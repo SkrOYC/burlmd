@@ -10,7 +10,7 @@
 
 ## Security & Sovereignty
 - **Decentralized Storage:** User data is stored exclusively in the user's designated remote repository (e.g., GitHub). The application backend must not act as a central storage broker for note content.
-- **At-Rest Encryption (Local):** Because the remote Git host might be secure, but mobile devices can be lost/stolen, all local Markdown files and local SQLite indexes must be encrypted (e.g., AES-256). The encryption keys must reside in the secure hardware enclave (OS Keychain/Keystore).
+- **At-Rest Encryption (Local):** The system relies on iOS/Android Data Protection (Full Disk Encryption) for raw Markdown files on disk to allow native Git merge capabilities. The SQLite search index, which aggregates all knowledge, must be explicitly encrypted via `sqlcipher`. The database encryption key must reside in the secure hardware enclave (OS Keychain/Keystore).
 - **Data Portability:** Despite local encryption, the system must provide an easy "Export Workspace" function that decrypts all files into standard, parseable Open Knowledge Format (OKF) Markdown on disk.
 
 ## Privacy

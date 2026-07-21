@@ -77,12 +77,12 @@ pub fn open_note(path: String) -> anyhow::Result<NoteState> {
 }
 
 #[frb(sync)]
-pub fn update_block(note_id: String, block_index: usize, new_node: AstNode) -> anyhow::Result<()> {
+pub fn update_block(note_id: String, block_index: usize, new_node: AstNode) -> anyhow::Result<NoteState> {
     unimplemented!()
 }
 
 #[frb(sync)]
-pub fn resolve_suggestion(note_id: String, block_index: usize, keep_incoming: bool) -> anyhow::Result<()> {
+pub fn resolve_suggestion(note_id: String, block_index: usize, keep_incoming: bool) -> anyhow::Result<NoteState> {
     unimplemented!()
 }
 

@@ -4,7 +4,7 @@ version: v1.0.0
 
 # Active Backlog Summary
 
-**Total Active Story Points:** 52
+**Total Active Story Points:** 49
 
 ## Critical Path
 1. CORE-A001
@@ -17,10 +17,9 @@ version: v1.0.0
 8. UIDB-B005
 9. SYNC-C001
 10. SYNC-C002
-11. SYNC-C003
-12. SYNC-C004
-13. SYNC-C005
-14. SYNC-C006
+11. SYNC-C004
+12. SYNC-C005
+13. SYNC-C006
 
 ## Build Order Diagram
 
@@ -41,7 +40,6 @@ flowchart LR
     
     B001 --> C001[SYNC-C001]
     C001 --> C002[SYNC-C002]
-    C001 --> C003[SYNC-C003]
     
     C002 --> C004[SYNC-C004]
     B002 --> C004

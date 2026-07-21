@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS workspaces (
     last_synced INTEGER            -- Unix timestamp
 );
 
--- Represents metadata for a Note (Markdown file encrypted on disk)
+-- Represents metadata for a Note (Markdown file on disk)
 CREATE TABLE IF NOT EXISTS notes (
     id TEXT PRIMARY KEY,           -- UUID or a normalized file path hash
     workspace_id TEXT NOT NULL,
@@ -31,27 +31,11 @@ CREATE TABLE IF NOT EXISTS links (
     FOREIGN KEY (target_id) REFERENCES notes(id) ON DELETE CASCADE
 );
 
--- FTS5 Virtual Table for full-text search across all notes
+-- FTS5 Virtual Table for full-text search across all notes.
+-- This is a standard FTS table (not external content) so it can store 
+-- the text and generate snippets. The Core Engine must manually 
+-- INSERT/DELETE/UPDATE this table when indexing files.
 CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
     title,
-    content,
-    content='notes',    -- External content table
-    content_rowid='rowid'
+    content
 );
-
--- Triggers to keep FTS5 synchronized with the notes table (for title changes)
--- Note: The Core Engine must manually update the `content` field in `notes_fts` 
--- when the file on disk is decrypted and indexed, as SQLite cannot read the file contents directly.
-
-CREATE TRIGGER IF NOT EXISTS notes_ai AFTER INSERT ON notes BEGIN
-  INSERT INTO notes_fts(rowid, title, content) VALUES (new.rowid, new.title, '');
-END;
-
-CREATE TRIGGER IF NOT EXISTS notes_ad AFTER DELETE ON notes BEGIN
-  INSERT INTO notes_fts(notes_fts, rowid, title, content) VALUES('delete', old.rowid, old.title, '');
-END;
-
-CREATE TRIGGER IF NOT EXISTS notes_au AFTER UPDATE ON notes BEGIN
-  INSERT INTO notes_fts(notes_fts, rowid, title, content) VALUES('delete', old.rowid, old.title, '');
-  INSERT INTO notes_fts(rowid, title, content) VALUES (new.rowid, new.title, '');
-END;

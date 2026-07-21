@@ -31,21 +31,6 @@ When the database file is written to disk
 Then the file is AES-256-GCM encrypted and cannot be opened by standard sqlite3 CLI
 ```
 
-#### SYNC-C003 AES File Encryption for Markdown
-- **Type:** Security
-- **Effort:** 3
-- **Dependencies:** SYNC-C001
-- **Category:** Security
-- **Scope (In-Scope Files):**
-  - `rust/src/security/crypto.rs`
-- **Description:** Build wrapper functions using `aes-gcm` to encrypt and decrypt the raw Markdown file contents before writing them to the local disk.
-- **Acceptance Criteria (Gherkin):**
-```gherkin
-Given a raw Markdown string
-When it is saved to disk
-Then the disk contents are ciphertext
-```
-
 #### SYNC-C004 Implement Git Operations (gix)
 - **Type:** Feature
 - **Effort:** 8
