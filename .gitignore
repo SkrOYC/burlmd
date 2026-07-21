@@ -8,12 +8,9 @@ devenv.local.nix
 result
 result-*
 
-# The android module points ANDROID_USER_HOME/ANDROID_AVD_HOME at the repo so
-# that AVDs and SDK state stay per-project instead of leaking into ~/.android.
+# Holds the deliberately-empty ANDROID_HOME sentinel (see devenv.nix), and any
+# Android state a future SDK pin would put here rather than in ~/.android.
 .android/
-# Regenerated on every shell entry, and contains absolute /nix/store paths that
-# change with each devenv update. Generated state, never tracked.
-/local.properties
 
 # --- Rust -----------------------------------------------------------------
 # Unanchored, so a Cargo workspace root moving to the repository root is still
@@ -50,8 +47,12 @@ ios/Pods/
 # --- Secrets --------------------------------------------------------------
 # EPIC-C introduces GitHub OAuth credentials; signing material follows if the
 # mobile targets are ever unshelved.
-.env
-*.env
+# `.env*` rather than `.env`/`*.env`: the latter pair misses the shapes that
+# actually leak — .env.local, .env.production, .env.development. The negation is
+# load-bearing, since .envrc is this repo's direnv entrypoint and must stay
+# tracked.
+.env*
+!.envrc
 secrets.*
 *.jks
 *.keystore

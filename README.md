@@ -34,7 +34,8 @@ outside the store, pinned by `pubspec.lock` and `Cargo.lock` once those exist.
 ```bash
 # One-off, if you don't already have them
 curl -fsSL https://install.determinate.systems/nix | sh -s -- install
-nix profile install nixpkgs#devenv
+nix profile install nixpkgs#devenv   # devenv 2.x; the CLI itself is not covered
+                                     # by devenv.lock — see note below
 
 # Then, from the repository root
 devenv shell
@@ -58,19 +59,14 @@ and CocoaPods from outside the Nix store.
 | Rust | 1.97.1 | [`rust-toolchain.toml`](rust-toolchain.toml) |
 | `flutter_rust_bridge_codegen` | 2.12.0 | `nixpkgs` via `devenv.nix` |
 | SQLCipher | 4.14.0 | vendored by `rusqlite`'s `bundled-sqlcipher` |
-| Android SDK | platforms 34/35, build-tools 35.0.0, NDK 28.2 | `nixpkgs` via `devenv.nix` |
 
-The Android SDK is pinned even though mobile is out of product scope. Without
-it, Flutter scans well-known home-directory locations and silently adopts
-whatever SDK a contributor happens to have installed — the one part of the
-toolchain `devenv.lock` could not otherwise govern. `ANDROID_HOME` resolves into
-the Nix store, and SDK state (`ANDROID_USER_HOME`, AVDs) is kept in a gitignored
-`.android/` inside the repo rather than in `~/.android`.
-
-`flutter doctor` still reports `Android license status unknown`. That is a
-read-only-store limitation, not a misconfiguration: the license hashes are baked
-into the SDK derivation, but `sdkmanager` re-checks against Google's current set
-and cannot persist an acceptance into `/nix/store`. It does not affect builds.
+No Android SDK is provisioned — mobile is out of product scope — but discovery
+is pinned shut. `ANDROID_HOME` and `ANDROID_SDK_ROOT` point at a deliberately
+empty in-repo path, because Flutter otherwise scans well-known home-directory
+locations and silently adopts whatever SDK you happen to have installed. That
+was the one part of the toolchain `devenv.lock` could not govern. `flutter
+doctor` now reports "Unable to locate Android SDK" identically on every machine,
+which is the intended state until mobile is unshelved.
 
 It also carries the native dependencies the stack needs and that are easy to get
 wrong: the GTK/GL stack for the Flutter Linux embedder, `libclang` for the
@@ -80,6 +76,11 @@ No Secret Service library is needed — `keyring` 4.x talks D-Bus in pure Rust v
 
 Exact versions are locked in `devenv.lock`. To move them forward, run
 `devenv update` and re-verify.
+
+One caveat on that boundary: `devenv.lock` pins the inputs, not the `devenv` CLI
+that reads it. The CLI is installed from whatever nixpkgs your Nix resolves, and
+module compatibility is not guaranteed across CLI majors. This environment is
+verified against devenv 2.1.2.
 
 ## Quality gates
 
@@ -95,8 +96,11 @@ Entering the shell installs Git pre-commit hooks enforcing the standards in
 
 The language hooks are a no-op until the manifest each one needs
 (`rust/Cargo.toml`, `pubspec.yaml`) exists, so they activate on their own as
-`CORE-A001` lands. They exclude `.constitution/`, so editing the tech-spec's
-`ffi_api.rs` contract does not trigger a build gate.
+`CORE-A001` lands — but they fail loudly rather than silently skipping if a
+manifest turns up somewhere unexpected. All of them exclude `.constitution/`, so
+editing the tech-spec's `ffi_api.rs` contract does not trigger a build gate.
+
+These are the only automated gates. There is no CI, and nothing runs tests.
 
 ## Verification performed
 

@@ -61,12 +61,25 @@ let
   cargo = "${config.languages.rust.toolchainPackage}/bin/cargo";
   dart = "${flutter}/bin/dart";
 
+  # The guards distinguish "no manifest exists yet" (skip, we are pre-CORE-A001)
+  # from "a manifest exists somewhere unexpected" (fail loudly). A bare
+  # `[ -f rust/Cargo.toml ] || exit 0` would turn a layout change into a green
+  # commit with no checks run and nothing said about it.
   rustHook =
     name: command:
     pkgs.writeShellScript "burlmd-${name}" ''
       set -euo pipefail
-      [ -f rust/Cargo.toml ] || exit 0
-      cd rust
+      if [ -f rust/Cargo.toml ]; then
+        cd rust
+      elif [ -f Cargo.toml ]; then
+        :
+      elif ! git ls-files -- '*Cargo.toml' | grep -q .; then
+        exit 0
+      else
+        echo "burlmd: Cargo.toml found outside rust/ or the repository root." >&2
+        echo "        Update the rustHook guard in devenv.nix." >&2
+        exit 1
+      fi
       exec ${cargo} ${command}
     '';
 
@@ -74,7 +87,14 @@ let
     name: command:
     pkgs.writeShellScript "burlmd-${name}" ''
       set -euo pipefail
-      [ -f pubspec.yaml ] || exit 0
+      if [ ! -f pubspec.yaml ]; then
+        if git ls-files -- '*pubspec.yaml' | grep -q .; then
+          echo "burlmd: pubspec.yaml found outside the repository root." >&2
+          echo "        Update the dartHook guard in devenv.nix." >&2
+          exit 1
+        fi
+        exit 0
+      fi
       exec ${dart} ${command}
     '';
 in
@@ -93,46 +113,6 @@ in
     # The Flutter distribution ships its own Dart SDK; using it avoids a version
     # skew between `dart analyze` and the SDK Flutter actually compiles against.
     package = flutter;
-  };
-
-  # --- Android SDK ----------------------------------------------------------
-
-  # Pinned so that nothing is discovered from the host. Without this, Flutter
-  # falls back to scanning well-known home-directory locations and silently
-  # adopts whatever SDK, NDK and build-tools a contributor happens to have —
-  # unversioned, undeclared, and invisible to devenv.lock.
-  #
-  # Note this pins the *toolchain* only. Mobile remains out of product scope per
-  # tasks/critical-path.md; no mobile target is built and no mobile code exists.
-  android = {
-    enable = true;
-    flutter.enable = true;
-    flutter.package = flutter;
-    platforms.version = [
-      "34"
-      "35"
-    ];
-    buildTools.version = [ "35.0.0" ];
-    ndk.enable = true;
-    abis = [
-      "arm64-v8a"
-      "x86_64"
-    ];
-    # Pre-accept every license hash. The SDK lives in the read-only Nix store, so
-    # `sdkmanager --licenses` cannot persist an acceptance; the hashes have to be
-    # baked in at build time or Flutter reports "license status unknown" forever.
-    extraLicenses = [
-      "android-sdk-preview-license"
-      "android-googletv-license"
-      "android-sdk-arm-dbt-license"
-      "google-gdk-license"
-      "intel-android-extra-license"
-      "intel-android-sysimage-license"
-      "mips-android-sysimage-license"
-    ];
-
-    # The emulator is a large closure and nothing here can exercise it yet.
-    emulator.enable = false;
   };
 
   # --- Packages -------------------------------------------------------------
@@ -171,6 +151,25 @@ in
     # `ldd` on a release build with the variable unset). Exporting it would apply
     # to every process in the shell, and on a non-NixOS host it forces nix-built
     # libc-linked sonames into distro binaries like git, curl and ssh.
+    #
+    # Enabling devenv's `android` module breaks this invariant — it appends
+    # libglvnd, vulkan-loader and the NDK/build-tools lib dirs to
+    # LD_LIBRARY_PATH. That is one reason the Android SDK is not pinned here;
+    # see ANDROID_HOME below.
+
+    # Pin Android SDK discovery to a path that deliberately holds no SDK.
+    # Flutter otherwise scans well-known home-directory locations and silently
+    # adopts whatever SDK a contributor happens to have installed — the one part
+    # of the toolchain devenv.lock could not govern. With these set, discovery is
+    # deterministic and identical on every machine: `flutter doctor` reports
+    # "Unable to locate Android SDK" instead of picking up ~/.android/sdk.
+    #
+    # A real pinned SDK belongs here when mobile is unshelved, at versions
+    # current at that time. Doing it now would cost a 14.9 GiB closure on every
+    # desktop-only checkout, for platforms and an NDK that will be years stale
+    # before anything compiles against them.
+    ANDROID_HOME = "${config.env.DEVENV_ROOT}/.android/no-sdk";
+    ANDROID_SDK_ROOT = "${config.env.DEVENV_ROOT}/.android/no-sdk";
   };
 
   enterShell = ''
@@ -218,6 +217,7 @@ in
       name = "dart format";
       entry = toString (dartHook "dart-format" "format --set-exit-if-changed .");
       files = "\\.dart$";
+      excludes = [ "^\\.constitution/" ];
       pass_filenames = false;
       language = "system";
     };
@@ -227,6 +227,7 @@ in
       name = "dart analyze";
       entry = toString (dartHook "dart-analyze" "analyze");
       files = "(\\.dart|pubspec\\.yaml)$";
+      excludes = [ "^\\.constitution/" ];
       pass_filenames = false;
       language = "system";
     };

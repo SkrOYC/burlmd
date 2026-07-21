@@ -21,8 +21,10 @@ The repository follows the default `flutter_rust_bridge` template structure to m
 │   │   ├── components/      # Reusable UI blocks
 │   │   ├── providers/       # Riverpod state definitions
 │   │   └── rust/            # Auto-generated FRB Dart bindings
+├── test/                    # Dart widget tests
 ├── rust/                    # Rust Core Engine source code
 │   ├── Cargo.toml
+│   ├── tests/               # Rust integration tests
 │   ├── src/
 │   │   ├── api/             # FFI interface exposed to Dart
 │   │   ├── db/              # rusqlite database management
@@ -33,7 +35,9 @@ The repository follows the default `flutter_rust_bridge` template structure to m
 ```
 
 `android/` and `ios/` are absent by design: mobile targets are deferred per
-`tasks/critical-path.md`, and no mobile toolchain is provisioned.
+`tasks/critical-path.md`, and no mobile toolchain is provisioned. `ANDROID_HOME`
+is pointed at a deliberately empty in-repo path so that Flutter cannot silently
+adopt an SDK from the contributor's home directory; see `stack.md`.
 
 ## Toolchain
 All commands below assume the `devenv` shell (`devenv shell`, or automatic via
@@ -55,7 +59,12 @@ All commands below assume the `devenv` shell (`devenv shell`, or automatic via
    - Rust: Unit tests for AST parsing, SQLite migrations, and Git merge logic.
    - Dart: Widget tests for the hybrid editor rendering (verifying AST nodes render correctly).
 
-All of the above are enforced as pre-commit hooks installed on entry to the
-devenv shell. The Rust and Dart hooks no-op until their manifests exist, and
-they exclude `.constitution/` so that editing the spec's FFI contract does not
-trigger a build gate.
+The *mechanical* rules above — `cargo fmt`, `cargo clippy`, `dart format`,
+`dart analyze`, `nixfmt` — are enforced as pre-commit hooks installed on entry
+to the devenv shell. They exclude `.constitution/`, so editing the spec's FFI
+contract does not trigger a build gate, and they no-op until their manifests
+exist.
+
+Nothing enforces the rest, and no CI runs today. The testing standard, the Rust
+async-avoidance rule and the Dart widget-statelessness rule are review
+obligations, not gated checks.
