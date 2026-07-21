@@ -106,7 +106,7 @@ Entering the shell installs Git pre-commit hooks enforcing the standards in
 - `cargo clippy --all-targets -- -D warnings`
 - `dart format --set-exit-if-changed .`
 - `dart analyze`
-- `nixfmt` on `devenv.nix` — currently the only source file in the repository,
+- `nixfmt` on any `*.nix` file — today that is only `devenv.nix`, the only source file in the repository,
   and so the only hook that can fail today
 
 The language hooks are a no-op until the manifest each one needs

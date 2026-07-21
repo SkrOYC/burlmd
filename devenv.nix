@@ -68,24 +68,30 @@ let
   #
   # They exclude `.constitution/` for the same reason the hooks do — the spec
   # keeps source-shaped files as documentation (see contracts/ffi_api.rs), and a
-  # manifest example landing there must not hard-block every commit. Command
-  # substitution rather than `| grep -q`: under `pipefail`, grep exiting early
-  # can SIGPIPE the upstream `git ls-files` into a 141, which the negated form
-  # would read as "no manifest" and silently skip.
+  # manifest example landing there must not hard-block every commit.
+  #
+  # The `git ls-files` result is assigned rather than tested inline. `| grep -q`
+  # can SIGPIPE the upstream into a 141 under `pipefail`, and `[ -z "$(...)" ]`
+  # discards the substitution's exit status outright — both would read a failing
+  # git as "no manifest found" and silently skip every check, which is the exact
+  # failure this guard exists to prevent. An assignment propagates the status.
   rustHook =
     name: command:
     pkgs.writeShellScript "burlmd-${name}" ''
       set -euo pipefail
       if [ -f rust/Cargo.toml ]; then
         cd rust
-      elif [ -f Cargo.toml ]; then
-        :
-      elif [ -z "$(git ls-files -- '*Cargo.toml' ':!.constitution/**')" ]; then
+      elif [ ! -f Cargo.toml ]; then
+        manifests=$(git ls-files -- '*Cargo.toml' ':!.constitution/**') || {
+          echo "burlmd: git ls-files failed; refusing to skip checks." >&2
+          exit 1
+        }
+        if [ -n "$manifests" ]; then
+          echo "burlmd: Cargo.toml found outside rust/ or the repository root." >&2
+          echo "        Update the rustHook guard in devenv.nix." >&2
+          exit 1
+        fi
         exit 0
-      else
-        echo "burlmd: Cargo.toml found outside rust/ or the repository root." >&2
-        echo "        Update the rustHook guard in devenv.nix." >&2
-        exit 1
       fi
       exec ${cargo} ${command}
     '';
@@ -95,7 +101,11 @@ let
     pkgs.writeShellScript "burlmd-${name}" ''
       set -euo pipefail
       if [ ! -f pubspec.yaml ]; then
-        if [ -n "$(git ls-files -- '*pubspec.yaml' ':!.constitution/**')" ]; then
+        manifests=$(git ls-files -- '*pubspec.yaml' ':!.constitution/**') || {
+          echo "burlmd: git ls-files failed; refusing to skip checks." >&2
+          exit 1
+        }
+        if [ -n "$manifests" ]; then
           echo "burlmd: pubspec.yaml found outside the repository root." >&2
           echo "        Update the dartHook guard in devenv.nix." >&2
           exit 1
@@ -195,6 +205,7 @@ in
     echo "burlmd — local-first, Git-backed notes" >&2
     echo "  flutter ''${_flutter:-?}  |  rustc ''${_rustc:-?}  |  frb ''${_frb:-?}" >&2
     unset -f _v
+    unset _flutter _rustc _frb
   '';
 
   # --- Quality gates (see .constitution/tech-spec/guidelines.md) ------------
@@ -207,8 +218,15 @@ in
   # pattern was widened for.
   git-hooks.hooks = {
     # devenv.nix is the one source file in the repository that no other hook
-    # covers, and it is currently the only source file at all.
-    nixfmt-rfc-style.enable = true;
+    # covers, and it is currently the only source file at all. Unlike the
+    # language hooks this one runs with pass_filenames = true and rewrites in
+    # place, so the .constitution/ exclusion is load-bearing rather than
+    # cosmetic: without it, a .nix file kept in the spec as documentation would
+    # be reformatted by a commit that merely touched it.
+    nixfmt-rfc-style = {
+      enable = true;
+      excludes = [ "^\\.constitution/" ];
+    };
 
     burlmd-rust-fmt = {
       enable = true;
@@ -225,7 +243,9 @@ in
     burlmd-rust-clippy = {
       enable = true;
       name = "cargo clippy";
-      entry = toString (rustHook "cargo-clippy" "clippy --all-targets -- -D warnings");
+      # --workspace so this matches `cargo fmt --all`'s scope; without it clippy
+      # only covers default workspace members.
+      entry = toString (rustHook "cargo-clippy" "clippy --workspace --all-targets -- -D warnings");
       files = "(\\.rs|Cargo\\.(toml|lock))$";
       excludes = [ "^\\.constitution/" ];
       pass_filenames = false;

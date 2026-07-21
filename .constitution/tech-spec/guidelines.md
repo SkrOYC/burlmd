@@ -5,6 +5,7 @@ The repository follows the default `flutter_rust_bridge` template structure to m
 
 ```text
 /
+├── .agents/                 # Agent skill definitions (Dart/Flutter workflows)
 ├── .constitution/           # AI Project Development Framework artifacts
 ├── .envrc                   # direnv entrypoint; activates the devenv shell
 ├── .gitignore
@@ -36,7 +37,7 @@ The repository follows the default `flutter_rust_bridge` template structure to m
 
 `android/` and `ios/` are absent by design: mobile targets are deferred per
 `tasks/critical-path.md`, and no mobile toolchain is provisioned. `ANDROID_HOME`
-is pointed at a deliberately empty in-repo path so that Flutter cannot silently
+is pointed at an in-repo path that deliberately holds no SDK, so Flutter cannot silently
 adopt an SDK from the contributor's home directory; see `stack.md`.
 
 ## Toolchain
@@ -54,16 +55,17 @@ All commands below assume the `devenv` shell (`devenv shell`, or automatic via
    - Must be formatted with `dart format`.
    - UI widgets must be completely stateless regarding note content. All active note state is pulled from Riverpod providers connected to the FRB.
 3. **Nix:**
-   - `devenv.nix` must be formatted with `nixfmt` (RFC style).
+   - Every `*.nix` file must be formatted with `nixfmt` (RFC style). Today that is only `devenv.nix`.
 4. **Testing:**
    - Rust: Unit tests for AST parsing, SQLite migrations, and Git merge logic.
    - Dart: Widget tests for the hybrid editor rendering (verifying AST nodes render correctly).
 
 The *mechanical* rules above — `cargo fmt`, `cargo clippy`, `dart format`,
 `dart analyze`, `nixfmt` — are enforced as pre-commit hooks installed on entry
-to the devenv shell. They exclude `.constitution/`, so editing the spec's FFI
-contract does not trigger a build gate, and they no-op until their manifests
-exist.
+to the devenv shell. All of them exclude `.constitution/`, so editing the spec's
+FFI contract does not trigger a build gate. The four *language* hooks
+additionally no-op until their manifests exist; `nixfmt` has no manifest to wait
+on and runs today.
 
 Nothing enforces the rest, and no CI runs today. The testing standard, the Rust
 async-avoidance rule and the Dart widget-statelessness rule are review
