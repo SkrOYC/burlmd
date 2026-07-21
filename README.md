@@ -79,10 +79,21 @@ No Android SDK is provisioned — mobile is out of product scope — but discove
 is pinned shut. `ANDROID_HOME` and `ANDROID_SDK_ROOT` point at a deliberately
 empty in-repo path, because Flutter otherwise scans well-known home-directory
 locations and silently adopts whatever SDK you happen to have installed. That
-was the one part of the toolchain `devenv.lock` could not govern. `flutter
-doctor` now reports `ANDROID_HOME = <repo>/.android/no-sdk but Android SDK not
-found at this location.` — the same on every machine,
-which is the intended state until mobile is unshelved.
+was the one part of the toolchain `devenv.lock` could not govern. `CHROME_EXECUTABLE`
+is pinned shut the same way, for the same reason — the web target is no more in
+scope than mobile, and left alone Flutter resolves a browser off the host `PATH`.
+
+So `flutter doctor` deliberately reports **two** failing categories, identically
+on every machine, and that is the intended state until those targets are
+unshelved:
+
+```text
+[✗] Android toolchain - develop for Android devices
+    ✗ ANDROID_HOME = <repo>/.sentinels/no-android-sdk
+      but Android SDK not found at this location.
+[✗] Chrome - develop for the web (Cannot find Chrome executable at
+    <repo>/.sentinels/no-chrome)
+```
 
 It also carries the native dependencies the stack needs and that are easy to get
 wrong: the GTK/GL stack for the Flutter Linux embedder, `libclang` for the
@@ -105,7 +116,7 @@ Entering the shell installs Git pre-commit hooks enforcing the standards in
 
 - `cargo fmt --all -- --check`
 - `cargo clippy --workspace --all-targets -- -D warnings`
-- `dart format --set-exit-if-changed .`
+- `dart format --output=none --set-exit-if-changed lib test`
 - `dart analyze`
 - `nixfmt` on any `*.nix` file — today that is only `devenv.nix`, the only source file in the repository,
   and so the only hook that can fail today
@@ -122,8 +133,10 @@ These are the only automated gates. There is no CI, and nothing runs tests.
 
 The environment was not assumed to work — it was exercised. Inside the shell:
 
-- `flutter doctor` reports a healthy Linux toolchain and an available Linux
-  desktop target.
+- `flutter doctor` reports `[✓] Linux toolchain` and `[✓] Connected device`
+  with a Linux desktop target. The Linux row carries one warning,
+  `! Unable to access driver information using 'eglinfo'`, because `mesa-demos`
+  is deliberately not in the closure; it does not affect builds.
 - `flutter create` followed by `flutter build linux --release` produces a running
   bundle.
 - A throwaway Rust crate depending on `rusqlite` (`bundled-sqlcipher`), `gix`,

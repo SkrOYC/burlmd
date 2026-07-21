@@ -79,6 +79,19 @@ let
     name: command:
     pkgs.writeShellScript "burlmd-${name}" ''
       set -euo pipefail
+      # An absolute cargo is not sufficient outside the shell: cargo finds rustc
+      # beside itself but not a linker, and any crate with a build script then
+      # dies on `linker `cc` not found`. libsqlite3-sys — reached through
+      # bundled-sqlcipher, the centre of this stack — has one, and additionally
+      # needs libclang for bindgen and pkg-config/openssl. Supply the minimum so
+      # the outside-the-shell path actually runs the check it promises.
+      # bash and coreutils are in here because the nixpkgs cc wrapper is itself a
+      # bash script that shells out; without them the linker fails with a
+      # `collect2: ld returned 127` that is far harder to read than the original
+      # `command not found`.
+      export PATH="${pkgs.stdenv.cc}/bin:${pkgs.pkg-config}/bin:${pkgs.bash}/bin:${pkgs.coreutils}/bin:$PATH"
+      export LIBCLANG_PATH="${pkgs.llvmPackages.libclang.lib}/lib"
+      export PKG_CONFIG_PATH="${pkgs.openssl.dev}/lib/pkgconfig''${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
       if [ -f rust/Cargo.toml ]; then
         cd rust
       elif [ ! -f Cargo.toml ]; then
@@ -124,6 +137,21 @@ let
   # the gate off code we do not control. `dart analyze` needs the equivalent via
   # `analyzer.exclude` in analysis_options.yaml, which CORE-A001 must add.
   dartFormatBody = ''
+    # Anything .dart outside the owned roots is a guard failure, not a silent
+    # skip — the same rule the manifest guards above follow. rust_builder/ is
+    # excluded because that is where the vendored cargokit sources live.
+    stray=$(git ls-files -- '*.dart' \
+      ':!lib/**' ':!test/**' ':!rust_builder/**' ':!.constitution/**') || {
+      echo "burlmd: git ls-files failed; refusing to skip checks." >&2
+      exit 1
+    }
+    if [ -n "$stray" ]; then
+      echo "burlmd: Dart sources outside lib/ and test/:" >&2
+      echo "$stray" | sed 's/^/          /' >&2
+      echo "        Add the directory to dartFormatBody in devenv.nix." >&2
+      exit 1
+    fi
+
     paths=()
     for d in lib test; do
       [ -d "$d" ] && paths+=("$d")
@@ -131,7 +159,11 @@ let
     if [ ''${#paths[@]} -eq 0 ]; then
       exit 0
     fi
-    exec ${dart} format --set-exit-if-changed "''${paths[@]}"
+    # --output=none: `--set-exit-if-changed` only sets the exit code, it does
+    # not stop `dart format` rewriting in place. Without this the hook silently
+    # mutates the working tree while the README presents it as a check, and an
+    # auto-fix to a partially staged file can collide with prek's stash/restore.
+    exec ${dart} format --output=none --set-exit-if-changed "''${paths[@]}"
   '';
 in
 {

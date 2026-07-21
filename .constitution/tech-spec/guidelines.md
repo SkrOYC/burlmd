@@ -67,6 +67,12 @@ FFI contract does not trigger a build gate. The four *language* hooks
 additionally no-op until their manifests exist; `nixfmt` has no manifest to wait
 on and runs today.
 
+Once real Rust code exists, `cargo clippy --workspace --all-targets` on every
+`.rs` commit will be a multi-minute gate — `bundled-sqlcipher` compiles the
+SQLCipher amalgamation from source, and `--all-targets` additionally builds tests
+and benches. Consider moving clippy to the `pre-push` stage at that point,
+leaving `cargo fmt` on `pre-commit`.
+
 Nothing enforces the rest, and no CI runs today. The testing standard, the Rust
 async-avoidance rule and the Dart widget-statelessness rule are review
 obligations, not gated checks.
