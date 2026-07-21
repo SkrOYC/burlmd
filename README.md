@@ -115,5 +115,5 @@ The environment was not assumed to work — it was exercised. Inside the shell:
   query against a keyed SQLCipher connection.
 
 Two findings from that exercise were reconciled back into the tech-spec (see
-`.constitution/tech-spec/changelog.md`, v1.0.1): the Rust pin must be ≥ 1.94, and
+`.constitution/tech-spec/changelog.md`, v1.0.1): the Rust pin must be ≥ 1.95, and
 `rusqlite` 0.40 no longer exposes an `fts5` feature.
