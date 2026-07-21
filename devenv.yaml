@@ -11,3 +11,5 @@ inputs:
     inputs:
       nixpkgs:
         follows: nixpkgs
+# Required by the android module: large parts of the Android SDK are unfree.
+allowUnfree: true

@@ -95,6 +95,46 @@ in
     package = flutter;
   };
 
+  # --- Android SDK ----------------------------------------------------------
+
+  # Pinned so that nothing is discovered from the host. Without this, Flutter
+  # falls back to scanning well-known home-directory locations and silently
+  # adopts whatever SDK, NDK and build-tools a contributor happens to have —
+  # unversioned, undeclared, and invisible to devenv.lock.
+  #
+  # Note this pins the *toolchain* only. Mobile remains out of product scope per
+  # tasks/critical-path.md; no mobile target is built and no mobile code exists.
+  android = {
+    enable = true;
+    flutter.enable = true;
+    flutter.package = flutter;
+    platforms.version = [
+      "34"
+      "35"
+    ];
+    buildTools.version = [ "35.0.0" ];
+    ndk.enable = true;
+    abis = [
+      "arm64-v8a"
+      "x86_64"
+    ];
+    # Pre-accept every license hash. The SDK lives in the read-only Nix store, so
+    # `sdkmanager --licenses` cannot persist an acceptance; the hashes have to be
+    # baked in at build time or Flutter reports "license status unknown" forever.
+    extraLicenses = [
+      "android-sdk-preview-license"
+      "android-googletv-license"
+      "android-sdk-arm-dbt-license"
+      "google-gdk-license"
+      "intel-android-extra-license"
+      "intel-android-sysimage-license"
+      "mips-android-sysimage-license"
+    ];
+
+    # The emulator is a large closure and nothing here can exercise it yet.
+    emulator.enable = false;
+  };
+
   # --- Packages -------------------------------------------------------------
 
   packages =

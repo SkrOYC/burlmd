@@ -8,6 +8,13 @@ devenv.local.nix
 result
 result-*
 
+# The android module points ANDROID_USER_HOME/ANDROID_AVD_HOME at the repo so
+# that AVDs and SDK state stay per-project instead of leaking into ~/.android.
+.android/
+# Regenerated on every shell entry, and contains absolute /nix/store paths that
+# change with each devenv update. Generated state, never tracked.
+/local.properties
+
 # --- Rust -----------------------------------------------------------------
 # Unanchored, so a Cargo workspace root moving to the repository root is still
 # covered.

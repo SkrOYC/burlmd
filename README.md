@@ -58,6 +58,19 @@ and CocoaPods from outside the Nix store.
 | Rust | 1.97.1 | [`rust-toolchain.toml`](rust-toolchain.toml) |
 | `flutter_rust_bridge_codegen` | 2.12.0 | `nixpkgs` via `devenv.nix` |
 | SQLCipher | 4.14.0 | vendored by `rusqlite`'s `bundled-sqlcipher` |
+| Android SDK | platforms 34/35, build-tools 35.0.0, NDK 28.2 | `nixpkgs` via `devenv.nix` |
+
+The Android SDK is pinned even though mobile is out of product scope. Without
+it, Flutter scans well-known home-directory locations and silently adopts
+whatever SDK a contributor happens to have installed — the one part of the
+toolchain `devenv.lock` could not otherwise govern. `ANDROID_HOME` resolves into
+the Nix store, and SDK state (`ANDROID_USER_HOME`, AVDs) is kept in a gitignored
+`.android/` inside the repo rather than in `~/.android`.
+
+`flutter doctor` still reports `Android license status unknown`. That is a
+read-only-store limitation, not a misconfiguration: the license hashes are baked
+into the SDK derivation, but `sdkmanager` re-checks against Google's current set
+and cannot persist an acceptance into `/nix/store`. It does not affect builds.
 
 It also carries the native dependencies the stack needs and that are easy to get
 wrong: the GTK/GL stack for the Flutter Linux embedder, `libclang` for the
