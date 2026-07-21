@@ -77,9 +77,13 @@ Entering the shell installs Git pre-commit hooks enforcing the standards in
 - `cargo clippy --all-targets -- -D warnings`
 - `dart format --set-exit-if-changed .`
 - `dart analyze`
+- `nixfmt` on `devenv.nix` — currently the only source file in the repository,
+  and so the only hook that can fail today
 
-Each hook is a no-op until the manifest it needs (`rust/Cargo.toml`,
-`pubspec.yaml`) exists, so they activate on their own as `CORE-A001` lands.
+The language hooks are a no-op until the manifest each one needs
+(`rust/Cargo.toml`, `pubspec.yaml`) exists, so they activate on their own as
+`CORE-A001` lands. They exclude `.constitution/`, so editing the tech-spec's
+`ffi_api.rs` contract does not trigger a build gate.
 
 ## Verification performed
 

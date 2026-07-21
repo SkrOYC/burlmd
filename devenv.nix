@@ -19,7 +19,12 @@ let
     pcre2
     libepoxy
     at-spi2-core
-    util-linux # libmount, pulled in transitively by glib's pkg-config file
+    # libmount.pc, required transitively by glib's pkg-config file. This also
+    # puts util-linux's bin output on PATH, shadowing the host's `mount`,
+    # `kill`, `dmesg` and friends inside the shell — as gtk3 and glib do for
+    # `lp` and `gio`. Accepted: `util-linux.dev` does not avoid it (verified;
+    # the bin output is propagated regardless).
+    util-linux
     xorg.libX11
     # libglvnd, which owns the libGL.so.1 loader ABI. The driver implementations
     # come from the host (/run/opengl-driver on NixOS), so `mesa` is deliberately
@@ -30,7 +35,11 @@ let
 
   # Native dependencies for the Rust core engine.
   #   openssl    -> rusqlite's `bundled-sqlcipher` links against it
-  #   sqlcipher  -> CLI, for inspecting the encrypted index during development
+  #   sqlcipher  -> CLI, for inspecting the encrypted index during development.
+  #                 Note this floats independently of the SQLCipher that
+  #                 `bundled-sqlcipher` vendors (currently CLI 4.16.0 vs
+  #                 vendored 4.14.0). Compatible within 4.x; a nixpkgs bump
+  #                 across a major boundary would break the inspect workflow.
   #
   # Note there is no Secret Service library here on purpose. `keyring` 4.x reaches
   # the OS enclave through `zbus`, which speaks the D-Bus wire protocol in pure
@@ -98,11 +107,12 @@ in
       pkg-config
       cmake
       ninja
-      # The clang wrapper also puts `cc`/`ld` on PATH ahead of stdenv's gcc
-      # wrapper, so the Rust half of the monorepo links with clang too. Flutter's
-      # Linux desktop build requires clang, and mixing is fine in practice; this
-      # is called out so the coupling is a recorded decision rather than a
-      # surprise the first time a `cc`-crate build script misbehaves.
+      # Flutter's Linux desktop build requires clang. The stdenv gcc wrapper
+      # still wins the PATH race and `CC` is `gcc` (verified in the shell), so
+      # the Rust half of the monorepo and every `cc`-crate build script compile
+      # with gcc while Flutter's CMake step uses clang. Mixing is fine in
+      # practice; it is recorded here so nobody debugging a build script starts
+      # from the wrong premise about which compiler they are actually using.
       clang
 
       git
@@ -125,7 +135,7 @@ in
 
   enterShell = ''
     echo "burlmd — local-first, Git-backed notes"
-    echo "  flutter $(flutter --version 2>/dev/null | head -n1 | cut -d' ' -f2 || echo '?')  |  $(rustc --version)  |  frb $(flutter_rust_bridge_codegen --version 2>/dev/null | cut -d' ' -f2 || echo '?')"
+    echo "  flutter $(flutter --version 2>/dev/null | head -n1 | cut -d' ' -f2 || echo '?')  |  rustc $(rustc --version 2>/dev/null | cut -d' ' -f2 || echo '?')  |  frb $(flutter_rust_bridge_codegen --version 2>/dev/null | cut -d' ' -f2 || echo '?')"
   '';
 
   # --- Quality gates (see .constitution/tech-spec/guidelines.md) ------------
@@ -146,6 +156,9 @@ in
       name = "cargo fmt";
       entry = toString (rustHook "cargo-fmt" "fmt --all -- --check");
       files = "\\.rs$";
+      # The tech-spec's FFI contract is a .rs file that is documentation, not
+      # crate source; editing it must not trigger a build gate.
+      excludes = [ "^\\.constitution/" ];
       pass_filenames = false;
       language = "system";
     };
@@ -155,6 +168,7 @@ in
       name = "cargo clippy";
       entry = toString (rustHook "cargo-clippy" "clippy --all-targets -- -D warnings");
       files = "(\\.rs|Cargo\\.(toml|lock))$";
+      excludes = [ "^\\.constitution/" ];
       pass_filenames = false;
       language = "system";
     };

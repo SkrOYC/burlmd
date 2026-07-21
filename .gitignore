@@ -9,7 +9,9 @@ result
 result-*
 
 # --- Rust -----------------------------------------------------------------
-rust/target/
+# Unanchored, so a Cargo workspace root moving to the repository root is still
+# covered.
+target/
 **/*.rs.bk
 
 # --- Flutter / Dart -------------------------------------------------------
@@ -17,7 +19,9 @@ rust/target/
 .flutter-plugins
 .flutter-plugins-dependencies
 .packages
-build/
+# Anchored: Flutter's build output lives at the root, and an unanchored pattern
+# would also swallow any source directory named `build` at any depth.
+/build/
 .pub-cache/
 .pub/
 *.iml
