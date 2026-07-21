@@ -96,8 +96,10 @@ let
       exec ${cargo} ${command}
     '';
 
+  # Takes a body rather than a bare command, so the format hook can scope its
+  # paths while sharing the manifest guard.
   dartHook =
-    name: command:
+    name: body:
     pkgs.writeShellScript "burlmd-${name}" ''
       set -euo pipefail
       if [ ! -f pubspec.yaml ]; then
@@ -112,8 +114,25 @@ let
         fi
         exit 0
       fi
-      exec ${dart} ${command}
+      ${body}
     '';
+
+  # `dart format` has no --exclude and only skips directories whose name starts
+  # with a dot, so a bare `dart format .` reaches the Dart sources FRB scaffolds
+  # under rust_builder/cargokit/ — vendored third-party glue whose own README
+  # says to ignore it. Formatting only the directories this project owns keeps
+  # the gate off code we do not control. `dart analyze` needs the equivalent via
+  # `analyzer.exclude` in analysis_options.yaml, which CORE-A001 must add.
+  dartFormatBody = ''
+    paths=()
+    for d in lib test; do
+      [ -d "$d" ] && paths+=("$d")
+    done
+    if [ ''${#paths[@]} -eq 0 ]; then
+      exit 0
+    fi
+    exec ${dart} format --set-exit-if-changed "''${paths[@]}"
+  '';
 in
 {
   # --- Toolchains -----------------------------------------------------------
@@ -185,8 +204,14 @@ in
     # current at that time. Doing it now would cost a 14.9 GiB closure on every
     # desktop-only checkout, for platforms and an NDK that will be years stale
     # before anything compiles against them.
-    ANDROID_HOME = "${config.env.DEVENV_ROOT}/.android/no-sdk";
-    ANDROID_SDK_ROOT = "${config.env.DEVENV_ROOT}/.android/no-sdk";
+    ANDROID_HOME = "${config.env.DEVENV_ROOT}/.sentinels/no-android-sdk";
+    ANDROID_SDK_ROOT = "${config.env.DEVENV_ROOT}/.sentinels/no-android-sdk";
+
+    # Same reasoning for the web target, which is no more in scope than mobile.
+    # Left unset, Flutter resolves a browser off the host PATH and reports a
+    # green `[✓] Chrome` that devenv.lock does not govern — a per-machine result
+    # from ambient state, which is exactly what the Android pair above closes.
+    CHROME_EXECUTABLE = "${config.env.DEVENV_ROOT}/.sentinels/no-chrome";
   };
 
   # The banner goes to stderr. On stdout it corrupts every non-interactive
@@ -246,7 +271,10 @@ in
       # --workspace so this matches `cargo fmt --all`'s scope; without it clippy
       # only covers default workspace members.
       entry = toString (rustHook "cargo-clippy" "clippy --workspace --all-targets -- -D warnings");
-      files = "(\\.rs|Cargo\\.(toml|lock))$";
+      # rust-toolchain.toml is included deliberately: a commit that only bumps
+      # the compiler is the change most likely to break the build, and it would
+      # otherwise pass through no Rust gate at all.
+      files = "(\\.rs|Cargo\\.(toml|lock)|rust-toolchain\\.toml)$";
       excludes = [ "^\\.constitution/" ];
       pass_filenames = false;
       language = "system";
@@ -255,7 +283,7 @@ in
     burlmd-dart-fmt = {
       enable = true;
       name = "dart format";
-      entry = toString (dartHook "dart-format" "format --set-exit-if-changed .");
+      entry = toString (dartHook "dart-format" dartFormatBody);
       files = "\\.dart$";
       excludes = [ "^\\.constitution/" ];
       pass_filenames = false;
@@ -265,7 +293,7 @@ in
     burlmd-dart-analyze = {
       enable = true;
       name = "dart analyze";
-      entry = toString (dartHook "dart-analyze" "analyze");
+      entry = toString (dartHook "dart-analyze" "exec ${dart} analyze");
       files = "(\\.dart|pubspec\\.yaml)$";
       excludes = [ "^\\.constitution/" ];
       pass_filenames = false;

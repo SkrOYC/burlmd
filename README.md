@@ -80,7 +80,8 @@ is pinned shut. `ANDROID_HOME` and `ANDROID_SDK_ROOT` point at a deliberately
 empty in-repo path, because Flutter otherwise scans well-known home-directory
 locations and silently adopts whatever SDK you happen to have installed. That
 was the one part of the toolchain `devenv.lock` could not govern. `flutter
-doctor` now reports "Unable to locate Android SDK" identically on every machine,
+doctor` now reports `ANDROID_HOME = <repo>/.android/no-sdk but Android SDK not
+found at this location.` — the same on every machine,
 which is the intended state until mobile is unshelved.
 
 It also carries the native dependencies the stack needs and that are easy to get
@@ -103,7 +104,7 @@ Entering the shell installs Git pre-commit hooks enforcing the standards in
 [`.constitution/tech-spec/guidelines.md`](.constitution/tech-spec/guidelines.md):
 
 - `cargo fmt --all -- --check`
-- `cargo clippy --all-targets -- -D warnings`
+- `cargo clippy --workspace --all-targets -- -D warnings`
 - `dart format --set-exit-if-changed .`
 - `dart analyze`
 - `nixfmt` on any `*.nix` file — today that is only `devenv.nix`, the only source file in the repository,

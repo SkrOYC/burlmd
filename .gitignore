@@ -8,8 +8,11 @@ devenv.local.nix
 result
 result-*
 
-# Holds the deliberately-empty ANDROID_HOME sentinel (see devenv.nix), and any
-# Android state a future SDK pin would put here rather than in ~/.android.
+# Paths that deliberately hold nothing, so that Flutter's discovery of
+# out-of-scope targets (Android SDK, Chrome) resolves the same way on every
+# machine instead of picking up whatever the host happens to have. See devenv.nix.
+.sentinels/
+# Android state, should a future SDK pin put it here rather than in ~/.android.
 .android/
 
 # --- Rust -----------------------------------------------------------------
