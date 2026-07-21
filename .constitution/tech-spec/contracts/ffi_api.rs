@@ -45,7 +45,7 @@ pub enum AstNode {
     ListItem { content: Vec<InlineElement>, checked: Option<bool> },
     Blockquote { nodes: Vec<AstNode> },
     CodeBlock { language: Option<String>, code: String },
-    Image { alt_text: String, local_path: String },
+    Image { alt_text: String, absolute_path: String },
     
     /// Represents a pending Git conflict that the user must resolve.
     /// Rendered as a Google-Docs style margin suggestion.
@@ -71,6 +71,8 @@ pub enum AppError {
     DiskFull,
     AuthExpired,
     GitConflict,
+    DatabaseError(String),
+    CryptoError(String),
     IoError(String),
     ParseError(String),
 }
@@ -86,8 +88,13 @@ pub fn open_note(path: String) -> Result<NoteState, AppError> {
     unimplemented!()
 }
 
+#[frb(sync)] 
+pub fn open_note_by_id(note_id: String) -> Result<NoteState, AppError> {
+    unimplemented!()
+}
+
 #[frb(sync)]
-pub fn update_block(note_id: String, block_path: Vec<usize>, new_node: AstNode) -> Result<NoteState, AppError> {
+pub fn update_block(note_id: String, block_path: Vec<usize>, raw_markdown: String) -> Result<NoteState, AppError> {
     unimplemented!()
 }
 

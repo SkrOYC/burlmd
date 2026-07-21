@@ -31,7 +31,7 @@ When the database file is written to disk
 Then the file is AES-256-GCM encrypted and cannot be opened by standard sqlite3 CLI
 ```
 
-#### SYNC-C004 Implement Git Operations (gix)
+#### SYNC-C003 Implement Git Operations (gix)
 - **Type:** Feature
 - **Effort:** 8
 - **Dependencies:** SYNC-C002, UIDB-B002
@@ -46,7 +46,7 @@ When the commit function is called
 Then `gix` successfully creates a Git commit in the local `.git` index
 ```
 
-#### SYNC-C005 Implement OAuth Handshake
+#### SYNC-C004 Implement OAuth Handshake
 - **Type:** Feature
 - **Effort:** 5
 - **Dependencies:** UIDB-B003
@@ -54,7 +54,7 @@ Then `gix` successfully creates a Git commit in the local `.git` index
 - **Scope (In-Scope Files):**
   - `lib/src/screens/login.dart`
   - `rust/src/api/auth.rs`
-- **Description:** Build the OAuth web flow in Flutter to capture a GitHub authorization code, pass it to Rust, exchange it for tokens, and store them via `keyring`.
+- **Description:** Build the OAuth web flow in Flutter to capture a GitHub authorization code, pass it to Rust, exchange it for tokens via PKCE, and store them via `keyring`.
 - **Acceptance Criteria (Gherkin):**
 ```gherkin
 Given the Login screen
@@ -62,10 +62,10 @@ When the user completes the OAuth flow
 Then the Access Token is securely stored in the OS Keychain by Rust
 ```
 
-#### SYNC-C006 Background Sync Manager Scheduler
+#### SYNC-C005 Background Sync Manager Scheduler
 - **Type:** Feature
 - **Effort:** 3
-- **Dependencies:** SYNC-C004, SYNC-C005
+- **Dependencies:** SYNC-C003, SYNC-C004
 - **Category:** Correctness
 - **Scope (In-Scope Files):**
   - `rust/src/sync/scheduler.rs`

@@ -16,7 +16,6 @@ version: v1.0.0
 - **Markdown Parser:** `pulldown-cmark` (with custom pre-processor for Git conflict markers).
 
 ## Security & Cryptography
-- **Secure Storage (Dart):** `flutter_secure_storage` - used strictly to pass the initial OS Keychain access token into the Rust Core Engine on boot.
 - **Secure Storage (Rust):** `keyring` - handles direct retrieval of OAuth tokens and AES keys from the OS hardware enclave without passing them through Dart memory.
 - **Database Encryption:** `sqlcipher` (bundled with `rusqlite`) - provides transparent AES-256-GCM encryption of the SQLite index file on disk.
 

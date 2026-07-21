@@ -1,8 +1,8 @@
 # Logical Risks & Technical Debt
 
 ## 1. FFI Serialization Overhead
-- **Risk:** Passing complex Abstract Syntax Trees (AST) across the boundary between the Presentation Container and the Core Engine for every keystroke could violate the 16ms performance constraint if serialization is inefficient.
-- **Mitigation:** Implement highly optimized binary serialization (e.g., flatbuffers or strictly typed shared memory buffers) instead of heavy JSON strings for high-frequency operations.
+- **Risk:** Passing the entire markdown AST tree back and forth across the FFI boundary on every block edit could violate the 16ms frame budget, causing UI stutter.
+- **Mitigation:** Rely on `flutter_rust_bridge` (v2)'s high-performance SSE (Simple Serialization Engine) which minimizes overhead. If latency persists for enormous files, refactor the FFI boundary to stream differential AST updates (only the modified node) instead of the entire tree.
 
 ## 2. Sync Worker Battery Drain
 - **Risk:** A continuous background Sync Manager polling or pushing frequently on mobile devices will cause excessive battery consumption.
