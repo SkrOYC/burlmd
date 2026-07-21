@@ -43,6 +43,7 @@ pub enum AstNode {
     ListItem { content: Vec<AstNode>, checked: Option<bool> },
     Blockquote { nodes: Vec<AstNode> },
     CodeBlock { language: Option<String>, code: String },
+    ThematicBreak,
     Image { alt_text: String, url_or_path: String },
     
     /// Represents a pending Git conflict that the user must resolve.
@@ -94,6 +95,9 @@ pub fn open_note_by_id(note_id: String) -> Result<NoteState, AppError> {
     unimplemented!()
 }
 
+// Note: block_paths are strictly index-based. They are robust for single-user typing,
+// but can shift during background syncs. Optimistic Concurrency Control (OCC) catches
+// desyncs by verifying `expected_base_revision` on save.
 #[frb(sync)]
 pub fn update_block(note_id: String, block_path: Vec<usize>, new_node: AstNode) -> Result<NoteState, AppError> {
     unimplemented!()

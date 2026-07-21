@@ -35,12 +35,16 @@ CREATE TABLE IF NOT EXISTS links (
 
 -- FTS5 Virtual Table for full-text search across all notes.
 -- Note: It is a standard FTS table. To avoid O(N) deletion scans on note_id,
--- the Core Engine must query `SELECT rowid FROM notes_fts WHERE note_id = ?` 
--- and then `DELETE FROM notes_fts WHERE rowid = ?`.
+-- the Core Engine must maintain the `fts_mapping` table.
 CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
-    note_id UNINDEXED,
     title,
     content
+);
+
+-- B-Tree index mapping a note's UUID to its FTS5 internal rowid for fast deletion
+CREATE TABLE IF NOT EXISTS fts_mapping (
+    note_id TEXT PRIMARY KEY,
+    fts_rowid INTEGER NOT NULL
 );
 
 -- Represents in-memory drafts that survive OS process termination (OOM kill)
@@ -48,8 +52,8 @@ CREATE TABLE IF NOT EXISTS drafts (
     note_id TEXT PRIMARY KEY,
     workspace_id TEXT NOT NULL,
     raw_markdown TEXT NOT NULL,
-    updated_at INTEGER NOT NULL,
-    FOREIGN KEY (note_id) REFERENCES notes(id) ON DELETE CASCADE
+    updated_at INTEGER NOT NULL
+    -- No foreign key to notes(id) because new notes start as drafts before saving
 );
 
 -- Represents explicit directories in the workspace (supports empty directories)
@@ -57,5 +61,6 @@ CREATE TABLE IF NOT EXISTS directories (
     id TEXT PRIMARY KEY,
     workspace_id TEXT NOT NULL,
     path TEXT NOT NULL,            -- Relative path within the Workspace
-    FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
+    FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
+    UNIQUE(workspace_id, path)
 );

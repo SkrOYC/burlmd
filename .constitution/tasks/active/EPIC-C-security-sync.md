@@ -7,7 +7,7 @@
 - **Category:** Correctness
 - **Scope (In-Scope Files):**
   - `rust/src/git/operations.rs`
-- **Description:** Implement programmatic Git `clone`, `commit`, `push`, and `pull` operations against the local Workspace directory using `gix`.
+- **Description:** Implement programmatic Git `clone`, `commit`, `push`, and `pull` operations against the local Workspace directory using `gix` (or shelling out to the `git` CLI if `gix` currently lacks robust working tree merge conflict generation).
 - **Acceptance Criteria (Gherkin):**
 ```gherkin
 Given a local directory with changes
