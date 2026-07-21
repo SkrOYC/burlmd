@@ -61,5 +61,7 @@ key.properties
 # --- Local / editor -------------------------------------------------------
 .vscode/
 .idea/
-*.log
+# Anchored, so log fixtures under rust/tests/ or test/ are not swallowed once
+# the sync and conflict-resolution suites grow them.
+/*.log
 .DS_Store

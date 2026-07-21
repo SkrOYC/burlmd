@@ -33,6 +33,9 @@ outside the store, pinned by `pubspec.lock` and `Cargo.lock` once those exist.
 
 ```bash
 # One-off, if you don't already have them
+# Any Nix >= 2.18 works. This is the Determinate Systems installer, a
+# third-party pipe-to-shell — read it first, or use the official installer
+# from https://nixos.org/download if you prefer.
 curl -fsSL https://install.determinate.systems/nix | sh -s -- install
 nix profile install nixpkgs#devenv   # devenv 2.x; the CLI itself is not covered
                                      # by devenv.lock — see note below
@@ -47,9 +50,13 @@ environment automatically whenever you `cd` into the repository.
 The first entry builds the shell and may take several minutes. Subsequent entries
 are near-instant.
 
-Everything below was exercised on Linux. macOS is a supported target of the same
-Flutter pin, but has not been run yet, and a macOS contributor still needs Xcode
-and CocoaPods from outside the Nix store.
+Everything below was exercised on Linux only. macOS is *expected* to work — the
+Flutter pin advertises both Darwin platforms — but no one has entered this shell
+on a Mac, so treat it as unverified. Two known rough edges there: `clang` is in
+`packages` unconditionally and would sit alongside the stdenv one, and
+`bundled-sqlcipher` links Security/CommonCrypto rather than the `openssl` this
+environment supplies. A macOS contributor also needs Xcode and CocoaPods from
+outside the Nix store.
 
 ## What the environment provides
 
@@ -58,7 +65,12 @@ and CocoaPods from outside the Nix store.
 | Flutter (bundles Dart) | 3.44.3 / Dart 3.12.2 | `nixpkgs` via `devenv.nix` |
 | Rust | 1.97.1 | [`rust-toolchain.toml`](rust-toolchain.toml) |
 | `flutter_rust_bridge_codegen` | 2.12.0 | `nixpkgs` via `devenv.nix` |
-| SQLCipher | 4.14.0 | vendored by `rusqlite`'s `bundled-sqlcipher` |
+| SQLCipher CLI | 4.16.0 | `nixpkgs` via `devenv.nix` |
+
+Once `CORE-A001` adds `rusqlite`, the library the app links is the SQLCipher
+**4.14.0** vendored by `bundled-sqlcipher` — not the CLI above. The two float
+independently; the CLI is present only for inspecting the encrypted index during
+development.
 
 No Android SDK is provisioned — mobile is out of product scope — but discovery
 is pinned shut. `ANDROID_HOME` and `ANDROID_SDK_ROOT` point at a deliberately

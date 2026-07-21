@@ -65,6 +65,13 @@ let
   # from "a manifest exists somewhere unexpected" (fail loudly). A bare
   # `[ -f rust/Cargo.toml ] || exit 0` would turn a layout change into a green
   # commit with no checks run and nothing said about it.
+  #
+  # They exclude `.constitution/` for the same reason the hooks do — the spec
+  # keeps source-shaped files as documentation (see contracts/ffi_api.rs), and a
+  # manifest example landing there must not hard-block every commit. Command
+  # substitution rather than `| grep -q`: under `pipefail`, grep exiting early
+  # can SIGPIPE the upstream `git ls-files` into a 141, which the negated form
+  # would read as "no manifest" and silently skip.
   rustHook =
     name: command:
     pkgs.writeShellScript "burlmd-${name}" ''
@@ -73,7 +80,7 @@ let
         cd rust
       elif [ -f Cargo.toml ]; then
         :
-      elif ! git ls-files -- '*Cargo.toml' | grep -q .; then
+      elif [ -z "$(git ls-files -- '*Cargo.toml' ':!.constitution/**')" ]; then
         exit 0
       else
         echo "burlmd: Cargo.toml found outside rust/ or the repository root." >&2
@@ -88,7 +95,7 @@ let
     pkgs.writeShellScript "burlmd-${name}" ''
       set -euo pipefail
       if [ ! -f pubspec.yaml ]; then
-        if git ls-files -- '*pubspec.yaml' | grep -q .; then
+        if [ -n "$(git ls-files -- '*pubspec.yaml' ':!.constitution/**')" ]; then
           echo "burlmd: pubspec.yaml found outside the repository root." >&2
           echo "        Update the dartHook guard in devenv.nix." >&2
           exit 1
@@ -172,9 +179,22 @@ in
     ANDROID_SDK_ROOT = "${config.env.DEVENV_ROOT}/.android/no-sdk";
   };
 
+  # The banner goes to stderr. On stdout it corrupts every non-interactive
+  # `devenv shell -- <cmd>` invocation — CI steps, `direnv exec`, and any
+  # `devenv shell -- cargo metadata | jq` style pipeline.
+  #
+  # Each probe is captured before defaulting: `$(cmd | cut ...) || echo '?'`
+  # never fires, because `||` binds to `cut`, which exits 0 on empty input. The
+  # fallback would silently print an empty field in exactly the broken case it
+  # exists to surface.
   enterShell = ''
-    echo "burlmd — local-first, Git-backed notes"
-    echo "  flutter $(flutter --version 2>/dev/null | head -n1 | cut -d' ' -f2 || echo '?')  |  rustc $(rustc --version 2>/dev/null | cut -d' ' -f2 || echo '?')  |  frb $(flutter_rust_bridge_codegen --version 2>/dev/null | cut -d' ' -f2 || echo '?')"
+    _v() { "$@" 2>/dev/null | head -n1 | cut -d' ' -f2; }
+    _flutter=$(_v flutter --version)
+    _rustc=$(_v rustc --version)
+    _frb=$(_v flutter_rust_bridge_codegen --version)
+    echo "burlmd — local-first, Git-backed notes" >&2
+    echo "  flutter ''${_flutter:-?}  |  rustc ''${_rustc:-?}  |  frb ''${_frb:-?}" >&2
+    unset -f _v
   '';
 
   # --- Quality gates (see .constitution/tech-spec/guidelines.md) ------------
