@@ -1,5 +1,12 @@
 # Stage 3: Technical Implementation Changelog
 
+## v1.0.1
+Phase 0 (tooling readiness). Amendments driven by empirically verifying the stack inside the new `devenv` shell rather than by design changes.
+- Replaced `fvm` with a `nixpkgs` pin (`flutterPackages.v3_44`) as the Flutter SDK pinning mechanism. `fvm` fetches unpatched SDK binaries that cannot execute on NixOS and sidesteps the Nix store.
+- Recorded `devenv` + `devenv.lock` as the reproducibility boundary for the whole toolchain.
+- Pinned the Rust toolchain to `1.97.1` and documented `1.94` as a hard floor: `libsqlite3-sys >= 0.38`, reached through `rusqlite`'s `bundled-sqlcipher` build, requires the stabilised `cfg_select!` macro.
+- Corrected the `rusqlite` feature set: `bundled-sqlcipher` alone (it implies `bundled`). The `fts5` feature no longer exists in `rusqlite` 0.40 — FTS5 ships enabled in the bundled amalgamation. Confirmed by an FTS5 `MATCH` query against a keyed SQLCipher 4.14.0 connection.
+
 ## v1.0.0
 - Selected `flutter_rust_bridge` (v2) for FFI, `rusqlite` for local index, and `gix` for Git operations.
 - Defined standard FRB monorepo layout.
