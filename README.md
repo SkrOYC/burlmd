@@ -31,18 +31,21 @@ install Flutter, Dart or Rust yourself. Package registries are a separate matter
 `pub` and `cargo` still resolve into `~/.pub-cache` and `~/.cargo/registry`
 outside the store, pinned by `pubspec.lock` and `Cargo.lock` once those exist.
 
+These are the commands devenv itself documents at
+<https://devenv.sh/getting-started/>; follow that page if it has moved on.
+
 ```bash
-# One-off, if you don't already have them
-# Any Nix >= 2.18 works. This is the Determinate Systems installer, a
-# third-party pipe-to-shell — read it first, or use the official installer
-# from https://nixos.org/download if you prefer.
-curl -fsSL https://install.determinate.systems/nix | sh -s -- install
-nix profile install nixpkgs#devenv   # devenv 2.x; the CLI itself is not covered
-                                     # by devenv.lock — see note below
+# One-off, if you don't already have them.
+sh <(curl -L https://nixos.org/nix/install) --daemon                 # Nix
+nix-env --install --attr devenv \
+  -f https://github.com/NixOS/nixpkgs/tarball/nixpkgs-unstable       # devenv
 
 # Then, from the repository root
 devenv shell
 ```
+
+devenv states no minimum Nix version. The `devenv` CLI is not covered by
+`devenv.lock` — see the note below the table.
 
 With [direnv](https://direnv.net) installed, `direnv allow` activates the
 environment automatically whenever you `cd` into the repository.
