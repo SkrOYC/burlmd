@@ -39,24 +39,25 @@ pub enum AstNode {
     Heading { level: u8, content: Vec<InlineElement> },
     Paragraph { content: Vec<InlineElement> },
     List { ordered: bool, items: Vec<AstNode> },
-    ListItem { content: Vec<InlineElement>, checked: Option<bool> },
+    ListItem { content: Vec<AstNode>, checked: Option<bool> },
     Blockquote { nodes: Vec<AstNode> },
     CodeBlock { language: Option<String>, code: String },
-    Image { alt_text: String, relative_workspace_path: String },
+    Image { alt_text: String, url_or_path: String },
     
     /// Represents a pending Git conflict that the user must resolve.
     /// Rendered as a Google-Docs style margin suggestion.
     Suggestion { 
-        base_content: Vec<AstNode>, 
+        base_content: Option<Vec<AstNode>>, 
+        local_content: Vec<AstNode>,
         incoming_content: Vec<AstNode> 
     },
 }
 
 #[frb]
 pub struct NoteState {
-    pub id: String,
-    pub is_dirty: bool,
-    pub nodes: Vec<AstNode>,
+    pub ast: Vec<AstNode>,
+    pub metadata: NoteMetadata,
+    pub base_revision: String,
 }
 
 // ---------------------------------------------------------------------------
@@ -108,7 +109,7 @@ pub fn delete_block(note_id: String, block_path: Vec<usize>) -> Result<NoteState
 }
 
 #[frb(sync)]
-pub fn resolve_suggestion(note_id: String, block_path: Vec<usize>, resolved_markdown: String) -> Result<NoteState, AppError> {
+pub fn resolve_suggestion(note_id: String, block_path: Vec<usize>, resolved_node: AstNode) -> Result<NoteState, AppError> {
     unimplemented!()
 }
 

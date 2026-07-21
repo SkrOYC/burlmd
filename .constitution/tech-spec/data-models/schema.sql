@@ -27,18 +27,17 @@ CREATE TABLE IF NOT EXISTS links (
     source_id TEXT NOT NULL,
     target_id TEXT,                -- Nullable for ghost links
     target_title TEXT NOT NULL,    -- The text inside [[Link]]
-    PRIMARY KEY (source_id, target_title),
+    PRIMARY KEY (source_id, target_title), -- Core Engine must use INSERT OR IGNORE
     FOREIGN KEY (source_id) REFERENCES notes(id) ON DELETE CASCADE
     -- No foreign key on target_id to allow "ghost links" to uncreated notes
 );
 
 -- FTS5 Virtual Table for full-text search across all notes.
--- This is a standard FTS table (not external content) so it can store 
--- the text and generate snippets. The Core Engine must manually 
--- INSERT/DELETE/UPDATE this table when indexing files.
+-- Note: It is a standard FTS table. To avoid O(N) deletion scans on note_id,
+-- the Core Engine must query `SELECT rowid FROM notes_fts WHERE note_id = ?` 
+-- and then `DELETE FROM notes_fts WHERE rowid = ?`.
 CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
+    note_id UNINDEXED,
     title,
-    content,
-    content='notes',
-    content_rowid='rowid'
+    content
 );
