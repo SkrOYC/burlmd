@@ -11,3 +11,6 @@
 ## 3. Large Repository Indexing Latency
 - **Risk:** For power users with thousands of notes, performing a full logical re-index of the graph (Links and OKF hierarchy) upon initial device clone could lock up the Core Engine for seconds or minutes.
 - **Mitigation:** The Local Repository must be designed to perform incremental indexing, updating only the files that changed in the latest pulled commits rather than rescanning the entire directory tree.
+## 6. Optimistic Concurrency Control for Background Sync
+- **Risk:** The background Sync Manager pulls remote changes and overwrites the local file while the user is actively editing a dirty AST draft in memory. When the user saves, the draft blindly overwrites the file, destroying the remote changes and Git conflict markers.
+- **Mitigation:** The Core Engine must implement Optimistic Concurrency Control (OCC). `save_note` will require an `expected_base_revision` (e.g., file hash or last-modified timestamp). If the on-disk file was modified by background sync while the draft was active, the save is rejected, and the Core Engine forces the UI to reload the file and render the newly injected Git conflict markers.

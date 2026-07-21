@@ -25,8 +25,9 @@ CREATE TABLE IF NOT EXISTS notes (
 -- Represents lateral connections between Notes
 CREATE TABLE IF NOT EXISTS links (
     source_id TEXT NOT NULL,
-    target_id TEXT NOT NULL,
-    PRIMARY KEY (source_id, target_id),
+    target_id TEXT,                -- Nullable for ghost links
+    target_title TEXT NOT NULL,    -- The text inside [[Link]]
+    PRIMARY KEY (source_id, target_title),
     FOREIGN KEY (source_id) REFERENCES notes(id) ON DELETE CASCADE
     -- No foreign key on target_id to allow "ghost links" to uncreated notes
 );
@@ -36,7 +37,8 @@ CREATE TABLE IF NOT EXISTS links (
 -- the text and generate snippets. The Core Engine must manually 
 -- INSERT/DELETE/UPDATE this table when indexing files.
 CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
-    note_id UNINDEXED,
     title,
-    content
+    content,
+    content='notes',
+    content_rowid='rowid'
 );

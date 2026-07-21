@@ -17,25 +17,21 @@ pub struct NoteMetadata {
 // ---------------------------------------------------------------------------
 
 #[frb]
-pub enum TextFormat {
-    Normal,
-    Bold,
-    Italic,
-    Strikethrough,
-    InlineCode,
-}
-
-#[frb]
 pub struct TextRun {
-    pub text: String,
-    pub format: TextFormat,
+    pub content: String,
+    pub bold: bool,
+    pub italic: bool,
+    pub strikethrough: bool,
+    pub code: bool,
 }
 
 #[frb]
 pub enum InlineElement {
     Text(TextRun),
-    Link { text: String, target_note_id: String },
-    ExternalLink { text: String, url: String },
+    /// A lateral link to another note `[[title]]`
+    Link { target_title: String, resolved_note_id: Option<String>, content: Vec<InlineElement> },
+    /// A standard markdown link `[text](url)`
+    ExternalLink { url: String, content: Vec<InlineElement> },
 }
 
 #[frb]
@@ -74,6 +70,8 @@ pub enum AppError {
     GitConflict,
     DatabaseError(String),
     CryptoError(String),
+    NetworkError(String),
+    OAuthError(String),
     IoError(String),
     ParseError(String),
 }
@@ -100,12 +98,22 @@ pub fn update_block(note_id: String, block_path: Vec<usize>, new_node: AstNode) 
 }
 
 #[frb(sync)]
+pub fn insert_block(note_id: String, block_path: Vec<usize>, new_node: AstNode) -> Result<NoteState, AppError> {
+    unimplemented!()
+}
+
+#[frb(sync)]
+pub fn delete_block(note_id: String, block_path: Vec<usize>) -> Result<NoteState, AppError> {
+    unimplemented!()
+}
+
+#[frb(sync)]
 pub fn resolve_suggestion(note_id: String, block_path: Vec<usize>, resolved_markdown: String) -> Result<NoteState, AppError> {
     unimplemented!()
 }
 
 #[frb(sync)]
-pub fn save_note(note_id: String) -> Result<(), AppError> {
+pub fn save_note(note_id: String, expected_base_revision: String) -> Result<(), AppError> {
     unimplemented!()
 }
 
