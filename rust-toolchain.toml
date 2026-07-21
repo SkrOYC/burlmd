@@ -1,0 +1,10 @@
+# Source of truth for the Rust toolchain (see .constitution/tech-spec/stack.md).
+# devenv reads this file via `languages.rust.toolchainFile`; rustup users get the
+# same toolchain automatically when entering the repository.
+[toolchain]
+# 1.95 is a hard floor: libsqlite3-sys >= 0.38 (pulled in by rusqlite's
+# bundled-sqlcipher build) uses `cfg_select!`, stabilised in Rust 1.95.0
+# (rust-lang/rust#149783).
+channel = "1.97.1"
+profile = "minimal"
+components = ["rustc", "cargo", "clippy", "rustfmt", "rust-analyzer", "rust-src"]

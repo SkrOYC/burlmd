@@ -13,7 +13,7 @@
 - **Expected Success Output:** App builds and runs default FRB template, rust tests pass.
 - **STOP Conditions:**
   - STOP if FFI generation fails due to missing system dependencies.
-- **Description:** Set up the standard `flutter_rust_bridge` monorepo. Clear out the default counter code and establish the `rust/src/api` directory structure.
+- **Description:** Set up the standard `flutter_rust_bridge` monorepo. Clear out the default counter code and establish the `rust/src/api` directory structure. FRB scaffolds `rust_builder/cargokit/` containing vendored third-party Dart that upstream says to ignore; add `analyzer.exclude` for it in `analysis_options.yaml`, or the `dart analyze` pre-commit hook will gate on code this project does not own. The `dart format` hook is already scoped to `lib/` and `test/` for the same reason.
 - **Acceptance Criteria (Gherkin):**
 ```gherkin
 Given a fresh clone of the repository

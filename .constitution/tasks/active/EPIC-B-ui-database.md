@@ -28,7 +28,7 @@ Then a new 256-bit key is generated and stored in the OS Keychain
 ```gherkin
 Given the SQLite initialization
 When the database file is written to disk
-Then the file is AES-256-GCM encrypted and cannot be opened by standard sqlite3 CLI
+Then the file is AES-256-CBC encrypted with HMAC-SHA512 page authentication and cannot be opened by standard sqlite3 CLI
 ```
 
 #### UIDB-B003 SQLite Initialization & Schema
