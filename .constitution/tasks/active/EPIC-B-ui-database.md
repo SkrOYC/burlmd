@@ -1,16 +1,46 @@
 # Epic B: UI & Database
 
-#### UIDB-B001 SQLite Initialization & Schema
-- **Type:** Feature
+#### UIDB-B001 Integrate Keychain Root Key
+- **Type:** Security
 - **Effort:** 3
 - **Dependencies:** CORE-A001
+- **Category:** Security
+- **Scope (In-Scope Files):**
+  - `rust/src/security/keyring.rs`
+- **Verification Command:** `cargo test security::`
+- **Description:** Implement Rust `keyring` integration to generate and securely store a 256-bit root AES key in the host OS secure enclave.
+- **Acceptance Criteria (Gherkin):**
+```gherkin
+Given a fresh installation
+When the app boots
+Then a new 256-bit key is generated and stored in the OS Keychain
+```
+
+#### UIDB-B002 Encrypt SQLite with SQLCipher
+- **Type:** Security
+- **Effort:** 5
+- **Dependencies:** UIDB-B001
+- **Category:** Security
+- **Scope (In-Scope Files):**
+  - `rust/src/db/connection.rs`
+- **Description:** Configure the `rusqlite` initialization to issue `PRAGMA key` using the root key from `UIDB-B001`.
+- **Acceptance Criteria (Gherkin):**
+```gherkin
+Given the SQLite initialization
+When the database file is written to disk
+Then the file is AES-256-GCM encrypted and cannot be opened by standard sqlite3 CLI
+```
+
+#### UIDB-B003 SQLite Initialization & Schema
+- **Type:** Feature
+- **Effort:** 3
+- **Dependencies:** UIDB-B002
 - **Category:** Correctness
 - **Scope (In-Scope Files):**
   - `rust/src/db/connection.rs`
   - `rust/src/db/schema.sql` (embedded or run on init)
 - **Verification Command:** `cargo test db::`
-- **Expected Success Output:** Database initializes in memory for tests.
-- **Description:** Implement `rusqlite` setup logic to initialize the local database file, applying the `notes`, `links`, and `notes_fts` tables using the TechSpec schema.
+- **Description:** Implement `rusqlite` setup logic to initialize the local encrypted database file, applying the `notes`, `links`, and `notes_fts` tables using the TechSpec schema.
 - **Acceptance Criteria (Gherkin):**
 ```gherkin
 Given an empty database path
@@ -18,10 +48,10 @@ When the db initialization routine runs
 Then the tables `notes` and `notes_fts` are created successfully
 ```
 
-#### UIDB-B002 Expose SQLite Queries to FFI
+#### UIDB-B004 Expose SQLite Queries to FFI
 - **Type:** Feature
 - **Effort:** 2
-- **Dependencies:** CORE-A003, UIDB-B001
+- **Dependencies:** CORE-A003, UIDB-B003
 - **Category:** Correctness
 - **Scope (In-Scope Files):**
   - `rust/src/api/ffi_api.rs`
@@ -34,7 +64,7 @@ When Dart calls `search_notes`
 Then the Rust core executes an FTS5 query and returns `NoteMetadata`
 ```
 
-#### UIDB-B003 Flutter Riverpod Setup
+#### UIDB-B005 Flutter Riverpod Setup
 - **Type:** Feature
 - **Effort:** 2
 - **Dependencies:** CORE-A001
@@ -51,10 +81,10 @@ When it boots
 Then the Rust API is injected via a Riverpod Provider
 ```
 
-#### UIDB-B004 Hybrid Editor Widget (Basic Rendering)
+#### UIDB-B006 Hybrid Editor Widget (Basic Rendering)
 - **Type:** Feature
 - **Effort:** 5
-- **Dependencies:** UIDB-B002, UIDB-B003
+- **Dependencies:** UIDB-B004, UIDB-B005
 - **Category:** Feature-Evolution
 - **Scope (In-Scope Files):**
   - `lib/src/components/editor.dart`
@@ -67,10 +97,10 @@ When the Editor renders the AST
 Then a bold Flutter Text widget is painted to the screen
 ```
 
-#### UIDB-B005 Editor FFI Streaming Connection
+#### UIDB-B007 Editor FFI Streaming Connection
 - **Type:** Feature
 - **Effort:** 3
-- **Dependencies:** UIDB-B004
+- **Dependencies:** UIDB-B006
 - **Category:** Correctness
 - **Scope (In-Scope Files):**
   - `lib/src/components/editor.dart`

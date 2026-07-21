@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS workspaces (
 
 -- Represents metadata for a Note (Markdown file on disk)
 CREATE TABLE IF NOT EXISTS notes (
-    id TEXT PRIMARY KEY,           -- Stable UUID (never derived from file path)
+    id TEXT PRIMARY KEY,           -- Stable UUID (persisted in Markdown YAML frontmatter)
     workspace_id TEXT NOT NULL,
     path TEXT NOT NULL,            -- The relative path within the Workspace
     title TEXT NOT NULL,
@@ -27,8 +27,8 @@ CREATE TABLE IF NOT EXISTS links (
     source_id TEXT NOT NULL,
     target_id TEXT NOT NULL,
     PRIMARY KEY (source_id, target_id),
-    FOREIGN KEY (source_id) REFERENCES notes(id) ON DELETE CASCADE,
-    FOREIGN KEY (target_id) REFERENCES notes(id) ON DELETE CASCADE
+    FOREIGN KEY (source_id) REFERENCES notes(id) ON DELETE CASCADE
+    -- No foreign key on target_id to allow "ghost links" to uncreated notes
 );
 
 -- FTS5 Virtual Table for full-text search across all notes.

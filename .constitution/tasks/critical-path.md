@@ -15,11 +15,11 @@ version: v1.0.0
 6. UIDB-B003
 7. UIDB-B004
 8. UIDB-B005
-9. SYNC-C001
-10. SYNC-C002
-11. SYNC-C003
-12. SYNC-C004
-13. SYNC-C005
+9. UIDB-B006
+10. UIDB-B007
+11. SYNC-C001
+12. SYNC-C002
+13. SYNC-C003
 
 ## Build Order Diagram
 
@@ -27,27 +27,25 @@ version: v1.0.0
 flowchart LR
     A001[CORE-A001] --> A002[CORE-A002]
     A001 --> B001[UIDB-B001]
-    A001 --> B003[UIDB-B003]
+    A001 --> B005[UIDB-B005]
     
     A002 --> A003[CORE-A003]
     
-    A003 --> B002[UIDB-B002]
-    B001 --> B002
+    B001 --> B002[UIDB-B002]
+    B002 --> B003[UIDB-B003]
     
-    B002 --> B004[UIDB-B004]
+    A003 --> B004[UIDB-B004]
     B003 --> B004
-    B004 --> B005[UIDB-B005]
     
-    B001 --> C001[SYNC-C001]
-    C001 --> C002[SYNC-C002]
+    B004 --> B006[UIDB-B006]
+    B005 --> B006
+    B006 --> B007[UIDB-B007]
     
-    C002 --> C003[SYNC-C003]
-    B002 --> C003
+    B004 --> C001[SYNC-C001]
+    B005 --> C002[SYNC-C002]
     
-    B003 --> C004[SYNC-C004]
-    
-    C003 --> C005[SYNC-C005]
-    C004 --> C005
+    C001 --> C003[SYNC-C003]
+    C002 --> C003
 ```
 
 ## Phasing Strategy
