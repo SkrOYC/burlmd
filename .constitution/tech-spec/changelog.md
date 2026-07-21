@@ -6,6 +6,8 @@ Phase 0 (tooling readiness). Amendments driven by empirically verifying the stac
 - Recorded `devenv` + `devenv.lock` as the reproducibility boundary for the whole toolchain.
 - Pinned the Rust toolchain to `1.97.1` and documented `1.94` as a hard floor: `libsqlite3-sys >= 0.38`, reached through `rusqlite`'s `bundled-sqlcipher` build, requires the stabilised `cfg_select!` macro.
 - Corrected the `rusqlite` feature set: `bundled-sqlcipher` alone (it implies `bundled`). The `fts5` feature no longer exists in `rusqlite` 0.40 — FTS5 ships enabled in the bundled amalgamation. Confirmed by an FTS5 `MATCH` query against a keyed SQLCipher 4.14.0 connection.
+- Updated the `guidelines.md` monorepo layout to include the phase 0 root files (`devenv.nix`, `devenv.yaml`, `devenv.lock`, `rust-toolchain.toml`, `.envrc`), and recorded that the documented commands assume the devenv shell.
+- Noted that `keyring` 4.x reaches the Secret Service through `zbus` in pure Rust, so no `libsecret`/`libdbus` native dependency is required on Linux.
 
 ## v1.0.0
 - Selected `flutter_rust_bridge` (v2) for FFI, `rusqlite` for local index, and `gix` for Git operations.

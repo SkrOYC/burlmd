@@ -6,6 +6,11 @@ The repository follows the default `flutter_rust_bridge` template structure to m
 ```text
 /
 ├── .constitution/       # AI Project Development Framework artifacts
+├── .envrc                   # direnv entrypoint; activates the devenv shell
+├── devenv.nix               # Developer environment: toolchains, native deps, git hooks
+├── devenv.yaml              # devenv inputs (nixpkgs, rust-overlay, git-hooks)
+├── devenv.lock              # Pinned input revisions; the reproducibility boundary
+├── rust-toolchain.toml      # Rust version pin, read by devenv and by rustup
 ├── android/             # Flutter Android build files
 ├── ios/                 # Flutter iOS build files
 ├── lib/                 # Dart/Flutter UI source code
@@ -25,6 +30,11 @@ The repository follows the default `flutter_rust_bridge` template structure to m
 ├── pubspec.yaml         # Dart dependencies
 └── flutter_rust_bridge.yaml # FRB configuration
 ```
+
+## Toolchain
+All commands below assume the `devenv` shell (`devenv shell`, or automatic via
+`direnv`). Toolchain versions are pinned there and in `rust-toolchain.toml`; see
+`stack.md` for the compatibility policy.
 
 ## Coding Standards
 1. **Rust:**

@@ -27,8 +27,9 @@ cross-compilation, graph visualisation and GitLab support are deferred.
 ## Getting started
 
 The toolchain is provisioned entirely by [devenv](https://devenv.sh) — you do not
-install Flutter, Dart or Rust yourself, and nothing is fetched outside the Nix
-store.
+install Flutter, Dart or Rust yourself. Package registries are a separate matter:
+`pub` and `cargo` still resolve into `~/.pub-cache` and `~/.cargo/registry`
+outside the store, pinned by `pubspec.lock` and `Cargo.lock` once those exist.
 
 ```bash
 # One-off, if you don't already have them
@@ -45,6 +46,10 @@ environment automatically whenever you `cd` into the repository.
 The first entry builds the shell and may take several minutes. Subsequent entries
 are near-instant.
 
+Everything below was exercised on Linux. macOS is a supported target of the same
+Flutter pin, but has not been run yet, and a macOS contributor still needs Xcode
+and CocoaPods from outside the Nix store.
+
 ## What the environment provides
 
 | Tool | Version | Pinned by |
@@ -56,8 +61,9 @@ are near-instant.
 
 It also carries the native dependencies the stack needs and that are easy to get
 wrong: the GTK/GL stack for the Flutter Linux embedder, `libclang` for the
-`bindgen` step inside `libsqlite3-sys`, `openssl` for the SQLCipher build, and
-`libsecret` for the `keyring` crate's Secret Service backend on Linux.
+`bindgen` step inside `libsqlite3-sys`, and `openssl` for the SQLCipher build.
+No Secret Service library is needed — `keyring` 4.x talks D-Bus in pure Rust via
+`zbus`.
 
 Exact versions are locked in `devenv.lock`. To move them forward, run
 `devenv update` and re-verify.

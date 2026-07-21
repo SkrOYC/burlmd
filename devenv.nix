@@ -1,4 +1,9 @@
-{ pkgs, lib, ... }:
+{
+  pkgs,
+  lib,
+  config,
+  ...
+}:
 
 let
   # Flutter SDK pin. This replaces `fvm` from the original tech-spec: fvm fetches
@@ -16,30 +21,44 @@ let
     at-spi2-core
     util-linux # libmount, pulled in transitively by glib's pkg-config file
     xorg.libX11
+    # libglvnd, which owns the libGL.so.1 loader ABI. The driver implementations
+    # come from the host (/run/opengl-driver on NixOS), so `mesa` is deliberately
+    # not listed: it would add a closure without making GL work anywhere it
+    # doesn't already.
     libGL
-    mesa
   ];
 
   # Native dependencies for the Rust core engine.
   #   openssl    -> rusqlite's `bundled-sqlcipher` links against it
-  #   libsecret  -> the `keyring` crate's Secret Service backend on Linux
   #   sqlcipher  -> CLI, for inspecting the encrypted index during development
+  #
+  # Note there is no Secret Service library here on purpose. `keyring` 4.x reaches
+  # the OS enclave through `zbus`, which speaks the D-Bus wire protocol in pure
+  # Rust; neither `libsecret` nor `libdbus` is required to build or run it.
   coreEngineDeps = with pkgs; [
     openssl
-    libsecret
     sqlcipher
   ];
 
-  # Hooks are written defensively: this repository is intentionally empty of
-  # application code until CORE-A001 lands, so each hook no-ops until the
-  # corresponding manifest exists.
+  # Hooks are written defensively on two axes. They no-op until the manifest they
+  # need exists, because this repository is intentionally empty of application
+  # code until CORE-A001 lands; and they invoke absolute store paths rather than
+  # bare `cargo`/`dart`, so that a commit made outside the devenv shell (a GUI
+  # client, an editor's built-in git, a terminal where direnv was never allowed)
+  # runs the real check instead of failing with `command not found`.
+  # `toolchainPackage`, not `toolchain.cargo`: when `toolchainFile` is set, the
+  # combined toolchain lands in the former, while the latter silently falls back
+  # to nixpkgs' cargo — a different version from the one the shell provides.
+  cargo = "${config.languages.rust.toolchainPackage}/bin/cargo";
+  dart = "${flutter}/bin/dart";
+
   rustHook =
     name: command:
     pkgs.writeShellScript "burlmd-${name}" ''
       set -euo pipefail
       [ -f rust/Cargo.toml ] || exit 0
       cd rust
-      exec ${command}
+      exec ${cargo} ${command}
     '';
 
   dartHook =
@@ -47,7 +66,7 @@ let
     pkgs.writeShellScript "burlmd-${name}" ''
       set -euo pipefail
       [ -f pubspec.yaml ] || exit 0
-      exec ${command}
+      exec ${dart} ${command}
     '';
 in
 {
@@ -79,6 +98,11 @@ in
       pkg-config
       cmake
       ninja
+      # The clang wrapper also puts `cc`/`ld` on PATH ahead of stdenv's gcc
+      # wrapper, so the Rust half of the monorepo links with clang too. Flutter's
+      # Linux desktop build requires clang, and mixing is fine in practice; this
+      # is called out so the coupling is a recorded decision rather than a
+      # surprise the first time a `cc`-crate build script misbehaves.
       clang
 
       git
@@ -92,10 +116,11 @@ in
     # bindgen (pulled in by rusqlite/sqlcipher) locates libclang through this.
     LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
 
-    # The compiled Linux desktop bundle resolves GTK/GL at runtime.
-    LD_LIBRARY_PATH = lib.optionalString pkgs.stdenv.isLinux (
-      lib.makeLibraryPath (linuxDesktopDeps ++ coreEngineDeps)
-    );
+    # Deliberately no LD_LIBRARY_PATH. CMake bakes an RPATH into the Flutter
+    # desktop bundle, so it resolves every library on its own (verified with
+    # `ldd` on a release build with the variable unset). Exporting it would apply
+    # to every process in the shell, and on a non-NixOS host it forces nix-built
+    # libc-linked sonames into distro binaries like git, curl and ssh.
   };
 
   enterShell = ''
@@ -105,38 +130,48 @@ in
 
   # --- Quality gates (see .constitution/tech-spec/guidelines.md) ------------
 
+  # Every hook is named under a `burlmd-` prefix. Bare ids such as `dart-analyze`
+  # and `clippy` already exist as builtins in git-hooks.nix, and defining one
+  # merges with the builtin rather than replacing it — inheriting its `types`
+  # filter, which pre-commit intersects with `files`. That silently narrowed
+  # `dart analyze` to Dart files only, dropping the `pubspec.yaml` case the
+  # pattern was widened for.
   git-hooks.hooks = {
-    rust-fmt = {
+    # devenv.nix is the one source file in the repository that no other hook
+    # covers, and it is currently the only source file at all.
+    nixfmt-rfc-style.enable = true;
+
+    burlmd-rust-fmt = {
       enable = true;
       name = "cargo fmt";
-      entry = toString (rustHook "cargo-fmt" "cargo fmt --all -- --check");
+      entry = toString (rustHook "cargo-fmt" "fmt --all -- --check");
       files = "\\.rs$";
       pass_filenames = false;
       language = "system";
     };
 
-    rust-clippy = {
+    burlmd-rust-clippy = {
       enable = true;
       name = "cargo clippy";
-      entry = toString (rustHook "cargo-clippy" "cargo clippy --all-targets -- -D warnings");
+      entry = toString (rustHook "cargo-clippy" "clippy --all-targets -- -D warnings");
       files = "(\\.rs|Cargo\\.(toml|lock))$";
       pass_filenames = false;
       language = "system";
     };
 
-    dart-fmt = {
+    burlmd-dart-fmt = {
       enable = true;
       name = "dart format";
-      entry = toString (dartHook "dart-format" "dart format --set-exit-if-changed .");
+      entry = toString (dartHook "dart-format" "format --set-exit-if-changed .");
       files = "\\.dart$";
       pass_filenames = false;
       language = "system";
     };
 
-    dart-analyze = {
+    burlmd-dart-analyze = {
       enable = true;
       name = "dart analyze";
-      entry = toString (dartHook "dart-analyze" "dart analyze");
+      entry = toString (dartHook "dart-analyze" "analyze");
       files = "(\\.dart|pubspec\\.yaml)$";
       pass_filenames = false;
       language = "system";

@@ -24,13 +24,27 @@ build/
 doc/api/
 
 # --- Platform build artifacts ---------------------------------------------
+# `flutter create` writes its own per-platform .gitignore files, which stay
+# authoritative. These entries are only a safety net for a tree where those
+# files have not been generated yet. Note that generated plugin registrants are
+# deliberately NOT ignored: upstream tracks them, and the platform projects
+# reference them, so ignoring them breaks a fresh clone before `flutter pub get`.
 linux/flutter/ephemeral/
 macos/Flutter/ephemeral/
-macos/Flutter/GeneratedPluginRegistrant.swift
 android/.gradle/
 android/local.properties
 ios/Flutter/ephemeral/
 ios/Pods/
+
+# --- Secrets --------------------------------------------------------------
+# EPIC-C introduces GitHub OAuth credentials; signing material follows if the
+# mobile targets are ever unshelved.
+.env
+*.env
+secrets.*
+*.jks
+*.keystore
+key.properties
 
 # --- Local / editor -------------------------------------------------------
 .vscode/
