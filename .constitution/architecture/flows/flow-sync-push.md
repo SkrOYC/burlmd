@@ -27,6 +27,7 @@ sequenceDiagram
         Sync->>Remote: Fetch latest upstream
         Remote-->>Sync: Upstream commits
         Sync->>Local: Merge upstream into local (writes raw conflict markers if overlapping)
+        Sync->>Sync: Trigger re-index of notes and notes_fts tables
         Sync->>Core: Notify of potential conflict state
     end
 ```

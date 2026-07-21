@@ -6,6 +6,7 @@ use flutter_rust_bridge::frb;
 #[frb]
 pub struct NoteMetadata {
     pub id: String,
+    pub workspace_id: String,
     pub path: String,
     pub title: String,
     pub last_modified: i64,
@@ -79,7 +80,7 @@ pub enum AppError {
 
 /// Authenticates via OAuth and returns a Workspace ID
 #[frb]
-pub async fn authenticate_workspace(provider: String, auth_code: String) -> Result<String, AppError> {
+pub async fn authenticate_workspace(provider: String, auth_code: String, code_verifier: String) -> Result<String, AppError> {
     unimplemented!()
 }
 

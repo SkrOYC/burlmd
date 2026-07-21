@@ -6,9 +6,10 @@ PRAGMA foreign_keys = ON;
 -- Represents an authorized Git repository connected via OAuth
 CREATE TABLE IF NOT EXISTS workspaces (
     id TEXT PRIMARY KEY,           -- UUID
-    remote_url TEXT NOT NULL,      -- Git URL (e.g., https://github.com/user/repo.git)
-    provider TEXT NOT NULL,        -- 'github', 'gitlab'
-    last_synced INTEGER            -- Unix timestamp
+    name TEXT NOT NULL,
+    provider TEXT NOT NULL,        -- 'github', 'gitlab', 'local'
+    remote_url TEXT,               -- The Git remote URL
+    local_path TEXT NOT NULL       -- Absolute path where the repo is cloned on disk
 );
 
 -- Represents metadata for a Note (Markdown file on disk)
@@ -40,4 +41,21 @@ CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
     note_id UNINDEXED,
     title,
     content
+);
+
+-- Represents in-memory drafts that survive OS process termination (OOM kill)
+CREATE TABLE IF NOT EXISTS drafts (
+    note_id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL,
+    raw_markdown TEXT NOT NULL,
+    updated_at INTEGER NOT NULL,
+    FOREIGN KEY (note_id) REFERENCES notes(id) ON DELETE CASCADE
+);
+
+-- Represents explicit directories in the workspace (supports empty directories)
+CREATE TABLE IF NOT EXISTS directories (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL,
+    path TEXT NOT NULL,            -- Relative path within the Workspace
+    FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
 );
