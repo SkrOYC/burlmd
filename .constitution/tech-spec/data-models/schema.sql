@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS workspaces (
 
 -- Represents metadata for a Note (Markdown file on disk)
 CREATE TABLE IF NOT EXISTS notes (
-    id TEXT PRIMARY KEY,           -- UUID or a normalized file path hash
+    id TEXT PRIMARY KEY,           -- Stable UUID (never derived from file path)
     workspace_id TEXT NOT NULL,
     path TEXT NOT NULL,            -- The relative path within the Workspace
     title TEXT NOT NULL,
@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS links (
 -- the text and generate snippets. The Core Engine must manually 
 -- INSERT/DELETE/UPDATE this table when indexing files.
 CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
+    note_id UNINDEXED,
     title,
     content
 );

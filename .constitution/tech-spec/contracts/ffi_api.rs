@@ -41,6 +41,7 @@ pub enum InlineElement {
 pub enum AstNode {
     Heading { level: u8, content: Vec<InlineElement> },
     Paragraph { content: Vec<InlineElement> },
+    List { ordered: bool, items: Vec<AstNode> },
     ListItem { content: Vec<InlineElement>, checked: Option<bool> },
     Blockquote { nodes: Vec<AstNode> },
     CodeBlock { language: Option<String>, code: String },
@@ -65,33 +66,42 @@ pub struct NoteState {
 // Synchronous & Asynchronous Interface Methods
 // ---------------------------------------------------------------------------
 
+#[frb]
+pub enum AppError {
+    DiskFull,
+    AuthExpired,
+    GitConflict,
+    IoError(String),
+    ParseError(String),
+}
+
 /// Authenticates via OAuth and returns a Workspace ID
 #[frb]
-pub async fn authenticate_workspace(provider: String, auth_code: String) -> anyhow::Result<String> {
+pub async fn authenticate_workspace(provider: String, auth_code: String) -> Result<String, AppError> {
     unimplemented!()
 }
 
 #[frb(sync)] 
-pub fn open_note(path: String) -> anyhow::Result<NoteState> {
+pub fn open_note(path: String) -> Result<NoteState, AppError> {
     unimplemented!()
 }
 
 #[frb(sync)]
-pub fn update_block(note_id: String, block_index: usize, new_node: AstNode) -> anyhow::Result<NoteState> {
+pub fn update_block(note_id: String, block_path: Vec<usize>, new_node: AstNode) -> Result<NoteState, AppError> {
     unimplemented!()
 }
 
 #[frb(sync)]
-pub fn resolve_suggestion(note_id: String, block_index: usize, keep_incoming: bool) -> anyhow::Result<NoteState> {
+pub fn resolve_suggestion(note_id: String, block_path: Vec<usize>, keep_incoming: bool) -> Result<NoteState, AppError> {
     unimplemented!()
 }
 
 #[frb(sync)]
-pub fn save_note(note_id: String) -> anyhow::Result<()> {
+pub fn save_note(note_id: String) -> Result<(), AppError> {
     unimplemented!()
 }
 
 #[frb]
-pub async fn search_notes(query: String) -> anyhow::Result<Vec<NoteMetadata>> {
+pub async fn search_notes(query: String) -> Result<Vec<NoteMetadata>, AppError> {
     unimplemented!()
 }
