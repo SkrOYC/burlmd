@@ -423,7 +423,11 @@ fn parse_wikilinks_in_text_run(tr: TextRun, out: &mut Vec<InlineElement>) {
 
             rest = &after_start[end_idx + 2..];
         } else {
-            out.push(InlineElement::Text(tr.with_content(rest.to_string())));
+            // No closing `]]`: emit the unmatched `[[...` tail as literal text.
+            // `before` (the prefix up to `start_idx`) was already pushed above.
+            out.push(InlineElement::Text(
+                tr.with_content(rest[start_idx..].to_string()),
+            ));
             return;
         }
     }
@@ -497,6 +501,60 @@ mod tests {
             } else {
                 panic!("Expected Link inline element");
             }
+        } else {
+            panic!("Expected Paragraph node");
+        }
+    }
+
+    #[test]
+    fn test_unterminated_wikilink_does_not_duplicate_prefix() {
+        let md = "abc [[unclosed";
+        let ast = parse_markdown(md);
+
+        assert_eq!(ast.len(), 1);
+        if let AstNode::Paragraph { content } = &ast[0] {
+            let joined: String = content
+                .iter()
+                .map(|elem| match elem {
+                    InlineElement::Text(tr) => tr.content.as_str(),
+                    _ => "",
+                })
+                .collect();
+            assert_eq!(joined, "abc [[unclosed");
+        } else {
+            panic!("Expected Paragraph node");
+        }
+    }
+
+    #[test]
+    fn test_multiple_unterminated_wikilinks_do_not_duplicate_prefix() {
+        let md = "see [[A]] and [[B";
+        let ast = parse_markdown(md);
+
+        assert_eq!(ast.len(), 1);
+        if let AstNode::Paragraph { content } = &ast[0] {
+            let joined: String = content
+                .iter()
+                .map(|elem| match elem {
+                    InlineElement::Text(tr) => tr.content.to_string(),
+                    InlineElement::Link {
+                        target_title,
+                        content,
+                        ..
+                    } => {
+                        let _ = target_title;
+                        content
+                            .iter()
+                            .map(|inner| match inner {
+                                InlineElement::Text(tr) => tr.content.as_str(),
+                                _ => "",
+                            })
+                            .collect()
+                    }
+                    _ => String::new(),
+                })
+                .collect();
+            assert_eq!(joined, "see A and [[B");
         } else {
             panic!("Expected Paragraph node");
         }
