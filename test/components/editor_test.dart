@@ -100,6 +100,57 @@ void main() {
     expect(editableText.style.fontWeight, FontWeight.bold);
   });
 
+  testWidgets(
+    'a multi-run paragraph stays read-only and keeps each run\'s distinct '
+    'styling, instead of collapsing to one TextField style',
+    (tester) async {
+      final ast = [
+        AstNode.paragraph(
+          content: [
+            InlineElement.text(
+              const TextRun(
+                content: 'before ',
+                bold: false,
+                italic: false,
+                strikethrough: false,
+                code: false,
+              ),
+            ),
+            InlineElement.text(
+              const TextRun(
+                content: 'bold',
+                bold: true,
+                italic: false,
+                strikethrough: false,
+                code: false,
+              ),
+            ),
+          ],
+        ),
+      ];
+
+      await pumpEditor(tester, ast);
+
+      // A single TextField can only carry one uniform style, so a multi-run
+      // paragraph must render read-only instead of silently flattening to
+      // the first run's style and dropping the rest (the bug this test
+      // guards: caught via an actual `flutter run`, not a prior test, since
+      // every other test here only ever builds single-run paragraphs).
+      expect(find.byType(TextField), findsNothing);
+
+      final richText = tester.widget<RichText>(find.byType(RichText).first);
+      final wrapperSpan = richText.text as TextSpan;
+      final paragraphSpan = wrapperSpan.children!.first as TextSpan;
+      final firstRun = paragraphSpan.children![0] as TextSpan;
+      final secondRun = paragraphSpan.children![1] as TextSpan;
+
+      expect(firstRun.text, 'before ');
+      expect(firstRun.style?.fontWeight, isNull);
+      expect(secondRun.text, 'bold');
+      expect(secondRun.style?.fontWeight, FontWeight.bold);
+    },
+  );
+
   testWidgets('a non-bold TextRun inside a Heading still inherits bold', (
     tester,
   ) async {

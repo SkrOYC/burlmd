@@ -25,12 +25,20 @@ class Editor extends ConsumerWidget {
   }
 }
 
-/// Wraps a single top-level AST node. Paragraphs are live-editable via a
-/// [TextField] that streams keystrokes straight to `update_block`; every
-/// other block type stays read-only through [renderBlock] for now — full
-/// rich multi-run inline editing (splitting a styled run mid-string while
-/// preserving neighboring formatting and cursor position) is materially
-/// larger than this ticket's scope.
+/// Wraps a single top-level AST node. Only a single-run Paragraph (exactly
+/// one plain-or-styled [InlineElement_Text], no Links) is live-editable via a
+/// [TextField] that streams keystrokes straight to `update_block`. A
+/// [TextField] can only apply one uniform [TextStyle], so a multi-run
+/// paragraph (e.g. plain text followed by a bold word) made editable this way
+/// would silently flatten to a single style and lose every distinction a
+/// reader relies on — caught visually (a real `flutter run`, not just
+/// `flutter test`) when a mixed-run paragraph rendered with no bold/italic/
+/// code distinction at all. Multi-run paragraphs and every other block type
+/// stay read-only through [renderBlock], which preserves full per-run
+/// fidelity via [renderInline]'s `TextSpan` tree — full rich multi-run inline
+/// editing (splitting a styled run mid-string while preserving neighboring
+/// formatting and cursor position) is materially larger than this ticket's
+/// scope.
 class _EditableBlock extends ConsumerStatefulWidget {
   const _EditableBlock({required this.node, required this.blockPath});
 
@@ -81,48 +89,45 @@ class _EditableBlockState extends ConsumerState<_EditableBlock> {
 
   @override
   Widget build(BuildContext context) => switch (widget.node) {
-    AstNode_Paragraph(:final content) => TextField(
-      controller: _controller,
-      // A plain TextField carries one uniform style, not per-character rich
-      // text, so full multi-run formatting can't survive being made
-      // editable this way (that's the "materially larger" scope this ticket
-      // defers). Deriving the field's style from the paragraph's first run
-      // at least keeps a simple single-style paragraph (the common case)
-      // visibly bold/italic/etc. while editable, rather than always
-      // silently flattening to plain text.
-      style: _paragraphStyle(content),
-      decoration: const InputDecoration(border: InputBorder.none),
-      onChanged: (text) {
-        final newNode = AstNode.paragraph(
-          content: [
-            InlineElement.text(
-              TextRun(
-                content: text,
-                bold: false,
-                italic: false,
-                strikethrough: false,
-                code: false,
+    AstNode_Paragraph(:final content) when _isSingleTextRun(content) =>
+      TextField(
+        controller: _controller,
+        // Deriving the field's style from the (only) run keeps a single-run
+        // paragraph visibly bold/italic/etc. while editable. Safe here
+        // specifically because _isSingleTextRun guarantees there is exactly
+        // one run — for a multi-run paragraph this same derivation would
+        // silently drop every run after the first, so those stay read-only
+        // instead (see the class doc comment).
+        style: _paragraphStyle(content),
+        decoration: const InputDecoration(border: InputBorder.none),
+        onChanged: (text) {
+          final newNode = AstNode.paragraph(
+            content: [
+              InlineElement.text(
+                TextRun(
+                  content: text,
+                  bold: false,
+                  italic: false,
+                  strikethrough: false,
+                  code: false,
+                ),
               ),
-            ),
-          ],
-        );
-        ref
-            .read(activeNoteProvider.notifier)
-            .updateBlock(widget.blockPath, newNode);
-      },
-    ),
+            ],
+          );
+          ref
+              .read(activeNoteProvider.notifier)
+              .updateBlock(widget.blockPath, newNode);
+        },
+      ),
     final other => renderBlock(other),
   };
 }
 
-// Only reads InlineElement_Text runs: a paragraph containing a Link or
-// ExternalLink renders that portion as empty in the editable field (its
-// display text is dropped), and any edit permanently drops it from the AST
-// on the first keystroke, since `onChanged` always rebuilds the paragraph as
-// a single plain-text run. This is a known content-fidelity gap of the
-// single-run-editing scope narrowing, not (yet) user-visible data loss:
-// `save_note` doesn't serialize the AST back to Markdown, so nothing
-// persists this to disk today.
+// Only called meaningfully for paragraphs _isSingleTextRun accepts (see
+// below); for any other node this result is computed but unused, since
+// _EditableBlockState.build only reads _controller inside that same guard.
+// A single-run paragraph is always exactly one InlineElement_Text, never a
+// Link/ExternalLink, so there is no display-text-dropping gap here.
 String _plainText(AstNode node) {
   if (node is! AstNode_Paragraph) return '';
   final buffer = StringBuffer();
@@ -132,9 +137,17 @@ String _plainText(AstNode node) {
   return buffer.toString();
 }
 
+/// A paragraph is only safe to make editable via a single-style [TextField]
+/// when it has exactly one run and that run is plain text (not a Link) — see
+/// the `_EditableBlock` class doc comment for why a multi-run paragraph must
+/// stay read-only instead.
+bool _isSingleTextRun(List<InlineElement> content) =>
+    content.length == 1 && content.single is InlineElement_Text;
+
 /// Derives a single [TextStyle] for an editable paragraph field from its
-/// first text run's formatting (a `TextField` can't apply per-character
-/// rich styling the way [renderInline]'s `TextSpan` tree can).
+/// (only, per [_isSingleTextRun]) run's formatting — a `TextField` can't
+/// apply per-character rich styling the way [renderInline]'s `TextSpan` tree
+/// can.
 TextStyle? _paragraphStyle(List<InlineElement> content) {
   for (final inline in content) {
     if (inline is InlineElement_Text) {

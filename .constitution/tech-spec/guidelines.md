@@ -77,3 +77,30 @@ leaving `cargo fmt` on `pre-commit`.
 Nothing enforces the rest, and no CI runs today. The testing standard, the Rust
 async-avoidance rule and the Dart widget-statelessness rule are review
 obligations, not gated checks.
+
+## Running the real app (manual visual verification)
+
+No ticket's Verification Command through Epic B ever actually launches the
+built app (`cargo build`/`cargo test` exercise the Rust half in isolation;
+`flutter test` exercises the Dart half against fakes) — so `flutter run`
+launching successfully, and the UI actually rendering correctly, had never
+once been checked. `flutter run -d linux` in debug mode crashes on startup:
+`flutter_rust_bridge`'s generated Dart loader
+(`lib/src/rust/frb_generated.dart`, `ioDirectory: 'rust/target/release/'`)
+looks for the native library at `rust/target/release/librust.so`, resolved
+relative to the process's working directory — a location distinct from the
+`bundled-sqlcipher` debug artifact `cargokit` builds into
+`build/linux/x64/debug/bundle/lib/librust.so` for the actual app bundle.
+Before running the desktop app locally (`flutter run -d linux`, or any manual
+visual check), run `cargo build --release` once from `rust/` (and again after
+any change to the Rust API surface) so that path exists.
+
+For actually looking at rendered output rather than only asserting widget
+properties in `flutter test` — screenshot with `grim`, and, when keystroke
+simulation is needed, inject text with `wtype` (both provisioned in
+`devenv.nix` for this purpose; Wayland-only, not part of the CI/build path).
+This caught a real regression during Epic B's closeout that six passing
+`flutter test` cases missed entirely: every test's paragraphs happened to be
+single-run, so the bug (a multi-run paragraph silently collapsing to one
+uniform, unstyled `TextField` once made editable) was invisible to the suite
+until an actual rendered screenshot was inspected.
