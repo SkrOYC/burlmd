@@ -9,11 +9,25 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 part 'ffi_api.freezed.dart';
 
-// These functions are ignored because they are not marked as `pub`: `save_note_impl`, `search_notes_impl`
+// These functions are ignored because they are not marked as `pub`: `active_note_cache`, `save_note_impl`, `search_notes_impl`, `set_node_at_path`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`
 
 NoteState openNote({required String path}) =>
     RustLib.instance.api.crateApiFfiApiOpenNote(path: path);
+
+/// Applies a keystroke-level edit to the currently open note's in-memory
+/// AST and returns the updated `NoteState`. `block_path` is an index path
+/// into the AST tree (see `set_node_at_path`); it does not persist the
+/// change to disk or the DB — that happens via `save_note`.
+NoteState updateBlock({
+  required String noteId,
+  required Uint64List blockPath,
+  required AstNode newNode,
+}) => RustLib.instance.api.crateApiFfiApiUpdateBlock(
+  noteId: noteId,
+  blockPath: blockPath,
+  newNode: newNode,
+);
 
 Future<List<NoteMetadata>> searchNotes({required String query}) =>
     RustLib.instance.api.crateApiFfiApiSearchNotes(query: query);

@@ -126,6 +126,7 @@ Then a bold Flutter Text widget is painted to the screen
 - **Scope (In-Scope Files):**
   - `lib/src/components/editor.dart`
   - `rust/src/api/ffi_api.rs`
+- **Verification Command:** `cargo build && flutter test`
 - **Description:** Wire the Editor widget to send block updates (keystrokes) to the `update_block` FFI function, and re-render the AST returned by the Core Engine.
 - **Acceptance Criteria (Gherkin):**
 ```gherkin
@@ -133,3 +134,11 @@ Given the active Editor
 When the user types a character
 Then the FFI function is called and the UI updates within 16ms
 ```
+
+##### UIDB-B007 Deviations & Justifications
+- **Touched Files:** `rust/src/frb_generated.rs`, `lib/src/rust/api/ffi_api.dart`, `lib/src/rust/frb_generated.dart`, `lib/src/rust/frb_generated.io.dart`, `lib/src/rust/frb_generated.web.dart`, `lib/src/providers/note_providers.dart`, `lib/src/providers/rust_api_provider.dart`, `test/components/editor_test.dart`
+- **Justification:** `rust/src/frb_generated.rs` and `lib/src/rust/**` are `flutter_rust_bridge_codegen generate` output for `update_block`'s new FFI surface, following the same pattern recorded for `UIDB-B004`. `note_providers.dart`/`rust_api_provider.dart` (both already-owned by `UIDB-B005`) are the natural home for the `updateBlock` call the Editor needs — adding it there rather than duplicating FFI-calling logic inside `editor.dart` keeps the "UI stays stateless regarding content" boundary intact. `test/components/editor_test.dart` required updating because `Editor`'s public constructor changed (it now reads `activeNoteProvider` instead of taking `ast` directly, per this ticket's declared scope covering `editor.dart`), which is the same "test needs updating because production API changed" situation the `UIDB-B005` review flagged in advance for this exact milestone.
+
+**Judgment call — the 16ms Gherkin.** A literal stopwatch assertion isn't meaningful under `flutter test`'s fake clock (it doesn't measure real GPU frame timing). The test instead asserts the *shape* of synchronicity: typing triggers exactly one `tester.pump()` before the provider state reflects the edit, with no `await`/`Future` anywhere in the Dart-side call chain (`TextField.onChanged` → `NoteController.updateBlock` → `RustApi.updateBlock`), consistent with the Rust side being `#[frb(sync)]` rather than `async`. This proves no extra async hop sits between keystroke and re-render, which is the actual latency risk the Gherkin is guarding against, without asserting a specific millisecond figure that a widget test can't honestly measure.
+
+**Scope narrowing — single-run paragraph editing only.** Only `Paragraph` blocks are editable in this ticket; other block types stay read-only via `renderBlock`. Editing also collapses a paragraph to a single plain-text run on every keystroke (via `TextField`, which — unlike the `TextSpan` tree `renderBlock` uses for read-only rendering — can only apply one uniform style, not per-character rich formatting). To avoid regressing `UIDB-B006`'s own bold-rendering acceptance criterion, the field's style is derived from the paragraph's first run so a simple single-style paragraph still displays correctly while editable; full rich multi-run inline editing (splitting a styled run mid-string while preserving neighboring formatting and cursor position) is materially larger than this ticket's scope and is left as a follow-up.

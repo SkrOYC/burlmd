@@ -1,5 +1,6 @@
 import 'package:burlmd/src/providers/rust_api_provider.dart';
 import 'package:burlmd/src/rust/api/ffi_api.dart';
+import 'package:burlmd/src/rust/markdown/ast.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// Holds the currently open note's state. UI widgets must stay stateless
@@ -11,6 +12,14 @@ class NoteController extends Notifier<NoteState?> {
 
   void open(String path) {
     state = ref.read(rustApiProvider).openNote(path);
+  }
+
+  void updateBlock(List<int> blockPath, AstNode newNode) {
+    final current = state;
+    if (current == null) return;
+    state = ref
+        .read(rustApiProvider)
+        .updateBlock(current.metadata.id, blockPath, newNode);
   }
 }
 

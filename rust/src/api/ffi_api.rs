@@ -1,3 +1,5 @@
+use std::sync::Mutex;
+
 use flutter_rust_bridge::frb;
 
 // AST types are owned by the `markdown` domain module (parsing is what
@@ -68,11 +70,77 @@ pub fn open_note(path: String) -> Result<NoteState, AppError> {
         snippet: None,
     };
 
-    Ok(NoteState {
+    let state = NoteState {
         ast,
         metadata,
         base_revision: "head".to_string(),
-    })
+    };
+    *active_note_cache()? = Some(state.clone());
+    Ok(state)
+}
+
+/// Holds the AST of the note currently open in the editor, kept in memory so
+/// `update_block` can apply keystroke-level edits without a disk round trip.
+/// Single-slot: this project's UI has exactly one active note at a time.
+static ACTIVE_NOTE_CACHE: Mutex<Option<NoteState>> = Mutex::new(None);
+
+fn active_note_cache() -> Result<std::sync::MutexGuard<'static, Option<NoteState>>, AppError> {
+    ACTIVE_NOTE_CACHE
+        .lock()
+        .map_err(|_| AppError::DatabaseError("active note cache poisoned".to_string()))
+}
+
+/// Descends `path` into `nodes`, replacing the addressed node with
+/// `new_node`. Only `List`/`ListItem`/`Blockquote` hold nested `Vec<AstNode>`
+/// and can be descended through; `Suggestion`'s three branches are
+/// deliberately not addressable here (that's `resolve_suggestion`'s job).
+fn set_node_at_path(
+    nodes: &mut [AstNode],
+    path: &[usize],
+    new_node: AstNode,
+) -> Result<(), AppError> {
+    let (&idx, rest) = path
+        .split_first()
+        .ok_or_else(|| AppError::ParseError("empty block_path".to_string()))?;
+    let node = nodes
+        .get_mut(idx)
+        .ok_or_else(|| AppError::ParseError(format!("block_path index {idx} out of range")))?;
+
+    if rest.is_empty() {
+        *node = new_node;
+        return Ok(());
+    }
+
+    match node {
+        AstNode::List { items, .. } => set_node_at_path(items, rest, new_node),
+        AstNode::ListItem { content, .. } => set_node_at_path(content, rest, new_node),
+        AstNode::Blockquote { nodes, .. } => set_node_at_path(nodes, rest, new_node),
+        AstNode::Suggestion { .. } => Err(AppError::ParseError(
+            "update_block cannot descend into Suggestion nodes; use resolve_suggestion".to_string(),
+        )),
+        _ => Err(AppError::ParseError(format!(
+            "block_path continues past a leaf node at index {idx}"
+        ))),
+    }
+}
+
+/// Applies a keystroke-level edit to the currently open note's in-memory
+/// AST and returns the updated `NoteState`. `block_path` is an index path
+/// into the AST tree (see `set_node_at_path`); it does not persist the
+/// change to disk or the DB — that happens via `save_note`.
+#[frb(sync)]
+pub fn update_block(
+    note_id: String,
+    block_path: Vec<usize>,
+    new_node: AstNode,
+) -> Result<NoteState, AppError> {
+    let mut cache = active_note_cache()?;
+    let state = cache
+        .as_mut()
+        .filter(|s| s.metadata.id == note_id)
+        .ok_or_else(|| AppError::IoError(format!("no open note with id {note_id}")))?;
+    set_node_at_path(&mut state.ast, &block_path, new_node)?;
+    Ok(state.clone())
 }
 
 /// Full-text search over all indexed notes, ordered by FTS5 relevance
@@ -167,6 +235,101 @@ mod tests {
     use rusqlite::Connection;
 
     use super::*;
+
+    // `set_node_at_path` is tested directly as a pure function rather than
+    // through `update_block`, which reads/writes the process-wide
+    // `ACTIVE_NOTE_CACHE` static: exercising that shared mutable state from
+    // parallel test threads would make tests interfere with each other,
+    // mirroring why `search_notes_impl`/`save_note_impl` below are tested
+    // against an isolated connection instead of the DB singleton.
+    fn text_paragraph(s: &str) -> AstNode {
+        AstNode::Paragraph {
+            content: vec![InlineElement::Text(TextRun {
+                content: s.to_string(),
+                bold: false,
+                italic: false,
+                strikethrough: false,
+                code: false,
+            })],
+        }
+    }
+
+    #[test]
+    fn set_node_at_path_replaces_a_top_level_node() {
+        let mut nodes = vec![text_paragraph("a"), text_paragraph("b")];
+        set_node_at_path(&mut nodes, &[1], text_paragraph("replaced")).unwrap();
+
+        assert_eq!(nodes[0], text_paragraph("a"));
+        assert_eq!(nodes[1], text_paragraph("replaced"));
+    }
+
+    #[test]
+    fn set_node_at_path_descends_through_list_and_list_item() {
+        let mut nodes = vec![AstNode::List {
+            ordered: false,
+            items: vec![AstNode::ListItem {
+                content: vec![text_paragraph("original")],
+                checked: None,
+            }],
+        }];
+
+        set_node_at_path(&mut nodes, &[0, 0, 0], text_paragraph("edited")).unwrap();
+
+        let AstNode::List { items, .. } = &nodes[0] else {
+            panic!("expected a List node");
+        };
+        let AstNode::ListItem { content, .. } = &items[0] else {
+            panic!("expected a ListItem node");
+        };
+        assert_eq!(content[0], text_paragraph("edited"));
+    }
+
+    #[test]
+    fn set_node_at_path_descends_through_blockquote() {
+        let mut nodes = vec![AstNode::Blockquote {
+            nodes: vec![text_paragraph("original")],
+        }];
+
+        set_node_at_path(&mut nodes, &[0, 0], text_paragraph("edited")).unwrap();
+
+        let AstNode::Blockquote { nodes: inner, .. } = &nodes[0] else {
+            panic!("expected a Blockquote node");
+        };
+        assert_eq!(inner[0], text_paragraph("edited"));
+    }
+
+    #[test]
+    fn set_node_at_path_rejects_an_empty_path() {
+        let mut nodes = vec![text_paragraph("a")];
+        let result = set_node_at_path(&mut nodes, &[], text_paragraph("x"));
+        assert!(matches!(result, Err(AppError::ParseError(_))));
+    }
+
+    #[test]
+    fn set_node_at_path_rejects_an_out_of_range_index() {
+        let mut nodes = vec![text_paragraph("a")];
+        let result = set_node_at_path(&mut nodes, &[5], text_paragraph("x"));
+        assert!(matches!(result, Err(AppError::ParseError(_))));
+    }
+
+    #[test]
+    fn set_node_at_path_rejects_descending_into_a_leaf_node() {
+        let mut nodes = vec![text_paragraph("a")];
+        // Paragraph has no nested Vec<AstNode> to descend into.
+        let result = set_node_at_path(&mut nodes, &[0, 0], text_paragraph("x"));
+        assert!(matches!(result, Err(AppError::ParseError(_))));
+    }
+
+    #[test]
+    fn set_node_at_path_rejects_descending_into_a_suggestion() {
+        let mut nodes = vec![AstNode::Suggestion {
+            base_content: None,
+            local_content: vec![text_paragraph("local")],
+            incoming_content: vec![text_paragraph("incoming")],
+        }];
+        let result = set_node_at_path(&mut nodes, &[0, 0], text_paragraph("x"));
+        assert!(matches!(result, Err(AppError::ParseError(_))));
+    }
 
     // These exercise `search_notes_impl`/`save_note_impl` directly against an
     // in-memory, unencrypted connection rather than through the `search_notes`/

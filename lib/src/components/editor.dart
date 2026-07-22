@@ -1,19 +1,129 @@
+import 'package:burlmd/src/providers/note_providers.dart';
 import 'package:burlmd/src/rust/markdown/ast.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-/// Renders a parsed Markdown AST as read-only Flutter widgets, so users see
-/// formatted text (bold, headings, lists, ...) instead of raw markup.
-/// Stateless regarding note content: `ast` is the sole input, supplied by a
-/// caller reading note state from a Riverpod provider — this widget never
-/// stores or owns content itself.
-class Editor extends StatelessWidget {
-  const Editor({super.key, required this.ast});
-
-  final List<AstNode> ast;
+/// Renders the currently open note's AST as formatted, editable Flutter
+/// widgets, so users see actual bold/italic/headings/lists instead of raw
+/// markdown syntax. Stateless regarding note content: it reads `ast` from
+/// [activeNoteProvider] rather than owning or caching it itself; edits flow
+/// back out through the same provider (and, ultimately, the Rust core) so
+/// that provider stays the single source of truth.
+class Editor extends ConsumerWidget {
+  const Editor({super.key});
 
   @override
-  Widget build(BuildContext context) =>
-      ListView(children: [for (final node in ast) renderBlock(node)]);
+  Widget build(BuildContext context, WidgetRef ref) {
+    final note = ref.watch(activeNoteProvider);
+    if (note == null) return const SizedBox.shrink();
+    return ListView(
+      children: [
+        for (var i = 0; i < note.ast.length; i++)
+          _EditableBlock(node: note.ast[i], blockPath: [i]),
+      ],
+    );
+  }
+}
+
+/// Wraps a single top-level AST node. Paragraphs are live-editable via a
+/// [TextField] that streams keystrokes straight to `update_block`; every
+/// other block type stays read-only through [renderBlock] for now — full
+/// rich multi-run inline editing (splitting a styled run mid-string while
+/// preserving neighboring formatting and cursor position) is materially
+/// larger than this ticket's scope.
+class _EditableBlock extends ConsumerStatefulWidget {
+  const _EditableBlock({required this.node, required this.blockPath});
+
+  final AstNode node;
+  final List<int> blockPath;
+
+  @override
+  ConsumerState<_EditableBlock> createState() => _EditableBlockState();
+}
+
+class _EditableBlockState extends ConsumerState<_EditableBlock> {
+  // Held in State (rather than rebuilt every keystroke) so the cursor
+  // doesn't jump to the end of the field on every rebuild. This is ephemeral
+  // edit-widget presentation state, not note content, so it doesn't violate
+  // the "stateless regarding content" rule — the content itself still comes
+  // only from `activeNoteProvider`.
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: _plainText(widget.node));
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => switch (widget.node) {
+    AstNode_Paragraph(:final content) => TextField(
+      controller: _controller,
+      // A plain TextField carries one uniform style, not per-character rich
+      // text, so full multi-run formatting can't survive being made
+      // editable this way (that's the "materially larger" scope this ticket
+      // defers). Deriving the field's style from the paragraph's first run
+      // at least keeps a simple single-style paragraph (the common case)
+      // visibly bold/italic/etc. while editable, rather than always
+      // silently flattening to plain text.
+      style: _paragraphStyle(content),
+      decoration: const InputDecoration(border: InputBorder.none),
+      onChanged: (text) {
+        final newNode = AstNode.paragraph(
+          content: [
+            InlineElement.text(
+              TextRun(
+                content: text,
+                bold: false,
+                italic: false,
+                strikethrough: false,
+                code: false,
+              ),
+            ),
+          ],
+        );
+        ref
+            .read(activeNoteProvider.notifier)
+            .updateBlock(widget.blockPath, newNode);
+      },
+    ),
+    final other => renderBlock(other),
+  };
+}
+
+String _plainText(AstNode node) {
+  if (node is! AstNode_Paragraph) return '';
+  final buffer = StringBuffer();
+  for (final inline in node.content) {
+    if (inline is InlineElement_Text) buffer.write(inline.field0.content);
+  }
+  return buffer.toString();
+}
+
+/// Derives a single [TextStyle] for an editable paragraph field from its
+/// first text run's formatting (a `TextField` can't apply per-character
+/// rich styling the way [renderInline]'s `TextSpan` tree can).
+TextStyle? _paragraphStyle(List<InlineElement> content) {
+  for (final inline in content) {
+    if (inline is InlineElement_Text) {
+      final run = inline.field0;
+      return TextStyle(
+        fontWeight: run.bold ? FontWeight.bold : FontWeight.normal,
+        fontStyle: run.italic ? FontStyle.italic : FontStyle.normal,
+        decoration: run.strikethrough
+            ? TextDecoration.lineThrough
+            : TextDecoration.none,
+        fontFamily: run.code ? 'monospace' : null,
+      );
+    }
+  }
+  return null;
 }
 
 Widget _renderListItem(List<AstNode> content, bool? checked, String marker) =>

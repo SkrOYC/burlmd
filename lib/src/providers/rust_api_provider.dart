@@ -1,5 +1,8 @@
 import 'package:burlmd/src/rust/api/ffi_api.dart' as ffi;
+import 'package:burlmd/src/rust/markdown/ast.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart'
+    show Uint64List;
 
 /// Thin, app-owned wrapper around the generated FRB free functions. This is
 /// the seam application code depends on instead of importing `ffi_api.dart`
@@ -16,6 +19,16 @@ class RustApi {
 
   void saveNote(String noteId, String expectedBaseRevision) =>
       ffi.saveNote(noteId: noteId, expectedBaseRevision: expectedBaseRevision);
+
+  ffi.NoteState updateBlock(
+    String noteId,
+    List<int> blockPath,
+    AstNode newNode,
+  ) => ffi.updateBlock(
+    noteId: noteId,
+    blockPath: Uint64List.fromList(blockPath),
+    newNode: newNode,
+  );
 }
 
 /// Injects the Rust API surface into the widget tree. `RustLib.init()` must
