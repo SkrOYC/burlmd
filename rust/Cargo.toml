@@ -11,6 +11,7 @@ flutter_rust_bridge = "=2.12.0"
 getrandom = "0.4.3"
 keyring = "4.1.5"
 pulldown-cmark = "0.12"
+zeroize = "1.9.0"
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frb_expand)'] }

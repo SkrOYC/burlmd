@@ -30,7 +30,8 @@ The repository follows the default `flutter_rust_bridge` template structure to m
 │   │   ├── api/             # FFI interface exposed to Dart
 │   │   ├── db/              # rusqlite database management
 │   │   ├── git/             # gix integration
-│   │   └── markdown/        # AST parsing logic
+│   │   ├── markdown/        # AST parsing logic
+│   │   └── security/        # OS Keychain root-key integration
 ├── pubspec.yaml             # Dart dependencies
 └── flutter_rust_bridge.yaml # FRB configuration
 ```
