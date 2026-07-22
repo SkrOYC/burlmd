@@ -38,7 +38,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.12.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1918914929;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 1886362596;
 
 // Section: executor
 
@@ -110,6 +110,36 @@ fn wire__crate__api__simple__init_app_impl(
         },
     )
 }
+fn wire__crate__api__ffi_api__open_note_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "open_note",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_path = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, crate::api::ffi_api::AppError>((move || {
+                let output_ok = crate::api::ffi_api::open_note(api_path)?;
+                Ok(output_ok)
+            })())
+        },
+    )
+}
 
 // Section: dart2rust
 
@@ -118,6 +148,207 @@ impl SseDecode for String {
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         let mut inner = <Vec<u8>>::sse_decode(deserializer);
         return String::from_utf8(inner).unwrap();
+    }
+}
+
+impl SseDecode for crate::api::ffi_api::AppError {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut tag_ = <i32>::sse_decode(deserializer);
+        match tag_ {
+            0 => {
+                return crate::api::ffi_api::AppError::DiskFull;
+            }
+            1 => {
+                return crate::api::ffi_api::AppError::AuthExpired;
+            }
+            2 => {
+                return crate::api::ffi_api::AppError::GitConflict;
+            }
+            3 => {
+                let mut var_field0 = <String>::sse_decode(deserializer);
+                return crate::api::ffi_api::AppError::DatabaseError(var_field0);
+            }
+            4 => {
+                let mut var_field0 = <String>::sse_decode(deserializer);
+                return crate::api::ffi_api::AppError::CryptoError(var_field0);
+            }
+            5 => {
+                let mut var_field0 = <String>::sse_decode(deserializer);
+                return crate::api::ffi_api::AppError::NetworkError(var_field0);
+            }
+            6 => {
+                let mut var_field0 = <String>::sse_decode(deserializer);
+                return crate::api::ffi_api::AppError::OAuthError(var_field0);
+            }
+            7 => {
+                let mut var_field0 = <String>::sse_decode(deserializer);
+                return crate::api::ffi_api::AppError::IoError(var_field0);
+            }
+            8 => {
+                let mut var_field0 = <String>::sse_decode(deserializer);
+                return crate::api::ffi_api::AppError::ParseError(var_field0);
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+
+impl SseDecode for crate::api::ffi_api::AstNode {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut tag_ = <i32>::sse_decode(deserializer);
+        match tag_ {
+            0 => {
+                let mut var_level = <u8>::sse_decode(deserializer);
+                let mut var_content =
+                    <Vec<crate::api::ffi_api::InlineElement>>::sse_decode(deserializer);
+                return crate::api::ffi_api::AstNode::Heading {
+                    level: var_level,
+                    content: var_content,
+                };
+            }
+            1 => {
+                let mut var_content =
+                    <Vec<crate::api::ffi_api::InlineElement>>::sse_decode(deserializer);
+                return crate::api::ffi_api::AstNode::Paragraph {
+                    content: var_content,
+                };
+            }
+            2 => {
+                let mut var_ordered = <bool>::sse_decode(deserializer);
+                let mut var_items = <Vec<crate::api::ffi_api::AstNode>>::sse_decode(deserializer);
+                return crate::api::ffi_api::AstNode::List {
+                    ordered: var_ordered,
+                    items: var_items,
+                };
+            }
+            3 => {
+                let mut var_content = <Vec<crate::api::ffi_api::AstNode>>::sse_decode(deserializer);
+                let mut var_checked = <Option<bool>>::sse_decode(deserializer);
+                return crate::api::ffi_api::AstNode::ListItem {
+                    content: var_content,
+                    checked: var_checked,
+                };
+            }
+            4 => {
+                let mut var_nodes = <Vec<crate::api::ffi_api::AstNode>>::sse_decode(deserializer);
+                return crate::api::ffi_api::AstNode::Blockquote { nodes: var_nodes };
+            }
+            5 => {
+                let mut var_language = <Option<String>>::sse_decode(deserializer);
+                let mut var_code = <String>::sse_decode(deserializer);
+                return crate::api::ffi_api::AstNode::CodeBlock {
+                    language: var_language,
+                    code: var_code,
+                };
+            }
+            6 => {
+                return crate::api::ffi_api::AstNode::ThematicBreak;
+            }
+            7 => {
+                let mut var_altText = <String>::sse_decode(deserializer);
+                let mut var_urlOrPath = <String>::sse_decode(deserializer);
+                return crate::api::ffi_api::AstNode::Image {
+                    alt_text: var_altText,
+                    url_or_path: var_urlOrPath,
+                };
+            }
+            8 => {
+                let mut var_baseContent =
+                    <Option<Vec<crate::api::ffi_api::AstNode>>>::sse_decode(deserializer);
+                let mut var_localContent =
+                    <Vec<crate::api::ffi_api::AstNode>>::sse_decode(deserializer);
+                let mut var_incomingContent =
+                    <Vec<crate::api::ffi_api::AstNode>>::sse_decode(deserializer);
+                return crate::api::ffi_api::AstNode::Suggestion {
+                    base_content: var_baseContent,
+                    local_content: var_localContent,
+                    incoming_content: var_incomingContent,
+                };
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+
+impl SseDecode for bool {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        deserializer.cursor.read_u8().unwrap() != 0
+    }
+}
+
+impl SseDecode for i64 {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        deserializer.cursor.read_i64::<NativeEndian>().unwrap()
+    }
+}
+
+impl SseDecode for crate::api::ffi_api::InlineElement {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut tag_ = <i32>::sse_decode(deserializer);
+        match tag_ {
+            0 => {
+                let mut var_field0 = <crate::api::ffi_api::TextRun>::sse_decode(deserializer);
+                return crate::api::ffi_api::InlineElement::Text(var_field0);
+            }
+            1 => {
+                let mut var_targetTitle = <String>::sse_decode(deserializer);
+                let mut var_resolvedNoteId = <Option<String>>::sse_decode(deserializer);
+                let mut var_content =
+                    <Vec<crate::api::ffi_api::InlineElement>>::sse_decode(deserializer);
+                return crate::api::ffi_api::InlineElement::Link {
+                    target_title: var_targetTitle,
+                    resolved_note_id: var_resolvedNoteId,
+                    content: var_content,
+                };
+            }
+            2 => {
+                let mut var_url = <String>::sse_decode(deserializer);
+                let mut var_content =
+                    <Vec<crate::api::ffi_api::InlineElement>>::sse_decode(deserializer);
+                return crate::api::ffi_api::InlineElement::ExternalLink {
+                    url: var_url,
+                    content: var_content,
+                };
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+
+impl SseDecode for Vec<crate::api::ffi_api::AstNode> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::api::ffi_api::AstNode>::sse_decode(deserializer));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<crate::api::ffi_api::InlineElement> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::api::ffi_api::InlineElement>::sse_decode(
+                deserializer,
+            ));
+        }
+        return ans_;
     }
 }
 
@@ -130,6 +361,93 @@ impl SseDecode for Vec<u8> {
             ans_.push(<u8>::sse_decode(deserializer));
         }
         return ans_;
+    }
+}
+
+impl SseDecode for crate::api::ffi_api::NoteMetadata {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_id = <String>::sse_decode(deserializer);
+        let mut var_workspaceId = <String>::sse_decode(deserializer);
+        let mut var_path = <String>::sse_decode(deserializer);
+        let mut var_title = <String>::sse_decode(deserializer);
+        let mut var_lastModified = <i64>::sse_decode(deserializer);
+        let mut var_snippet = <Option<String>>::sse_decode(deserializer);
+        return crate::api::ffi_api::NoteMetadata {
+            id: var_id,
+            workspace_id: var_workspaceId,
+            path: var_path,
+            title: var_title,
+            last_modified: var_lastModified,
+            snippet: var_snippet,
+        };
+    }
+}
+
+impl SseDecode for crate::api::ffi_api::NoteState {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_ast = <Vec<crate::api::ffi_api::AstNode>>::sse_decode(deserializer);
+        let mut var_metadata = <crate::api::ffi_api::NoteMetadata>::sse_decode(deserializer);
+        let mut var_baseRevision = <String>::sse_decode(deserializer);
+        return crate::api::ffi_api::NoteState {
+            ast: var_ast,
+            metadata: var_metadata,
+            base_revision: var_baseRevision,
+        };
+    }
+}
+
+impl SseDecode for Option<String> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<String>::sse_decode(deserializer));
+        } else {
+            return None;
+        }
+    }
+}
+
+impl SseDecode for Option<bool> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<bool>::sse_decode(deserializer));
+        } else {
+            return None;
+        }
+    }
+}
+
+impl SseDecode for Option<Vec<crate::api::ffi_api::AstNode>> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<Vec<crate::api::ffi_api::AstNode>>::sse_decode(
+                deserializer,
+            ));
+        } else {
+            return None;
+        }
+    }
+}
+
+impl SseDecode for crate::api::ffi_api::TextRun {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_content = <String>::sse_decode(deserializer);
+        let mut var_bold = <bool>::sse_decode(deserializer);
+        let mut var_italic = <bool>::sse_decode(deserializer);
+        let mut var_strikethrough = <bool>::sse_decode(deserializer);
+        let mut var_code = <bool>::sse_decode(deserializer);
+        return crate::api::ffi_api::TextRun {
+            content: var_content,
+            bold: var_bold,
+            italic: var_italic,
+            strikethrough: var_strikethrough,
+            code: var_code,
+        };
     }
 }
 
@@ -149,13 +467,6 @@ impl SseDecode for i32 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         deserializer.cursor.read_i32::<NativeEndian>().unwrap()
-    }
-}
-
-impl SseDecode for bool {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
-        deserializer.cursor.read_u8().unwrap() != 0
     }
 }
 
@@ -182,16 +493,403 @@ fn pde_ffi_dispatcher_sync_impl(
     // Codec=Pde (Serialization + dispatch), see doc to use other codecs
     match func_id {
         1 => wire__crate__api__simple__greet_impl(ptr, rust_vec_len, data_len),
+        3 => wire__crate__api__ffi_api__open_note_impl(ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
 
 // Section: rust2dart
 
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::ffi_api::AppError {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            crate::api::ffi_api::AppError::DiskFull => [0.into_dart()].into_dart(),
+            crate::api::ffi_api::AppError::AuthExpired => [1.into_dart()].into_dart(),
+            crate::api::ffi_api::AppError::GitConflict => [2.into_dart()].into_dart(),
+            crate::api::ffi_api::AppError::DatabaseError(field0) => {
+                [3.into_dart(), field0.into_into_dart().into_dart()].into_dart()
+            }
+            crate::api::ffi_api::AppError::CryptoError(field0) => {
+                [4.into_dart(), field0.into_into_dart().into_dart()].into_dart()
+            }
+            crate::api::ffi_api::AppError::NetworkError(field0) => {
+                [5.into_dart(), field0.into_into_dart().into_dart()].into_dart()
+            }
+            crate::api::ffi_api::AppError::OAuthError(field0) => {
+                [6.into_dart(), field0.into_into_dart().into_dart()].into_dart()
+            }
+            crate::api::ffi_api::AppError::IoError(field0) => {
+                [7.into_dart(), field0.into_into_dart().into_dart()].into_dart()
+            }
+            crate::api::ffi_api::AppError::ParseError(field0) => {
+                [8.into_dart(), field0.into_into_dart().into_dart()].into_dart()
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::api::ffi_api::AppError {}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::ffi_api::AppError>
+    for crate::api::ffi_api::AppError
+{
+    fn into_into_dart(self) -> crate::api::ffi_api::AppError {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::ffi_api::AstNode {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            crate::api::ffi_api::AstNode::Heading { level, content } => [
+                0.into_dart(),
+                level.into_into_dart().into_dart(),
+                content.into_into_dart().into_dart(),
+            ]
+            .into_dart(),
+            crate::api::ffi_api::AstNode::Paragraph { content } => {
+                [1.into_dart(), content.into_into_dart().into_dart()].into_dart()
+            }
+            crate::api::ffi_api::AstNode::List { ordered, items } => [
+                2.into_dart(),
+                ordered.into_into_dart().into_dart(),
+                items.into_into_dart().into_dart(),
+            ]
+            .into_dart(),
+            crate::api::ffi_api::AstNode::ListItem { content, checked } => [
+                3.into_dart(),
+                content.into_into_dart().into_dart(),
+                checked.into_into_dart().into_dart(),
+            ]
+            .into_dart(),
+            crate::api::ffi_api::AstNode::Blockquote { nodes } => {
+                [4.into_dart(), nodes.into_into_dart().into_dart()].into_dart()
+            }
+            crate::api::ffi_api::AstNode::CodeBlock { language, code } => [
+                5.into_dart(),
+                language.into_into_dart().into_dart(),
+                code.into_into_dart().into_dart(),
+            ]
+            .into_dart(),
+            crate::api::ffi_api::AstNode::ThematicBreak => [6.into_dart()].into_dart(),
+            crate::api::ffi_api::AstNode::Image {
+                alt_text,
+                url_or_path,
+            } => [
+                7.into_dart(),
+                alt_text.into_into_dart().into_dart(),
+                url_or_path.into_into_dart().into_dart(),
+            ]
+            .into_dart(),
+            crate::api::ffi_api::AstNode::Suggestion {
+                base_content,
+                local_content,
+                incoming_content,
+            } => [
+                8.into_dart(),
+                base_content.into_into_dart().into_dart(),
+                local_content.into_into_dart().into_dart(),
+                incoming_content.into_into_dart().into_dart(),
+            ]
+            .into_dart(),
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::api::ffi_api::AstNode {}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::ffi_api::AstNode>
+    for crate::api::ffi_api::AstNode
+{
+    fn into_into_dart(self) -> crate::api::ffi_api::AstNode {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::ffi_api::InlineElement {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            crate::api::ffi_api::InlineElement::Text(field0) => {
+                [0.into_dart(), field0.into_into_dart().into_dart()].into_dart()
+            }
+            crate::api::ffi_api::InlineElement::Link {
+                target_title,
+                resolved_note_id,
+                content,
+            } => [
+                1.into_dart(),
+                target_title.into_into_dart().into_dart(),
+                resolved_note_id.into_into_dart().into_dart(),
+                content.into_into_dart().into_dart(),
+            ]
+            .into_dart(),
+            crate::api::ffi_api::InlineElement::ExternalLink { url, content } => [
+                2.into_dart(),
+                url.into_into_dart().into_dart(),
+                content.into_into_dart().into_dart(),
+            ]
+            .into_dart(),
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::ffi_api::InlineElement
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::ffi_api::InlineElement>
+    for crate::api::ffi_api::InlineElement
+{
+    fn into_into_dart(self) -> crate::api::ffi_api::InlineElement {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::ffi_api::NoteMetadata {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.id.into_into_dart().into_dart(),
+            self.workspace_id.into_into_dart().into_dart(),
+            self.path.into_into_dart().into_dart(),
+            self.title.into_into_dart().into_dart(),
+            self.last_modified.into_into_dart().into_dart(),
+            self.snippet.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::ffi_api::NoteMetadata
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::ffi_api::NoteMetadata>
+    for crate::api::ffi_api::NoteMetadata
+{
+    fn into_into_dart(self) -> crate::api::ffi_api::NoteMetadata {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::ffi_api::NoteState {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.ast.into_into_dart().into_dart(),
+            self.metadata.into_into_dart().into_dart(),
+            self.base_revision.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::ffi_api::NoteState
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::ffi_api::NoteState>
+    for crate::api::ffi_api::NoteState
+{
+    fn into_into_dart(self) -> crate::api::ffi_api::NoteState {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::ffi_api::TextRun {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.content.into_into_dart().into_dart(),
+            self.bold.into_into_dart().into_dart(),
+            self.italic.into_into_dart().into_dart(),
+            self.strikethrough.into_into_dart().into_dart(),
+            self.code.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::api::ffi_api::TextRun {}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::ffi_api::TextRun>
+    for crate::api::ffi_api::TextRun
+{
+    fn into_into_dart(self) -> crate::api::ffi_api::TextRun {
+        self
+    }
+}
+
 impl SseEncode for String {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <Vec<u8>>::sse_encode(self.into_bytes(), serializer);
+    }
+}
+
+impl SseEncode for crate::api::ffi_api::AppError {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        match self {
+            crate::api::ffi_api::AppError::DiskFull => {
+                <i32>::sse_encode(0, serializer);
+            }
+            crate::api::ffi_api::AppError::AuthExpired => {
+                <i32>::sse_encode(1, serializer);
+            }
+            crate::api::ffi_api::AppError::GitConflict => {
+                <i32>::sse_encode(2, serializer);
+            }
+            crate::api::ffi_api::AppError::DatabaseError(field0) => {
+                <i32>::sse_encode(3, serializer);
+                <String>::sse_encode(field0, serializer);
+            }
+            crate::api::ffi_api::AppError::CryptoError(field0) => {
+                <i32>::sse_encode(4, serializer);
+                <String>::sse_encode(field0, serializer);
+            }
+            crate::api::ffi_api::AppError::NetworkError(field0) => {
+                <i32>::sse_encode(5, serializer);
+                <String>::sse_encode(field0, serializer);
+            }
+            crate::api::ffi_api::AppError::OAuthError(field0) => {
+                <i32>::sse_encode(6, serializer);
+                <String>::sse_encode(field0, serializer);
+            }
+            crate::api::ffi_api::AppError::IoError(field0) => {
+                <i32>::sse_encode(7, serializer);
+                <String>::sse_encode(field0, serializer);
+            }
+            crate::api::ffi_api::AppError::ParseError(field0) => {
+                <i32>::sse_encode(8, serializer);
+                <String>::sse_encode(field0, serializer);
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+
+impl SseEncode for crate::api::ffi_api::AstNode {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        match self {
+            crate::api::ffi_api::AstNode::Heading { level, content } => {
+                <i32>::sse_encode(0, serializer);
+                <u8>::sse_encode(level, serializer);
+                <Vec<crate::api::ffi_api::InlineElement>>::sse_encode(content, serializer);
+            }
+            crate::api::ffi_api::AstNode::Paragraph { content } => {
+                <i32>::sse_encode(1, serializer);
+                <Vec<crate::api::ffi_api::InlineElement>>::sse_encode(content, serializer);
+            }
+            crate::api::ffi_api::AstNode::List { ordered, items } => {
+                <i32>::sse_encode(2, serializer);
+                <bool>::sse_encode(ordered, serializer);
+                <Vec<crate::api::ffi_api::AstNode>>::sse_encode(items, serializer);
+            }
+            crate::api::ffi_api::AstNode::ListItem { content, checked } => {
+                <i32>::sse_encode(3, serializer);
+                <Vec<crate::api::ffi_api::AstNode>>::sse_encode(content, serializer);
+                <Option<bool>>::sse_encode(checked, serializer);
+            }
+            crate::api::ffi_api::AstNode::Blockquote { nodes } => {
+                <i32>::sse_encode(4, serializer);
+                <Vec<crate::api::ffi_api::AstNode>>::sse_encode(nodes, serializer);
+            }
+            crate::api::ffi_api::AstNode::CodeBlock { language, code } => {
+                <i32>::sse_encode(5, serializer);
+                <Option<String>>::sse_encode(language, serializer);
+                <String>::sse_encode(code, serializer);
+            }
+            crate::api::ffi_api::AstNode::ThematicBreak => {
+                <i32>::sse_encode(6, serializer);
+            }
+            crate::api::ffi_api::AstNode::Image {
+                alt_text,
+                url_or_path,
+            } => {
+                <i32>::sse_encode(7, serializer);
+                <String>::sse_encode(alt_text, serializer);
+                <String>::sse_encode(url_or_path, serializer);
+            }
+            crate::api::ffi_api::AstNode::Suggestion {
+                base_content,
+                local_content,
+                incoming_content,
+            } => {
+                <i32>::sse_encode(8, serializer);
+                <Option<Vec<crate::api::ffi_api::AstNode>>>::sse_encode(base_content, serializer);
+                <Vec<crate::api::ffi_api::AstNode>>::sse_encode(local_content, serializer);
+                <Vec<crate::api::ffi_api::AstNode>>::sse_encode(incoming_content, serializer);
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+
+impl SseEncode for bool {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        serializer.cursor.write_u8(self as _).unwrap();
+    }
+}
+
+impl SseEncode for i64 {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        serializer.cursor.write_i64::<NativeEndian>(self).unwrap();
+    }
+}
+
+impl SseEncode for crate::api::ffi_api::InlineElement {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        match self {
+            crate::api::ffi_api::InlineElement::Text(field0) => {
+                <i32>::sse_encode(0, serializer);
+                <crate::api::ffi_api::TextRun>::sse_encode(field0, serializer);
+            }
+            crate::api::ffi_api::InlineElement::Link {
+                target_title,
+                resolved_note_id,
+                content,
+            } => {
+                <i32>::sse_encode(1, serializer);
+                <String>::sse_encode(target_title, serializer);
+                <Option<String>>::sse_encode(resolved_note_id, serializer);
+                <Vec<crate::api::ffi_api::InlineElement>>::sse_encode(content, serializer);
+            }
+            crate::api::ffi_api::InlineElement::ExternalLink { url, content } => {
+                <i32>::sse_encode(2, serializer);
+                <String>::sse_encode(url, serializer);
+                <Vec<crate::api::ffi_api::InlineElement>>::sse_encode(content, serializer);
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+
+impl SseEncode for Vec<crate::api::ffi_api::AstNode> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::api::ffi_api::AstNode>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<crate::api::ffi_api::InlineElement> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::api::ffi_api::InlineElement>::sse_encode(item, serializer);
+        }
     }
 }
 
@@ -202,6 +900,68 @@ impl SseEncode for Vec<u8> {
         for item in self {
             <u8>::sse_encode(item, serializer);
         }
+    }
+}
+
+impl SseEncode for crate::api::ffi_api::NoteMetadata {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.id, serializer);
+        <String>::sse_encode(self.workspace_id, serializer);
+        <String>::sse_encode(self.path, serializer);
+        <String>::sse_encode(self.title, serializer);
+        <i64>::sse_encode(self.last_modified, serializer);
+        <Option<String>>::sse_encode(self.snippet, serializer);
+    }
+}
+
+impl SseEncode for crate::api::ffi_api::NoteState {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <Vec<crate::api::ffi_api::AstNode>>::sse_encode(self.ast, serializer);
+        <crate::api::ffi_api::NoteMetadata>::sse_encode(self.metadata, serializer);
+        <String>::sse_encode(self.base_revision, serializer);
+    }
+}
+
+impl SseEncode for Option<String> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <String>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for Option<bool> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <bool>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for Option<Vec<crate::api::ffi_api::AstNode>> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <Vec<crate::api::ffi_api::AstNode>>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for crate::api::ffi_api::TextRun {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.content, serializer);
+        <bool>::sse_encode(self.bold, serializer);
+        <bool>::sse_encode(self.italic, serializer);
+        <bool>::sse_encode(self.strikethrough, serializer);
+        <bool>::sse_encode(self.code, serializer);
     }
 }
 
@@ -221,13 +981,6 @@ impl SseEncode for i32 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         serializer.cursor.write_i32::<NativeEndian>(self).unwrap();
-    }
-}
-
-impl SseEncode for bool {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
-        serializer.cursor.write_u8(self as _).unwrap();
     }
 }
 

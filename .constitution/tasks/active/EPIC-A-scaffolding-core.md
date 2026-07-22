@@ -67,3 +67,8 @@ Given the parsed AST structures
 When I run FRB codegen
 Then the corresponding Dart classes (AstNode, TextRun) are available in `lib/src/rust/`
 ```
+
+##### CORE-A003 Deviations & Justifications
+- **Touched Files:** `pubspec.yaml`, `pubspec.lock`, `lib/src/rust/api/ffi_api.dart`, `lib/src/rust/api/ffi_api.freezed.dart`, `lib/src/rust/frb_generated.dart`, `lib/src/rust/frb_generated.io.dart`, `lib/src/rust/frb_generated.web.dart`, `rust/src/api/mod.rs`, `rust/src/frb_generated.rs`, `rust/src/markdown/mod.rs`, `rust/src/markdown/parser.rs`
+- **Justification:** Added `freezed` and `build_runner` dependencies to `pubspec.yaml` required by `flutter_rust_bridge_codegen` for enum AST serialization across FFI, exported `ffi_api` in `rust/src/api/mod.rs`, updated `parser.rs` to import AST types from `ffi_api`, and generated Dart FFI binding files under `lib/src/rust/`.
+

@@ -6,6 +6,7 @@
 // Static analysis wrongly picks the IO variant, thus ignore this
 // ignore_for_file: argument_type_not_assignable
 
+import 'api/ffi_api.dart';
 import 'api/simple.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -24,7 +25,52 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   String dco_decode_String(dynamic raw);
 
   @protected
+  AppError dco_decode_app_error(dynamic raw);
+
+  @protected
+  AstNode dco_decode_ast_node(dynamic raw);
+
+  @protected
+  bool dco_decode_bool(dynamic raw);
+
+  @protected
+  bool dco_decode_box_autoadd_bool(dynamic raw);
+
+  @protected
+  TextRun dco_decode_box_autoadd_text_run(dynamic raw);
+
+  @protected
+  PlatformInt64 dco_decode_i_64(dynamic raw);
+
+  @protected
+  InlineElement dco_decode_inline_element(dynamic raw);
+
+  @protected
+  List<AstNode> dco_decode_list_ast_node(dynamic raw);
+
+  @protected
+  List<InlineElement> dco_decode_list_inline_element(dynamic raw);
+
+  @protected
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw);
+
+  @protected
+  NoteMetadata dco_decode_note_metadata(dynamic raw);
+
+  @protected
+  NoteState dco_decode_note_state(dynamic raw);
+
+  @protected
+  String? dco_decode_opt_String(dynamic raw);
+
+  @protected
+  bool? dco_decode_opt_box_autoadd_bool(dynamic raw);
+
+  @protected
+  List<AstNode>? dco_decode_opt_list_ast_node(dynamic raw);
+
+  @protected
+  TextRun dco_decode_text_run(dynamic raw);
 
   @protected
   int dco_decode_u_8(dynamic raw);
@@ -36,7 +82,54 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   String sse_decode_String(SseDeserializer deserializer);
 
   @protected
+  AppError sse_decode_app_error(SseDeserializer deserializer);
+
+  @protected
+  AstNode sse_decode_ast_node(SseDeserializer deserializer);
+
+  @protected
+  bool sse_decode_bool(SseDeserializer deserializer);
+
+  @protected
+  bool sse_decode_box_autoadd_bool(SseDeserializer deserializer);
+
+  @protected
+  TextRun sse_decode_box_autoadd_text_run(SseDeserializer deserializer);
+
+  @protected
+  PlatformInt64 sse_decode_i_64(SseDeserializer deserializer);
+
+  @protected
+  InlineElement sse_decode_inline_element(SseDeserializer deserializer);
+
+  @protected
+  List<AstNode> sse_decode_list_ast_node(SseDeserializer deserializer);
+
+  @protected
+  List<InlineElement> sse_decode_list_inline_element(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer);
+
+  @protected
+  NoteMetadata sse_decode_note_metadata(SseDeserializer deserializer);
+
+  @protected
+  NoteState sse_decode_note_state(SseDeserializer deserializer);
+
+  @protected
+  String? sse_decode_opt_String(SseDeserializer deserializer);
+
+  @protected
+  bool? sse_decode_opt_box_autoadd_bool(SseDeserializer deserializer);
+
+  @protected
+  List<AstNode>? sse_decode_opt_list_ast_node(SseDeserializer deserializer);
+
+  @protected
+  TextRun sse_decode_text_run(SseDeserializer deserializer);
 
   @protected
   int sse_decode_u_8(SseDeserializer deserializer);
@@ -48,16 +141,64 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   int sse_decode_i_32(SseDeserializer deserializer);
 
   @protected
-  bool sse_decode_bool(SseDeserializer deserializer);
+  void sse_encode_String(String self, SseSerializer serializer);
 
   @protected
-  void sse_encode_String(String self, SseSerializer serializer);
+  void sse_encode_app_error(AppError self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_ast_node(AstNode self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bool(bool self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_bool(bool self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_text_run(TextRun self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_i_64(PlatformInt64 self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_inline_element(InlineElement self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_ast_node(List<AstNode> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_inline_element(
+    List<InlineElement> self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_list_prim_u_8_strict(
     Uint8List self,
     SseSerializer serializer,
   );
+
+  @protected
+  void sse_encode_note_metadata(NoteMetadata self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_note_state(NoteState self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_String(String? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_bool(bool? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_list_ast_node(
+    List<AstNode>? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_text_run(TextRun self, SseSerializer serializer);
 
   @protected
   void sse_encode_u_8(int self, SseSerializer serializer);
@@ -67,9 +208,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_i_32(int self, SseSerializer serializer);
-
-  @protected
-  void sse_encode_bool(bool self, SseSerializer serializer);
 }
 
 // Section: wire_class

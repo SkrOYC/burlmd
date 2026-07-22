@@ -3,6 +3,7 @@
 
 // ignore_for_file: unused_import, unused_element, unnecessary_import, duplicate_ignore, invalid_use_of_internal_member, annotate_overrides, non_constant_identifier_names, curly_braces_in_flow_control_structures, prefer_const_literals_to_create_immutables, unused_field
 
+import 'api/ffi_api.dart';
 import 'api/simple.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -66,7 +67,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.12.0';
 
   @override
-  int get rustContentHash => -1918914929;
+  int get rustContentHash => 1886362596;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -81,6 +82,8 @@ abstract class RustLibApi extends BaseApi {
   String crateApiSimpleGreet({required String name});
 
   Future<void> crateApiSimpleInitApp();
+
+  NoteState crateApiFfiApiOpenNote({required String path});
 }
 
 class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
@@ -141,6 +144,29 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   TaskConstMeta get kCrateApiSimpleInitAppConstMeta =>
       const TaskConstMeta(debugName: "init_app", argNames: []);
 
+  @override
+  NoteState crateApiFfiApiOpenNote({required String path}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(path, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 3)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_note_state,
+          decodeErrorData: sse_decode_app_error,
+        ),
+        constMeta: kCrateApiFfiApiOpenNoteConstMeta,
+        argValues: [path],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiFfiApiOpenNoteConstMeta =>
+      const TaskConstMeta(debugName: "open_note", argNames: ["path"]);
+
   @protected
   String dco_decode_String(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
@@ -148,9 +174,204 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  AppError dco_decode_app_error(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    switch (raw[0]) {
+      case 0:
+        return AppError_DiskFull();
+      case 1:
+        return AppError_AuthExpired();
+      case 2:
+        return AppError_GitConflict();
+      case 3:
+        return AppError_DatabaseError(dco_decode_String(raw[1]));
+      case 4:
+        return AppError_CryptoError(dco_decode_String(raw[1]));
+      case 5:
+        return AppError_NetworkError(dco_decode_String(raw[1]));
+      case 6:
+        return AppError_OAuthError(dco_decode_String(raw[1]));
+      case 7:
+        return AppError_IoError(dco_decode_String(raw[1]));
+      case 8:
+        return AppError_ParseError(dco_decode_String(raw[1]));
+      default:
+        throw Exception("unreachable");
+    }
+  }
+
+  @protected
+  AstNode dco_decode_ast_node(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    switch (raw[0]) {
+      case 0:
+        return AstNode_Heading(
+          level: dco_decode_u_8(raw[1]),
+          content: dco_decode_list_inline_element(raw[2]),
+        );
+      case 1:
+        return AstNode_Paragraph(
+          content: dco_decode_list_inline_element(raw[1]),
+        );
+      case 2:
+        return AstNode_List(
+          ordered: dco_decode_bool(raw[1]),
+          items: dco_decode_list_ast_node(raw[2]),
+        );
+      case 3:
+        return AstNode_ListItem(
+          content: dco_decode_list_ast_node(raw[1]),
+          checked: dco_decode_opt_box_autoadd_bool(raw[2]),
+        );
+      case 4:
+        return AstNode_Blockquote(nodes: dco_decode_list_ast_node(raw[1]));
+      case 5:
+        return AstNode_CodeBlock(
+          language: dco_decode_opt_String(raw[1]),
+          code: dco_decode_String(raw[2]),
+        );
+      case 6:
+        return AstNode_ThematicBreak();
+      case 7:
+        return AstNode_Image(
+          altText: dco_decode_String(raw[1]),
+          urlOrPath: dco_decode_String(raw[2]),
+        );
+      case 8:
+        return AstNode_Suggestion(
+          baseContent: dco_decode_opt_list_ast_node(raw[1]),
+          localContent: dco_decode_list_ast_node(raw[2]),
+          incomingContent: dco_decode_list_ast_node(raw[3]),
+        );
+      default:
+        throw Exception("unreachable");
+    }
+  }
+
+  @protected
+  bool dco_decode_bool(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as bool;
+  }
+
+  @protected
+  bool dco_decode_box_autoadd_bool(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as bool;
+  }
+
+  @protected
+  TextRun dco_decode_box_autoadd_text_run(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_text_run(raw);
+  }
+
+  @protected
+  PlatformInt64 dco_decode_i_64(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dcoDecodeI64(raw);
+  }
+
+  @protected
+  InlineElement dco_decode_inline_element(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    switch (raw[0]) {
+      case 0:
+        return InlineElement_Text(dco_decode_box_autoadd_text_run(raw[1]));
+      case 1:
+        return InlineElement_Link(
+          targetTitle: dco_decode_String(raw[1]),
+          resolvedNoteId: dco_decode_opt_String(raw[2]),
+          content: dco_decode_list_inline_element(raw[3]),
+        );
+      case 2:
+        return InlineElement_ExternalLink(
+          url: dco_decode_String(raw[1]),
+          content: dco_decode_list_inline_element(raw[2]),
+        );
+      default:
+        throw Exception("unreachable");
+    }
+  }
+
+  @protected
+  List<AstNode> dco_decode_list_ast_node(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_ast_node).toList();
+  }
+
+  @protected
+  List<InlineElement> dco_decode_list_inline_element(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_inline_element).toList();
+  }
+
+  @protected
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as Uint8List;
+  }
+
+  @protected
+  NoteMetadata dco_decode_note_metadata(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 6)
+      throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
+    return NoteMetadata(
+      id: dco_decode_String(arr[0]),
+      workspaceId: dco_decode_String(arr[1]),
+      path: dco_decode_String(arr[2]),
+      title: dco_decode_String(arr[3]),
+      lastModified: dco_decode_i_64(arr[4]),
+      snippet: dco_decode_opt_String(arr[5]),
+    );
+  }
+
+  @protected
+  NoteState dco_decode_note_state(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return NoteState(
+      ast: dco_decode_list_ast_node(arr[0]),
+      metadata: dco_decode_note_metadata(arr[1]),
+      baseRevision: dco_decode_String(arr[2]),
+    );
+  }
+
+  @protected
+  String? dco_decode_opt_String(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_String(raw);
+  }
+
+  @protected
+  bool? dco_decode_opt_box_autoadd_bool(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_bool(raw);
+  }
+
+  @protected
+  List<AstNode>? dco_decode_opt_list_ast_node(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_list_ast_node(raw);
+  }
+
+  @protected
+  TextRun dco_decode_text_run(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 5)
+      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
+    return TextRun(
+      content: dco_decode_String(arr[0]),
+      bold: dco_decode_bool(arr[1]),
+      italic: dco_decode_bool(arr[2]),
+      strikethrough: dco_decode_bool(arr[3]),
+      code: dco_decode_bool(arr[4]),
+    );
   }
 
   @protected
@@ -173,10 +394,252 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  AppError sse_decode_app_error(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var tag_ = sse_decode_i_32(deserializer);
+    switch (tag_) {
+      case 0:
+        return AppError_DiskFull();
+      case 1:
+        return AppError_AuthExpired();
+      case 2:
+        return AppError_GitConflict();
+      case 3:
+        var var_field0 = sse_decode_String(deserializer);
+        return AppError_DatabaseError(var_field0);
+      case 4:
+        var var_field0 = sse_decode_String(deserializer);
+        return AppError_CryptoError(var_field0);
+      case 5:
+        var var_field0 = sse_decode_String(deserializer);
+        return AppError_NetworkError(var_field0);
+      case 6:
+        var var_field0 = sse_decode_String(deserializer);
+        return AppError_OAuthError(var_field0);
+      case 7:
+        var var_field0 = sse_decode_String(deserializer);
+        return AppError_IoError(var_field0);
+      case 8:
+        var var_field0 = sse_decode_String(deserializer);
+        return AppError_ParseError(var_field0);
+      default:
+        throw UnimplementedError('');
+    }
+  }
+
+  @protected
+  AstNode sse_decode_ast_node(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var tag_ = sse_decode_i_32(deserializer);
+    switch (tag_) {
+      case 0:
+        var var_level = sse_decode_u_8(deserializer);
+        var var_content = sse_decode_list_inline_element(deserializer);
+        return AstNode_Heading(level: var_level, content: var_content);
+      case 1:
+        var var_content = sse_decode_list_inline_element(deserializer);
+        return AstNode_Paragraph(content: var_content);
+      case 2:
+        var var_ordered = sse_decode_bool(deserializer);
+        var var_items = sse_decode_list_ast_node(deserializer);
+        return AstNode_List(ordered: var_ordered, items: var_items);
+      case 3:
+        var var_content = sse_decode_list_ast_node(deserializer);
+        var var_checked = sse_decode_opt_box_autoadd_bool(deserializer);
+        return AstNode_ListItem(content: var_content, checked: var_checked);
+      case 4:
+        var var_nodes = sse_decode_list_ast_node(deserializer);
+        return AstNode_Blockquote(nodes: var_nodes);
+      case 5:
+        var var_language = sse_decode_opt_String(deserializer);
+        var var_code = sse_decode_String(deserializer);
+        return AstNode_CodeBlock(language: var_language, code: var_code);
+      case 6:
+        return AstNode_ThematicBreak();
+      case 7:
+        var var_altText = sse_decode_String(deserializer);
+        var var_urlOrPath = sse_decode_String(deserializer);
+        return AstNode_Image(altText: var_altText, urlOrPath: var_urlOrPath);
+      case 8:
+        var var_baseContent = sse_decode_opt_list_ast_node(deserializer);
+        var var_localContent = sse_decode_list_ast_node(deserializer);
+        var var_incomingContent = sse_decode_list_ast_node(deserializer);
+        return AstNode_Suggestion(
+          baseContent: var_baseContent,
+          localContent: var_localContent,
+          incomingContent: var_incomingContent,
+        );
+      default:
+        throw UnimplementedError('');
+    }
+  }
+
+  @protected
+  bool sse_decode_bool(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getUint8() != 0;
+  }
+
+  @protected
+  bool sse_decode_box_autoadd_bool(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_bool(deserializer));
+  }
+
+  @protected
+  TextRun sse_decode_box_autoadd_text_run(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_text_run(deserializer));
+  }
+
+  @protected
+  PlatformInt64 sse_decode_i_64(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getPlatformInt64();
+  }
+
+  @protected
+  InlineElement sse_decode_inline_element(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var tag_ = sse_decode_i_32(deserializer);
+    switch (tag_) {
+      case 0:
+        var var_field0 = sse_decode_box_autoadd_text_run(deserializer);
+        return InlineElement_Text(var_field0);
+      case 1:
+        var var_targetTitle = sse_decode_String(deserializer);
+        var var_resolvedNoteId = sse_decode_opt_String(deserializer);
+        var var_content = sse_decode_list_inline_element(deserializer);
+        return InlineElement_Link(
+          targetTitle: var_targetTitle,
+          resolvedNoteId: var_resolvedNoteId,
+          content: var_content,
+        );
+      case 2:
+        var var_url = sse_decode_String(deserializer);
+        var var_content = sse_decode_list_inline_element(deserializer);
+        return InlineElement_ExternalLink(url: var_url, content: var_content);
+      default:
+        throw UnimplementedError('');
+    }
+  }
+
+  @protected
+  List<AstNode> sse_decode_list_ast_node(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <AstNode>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_ast_node(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<InlineElement> sse_decode_list_inline_element(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <InlineElement>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_inline_element(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
   Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var len_ = sse_decode_i_32(deserializer);
     return deserializer.buffer.getUint8List(len_);
+  }
+
+  @protected
+  NoteMetadata sse_decode_note_metadata(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_id = sse_decode_String(deserializer);
+    var var_workspaceId = sse_decode_String(deserializer);
+    var var_path = sse_decode_String(deserializer);
+    var var_title = sse_decode_String(deserializer);
+    var var_lastModified = sse_decode_i_64(deserializer);
+    var var_snippet = sse_decode_opt_String(deserializer);
+    return NoteMetadata(
+      id: var_id,
+      workspaceId: var_workspaceId,
+      path: var_path,
+      title: var_title,
+      lastModified: var_lastModified,
+      snippet: var_snippet,
+    );
+  }
+
+  @protected
+  NoteState sse_decode_note_state(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_ast = sse_decode_list_ast_node(deserializer);
+    var var_metadata = sse_decode_note_metadata(deserializer);
+    var var_baseRevision = sse_decode_String(deserializer);
+    return NoteState(
+      ast: var_ast,
+      metadata: var_metadata,
+      baseRevision: var_baseRevision,
+    );
+  }
+
+  @protected
+  String? sse_decode_opt_String(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_String(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  bool? sse_decode_opt_box_autoadd_bool(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_bool(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  List<AstNode>? sse_decode_opt_list_ast_node(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_list_ast_node(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  TextRun sse_decode_text_run(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_content = sse_decode_String(deserializer);
+    var var_bold = sse_decode_bool(deserializer);
+    var var_italic = sse_decode_bool(deserializer);
+    var var_strikethrough = sse_decode_bool(deserializer);
+    var var_code = sse_decode_bool(deserializer);
+    return TextRun(
+      content: var_content,
+      bold: var_bold,
+      italic: var_italic,
+      strikethrough: var_strikethrough,
+      code: var_code,
+    );
   }
 
   @protected
@@ -197,15 +660,152 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  bool sse_decode_bool(SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    return deserializer.buffer.getUint8() != 0;
-  }
-
-  @protected
   void sse_encode_String(String self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_list_prim_u_8_strict(utf8.encoder.convert(self), serializer);
+  }
+
+  @protected
+  void sse_encode_app_error(AppError self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    switch (self) {
+      case AppError_DiskFull():
+        sse_encode_i_32(0, serializer);
+      case AppError_AuthExpired():
+        sse_encode_i_32(1, serializer);
+      case AppError_GitConflict():
+        sse_encode_i_32(2, serializer);
+      case AppError_DatabaseError(field0: final field0):
+        sse_encode_i_32(3, serializer);
+        sse_encode_String(field0, serializer);
+      case AppError_CryptoError(field0: final field0):
+        sse_encode_i_32(4, serializer);
+        sse_encode_String(field0, serializer);
+      case AppError_NetworkError(field0: final field0):
+        sse_encode_i_32(5, serializer);
+        sse_encode_String(field0, serializer);
+      case AppError_OAuthError(field0: final field0):
+        sse_encode_i_32(6, serializer);
+        sse_encode_String(field0, serializer);
+      case AppError_IoError(field0: final field0):
+        sse_encode_i_32(7, serializer);
+        sse_encode_String(field0, serializer);
+      case AppError_ParseError(field0: final field0):
+        sse_encode_i_32(8, serializer);
+        sse_encode_String(field0, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_ast_node(AstNode self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    switch (self) {
+      case AstNode_Heading(level: final level, content: final content):
+        sse_encode_i_32(0, serializer);
+        sse_encode_u_8(level, serializer);
+        sse_encode_list_inline_element(content, serializer);
+      case AstNode_Paragraph(content: final content):
+        sse_encode_i_32(1, serializer);
+        sse_encode_list_inline_element(content, serializer);
+      case AstNode_List(ordered: final ordered, items: final items):
+        sse_encode_i_32(2, serializer);
+        sse_encode_bool(ordered, serializer);
+        sse_encode_list_ast_node(items, serializer);
+      case AstNode_ListItem(content: final content, checked: final checked):
+        sse_encode_i_32(3, serializer);
+        sse_encode_list_ast_node(content, serializer);
+        sse_encode_opt_box_autoadd_bool(checked, serializer);
+      case AstNode_Blockquote(nodes: final nodes):
+        sse_encode_i_32(4, serializer);
+        sse_encode_list_ast_node(nodes, serializer);
+      case AstNode_CodeBlock(language: final language, code: final code):
+        sse_encode_i_32(5, serializer);
+        sse_encode_opt_String(language, serializer);
+        sse_encode_String(code, serializer);
+      case AstNode_ThematicBreak():
+        sse_encode_i_32(6, serializer);
+      case AstNode_Image(altText: final altText, urlOrPath: final urlOrPath):
+        sse_encode_i_32(7, serializer);
+        sse_encode_String(altText, serializer);
+        sse_encode_String(urlOrPath, serializer);
+      case AstNode_Suggestion(
+        baseContent: final baseContent,
+        localContent: final localContent,
+        incomingContent: final incomingContent,
+      ):
+        sse_encode_i_32(8, serializer);
+        sse_encode_opt_list_ast_node(baseContent, serializer);
+        sse_encode_list_ast_node(localContent, serializer);
+        sse_encode_list_ast_node(incomingContent, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_bool(bool self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putUint8(self ? 1 : 0);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_bool(bool self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_bool(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_text_run(TextRun self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_text_run(self, serializer);
+  }
+
+  @protected
+  void sse_encode_i_64(PlatformInt64 self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putPlatformInt64(self);
+  }
+
+  @protected
+  void sse_encode_inline_element(InlineElement self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    switch (self) {
+      case InlineElement_Text(field0: final field0):
+        sse_encode_i_32(0, serializer);
+        sse_encode_box_autoadd_text_run(field0, serializer);
+      case InlineElement_Link(
+        targetTitle: final targetTitle,
+        resolvedNoteId: final resolvedNoteId,
+        content: final content,
+      ):
+        sse_encode_i_32(1, serializer);
+        sse_encode_String(targetTitle, serializer);
+        sse_encode_opt_String(resolvedNoteId, serializer);
+        sse_encode_list_inline_element(content, serializer);
+      case InlineElement_ExternalLink(url: final url, content: final content):
+        sse_encode_i_32(2, serializer);
+        sse_encode_String(url, serializer);
+        sse_encode_list_inline_element(content, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_ast_node(List<AstNode> self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_ast_node(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_inline_element(
+    List<InlineElement> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_inline_element(item, serializer);
+    }
   }
 
   @protected
@@ -216,6 +816,68 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_i_32(self.length, serializer);
     serializer.buffer.putUint8List(self);
+  }
+
+  @protected
+  void sse_encode_note_metadata(NoteMetadata self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.id, serializer);
+    sse_encode_String(self.workspaceId, serializer);
+    sse_encode_String(self.path, serializer);
+    sse_encode_String(self.title, serializer);
+    sse_encode_i_64(self.lastModified, serializer);
+    sse_encode_opt_String(self.snippet, serializer);
+  }
+
+  @protected
+  void sse_encode_note_state(NoteState self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_list_ast_node(self.ast, serializer);
+    sse_encode_note_metadata(self.metadata, serializer);
+    sse_encode_String(self.baseRevision, serializer);
+  }
+
+  @protected
+  void sse_encode_opt_String(String? self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_String(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_bool(bool? self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_bool(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_list_ast_node(
+    List<AstNode>? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_list_ast_node(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_text_run(TextRun self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.content, serializer);
+    sse_encode_bool(self.bold, serializer);
+    sse_encode_bool(self.italic, serializer);
+    sse_encode_bool(self.strikethrough, serializer);
+    sse_encode_bool(self.code, serializer);
   }
 
   @protected
@@ -233,11 +895,5 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   void sse_encode_i_32(int self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     serializer.buffer.putInt32(self);
-  }
-
-  @protected
-  void sse_encode_bool(bool self, SseSerializer serializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    serializer.buffer.putUint8(self ? 1 : 0);
   }
 }

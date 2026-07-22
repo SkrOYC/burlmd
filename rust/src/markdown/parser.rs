@@ -1,66 +1,6 @@
 use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TextRun {
-    pub content: String,
-    pub bold: bool,
-    pub italic: bool,
-    pub strikethrough: bool,
-    pub code: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum InlineElement {
-    Text(TextRun),
-    /// A lateral link to another note `[[title]]`
-    Link {
-        target_title: String,
-        resolved_note_id: Option<String>,
-        content: Vec<InlineElement>,
-    },
-    /// A standard markdown link `[text](url)`
-    ExternalLink {
-        url: String,
-        content: Vec<InlineElement>,
-    },
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum AstNode {
-    Heading {
-        level: u8,
-        content: Vec<InlineElement>,
-    },
-    Paragraph {
-        content: Vec<InlineElement>,
-    },
-    List {
-        ordered: bool,
-        items: Vec<AstNode>,
-    },
-    ListItem {
-        content: Vec<AstNode>,
-        checked: Option<bool>,
-    },
-    Blockquote {
-        nodes: Vec<AstNode>,
-    },
-    CodeBlock {
-        language: Option<String>,
-        code: String,
-    },
-    ThematicBreak,
-    Image {
-        alt_text: String,
-        url_or_path: String,
-    },
-    /// Represents a pending Git conflict that the user must resolve.
-    Suggestion {
-        base_content: Option<Vec<AstNode>>,
-        local_content: Vec<AstNode>,
-        incoming_content: Vec<AstNode>,
-    },
-}
+pub use crate::api::ffi_api::{AstNode, InlineElement, TextRun};
 
 #[derive(Default)]
 struct FormatState {
