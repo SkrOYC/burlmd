@@ -9,10 +9,37 @@ struct FormatState {
     strikethrough: bool,
 }
 
+struct LinkFrame {
+    url: String,
+    content: Vec<InlineElement>,
+}
+
+struct CodeBlockAccum {
+    language: Option<String>,
+    code: String,
+}
+
+impl TextRun {
+    fn from_state(content: String, format_state: &FormatState, code: bool) -> Self {
+        TextRun {
+            content,
+            bold: format_state.bold,
+            italic: format_state.italic,
+            strikethrough: format_state.strikethrough,
+            code,
+        }
+    }
+
+    fn with_content(&self, content: String) -> Self {
+        TextRun {
+            content,
+            ..self.clone()
+        }
+    }
+}
+
 pub fn parse_markdown(input: &str) -> Vec<AstNode> {
     let mut options = Options::empty();
-    options.insert(Options::ENABLE_TABLES);
-    options.insert(Options::ENABLE_FOOTNOTES);
     options.insert(Options::ENABLE_STRIKETHROUGH);
     options.insert(Options::ENABLE_TASKLISTS);
 
@@ -22,8 +49,8 @@ pub fn parse_markdown(input: &str) -> Vec<AstNode> {
 
     let mut current_inlines: Vec<InlineElement> = Vec::new();
     let mut format_state = FormatState::default();
-    let mut current_code_block: Option<(Option<String>, String)> = None;
-    let mut link_stack: Vec<(String, Vec<InlineElement>)> = Vec::new();
+    let mut current_code_block: Option<CodeBlockAccum> = None;
+    let mut link_stack: Vec<LinkFrame> = Vec::new();
 
     for event in parser {
         match event {
@@ -40,6 +67,10 @@ pub fn parse_markdown(input: &str) -> Vec<AstNode> {
                     node_stack.push(ContainerNode::Blockquote(Vec::new()));
                 }
                 Tag::List(start_number) => {
+                    // A tight list nested directly under another item's text (no
+                    // blank line) leaves that text un-flushed in `current_inlines`;
+                    // attribute it to the enclosing item before it gets shadowed.
+                    flush_pending_inlines(&mut root_nodes, &mut node_stack, &mut current_inlines);
                     node_stack.push(ContainerNode::List {
                         ordered: start_number.is_some(),
                         items: Vec::new(),
@@ -63,13 +94,22 @@ pub fn parse_markdown(input: &str) -> Vec<AstNode> {
                         }
                         pulldown_cmark::CodeBlockKind::Indented => None,
                     };
-                    current_code_block = Some((lang, String::new()));
+                    current_code_block = Some(CodeBlockAccum {
+                        language: lang,
+                        code: String::new(),
+                    });
                 }
                 Tag::Link { dest_url, .. } => {
-                    link_stack.push((dest_url.to_string(), Vec::new()));
+                    link_stack.push(LinkFrame {
+                        url: dest_url.to_string(),
+                        content: Vec::new(),
+                    });
                 }
                 Tag::Image { dest_url, .. } => {
-                    link_stack.push((dest_url.to_string(), Vec::new()));
+                    link_stack.push(LinkFrame {
+                        url: dest_url.to_string(),
+                        content: Vec::new(),
+                    });
                 }
                 Tag::Strong => format_state.bold = true,
                 Tag::Emphasis => format_state.italic = true,
@@ -106,34 +146,49 @@ pub fn parse_markdown(input: &str) -> Vec<AstNode> {
                     }
                 }
                 TagEnd::Item => {
-                    if let Some(ContainerNode::ListItem { content, checked }) = node_stack.pop() {
+                    if let Some(ContainerNode::ListItem {
+                        mut content,
+                        checked,
+                    }) = node_stack.pop()
+                    {
+                        // Tight list items (the common `- a\n- b` form, and all task
+                        // list items) get their text as bare `Event::Text`, with no
+                        // `Paragraph` wrapper to trigger a flush. Flush here so that
+                        // text isn't silently dropped.
+                        if !current_inlines.is_empty() {
+                            let inline_content =
+                                process_inlines(std::mem::take(&mut current_inlines));
+                            content.push(AstNode::Paragraph {
+                                content: inline_content,
+                            });
+                        }
                         let node = AstNode::ListItem { content, checked };
                         push_node(&mut root_nodes, &mut node_stack, node);
                     }
                 }
                 TagEnd::CodeBlock => {
-                    if let Some((language, code)) = current_code_block.take() {
-                        let node = AstNode::CodeBlock { language, code };
+                    if let Some(accum) = current_code_block.take() {
+                        let node = AstNode::CodeBlock {
+                            language: accum.language,
+                            code: accum.code,
+                        };
                         push_node(&mut root_nodes, &mut node_stack, node);
                     }
                 }
                 TagEnd::Link => {
-                    if let Some((url, content)) = link_stack.pop() {
-                        let processed_content = process_inlines(content);
+                    if let Some(frame) = link_stack.pop() {
+                        let processed_content = process_inlines(frame.content);
                         let ext_link = InlineElement::ExternalLink {
-                            url,
+                            url: frame.url,
                             content: processed_content,
                         };
-                        if let Some((_, ref mut parent_content)) = link_stack.last_mut() {
-                            parent_content.push(ext_link);
-                        } else {
-                            current_inlines.push(ext_link);
-                        }
+                        push_inline(ext_link, &mut current_inlines, &mut link_stack);
                     }
                 }
                 TagEnd::Image => {
-                    if let Some((url, content)) = link_stack.pop() {
-                        let alt_text = content
+                    if let Some(frame) = link_stack.pop() {
+                        let alt_text = frame
+                            .content
                             .iter()
                             .map(|elem| match elem {
                                 InlineElement::Text(tr) => tr.content.as_str(),
@@ -143,11 +198,17 @@ pub fn parse_markdown(input: &str) -> Vec<AstNode> {
                             .join("");
                         let node = AstNode::Image {
                             alt_text,
-                            url_or_path: url,
+                            url_or_path: frame.url,
                         };
 
-                        if matches!(node_stack.last(), Some(ContainerNode::Paragraph))
-                            && !current_inlines.is_empty()
+                        // Images are block nodes in this AST, so any inline text
+                        // accumulated ahead of them (in a paragraph, or a tight
+                        // list item, which never opens its own Paragraph tag)
+                        // must be flushed as its own node first to preserve order.
+                        if matches!(
+                            node_stack.last(),
+                            Some(ContainerNode::Paragraph) | Some(ContainerNode::ListItem { .. })
+                        ) && !current_inlines.is_empty()
                         {
                             let p_content = process_inlines(std::mem::take(&mut current_inlines));
                             let p_node = AstNode::Paragraph { content: p_content };
@@ -162,45 +223,31 @@ pub fn parse_markdown(input: &str) -> Vec<AstNode> {
                 _ => {}
             },
             Event::Text(text) => {
-                if let Some((_, ref mut code)) = current_code_block {
-                    code.push_str(&text);
+                if let Some(ref mut accum) = current_code_block {
+                    accum.code.push_str(&text);
                 } else {
                     push_raw_text(&text, &format_state, &mut current_inlines, &mut link_stack);
                 }
             }
             Event::Code(text) => {
-                let text_run = TextRun {
-                    content: text.to_string(),
-                    bold: format_state.bold,
-                    italic: format_state.italic,
-                    strikethrough: format_state.strikethrough,
-                    code: true,
-                };
-                let elem = InlineElement::Text(text_run);
-                if let Some((_, ref mut link_content)) = link_stack.last_mut() {
-                    link_content.push(elem);
-                } else {
-                    current_inlines.push(elem);
-                }
+                let text_run = TextRun::from_state(text.to_string(), &format_state, true);
+                push_inline(
+                    InlineElement::Text(text_run),
+                    &mut current_inlines,
+                    &mut link_stack,
+                );
             }
             Event::Rule => {
                 let node = AstNode::ThematicBreak;
                 push_node(&mut root_nodes, &mut node_stack, node);
             }
             Event::SoftBreak | Event::HardBreak => {
-                let text_run = TextRun {
-                    content: "\n".to_string(),
-                    bold: format_state.bold,
-                    italic: format_state.italic,
-                    strikethrough: format_state.strikethrough,
-                    code: false,
-                };
-                let elem = InlineElement::Text(text_run);
-                if let Some((_, ref mut link_content)) = link_stack.last_mut() {
-                    link_content.push(elem);
-                } else {
-                    current_inlines.push(elem);
-                }
+                let text_run = TextRun::from_state("\n".to_string(), &format_state, false);
+                push_inline(
+                    InlineElement::Text(text_run),
+                    &mut current_inlines,
+                    &mut link_stack,
+                );
             }
             Event::TaskListMarker(checked) => {
                 if let Some(ContainerNode::ListItem {
@@ -244,25 +291,41 @@ fn push_node(root_nodes: &mut Vec<AstNode>, node_stack: &mut [ContainerNode], no
     }
 }
 
+/// Flushes any inline content accumulated outside of a `Paragraph` tag (e.g.
+/// bare text directly under a tight list item) into a synthetic `Paragraph`
+/// node attached to the current container. No-op when nothing is pending.
+fn flush_pending_inlines(
+    root_nodes: &mut Vec<AstNode>,
+    node_stack: &mut [ContainerNode],
+    current_inlines: &mut Vec<InlineElement>,
+) {
+    if current_inlines.is_empty() {
+        return;
+    }
+    let content = process_inlines(std::mem::take(current_inlines));
+    push_node(root_nodes, node_stack, AstNode::Paragraph { content });
+}
+
+fn push_inline(
+    elem: InlineElement,
+    current_inlines: &mut Vec<InlineElement>,
+    link_stack: &mut [LinkFrame],
+) {
+    if let Some(frame) = link_stack.last_mut() {
+        frame.content.push(elem);
+    } else {
+        current_inlines.push(elem);
+    }
+}
+
 fn push_raw_text(
     text: &str,
     format_state: &FormatState,
     current_inlines: &mut Vec<InlineElement>,
-    link_stack: &mut [(String, Vec<InlineElement>)],
+    link_stack: &mut [LinkFrame],
 ) {
-    let tr = TextRun {
-        content: text.to_string(),
-        bold: format_state.bold,
-        italic: format_state.italic,
-        strikethrough: format_state.strikethrough,
-        code: false,
-    };
-    let elem = InlineElement::Text(tr);
-    if let Some((_, ref mut link_content)) = link_stack.last_mut() {
-        link_content.push(elem);
-    } else {
-        current_inlines.push(elem);
-    }
+    let tr = TextRun::from_state(text.to_string(), format_state, false);
+    push_inline(InlineElement::Text(tr), current_inlines, link_stack);
 }
 
 fn process_inlines(raw_inlines: Vec<InlineElement>) -> Vec<InlineElement> {
@@ -330,13 +393,7 @@ fn parse_wikilinks_in_text_run(tr: TextRun, out: &mut Vec<InlineElement>) {
     while let Some(start_idx) = rest.find("[[") {
         if start_idx > 0 {
             let before = &rest[..start_idx];
-            out.push(InlineElement::Text(TextRun {
-                content: before.to_string(),
-                bold: tr.bold,
-                italic: tr.italic,
-                strikethrough: tr.strikethrough,
-                code: false,
-            }));
+            out.push(InlineElement::Text(tr.with_content(before.to_string())));
         }
         let after_start = &rest[start_idx + 2..];
         if let Some(end_idx) = after_start.find("]]") {
@@ -350,36 +407,20 @@ fn parse_wikilinks_in_text_run(tr: TextRun, out: &mut Vec<InlineElement>) {
             out.push(InlineElement::Link {
                 target_title: target_title.to_string(),
                 resolved_note_id: None,
-                content: vec![InlineElement::Text(TextRun {
-                    content: display_text.to_string(),
-                    bold: tr.bold,
-                    italic: tr.italic,
-                    strikethrough: tr.strikethrough,
-                    code: false,
-                })],
+                content: vec![InlineElement::Text(
+                    tr.with_content(display_text.to_string()),
+                )],
             });
 
             rest = &after_start[end_idx + 2..];
         } else {
-            out.push(InlineElement::Text(TextRun {
-                content: rest.to_string(),
-                bold: tr.bold,
-                italic: tr.italic,
-                strikethrough: tr.strikethrough,
-                code: false,
-            }));
+            out.push(InlineElement::Text(tr.with_content(rest.to_string())));
             return;
         }
     }
 
     if !rest.is_empty() {
-        out.push(InlineElement::Text(TextRun {
-            content: rest.to_string(),
-            bold: tr.bold,
-            italic: tr.italic,
-            strikethrough: tr.strikethrough,
-            code: false,
-        }));
+        out.push(InlineElement::Text(tr.with_content(rest.to_string())));
     }
 }
 
@@ -452,8 +493,22 @@ mod tests {
         }
     }
 
+    /// Pulls the text of a tight list item's first (implicit) paragraph.
+    fn item_text(node: &AstNode) -> &str {
+        match node {
+            AstNode::ListItem { content, .. } => match content.first() {
+                Some(AstNode::Paragraph { content }) => match content.first() {
+                    Some(InlineElement::Text(tr)) => tr.content.as_str(),
+                    _ => panic!("Expected Text inline element in item paragraph"),
+                },
+                _ => panic!("Expected Paragraph as item content"),
+            },
+            _ => panic!("Expected ListItem"),
+        }
+    }
+
     #[test]
-    fn test_nested_list_and_code_block() {
+    fn test_tight_list_item_content() {
         let md = "```rust\nfn main() {}\n```\n\n- Item 1\n- Item 2";
         let ast = parse_markdown(md);
 
@@ -470,6 +525,115 @@ mod tests {
             AstNode::List { ordered, items } => {
                 assert!(!ordered);
                 assert_eq!(items.len(), 2);
+                assert_eq!(item_text(&items[0]), "Item 1");
+                assert_eq!(item_text(&items[1]), "Item 2");
+            }
+            _ => panic!("Expected List"),
+        }
+    }
+
+    #[test]
+    fn test_task_list_item_content() {
+        let md = "- [x] done\n- [ ] todo";
+        let ast = parse_markdown(md);
+
+        assert_eq!(ast.len(), 1);
+        match &ast[0] {
+            AstNode::List { ordered, items } => {
+                assert!(!ordered);
+                assert_eq!(items.len(), 2);
+
+                match &items[0] {
+                    AstNode::ListItem { checked, .. } => assert_eq!(*checked, Some(true)),
+                    _ => panic!("Expected ListItem"),
+                }
+                assert_eq!(item_text(&items[0]), "done");
+
+                match &items[1] {
+                    AstNode::ListItem { checked, .. } => assert_eq!(*checked, Some(false)),
+                    _ => panic!("Expected ListItem"),
+                }
+                assert_eq!(item_text(&items[1]), "todo");
+            }
+            _ => panic!("Expected List"),
+        }
+    }
+
+    #[test]
+    fn test_nested_tight_list_content() {
+        let md = "- Outer\n  - Inner";
+        let ast = parse_markdown(md);
+
+        assert_eq!(ast.len(), 1);
+        match &ast[0] {
+            AstNode::List { items, .. } => {
+                assert_eq!(items.len(), 1);
+                match &items[0] {
+                    AstNode::ListItem { content, .. } => {
+                        assert_eq!(content.len(), 2);
+                        match &content[0] {
+                            AstNode::Paragraph { content } => match &content[0] {
+                                InlineElement::Text(tr) => assert_eq!(tr.content, "Outer"),
+                                _ => panic!("Expected Text inline element"),
+                            },
+                            _ => panic!("Expected Paragraph for outer item text"),
+                        }
+                        match &content[1] {
+                            AstNode::List {
+                                items: inner_items, ..
+                            } => {
+                                assert_eq!(inner_items.len(), 1);
+                                assert_eq!(item_text(&inner_items[0]), "Inner");
+                            }
+                            _ => panic!("Expected nested List"),
+                        }
+                    }
+                    _ => panic!("Expected ListItem"),
+                }
+            }
+            _ => panic!("Expected List"),
+        }
+    }
+
+    #[test]
+    fn test_image_inside_list_item_preserves_order() {
+        let md = "- text before ![a](x.png) after";
+        let ast = parse_markdown(md);
+
+        assert_eq!(ast.len(), 1);
+        match &ast[0] {
+            AstNode::List { items, .. } => {
+                assert_eq!(items.len(), 1);
+                match &items[0] {
+                    AstNode::ListItem { content, .. } => {
+                        assert_eq!(content.len(), 3);
+                        match &content[0] {
+                            AstNode::Paragraph { content } => match &content[0] {
+                                InlineElement::Text(tr) => assert_eq!(tr.content, "text before "),
+                                _ => panic!("Expected Text inline element"),
+                            },
+                            _ => panic!("Expected Paragraph before image"),
+                        }
+                        match &content[1] {
+                            AstNode::Image {
+                                alt_text,
+                                url_or_path,
+                            } => {
+                                assert_eq!(alt_text, "a");
+                                assert_eq!(url_or_path, "x.png");
+                            }
+                            _ => panic!("Expected Image node"),
+                        }
+                        match &content[2] {
+                            AstNode::Paragraph { content } => match &content[0] {
+                                InlineElement::Text(tr) => assert_eq!(tr.content, " after"),
+                                _ => panic!("Expected Text inline element"),
+                            },
+                            _ => panic!("Expected Paragraph after image"),
+                        }
+                    }
+                    _ => panic!("Expected ListItem"),
+                }
             }
             _ => panic!("Expected List"),
         }

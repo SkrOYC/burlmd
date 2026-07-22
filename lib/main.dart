@@ -1,4 +1,3 @@
-import 'package:burlmd/src/rust/api/simple.dart';
 import 'package:burlmd/src/rust/frb_generated.dart';
 import 'package:flutter/material.dart';
 
@@ -15,11 +14,7 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       home: Scaffold(
         appBar: AppBar(title: const Text('burlmd')),
-        body: Center(
-          child: Text(
-            'Action: Call Rust `greet("Tom")`\nResult: `${greet(name: "Tom")}`',
-          ),
-        ),
+        body: const Center(child: Text('burlmd')),
       ),
     );
   }
