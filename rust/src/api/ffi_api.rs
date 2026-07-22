@@ -1,5 +1,11 @@
 use flutter_rust_bridge::frb;
 
+// AST types are owned by the `markdown` domain module (parsing is what
+// produces and shapes them); re-exported here so they cross the FFI
+// boundary FRB scans (`rust_input: crate::api`) without `markdown`
+// having to depend back on this module for its own output types.
+pub use crate::markdown::{AstNode, InlineElement, TextRun};
+
 #[frb]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NoteMetadata {
@@ -9,71 +15,6 @@ pub struct NoteMetadata {
     pub title: String,
     pub last_modified: i64,
     pub snippet: Option<String>,
-}
-
-#[frb]
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TextRun {
-    pub content: String,
-    pub bold: bool,
-    pub italic: bool,
-    pub strikethrough: bool,
-    pub code: bool,
-}
-
-#[frb]
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum InlineElement {
-    Text(TextRun),
-    /// A lateral link to another note `[[title]]`
-    Link {
-        target_title: String,
-        resolved_note_id: Option<String>,
-        content: Vec<InlineElement>,
-    },
-    /// A standard markdown link `[text](url)`
-    ExternalLink {
-        url: String,
-        content: Vec<InlineElement>,
-    },
-}
-
-#[frb]
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum AstNode {
-    Heading {
-        level: u8,
-        content: Vec<InlineElement>,
-    },
-    Paragraph {
-        content: Vec<InlineElement>,
-    },
-    List {
-        ordered: bool,
-        items: Vec<AstNode>,
-    },
-    ListItem {
-        content: Vec<AstNode>,
-        checked: Option<bool>,
-    },
-    Blockquote {
-        nodes: Vec<AstNode>,
-    },
-    CodeBlock {
-        language: Option<String>,
-        code: String,
-    },
-    ThematicBreak,
-    Image {
-        alt_text: String,
-        url_or_path: String,
-    },
-    /// Represents a pending Git conflict that the user must resolve.
-    Suggestion {
-        base_content: Option<Vec<AstNode>>,
-        local_content: Vec<AstNode>,
-        incoming_content: Vec<AstNode>,
-    },
 }
 
 #[frb]
@@ -111,12 +52,19 @@ pub fn open_note(path: String) -> Result<NoteState, AppError> {
 
     let ast = crate::markdown::parse_markdown(&content);
 
+    let last_modified = std::fs::metadata(&path)
+        .and_then(|m| m.modified())
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+
     let metadata = NoteMetadata {
         id: path.clone(),
         workspace_id: "default".to_string(),
         path: path.clone(),
         title,
-        last_modified: 0,
+        last_modified,
         snippet: None,
     };
 

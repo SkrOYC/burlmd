@@ -1,6 +1,6 @@
 use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd};
 
-pub use crate::api::ffi_api::{AstNode, InlineElement, TextRun};
+use super::ast::{AstNode, InlineElement, TextRun};
 
 #[derive(Default)]
 struct FormatState {
@@ -474,14 +474,20 @@ mod tests {
                 if let InlineElement::Text(tr) = &content[0] {
                     assert_eq!(tr.content, "This is ");
                     assert!(!tr.bold);
+                } else {
+                    panic!("Expected Text inline element");
                 }
                 if let InlineElement::Text(tr) = &content[1] {
                     assert_eq!(tr.content, "bold");
                     assert!(tr.bold);
+                } else {
+                    panic!("Expected Text inline element");
                 }
                 if let InlineElement::Text(tr) = &content[2] {
                     assert_eq!(tr.content, " text.");
                     assert!(!tr.bold);
+                } else {
+                    panic!("Expected Text inline element");
                 }
             }
             _ => panic!("Expected Paragraph node"),
