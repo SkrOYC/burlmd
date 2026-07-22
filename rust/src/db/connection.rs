@@ -1,6 +1,7 @@
 use std::path::Path;
 
 use rusqlite::Connection;
+use zeroize::Zeroizing;
 
 use crate::api::ffi_api::AppError;
 use crate::security::keyring::get_or_create_root_key;
@@ -13,6 +14,15 @@ impl From<rusqlite::Error> for AppError {
 
 /// Opens (creating if absent) the SQLCipher-encrypted local index at `path`
 /// and unlocks it with the root key from the OS Keychain.
+pub fn open_encrypted_db(path: &Path) -> Result<Connection, AppError> {
+    let key = get_or_create_root_key()?;
+    open_encrypted_db_with_key(path, &*key)
+}
+
+/// Opens (creating if absent) the SQLCipher-encrypted local index at `path`
+/// and unlocks it with the supplied raw 256-bit `key`. Split out from
+/// [`open_encrypted_db`] so callers (namely tests) can inject a throwaway
+/// key instead of going through the OS Keychain.
 ///
 /// `PRAGMA key` must be the first statement executed on a freshly opened
 /// connection, before any schema access — SQLCipher defers key validation
@@ -20,18 +30,21 @@ impl From<rusqlite::Error> for AppError {
 /// to surface a bad/missing key here rather than on the caller's first
 /// query. The key is applied in its raw-hex form (`x'<64 hex chars>'`),
 /// which sets the 32 encryption key bytes directly with no KDF applied —
-/// appropriate because the key is already full-entropy CSPRNG output from
-/// `get_or_create_root_key`, not a low-entropy human passphrase that would
-/// benefit from SQLCipher's passphrase-mode PBKDF2 derivation.
-pub fn open_encrypted_db(path: &Path) -> Result<Connection, AppError> {
+/// appropriate because the key is already full-entropy CSPRNG output, not a
+/// low-entropy human passphrase that would benefit from SQLCipher's
+/// passphrase-mode PBKDF2 derivation.
+fn open_encrypted_db_with_key(path: &Path, key: &[u8]) -> Result<Connection, AppError> {
     let conn = Connection::open(path)?;
-    let key = get_or_create_root_key()?;
 
-    let hex_key: String = key.iter().map(|b| format!("{b:02x}")).collect();
+    let hex_key = Zeroizing::new(key.iter().map(|b| format!("{b:02x}")).collect::<String>());
     // PRAGMA statements don't accept bound parameters; `hex_key` is locally
     // generated 64-hex-char data, not attacker-controlled input, so this
-    // string interpolation carries no injection risk.
-    conn.execute_batch(&format!("PRAGMA key = \"x'{hex_key}'\";"))?;
+    // string interpolation carries no injection risk. Both the hex encoding
+    // and the assembled PRAGMA statement are wrapped in `Zeroizing` so the
+    // key material is wiped from memory on drop, matching the discipline
+    // already applied to it in `security::keyring`.
+    let pragma = Zeroizing::new(format!("PRAGMA key = \"x'{}'\";", *hex_key));
+    conn.execute_batch(&pragma)?;
 
     conn.query_row("SELECT count(*) FROM sqlite_master", [], |row| {
         row.get::<_, i64>(0)
@@ -51,9 +64,12 @@ mod tests {
     fn database_file_is_encrypted_at_rest_and_unreadable_without_the_key() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("index.sqlite3");
+        // A throwaway key, not the real OS Keychain entry — keeps this test
+        // hermetic and independent of a live Secret Service being available.
+        let key = [0x42u8; 32];
 
         {
-            let conn = open_encrypted_db(&path).unwrap();
+            let conn = open_encrypted_db_with_key(&path, &key).unwrap();
             conn.execute_batch("CREATE TABLE t (x INTEGER);").unwrap();
         } // drop closes the connection, forcing a flush
 
@@ -71,6 +87,11 @@ mod tests {
         let result = unkeyed.query_row("SELECT count(*) FROM sqlite_master", [], |r| {
             r.get::<_, i64>(0)
         });
-        assert!(result.is_err());
+        let err = result.expect_err("unkeyed read of an encrypted file must fail");
+        assert_eq!(
+            err.sqlite_error_code(),
+            Some(rusqlite::ErrorCode::NotADatabase),
+            "expected SQLITE_NOTADB, got: {err}"
+        );
     }
 }

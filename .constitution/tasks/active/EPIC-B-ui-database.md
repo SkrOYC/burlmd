@@ -27,6 +27,7 @@ Then a new 256-bit key is generated and stored in the OS Keychain
 - **Category:** Security
 - **Scope (In-Scope Files):**
   - `rust/src/db/connection.rs`
+- **Verification Command:** `cargo test db::`
 - **Description:** Configure the `rusqlite` initialization to issue `PRAGMA key` using the root key from `UIDB-B001`.
 - **Acceptance Criteria (Gherkin):**
 ```gherkin
