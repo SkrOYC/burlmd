@@ -99,13 +99,7 @@ pub fn parse_markdown(input: &str) -> Vec<AstNode> {
                         code: String::new(),
                     });
                 }
-                Tag::Link { dest_url, .. } => {
-                    link_stack.push(LinkFrame {
-                        url: dest_url.to_string(),
-                        content: Vec::new(),
-                    });
-                }
-                Tag::Image { dest_url, .. } => {
+                Tag::Link { dest_url, .. } | Tag::Image { dest_url, .. } => {
                     link_stack.push(LinkFrame {
                         url: dest_url.to_string(),
                         content: Vec::new(),
@@ -278,17 +272,32 @@ enum ContainerNode {
     },
 }
 
+/// Attaches `node` to the nearest ancestor that actually holds child nodes,
+/// skipping past `Heading`/`Paragraph` frames on the stack. Those two exist
+/// only to accumulate inline content and never hold block-level children, so
+/// treating the topmost frame as "the parent" (regardless of its kind) would
+/// wrongly hoist nodes to the document root whenever a block node (e.g. an
+/// image) is pushed while a paragraph inside a blockquote or list item is
+/// still open.
 fn push_node(root_nodes: &mut Vec<AstNode>, node_stack: &mut [ContainerNode], node: AstNode) {
-    if let Some(parent) = node_stack.last_mut() {
+    for parent in node_stack.iter_mut().rev() {
         match parent {
-            ContainerNode::Blockquote(nodes) => nodes.push(node),
-            ContainerNode::List { items, .. } => items.push(node),
-            ContainerNode::ListItem { content, .. } => content.push(node),
-            _ => root_nodes.push(node),
+            ContainerNode::Blockquote(nodes) => {
+                nodes.push(node);
+                return;
+            }
+            ContainerNode::List { items, .. } => {
+                items.push(node);
+                return;
+            }
+            ContainerNode::ListItem { content, .. } => {
+                content.push(node);
+                return;
+            }
+            ContainerNode::Heading(_) | ContainerNode::Paragraph => {}
         }
-    } else {
-        root_nodes.push(node);
     }
+    root_nodes.push(node);
 }
 
 /// Flushes any inline content accumulated outside of a `Paragraph` tag (e.g.
@@ -634,6 +643,75 @@ mod tests {
                     }
                     _ => panic!("Expected ListItem"),
                 }
+            }
+            _ => panic!("Expected List"),
+        }
+    }
+
+    #[test]
+    fn test_image_inside_blockquote_stays_nested() {
+        let md = "> quoted text ![a](x.png)";
+        let ast = parse_markdown(md);
+
+        assert_eq!(ast.len(), 1);
+        match &ast[0] {
+            AstNode::Blockquote { nodes } => {
+                assert_eq!(nodes.len(), 2);
+                match &nodes[0] {
+                    AstNode::Paragraph { content } => match &content[0] {
+                        InlineElement::Text(tr) => assert_eq!(tr.content, "quoted text "),
+                        _ => panic!("Expected Text inline element"),
+                    },
+                    _ => panic!("Expected Paragraph before image"),
+                }
+                match &nodes[1] {
+                    AstNode::Image {
+                        alt_text,
+                        url_or_path,
+                    } => {
+                        assert_eq!(alt_text, "a");
+                        assert_eq!(url_or_path, "x.png");
+                    }
+                    _ => panic!("Expected Image node"),
+                }
+            }
+            _ => panic!("Expected Blockquote"),
+        }
+    }
+
+    #[test]
+    fn test_image_inside_loose_list_item_stays_nested() {
+        let md = "- first ![a](x.png)\n\n- second";
+        let ast = parse_markdown(md);
+
+        assert_eq!(ast.len(), 1);
+        match &ast[0] {
+            AstNode::List { items, .. } => {
+                assert_eq!(items.len(), 2);
+                match &items[0] {
+                    AstNode::ListItem { content, .. } => {
+                        assert_eq!(content.len(), 2);
+                        match &content[0] {
+                            AstNode::Paragraph { content } => match &content[0] {
+                                InlineElement::Text(tr) => assert_eq!(tr.content, "first "),
+                                _ => panic!("Expected Text inline element"),
+                            },
+                            _ => panic!("Expected Paragraph before image"),
+                        }
+                        match &content[1] {
+                            AstNode::Image {
+                                alt_text,
+                                url_or_path,
+                            } => {
+                                assert_eq!(alt_text, "a");
+                                assert_eq!(url_or_path, "x.png");
+                            }
+                            _ => panic!("Expected Image node"),
+                        }
+                    }
+                    _ => panic!("Expected ListItem"),
+                }
+                assert_eq!(item_text(&items[1]), "second");
             }
             _ => panic!("Expected List"),
         }
