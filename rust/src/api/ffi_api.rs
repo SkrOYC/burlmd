@@ -5,7 +5,10 @@ use flutter_rust_bridge::frb;
 // AST types are owned by the `markdown` domain module (parsing is what
 // produces and shapes them); re-exported here so they cross the FFI
 // boundary FRB scans (`rust_input: crate::api`) without `markdown`
-// having to depend back on this module for its own output types.
+// having to depend back on this module for its own output types. `AppError`
+// is re-exported the same way, from a shared leaf module, so `db` and
+// `security` can report failures without depending upward on `api`.
+pub use crate::error::AppError;
 pub use crate::markdown::{AstNode, InlineElement, TextRun};
 
 #[frb]
@@ -25,20 +28,6 @@ pub struct NoteState {
     pub ast: Vec<AstNode>,
     pub metadata: NoteMetadata,
     pub base_revision: String,
-}
-
-#[frb]
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum AppError {
-    DiskFull,
-    AuthExpired,
-    GitConflict,
-    DatabaseError(String),
-    CryptoError(String),
-    NetworkError(String),
-    OAuthError(String),
-    IoError(String),
-    ParseError(String),
 }
 
 #[frb(sync)]
@@ -73,6 +62,14 @@ pub fn open_note(path: String) -> Result<NoteState, AppError> {
     let state = NoteState {
         ast,
         metadata,
+        // A placeholder token, not yet the same OCC domain `save_note_impl`
+        // checks against (`notes.last_modified`, stringified) — `open_note`
+        // reads straight from the filesystem and never touches the `notes`
+        // table, so there is no DB-backed revision to hand back yet. Passing
+        // this value on to `save_note` today would always mismatch and
+        // return `GitConflict`. Reconcile when the open->edit->save flow is
+        // actually wired (no Markdown serializer/write-through exists yet;
+        // see `architecture/risks.md` #6 and `flow-edit-note.md`).
         base_revision: "head".to_string(),
     };
     *active_note_cache()? = Some(state.clone());
@@ -176,13 +173,15 @@ fn search_notes_impl(
     rows.collect::<Result<Vec<_>, _>>().map_err(AppError::from)
 }
 
+// `async` per the TechSpec FFI contract, even though `guidelines.md`'s Rust
+// section otherwise prefers synchronous local-index queries: the body below
+// runs to completion synchronously (a blocking mutex lock, then the query)
+// with no `.await` inside it, so this doesn't yield to an executor — the
+// `async` marker only affects how FRB dispatches the call across the
+// boundary, not this function's own execution.
 #[frb]
 pub async fn search_notes(query: String) -> Result<Vec<NoteMetadata>, AppError> {
-    let db = crate::db::connection::connection()?;
-    let conn = db
-        .lock()
-        .map_err(|_| AppError::DatabaseError("db mutex poisoned".to_string()))?;
-    search_notes_impl(&conn, &query)
+    crate::db::connection::with_connection(|conn| search_notes_impl(conn, &query))
 }
 
 /// Optimistic-concurrency-controlled save: rejects with `AppError::GitConflict`
@@ -194,17 +193,30 @@ pub async fn search_notes(query: String) -> Result<Vec<NoteMetadata>, AppError> 
 /// serializer exists anywhere in this crate yet, and that write path overlaps
 /// the Git-aware sync work tracked separately. This function only updates the
 /// DB-level revision bookkeeping that write-through will eventually gate on.
+///
+/// `expected_base_revision` is compared against the DB's own
+/// `notes.last_modified` (stringified) — not yet the same token `open_note`
+/// currently hands back as `NoteState.base_revision` (a hardcoded
+/// placeholder). See the comment on that field for why the two aren't wired
+/// together yet.
 fn save_note_impl(
     conn: &rusqlite::Connection,
     note_id: &str,
     expected_base_revision: &str,
     now: i64,
 ) -> Result<(), AppError> {
-    let current: i64 = conn.query_row(
-        "SELECT last_modified FROM notes WHERE id = ?1",
-        [note_id],
-        |row| row.get(0),
-    )?;
+    let current: i64 = conn
+        .query_row(
+            "SELECT last_modified FROM notes WHERE id = ?1",
+            [note_id],
+            |row| row.get(0),
+        )
+        .map_err(|e| match e {
+            rusqlite::Error::QueryReturnedNoRows => {
+                AppError::IoError(format!("no note found with id {note_id}"))
+            }
+            e => AppError::from(e),
+        })?;
 
     if current.to_string() != expected_base_revision {
         return Err(AppError::GitConflict);
@@ -219,15 +231,13 @@ fn save_note_impl(
 
 #[frb(sync)]
 pub fn save_note(note_id: String, expected_base_revision: String) -> Result<(), AppError> {
-    let db = crate::db::connection::connection()?;
-    let conn = db
-        .lock()
-        .map_err(|_| AppError::DatabaseError("db mutex poisoned".to_string()))?;
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs() as i64)
         .unwrap_or(0);
-    save_note_impl(&conn, &note_id, &expected_base_revision, now)
+    crate::db::connection::with_connection(|conn| {
+        save_note_impl(conn, &note_id, &expected_base_revision, now)
+    })
 }
 
 #[cfg(test)]
@@ -437,5 +447,19 @@ mod tests {
             )
             .unwrap();
         assert_eq!(last_modified, 1000);
+    }
+
+    #[test]
+    fn save_note_reports_a_clear_error_for_an_unknown_note_id() {
+        let conn = seeded_db();
+
+        let result = save_note_impl(&conn, "does-not-exist", "1000", 2000);
+
+        assert_eq!(
+            result,
+            Err(AppError::IoError(
+                "no note found with id does-not-exist".to_string()
+            ))
+        );
     }
 }

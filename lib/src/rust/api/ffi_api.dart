@@ -3,14 +3,13 @@
 
 // ignore_for_file: invalid_use_of_internal_member, unused_import, unnecessary_import
 
+import '../error.dart';
 import '../frb_generated.dart';
 import '../markdown/ast.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
-import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
-part 'ffi_api.freezed.dart';
 
 // These functions are ignored because they are not marked as `pub`: `active_note_cache`, `save_note_impl`, `search_notes_impl`, `set_node_at_path`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `eq`, `eq`, `fmt`, `fmt`
 
 NoteState openNote({required String path}) =>
     RustLib.instance.api.crateApiFfiApiOpenNote(path: path);
@@ -37,21 +36,6 @@ void saveNote({required String noteId, required String expectedBaseRevision}) =>
       noteId: noteId,
       expectedBaseRevision: expectedBaseRevision,
     );
-
-@freezed
-sealed class AppError with _$AppError implements FrbException {
-  const AppError._();
-
-  const factory AppError.diskFull() = AppError_DiskFull;
-  const factory AppError.authExpired() = AppError_AuthExpired;
-  const factory AppError.gitConflict() = AppError_GitConflict;
-  const factory AppError.databaseError(String field0) = AppError_DatabaseError;
-  const factory AppError.cryptoError(String field0) = AppError_CryptoError;
-  const factory AppError.networkError(String field0) = AppError_NetworkError;
-  const factory AppError.oAuthError(String field0) = AppError_OAuthError;
-  const factory AppError.ioError(String field0) = AppError_IoError;
-  const factory AppError.parseError(String field0) = AppError_ParseError;
-}
 
 class NoteMetadata {
   final String id;

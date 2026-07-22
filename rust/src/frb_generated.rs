@@ -103,7 +103,7 @@ fn wire__crate__api__ffi_api__open_note_impl(
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_path = <String>::sse_decode(&mut deserializer);
             deserializer.end();
-            transform_result_sse::<_, crate::api::ffi_api::AppError>((move || {
+            transform_result_sse::<_, crate::error::AppError>((move || {
                 let output_ok = crate::api::ffi_api::open_note(api_path)?;
                 Ok(output_ok)
             })())
@@ -134,7 +134,7 @@ fn wire__crate__api__ffi_api__save_note_impl(
             let api_note_id = <String>::sse_decode(&mut deserializer);
             let api_expected_base_revision = <String>::sse_decode(&mut deserializer);
             deserializer.end();
-            transform_result_sse::<_, crate::api::ffi_api::AppError>((move || {
+            transform_result_sse::<_, crate::error::AppError>((move || {
                 let output_ok =
                     crate::api::ffi_api::save_note(api_note_id, api_expected_base_revision)?;
                 Ok(output_ok)
@@ -167,7 +167,7 @@ fn wire__crate__api__ffi_api__search_notes_impl(
             let api_query = <String>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| async move {
-                transform_result_sse::<_, crate::api::ffi_api::AppError>(
+                transform_result_sse::<_, crate::error::AppError>(
                     (move || async move {
                         let output_ok = crate::api::ffi_api::search_notes(api_query).await?;
                         Ok(output_ok)
@@ -203,7 +203,7 @@ fn wire__crate__api__ffi_api__update_block_impl(
             let api_block_path = <Vec<usize>>::sse_decode(&mut deserializer);
             let api_new_node = <crate::markdown::ast::AstNode>::sse_decode(&mut deserializer);
             deserializer.end();
-            transform_result_sse::<_, crate::api::ffi_api::AppError>((move || {
+            transform_result_sse::<_, crate::error::AppError>((move || {
                 let output_ok =
                     crate::api::ffi_api::update_block(api_note_id, api_block_path, api_new_node)?;
                 Ok(output_ok)
@@ -222,43 +222,43 @@ impl SseDecode for String {
     }
 }
 
-impl SseDecode for crate::api::ffi_api::AppError {
+impl SseDecode for crate::error::AppError {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         let mut tag_ = <i32>::sse_decode(deserializer);
         match tag_ {
             0 => {
-                return crate::api::ffi_api::AppError::DiskFull;
+                return crate::error::AppError::DiskFull;
             }
             1 => {
-                return crate::api::ffi_api::AppError::AuthExpired;
+                return crate::error::AppError::AuthExpired;
             }
             2 => {
-                return crate::api::ffi_api::AppError::GitConflict;
+                return crate::error::AppError::GitConflict;
             }
             3 => {
                 let mut var_field0 = <String>::sse_decode(deserializer);
-                return crate::api::ffi_api::AppError::DatabaseError(var_field0);
+                return crate::error::AppError::DatabaseError(var_field0);
             }
             4 => {
                 let mut var_field0 = <String>::sse_decode(deserializer);
-                return crate::api::ffi_api::AppError::CryptoError(var_field0);
+                return crate::error::AppError::CryptoError(var_field0);
             }
             5 => {
                 let mut var_field0 = <String>::sse_decode(deserializer);
-                return crate::api::ffi_api::AppError::NetworkError(var_field0);
+                return crate::error::AppError::NetworkError(var_field0);
             }
             6 => {
                 let mut var_field0 = <String>::sse_decode(deserializer);
-                return crate::api::ffi_api::AppError::OAuthError(var_field0);
+                return crate::error::AppError::OAuthError(var_field0);
             }
             7 => {
                 let mut var_field0 = <String>::sse_decode(deserializer);
-                return crate::api::ffi_api::AppError::IoError(var_field0);
+                return crate::error::AppError::IoError(var_field0);
             }
             8 => {
                 let mut var_field0 = <String>::sse_decode(deserializer);
-                return crate::api::ffi_api::AppError::ParseError(var_field0);
+                return crate::error::AppError::ParseError(var_field0);
             }
             _ => {
                 unimplemented!("");
@@ -608,28 +608,28 @@ fn pde_ffi_dispatcher_sync_impl(
 // Section: rust2dart
 
 // Codec=Dco (DartCObject based), see doc to use other codecs
-impl flutter_rust_bridge::IntoDart for crate::api::ffi_api::AppError {
+impl flutter_rust_bridge::IntoDart for crate::error::AppError {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         match self {
-            crate::api::ffi_api::AppError::DiskFull => [0.into_dart()].into_dart(),
-            crate::api::ffi_api::AppError::AuthExpired => [1.into_dart()].into_dart(),
-            crate::api::ffi_api::AppError::GitConflict => [2.into_dart()].into_dart(),
-            crate::api::ffi_api::AppError::DatabaseError(field0) => {
+            crate::error::AppError::DiskFull => [0.into_dart()].into_dart(),
+            crate::error::AppError::AuthExpired => [1.into_dart()].into_dart(),
+            crate::error::AppError::GitConflict => [2.into_dart()].into_dart(),
+            crate::error::AppError::DatabaseError(field0) => {
                 [3.into_dart(), field0.into_into_dart().into_dart()].into_dart()
             }
-            crate::api::ffi_api::AppError::CryptoError(field0) => {
+            crate::error::AppError::CryptoError(field0) => {
                 [4.into_dart(), field0.into_into_dart().into_dart()].into_dart()
             }
-            crate::api::ffi_api::AppError::NetworkError(field0) => {
+            crate::error::AppError::NetworkError(field0) => {
                 [5.into_dart(), field0.into_into_dart().into_dart()].into_dart()
             }
-            crate::api::ffi_api::AppError::OAuthError(field0) => {
+            crate::error::AppError::OAuthError(field0) => {
                 [6.into_dart(), field0.into_into_dart().into_dart()].into_dart()
             }
-            crate::api::ffi_api::AppError::IoError(field0) => {
+            crate::error::AppError::IoError(field0) => {
                 [7.into_dart(), field0.into_into_dart().into_dart()].into_dart()
             }
-            crate::api::ffi_api::AppError::ParseError(field0) => {
+            crate::error::AppError::ParseError(field0) => {
                 [8.into_dart(), field0.into_into_dart().into_dart()].into_dart()
             }
             _ => {
@@ -638,11 +638,9 @@ impl flutter_rust_bridge::IntoDart for crate::api::ffi_api::AppError {
         }
     }
 }
-impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::api::ffi_api::AppError {}
-impl flutter_rust_bridge::IntoIntoDart<crate::api::ffi_api::AppError>
-    for crate::api::ffi_api::AppError
-{
-    fn into_into_dart(self) -> crate::api::ffi_api::AppError {
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::error::AppError {}
+impl flutter_rust_bridge::IntoIntoDart<crate::error::AppError> for crate::error::AppError {
+    fn into_into_dart(self) -> crate::error::AppError {
         self
     }
 }
@@ -832,40 +830,40 @@ impl SseEncode for String {
     }
 }
 
-impl SseEncode for crate::api::ffi_api::AppError {
+impl SseEncode for crate::error::AppError {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         match self {
-            crate::api::ffi_api::AppError::DiskFull => {
+            crate::error::AppError::DiskFull => {
                 <i32>::sse_encode(0, serializer);
             }
-            crate::api::ffi_api::AppError::AuthExpired => {
+            crate::error::AppError::AuthExpired => {
                 <i32>::sse_encode(1, serializer);
             }
-            crate::api::ffi_api::AppError::GitConflict => {
+            crate::error::AppError::GitConflict => {
                 <i32>::sse_encode(2, serializer);
             }
-            crate::api::ffi_api::AppError::DatabaseError(field0) => {
+            crate::error::AppError::DatabaseError(field0) => {
                 <i32>::sse_encode(3, serializer);
                 <String>::sse_encode(field0, serializer);
             }
-            crate::api::ffi_api::AppError::CryptoError(field0) => {
+            crate::error::AppError::CryptoError(field0) => {
                 <i32>::sse_encode(4, serializer);
                 <String>::sse_encode(field0, serializer);
             }
-            crate::api::ffi_api::AppError::NetworkError(field0) => {
+            crate::error::AppError::NetworkError(field0) => {
                 <i32>::sse_encode(5, serializer);
                 <String>::sse_encode(field0, serializer);
             }
-            crate::api::ffi_api::AppError::OAuthError(field0) => {
+            crate::error::AppError::OAuthError(field0) => {
                 <i32>::sse_encode(6, serializer);
                 <String>::sse_encode(field0, serializer);
             }
-            crate::api::ffi_api::AppError::IoError(field0) => {
+            crate::error::AppError::IoError(field0) => {
                 <i32>::sse_encode(7, serializer);
                 <String>::sse_encode(field0, serializer);
             }
-            crate::api::ffi_api::AppError::ParseError(field0) => {
+            crate::error::AppError::ParseError(field0) => {
                 <i32>::sse_encode(8, serializer);
                 <String>::sse_encode(field0, serializer);
             }

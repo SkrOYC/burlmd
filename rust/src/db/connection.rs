@@ -4,7 +4,7 @@ use std::sync::{Mutex, OnceLock};
 use rusqlite::Connection;
 use zeroize::Zeroizing;
 
-use crate::api::ffi_api::AppError;
+use crate::error::AppError;
 use crate::security::keyring::get_or_create_root_key;
 
 impl From<rusqlite::Error> for AppError {
@@ -120,6 +120,19 @@ pub fn connection() -> Result<&'static Mutex<Connection>, AppError> {
     let conn = open_and_initialize(&default_db_path()?)?;
     let _ = DB.set(Mutex::new(conn));
     Ok(DB.get().expect("DB was just set while holding INIT_LOCK"))
+}
+
+/// Acquires the process-wide connection and runs `f` against it, so each
+/// FFI function needing the DB doesn't repeat the "get the singleton, lock
+/// it, map a poisoned-lock error" preamble.
+pub fn with_connection<T>(
+    f: impl FnOnce(&Connection) -> Result<T, AppError>,
+) -> Result<T, AppError> {
+    let db = connection()?;
+    let conn = db
+        .lock()
+        .map_err(|_| AppError::DatabaseError("db mutex poisoned".to_string()))?;
+    f(&conn)
 }
 
 #[cfg(test)]

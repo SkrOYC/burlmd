@@ -1,7 +1,7 @@
 use keyring::Entry;
 use zeroize::Zeroizing;
 
-use crate::api::ffi_api::AppError;
+use crate::error::AppError;
 
 const SERVICE: &str = "com.burlmd.app";
 const ACCOUNT: &str = "root_key";

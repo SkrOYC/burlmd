@@ -6,6 +6,7 @@
 import 'api/ffi_api.dart';
 import 'dart:async';
 import 'dart:convert';
+import 'error.dart';
 import 'frb_generated.dart';
 import 'frb_generated.io.dart'
     if (dart.library.js_interop) 'frb_generated.web.dart';

@@ -148,21 +148,16 @@ bool _isSingleTextRun(List<InlineElement> content) =>
 /// (only, per [_isSingleTextRun]) run's formatting — a `TextField` can't
 /// apply per-character rich styling the way [renderInline]'s `TextSpan` tree
 /// can.
-TextStyle? _paragraphStyle(List<InlineElement> content) {
-  for (final inline in content) {
-    if (inline is InlineElement_Text) {
-      final run = inline.field0;
-      return TextStyle(
-        fontWeight: run.bold ? FontWeight.bold : FontWeight.normal,
-        fontStyle: run.italic ? FontStyle.italic : FontStyle.normal,
-        decoration: run.strikethrough
-            ? TextDecoration.lineThrough
-            : TextDecoration.none,
-        fontFamily: run.code ? 'monospace' : null,
-      );
-    }
-  }
-  return null;
+TextStyle _paragraphStyle(List<InlineElement> content) {
+  final run = (content.single as InlineElement_Text).field0;
+  return TextStyle(
+    fontWeight: run.bold ? FontWeight.bold : FontWeight.normal,
+    fontStyle: run.italic ? FontStyle.italic : FontStyle.normal,
+    decoration: run.strikethrough
+        ? TextDecoration.lineThrough
+        : TextDecoration.none,
+    fontFamily: run.code ? 'monospace' : null,
+  );
 }
 
 Widget _renderListItem(List<AstNode> content, bool? checked, String marker) =>
@@ -270,18 +265,18 @@ TextSpan renderInline(InlineElement element) => switch (element) {
       fontFamily: field0.code ? 'monospace' : null,
     ),
   ),
-  InlineElement_Link(:final content) => TextSpan(
-    style: const TextStyle(
-      color: Colors.blue,
-      decoration: TextDecoration.underline,
-    ),
-    children: content.map(renderInline).toList(),
-  ),
-  InlineElement_ExternalLink(:final content) => TextSpan(
-    style: const TextStyle(
-      color: Colors.blue,
-      decoration: TextDecoration.underline,
-    ),
-    children: content.map(renderInline).toList(),
-  ),
+  InlineElement_Link(:final content) => _renderLinkSpan(content),
+  InlineElement_ExternalLink(:final content) => _renderLinkSpan(content),
 };
+
+/// Internal-link and external-link runs render identically today (both a
+/// blue underline around their nested inline content) — a future ticket may
+/// want to distinguish them (e.g. an external-link icon), at which point
+/// this shared helper splits back into two.
+TextSpan _renderLinkSpan(List<InlineElement> content) => TextSpan(
+  style: const TextStyle(
+    color: Colors.blue,
+    decoration: TextDecoration.underline,
+  ),
+  children: content.map(renderInline).toList(),
+);

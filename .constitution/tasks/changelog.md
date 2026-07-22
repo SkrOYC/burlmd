@@ -1,5 +1,13 @@
 # Stage 4: Tasks Changelog
 
+## v1.2.2
+PR #4 dual-axis review, round 1.
+- Fixed a real architectural defect (P1, Standards axis): `db::connection` and `security::keyring` imported `AppError` from the FFI-facing `api::ffi_api` module, an upward dependency `architecture/containers.md` explicitly rules out for those containers. Moved `AppError` into a new shared leaf module (`rust/src/error.rs`); `api`, `db`, and `security` all depend on it inward now. Also corrected `containers.md`'s Local Repository entry, which claimed "Depends on: None" despite always having called into Secure Storage for the root key.
+- Fixed two duplicated-code P2s (Standards axis): `renderInline`'s identical Link/ExternalLink arms, and the repeated DB-singleton-acquire-and-lock preamble in `search_notes`/`save_note` (now a shared `with_connection` helper).
+- Fixed an unclear-error P2 (Spec axis): `save_note` on an unknown note id now reports `AppError::IoError` instead of a raw `DatabaseError` surfaced from `rusqlite::Error::QueryReturnedNoRows`.
+- Documented (not fixed, no reachable path exists yet) a real latent inconsistency both review axes independently found: `open_note`'s placeholder `base_revision` and `save_note`'s DB-sourced `expected_base_revision` are not the same token yet, since `open_note` never touches the `notes` table. Added explicit comments at both ends instead of inventing the open→edit→save wiring this epic never scoped.
+- See `tasks/completed/EPIC-B-ui-database.md`'s new "Post-PR-review fixes (round 1)" note for full detail.
+
 ## v1.2.1
 Post-closeout correction for Epic B, prompted by a request to actually visually verify the shipped UI rather than rely solely on `flutter test` assertions against fakes.
 - Discovered and fixed a real regression in `lib/src/components/editor.dart`: multi-run paragraphs (any paragraph mixing plain text with a bold/italic/code/strikethrough run, or containing a Link) were silently made editable via `TextField` alongside single-run ones, and `_paragraphStyle` only reads the first run — so the field displayed the whole paragraph in one flattened style, dropping every other run's formatting even before any edit. This directly regressed `UIDB-B006`'s own bold-rendering Gherkin and was invisible to all six existing widget tests, since every test paragraph happened to be single-run. Fixed by gating paragraph editability on a new `_isSingleTextRun` check; multi-run and Link-containing paragraphs now correctly stay read-only via `renderBlock`. Added a regression test (`a multi-run paragraph stays read-only and keeps each run's distinct styling`).
