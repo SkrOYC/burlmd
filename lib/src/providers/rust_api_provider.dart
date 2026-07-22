@@ -1,10 +1,24 @@
-import 'package:burlmd/src/rust/frb_generated.dart';
+import 'package:burlmd/src/rust/api/ffi_api.dart' as ffi;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-/// Injects the initialized Rust FFI API surface into the widget tree.
-/// `RustLib.init()` must already have completed (awaited in `main()`)
-/// before any widget first reads this provider.
-final rustApiProvider = Provider<RustLibApi>(
-  // ignore: invalid_use_of_internal_member
-  (ref) => RustLib.instance.api,
-);
+/// Thin, app-owned wrapper around the generated FRB free functions. This is
+/// the seam application code depends on instead of importing `ffi_api.dart`
+/// functions directly, so tests can override `rustApiProvider` without
+/// needing FRB's own `RustLib.initMock()` machinery, and without touching
+/// `RustLib.instance.api`, which flutter_rust_bridge marks `@internal`.
+class RustApi {
+  const RustApi();
+
+  ffi.NoteState openNote(String path) => ffi.openNote(path: path);
+
+  Future<List<ffi.NoteMetadata>> searchNotes(String query) =>
+      ffi.searchNotes(query: query);
+
+  void saveNote(String noteId, String expectedBaseRevision) =>
+      ffi.saveNote(noteId: noteId, expectedBaseRevision: expectedBaseRevision);
+}
+
+/// Injects the Rust API surface into the widget tree. `RustLib.init()` must
+/// already have completed (awaited in `main()`) before any widget first
+/// reads this provider.
+final rustApiProvider = Provider<RustApi>((ref) => const RustApi());

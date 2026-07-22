@@ -1,3 +1,4 @@
+import 'package:burlmd/src/providers/rust_api_provider.dart';
 import 'package:burlmd/src/rust/api/ffi_api.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -9,7 +10,7 @@ class NoteController extends Notifier<NoteState?> {
   NoteState? build() => null;
 
   void open(String path) {
-    state = openNote(path: path);
+    state = ref.read(rustApiProvider).openNote(path);
   }
 }
 
