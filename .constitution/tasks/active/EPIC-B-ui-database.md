@@ -114,6 +114,10 @@ When the Editor renders the AST
 Then a bold Flutter Text widget is painted to the screen
 ```
 
+##### UIDB-B006 Deviations & Justifications
+- **Touched Files:** `test/components/editor_test.dart` (new)
+- **Justification:** The ticket's own Verification Command is `flutter test`, which requires a test to exist; `test/` mirrors `lib/src/components/` for its one widget test, matching the project's existing `test/widget_test.dart` convention.
+
 #### UIDB-B007 Editor FFI Streaming Connection
 - **Type:** Feature
 - **Effort:** 3
