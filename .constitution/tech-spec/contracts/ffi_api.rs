@@ -123,6 +123,10 @@ pub fn save_note(note_id: String, expected_base_revision: String) -> Result<(), 
     unimplemented!()
 }
 
+/// Capped at 50 results (bm25-ranked, best match first) by the reference
+/// implementation. No pagination cursor exists yet; a query matching more
+/// than 50 notes silently returns only the top 50 rather than surfacing
+/// truncation to the caller. Revisit once a search UI actually needs more.
 #[frb]
 pub async fn search_notes(query: String) -> Result<Vec<NoteMetadata>, AppError> {
     unimplemented!()

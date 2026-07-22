@@ -9,6 +9,8 @@
 import 'api/ffi_api.dart';
 import 'dart:async';
 import 'dart:convert';
+import 'draft.dart';
+import 'error.dart';
 import 'frb_generated.dart';
 import 'markdown/ast.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated_web.dart';
@@ -34,6 +36,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   bool dco_decode_bool(dynamic raw);
 
   @protected
+  AstNode dco_decode_box_autoadd_ast_node(dynamic raw);
+
+  @protected
   bool dco_decode_box_autoadd_bool(dynamic raw);
 
   @protected
@@ -52,7 +57,13 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<InlineElement> dco_decode_list_inline_element(dynamic raw);
 
   @protected
+  List<NoteMetadata> dco_decode_list_note_metadata(dynamic raw);
+
+  @protected
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw);
+
+  @protected
+  Uint64List dco_decode_list_prim_usize_strict(dynamic raw);
 
   @protected
   NoteMetadata dco_decode_note_metadata(dynamic raw);
@@ -79,6 +90,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void dco_decode_unit(dynamic raw);
 
   @protected
+  BigInt dco_decode_usize(dynamic raw);
+
+  @protected
   String sse_decode_String(SseDeserializer deserializer);
 
   @protected
@@ -89,6 +103,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   bool sse_decode_bool(SseDeserializer deserializer);
+
+  @protected
+  AstNode sse_decode_box_autoadd_ast_node(SseDeserializer deserializer);
 
   @protected
   bool sse_decode_box_autoadd_bool(SseDeserializer deserializer);
@@ -111,7 +128,15 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  List<NoteMetadata> sse_decode_list_note_metadata(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer);
+
+  @protected
+  Uint64List sse_decode_list_prim_usize_strict(SseDeserializer deserializer);
 
   @protected
   NoteMetadata sse_decode_note_metadata(SseDeserializer deserializer);
@@ -138,6 +163,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_decode_unit(SseDeserializer deserializer);
 
   @protected
+  BigInt sse_decode_usize(SseDeserializer deserializer);
+
+  @protected
   int sse_decode_i_32(SseDeserializer deserializer);
 
   @protected
@@ -151,6 +179,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_bool(bool self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_ast_node(AstNode self, SseSerializer serializer);
 
   @protected
   void sse_encode_box_autoadd_bool(bool self, SseSerializer serializer);
@@ -174,8 +205,20 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_list_note_metadata(
+    List<NoteMetadata> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_list_prim_u_8_strict(
     Uint8List self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_prim_usize_strict(
+    Uint64List self,
     SseSerializer serializer,
   );
 
@@ -205,6 +248,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_unit(void self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_usize(BigInt self, SseSerializer serializer);
 
   @protected
   void sse_encode_i_32(int self, SseSerializer serializer);

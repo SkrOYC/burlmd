@@ -27,7 +27,7 @@
 - **Capability:** The system continuously and automatically syncs changes across devices in the background.
 - **Rationale:** Ensures data is always up-to-date.
 - **Priority:** P0
-- **Capability:** All local data (Notes on disk and the SQLite search index) is encrypted at rest, with the decryption key stored securely in the OS-level Keychain/Keystore.
+- **Capability:** All local data is protected at rest: Notes on disk are protected via OS-level Full Disk Encryption, and the SQLite search index is additionally encrypted at the application level (SQLCipher), with the decryption key stored securely in the OS-level Keychain/Keystore.
 - **Rationale:** Ensures high data privacy if the physical device is compromised.
 - **Priority:** P1
 - **Capability:** The system surfaces concurrent offline edits as inline Suggestions for the user to accept or reject.

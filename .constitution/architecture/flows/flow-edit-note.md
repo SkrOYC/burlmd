@@ -17,8 +17,8 @@ sequenceDiagram
     loop Active Editing
         UI->>Core: Stream block modification (e.g., Keystroke on Block 3)
         Core->>Core: Update active Draft AST in memory
-        Core-->>UI: Acknowledge & return updated localized AST
-        UI->>UI: Re-render specific block
+        Core-->>UI: Acknowledge & return updated NoteState (full AST)
+        UI->>UI: Re-render note (whole block list; per-block differential re-render is a future optimization, see risks.md #1)
     end
     
     UI->>Core: Close Editor / Explicit Save
@@ -26,3 +26,5 @@ sequenceDiagram
     Core->>Local: Commit Markdown to disk (Atomic Save)
     Local-->>Core: Commit Success
 ```
+
+**Current implementation status (Epic B):** the "Active Editing" loop is fully implemented (`update_block`, synchronous FFI round-trip). The "Close Editor / Explicit Save" phase is **not yet implemented** — `save_note` currently performs only an Optimistic Concurrency Control check against `notes.last_modified` (see `architecture/risks.md` risk #6); no Markdown serializer exists, and no code path commits AST content back to the on-disk file. That half of this flow is deferred to a future ticket.

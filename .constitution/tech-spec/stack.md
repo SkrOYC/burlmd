@@ -1,5 +1,5 @@
 ---
-version: v1.0.1
+version: v1.0.2
 ---
 
 # Bill of Materials (BOM) & Stack
@@ -17,7 +17,8 @@ version: v1.0.1
 
 ## Security & Cryptography
 - **Secure Storage (Rust):** `keyring` - handles direct retrieval of OAuth tokens and AES keys from the OS hardware enclave without passing them through Dart memory.
-- **Database Encryption:** `sqlcipher` (bundled with `rusqlite`) - provides transparent AES-256-CBC encryption of the SQLite index file on disk, with each page authenticated by HMAC-SHA512 (Encrypt-then-MAC) and the key derived via PBKDF2-HMAC-SHA512. This is not an AEAD construction; threat-model reasoning about tamper resistance must not assume GCM semantics. Per the SQLCipher design document (<https://www.zetetic.net/sqlcipher/design/>): "The encryption algorithm is 256-bit AES in CBC mode", keys are derived with PBKDF2-HMAC-SHA512 at 256,000 iterations, and "every page write includes a Message Authentication Code (HMAC-SHA512) of the ciphertext and the initialization vector at the end of the page". Cross-checked locally by reading `PRAGMA cipher_settings`; the instrument there was the standalone 4.16.0 CLI, while the shipped version is the 4.14.0 vendored by `bundled-sqlcipher`.
+- **Database Encryption:** `sqlcipher` (bundled with `rusqlite`) - provides transparent AES-256-CBC encryption of the SQLite index file on disk, with each page authenticated by HMAC-SHA512 (Encrypt-then-MAC). This is not an AEAD construction; threat-model reasoning about tamper resistance must not assume GCM semantics. Per the SQLCipher design document (<https://www.zetetic.net/sqlcipher/design/>): "The encryption algorithm is 256-bit AES in CBC mode", and "every page write includes a Message Authentication Code (HMAC-SHA512) of the ciphertext and the initialization vector at the end of the page". Cross-checked locally by reading `PRAGMA cipher_settings`; the instrument there was the standalone 4.16.0 CLI, while the shipped version is the 4.14.0 vendored by `bundled-sqlcipher`.
+- **Key application:** the root key from `keyring` (see below) is already a full-entropy 256-bit CSPRNG value, so it is applied to SQLCipher via the raw-key PRAGMA form — `PRAGMA key = "x'<64 hex chars>'"` — which sets the 32 key bytes directly with **no KDF applied**. SQLCipher's passphrase-mode PBKDF2-HMAC-SHA512 (256,000 iterations) exists to strengthen low-entropy human passphrases; running it on already-random key material adds cost with no security benefit, so this project deliberately does not use passphrase mode. (Corrected in v1.0.2 — the encryption bullet previously stated the key was "derived via PBKDF2-HMAC-SHA512", which described passphrase mode rather than this project's actual raw-key mechanism.)
 
 ## Compatibility & Upgrade Policy
 - **Developer Environment:** The entire toolchain is provisioned by `devenv` (Nix). `devenv.lock` pins `nixpkgs`, `rust-overlay` and `git-hooks`, so the toolchain closure resolves identically across machines and CI. Note the boundary stops there: `pub` and `cargo` still resolve package registries outside the store, pinned by `pubspec.lock`/`Cargo.lock` once those exist, and the `devenv` CLI that reads the lock is itself installed outside it.

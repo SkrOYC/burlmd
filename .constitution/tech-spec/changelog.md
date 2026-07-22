@@ -1,5 +1,9 @@
 # Stage 3: Technical Implementation Changelog
 
+## v1.0.2
+UIDB-B002 implementation (Epic B execution).
+- Corrected `stack.md`'s Database Encryption bullet: the root key is applied to SQLCipher via the raw-key PRAGMA form (`PRAGMA key = "x'<64 hex chars>'"`), not a passphrase string. The v1.0.1 wording ("key derived via PBKDF2-HMAC-SHA512... 256,000 iterations") described SQLCipher's passphrase mode, which this project does not use — PBKDF2 exists to strengthen low-entropy human passphrases and adds cost with no benefit when the input key is already full-entropy CSPRNG output from the OS Keychain (UIDB-B001). Confirmed live: `cargo test db::` verifies the resulting file is unreadable without the key and its raw bytes don't match SQLite's plaintext header.
+
 ## v1.0.1
 Phase 0 (tooling readiness). Amendments driven by empirically verifying the stack inside the new `devenv` shell rather than by design changes.
 - Replaced `fvm` with a `nixpkgs` pin (`flutterPackages.v3_44`) as the Flutter SDK pinning mechanism. `fvm` fetches unpatched SDK binaries that cannot execute on NixOS and sidesteps the Nix store.

@@ -3,41 +3,15 @@ use flutter_rust_bridge::frb;
 // AST types are owned by the `markdown` domain module (parsing is what
 // produces and shapes them); re-exported here so they cross the FFI
 // boundary FRB scans (`rust_input: crate::api`) without `markdown`
-// having to depend back on this module for its own output types.
+// having to depend back on this module for its own output types. `AppError`
+// is re-exported the same way, from a shared leaf module, so `db` and
+// `security` can report failures without depending upward on `api`.
+// `NoteMetadata`/`NoteState` are re-exported from `draft`, which also owns
+// the active-note cache and `set_node_at_path` — this module's own job is
+// just the thin `#[frb]` wrappers below, not the draft-state domain logic.
+pub use crate::draft::{NoteMetadata, NoteState};
+pub use crate::error::AppError;
 pub use crate::markdown::{AstNode, InlineElement, TextRun};
-
-#[frb]
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct NoteMetadata {
-    pub id: String,
-    pub workspace_id: String,
-    pub path: String,
-    pub title: String,
-    pub last_modified: i64,
-    pub snippet: Option<String>,
-}
-
-#[frb]
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct NoteState {
-    pub ast: Vec<AstNode>,
-    pub metadata: NoteMetadata,
-    pub base_revision: String,
-}
-
-#[frb]
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum AppError {
-    DiskFull,
-    AuthExpired,
-    GitConflict,
-    DatabaseError(String),
-    CryptoError(String),
-    NetworkError(String),
-    OAuthError(String),
-    IoError(String),
-    ParseError(String),
-}
 
 #[frb(sync)]
 pub fn open_note(path: String) -> Result<NoteState, AppError> {
@@ -60,6 +34,14 @@ pub fn open_note(path: String) -> Result<NoteState, AppError> {
         .unwrap_or(0);
 
     let metadata = NoteMetadata {
+        // A second facet of the "open_note isn't wired to the notes table"
+        // gap documented below on `base_revision`: `data-models/schema.sql`
+        // defines `notes.id` as a stable UUID, but this is the filesystem
+        // path (carried from Epic A's original implementation). Passing
+        // this `id` into `save_note`/`update_block` today only works
+        // because `update_block` matches against this same in-memory value,
+        // never against a DB row — `save_note` keys on `notes.id` for real,
+        // so it would need a real UUID once note creation/lookup is wired.
         id: path.clone(),
         workspace_id: "default".to_string(),
         path: path.clone(),
@@ -68,9 +50,348 @@ pub fn open_note(path: String) -> Result<NoteState, AppError> {
         snippet: None,
     };
 
-    Ok(NoteState {
+    let state = NoteState {
         ast,
         metadata,
+        // A placeholder token, not yet the same OCC domain `save_note_impl`
+        // checks against (`notes.last_modified`, stringified) — `open_note`
+        // reads straight from the filesystem and never touches the `notes`
+        // table, so there is no DB-backed revision to hand back yet. Passing
+        // this value on to `save_note` today would always mismatch and
+        // return `GitConflict`. Reconcile when the open->edit->save flow is
+        // actually wired (no Markdown serializer/write-through exists yet;
+        // see `architecture/risks.md` #6 and `flow-edit-note.md`).
         base_revision: "head".to_string(),
+    };
+    *crate::draft::active_note_cache()? = Some(state.clone());
+    Ok(state)
+}
+
+/// Applies a keystroke-level edit to the currently open note's in-memory
+/// AST and returns the updated `NoteState`. `block_path` is an index path
+/// into the AST tree (see `draft::set_node_at_path`); it does not persist
+/// the change to disk or the DB — that happens via `save_note`.
+#[frb(sync)]
+pub fn update_block(
+    note_id: String,
+    block_path: Vec<usize>,
+    new_node: AstNode,
+) -> Result<NoteState, AppError> {
+    let mut cache = crate::draft::active_note_cache()?;
+    let state = cache
+        .as_mut()
+        .filter(|s| s.metadata.id == note_id)
+        .ok_or_else(|| AppError::IoError(format!("no open note with id {note_id}")))?;
+    crate::draft::set_node_at_path(&mut state.ast, &block_path, new_node)?;
+    Ok(state.clone())
+}
+
+/// FTS5's bare `MATCH` syntax is a full query language (boolean operators,
+/// `column:` filters, `-token` exclusion, `"phrase"` grouping, ...), so
+/// passing raw user input straight to `MATCH` throws a syntax error on
+/// perfectly ordinary searches — a hyphenated word, a colon, unbalanced
+/// quotes. Quoting the *whole* query as one phrase would dodge that (FTS5's
+/// own escaping rule: double any embedded `"`), but it also silently changes
+/// what a "search my notes" box means: a phrase match requires every term to
+/// appear adjacent and in that exact order, whereas users expect a multi-word
+/// query to match notes containing all the terms, in any order. Quoting each
+/// whitespace-split token *separately* instead keeps FTS5's implicit AND
+/// across terms (its default when tokens aren't otherwise joined by an
+/// operator) while still neutralizing the syntax footguns, since no operator
+/// character can survive inside its own quoted token. A query with no tokens
+/// at all (empty or whitespace-only input) produces an empty string here;
+/// callers should treat that as "no results" rather than pass it to `MATCH`.
+fn fts5_phrase_query(query: &str) -> String {
+    query
+        .split_whitespace()
+        .map(|token| format!("\"{}\"", token.replace('"', "\"\"")))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// Full-text search over all indexed notes, ordered by FTS5 relevance
+/// (bm25, best match first). `notes_fts` only carries `(title, content)`;
+/// `fts_mapping` is the note_id <-> fts_rowid join table maintained
+/// alongside it, used here to recover the owning `notes` row per hit.
+///
+/// Capped at the top 50 matches, with no pagination cursor and no signal to
+/// the caller when a query matches more than that (see the matching note on
+/// this function in `tech-spec/contracts/ffi_api.rs`) — acceptable for now
+/// since no search UI exists yet to expose more, but worth revisiting before
+/// one does.
+fn search_notes_impl(
+    conn: &rusqlite::Connection,
+    query: &str,
+) -> Result<Vec<NoteMetadata>, AppError> {
+    let fts_query = fts5_phrase_query(query);
+    if fts_query.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut stmt = conn.prepare(
+        "SELECT n.id, n.workspace_id, n.path, n.title, n.last_modified, \
+                snippet(notes_fts, 1, '', '', '…', 8) AS snippet \
+         FROM notes_fts \
+         JOIN fts_mapping ON fts_mapping.fts_rowid = notes_fts.rowid \
+         JOIN notes n ON n.id = fts_mapping.note_id \
+         WHERE notes_fts MATCH ?1 \
+         ORDER BY rank \
+         LIMIT 50",
+    )?;
+
+    let rows = stmt.query_map([fts_query], |row| {
+        Ok(NoteMetadata {
+            id: row.get(0)?,
+            workspace_id: row.get(1)?,
+            path: row.get(2)?,
+            title: row.get(3)?,
+            last_modified: row.get(4)?,
+            snippet: row.get(5)?,
+        })
+    })?;
+
+    rows.collect::<Result<Vec<_>, _>>().map_err(AppError::from)
+}
+
+// `async` per the TechSpec FFI contract, even though `guidelines.md`'s Rust
+// section otherwise prefers synchronous local-index queries: the body below
+// runs to completion synchronously (a blocking mutex lock, then the query)
+// with no `.await` inside it, so this doesn't yield to an executor — the
+// `async` marker only affects how FRB dispatches the call across the
+// boundary, not this function's own execution.
+#[frb]
+pub async fn search_notes(query: String) -> Result<Vec<NoteMetadata>, AppError> {
+    crate::db::connection::with_connection(|conn| search_notes_impl(conn, &query))
+}
+
+/// Optimistic-concurrency-controlled save: rejects with `AppError::GitConflict`
+/// if `notes.last_modified` has drifted from `expected_base_revision` since the
+/// caller last read the note (e.g. a background sync updated it concurrently).
+///
+/// Serializing the in-memory AST back to Markdown and writing it to the
+/// workspace's on-disk file is intentionally out of scope here — no Markdown
+/// serializer exists anywhere in this crate yet, and that write path overlaps
+/// the Git-aware sync work tracked separately. This function only updates the
+/// DB-level revision bookkeeping that write-through will eventually gate on.
+///
+/// `expected_base_revision` is compared against the DB's own
+/// `notes.last_modified` (stringified) — not yet the same token `open_note`
+/// currently hands back as `NoteState.base_revision` (a hardcoded
+/// placeholder). See the comment on that field for why the two aren't wired
+/// together yet.
+fn save_note_impl(
+    conn: &rusqlite::Connection,
+    note_id: &str,
+    expected_base_revision: &str,
+    now: i64,
+) -> Result<(), AppError> {
+    let current: i64 = conn
+        .query_row(
+            "SELECT last_modified FROM notes WHERE id = ?1",
+            [note_id],
+            |row| row.get(0),
+        )
+        .map_err(|e| match e {
+            rusqlite::Error::QueryReturnedNoRows => {
+                AppError::IoError(format!("no note found with id {note_id}"))
+            }
+            e => AppError::from(e),
+        })?;
+
+    if current.to_string() != expected_base_revision {
+        return Err(AppError::GitConflict);
+    }
+
+    conn.execute(
+        "UPDATE notes SET last_modified = ?1 WHERE id = ?2",
+        rusqlite::params![now, note_id],
+    )?;
+    Ok(())
+}
+
+#[frb(sync)]
+pub fn save_note(note_id: String, expected_base_revision: String) -> Result<(), AppError> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    crate::db::connection::with_connection(|conn| {
+        save_note_impl(conn, &note_id, &expected_base_revision, now)
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use rusqlite::Connection;
+
+    use super::*;
+
+    // These exercise `search_notes_impl`/`save_note_impl` directly against an
+    // in-memory, unencrypted connection rather than through the `search_notes`/
+    // `save_note` FFI wrappers and the process-wide `db::connection::connection()`
+    // singleton: the singleton is lazily initialized once per test binary, so
+    // routing through it here would make tests order-dependent on which one
+    // opens (and fixes the path of) the shared connection first. Encryption
+    // itself is already covered by `db::connection`'s own tests; these tests
+    // are only responsible for the SQL logic.
+    fn seeded_db() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        crate::db::connection::init_schema(&conn).unwrap();
+        conn.execute(
+            "INSERT INTO workspaces (id, name, provider, remote_url, local_path) \
+             VALUES ('ws', 'Test Workspace', 'local', NULL, '/tmp/ws')",
+            [],
+        )
+        .unwrap();
+        conn
+    }
+
+    fn seed_note(conn: &Connection, id: &str, title: &str, content: &str, last_modified: i64) {
+        conn.execute(
+            "INSERT INTO notes (id, workspace_id, path, title, last_modified) \
+             VALUES (?1, 'ws', ?2, ?3, ?4)",
+            rusqlite::params![id, format!("{id}.md"), title, last_modified],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO notes_fts (title, content) VALUES (?1, ?2)",
+            rusqlite::params![title, content],
+        )
+        .unwrap();
+        let fts_rowid = conn.last_insert_rowid();
+        conn.execute(
+            "INSERT INTO fts_mapping (note_id, fts_rowid) VALUES (?1, ?2)",
+            rusqlite::params![id, fts_rowid],
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn search_notes_finds_a_match_via_fts5_and_returns_its_metadata() {
+        let conn = seeded_db();
+        seed_note(&conn, "note-1", "Grocery List", "Buy milk and bread", 1000);
+        seed_note(
+            &conn,
+            "note-2",
+            "Trip Planning",
+            "Book flights to Rome",
+            2000,
+        );
+
+        let results = search_notes_impl(&conn, "milk").unwrap();
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].id, "note-1");
+        assert_eq!(results[0].title, "Grocery List");
+        assert_eq!(results[0].workspace_id, "ws");
+        assert_eq!(results[0].last_modified, 1000);
+        assert!(results[0].snippet.as_deref().unwrap().contains("milk"));
+    }
+
+    #[test]
+    fn search_notes_returns_no_results_for_a_non_matching_query() {
+        let conn = seeded_db();
+        seed_note(&conn, "note-1", "Grocery List", "Buy milk and bread", 1000);
+
+        let results = search_notes_impl(&conn, "spaceship").unwrap();
+
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn search_notes_does_not_choke_on_fts5_syntax_characters_in_ordinary_queries() {
+        let conn = seeded_db();
+        seed_note(&conn, "note-1", "Grocery List", "Buy milk and bread", 1000);
+
+        // Each of these is a bare `MATCH` syntax error without phrase-quoting
+        // (hyphen is an exclusion operator, `:` introduces a column filter,
+        // parens group a boolean expression, and an unmatched `"` is an
+        // unterminated string) — none of them should ever surface as an
+        // AppError to a user just typing an ordinary search.
+        for query in ["note-1", "budget:2024", "hello (world", "\"unbalanced"] {
+            search_notes_impl(&conn, query).unwrap();
+        }
+    }
+
+    #[test]
+    fn search_notes_matches_notes_containing_every_query_term_in_any_order() {
+        let conn = seeded_db();
+        seed_note(&conn, "note-1", "Grocery List", "Buy milk and bread", 1000);
+        seed_note(
+            &conn,
+            "note-2",
+            "Reordered",
+            "bread and milk, in that order",
+            2000,
+        );
+        seed_note(&conn, "note-3", "Missing a term", "Buy milk only", 3000);
+
+        let results = search_notes_impl(&conn, "milk bread").unwrap();
+
+        // A multi-word query is an implicit AND across per-token quoted
+        // phrases (not one exact-phrase match), so word order shouldn't
+        // matter — both note-1 and note-2 contain "milk" and "bread"
+        // somewhere, note-3 doesn't contain "bread" at all.
+        let ids: std::collections::HashSet<_> = results.iter().map(|r| r.id.as_str()).collect();
+        assert_eq!(ids, std::collections::HashSet::from(["note-1", "note-2"]));
+    }
+
+    #[test]
+    fn search_notes_returns_nothing_for_an_empty_or_whitespace_only_query() {
+        let conn = seeded_db();
+        seed_note(&conn, "note-1", "Grocery List", "Buy milk and bread", 1000);
+
+        assert!(search_notes_impl(&conn, "").unwrap().is_empty());
+        assert!(search_notes_impl(&conn, "   ").unwrap().is_empty());
+    }
+
+    #[test]
+    fn save_note_updates_last_modified_when_revision_matches() {
+        let conn = seeded_db();
+        seed_note(&conn, "note-1", "Grocery List", "Buy milk and bread", 1000);
+
+        save_note_impl(&conn, "note-1", "1000", 2000).unwrap();
+
+        let last_modified: i64 = conn
+            .query_row(
+                "SELECT last_modified FROM notes WHERE id = 'note-1'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(last_modified, 2000);
+    }
+
+    #[test]
+    fn save_note_rejects_a_stale_revision_with_git_conflict() {
+        let conn = seeded_db();
+        seed_note(&conn, "note-1", "Grocery List", "Buy milk and bread", 1000);
+
+        let result = save_note_impl(&conn, "note-1", "999", 2000);
+
+        assert_eq!(result, Err(AppError::GitConflict));
+        // The row must be untouched by a rejected save.
+        let last_modified: i64 = conn
+            .query_row(
+                "SELECT last_modified FROM notes WHERE id = 'note-1'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(last_modified, 1000);
+    }
+
+    #[test]
+    fn save_note_reports_a_clear_error_for_an_unknown_note_id() {
+        let conn = seeded_db();
+
+        let result = save_note_impl(&conn, "does-not-exist", "1000", 2000);
+
+        assert_eq!(
+            result,
+            Err(AppError::IoError(
+                "no note found with id does-not-exist".to_string()
+            ))
+        );
+    }
 }

@@ -204,6 +204,14 @@ in
       clang
 
       git
+
+      # Manual visual-verification tooling (Wayland). `grim` captures a real
+      # screenshot of the running app; `wtype` injects keystrokes into the
+      # focused window. Used to actually look at rendered pixels and exercise
+      # live typing, rather than only asserting widget properties in
+      # `flutter test`. Not part of the CI/build path.
+      grim
+      wtype
     ]
     ++ coreEngineDeps
     ++ lib.optionals pkgs.stdenv.isLinux linuxDesktopDeps;

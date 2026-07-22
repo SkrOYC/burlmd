@@ -3,91 +3,36 @@
 
 // ignore_for_file: invalid_use_of_internal_member, unused_import, unnecessary_import
 
+import '../draft.dart';
+import '../error.dart';
 import '../frb_generated.dart';
 import '../markdown/ast.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
-import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
-part 'ffi_api.freezed.dart';
 
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`
+// These functions are ignored because they are not marked as `pub`: `fts5_phrase_query`, `save_note_impl`, `search_notes_impl`
 
 NoteState openNote({required String path}) =>
     RustLib.instance.api.crateApiFfiApiOpenNote(path: path);
 
-@freezed
-sealed class AppError with _$AppError implements FrbException {
-  const AppError._();
+/// Applies a keystroke-level edit to the currently open note's in-memory
+/// AST and returns the updated `NoteState`. `block_path` is an index path
+/// into the AST tree (see `draft::set_node_at_path`); it does not persist
+/// the change to disk or the DB — that happens via `save_note`.
+NoteState updateBlock({
+  required String noteId,
+  required Uint64List blockPath,
+  required AstNode newNode,
+}) => RustLib.instance.api.crateApiFfiApiUpdateBlock(
+  noteId: noteId,
+  blockPath: blockPath,
+  newNode: newNode,
+);
 
-  const factory AppError.diskFull() = AppError_DiskFull;
-  const factory AppError.authExpired() = AppError_AuthExpired;
-  const factory AppError.gitConflict() = AppError_GitConflict;
-  const factory AppError.databaseError(String field0) = AppError_DatabaseError;
-  const factory AppError.cryptoError(String field0) = AppError_CryptoError;
-  const factory AppError.networkError(String field0) = AppError_NetworkError;
-  const factory AppError.oAuthError(String field0) = AppError_OAuthError;
-  const factory AppError.ioError(String field0) = AppError_IoError;
-  const factory AppError.parseError(String field0) = AppError_ParseError;
-}
+Future<List<NoteMetadata>> searchNotes({required String query}) =>
+    RustLib.instance.api.crateApiFfiApiSearchNotes(query: query);
 
-class NoteMetadata {
-  final String id;
-  final String workspaceId;
-  final String path;
-  final String title;
-  final PlatformInt64 lastModified;
-  final String? snippet;
-
-  const NoteMetadata({
-    required this.id,
-    required this.workspaceId,
-    required this.path,
-    required this.title,
-    required this.lastModified,
-    this.snippet,
-  });
-
-  @override
-  int get hashCode =>
-      id.hashCode ^
-      workspaceId.hashCode ^
-      path.hashCode ^
-      title.hashCode ^
-      lastModified.hashCode ^
-      snippet.hashCode;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is NoteMetadata &&
-          runtimeType == other.runtimeType &&
-          id == other.id &&
-          workspaceId == other.workspaceId &&
-          path == other.path &&
-          title == other.title &&
-          lastModified == other.lastModified &&
-          snippet == other.snippet;
-}
-
-class NoteState {
-  final List<AstNode> ast;
-  final NoteMetadata metadata;
-  final String baseRevision;
-
-  const NoteState({
-    required this.ast,
-    required this.metadata,
-    required this.baseRevision,
-  });
-
-  @override
-  int get hashCode => ast.hashCode ^ metadata.hashCode ^ baseRevision.hashCode;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is NoteState &&
-          runtimeType == other.runtimeType &&
-          ast == other.ast &&
-          metadata == other.metadata &&
-          baseRevision == other.baseRevision;
-}
+void saveNote({required String noteId, required String expectedBaseRevision}) =>
+    RustLib.instance.api.crateApiFfiApiSaveNote(
+      noteId: noteId,
+      expectedBaseRevision: expectedBaseRevision,
+    );
