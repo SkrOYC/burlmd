@@ -14,7 +14,7 @@
 
 ## 3. Local Repository (Index & Storage)
 - **Logical Type:** Storage Boundary
-- **Responsibility:** Persists the encrypted local state of the Open Knowledge Format (OKF) directory tree and maintains an encrypted search index for graph relationships and full-text queries.
+- **Responsibility:** Persists the Open Knowledge Format (OKF) directory tree and maintains an application-level-encrypted (SQLCipher) search index for graph relationships and full-text queries. The raw OKF directory tree itself is not independently encrypted by this container — it relies on OS-level Full Disk Encryption (see `prd/constraints.md`), so that native Git merge tooling can still operate on plaintext files.
 - **Inputs / Outputs:** Receives finalized encrypted document commits and search queries; outputs queried encrypted documents.
 - **Depends on:** None (Self-contained).
 
