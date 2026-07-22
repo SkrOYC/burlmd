@@ -1,5 +1,11 @@
 # Stage 4: Tasks Changelog
 
+## v1.2.5
+PR #4 dual-axis review, round 4 (confirming pass after round 3's material behavior changes) — loop closed, no fixes needed.
+- Both axes returned zero P0/P1, the third consecutive clean high-priority round (after 2 and 3), satisfying the review loop's stop condition. No code changes this round.
+- Documented, not fixed: a Feature-Envy P2 (Standards) — `search_notes_impl`/`save_note_impl`/`fts5_phrase_query` still live in `api::ffi_api` rather than `db`, the other half of round 2's Divergent-Change fix; a missing error surface for FFI failures in `note_providers.dart` (P2, Spec, currently unreachable since `Editor` isn't mounted); and an Investigate (Spec) that `search_notes` has no `workspace_id` filter despite `prd/capabilities.md`'s "search... in their Workspace" wording — currently unreachable since only one hardcoded workspace exists and no workspace-selection ticket has landed.
+- See `tasks/completed/EPIC-B-ui-database.md`'s "Post-PR-review round 4" note for full detail.
+
 ## v1.2.4
 PR #4 dual-axis review, round 3 (confirming pass after round 2's clean high-priority result).
 - Fixed a real correctness regression introduced by round 2's own fix (Spec axis): quoting the *entire* search query as one phrase turned multi-word search into exact-adjacent-phrase matching, contradicting `prd/capabilities.md`'s "search across all Notes." `fts5_phrase_query` now quotes each whitespace-split token individually and joins with a space, restoring implicit-AND-across-terms matching while still avoiding FTS5 syntax errors on hyphens/colons/parens/unmatched quotes. Replaced the round-2 test that had encoded the wrong phrase-only semantics.
