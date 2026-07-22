@@ -1,5 +1,9 @@
 # Stage 4: Tasks Changelog
 
+## v1.1.0
+- Completed **Epic A: Scaffolding & Core Engine** (`CORE-A001`, `CORE-A002`, `CORE-A003`), total 10 story points.
+- Monorepo scaffolded using `flutter_rust_bridge` (v2), Markdown AST parser implemented with `pulldown-cmark`, and AST/FFI API contracts exposed across the FFI boundary to Dart.
+
 ## v1.0.1
 - Recorded Phase 0 (tooling readiness), executed ahead of `CORE-A001`. It provisions the reproducible `devenv` environment and the pre-commit quality gates; it adds no application code and consumes no story points, so the critical path and totals are unchanged.
 - Every file it introduces falls outside the `Scope (In-Scope Files)` of Epics A/B/C by design. `CORE-A001` keeps `Dependencies: None`, but its verification commands are now expected to run inside the devenv shell, per the Toolchain section of `tech-spec/guidelines.md`.
