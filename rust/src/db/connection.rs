@@ -74,6 +74,13 @@ pub fn open_and_initialize(path: &Path) -> Result<Connection, AppError> {
 }
 
 static DB: OnceLock<Mutex<Connection>> = OnceLock::new();
+// Serializes *initialization* only (not per-query access, which goes through
+// the `Mutex<Connection>` inside `DB` once it's set). Without this, two
+// threads racing to be the first caller of `connection()` could both open
+// the same SQLCipher file and run `init_schema` concurrently; SQLite's
+// default busy_timeout is 0, so the loser would surface a spurious
+// `SQLITE_BUSY` error instead of just losing the (harmless) `DB.set` race.
+static INIT_LOCK: Mutex<()> = Mutex::new(());
 
 fn default_db_path() -> Result<PathBuf, AppError> {
     if let Ok(p) = std::env::var("BURLMD_DB_PATH") {
@@ -92,17 +99,27 @@ fn default_db_path() -> Result<PathBuf, AppError> {
 /// makes the path driven by `workspaces.local_path` instead.
 ///
 /// `OnceLock::get_or_try_init` is unstable on this project's pinned toolchain, so
-/// fallible init is done manually: on a losing race between threads, the loser's
-/// freshly-opened `Connection` is simply dropped.
+/// fallible init is done manually via double-checked locking: concurrent callers
+/// block on `INIT_LOCK` (rather than racing to open the same file) until the
+/// first one finishes, then all observe `DB.get()` returning `Some`.
 pub fn connection() -> Result<&'static Mutex<Connection>, AppError> {
     if let Some(db) = DB.get() {
         return Ok(db);
     }
+
+    let _init_guard = INIT_LOCK
+        .lock()
+        .map_err(|_| AppError::DatabaseError("db init lock poisoned".to_string()))?;
+
+    // Re-check: another thread may have finished initializing while we were
+    // waiting for the lock.
+    if let Some(db) = DB.get() {
+        return Ok(db);
+    }
+
     let conn = open_and_initialize(&default_db_path()?)?;
     let _ = DB.set(Mutex::new(conn));
-    Ok(DB
-        .get()
-        .expect("DB was just set or already set by a concurrent caller"))
+    Ok(DB.get().expect("DB was just set while holding INIT_LOCK"))
 }
 
 #[cfg(test)]

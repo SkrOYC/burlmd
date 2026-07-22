@@ -74,8 +74,8 @@ Then the Rust core executes an FTS5 query and returns `NoteMetadata`
 ```
 
 ##### UIDB-B004 Deviations & Justifications
-- **Touched Files:** `rust/src/db/connection.rs`, `lib/src/rust/api/ffi_api.dart`, `lib/src/rust/frb_generated.dart`, `lib/src/rust/frb_generated.io.dart`, `lib/src/rust/frb_generated.web.dart`
-- **Justification:** `search_notes`/`save_note` need a process-wide DB connection to operate on, so the `OnceLock<Mutex<Connection>>` singleton and its `connection()` accessor were added to `db/connection.rs` (already-owned by UIDB-B002/B003) rather than duplicated inside `ffi_api.rs`. The `lib/src/rust/**` changes are `flutter_rust_bridge_codegen generate` output, required whenever `ffi_api.rs`'s public FFI surface changes (same pattern recorded for `CORE-A003`, whose own Verification Command was `flutter_rust_bridge_codegen generate && cargo build`); regenerated automatically, not hand-edited.
+- **Touched Files:** `rust/src/db/connection.rs`, `rust/src/frb_generated.rs`, `lib/src/rust/api/ffi_api.dart`, `lib/src/rust/frb_generated.dart`, `lib/src/rust/frb_generated.io.dart`, `lib/src/rust/frb_generated.web.dart`
+- **Justification:** `search_notes`/`save_note` need a process-wide DB connection to operate on, so the `OnceLock<Mutex<Connection>>` singleton and its `connection()` accessor were added to `db/connection.rs` (already-owned by UIDB-B002/B003) rather than duplicated inside `ffi_api.rs`. `rust/src/frb_generated.rs` and the `lib/src/rust/**` files are all `flutter_rust_bridge_codegen generate` output (Rust-side dispatch glue and Dart-side bindings respectively), required whenever `ffi_api.rs`'s public FFI surface changes (same pattern recorded for `CORE-A003`, whose own Verification Command was `flutter_rust_bridge_codegen generate && cargo build`); regenerated automatically, not hand-edited.
 
 #### UIDB-B005 Flutter Riverpod Setup
 - **Type:** Feature
