@@ -1,4 +1,5 @@
 import 'package:burlmd/src/rust/api/ffi_api.dart' as ffi;
+import 'package:burlmd/src/rust/draft.dart';
 import 'package:burlmd/src/rust/markdown/ast.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart'
@@ -12,23 +13,20 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart'
 class RustApi {
   const RustApi();
 
-  ffi.NoteState openNote(String path) => ffi.openNote(path: path);
+  NoteState openNote(String path) => ffi.openNote(path: path);
 
-  Future<List<ffi.NoteMetadata>> searchNotes(String query) =>
+  Future<List<NoteMetadata>> searchNotes(String query) =>
       ffi.searchNotes(query: query);
 
   void saveNote(String noteId, String expectedBaseRevision) =>
       ffi.saveNote(noteId: noteId, expectedBaseRevision: expectedBaseRevision);
 
-  ffi.NoteState updateBlock(
-    String noteId,
-    List<int> blockPath,
-    AstNode newNode,
-  ) => ffi.updateBlock(
-    noteId: noteId,
-    blockPath: Uint64List.fromList(blockPath),
-    newNode: newNode,
-  );
+  NoteState updateBlock(String noteId, List<int> blockPath, AstNode newNode) =>
+      ffi.updateBlock(
+        noteId: noteId,
+        blockPath: Uint64List.fromList(blockPath),
+        newNode: newNode,
+      );
 }
 
 /// Injects the Rust API surface into the widget tree. `RustLib.init()` must

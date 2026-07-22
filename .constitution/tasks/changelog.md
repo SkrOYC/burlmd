@@ -1,5 +1,13 @@
 # Stage 4: Tasks Changelog
 
+## v1.2.3
+PR #4 dual-axis review, round 2.
+- Fixed a real, exploitable-by-any-ordinary-search P2 (Spec axis): `search_notes_impl` passed raw user input straight into FTS5's `MATCH`, whose query grammar throws syntax errors on hyphens, colons, parens, and unmatched quotes — everyday search terms. Now wraps the query in a quoted-phrase escape (`fts5_phrase_query`) so it's always treated as one literal phrase. Added tests for the exact previously-broken inputs.
+- Fixed `Editor`'s `ListView(children: [...])` eagerly building every block (both axes independently flagged this against `architecture/risks.md` #1/#3); switched to `ListView.builder`.
+- Fixed a Divergent-Change P2 (Standards axis): extracted the active-note draft-state domain (`NoteMetadata`, `NoteState`, the in-memory cache, `set_node_at_path`) out of `api::ffi_api` into a new `rust/src/draft.rs` leaf module, matching `containers.md`'s framing of draft-state management as distinct from the FFI bridge. Regenerated FRB bindings; updated Dart imports accordingly.
+- Documented (not fixed) the search result cap (`LIMIT 50`, no pagination) in both the contract and implementation, and a second facet of the open→save wiring gap (`open_note`'s path-based id vs. `notes.id`'s UUID shape) alongside the existing `base_revision` note.
+- See `tasks/completed/EPIC-B-ui-database.md`'s "Post-PR-review fixes (round 2)" note for full detail.
+
 ## v1.2.2
 PR #4 dual-axis review, round 1.
 - Fixed a real architectural defect (P1, Standards axis): `db::connection` and `security::keyring` imported `AppError` from the FFI-facing `api::ffi_api` module, an upward dependency `architecture/containers.md` explicitly rules out for those containers. Moved `AppError` into a new shared leaf module (`rust/src/error.rs`); `api`, `db`, and `security` all depend on it inward now. Also corrected `containers.md`'s Local Repository entry, which claimed "Depends on: None" despite always having called into Secure Storage for the root key.

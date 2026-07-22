@@ -424,15 +424,13 @@ impl SseDecode for Vec<crate::markdown::ast::InlineElement> {
     }
 }
 
-impl SseDecode for Vec<crate::api::ffi_api::NoteMetadata> {
+impl SseDecode for Vec<crate::draft::NoteMetadata> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         let mut len_ = <i32>::sse_decode(deserializer);
         let mut ans_ = Vec::with_capacity(len_ as usize);
         for idx_ in 0..len_ {
-            ans_.push(<crate::api::ffi_api::NoteMetadata>::sse_decode(
-                deserializer,
-            ));
+            ans_.push(<crate::draft::NoteMetadata>::sse_decode(deserializer));
         }
         return ans_;
     }
@@ -462,7 +460,7 @@ impl SseDecode for Vec<usize> {
     }
 }
 
-impl SseDecode for crate::api::ffi_api::NoteMetadata {
+impl SseDecode for crate::draft::NoteMetadata {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         let mut var_id = <String>::sse_decode(deserializer);
@@ -471,7 +469,7 @@ impl SseDecode for crate::api::ffi_api::NoteMetadata {
         let mut var_title = <String>::sse_decode(deserializer);
         let mut var_lastModified = <i64>::sse_decode(deserializer);
         let mut var_snippet = <Option<String>>::sse_decode(deserializer);
-        return crate::api::ffi_api::NoteMetadata {
+        return crate::draft::NoteMetadata {
             id: var_id,
             workspace_id: var_workspaceId,
             path: var_path,
@@ -482,13 +480,13 @@ impl SseDecode for crate::api::ffi_api::NoteMetadata {
     }
 }
 
-impl SseDecode for crate::api::ffi_api::NoteState {
+impl SseDecode for crate::draft::NoteState {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         let mut var_ast = <Vec<crate::markdown::ast::AstNode>>::sse_decode(deserializer);
-        let mut var_metadata = <crate::api::ffi_api::NoteMetadata>::sse_decode(deserializer);
+        let mut var_metadata = <crate::draft::NoteMetadata>::sse_decode(deserializer);
         let mut var_baseRevision = <String>::sse_decode(deserializer);
-        return crate::api::ffi_api::NoteState {
+        return crate::draft::NoteState {
             ast: var_ast,
             metadata: var_metadata,
             base_revision: var_baseRevision,
@@ -755,7 +753,7 @@ impl flutter_rust_bridge::IntoIntoDart<crate::markdown::ast::InlineElement>
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
-impl flutter_rust_bridge::IntoDart for crate::api::ffi_api::NoteMetadata {
+impl flutter_rust_bridge::IntoDart for crate::draft::NoteMetadata {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
             self.id.into_into_dart().into_dart(),
@@ -768,19 +766,14 @@ impl flutter_rust_bridge::IntoDart for crate::api::ffi_api::NoteMetadata {
         .into_dart()
     }
 }
-impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
-    for crate::api::ffi_api::NoteMetadata
-{
-}
-impl flutter_rust_bridge::IntoIntoDart<crate::api::ffi_api::NoteMetadata>
-    for crate::api::ffi_api::NoteMetadata
-{
-    fn into_into_dart(self) -> crate::api::ffi_api::NoteMetadata {
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::draft::NoteMetadata {}
+impl flutter_rust_bridge::IntoIntoDart<crate::draft::NoteMetadata> for crate::draft::NoteMetadata {
+    fn into_into_dart(self) -> crate::draft::NoteMetadata {
         self
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
-impl flutter_rust_bridge::IntoDart for crate::api::ffi_api::NoteState {
+impl flutter_rust_bridge::IntoDart for crate::draft::NoteState {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
             self.ast.into_into_dart().into_dart(),
@@ -790,14 +783,9 @@ impl flutter_rust_bridge::IntoDart for crate::api::ffi_api::NoteState {
         .into_dart()
     }
 }
-impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
-    for crate::api::ffi_api::NoteState
-{
-}
-impl flutter_rust_bridge::IntoIntoDart<crate::api::ffi_api::NoteState>
-    for crate::api::ffi_api::NoteState
-{
-    fn into_into_dart(self) -> crate::api::ffi_api::NoteState {
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::draft::NoteState {}
+impl flutter_rust_bridge::IntoIntoDart<crate::draft::NoteState> for crate::draft::NoteState {
+    fn into_into_dart(self) -> crate::draft::NoteState {
         self
     }
 }
@@ -998,12 +986,12 @@ impl SseEncode for Vec<crate::markdown::ast::InlineElement> {
     }
 }
 
-impl SseEncode for Vec<crate::api::ffi_api::NoteMetadata> {
+impl SseEncode for Vec<crate::draft::NoteMetadata> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <i32>::sse_encode(self.len() as _, serializer);
         for item in self {
-            <crate::api::ffi_api::NoteMetadata>::sse_encode(item, serializer);
+            <crate::draft::NoteMetadata>::sse_encode(item, serializer);
         }
     }
 }
@@ -1028,7 +1016,7 @@ impl SseEncode for Vec<usize> {
     }
 }
 
-impl SseEncode for crate::api::ffi_api::NoteMetadata {
+impl SseEncode for crate::draft::NoteMetadata {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <String>::sse_encode(self.id, serializer);
@@ -1040,11 +1028,11 @@ impl SseEncode for crate::api::ffi_api::NoteMetadata {
     }
 }
 
-impl SseEncode for crate::api::ffi_api::NoteState {
+impl SseEncode for crate::draft::NoteState {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <Vec<crate::markdown::ast::AstNode>>::sse_encode(self.ast, serializer);
-        <crate::api::ffi_api::NoteMetadata>::sse_encode(self.metadata, serializer);
+        <crate::draft::NoteMetadata>::sse_encode(self.metadata, serializer);
         <String>::sse_encode(self.base_revision, serializer);
     }
 }

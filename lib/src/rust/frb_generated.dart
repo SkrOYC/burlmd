@@ -6,6 +6,7 @@
 import 'api/ffi_api.dart';
 import 'dart:async';
 import 'dart:convert';
+import 'draft.dart';
 import 'error.dart';
 import 'frb_generated.dart';
 import 'frb_generated.io.dart'

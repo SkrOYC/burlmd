@@ -16,11 +16,14 @@ class Editor extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final note = ref.watch(activeNoteProvider);
     if (note == null) return const SizedBox.shrink();
-    return ListView(
-      children: [
-        for (var i = 0; i < note.ast.length; i++)
+    // ListView.builder rather than a `children:` list, so only the blocks
+    // actually scrolled into view get built — a note with hundreds of blocks
+    // shouldn't rebuild every one of them on every keystroke just because
+    // `update_block` returns the full AST (see architecture/risks.md #1/#3).
+    return ListView.builder(
+      itemCount: note.ast.length,
+      itemBuilder: (context, i) =>
           _EditableBlock(node: note.ast[i], blockPath: [i]),
-      ],
     );
   }
 }

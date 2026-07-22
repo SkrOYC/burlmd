@@ -1,5 +1,5 @@
 import 'package:burlmd/src/providers/rust_api_provider.dart';
-import 'package:burlmd/src/rust/api/ffi_api.dart';
+import 'package:burlmd/src/rust/draft.dart';
 import 'package:burlmd/src/rust/markdown/ast.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 

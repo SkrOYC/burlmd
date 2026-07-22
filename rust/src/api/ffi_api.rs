@@ -1,5 +1,3 @@
-use std::sync::Mutex;
-
 use flutter_rust_bridge::frb;
 
 // AST types are owned by the `markdown` domain module (parsing is what
@@ -8,27 +6,12 @@ use flutter_rust_bridge::frb;
 // having to depend back on this module for its own output types. `AppError`
 // is re-exported the same way, from a shared leaf module, so `db` and
 // `security` can report failures without depending upward on `api`.
+// `NoteMetadata`/`NoteState` are re-exported from `draft`, which also owns
+// the active-note cache and `set_node_at_path` — this module's own job is
+// just the thin `#[frb]` wrappers below, not the draft-state domain logic.
+pub use crate::draft::{NoteMetadata, NoteState};
 pub use crate::error::AppError;
 pub use crate::markdown::{AstNode, InlineElement, TextRun};
-
-#[frb]
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct NoteMetadata {
-    pub id: String,
-    pub workspace_id: String,
-    pub path: String,
-    pub title: String,
-    pub last_modified: i64,
-    pub snippet: Option<String>,
-}
-
-#[frb]
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct NoteState {
-    pub ast: Vec<AstNode>,
-    pub metadata: NoteMetadata,
-    pub base_revision: String,
-}
 
 #[frb(sync)]
 pub fn open_note(path: String) -> Result<NoteState, AppError> {
@@ -51,6 +34,14 @@ pub fn open_note(path: String) -> Result<NoteState, AppError> {
         .unwrap_or(0);
 
     let metadata = NoteMetadata {
+        // A second facet of the "open_note isn't wired to the notes table"
+        // gap documented below on `base_revision`: `data-models/schema.sql`
+        // defines `notes.id` as a stable UUID, but this is the filesystem
+        // path (carried from Epic A's original implementation). Passing
+        // this `id` into `save_note`/`update_block` today only works
+        // because `update_block` matches against this same in-memory value,
+        // never against a DB row — `save_note` keys on `notes.id` for real,
+        // so it would need a real UUID once note creation/lookup is wired.
         id: path.clone(),
         workspace_id: "default".to_string(),
         path: path.clone(),
@@ -72,78 +63,52 @@ pub fn open_note(path: String) -> Result<NoteState, AppError> {
         // see `architecture/risks.md` #6 and `flow-edit-note.md`).
         base_revision: "head".to_string(),
     };
-    *active_note_cache()? = Some(state.clone());
+    *crate::draft::active_note_cache()? = Some(state.clone());
     Ok(state)
-}
-
-/// Holds the AST of the note currently open in the editor, kept in memory so
-/// `update_block` can apply keystroke-level edits without a disk round trip.
-/// Single-slot: this project's UI has exactly one active note at a time.
-static ACTIVE_NOTE_CACHE: Mutex<Option<NoteState>> = Mutex::new(None);
-
-fn active_note_cache() -> Result<std::sync::MutexGuard<'static, Option<NoteState>>, AppError> {
-    ACTIVE_NOTE_CACHE
-        .lock()
-        .map_err(|_| AppError::DatabaseError("active note cache poisoned".to_string()))
-}
-
-/// Descends `path` into `nodes`, replacing the addressed node with
-/// `new_node`. Only `List`/`ListItem`/`Blockquote` hold nested `Vec<AstNode>`
-/// and can be descended through; `Suggestion`'s three branches are
-/// deliberately not addressable here (that's `resolve_suggestion`'s job).
-fn set_node_at_path(
-    nodes: &mut [AstNode],
-    path: &[usize],
-    new_node: AstNode,
-) -> Result<(), AppError> {
-    let (&idx, rest) = path
-        .split_first()
-        .ok_or_else(|| AppError::ParseError("empty block_path".to_string()))?;
-    let node = nodes
-        .get_mut(idx)
-        .ok_or_else(|| AppError::ParseError(format!("block_path index {idx} out of range")))?;
-
-    if rest.is_empty() {
-        *node = new_node;
-        return Ok(());
-    }
-
-    match node {
-        AstNode::List { items, .. } => set_node_at_path(items, rest, new_node),
-        AstNode::ListItem { content, .. } => set_node_at_path(content, rest, new_node),
-        AstNode::Blockquote { nodes, .. } => set_node_at_path(nodes, rest, new_node),
-        AstNode::Suggestion { .. } => Err(AppError::ParseError(
-            "update_block cannot descend into Suggestion nodes; use resolve_suggestion".to_string(),
-        )),
-        _ => Err(AppError::ParseError(format!(
-            "block_path continues past a leaf node at index {idx}"
-        ))),
-    }
 }
 
 /// Applies a keystroke-level edit to the currently open note's in-memory
 /// AST and returns the updated `NoteState`. `block_path` is an index path
-/// into the AST tree (see `set_node_at_path`); it does not persist the
-/// change to disk or the DB — that happens via `save_note`.
+/// into the AST tree (see `draft::set_node_at_path`); it does not persist
+/// the change to disk or the DB — that happens via `save_note`.
 #[frb(sync)]
 pub fn update_block(
     note_id: String,
     block_path: Vec<usize>,
     new_node: AstNode,
 ) -> Result<NoteState, AppError> {
-    let mut cache = active_note_cache()?;
+    let mut cache = crate::draft::active_note_cache()?;
     let state = cache
         .as_mut()
         .filter(|s| s.metadata.id == note_id)
         .ok_or_else(|| AppError::IoError(format!("no open note with id {note_id}")))?;
-    set_node_at_path(&mut state.ast, &block_path, new_node)?;
+    crate::draft::set_node_at_path(&mut state.ast, &block_path, new_node)?;
     Ok(state.clone())
+}
+
+/// FTS5's bare `MATCH` syntax is a full query language (boolean operators,
+/// `column:` filters, `-token` exclusion, `"phrase"` grouping, ...), so
+/// passing raw user input straight to `MATCH` throws a syntax error on
+/// perfectly ordinary searches — a hyphenated word, a colon, unbalanced
+/// quotes. Wrapping the whole query in double quotes (escaping any embedded
+/// `"` by doubling it, FTS5's own escaping rule) forces it to be treated as
+/// one literal phrase instead, which is what a plain "search my notes" box
+/// needs: no query-language footguns, and a multi-word query still matches
+/// as an exact adjacent phrase.
+fn fts5_phrase_query(query: &str) -> String {
+    format!("\"{}\"", query.replace('"', "\"\""))
 }
 
 /// Full-text search over all indexed notes, ordered by FTS5 relevance
 /// (bm25, best match first). `notes_fts` only carries `(title, content)`;
 /// `fts_mapping` is the note_id <-> fts_rowid join table maintained
 /// alongside it, used here to recover the owning `notes` row per hit.
+///
+/// Capped at the top 50 matches, with no pagination cursor and no signal to
+/// the caller when a query matches more than that (see the matching note on
+/// this function in `tech-spec/contracts/ffi_api.rs`) — acceptable for now
+/// since no search UI exists yet to expose more, but worth revisiting before
+/// one does.
 fn search_notes_impl(
     conn: &rusqlite::Connection,
     query: &str,
@@ -159,7 +124,7 @@ fn search_notes_impl(
          LIMIT 50",
     )?;
 
-    let rows = stmt.query_map([query], |row| {
+    let rows = stmt.query_map([fts5_phrase_query(query)], |row| {
         Ok(NoteMetadata {
             id: row.get(0)?,
             workspace_id: row.get(1)?,
@@ -246,101 +211,6 @@ mod tests {
 
     use super::*;
 
-    // `set_node_at_path` is tested directly as a pure function rather than
-    // through `update_block`, which reads/writes the process-wide
-    // `ACTIVE_NOTE_CACHE` static: exercising that shared mutable state from
-    // parallel test threads would make tests interfere with each other,
-    // mirroring why `search_notes_impl`/`save_note_impl` below are tested
-    // against an isolated connection instead of the DB singleton.
-    fn text_paragraph(s: &str) -> AstNode {
-        AstNode::Paragraph {
-            content: vec![InlineElement::Text(TextRun {
-                content: s.to_string(),
-                bold: false,
-                italic: false,
-                strikethrough: false,
-                code: false,
-            })],
-        }
-    }
-
-    #[test]
-    fn set_node_at_path_replaces_a_top_level_node() {
-        let mut nodes = vec![text_paragraph("a"), text_paragraph("b")];
-        set_node_at_path(&mut nodes, &[1], text_paragraph("replaced")).unwrap();
-
-        assert_eq!(nodes[0], text_paragraph("a"));
-        assert_eq!(nodes[1], text_paragraph("replaced"));
-    }
-
-    #[test]
-    fn set_node_at_path_descends_through_list_and_list_item() {
-        let mut nodes = vec![AstNode::List {
-            ordered: false,
-            items: vec![AstNode::ListItem {
-                content: vec![text_paragraph("original")],
-                checked: None,
-            }],
-        }];
-
-        set_node_at_path(&mut nodes, &[0, 0, 0], text_paragraph("edited")).unwrap();
-
-        let AstNode::List { items, .. } = &nodes[0] else {
-            panic!("expected a List node");
-        };
-        let AstNode::ListItem { content, .. } = &items[0] else {
-            panic!("expected a ListItem node");
-        };
-        assert_eq!(content[0], text_paragraph("edited"));
-    }
-
-    #[test]
-    fn set_node_at_path_descends_through_blockquote() {
-        let mut nodes = vec![AstNode::Blockquote {
-            nodes: vec![text_paragraph("original")],
-        }];
-
-        set_node_at_path(&mut nodes, &[0, 0], text_paragraph("edited")).unwrap();
-
-        let AstNode::Blockquote { nodes: inner, .. } = &nodes[0] else {
-            panic!("expected a Blockquote node");
-        };
-        assert_eq!(inner[0], text_paragraph("edited"));
-    }
-
-    #[test]
-    fn set_node_at_path_rejects_an_empty_path() {
-        let mut nodes = vec![text_paragraph("a")];
-        let result = set_node_at_path(&mut nodes, &[], text_paragraph("x"));
-        assert!(matches!(result, Err(AppError::ParseError(_))));
-    }
-
-    #[test]
-    fn set_node_at_path_rejects_an_out_of_range_index() {
-        let mut nodes = vec![text_paragraph("a")];
-        let result = set_node_at_path(&mut nodes, &[5], text_paragraph("x"));
-        assert!(matches!(result, Err(AppError::ParseError(_))));
-    }
-
-    #[test]
-    fn set_node_at_path_rejects_descending_into_a_leaf_node() {
-        let mut nodes = vec![text_paragraph("a")];
-        // Paragraph has no nested Vec<AstNode> to descend into.
-        let result = set_node_at_path(&mut nodes, &[0, 0], text_paragraph("x"));
-        assert!(matches!(result, Err(AppError::ParseError(_))));
-    }
-
-    #[test]
-    fn set_node_at_path_rejects_descending_into_a_suggestion() {
-        let mut nodes = vec![AstNode::Suggestion {
-            base_content: None,
-            local_content: vec![text_paragraph("local")],
-            incoming_content: vec![text_paragraph("incoming")],
-        }];
-        let result = set_node_at_path(&mut nodes, &[0, 0], text_paragraph("x"));
-        assert!(matches!(result, Err(AppError::ParseError(_))));
-    }
-
     // These exercise `search_notes_impl`/`save_note_impl` directly against an
     // in-memory, unencrypted connection rather than through the `search_notes`/
     // `save_note` FFI wrappers and the process-wide `db::connection::connection()`
@@ -411,6 +281,39 @@ mod tests {
         let results = search_notes_impl(&conn, "spaceship").unwrap();
 
         assert!(results.is_empty());
+    }
+
+    #[test]
+    fn search_notes_does_not_choke_on_fts5_syntax_characters_in_ordinary_queries() {
+        let conn = seeded_db();
+        seed_note(&conn, "note-1", "Grocery List", "Buy milk and bread", 1000);
+
+        // Each of these is a bare `MATCH` syntax error without phrase-quoting
+        // (hyphen is an exclusion operator, `:` introduces a column filter,
+        // parens group a boolean expression, and an unmatched `"` is an
+        // unterminated string) — none of them should ever surface as an
+        // AppError to a user just typing an ordinary search.
+        for query in ["note-1", "budget:2024", "hello (world", "\"unbalanced"] {
+            search_notes_impl(&conn, query).unwrap();
+        }
+    }
+
+    #[test]
+    fn search_notes_treats_a_multi_word_query_as_an_exact_phrase() {
+        let conn = seeded_db();
+        seed_note(&conn, "note-1", "Grocery List", "Buy milk and bread", 1000);
+        seed_note(
+            &conn,
+            "note-2",
+            "Reordered",
+            "bread and milk, in that order",
+            2000,
+        );
+
+        let results = search_notes_impl(&conn, "milk and bread").unwrap();
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].id, "note-1");
     }
 
     #[test]

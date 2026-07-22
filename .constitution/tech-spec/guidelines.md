@@ -27,8 +27,11 @@ The repository follows the default `flutter_rust_bridge` template structure to m
 │   ├── Cargo.toml
 │   ├── tests/               # Rust integration tests
 │   ├── src/
-│   │   ├── api/             # FFI interface exposed to Dart
+│   │   ├── api/             # FFI interface exposed to Dart (thin #[frb] wrappers)
 │   │   ├── db/              # rusqlite database management
+│   │   ├── draft.rs         # Active-draft-state domain: NoteState/NoteMetadata,
+│   │   │                      the open-note cache, block_path-addressed edits
+│   │   ├── error.rs         # Shared AppError, so db/security don't depend on api
 │   │   ├── git/             # gix integration
 │   │   ├── markdown/        # AST parsing logic
 │   │   └── security/        # OS Keychain root-key integration
@@ -50,7 +53,7 @@ All commands below assume the `devenv` shell (`devenv shell`, or automatic via
 1. **Rust:**
    - Must pass `cargo clippy -- -D warnings`.
    - Must be formatted with `cargo fmt`.
-   - Avoid async/await unless absolutely necessary (e.g., long-running sync operations on a dedicated thread). Local index queries remain synchronous for maximum performance.
+   - Avoid async/await unless absolutely necessary (e.g., long-running sync operations on a dedicated thread). Local index queries remain synchronous for maximum performance, except where `tech-spec/contracts/ffi_api.rs` itself declares a function `async` (e.g. `search_notes`) — the contract's FFI-boundary signature takes precedence over this preference; the function's own body should still execute synchronously to completion rather than actually yielding to an executor.
 2. **Dart:**
    - Must pass `dart analyze`.
    - Must be formatted with `dart format`.
