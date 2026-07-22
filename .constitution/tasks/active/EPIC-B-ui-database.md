@@ -35,6 +35,10 @@ When the database file is written to disk
 Then the file is AES-256-CBC encrypted with HMAC-SHA512 page authentication and cannot be opened by standard sqlite3 CLI
 ```
 
+##### UIDB-B002 Deviations & Justifications
+- **Touched Files:** `rust/src/db/mod.rs` (new), `rust/src/lib.rs`, `rust/Cargo.toml`, `rust/Cargo.lock`, `.constitution/tech-spec/stack.md`, `.constitution/tech-spec/changelog.md`
+- **Justification:** `db/mod.rs` and the `lib.rs` wire-in are the same unavoidable module-introduction pattern as `UIDB-B001`. `Cargo.toml`/`Cargo.lock` changed via `cargo add rusqlite --features bundled-sqlcipher` and `cargo add tempfile --dev`. `stack.md`/`changelog.md` were corrected because the shipped implementation applies the root key via SQLCipher's raw-key PRAGMA form (`PRAGMA key = "x'<hex>'"`, no KDF) rather than the passphrase/PBKDF2 mechanism the spec previously described — leaving the spec factually wrong about the actual security mechanism was judged worse than this one-bullet out-of-scope correction; confirmed with the user before implementation as the correct approach given the root key is already full-entropy CSPRNG output.
+
 #### UIDB-B003 SQLite Initialization & Schema
 - **Type:** Feature
 - **Effort:** 3
