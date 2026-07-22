@@ -22,6 +22,11 @@ Then the Dart bindings are successfully generated without errors
 And `cargo build` succeeds
 ```
 
+##### CORE-A001 Deviations & Justifications
+- **Touched Files:** `analysis_options.yaml`, `lib/`, `linux/`, `macos/`, `rust_builder/`, `integration_test/`, `test/`, `test_driver/`, `.metadata`, `pubspec.lock`
+- **Justification:** Standard Flutter project initialization (`flutter create`) and `flutter_rust_bridge` monorepo integration (`flutter_rust_bridge_codegen integrate`) scaffolded platform build trees, cargokit wrapper package, default main entrypoint, and analysis exclusions required for Dart and Rust build support.
+
+
 #### CORE-A002 Implement Markdown Parsing Logic
 - **Type:** Feature
 - **Effort:** 5

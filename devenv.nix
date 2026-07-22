@@ -141,7 +141,7 @@ let
     # skip — the same rule the manifest guards above follow. rust_builder/ is
     # excluded because that is where the vendored cargokit sources live.
     stray=$(git ls-files -- '*.dart' \
-      ':!lib/**' ':!test/**' ':!rust_builder/**' ':!.constitution/**') || {
+      ':!lib/**' ':!test/**' ':!integration_test/**' ':!test_driver/**' ':!rust_builder/**' ':!.constitution/**') || {
       echo "burlmd: git ls-files failed; refusing to skip checks." >&2
       exit 1
     }
@@ -153,7 +153,7 @@ let
     fi
 
     paths=()
-    for d in lib test; do
+    for d in lib test integration_test test_driver; do
       [ -d "$d" ] && paths+=("$d")
     done
     if [ ''${#paths[@]} -eq 0 ]; then
