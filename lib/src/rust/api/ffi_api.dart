@@ -9,10 +9,20 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 part 'ffi_api.freezed.dart';
 
+// These functions are ignored because they are not marked as `pub`: `save_note_impl`, `search_notes_impl`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`
 
 NoteState openNote({required String path}) =>
     RustLib.instance.api.crateApiFfiApiOpenNote(path: path);
+
+Future<List<NoteMetadata>> searchNotes({required String query}) =>
+    RustLib.instance.api.crateApiFfiApiSearchNotes(query: query);
+
+void saveNote({required String noteId, required String expectedBaseRevision}) =>
+    RustLib.instance.api.crateApiFfiApiSaveNote(
+      noteId: noteId,
+      expectedBaseRevision: expectedBaseRevision,
+    );
 
 @freezed
 sealed class AppError with _$AppError implements FrbException {

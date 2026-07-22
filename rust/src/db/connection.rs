@@ -1,4 +1,5 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::sync::{Mutex, OnceLock};
 
 use rusqlite::Connection;
 use zeroize::Zeroizing;
@@ -70,6 +71,38 @@ pub fn open_and_initialize(path: &Path) -> Result<Connection, AppError> {
     let conn = open_encrypted_db(path)?;
     init_schema(&conn)?;
     Ok(conn)
+}
+
+static DB: OnceLock<Mutex<Connection>> = OnceLock::new();
+
+fn default_db_path() -> Result<PathBuf, AppError> {
+    if let Ok(p) = std::env::var("BURLMD_DB_PATH") {
+        return Ok(PathBuf::from(p));
+    }
+    let home =
+        std::env::var("HOME").map_err(|_| AppError::IoError("HOME is not set".to_string()))?;
+    let dir = Path::new(&home).join(".burlmd");
+    std::fs::create_dir_all(&dir).map_err(|e| AppError::IoError(e.to_string()))?;
+    Ok(dir.join("index.sqlite3"))
+}
+
+/// Process-wide encrypted DB connection, lazily opened (and schema-initialized)
+/// on first use. `BURLMD_DB_PATH` overrides the default `$HOME/.burlmd/index.sqlite3`
+/// location; this is a deliberate placeholder until a workspace-selection ticket
+/// makes the path driven by `workspaces.local_path` instead.
+///
+/// `OnceLock::get_or_try_init` is unstable on this project's pinned toolchain, so
+/// fallible init is done manually: on a losing race between threads, the loser's
+/// freshly-opened `Connection` is simply dropped.
+pub fn connection() -> Result<&'static Mutex<Connection>, AppError> {
+    if let Some(db) = DB.get() {
+        return Ok(db);
+    }
+    let conn = open_and_initialize(&default_db_path()?)?;
+    let _ = DB.set(Mutex::new(conn));
+    Ok(DB
+        .get()
+        .expect("DB was just set or already set by a concurrent caller"))
 }
 
 #[cfg(test)]

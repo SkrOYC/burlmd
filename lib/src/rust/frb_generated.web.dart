@@ -52,6 +52,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<InlineElement> dco_decode_list_inline_element(dynamic raw);
 
   @protected
+  List<NoteMetadata> dco_decode_list_note_metadata(dynamic raw);
+
+  @protected
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw);
 
   @protected
@@ -107,6 +110,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<InlineElement> sse_decode_list_inline_element(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<NoteMetadata> sse_decode_list_note_metadata(
     SseDeserializer deserializer,
   );
 
@@ -170,6 +178,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_list_inline_element(
     List<InlineElement> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_note_metadata(
+    List<NoteMetadata> self,
     SseSerializer serializer,
   );
 

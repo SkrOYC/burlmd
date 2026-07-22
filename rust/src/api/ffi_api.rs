@@ -74,3 +74,205 @@ pub fn open_note(path: String) -> Result<NoteState, AppError> {
         base_revision: "head".to_string(),
     })
 }
+
+/// Full-text search over all indexed notes, ordered by FTS5 relevance
+/// (bm25, best match first). `notes_fts` only carries `(title, content)`;
+/// `fts_mapping` is the note_id <-> fts_rowid join table maintained
+/// alongside it, used here to recover the owning `notes` row per hit.
+fn search_notes_impl(
+    conn: &rusqlite::Connection,
+    query: &str,
+) -> Result<Vec<NoteMetadata>, AppError> {
+    let mut stmt = conn.prepare(
+        "SELECT n.id, n.workspace_id, n.path, n.title, n.last_modified, \
+                snippet(notes_fts, 1, '', '', '…', 8) AS snippet \
+         FROM notes_fts \
+         JOIN fts_mapping ON fts_mapping.fts_rowid = notes_fts.rowid \
+         JOIN notes n ON n.id = fts_mapping.note_id \
+         WHERE notes_fts MATCH ?1 \
+         ORDER BY rank \
+         LIMIT 50",
+    )?;
+
+    let rows = stmt.query_map([query], |row| {
+        Ok(NoteMetadata {
+            id: row.get(0)?,
+            workspace_id: row.get(1)?,
+            path: row.get(2)?,
+            title: row.get(3)?,
+            last_modified: row.get(4)?,
+            snippet: row.get(5)?,
+        })
+    })?;
+
+    rows.collect::<Result<Vec<_>, _>>().map_err(AppError::from)
+}
+
+#[frb]
+pub async fn search_notes(query: String) -> Result<Vec<NoteMetadata>, AppError> {
+    let db = crate::db::connection::connection()?;
+    let conn = db
+        .lock()
+        .map_err(|_| AppError::DatabaseError("db mutex poisoned".to_string()))?;
+    search_notes_impl(&conn, &query)
+}
+
+/// Optimistic-concurrency-controlled save: rejects with `AppError::GitConflict`
+/// if `notes.last_modified` has drifted from `expected_base_revision` since the
+/// caller last read the note (e.g. a background sync updated it concurrently).
+///
+/// Serializing the in-memory AST back to Markdown and writing it to the
+/// workspace's on-disk file is intentionally out of scope here — no Markdown
+/// serializer exists anywhere in this crate yet, and that write path overlaps
+/// the Git-aware sync work tracked separately. This function only updates the
+/// DB-level revision bookkeeping that write-through will eventually gate on.
+fn save_note_impl(
+    conn: &rusqlite::Connection,
+    note_id: &str,
+    expected_base_revision: &str,
+    now: i64,
+) -> Result<(), AppError> {
+    let current: i64 = conn.query_row(
+        "SELECT last_modified FROM notes WHERE id = ?1",
+        [note_id],
+        |row| row.get(0),
+    )?;
+
+    if current.to_string() != expected_base_revision {
+        return Err(AppError::GitConflict);
+    }
+
+    conn.execute(
+        "UPDATE notes SET last_modified = ?1 WHERE id = ?2",
+        rusqlite::params![now, note_id],
+    )?;
+    Ok(())
+}
+
+#[frb(sync)]
+pub fn save_note(note_id: String, expected_base_revision: String) -> Result<(), AppError> {
+    let db = crate::db::connection::connection()?;
+    let conn = db
+        .lock()
+        .map_err(|_| AppError::DatabaseError("db mutex poisoned".to_string()))?;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    save_note_impl(&conn, &note_id, &expected_base_revision, now)
+}
+
+#[cfg(test)]
+mod tests {
+    use rusqlite::Connection;
+
+    use super::*;
+
+    // These exercise `search_notes_impl`/`save_note_impl` directly against an
+    // in-memory, unencrypted connection rather than through the `search_notes`/
+    // `save_note` FFI wrappers and the process-wide `db::connection::connection()`
+    // singleton: the singleton is lazily initialized once per test binary, so
+    // routing through it here would make tests order-dependent on which one
+    // opens (and fixes the path of) the shared connection first. Encryption
+    // itself is already covered by `db::connection`'s own tests; these tests
+    // are only responsible for the SQL logic.
+    fn seeded_db() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        crate::db::connection::init_schema(&conn).unwrap();
+        conn.execute(
+            "INSERT INTO workspaces (id, name, provider, remote_url, local_path) \
+             VALUES ('ws', 'Test Workspace', 'local', NULL, '/tmp/ws')",
+            [],
+        )
+        .unwrap();
+        conn
+    }
+
+    fn seed_note(conn: &Connection, id: &str, title: &str, content: &str, last_modified: i64) {
+        conn.execute(
+            "INSERT INTO notes (id, workspace_id, path, title, last_modified) \
+             VALUES (?1, 'ws', ?2, ?3, ?4)",
+            rusqlite::params![id, format!("{id}.md"), title, last_modified],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO notes_fts (title, content) VALUES (?1, ?2)",
+            rusqlite::params![title, content],
+        )
+        .unwrap();
+        let fts_rowid = conn.last_insert_rowid();
+        conn.execute(
+            "INSERT INTO fts_mapping (note_id, fts_rowid) VALUES (?1, ?2)",
+            rusqlite::params![id, fts_rowid],
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn search_notes_finds_a_match_via_fts5_and_returns_its_metadata() {
+        let conn = seeded_db();
+        seed_note(&conn, "note-1", "Grocery List", "Buy milk and bread", 1000);
+        seed_note(
+            &conn,
+            "note-2",
+            "Trip Planning",
+            "Book flights to Rome",
+            2000,
+        );
+
+        let results = search_notes_impl(&conn, "milk").unwrap();
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].id, "note-1");
+        assert_eq!(results[0].title, "Grocery List");
+        assert_eq!(results[0].workspace_id, "ws");
+        assert_eq!(results[0].last_modified, 1000);
+        assert!(results[0].snippet.as_deref().unwrap().contains("milk"));
+    }
+
+    #[test]
+    fn search_notes_returns_no_results_for_a_non_matching_query() {
+        let conn = seeded_db();
+        seed_note(&conn, "note-1", "Grocery List", "Buy milk and bread", 1000);
+
+        let results = search_notes_impl(&conn, "spaceship").unwrap();
+
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn save_note_updates_last_modified_when_revision_matches() {
+        let conn = seeded_db();
+        seed_note(&conn, "note-1", "Grocery List", "Buy milk and bread", 1000);
+
+        save_note_impl(&conn, "note-1", "1000", 2000).unwrap();
+
+        let last_modified: i64 = conn
+            .query_row(
+                "SELECT last_modified FROM notes WHERE id = 'note-1'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(last_modified, 2000);
+    }
+
+    #[test]
+    fn save_note_rejects_a_stale_revision_with_git_conflict() {
+        let conn = seeded_db();
+        seed_note(&conn, "note-1", "Grocery List", "Buy milk and bread", 1000);
+
+        let result = save_note_impl(&conn, "note-1", "999", 2000);
+
+        assert_eq!(result, Err(AppError::GitConflict));
+        // The row must be untouched by a rejected save.
+        let last_modified: i64 = conn
+            .query_row(
+                "SELECT last_modified FROM notes WHERE id = 'note-1'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(last_modified, 1000);
+    }
+}
