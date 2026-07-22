@@ -54,6 +54,24 @@ fn open_encrypted_db_with_key(path: &Path, key: &[u8]) -> Result<Connection, App
     Ok(conn)
 }
 
+const SCHEMA: &str = include_str!("schema.sql");
+
+/// Applies `schema.sql` to `conn`. Idempotent — every statement is
+/// `CREATE TABLE IF NOT EXISTS` / `CREATE VIRTUAL TABLE IF NOT EXISTS`.
+pub fn init_schema(conn: &Connection) -> Result<(), AppError> {
+    conn.execute_batch(SCHEMA)?;
+    Ok(())
+}
+
+/// Opens the encrypted local index at `path` (via the OS Keychain root key)
+/// and ensures the schema is applied. The one entry point application code
+/// should use to get a ready-to-query connection.
+pub fn open_and_initialize(path: &Path) -> Result<Connection, AppError> {
+    let conn = open_encrypted_db(path)?;
+    init_schema(&conn)?;
+    Ok(conn)
+}
+
 #[cfg(test)]
 mod tests {
     use std::io::Read;
@@ -93,5 +111,45 @@ mod tests {
             Some(rusqlite::ErrorCode::NotADatabase),
             "expected SQLITE_NOTADB, got: {err}"
         );
+    }
+
+    fn open_test_db() -> (tempfile::TempDir, Connection) {
+        let dir = tempfile::tempdir().unwrap();
+        let key = [0x24u8; 32]; // throwaway key, keeps the test hermetic
+        let conn = open_encrypted_db_with_key(&dir.path().join("index.sqlite3"), &key).unwrap();
+        (dir, conn)
+    }
+
+    #[test]
+    fn schema_creates_notes_and_notes_fts_tables() {
+        let (_dir, conn) = open_test_db();
+        init_schema(&conn).unwrap();
+
+        let count: i64 = conn
+            .query_row(
+                "SELECT count(*) FROM sqlite_master WHERE type='table' AND name IN ('notes','notes_fts')",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 2); // literal Gherkin assertion
+
+        // Stricter than the literal Gherkin: verify all 7 tables exist.
+        let all: i64 = conn
+            .query_row(
+                "SELECT count(*) FROM sqlite_master WHERE type='table' AND name IN \
+                 ('workspaces','notes','links','notes_fts','fts_mapping','drafts','directories')",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(all, 7);
+    }
+
+    #[test]
+    fn schema_application_is_idempotent() {
+        let (_dir, conn) = open_test_db();
+        init_schema(&conn).unwrap();
+        init_schema(&conn).unwrap(); // must not error on a second application
     }
 }
