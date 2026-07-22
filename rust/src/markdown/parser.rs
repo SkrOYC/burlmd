@@ -83,7 +83,7 @@ pub fn parse_markdown(input: &str) -> Vec<AstNode> {
     let mut current_inlines: Vec<InlineElement> = Vec::new();
     let mut format_state = FormatState::default();
     let mut current_code_block: Option<(Option<String>, String)> = None;
-    let mut current_link: Option<(String, Vec<InlineElement>)> = None;
+    let mut link_stack: Vec<(String, Vec<InlineElement>)> = Vec::new();
 
     for event in parser {
         match event {
@@ -126,10 +126,10 @@ pub fn parse_markdown(input: &str) -> Vec<AstNode> {
                     current_code_block = Some((lang, String::new()));
                 }
                 Tag::Link { dest_url, .. } => {
-                    current_link = Some((dest_url.to_string(), Vec::new()));
+                    link_stack.push((dest_url.to_string(), Vec::new()));
                 }
                 Tag::Image { dest_url, .. } => {
-                    current_link = Some((dest_url.to_string(), Vec::new()));
+                    link_stack.push((dest_url.to_string(), Vec::new()));
                 }
                 Tag::Strong => format_state.bold = true,
                 Tag::Emphasis => format_state.italic = true,
@@ -146,9 +146,11 @@ pub fn parse_markdown(input: &str) -> Vec<AstNode> {
                 }
                 TagEnd::Paragraph => {
                     if let Some(ContainerNode::Paragraph) = node_stack.pop() {
-                        let content = process_inlines(std::mem::take(&mut current_inlines));
-                        let node = AstNode::Paragraph { content };
-                        push_node(&mut root_nodes, &mut node_stack, node);
+                        if !current_inlines.is_empty() {
+                            let content = process_inlines(std::mem::take(&mut current_inlines));
+                            let node = AstNode::Paragraph { content };
+                            push_node(&mut root_nodes, &mut node_stack, node);
+                        }
                     }
                 }
                 TagEnd::BlockQuote(_) => {
@@ -176,13 +178,13 @@ pub fn parse_markdown(input: &str) -> Vec<AstNode> {
                     }
                 }
                 TagEnd::Link => {
-                    if let Some((url, content)) = current_link.take() {
+                    if let Some((url, content)) = link_stack.pop() {
                         let processed_content = process_inlines(content);
                         let ext_link = InlineElement::ExternalLink {
                             url,
                             content: processed_content,
                         };
-                        if let Some((_, ref mut parent_content)) = current_link {
+                        if let Some((_, ref mut parent_content)) = link_stack.last_mut() {
                             parent_content.push(ext_link);
                         } else {
                             current_inlines.push(ext_link);
@@ -190,7 +192,7 @@ pub fn parse_markdown(input: &str) -> Vec<AstNode> {
                     }
                 }
                 TagEnd::Image => {
-                    if let Some((url, content)) = current_link.take() {
+                    if let Some((url, content)) = link_stack.pop() {
                         let alt_text = content
                             .iter()
                             .map(|elem| match elem {
@@ -203,6 +205,14 @@ pub fn parse_markdown(input: &str) -> Vec<AstNode> {
                             alt_text,
                             url_or_path: url,
                         };
+
+                        if matches!(node_stack.last(), Some(ContainerNode::Paragraph))
+                            && !current_inlines.is_empty()
+                        {
+                            let p_content = process_inlines(std::mem::take(&mut current_inlines));
+                            let p_node = AstNode::Paragraph { content: p_content };
+                            push_node(&mut root_nodes, &mut node_stack, p_node);
+                        }
                         push_node(&mut root_nodes, &mut node_stack, node);
                     }
                 }
@@ -215,12 +225,7 @@ pub fn parse_markdown(input: &str) -> Vec<AstNode> {
                 if let Some((_, ref mut code)) = current_code_block {
                     code.push_str(&text);
                 } else {
-                    push_raw_text(
-                        &text,
-                        &format_state,
-                        &mut current_inlines,
-                        &mut current_link,
-                    );
+                    push_raw_text(&text, &format_state, &mut current_inlines, &mut link_stack);
                 }
             }
             Event::Code(text) => {
@@ -232,7 +237,7 @@ pub fn parse_markdown(input: &str) -> Vec<AstNode> {
                     code: true,
                 };
                 let elem = InlineElement::Text(text_run);
-                if let Some((_, ref mut link_content)) = current_link {
+                if let Some((_, ref mut link_content)) = link_stack.last_mut() {
                     link_content.push(elem);
                 } else {
                     current_inlines.push(elem);
@@ -251,7 +256,7 @@ pub fn parse_markdown(input: &str) -> Vec<AstNode> {
                     code: false,
                 };
                 let elem = InlineElement::Text(text_run);
-                if let Some((_, ref mut link_content)) = current_link {
+                if let Some((_, ref mut link_content)) = link_stack.last_mut() {
                     link_content.push(elem);
                 } else {
                     current_inlines.push(elem);
@@ -303,7 +308,7 @@ fn push_raw_text(
     text: &str,
     format_state: &FormatState,
     current_inlines: &mut Vec<InlineElement>,
-    current_link: &mut Option<(String, Vec<InlineElement>)>,
+    link_stack: &mut [(String, Vec<InlineElement>)],
 ) {
     let tr = TextRun {
         content: text.to_string(),
@@ -313,7 +318,7 @@ fn push_raw_text(
         code: false,
     };
     let elem = InlineElement::Text(tr);
-    if let Some((_, ref mut link_content)) = current_link {
+    if let Some((_, ref mut link_content)) = link_stack.last_mut() {
         link_content.push(elem);
     } else {
         current_inlines.push(elem);
@@ -527,6 +532,42 @@ mod tests {
                 assert_eq!(items.len(), 2);
             }
             _ => panic!("Expected List"),
+        }
+    }
+
+    #[test]
+    fn test_inline_image_in_paragraph() {
+        let md = "Before image ![alt text](http://example.com/img.png) After image";
+        let ast = parse_markdown(md);
+
+        assert_eq!(ast.len(), 3);
+        match &ast[0] {
+            AstNode::Paragraph { content } => {
+                assert_eq!(content.len(), 1);
+                if let InlineElement::Text(tr) = &content[0] {
+                    assert_eq!(tr.content, "Before image ");
+                }
+            }
+            _ => panic!("Expected Paragraph before image"),
+        }
+        match &ast[1] {
+            AstNode::Image {
+                alt_text,
+                url_or_path,
+            } => {
+                assert_eq!(alt_text, "alt text");
+                assert_eq!(url_or_path, "http://example.com/img.png");
+            }
+            _ => panic!("Expected Image node"),
+        }
+        match &ast[2] {
+            AstNode::Paragraph { content } => {
+                assert_eq!(content.len(), 1);
+                if let InlineElement::Text(tr) = &content[0] {
+                    assert_eq!(tr.content, " After image");
+                }
+            }
+            _ => panic!("Expected Paragraph after image"),
         }
     }
 }
