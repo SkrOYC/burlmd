@@ -46,6 +46,11 @@ When the parsing function is called
 Then it returns an AstNode tree containing the correct TextRuns
 ```
 
+##### CORE-A002 Deviations & Justifications
+- **Touched Files:** `rust/src/markdown/mod.rs`, `rust/src/lib.rs`, `rust/Cargo.toml`
+- **Justification:** Created `rust/src/markdown/mod.rs` to expose `parser`, declared `pub mod markdown;` in `rust/src/lib.rs`, and added `pulldown-cmark` dependency to `rust/Cargo.toml` to support Markdown AST parsing.
+
+
 #### CORE-A003 Expose AST over FFI
 - **Type:** Feature
 - **Effort:** 2
