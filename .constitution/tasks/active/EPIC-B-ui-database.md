@@ -94,6 +94,10 @@ When it boots
 Then the Rust API is injected via a Riverpod Provider
 ```
 
+##### UIDB-B005 Deviations & Justifications
+- **Touched Files:** `pubspec.yaml`, `pubspec.lock`
+- **Justification:** `flutter_riverpod` was added via `flutter pub add flutter_riverpod` per project tooling policy, which necessarily updates both the dependency declaration and the lockfile.
+
 #### UIDB-B006 Hybrid Editor Widget (Basic Rendering)
 - **Type:** Feature
 - **Effort:** 5
