@@ -16,6 +16,10 @@ When the app boots
 Then a new 256-bit key is generated and stored in the OS Keychain
 ```
 
+##### UIDB-B001 Deviations & Justifications
+- **Touched Files:** `rust/src/security/mod.rs` (new), `rust/src/lib.rs`, `rust/Cargo.toml`, `rust/Cargo.lock`
+- **Justification:** Introducing the `security` module requires a `mod.rs` to declare its child (`keyring`) and a `pub mod security;` wire-in at the crate root (`lib.rs`), the same shape as `CORE-A001`'s recorded deviations for `rust/src/api`. `Cargo.toml`/`Cargo.lock` changed because the `keyring` and `getrandom` crates were added via `cargo add` per project tooling policy.
+
 #### UIDB-B002 Encrypt SQLite with SQLCipher
 - **Type:** Security
 - **Effort:** 5
