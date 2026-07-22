@@ -199,14 +199,20 @@ pub fn parse_markdown(input: &str) -> Vec<AstNode> {
                         // accumulated ahead of them (in a paragraph, or a tight
                         // list item, which never opens its own Paragraph tag)
                         // must be flushed as its own node first to preserve order.
+                        // Deliberately excludes Heading: a heading's content is
+                        // inline-only (Vec<InlineElement>), so flushing here would
+                        // strand it as an empty node instead of keeping its text
+                        // attached - an image trailing heading text is a known,
+                        // unhandled edge case rather than one this flush can fix.
                         if matches!(
                             node_stack.last(),
                             Some(ContainerNode::Paragraph) | Some(ContainerNode::ListItem { .. })
-                        ) && !current_inlines.is_empty()
-                        {
-                            let p_content = process_inlines(std::mem::take(&mut current_inlines));
-                            let p_node = AstNode::Paragraph { content: p_content };
-                            push_node(&mut root_nodes, &mut node_stack, p_node);
+                        ) {
+                            flush_pending_inlines(
+                                &mut root_nodes,
+                                &mut node_stack,
+                                &mut current_inlines,
+                            );
                         }
                         push_node(&mut root_nodes, &mut node_stack, node);
                     }
@@ -500,6 +506,61 @@ mod tests {
                 assert_eq!(inner_content.len(), 1);
             } else {
                 panic!("Expected Link inline element");
+            }
+        } else {
+            panic!("Expected Paragraph node");
+        }
+    }
+
+    #[test]
+    fn test_wikilink_with_display_text() {
+        let md = "Check out [[My Note|the note]] for details.";
+        let ast = parse_markdown(md);
+
+        assert_eq!(ast.len(), 1);
+        if let AstNode::Paragraph { content } = &ast[0] {
+            assert_eq!(content.len(), 3);
+            if let InlineElement::Link {
+                target_title,
+                content: inner_content,
+                ..
+            } = &content[1]
+            {
+                assert_eq!(target_title, "My Note");
+                assert_eq!(inner_content.len(), 1);
+                match &inner_content[0] {
+                    InlineElement::Text(tr) => assert_eq!(tr.content, "the note"),
+                    _ => panic!("Expected Text inline element"),
+                }
+            } else {
+                panic!("Expected Link inline element");
+            }
+        } else {
+            panic!("Expected Paragraph node");
+        }
+    }
+
+    #[test]
+    fn test_external_link_parsing() {
+        let md = "See [the docs](https://example.com/docs) for details.";
+        let ast = parse_markdown(md);
+
+        assert_eq!(ast.len(), 1);
+        if let AstNode::Paragraph { content } = &ast[0] {
+            assert_eq!(content.len(), 3);
+            if let InlineElement::ExternalLink {
+                url,
+                content: inner_content,
+            } = &content[1]
+            {
+                assert_eq!(url, "https://example.com/docs");
+                assert_eq!(inner_content.len(), 1);
+                match &inner_content[0] {
+                    InlineElement::Text(tr) => assert_eq!(tr.content, "the docs"),
+                    _ => panic!("Expected Text inline element"),
+                }
+            } else {
+                panic!("Expected ExternalLink inline element");
             }
         } else {
             panic!("Expected Paragraph node");
