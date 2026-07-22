@@ -3,6 +3,12 @@
 
 PRAGMA foreign_keys = ON;
 
+-- Baseline schema version. Re-applied on every boot (this file is executed
+-- idempotently via `CREATE ... IF NOT EXISTS`), harmless while there is only
+-- one version; the first real migration should branch on the value already
+-- here rather than starting from an unset (0) baseline.
+PRAGMA user_version = 1;
+
 -- Represents an authorized Git repository connected via OAuth
 CREATE TABLE IF NOT EXISTS workspaces (
     id TEXT PRIMARY KEY,           -- UUID

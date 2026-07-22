@@ -1,3 +1,4 @@
+use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 
@@ -37,7 +38,17 @@ pub fn open_encrypted_db(path: &Path) -> Result<Connection, AppError> {
 fn open_encrypted_db_with_key(path: &Path, key: &[u8]) -> Result<Connection, AppError> {
     let conn = Connection::open(path)?;
 
-    let hex_key = Zeroizing::new(key.iter().map(|b| format!("{b:02x}")).collect::<String>());
+    // Written directly into a pre-sized `Zeroizing<String>` via `write!`
+    // rather than `key.iter().map(|b| format!(...)).collect::<String>()`:
+    // the latter allocates a transient, un-zeroized `String` per key byte
+    // (plus `collect`'s own growing-buffer reallocations), each holding
+    // key-derived hex and dropped without being wiped. A single pre-sized
+    // buffer means there's exactly one hex-key allocation, and it's the one
+    // already wrapped in `Zeroizing` below.
+    let mut hex_key = Zeroizing::new(String::with_capacity(key.len() * 2));
+    for byte in key {
+        write!(hex_key, "{byte:02x}").expect("writing to a String cannot fail");
+    }
     // PRAGMA statements don't accept bound parameters; `hex_key` is locally
     // generated 64-hex-char data, not attacker-controlled input, so this
     // string interpolation carries no injection risk. Both the hex encoding
@@ -214,5 +225,16 @@ mod tests {
         let (_dir, conn) = open_test_db();
         init_schema(&conn).unwrap();
         init_schema(&conn).unwrap(); // must not error on a second application
+    }
+
+    #[test]
+    fn schema_sets_a_baseline_user_version_for_future_migrations_to_branch_on() {
+        let (_dir, conn) = open_test_db();
+        init_schema(&conn).unwrap();
+
+        let version: i64 = conn
+            .query_row("PRAGMA user_version", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(version, 1);
     }
 }

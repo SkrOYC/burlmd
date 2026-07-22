@@ -1,5 +1,15 @@
 # Stage 4: Tasks Changelog
 
+## v1.2.4
+PR #4 dual-axis review, round 3 (confirming pass after round 2's clean high-priority result).
+- Fixed a real correctness regression introduced by round 2's own fix (Spec axis): quoting the *entire* search query as one phrase turned multi-word search into exact-adjacent-phrase matching, contradicting `prd/capabilities.md`'s "search across all Notes." `fts5_phrase_query` now quotes each whitespace-split token individually and joins with a space, restoring implicit-AND-across-terms matching while still avoiding FTS5 syntax errors on hyphens/colons/parens/unmatched quotes. Replaced the round-2 test that had encoded the wrong phrase-only semantics.
+- Fixed a zeroization gap (P2, Standards axis): the SQLCipher key's hex encoding was built via a chain of per-byte `format!` calls (each an un-zeroized, dropped-not-wiped intermediate `String`) before the final result was wrapped in `Zeroizing`. Now writes hex digits directly into one pre-sized `Zeroizing<String>` via `std::fmt::Write`, so there is exactly one key-hex allocation and it was zeroizing-wrapped from the start.
+- Fixed a Single-Responsibility P2 (Standards axis): split `_EditableBlock` into a top-level `_buildBlock`/`_isSingleTextRun` eligibility dispatcher and a narrower `_EditableParagraph` that operates on an already-validated single-run `content` list rather than a whole `AstNode`.
+- Fixed a spec-honesty P2 (Standards axis): `schema.sql`'s header comment claimed migration tracking via `PRAGMA user_version`, but no statement ever set it. Added `PRAGMA user_version = 1;` to both schema copies, with a comment that the first real migration should branch on this baseline. Added a test asserting the pragma reads back as `1`.
+- Backfilled a documentation gap in `UIDB-B001`'s Justification (P2, Standards axis): the `zeroize` crate addition was never recorded alongside `keyring`/`getrandom`.
+- Documented (not fixed): `architecture/resilience.md`'s "SQLite Draft Persistence" bullet describes per-keystroke persistence to the `drafts` table with restore-on-boot, but no Epic B ticket ever wired this up — `update_block` only mutates the in-memory cache. Added a "Current implementation status (Epic B)" note flagging this as needing its own future ticket. Also noted `devenv.nix`'s `grim`/`wtype` additions as intentionally outside this ticket's production-code scope.
+- See `tasks/completed/EPIC-B-ui-database.md`'s "Post-PR-review fixes (round 3)" note for full detail. Rounds 2 and 3 both produced zero P0/P1 findings, satisfying the review loop's two-consecutive-clean-round stop condition.
+
 ## v1.2.3
 PR #4 dual-axis review, round 2.
 - Fixed a real, exploitable-by-any-ordinary-search P2 (Spec axis): `search_notes_impl` passed raw user input straight into FTS5's `MATCH`, whose query grammar throws syntax errors on hyphens, colons, parens, and unmatched quotes — everyday search terms. Now wraps the query in a quoted-phrase escape (`fts5_phrase_query`) so it's always treated as one literal phrase. Added tests for the exact previously-broken inputs.

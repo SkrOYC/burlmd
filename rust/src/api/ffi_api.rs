@@ -90,13 +90,23 @@ pub fn update_block(
 /// `column:` filters, `-token` exclusion, `"phrase"` grouping, ...), so
 /// passing raw user input straight to `MATCH` throws a syntax error on
 /// perfectly ordinary searches — a hyphenated word, a colon, unbalanced
-/// quotes. Wrapping the whole query in double quotes (escaping any embedded
-/// `"` by doubling it, FTS5's own escaping rule) forces it to be treated as
-/// one literal phrase instead, which is what a plain "search my notes" box
-/// needs: no query-language footguns, and a multi-word query still matches
-/// as an exact adjacent phrase.
+/// quotes. Quoting the *whole* query as one phrase would dodge that (FTS5's
+/// own escaping rule: double any embedded `"`), but it also silently changes
+/// what a "search my notes" box means: a phrase match requires every term to
+/// appear adjacent and in that exact order, whereas users expect a multi-word
+/// query to match notes containing all the terms, in any order. Quoting each
+/// whitespace-split token *separately* instead keeps FTS5's implicit AND
+/// across terms (its default when tokens aren't otherwise joined by an
+/// operator) while still neutralizing the syntax footguns, since no operator
+/// character can survive inside its own quoted token. A query with no tokens
+/// at all (empty or whitespace-only input) produces an empty string here;
+/// callers should treat that as "no results" rather than pass it to `MATCH`.
 fn fts5_phrase_query(query: &str) -> String {
-    format!("\"{}\"", query.replace('"', "\"\""))
+    query
+        .split_whitespace()
+        .map(|token| format!("\"{}\"", token.replace('"', "\"\"")))
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// Full-text search over all indexed notes, ordered by FTS5 relevance
@@ -113,6 +123,11 @@ fn search_notes_impl(
     conn: &rusqlite::Connection,
     query: &str,
 ) -> Result<Vec<NoteMetadata>, AppError> {
+    let fts_query = fts5_phrase_query(query);
+    if fts_query.is_empty() {
+        return Ok(Vec::new());
+    }
+
     let mut stmt = conn.prepare(
         "SELECT n.id, n.workspace_id, n.path, n.title, n.last_modified, \
                 snippet(notes_fts, 1, '', '', '…', 8) AS snippet \
@@ -124,7 +139,7 @@ fn search_notes_impl(
          LIMIT 50",
     )?;
 
-    let rows = stmt.query_map([fts5_phrase_query(query)], |row| {
+    let rows = stmt.query_map([fts_query], |row| {
         Ok(NoteMetadata {
             id: row.get(0)?,
             workspace_id: row.get(1)?,
@@ -299,7 +314,7 @@ mod tests {
     }
 
     #[test]
-    fn search_notes_treats_a_multi_word_query_as_an_exact_phrase() {
+    fn search_notes_matches_notes_containing_every_query_term_in_any_order() {
         let conn = seeded_db();
         seed_note(&conn, "note-1", "Grocery List", "Buy milk and bread", 1000);
         seed_note(
@@ -309,11 +324,25 @@ mod tests {
             "bread and milk, in that order",
             2000,
         );
+        seed_note(&conn, "note-3", "Missing a term", "Buy milk only", 3000);
 
-        let results = search_notes_impl(&conn, "milk and bread").unwrap();
+        let results = search_notes_impl(&conn, "milk bread").unwrap();
 
-        assert_eq!(results.len(), 1);
-        assert_eq!(results[0].id, "note-1");
+        // A multi-word query is an implicit AND across per-token quoted
+        // phrases (not one exact-phrase match), so word order shouldn't
+        // matter — both note-1 and note-2 contain "milk" and "bread"
+        // somewhere, note-3 doesn't contain "bread" at all.
+        let ids: std::collections::HashSet<_> = results.iter().map(|r| r.id.as_str()).collect();
+        assert_eq!(ids, std::collections::HashSet::from(["note-1", "note-2"]));
+    }
+
+    #[test]
+    fn search_notes_returns_nothing_for_an_empty_or_whitespace_only_query() {
+        let conn = seeded_db();
+        seed_note(&conn, "note-1", "Grocery List", "Buy milk and bread", 1000);
+
+        assert!(search_notes_impl(&conn, "").unwrap().is_empty());
+        assert!(search_notes_impl(&conn, "   ").unwrap().is_empty());
     }
 
     #[test]
