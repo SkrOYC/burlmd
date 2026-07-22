@@ -190,4 +190,42 @@ void main() {
     final leaf = paragraph.content.single as InlineElement_Text;
     expect(leaf.field0.content, 'after');
   });
+
+  testWidgets(
+    'swapping to a different note resyncs an untouched, reused field',
+    (tester) async {
+      final container = ProviderContainer(
+        overrides: [
+          activeNoteProvider.overrideWith(
+            () => _FixedNoteController(_testNoteState([_paragraphOf('first')])),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(home: Scaffold(body: Editor())),
+        ),
+      );
+      expect(find.text('first'), findsOneWidget);
+
+      // Swap in a different note's content without the user having typed
+      // anything into the still-mounted field at this same list index.
+      container.read(activeNoteProvider.notifier).state = _testNoteState([
+        _paragraphOf('second'),
+      ]);
+      await tester.pump();
+
+      expect(
+        find.text('second'),
+        findsOneWidget,
+        reason:
+            'the reused field must resync to the externally-swapped note '
+            'content instead of keeping the previous note\'s stale text',
+      );
+      expect(find.text('first'), findsNothing);
+    },
+  );
 }

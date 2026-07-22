@@ -56,6 +56,24 @@ class _EditableBlockState extends ConsumerState<_EditableBlock> {
   }
 
   @override
+  void didUpdateWidget(covariant _EditableBlock oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Flutter reuses this State for the block at the same list index across
+    // rebuilds, so if `activeNoteProvider` ever swaps in a different note
+    // (or a future insert_block/delete_block reindexes positions), this
+    // node's content can change out from under an already-mounted field.
+    // Resync only when the incoming text actually differs from what the
+    // field currently shows — on this field's own keystroke round-trip
+    // through updateBlock, the echoed-back node already matches, so this
+    // guard leaves the cursor alone; it only fires on a genuinely external
+    // change.
+    final incomingText = _plainText(widget.node);
+    if (incomingText != _controller.text) {
+      _controller.text = incomingText;
+    }
+  }
+
+  @override
   void dispose() {
     _controller.dispose();
     super.dispose();
@@ -97,6 +115,14 @@ class _EditableBlockState extends ConsumerState<_EditableBlock> {
   };
 }
 
+// Only reads InlineElement_Text runs: a paragraph containing a Link or
+// ExternalLink renders that portion as empty in the editable field (its
+// display text is dropped), and any edit permanently drops it from the AST
+// on the first keystroke, since `onChanged` always rebuilds the paragraph as
+// a single plain-text run. This is a known content-fidelity gap of the
+// single-run-editing scope narrowing, not (yet) user-visible data loss:
+// `save_note` doesn't serialize the AST back to Markdown, so nothing
+// persists this to disk today.
 String _plainText(AstNode node) {
   if (node is! AstNode_Paragraph) return '';
   final buffer = StringBuffer();
