@@ -139,9 +139,17 @@ CREATE TABLE IF NOT EXISTS drafts (
     -- Note this is NOT because a draft can precede its `notes` row. Under this
     -- design it cannot: `create_note` writes the file with conformant
     -- frontmatter and returns a full `NoteState`, so the row exists before the
-    -- first keystroke. An orphan draft is therefore not a supported state, and
-    -- `pending_drafts` -- which returns `NoteMetadata` -- could not represent
-    -- one anyway.
+    -- first keystroke.
+    --
+    -- Deletion is the other direction, and having no foreign key means it does
+    -- NOT cascade -- reproduced against SQLite with `PRAGMA foreign_keys = ON`:
+    -- deleting the `notes` row, or the `workspaces` row above it, leaves this
+    -- row behind. `delete_note` and `delete_directory` therefore clear the
+    -- affected draft rows explicitly, in the same transaction, exactly as
+    -- `WSPC-D006` re-keys them explicitly on rename. An orphan draft is not a
+    -- supported state, but that is a property the Core enforces here, not one
+    -- the schema does -- and `pending_drafts`, which returns `NoteMetadata`,
+    -- could not represent one anyway.
 );
 
 -- Directories. Only strictly necessary for empty ones -- a Directory holding

@@ -17,15 +17,16 @@ sequenceDiagram
 
     UI->>Core: Begin OAuth flow (provider, loopback redirect_uri)
     Core->>Core: Generate PKCE verifier, challenge, state
-    Core-->>UI: Authorize URL + verifier + state
+    Core->>Core: Retain verifier + state against a flow id
+    Core-->>UI: Authorize URL + flow id
 
     UI->>OAuth: User authorizes via system browser
     OAuth-->>UI: Redirect to loopback with auth code + state
-    UI->>Core: Auth code + verifier + returned state
+    UI->>Core: Flow id + auth code + returned state
 
-    Core->>Core: Compare returned state to generated state
-    alt State does not match
-        Core-->>UI: Reject; no token exchange is attempted
+    Core->>Core: Compare returned state to the one retained for that flow id
+    alt State does not match, or flow id unknown/consumed
+        Core-->>UI: OAuthStateMismatch; no token exchange is attempted
     end
 
     Core->>OAuth: Exchange code for tokens (PKCE)
@@ -34,7 +35,7 @@ sequenceDiagram
     OS-->>Core: OK
     Core-->>UI: SessionState (authenticated)
 
-    UI->>Core: Connect Remote (workspace_id, repository?)
+    UI->>Core: Connect Remote (provider, repository?)
     alt No repository named
         Core->>Remote: Provision new private repository
         Remote-->>Core: Repository URL
@@ -57,6 +58,8 @@ The previous version of this flow sequenced authorization → token exchange →
 1. **It cloned.** There was no branch through the flow that did not involve a Remote, which made a network round trip a precondition to writing the first word and contradicted the Local-First Mandate outright. The implementation followed it faithfully, which is why `lib/main.dart` gates the whole application behind a login screen. Replaced by initialization in `flow-workspace-bootstrap.md`, with `clone` retained only for onboarding an already-remote Workspace onto a second device.
 2. **It owned the encryption key.** Moved to bootstrap, where it belongs — the key protects the local index, which has no relationship to whether a Remote exists.
 3. **It generated a `state` parameter and never checked it.** The value was minted, handed to the UI, and then dropped: the redirect came back and the code was exchanged without any comparison. A CSRF parameter that is generated but never compared is decoration — it is exactly as protective as omitting it, while reading in review as though the protection exists. The comparison is now an explicit step, and failing it terminates the flow before the token exchange rather than after.
+
+   The first attempt at this fix put the comparison in the Core lane while `contracts/ffi_api.rs` still declared it a *UI* obligation and `authenticate_workspace` still took no `state` — two documents specifying the same control in mutually exclusive places, which is the failure mode that produced the original defect. Resolved by giving the Core the check outright: it retains the verifier and `state` against a single-use flow id and neither value crosses the boundary. The trade-off originally cited for keeping them UI-side — Core statefulness across the browser leg — was illusory, since the flow was already stateful across that leg with the state merely parked in the container that cannot enforce anything with it.
 4. **It never distinguished "provision" from "connect".** `prd/capabilities.md` said OAuth would "provision or connect" a Workspace without defining either. Both branches are now explicit, and adopting a *non-empty* remote is deliberately excluded — that is a Workspace-adoption problem (CAP-WS-05), not a connection problem, and merging two populated histories is a materially different operation.
 
 ## Session persistence

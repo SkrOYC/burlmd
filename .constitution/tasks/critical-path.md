@@ -119,13 +119,13 @@ Synchronization is **not** required for that outcome, and this is load-bearing r
 - **Epic I — Quality & Portability.** Continuous integration, images, Export, and the graph visualization. CI was explicitly considered for this wave and deferred by decision; it is recorded as a known risk in `changelog.md` rather than an oversight.
 
 ### Built in this wave, surfaced in the next
-Two Core capabilities land in Epic D with no consumer in Epic E or F, and are recorded here rather than left to be discovered later — this whole wave exists precisely because Epics A–C shipped Core components nothing called.
+Three Core capabilities land in Epic D with no consumer in Epic E or F, and are recorded here rather than left to be discovered later — this whole wave exists precisely because Epics A–C shipped Core components nothing called.
 
 - **Backlinks** (`CAP-GRAPH-05`, P1). `WSPC-D009` builds the query and `idx_links_target` backs it, but no ticket surfaces inbound Links in the UI. The index work is not wasted: the same table and index serve the link rewriting that `WSPC-D006` depends on, which is why it is built now rather than deferred wholesale.
 - **Title-prefix jump** (`CAP-FIND-02`, P1). `WSPC-D009` builds `find_notes_by_title`, but `SHEL-E006` is full-text search and no ticket surfaces the title jump.
 - **Opening a foreign Workspace** (`CAP-WS-05`, P1). `WSPC-D004` exposes it and the indexer tolerates non-conformant files for its sake, but no ticket adds a directory picker.
 
-Both need only UI work to become reachable, and both belong in the next wave alongside Epic G.
+All three need only UI work to become reachable, and all three belong in the next wave alongside Epic G.
 
 ### Deferred (Future Scope)
 Mobile targets, multiple simultaneous Workspaces, and adopting a non-empty Remote. Each has a standing entry under `prd/out-of-scope/` explaining the reasoning and the conditions that would reopen it.

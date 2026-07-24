@@ -33,6 +33,9 @@ Folded into v1.1.0, since nothing in this pass has merged.
 - **Round 1** reworded `constraints.md`'s at-rest claim, which asserted operating-system full-disk encryption as though it were a platform guarantee. On the primary desktop target it is an install-time opt-in this application cannot assure.
 - **Round 2** found the same claim standing in `capabilities.md` (`CAP-WS-04`), because round 1 fixed the sentence it was shown rather than searching for the assertion. Both now state the two protections separately: the encrypted index is a guarantee this application makes, and what protects the plaintext Notes beside it is not.
 
+### Corrections from PR review, round 3
+- **`CAP-PORT-01` promised more than the format allows.** It asserted the Workspace conforms to OKF "at all times", but §11 defines conformance over an entire bundle, so a single file an external tool dropped in without frontmatter falsifies it — and CAP-WS-05 and CAP-PORT-03 both make that state supported and possibly permanent. Round 2 scoped the derived statements in `tech-spec/` without sweeping the capability they derive from. Now scoped to what the application writes, which is the promise it can actually keep without rewriting files the user never asked it to touch.
+
 ## v1.0.1
 Constitution Freshness & Reconciliation Pass following Epic B execution (UIDB-B001–B007).
 - Corrected `capabilities.md`'s at-rest encryption capability, which implied Notes on disk and the SQLite index receive identical, uniform encryption. The shipped implementation (and `constraints.md`'s own pre-existing rationale) draws a real distinction: Notes on disk are protected via OS-level Full Disk Encryption only, while the SQLite search index is additionally encrypted at the application level via SQLCipher. Reworded to state that distinction explicitly rather than imply both are encrypted the same way.

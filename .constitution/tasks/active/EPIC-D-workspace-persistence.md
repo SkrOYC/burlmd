@@ -39,7 +39,7 @@ And no file under rust/src has been modified
   - `rust/src/okf/frontmatter.rs`
   - `rust/src/okf/concept_id.rs`
   - `rust/src/okf/links.rs`
-  - `rust/src/error.rs` (adds the `PathUnavailable` and `NotFound` variants this module reports; `AppError` lives here, not in `api`)
+  - `rust/src/error.rs` (adds **every** variant the contract introduces — `PathUnavailable`, `NotFound`, `RevisionMismatch` and `OAuthStateMismatch` — not only the two this module itself reports. `AppError` lives here, not in `api`, and the later tickets that raise the other two do not scope this file. Adding all four at once costs nothing and is what keeps `WSPC-D007` able to pass its own revision-mismatch criterion.)
   - `rust/Cargo.toml`
   - `rust/src/lib.rs`
 - **Scope (Out-of-Scope Files):**
@@ -101,7 +101,7 @@ Then it is rejected as reserved
 - **STOP Conditions:**
   - "STOP if satisfying Edit Fidelity appears to require adding a byte range to any `AstNode` variant; `tech-spec/guidelines.md` forbids spans crossing the FFI boundary and ADR-007 decision 3 states why."
   - "STOP if any splice path needs to reconstruct Markdown from an AST; no serializer exists on the save path by design."
-- **Description:** The heart of ADR-007. Parse a Note into an AST while building a Core-side span map keyed by `block_path`, then replace the bytes of one Block's span with new source text and reparse. Frontmatter is located as a span like any other Block and is never re-serialized. Adopt the span-maintenance strategy chosen by WSPC-D001. The round-trip property required by `tech-spec/guidelines.md` is the primary gate: splicing a Block's own unmodified source back over its span must reproduce the file byte-for-byte, including whitespace, delimiter style, and unmanaged frontmatter keys.
+- **Description:** The heart of ADR-007. Parse a Note into an AST while building a Core-side span map keyed by `block_path` **and, within each Block, by inline run** (ADR-007 decision 8), then replace the bytes of one Block's span with new source text and reparse. The inline granularity is what lets a `BlockRange` — whose offsets are into *rendered* text, because it spans unfocused Blocks — resolve to the source offsets a splice needs. It costs no extra pass: `Parser::into_offset_iter()` already yields a range for every event, inline included. Frontmatter is located as a span like any other Block and is never re-serialized. Adopt the span-maintenance strategy chosen by WSPC-D001. The round-trip property required by `tech-spec/guidelines.md` is the primary gate: splicing a Block's own unmodified source back over its span must reproduce the file byte-for-byte, including whitespace, delimiter style, and unmanaged frontmatter keys.
 - **Acceptance Criteria (Gherkin):**
 ```gherkin
 Given any Note in the fixture corpus and any Block within it
@@ -119,6 +119,14 @@ Then the frontmatter block is byte-identical to the original
 Given a paragraph Block whose new source begins with a list marker
 When the splice is committed and the file reparsed
 Then the resulting node at that position is a list rather than a paragraph
+
+Given a paragraph whose source is `hello **bold** world`
+When rendered offset 6 is resolved against the span map
+Then it yields source offset 8, which is where `bold` begins
+
+Given a selection expressed as rendered offsets across two Blocks
+When it is resolved and the selected source extracted
+Then the extracted text is exactly the source spanned by the selection, delimiters included
 ```
 
 #### WSPC-D004 Local Workspace Bootstrap
@@ -142,7 +150,7 @@ Then the resulting node at that position is a list rather than a paragraph
   - "STOP if bootstrap requires reading a credential, contacting a network host, or consulting authentication state; `flow-workspace-bootstrap.md` contains no such step and CAP-WS-01 forbids one."
   - "STOP if the encrypted index is placed inside the bundle directory; `tech-spec/guidelines.md` requires it live alongside, not within, and names the exact path."
   - "STOP if an index file found at the old `$HOME/.burlmd/index.sqlite3` path is opened, migrated, or copied. It is stale derived state under a path the specification no longer names; the new path starts empty and `WSPC-D005` rebuilds it from the bundle."
-- **Description:** Implement `open_or_create_local_workspace` per `flow-workspace-bootstrap.md`. Resolves the default Workspace location and the index location specified in `guidelines.md` — the latter replacing the `$HOME/.burlmd/index.sqlite3` placeholder `connection.rs` carries from Epic B — creates the directory when absent, initializes a version-controlled repository in place, generates and stores the root encryption key on first boot, opens the encrypted index, and writes a Workspace row with a local provider and no remote. The root key path moves here from the authentication flow, where it never belonged. Both this path and a future clone path must converge on identical post-conditions.
+- **Description:** Implement `open_or_create_local_workspace` and `open_workspace` per `flow-workspace-bootstrap.md`. The second takes a caller-supplied directory and is what `CAP-WS-05` and ADR-005 decision 7 both already assume exists; it shares every post-condition with the first except that it neither creates the directory nor initializes a repository in one that has no history. Resolves the default Workspace location and the index location specified in `guidelines.md` — the latter replacing the `$HOME/.burlmd/index.sqlite3` placeholder `connection.rs` carries from Epic B — creates the directory when absent, initializes a version-controlled repository in place, generates and stores the root encryption key on first boot, opens the encrypted index, and writes a Workspace row with a local provider and no remote. The root key path moves here from the authentication flow, where it never belonged. Both this path and a future clone path must converge on identical post-conditions.
 - **Acceptance Criteria (Gherkin):**
 ```gherkin
 Given no Workspace directory exists and no network is reachable
@@ -164,6 +172,10 @@ Then it is outside the bundle directory, at the path `guidelines.md` names, and 
 Given an index file exists at the old `$HOME/.burlmd/index.sqlite3` path
 When the local Workspace is opened
 Then that file is neither opened nor migrated, and the Workspace opens against an index at the new path
+
+Given an existing directory of Markdown files that this application did not create
+When it is opened as a Workspace
+Then it becomes the active Workspace, a Workspace row is written for it, and no file in it is modified
 ```
 
 #### WSPC-D005 Bundle Indexer
@@ -256,6 +268,10 @@ Then the operation reports the path as unavailable and creates nothing
 Given a Note is deleted
 When local version history is inspected
 Then the deletion is committed and the prior content is recoverable
+
+Given a Note carrying an unflushed draft row is deleted
+When the draft table is inspected
+Then no row remains for it — the table has no foreign key, so nothing cascades and the deletion must clear it explicitly
 ```
 
 #### WSPC-D007 Persistence Tiers
@@ -265,7 +281,7 @@ Then the deletion is committed and the prior content is recoverable
 - **Category:** Correctness
 - **Scope (In-Scope Files):**
   - `rust/src/workspace/persist.rs`
-  - `rust/src/draft.rs`
+  - `rust/src/draft.rs` (**where `NoteMetadata` and `NoteState` are actually defined** — `api/ffi_api.rs` only re-exports them. The contract reshapes both: `NoteMetadata` loses `workspace_id` and gains `okf_conformant`, `NoteState` gains `restored_from_draft`.)
   - `rust/src/api/ffi_api.rs`
   - `rust/src/frb_generated.rs`, `lib/src/rust/**` (regenerated bindings only — this ticket adds `#[frb]` functions)
 - **Scope (Out-of-Scope Files):**
@@ -296,6 +312,10 @@ Given a Note has been written but not closed
 When local version history is inspected
 Then no commit exists for this session yet
 
+Given a Block is still focused and the idle interval elapses
+When the write tier fires
+Then the buffered source is spliced and written, later spans shift by the byte delta, and no reparse occurs
+
 Given a Note with edits from this session
 When the Note is closed
 Then exactly one commit is made, the draft row is cleared, and the sync scheduler is notified
@@ -316,6 +336,7 @@ Then the measured write completes within the frame budget, and the measurement i
 - **Category:** Correctness
 - **Scope (In-Scope Files):**
   - `rust/src/api/ffi_api.rs`
+  - `rust/src/draft.rs` (`NoteState` and `NoteMetadata` are defined here and only re-exported by `api/ffi_api.rs`; this ticket changes both shapes)
   - `rust/src/frb_generated.rs`
   - `lib/src/rust/**` (regenerated bindings only)
   - `lib/src/providers/note_providers.dart` (calls `openNote(path)` and assigns `updateBlock`'s return value; both signatures change here, so `dart analyze` cannot pass without it)
@@ -369,6 +390,7 @@ And no exposed function takes a workspace_id parameter
 - **Scope (In-Scope Files):**
   - `rust/src/api/ffi_api.rs`
   - `rust/src/index/query.rs`
+  - `rust/src/draft.rs` (four functions here return `Vec<NoteMetadata>`, which is defined in this file and loses `workspace_id` under the contract. This ticket depends only on `WSPC-D005`, so it can be scheduled before `WSPC-D007` — the other ticket that scopes this file — and its own gate would then be unpassable without it.)
   - `rust/src/frb_generated.rs`
   - `lib/src/rust/**` (regenerated bindings only)
 - **Scope (Out-of-Scope Files):**

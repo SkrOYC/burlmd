@@ -49,6 +49,11 @@ pub enum AppError {
     DatabaseError(String),
     CryptoError(String),
     NetworkError(String),
+    /// The `state` returned on the OAuth redirect did not match the value
+    /// minted for the `flow_id`, or the `flow_id` is unknown or already
+    /// consumed. Distinct from `OAuthError` because it is a CSRF signal, not
+    /// a provider failure, and no token request is made when it is raised.
+    OAuthStateMismatch,
     OAuthError(String),
     IoError(String),
     ParseError(String),
@@ -179,6 +184,9 @@ pub async fn create_note(directory_path: String, title: String) -> Result<NoteSt
 
 /// Deletes a Note and commits the deletion, so it stays recoverable from
 /// local version history (CAP-LIFE-04).
+/// Also clears any `drafts` row for this Note, in the same transaction. That
+/// table carries no foreign key (`data-models/schema.sql`), so nothing
+/// cascades and the row would otherwise outlive the Note it belongs to.
 #[frb]
 pub async fn delete_note(note_id: String) -> Result<(), AppError> {
     unimplemented!()
@@ -328,11 +336,14 @@ pub enum AstNode {
 pub struct NoteState {
     pub ast: Vec<AstNode>,
     pub metadata: NoteMetadata,
-    /// Content hash of the on-disk file (ADR-007 decision 7). This is the OCC
-    /// token: pass it back to `save_note`, which rejects with
-    /// `RevisionMismatch` if the file changed underneath the draft. It
-    /// replaces the `notes.last_modified` comparison, which could never match
-    /// the placeholder `open_note` returned and so made every save fail.
+    /// Content hash of the on-disk file (ADR-007 decision 7), replacing the
+    /// `notes.last_modified` comparison that could never match the
+    /// placeholder `open_note` returned and so made every save fail.
+    ///
+    /// **Not an input.** The Core holds this value and compares it itself
+    /// before every tier 2 write; see `flush_note`. It is exposed for display
+    /// and diagnostics only, and no function on this boundary accepts it
+    /// back.
     pub base_revision: String,
     /// True when a draft was restored from the `drafts` table rather than
     /// read from disk -- i.e. the previous session ended without tier 2
@@ -410,7 +421,10 @@ pub fn update_block(
 /// span, reparses, and returns the new state (ADR-007 decision 1).
 ///
 /// Called when the Block loses focus, not on every keystroke. This is where
-/// the reparse cost lands, alongside the tier 2 write, off the typing path.
+/// the reparse cost lands: off the typing path, and *separate from* the tier 2
+/// file write, which is on its own idle timer and may not have fired yet. A
+/// commit updates the AST, the span map and the draft row; it does not touch
+/// the file.
 ///
 /// A splice can change a Block's node shape -- a paragraph gaining a leading
 /// list marker reparses as a list -- so the returned state is authoritative
@@ -437,7 +451,11 @@ pub fn delete_block(note_id: String, block_path: Vec<usize>) -> Result<NoteState
 }
 
 /// Splits a Block at a character offset -- pressing Enter mid-Block
-/// (CAP-EDIT-03).
+/// (CAP-EDIT-03). `offset` is an offset into the Block's **source** text, not
+/// its rendered text: this is only ever called on the focused Block, which
+/// under ADR-006 displays raw source, so the caret position the UI reports is
+/// already a source offset. `merge_block_with_previous` needs no such note
+/// because offset 0 is the same position in both spaces.
 #[frb(sync)]
 pub fn split_block(
     note_id: String,
@@ -457,8 +475,26 @@ pub fn merge_block_with_previous(
     unimplemented!()
 }
 
-/// A selection spanning one or more Blocks (ADR-006 decision 3). Offsets are
-/// character offsets into each Block's rendered text.
+/// A selection spanning one or more Blocks (ADR-006 decision 3).
+///
+/// Offsets are character offsets into each Block's **rendered text**, defined
+/// as the in-order concatenation of the `TextRun.content` values reachable
+/// from that Block's `AstNode`, descending into `Link`/`ExternalLink`
+/// `content`. That definition is what makes the number well-defined: it is a
+/// pure function of the `AstNode` both sides already hold, not of whatever
+/// the widget laid out, so the Core reproduces the same string the UI
+/// selected in without the UI describing its geometry.
+///
+/// Resolving these to the source offsets a splice needs requires an
+/// inline-granularity rendered→source map, which the Core builds during the
+/// same parse — see ADR-007 decision 8. It is Core-side state under rule 3
+/// like every other span, and this is the one place a Block-granularity map
+/// is not sufficient.
+///
+/// Contrast `split_block`, whose `offset` is a **source** offset. The two
+/// conventions differ because the Blocks differ: a range spans unfocused
+/// Blocks, which the user sees rendered, while a split happens in the focused
+/// Block, which the user sees as raw source.
 #[frb]
 pub struct BlockRange {
     pub start_path: Vec<usize>,
@@ -614,8 +650,11 @@ pub async fn current_session() -> Result<SessionState, AppError> {
 #[frb]
 pub struct OAuthFlowStart {
     pub authorize_url: String,
-    pub code_verifier: String,
-    pub state: String,
+    /// Opaque handle for this in-flight authorization. The verifier and
+    /// `state` are retained Core-side against it and never cross this
+    /// boundary; the UI passes this back to `authenticate_workspace` along
+    /// with what the redirect delivered.
+    pub flow_id: String,
 }
 
 /// Generates the PKCE verifier, challenge and state Core-side and returns the
@@ -626,16 +665,20 @@ pub struct OAuthFlowStart {
 /// listener. `redirect_uri` is the loopback URL the UI is already listening
 /// on.
 ///
-/// **The Core does not validate either value.** It mints the verifier and
-/// forwards it to the token endpoint on the UI's behalf; it mints `state` and
-/// never sees it again. Comparing the `state` returned on the redirect
-/// against the one issued here — the CSRF check required by RFC 6749 §10.12 —
-/// is therefore a **UI obligation**, and a UI that skips it silently loses
-/// that protection with nothing in the Core able to detect the omission.
-/// Retaining the pair Core-side keyed by a flow id would move the check
-/// behind this boundary; that is deliberately not done here, because it would
-/// make the Core stateful across the browser leg for one comparison, and it
-/// is recorded as an accepted trade-off rather than an oversight.
+/// **The Core retains the verifier and `state` against `flow_id` and performs
+/// the CSRF comparison itself** (RFC 6749 §10.12), in `authenticate_workspace`.
+/// An earlier revision of this contract returned both values to the UI and
+/// declared the comparison a UI obligation. That was withdrawn: the check had
+/// no enforcement point, no ticket owned it, and a UI that simply skipped it
+/// would lose the protection with nothing able to detect the omission — the
+/// same "generated but never compared" shape the flow diagram itself had.
+///
+/// The trade-off originally cited against this — that it makes the Core
+/// stateful across the browser leg — does not survive scrutiny. The flow was
+/// already stateful across that leg; the state was merely parked in the
+/// Presentation Container, which is the less trustworthy of the two places to
+/// keep a secret and the only one that cannot enforce anything with it.
+/// Holding it Core-side moves nothing except who can check it.
 #[frb(sync)]
 pub fn begin_oauth_flow(
     provider: String,
@@ -648,11 +691,14 @@ pub fn begin_oauth_flow(
 /// secure storage. Establishes a session only -- it does not clone, create,
 /// or attach a Workspace. Under ADR-005 the Workspace already exists locally
 /// before any of this is called.
+/// Returns `OAuthStateMismatch` — before any request to the token endpoint —
+/// when `returned_state` does not equal the value minted for `flow_id`, or
+/// when `flow_id` is unknown or already consumed. A `flow_id` is single-use.
 #[frb]
 pub async fn authenticate_workspace(
-    provider: String,
+    flow_id: String,
     auth_code: String,
-    code_verifier: String,
+    returned_state: String,
 ) -> Result<SessionState, AppError> {
     unimplemented!()
 }

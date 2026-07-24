@@ -2,7 +2,9 @@
 
 Makes the application pleasant to write in. After Epic E a Note can be opened and read, but only plain single-run paragraphs are editable — no heading, list, quote or code Block can be edited, no Block can be created, and selection stops at every Block boundary. This epic delivers Live Preview, cross-Block selection, Block manipulation through ordinary typing, and Link insertion.
 
-This epic became substantially cheaper and less risky when the editing model changed to raw-on-focus. Mapping formatted output to editable spans — previously the largest engineering risk in the project, and the source of a shipped regression — is no longer a requirement at all: the editable surface holds plain source text.
+This epic became substantially cheaper and less risky when the editing model changed to raw-on-focus. Mapping formatted output to editable spans — previously the largest engineering risk in the project, and the source of a shipped regression — is no longer a requirement *for the focused Block*: its editable surface holds plain source text, so there is nothing to map.
+
+It is not gone entirely, and `EDIT-F003`/`EDIT-F007` are where it survives. A `BlockRange` spans *unfocused* Blocks, which the user sees rendered, so its offsets are rendered offsets and the Core must resolve them to source offsets to splice. ADR-007 decision 8 specifies that mapping and establishes that the parser already yields it. The residual risk is far smaller than what it replaced: the dangerous version mapped back from laid-out geometry, which depends on fonts and wrapping, while this one is a pure function of source text and parser output computed where the parser already runs.
 
 #### EDIT-F001 Spike: Rendered-to-Raw Promotion Fidelity
 - **Type:** Spike
@@ -18,6 +20,7 @@ This epic became substantially cheaper and less risky when the editing model cha
 - **Expected Success Output:** `exit 0`
 - **STOP Conditions:**
   - "STOP if the promotion cannot be made typographically stable; that outcome selects the custom-selectable escalation path recorded in ADR-006 decision 6, which is a Stage 3 decision rather than an improvised widget change."
+  - "STOP if resolving a rendered offset to a source offset turns out to need anything beyond the parser's own inline ranges; ADR-007 decision 8 asserts it does not, and an escalation there is a Stage 3 decision."
   - "STOP if the finding is asserted from widget-property assertions rather than inspected rendered output; property assertions are precisely what missed the equivalent defect before."
 - **Description:** Determine, from actual rendered output, whether promoting a Block from its formatted presentation to its raw editable presentation can be made free of visible layout movement. The text necessarily differs; the geometry must not. Compare screenshots of the same Block in both states across the Block types in scope, identify which properties must be held identical, and record whether the promote-on-focus approach in ADR-006 is viable or whether the escalation path must be taken. `tech-spec/guidelines.md` already requires typographic identity as a standard; this Spike establishes whether it is achievable and what it costs.
 - **Acceptance Criteria (Gherkin):**
