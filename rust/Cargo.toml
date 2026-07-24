@@ -7,15 +7,50 @@ edition = "2021"
 crate-type = ["cdylib", "staticlib"]
 
 [dependencies]
+base64 = "0.22.1"
 flutter_rust_bridge = "=2.12.0"
 getrandom = "0.4.3"
+gix = { version = "0.86.0", default-features = false, features = [
+    "max-performance-safe",
+    "sha1",
+    "blob-diff",
+    "revision",
+    "index",
+    "excludes",
+    "worktree-mutation",
+    "credentials",
+    "interrupt",
+    "tree-editor",
+    "blocking-network-client",
+    "blocking-http-transport-reqwest-rust-tls",
+] }
 keyring = "4.1.5"
 pulldown-cmark = "0.12"
+# `reqwest` is already pulled in transitively by `gix`'s
+# `blocking-http-transport-reqwest-rust-tls` feature (see `Cargo.lock`); this
+# is a direct dependency of our own so `api::auth` can drive it explicitly
+# (blocking client, rustls TLS backend, JSON (de)serialization) for the
+# GitHub OAuth token exchange, rather than introducing a second HTTP crate.
+reqwest = { version = "0.13.4", default-features = false, features = [
+    "blocking",
+    "rustls",
+    "json",
+    "form",
+] }
 rusqlite = { version = "0.40.1", features = ["bundled-sqlcipher"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0"
+sha2 = "0.10.9"
+url = "2.5.8"
 zeroize = "1.9.0"
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frb_expand)'] }
 
 [dev-dependencies]
+# Used only by `api::auth`'s tests, to run a `keyring` default-store warmup
+# before the test harness spawns its worker threads — see
+# `new_keyring_entry`'s doc comment in `rust/src/api/auth.rs` for the race
+# this closes.
+ctor = "1.0.10"
 tempfile = "3.27.0"

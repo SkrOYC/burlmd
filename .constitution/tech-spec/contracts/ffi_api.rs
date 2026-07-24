@@ -79,6 +79,33 @@ pub enum AppError {
     ParseError(String),
 }
 
+/// Everything the UI needs to drive the browser leg of an OAuth PKCE flow
+/// (SYNC-C002) and later call `authenticate_workspace`.
+#[frb]
+pub struct OAuthFlowStart {
+    pub authorize_url: String,
+    pub code_verifier: String,
+    pub state: String,
+}
+
+/// Starts an OAuth PKCE flow: generates the verifier/challenge/state
+/// Core-side and returns the full authorize URL for the UI to open in the
+/// system browser. Added beyond this contract's original surface at
+/// SYNC-C002 — not a pre-existing method here before that ticket.
+///
+/// PKCE verifier/challenge/state generation and authorize-URL construction
+/// must happen on the Core side of the boundary (the UI is not a trusted
+/// party to mint the verifier `authenticate_workspace` later checks the
+/// exchange against), while opening the system browser and running the
+/// loopback redirect listener can only happen UI-side (the Core has no
+/// notion of "the system browser" or a window to redirect back to).
+/// `redirect_uri` must be the loopback URL (`http://127.0.0.1:<port>/...`)
+/// the UI is already listening on; see `architecture/flows/flow-auth-handshake.md`.
+#[frb(sync)]
+pub fn begin_oauth_flow(provider: String, redirect_uri: String) -> Result<OAuthFlowStart, AppError> {
+    unimplemented!()
+}
+
 /// Authenticates via OAuth and returns a Workspace ID
 #[frb]
 pub async fn authenticate_workspace(provider: String, auth_code: String, code_verifier: String) -> Result<String, AppError> {

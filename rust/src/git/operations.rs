@@ -1,0 +1,1107 @@
+//! Programmatic Git `clone`, `commit`, `push`, and `pull` operations against a local
+//! Workspace directory (ticket SYNC-C001).
+//!
+//! ## Verified capability split (checked 2026-07-24 against gix 0.86.0 on crates.io,
+//! published 2026-07-23, and its upstream `crate-status.md`)
+//!
+//! `gix` (gitoxide) is used for the operations it implements robustly, and the `git` CLI
+//! (available in the devenv shell; the ticket explicitly permits this) is used for the rest:
+//!
+//! - **clone -> gix.** `crate-status.md` lists remote `clone` (including shallow) as
+//!   implemented ("usable"), and `gix::prepare_clone(..).fetch_then_checkout(..)` plus
+//!   `PrepareCheckout::main_worktree(..)` is the documented, exercised path
+//!   (docs.rs `gix::clone`).
+//! - **commit -> gix.** `crate-status.md` lists `commit` and "low-level ref/object/index
+//!   mutation" as implemented. We build the new tree with `Repository::edit_tree`
+//!   (`tree-editor` feature) from blobs written via `Repository::write_blob`, then write the
+//!   commit object and move the branch ref with `Repository::commit_as` (docs.rs
+//!   `gix::Repository`), matching the ticket's Gherkin literally: a commit lands in the local
+//!   `.git` object database and its branch ref.
+//! - **push -> `git` CLI.** Upstream is unambiguous: `crate-status.md` lists `push` as
+//!   entirely unimplemented for the `gix` crate ("- [ ] push") and the plumbing crates
+//!   (`gix-transport`/`gix-protocol`) explicitly do not implement "send-pack / receive-pack
+//!   client plumbing" or "report-status, sideband, delete-refs, push-options and atomic
+//!   pushes". There is no gix API to fall back to here at all, so this ticket shells out.
+//! - **pull -> `git` CLI.** `gix` implements `fetch`, but `crate-status.md`'s merge row is
+//!   only partial ("merge: [x] blobs, [x] trees, [ ] commits") — there is no commit-level
+//!   merge/three-way-merge-with-conflict-markers machinery in the `gix` crate today. Since
+//!   `flow-conflict-resolution.md` depends on real `<<<<<<<`/`=======`/`>>>>>>>` conflict
+//!   markers being left in the working tree by a failed merge, and `git merge`'s behavior
+//!   here is exactly that contract, pull is implemented as `git fetch` + `git merge`
+//!   (equivalent to `git pull --no-rebase`) via the CLI rather than reimplemented against
+//!   partial plumbing.
+//!
+//! Authentication is accepted as an optional [`GitCredentials`] parameter on every operation
+//! that talks to a remote, so SYNC-C002's keyring-backed OAuth token can be threaded through
+//! later. No keyring integration happens in this ticket.
+
+use crate::error::AppError;
+use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
+use base64::Engine as _;
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
+use std::sync::atomic::AtomicBool;
+use zeroize::Zeroizing;
+
+/// Credentials for authenticating against a remote (e.g. a GitHub OAuth access token).
+/// SYNC-C002 is responsible for retrieving this from `keyring`; this ticket only defines the
+/// shape so that wiring point exists.
+///
+/// The token is wrapped in `Zeroizing` (same pattern as `security::keyring`) so it is wiped
+/// from memory on drop, and `Debug` is implemented by hand to redact it: the derived `Debug`
+/// would otherwise print the cleartext token in panic messages, logs, or `{:?}` output.
+#[derive(Clone, Default, PartialEq, Eq)]
+pub struct GitCredentials {
+    /// The username to authenticate with. For GitHub token auth this is conventionally
+    /// ignored by the server but must be non-empty; `"x-access-token"` is a safe default.
+    pub username: String,
+    /// The bearer token / personal access token / OAuth access token.
+    pub token: Zeroizing<String>,
+}
+
+impl std::fmt::Debug for GitCredentials {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("GitCredentials")
+            .field("username", &self.username)
+            .field("token", &"***")
+            .finish()
+    }
+}
+
+/// Clone `url` into `dest`, checking out the default branch's worktree.
+///
+/// Uses `gix::prepare_clone` (see module docs). `dest` must not already exist.
+pub fn clone_repo(
+    url: &str,
+    dest: &Path,
+    credentials: Option<&GitCredentials>,
+) -> Result<(), AppError> {
+    let interrupt = AtomicBool::new(false);
+
+    let mut prepare = gix::prepare_clone(url, dest).map_err(|e| classify_gix_clone_err(&e))?;
+
+    if let Some(creds) = credentials {
+        let creds = creds.clone();
+        prepare = prepare.configure_connection(move |connection| {
+            let creds = creds.clone();
+            // The `Err` variant of `gix_credentials::protocol::Error` is dictated by the
+            // `set_credentials` trait signature upstream, not by anything under our control
+            // here; boxing it would change the callback's required type.
+            #[allow(clippy::result_large_err)]
+            connection.set_credentials(move |action| match action {
+                gix::credentials::helper::Action::Get(ctx) => {
+                    Ok(Some(gix::credentials::protocol::Outcome {
+                        identity: gix::sec::identity::Account {
+                            username: creds.username.clone(),
+                            password: creds.token.to_string(),
+                            oauth_refresh_token: None,
+                        },
+                        next: gix::credentials::helper::NextAction::from(ctx),
+                    }))
+                }
+                gix::credentials::helper::Action::Store(_)
+                | gix::credentials::helper::Action::Erase(_) => Ok(None),
+            });
+            Ok(())
+        });
+    }
+
+    let (mut checkout, _outcome) = prepare
+        .fetch_then_checkout(gix::progress::Discard, &interrupt)
+        .map_err(|e| classify_gix_fetch_err(&e))?;
+    checkout
+        .main_worktree(gix::progress::Discard, &interrupt)
+        .map_err(|e| AppError::IoError(format!("checkout after clone failed: {e}")))?;
+    Ok(())
+}
+
+/// Snapshot every file currently in the working tree (excluding `.git` and anything matched
+/// by `.gitignore`) into a new tree object and create a commit on top of the current `HEAD`,
+/// moving the branch ref forward.
+///
+/// Returns the new commit's hex object id.
+///
+/// This is a full-worktree snapshot rather than an index-diff commit: it is equivalent to
+/// `git add -A && git commit`, which is the semantics the Gherkin ("a local directory with
+/// changes" -> "a Git commit is created") calls for — including `git add -A`'s own real
+/// behavior of skipping gitignored paths unless `-f` is given, honored here via
+/// `Repository::excludes` (see `collect_files`). In particular, the new tree is built
+/// starting from the *empty* tree (not the parent commit's tree) and populated only with
+/// files `collect_files` currently finds in the worktree: a path that existed in the parent
+/// commit but is no longer present on disk (deleted, or the source half of a rename) is
+/// therefore correctly absent from the new tree, rather than surviving into it.
+pub fn commit_all(
+    repo_path: &Path,
+    message: &str,
+    author_name: &str,
+    author_email: &str,
+) -> Result<String, AppError> {
+    let repo = gix::open(repo_path).map_err(|e| AppError::IoError(format!("open repo: {e}")))?;
+
+    // `Repository::excludes` needs *some* `gix_index::State` to resolve id-mapped ignore
+    // sources against (irrelevant here, since the default `Source` below reads `.gitignore`
+    // straight off the worktree instead), so an empty index when none is present on disk yet
+    // is exactly right rather than an error.
+    let index = repo
+        .index_or_empty()
+        .map_err(|e| AppError::IoError(format!("open index: {e}")))?;
+    let mut excludes = repo
+        .excludes(
+            &index,
+            None,
+            gix::worktree::stack::state::ignore::Source::default(),
+        )
+        .map_err(|e| AppError::IoError(format!("configure .gitignore excludes: {e}")))?;
+
+    let mut files = Vec::new();
+    collect_files(repo_path, repo_path, &mut excludes, &mut files)?;
+
+    // Always start from the empty tree, rather than the parent commit's tree: the tree
+    // editor only ever `upsert`s paths found in the worktree below, so seeding it with the
+    // parent's tree would let deleted/renamed-away paths silently survive into the new
+    // commit (they'd never be visited, let alone removed). Building from empty and
+    // re-adding exactly what's on disk makes the result an accurate full-worktree snapshot
+    // regardless of what was deleted or renamed since the parent commit.
+    let empty_tree_id = gix::ObjectId::empty_tree(repo.object_hash());
+    let mut editor = repo
+        .edit_tree(empty_tree_id)
+        .map_err(|e| AppError::IoError(format!("start tree edit: {e}")))?;
+
+    for file in &files {
+        let relative = file
+            .strip_prefix(repo_path)
+            .expect("file was discovered under repo_path");
+        let rela_path: String = relative
+            .components()
+            .map(|c| c.as_os_str().to_string_lossy().into_owned())
+            .collect::<Vec<_>>()
+            .join("/");
+        let bytes = std::fs::read(file).map_err(|e| AppError::IoError(e.to_string()))?;
+        let blob_id = repo
+            .write_blob(bytes)
+            .map_err(|e| AppError::IoError(format!("write blob: {e}")))?;
+        editor
+            .upsert(
+                rela_path.as_str(),
+                gix::object::tree::EntryKind::Blob,
+                blob_id.detach(),
+            )
+            .map_err(|e| AppError::IoError(format!("stage {}: {e}", relative.display())))?;
+    }
+
+    let tree_id = editor
+        .write()
+        .map_err(|e| AppError::IoError(format!("write tree: {e}")))?;
+
+    let parents: Vec<gix::ObjectId> = match repo.head_id() {
+        Ok(id) => vec![id.detach()],
+        Err(_) => Vec::new(),
+    };
+
+    let time = gix::date::Time::now_local_or_utc();
+    let signature = gix::actor::Signature {
+        name: author_name.into(),
+        email: author_email.into(),
+        time,
+    };
+
+    let mut time_buf = gix::date::parse::TimeBuf::default();
+    let signature_ref = signature.to_ref(&mut time_buf);
+    let commit_id = repo
+        .commit_as(
+            signature_ref,
+            signature_ref,
+            "HEAD",
+            message,
+            tree_id,
+            parents,
+        )
+        .map_err(|e| AppError::IoError(format!("write commit: {e}")))?;
+
+    // `Repository::commit_as` only writes the commit object and moves the branch ref; it does
+    // not touch `.git/index`. Without this, the on-disk index still reflects the pre-commit
+    // state, so a subsequent `git merge`/`git status` (used by push/pull's `git` CLI shell-out)
+    // would see phantom uncommitted changes and refuse to proceed. Rebuild the index from the
+    // tree we just committed and write it back so the index and worktree agree, matching what
+    // `git commit` itself does.
+    let mut index_file = repo
+        .index_from_tree(&tree_id)
+        .map_err(|e| AppError::IoError(format!("build index from tree: {e}")))?;
+    index_file
+        .write(gix::index::write::Options::default())
+        .map_err(|e| AppError::IoError(format!("write index: {e}")))?;
+
+    Ok(commit_id.detach().to_string())
+}
+
+/// Push `branch` to `remote` (a configured remote name, e.g. `"origin"`).
+///
+/// Shells out to `git push` (see module docs: `gix` has no push support at all).
+pub fn push(
+    repo_path: &Path,
+    remote: &str,
+    branch: &str,
+    credentials: Option<&GitCredentials>,
+) -> Result<(), AppError> {
+    let mut cmd = git_command(repo_path);
+    cmd.arg("push").arg(remote).arg(branch);
+    apply_credentials(&mut cmd, credentials);
+
+    let output = cmd
+        .output()
+        .map_err(|e| AppError::IoError(format!("spawn git push: {e}")))?;
+    if output.status.success() {
+        return Ok(());
+    }
+    Err(classify_git_cli_failure(&output.stderr))
+}
+
+/// Fetch and merge `branch` from `remote` into the current branch (equivalent to
+/// `git pull --no-rebase`).
+///
+/// On a merge conflict, the working tree is left with raw `<<<<<<<`/`=======`/`>>>>>>>`
+/// conflict markers (as `flow-conflict-resolution.md` requires) and `AppError::GitConflict`
+/// is returned; the merge is deliberately *not* aborted, so callers must not assume the
+/// working tree is clean after an `Err(GitConflict)`.
+///
+/// Shells out to `git fetch` + `git merge` (see module docs: `gix`'s `merge` support does not
+/// yet cover commits, only blobs and trees).
+pub fn pull(
+    repo_path: &Path,
+    remote: &str,
+    branch: &str,
+    credentials: Option<&GitCredentials>,
+) -> Result<(), AppError> {
+    let mut fetch_cmd = git_command(repo_path);
+    fetch_cmd.arg("fetch").arg(remote).arg(branch);
+    apply_credentials(&mut fetch_cmd, credentials);
+
+    let fetch_output = fetch_cmd
+        .output()
+        .map_err(|e| AppError::IoError(format!("spawn git fetch: {e}")))?;
+    if !fetch_output.status.success() {
+        return Err(classify_git_cli_failure(&fetch_output.stderr));
+    }
+
+    let merge_output = git_command(repo_path)
+        .arg("merge")
+        .arg("--no-edit")
+        .arg(format!("{remote}/{branch}"))
+        .output()
+        .map_err(|e| AppError::IoError(format!("spawn git merge: {e}")))?;
+
+    if merge_output.status.success() {
+        return Ok(());
+    }
+
+    let combined = [
+        merge_output.stdout.as_slice(),
+        merge_output.stderr.as_slice(),
+    ]
+    .concat();
+    let text = String::from_utf8_lossy(&combined);
+    if text.contains("CONFLICT") || text.contains("Automatic merge failed") {
+        return Err(AppError::GitConflict);
+    }
+    Err(classify_git_cli_failure(&merge_output.stderr))
+}
+
+/// Recursively collect every regular file under `dir`, skipping the top-level `.git`
+/// directory and anything matched by `.gitignore` (checked via `excludes`, a `gix`
+/// exclude-stack cache built once in `commit_all` and threaded through recursive calls so
+/// per-directory `.gitignore` files are only parsed once each rather than per file).
+///
+/// A whole directory that matches `.gitignore` is pruned rather than recursed into, so a
+/// pattern like `build/` correctly skips everything underneath it too, not just a literal
+/// `build` entry.
+fn collect_files(
+    root: &Path,
+    dir: &Path,
+    excludes: &mut gix::AttributeStack<'_>,
+    out: &mut Vec<PathBuf>,
+) -> Result<(), AppError> {
+    for entry in std::fs::read_dir(dir).map_err(|e| AppError::IoError(e.to_string()))? {
+        let entry = entry.map_err(|e| AppError::IoError(e.to_string()))?;
+        let path = entry.path();
+        let file_type = entry
+            .file_type()
+            .map_err(|e| AppError::IoError(e.to_string()))?;
+        if path.file_name().map(|n| n == ".git").unwrap_or(false) && path.parent() == Some(root) {
+            continue;
+        }
+
+        let relative = path
+            .strip_prefix(root)
+            .expect("entry was discovered under root");
+        let mode = if file_type.is_dir() {
+            gix::index::entry::Mode::DIR
+        } else {
+            gix::index::entry::Mode::FILE
+        };
+        let is_excluded = excludes
+            .at_path(relative, Some(mode))
+            .map_err(|e| {
+                AppError::IoError(format!(
+                    "check .gitignore exclusion for {}: {e}",
+                    relative.display()
+                ))
+            })?
+            .is_excluded();
+        if is_excluded {
+            continue;
+        }
+
+        if file_type.is_dir() {
+            collect_files(root, &path, excludes, out)?;
+        } else if file_type.is_file() {
+            out.push(path);
+        }
+    }
+    Ok(())
+}
+
+/// Deterministic author/committer identity injected into every `git` CLI invocation's
+/// environment by [`git_command`] (`GIT_AUTHOR_NAME`/`GIT_AUTHOR_EMAIL` +
+/// `GIT_COMMITTER_NAME`/`GIT_COMMITTER_EMAIL`).
+///
+/// `pull`'s `git merge --no-edit` creates a real merge commit whenever the fetched history
+/// and the local history have both diverged and merge cleanly (i.e. neither side is a
+/// fast-forward of the other) — see `reindex_failure_on_a_clean_auto_merge_is_not_masked` in
+/// `sync::scheduler` for exactly that shape. Unlike `commit_all`, `git merge` is `git`'s own
+/// CLI machinery, not our tree-editor code, so it has no caller-supplied name/email to draw
+/// on; it falls back to reading `user.name`/`user.email` out of git config, which is
+/// unconfigured on a fresh production machine (nothing in this app's install/setup path ever
+/// runs `git config --global user.name`). Without an identity, that `git merge` invocation
+/// fails outright with "fatal: unable to auto-detect email address" /
+/// "Committer identity unknown", which `flow-sync-push.md`'s pull-then-merge step depends on
+/// succeeding. Setting these four env vars gives every CLI-driven `git` invocation in this
+/// module a deterministic identity that never depends on host git config, matching in shape
+/// (a plain name/email pair) how `commit_all` builds its own `gix::actor::Signature` from an
+/// explicit name/email a few lines above — the difference is that `commit_all`'s identity is
+/// always supplied by its caller (there is no fixed default to literally copy), while a
+/// `git merge` auto-merge commit has no caller-facing "author" of its own at all, so it is
+/// attributed to the app itself rather than to whichever user happened to trigger the sync.
+/// Applying the same env vars to `fetch`/`push` too is harmless (they never read identity) and
+/// keeps every call in this module going through one consistently-configured builder.
+const CLI_IDENTITY_NAME: &str = "BurlMD";
+const CLI_IDENTITY_EMAIL: &str = "sync@burlmd.app";
+
+/// Builds a `git` CLI [`Command`] rooted at `workdir` with the settings every `git` CLI
+/// invocation in this module needs, and MUST be the single entry point every such invocation
+/// goes through: no stdin (so a `git` that would otherwise prompt interactively fails fast
+/// instead of hanging), stdout/stderr piped for capture, `LC_ALL=C` pinned in the child's
+/// environment, `GIT_TERMINAL_PROMPT=0` to kill any remaining interactive-prompt path (stdin
+/// being `/dev/null` already stops most of these; some `git` builds' credential-helper prompts
+/// go through a pty instead of stdin, which `GIT_TERMINAL_PROMPT=0` closes off too), a fixed
+/// author/committer identity (see [`CLI_IDENTITY_NAME`]/[`CLI_IDENTITY_EMAIL`] above), and
+/// `GIT_CONFIG_GLOBAL`/`GIT_CONFIG_SYSTEM` pointed at `/dev/null` so none of this — the
+/// identity included — can be silently overridden by whatever `~/.gitconfig` or `/etc/gitconfig`
+/// happens to exist on the machine this runs on. That last point is also what makes this
+/// module's own test suite deterministic: without it, a developer or CI machine that *does*
+/// have a global git identity configured (as most developer machines do) would mask the exact
+/// "no identity configured" failure this module needs to handle, the way it did until this was
+/// added — see `pull_auto_merges_with_no_git_identity_configured_anywhere` below.
+///
+/// `LC_ALL=C` is not optional politeness: `classify_git_cli_failure` below classifies outcomes
+/// by substring-matching *English* fragments of `git`'s own stderr (`"non-fast-forward"`,
+/// `"CONFLICT"`, `"Authentication failed"`, etc.). `git` localizes that stderr via gettext
+/// according to `LC_ALL`/`LC_MESSAGES`/`LANG` (POSIX precedence, in that order), so a `git`
+/// invoked while inheriting a non-English locale from this process's environment (e.g. a
+/// contributor's machine running under `LANG=es_ES.UTF-8`) would otherwise silently misroute a
+/// real non-fast-forward push into `AppError::IoError`, skipping the entire fetch+merge
+/// conflict flow `flow-sync-push.md` and `flow-conflict-resolution.md` depend on. `LC_ALL`
+/// overrides both `LANG` and `LC_MESSAGES` when set, so pinning only `LC_ALL` here is
+/// sufficient to force `git`'s stderr back to the C-locale (English) text the classifier
+/// depends on, regardless of what the host process's own locale is.
+fn git_command(workdir: &Path) -> Command {
+    let mut cmd = Command::new("git");
+    cmd.current_dir(workdir)
+        .env("LC_ALL", "C")
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .env("GIT_CONFIG_GLOBAL", "/dev/null")
+        .env("GIT_CONFIG_SYSTEM", "/dev/null")
+        .env("GIT_AUTHOR_NAME", CLI_IDENTITY_NAME)
+        .env("GIT_AUTHOR_EMAIL", CLI_IDENTITY_EMAIL)
+        .env("GIT_COMMITTER_NAME", CLI_IDENTITY_NAME)
+        .env("GIT_COMMITTER_EMAIL", CLI_IDENTITY_EMAIL)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    cmd
+}
+
+/// Inject HTTP(S) auth (if any) into a `git` CLI invocation without putting the token on the
+/// command line (where it would be visible via `/proc/<pid>/cmdline` / `ps`). Uses git's
+/// environment-variable config-injection mechanism (`GIT_CONFIG_COUNT`/`GIT_CONFIG_KEY_n`/
+/// `GIT_CONFIG_VALUE_n`, supported since Git 2.31) to set a one-shot `http.extraHeader`.
+///
+/// The `user:token` pair and the base64-encoded header value are both wrapped in `Zeroizing`
+/// so *this process's* copies are wiped on drop (same discipline as `GitCredentials::token`
+/// itself). That said, the wipe is necessarily partial: `Command::env` copies the value into
+/// the `Command`'s own internal env map immediately, and the OS copies it again into the
+/// child process's env block at spawn time — neither of those copies is reachable to zero.
+/// The token surviving un-wiped in the child process's environment for the lifetime of that
+/// process is therefore a conscious, accepted bound of authenticating via `git`'s CLI env
+/// mechanism at all, not something this function can close.
+fn apply_credentials(cmd: &mut Command, credentials: Option<&GitCredentials>) {
+    if let Some(creds) = credentials {
+        let user_pass = Zeroizing::new(format!("{}:{}", creds.username, creds.token.as_str()));
+        let basic = Zeroizing::new(BASE64_STANDARD.encode(user_pass.as_bytes()));
+        let header_value = Zeroizing::new(format!("Authorization: Basic {}", basic.as_str()));
+        // The `Command` inherits this process's own environment, which may already carry an
+        // injected `GIT_CONFIG_COUNT`/`GIT_CONFIG_KEY_n`/`GIT_CONFIG_VALUE_n` sequence (e.g.
+        // from a wrapper this binary itself was launched under). Unconditionally starting our
+        // own entry at index 0 with `GIT_CONFIG_COUNT=1` would silently discard or mis-index
+        // whatever was already there; append after it instead.
+        let index = existing_git_config_count();
+        cmd.env("GIT_CONFIG_COUNT", (index + 1).to_string());
+        cmd.env(format!("GIT_CONFIG_KEY_{index}"), "http.extraheader");
+        cmd.env(format!("GIT_CONFIG_VALUE_{index}"), header_value.as_str());
+    }
+}
+
+/// How many `GIT_CONFIG_COUNT`-style entries are already present in *this process's own*
+/// environment (i.e. what the spawned `git` child would inherit before `apply_credentials`
+/// adds its own), so that entry can be appended after them rather than clobbering index 0.
+/// Absent or unparseable is treated as zero, matching `git`'s own behavior for a missing
+/// `GIT_CONFIG_COUNT`.
+fn existing_git_config_count() -> usize {
+    std::env::var("GIT_CONFIG_COUNT")
+        .ok()
+        .and_then(|s| s.parse::<usize>().ok())
+        .unwrap_or(0)
+}
+
+/// Classifies a failed `git` CLI invocation's stderr by substring-matching known English
+/// fragments of `git`'s own diagnostic text. This depends entirely on that stderr actually
+/// being in the C locale (English) — every call site in this module must build its `Command`
+/// via [`git_command`], which pins `LC_ALL=C` for exactly this reason (see its doc comment);
+/// calling this against stderr captured from a `git` invocation that inherited a different
+/// `LANG`/`LC_MESSAGES` would silently misclassify real conflicts/auth failures as a generic
+/// `IoError`.
+fn classify_git_cli_failure(stderr: &[u8]) -> AppError {
+    let text = String::from_utf8_lossy(stderr);
+    let lower = text.to_lowercase();
+    if lower.contains("non-fast-forward")
+        || lower.contains("fetch first")
+        || lower.contains("conflict")
+    {
+        AppError::GitConflict
+    } else if lower.contains("authentication failed")
+        || lower.contains("invalid credentials")
+        || lower.contains("invalid username or password")
+        || lower.contains("bad credentials")
+        || lower.contains("permission denied")
+        || lower.contains("access denied")
+        || lower.contains("error: 401")
+        || lower.contains("error: 403")
+        || lower.contains("returned error: 401")
+        || lower.contains("returned error: 403")
+        || lower.contains("http basic: access denied")
+        || lower.contains("support for password authentication was removed")
+    {
+        // Checked ahead of the generic network-error branch below: git's own auth-failure
+        // stderr (`fatal: Authentication failed for '...'`, an HTTP 401/403 status line, an
+        // SSH `Permission denied (publickey)`, etc.) also often contains phrases like
+        // "unable to access" that would otherwise be caught by the network branch — this
+        // ordering makes sure a stale/invalid credential is reported distinctly as
+        // `AuthExpired`, matching `tech-spec/contracts/ffi_api.rs`'s dedicated variant for
+        // exactly this case, rather than being misclassified as a transient `NetworkError`
+        // the scheduler would otherwise retry forever with backoff.
+        AppError::AuthExpired
+    } else if lower.contains("could not resolve host")
+        || lower.contains("could not read from remote repository")
+        || lower.contains("connection refused")
+        || lower.contains("connection timed out")
+        || lower.contains("unable to access")
+        || lower.contains("network")
+    {
+        AppError::NetworkError(text.trim().to_string())
+    } else {
+        AppError::IoError(text.trim().to_string())
+    }
+}
+
+fn classify_gix_clone_err(err: &gix::clone::Error) -> AppError {
+    AppError::IoError(format!("prepare clone: {err}"))
+}
+
+fn classify_gix_fetch_err(err: &gix::clone::fetch::Error) -> AppError {
+    let text = err.to_string();
+    let lower = text.to_lowercase();
+    if lower.contains("could not resolve") || lower.contains("connect") || lower.contains("i/o") {
+        AppError::NetworkError(text)
+    } else {
+        AppError::IoError(text)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_support::{git, init_bare, init_repo};
+    use std::process::Command as StdCommand;
+    use tempfile::tempdir;
+
+    /// Gherkin: Given a local directory with changes, When the commit function is called,
+    /// Then a Git commit is created in the local `.git` index.
+    #[test]
+    fn commit_all_creates_commit_in_fresh_repo() {
+        let dir = tempdir().unwrap();
+        init_repo(dir.path());
+        std::fs::write(dir.path().join("note.md"), b"# Hello\n").unwrap();
+
+        let commit_id = commit_all(
+            dir.path(),
+            "initial commit",
+            "Test User",
+            "test@example.com",
+        )
+        .expect("commit_all should succeed");
+
+        assert_eq!(commit_id.len(), 40, "expected a sha1 hex object id");
+
+        let log = StdCommand::new("git")
+            .args(["log", "--oneline", "-1"])
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+        let log_text = String::from_utf8_lossy(&log.stdout);
+        assert!(log_text.contains("initial commit"));
+
+        let show = StdCommand::new("git")
+            .args(["show", "HEAD:note.md"])
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+        assert_eq!(String::from_utf8_lossy(&show.stdout), "# Hello\n");
+    }
+
+    #[test]
+    fn commit_all_creates_second_commit_on_top_of_first() {
+        let dir = tempdir().unwrap();
+        init_repo(dir.path());
+        std::fs::write(dir.path().join("a.md"), b"a\n").unwrap();
+        commit_all(dir.path(), "first", "Test User", "test@example.com").unwrap();
+
+        std::fs::write(dir.path().join("b.md"), b"b\n").unwrap();
+        let second = commit_all(dir.path(), "second", "Test User", "test@example.com").unwrap();
+
+        let parent = StdCommand::new("git")
+            .args(["rev-parse", "HEAD^"])
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+        assert!(!String::from_utf8_lossy(&parent.stdout).trim().is_empty());
+
+        // Both files should be present in the resulting tree (full worktree snapshot).
+        let ls = StdCommand::new("git")
+            .args(["ls-tree", "-r", "--name-only", "HEAD"])
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+        let names = String::from_utf8_lossy(&ls.stdout);
+        assert!(names.contains("a.md"));
+        assert!(names.contains("b.md"));
+
+        let head = StdCommand::new("git")
+            .args(["rev-parse", "HEAD"])
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+        assert_eq!(String::from_utf8_lossy(&head.stdout).trim(), second);
+    }
+
+    #[test]
+    fn clone_repo_checks_out_working_tree_from_local_path() {
+        let src = tempdir().unwrap();
+        init_repo(src.path());
+        std::fs::write(src.path().join("readme.md"), b"hello\n").unwrap();
+        commit_all(src.path(), "seed", "Test User", "test@example.com").unwrap();
+
+        let dest_parent = tempdir().unwrap();
+        let dest = dest_parent.path().join("clone");
+
+        clone_repo(&src.path().to_string_lossy(), &dest, None).expect("clone should succeed");
+
+        let contents = std::fs::read_to_string(dest.join("readme.md")).unwrap();
+        assert_eq!(contents, "hello\n");
+        assert!(dest.join(".git").is_dir());
+    }
+
+    #[test]
+    fn push_then_pull_round_trip_via_local_bare_remote() {
+        let bare_parent = tempdir().unwrap();
+        let bare = bare_parent.path().join("remote.git");
+        init_bare(&bare);
+
+        // First clone: makes a commit and pushes it upstream.
+        let work_a_parent = tempdir().unwrap();
+        let work_a = work_a_parent.path().join("a");
+        clone_repo(&bare.to_string_lossy(), &work_a, None).expect("clone A should succeed");
+        std::fs::write(work_a.join("from_a.md"), b"from a\n").unwrap();
+        commit_all(&work_a, "commit from a", "A", "a@example.com").unwrap();
+        push(&work_a, "origin", "main", None).expect("push should succeed");
+
+        // Second clone: pulls what A pushed.
+        let work_b_parent = tempdir().unwrap();
+        let work_b = work_b_parent.path().join("b");
+        clone_repo(&bare.to_string_lossy(), &work_b, None).expect("clone B should succeed");
+        pull(&work_b, "origin", "main", None).expect("pull should succeed");
+
+        let contents = std::fs::read_to_string(work_b.join("from_a.md")).unwrap();
+        assert_eq!(contents, "from a\n");
+    }
+
+    #[test]
+    fn pull_surfaces_conflict_markers_without_destroying_them() {
+        let bare_parent = tempdir().unwrap();
+        let bare = bare_parent.path().join("remote.git");
+        init_bare(&bare);
+
+        // Seed the bare remote with an initial commit both clones will diverge from.
+        let seed_parent = tempdir().unwrap();
+        let seed = seed_parent.path().join("seed");
+        clone_repo(&bare.to_string_lossy(), &seed, None).unwrap();
+        std::fs::write(seed.join("shared.md"), b"base\n").unwrap();
+        commit_all(&seed, "seed", "Seed", "seed@example.com").unwrap();
+        push(&seed, "origin", "main", None).unwrap();
+
+        // Clone B *before* A pushes, so both start from the same "seed" ancestor and
+        // genuinely diverge rather than one being a fast-forward of the other.
+        let work_b_parent = tempdir().unwrap();
+        let work_b = work_b_parent.path().join("b");
+        clone_repo(&bare.to_string_lossy(), &work_b, None).unwrap();
+
+        // Clone A diverges and pushes upstream.
+        let work_a_parent = tempdir().unwrap();
+        let work_a = work_a_parent.path().join("a");
+        clone_repo(&bare.to_string_lossy(), &work_a, None).unwrap();
+        std::fs::write(work_a.join("shared.md"), b"from a\n").unwrap();
+        commit_all(&work_a, "a changes shared.md", "A", "a@example.com").unwrap();
+        push(&work_a, "origin", "main", None).unwrap();
+
+        // B, unaware of A's push, diverges independently from the same seed commit.
+        std::fs::write(work_b.join("shared.md"), b"from b\n").unwrap();
+        commit_all(&work_b, "b changes shared.md", "B", "b@example.com").unwrap();
+
+        let result = pull(&work_b, "origin", "main", None);
+        assert_eq!(result, Err(AppError::GitConflict));
+
+        let contents = std::fs::read_to_string(work_b.join("shared.md")).unwrap();
+        assert!(
+            contents.contains("<<<<<<<"),
+            "expected raw conflict markers to survive in the working tree, got: {contents}"
+        );
+        assert!(contents.contains("======="));
+        assert!(contents.contains(">>>>>>>"));
+        assert!(contents.contains("from a\n") || contents.contains("from b\n"));
+    }
+
+    #[test]
+    fn push_to_nonexistent_remote_is_a_network_error() {
+        let dir = tempdir().unwrap();
+        init_repo(dir.path());
+        std::fs::write(dir.path().join("a.md"), b"a\n").unwrap();
+        commit_all(dir.path(), "first", "Test User", "test@example.com").unwrap();
+        git(
+            dir.path(),
+            &["remote", "add", "origin", "/nonexistent/path/repo.git"],
+        );
+
+        let result = push(dir.path(), "origin", "main", None);
+        assert!(matches!(
+            result,
+            Err(AppError::NetworkError(_)) | Err(AppError::IoError(_))
+        ));
+    }
+
+    fn ls_tree_paths(dir: &Path) -> Vec<String> {
+        let ls = StdCommand::new("git")
+            .args(["ls-tree", "-r", "--name-only", "HEAD"])
+            .current_dir(dir)
+            .output()
+            .unwrap();
+        String::from_utf8_lossy(&ls.stdout)
+            .lines()
+            .map(|s| s.to_string())
+            .collect()
+    }
+
+    /// Regression test for the tree-editor deletion bug: `commit_all` used to seed the tree
+    /// editor from the parent commit's tree and only `upsert` worktree files, so a file
+    /// deleted from the worktree was never visited and survived into the new commit.
+    #[test]
+    fn commit_all_reflects_a_deleted_file() {
+        let dir = tempdir().unwrap();
+        init_repo(dir.path());
+        std::fs::write(dir.path().join("keep.md"), b"keep\n").unwrap();
+        std::fs::write(dir.path().join("gone.md"), b"gone\n").unwrap();
+        commit_all(dir.path(), "add both", "Test User", "test@example.com").unwrap();
+
+        std::fs::remove_file(dir.path().join("gone.md")).unwrap();
+        commit_all(
+            dir.path(),
+            "delete gone.md",
+            "Test User",
+            "test@example.com",
+        )
+        .unwrap();
+
+        let names = ls_tree_paths(dir.path());
+        assert!(names.contains(&"keep.md".to_string()));
+        assert!(
+            !names.iter().any(|n| n == "gone.md"),
+            "deleted file must not survive into the new commit's tree, got: {names:?}"
+        );
+    }
+
+    /// Regression test for the tree-editor rename bug: renaming used to leave the old path
+    /// present in the new commit's tree alongside the new one, since the old path was never
+    /// removed from the parent tree the editor started from.
+    #[test]
+    fn commit_all_reflects_a_renamed_file() {
+        let dir = tempdir().unwrap();
+        init_repo(dir.path());
+        std::fs::write(dir.path().join("old_name.md"), b"content\n").unwrap();
+        commit_all(
+            dir.path(),
+            "add old_name.md",
+            "Test User",
+            "test@example.com",
+        )
+        .unwrap();
+
+        std::fs::rename(
+            dir.path().join("old_name.md"),
+            dir.path().join("new_name.md"),
+        )
+        .unwrap();
+        commit_all(
+            dir.path(),
+            "rename old_name.md to new_name.md",
+            "Test User",
+            "test@example.com",
+        )
+        .unwrap();
+
+        let names = ls_tree_paths(dir.path());
+        assert!(names.contains(&"new_name.md".to_string()));
+        assert!(
+            !names.iter().any(|n| n == "old_name.md"),
+            "old path must not survive a rename, got: {names:?}"
+        );
+    }
+
+    /// Same deletion bug, but for a file nested inside a subdirectory, to make sure the fix
+    /// isn't just correct for top-level paths.
+    #[test]
+    fn commit_all_reflects_a_deleted_file_in_a_subdirectory() {
+        let dir = tempdir().unwrap();
+        init_repo(dir.path());
+        std::fs::create_dir_all(dir.path().join("notes/sub")).unwrap();
+        std::fs::write(dir.path().join("notes/sub/keep.md"), b"keep\n").unwrap();
+        std::fs::write(dir.path().join("notes/sub/gone.md"), b"gone\n").unwrap();
+        commit_all(
+            dir.path(),
+            "add nested files",
+            "Test User",
+            "test@example.com",
+        )
+        .unwrap();
+
+        std::fs::remove_file(dir.path().join("notes/sub/gone.md")).unwrap();
+        commit_all(
+            dir.path(),
+            "delete nested gone.md",
+            "Test User",
+            "test@example.com",
+        )
+        .unwrap();
+
+        let names = ls_tree_paths(dir.path());
+        assert!(names.contains(&"notes/sub/keep.md".to_string()));
+        assert!(
+            !names.iter().any(|n| n == "notes/sub/gone.md"),
+            "deleted nested file must not survive into the new commit's tree, got: {names:?}"
+        );
+    }
+
+    /// Regression test for the credential-leak bug: `GitCredentials`'s derived `Debug` used
+    /// to print the raw token in cleartext (e.g. in a panic message or `{:?}` log line).
+    #[test]
+    fn git_credentials_debug_output_redacts_the_token() {
+        let creds = GitCredentials {
+            username: "x-access-token".to_string(),
+            token: Zeroizing::new("super-secret-token-value".to_string()),
+        };
+
+        let debug_output = format!("{creds:?}");
+
+        assert!(
+            !debug_output.contains("super-secret-token-value"),
+            "Debug output must not contain the raw token, got: {debug_output}"
+        );
+        assert!(debug_output.contains("username"));
+        assert!(debug_output.contains("x-access-token"));
+    }
+
+    /// `commit_all` must honor `.gitignore`, matching real `git add -A`'s own behavior
+    /// (skipping gitignored paths unless `-f` is given): a top-level ignored file must not
+    /// be committed, a directory-level ignore pattern must prune everything underneath it
+    /// (not just a literal name match), the same must hold for a file nested inside a
+    /// tracked subdirectory, and — since `.gitignore` itself is an ordinary tracked file
+    /// unless something ignores it too — it must still be committed.
+    #[test]
+    fn commit_all_honors_gitignore() {
+        let dir = tempdir().unwrap();
+        init_repo(dir.path());
+        std::fs::write(dir.path().join(".gitignore"), b"ignored.md\nbuild/\n").unwrap();
+        std::fs::write(dir.path().join("ignored.md"), b"should not be committed\n").unwrap();
+        std::fs::write(dir.path().join("tracked.md"), b"should be committed\n").unwrap();
+        std::fs::create_dir_all(dir.path().join("build")).unwrap();
+        std::fs::write(
+            dir.path().join("build/output.md"),
+            b"excluded via a directory-level rule\n",
+        )
+        .unwrap();
+        std::fs::create_dir_all(dir.path().join("notes/sub")).unwrap();
+        std::fs::write(
+            dir.path().join("notes/sub/ignored.md"),
+            b"nested ignored file\n",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.path().join("notes/sub/tracked.md"),
+            b"nested tracked file\n",
+        )
+        .unwrap();
+
+        commit_all(
+            dir.path(),
+            "respect gitignore",
+            "Test User",
+            "test@example.com",
+        )
+        .unwrap();
+
+        let names = ls_tree_paths(dir.path());
+        assert!(
+            names.contains(&".gitignore".to_string()),
+            "the .gitignore file itself must be committed, got: {names:?}"
+        );
+        assert!(names.contains(&"tracked.md".to_string()));
+        assert!(names.contains(&"notes/sub/tracked.md".to_string()));
+        assert!(
+            !names.iter().any(|n| n == "ignored.md"),
+            "a gitignored top-level file must not be committed, got: {names:?}"
+        );
+        assert!(
+            !names.iter().any(|n| n.starts_with("build/")),
+            "a gitignored directory's contents must not be committed, got: {names:?}"
+        );
+        assert!(
+            !names.iter().any(|n| n == "notes/sub/ignored.md"),
+            "a gitignored file nested in a subdirectory must not be committed, got: {names:?}"
+        );
+    }
+
+    /// Regression test for the locale-sensitive stderr classification bug, plus every other
+    /// fixed env var `git_command` MUST set on every invocation: `classify_git_cli_failure`
+    /// substring-matches English `git` diagnostics, which only appear when the child inherits
+    /// a C locale; `GIT_TERMINAL_PROMPT=0` closes off pty-based credential-helper prompts that
+    /// nulled stdin alone doesn't stop; `GIT_CONFIG_GLOBAL`/`GIT_CONFIG_SYSTEM` pointed at
+    /// `/dev/null` stop a host's `~/.gitconfig`/`/etc/gitconfig` from overriding anything
+    /// (including the identity below); and the fixed author/committer identity is what lets
+    /// `git merge` create an auto-merge commit on a machine with no git identity configured at
+    /// all. `git_command` is the single builder every CLI invocation in this module goes
+    /// through, so asserting all of this here covers every call site.
+    #[test]
+    fn git_command_pins_locale_prompt_config_isolation_and_identity() {
+        let dir = tempdir().unwrap();
+        let cmd = git_command(dir.path());
+        let envs: std::collections::HashMap<_, _> = cmd.get_envs().collect();
+        let os = std::ffi::OsStr::new;
+        assert_eq!(
+            envs.get(os("LC_ALL")),
+            Some(&Some(os("C"))),
+            "git_command must pin LC_ALL=C so classify_git_cli_failure's English substring \
+             matching stays correct regardless of the host process's own locale"
+        );
+        assert_eq!(
+            envs.get(os("GIT_TERMINAL_PROMPT")),
+            Some(&Some(os("0"))),
+            "git_command must set GIT_TERMINAL_PROMPT=0 as belt-and-suspenders prompt \
+             suppression alongside the already-nulled stdin"
+        );
+        assert_eq!(
+            envs.get(os("GIT_CONFIG_GLOBAL")),
+            Some(&Some(os("/dev/null"))),
+            "git_command must isolate the child from the host's global git config"
+        );
+        assert_eq!(
+            envs.get(os("GIT_CONFIG_SYSTEM")),
+            Some(&Some(os("/dev/null"))),
+            "git_command must isolate the child from the host's system git config"
+        );
+        assert_eq!(
+            envs.get(os("GIT_AUTHOR_NAME")),
+            Some(&Some(os(CLI_IDENTITY_NAME)))
+        );
+        assert_eq!(
+            envs.get(os("GIT_AUTHOR_EMAIL")),
+            Some(&Some(os(CLI_IDENTITY_EMAIL)))
+        );
+        assert_eq!(
+            envs.get(os("GIT_COMMITTER_NAME")),
+            Some(&Some(os(CLI_IDENTITY_NAME)))
+        );
+        assert_eq!(
+            envs.get(os("GIT_COMMITTER_EMAIL")),
+            Some(&Some(os(CLI_IDENTITY_EMAIL)))
+        );
+    }
+
+    /// Regression test for the "Committer identity unknown" bug: `pull`'s `git merge --no-edit`
+    /// creates a real merge commit whenever both sides have diverged and merge cleanly (not a
+    /// fast-forward), and `git merge` needs *some* author/committer identity to do that. Before
+    /// `git_command` injected `GIT_AUTHOR_*`/`GIT_COMMITTER_*`, this only worked by accident on
+    /// a machine with a global `user.name`/`user.email` already configured (as most developer
+    /// machines — including the one this fix was written on — happen to have); a genuinely
+    /// fresh machine (or CI) with no git identity configured anywhere would fail here.
+    ///
+    /// This repo's `.git` directory has no `user.name`/`user.email` set (neither `init_repo`
+    /// nor `test_support::git` — used here only for `init_bare` — ever configures one), and
+    /// `git_command` itself now points `GIT_CONFIG_GLOBAL`/`GIT_CONFIG_SYSTEM` at `/dev/null`
+    /// for every invocation it builds, so this test is not relying on (or vulnerable to) the
+    /// host machine's own global git config either way — it would pass or fail identically on
+    /// a machine with no global identity at all.
+    #[test]
+    fn pull_auto_merges_with_no_git_identity_configured_anywhere() {
+        let bare_parent = tempdir().unwrap();
+        let bare = bare_parent.path().join("remote.git");
+        init_bare(&bare);
+
+        // Seed a common ancestor both clones diverge from.
+        let seed_parent = tempdir().unwrap();
+        let seed = seed_parent.path().join("seed");
+        clone_repo(&bare.to_string_lossy(), &seed, None).unwrap();
+        std::fs::write(seed.join("shared.md"), b"base\n").unwrap();
+        commit_all(&seed, "seed", "Seed", "seed@example.com").unwrap();
+        push(&seed, "origin", "main", None).unwrap();
+
+        // Clone B *before* A pushes, so both diverge from the same ancestor rather than one
+        // being a fast-forward of the other (a fast-forward merge creates no merge commit and
+        // so would never exercise the identity bug this test guards against).
+        let work_b_parent = tempdir().unwrap();
+        let work_b = work_b_parent.path().join("b");
+        clone_repo(&bare.to_string_lossy(), &work_b, None).unwrap();
+
+        // Clone A diverges with a *different* file, so the eventual merge is non-conflicting.
+        let work_a_parent = tempdir().unwrap();
+        let work_a = work_a_parent.path().join("a");
+        clone_repo(&bare.to_string_lossy(), &work_a, None).unwrap();
+        std::fs::write(work_a.join("from_a.md"), b"from a\n").unwrap();
+        commit_all(&work_a, "a adds a new file", "A", "a@example.com").unwrap();
+        push(&work_a, "origin", "main", None).unwrap();
+
+        // B, unaware of A's push, diverges independently with an unrelated new file.
+        std::fs::write(work_b.join("from_b.md"), b"from b\n").unwrap();
+        commit_all(&work_b, "b adds a different new file", "B", "b@example.com").unwrap();
+
+        pull(&work_b, "origin", "main", None)
+            .expect("pull's auto-merge must succeed even with no git identity configured anywhere");
+
+        // Both files should be present in the merged tree.
+        let names = ls_tree_paths(&work_b);
+        assert!(names.contains(&"from_a.md".to_string()));
+        assert!(names.contains(&"from_b.md".to_string()));
+    }
+
+    /// Serializes the handful of tests below that mutate process-global `GIT_CONFIG_*`
+    /// environment variables, since `cargo test`'s default parallel runner would otherwise let
+    /// two such tests race on the same process environment.
+    static GIT_CONFIG_ENV_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    /// Regression test for the `GIT_CONFIG_COUNT` clobbering bug: `apply_credentials` used to
+    /// unconditionally write `GIT_CONFIG_COUNT=1`/`GIT_CONFIG_KEY_0`/`GIT_CONFIG_VALUE_0`,
+    /// discarding (or mis-indexing) any config-injection entries this process's own environment
+    /// already carried. It must instead append after whatever is already there.
+    #[test]
+    fn apply_credentials_appends_after_an_existing_injected_config_entry() {
+        let _guard = GIT_CONFIG_ENV_MUTEX.lock().unwrap();
+        // SAFETY: serialized against every other test in this file that touches process env via
+        // `GIT_CONFIG_ENV_MUTEX`, and no other thread in this test binary sets these particular
+        // vars, so this is not racing a concurrent read/write of the same keys.
+        unsafe {
+            std::env::set_var("GIT_CONFIG_COUNT", "1");
+            std::env::set_var("GIT_CONFIG_KEY_0", "some.preexisting");
+            std::env::set_var("GIT_CONFIG_VALUE_0", "preexisting-value");
+        }
+
+        let mut cmd = Command::new("git");
+        let credentials = GitCredentials {
+            username: "x-access-token".to_string(),
+            token: Zeroizing::new("tok".to_string()),
+        };
+        apply_credentials(&mut cmd, Some(&credentials));
+
+        // SAFETY: see the comment on the `set_var` calls above; same guard, same scope.
+        unsafe {
+            std::env::remove_var("GIT_CONFIG_COUNT");
+            std::env::remove_var("GIT_CONFIG_KEY_0");
+            std::env::remove_var("GIT_CONFIG_VALUE_0");
+        }
+
+        let envs: std::collections::HashMap<_, _> = cmd.get_envs().collect();
+        assert_eq!(
+            envs.get(std::ffi::OsStr::new("GIT_CONFIG_COUNT")),
+            Some(&Some(std::ffi::OsStr::new("2"))),
+            "count must grow to existing (1) + our own entry (1) = 2"
+        );
+        assert_eq!(
+            envs.get(std::ffi::OsStr::new("GIT_CONFIG_KEY_1")),
+            Some(&Some(std::ffi::OsStr::new("http.extraheader"))),
+            "our entry must land at the next free index (1), not clobber index 0"
+        );
+        assert!(
+            envs.contains_key(std::ffi::OsStr::new("GIT_CONFIG_VALUE_1")),
+            "our entry's value must be set at the matching index"
+        );
+        // The pre-existing entry at index 0 must be left completely untouched by
+        // `apply_credentials` (it never even sees it — it's inherited, not on the `Command`).
+        assert!(
+            !envs.contains_key(std::ffi::OsStr::new("GIT_CONFIG_KEY_0")),
+            "apply_credentials must not overwrite the pre-existing index-0 entry"
+        );
+    }
+
+    /// With no `GIT_CONFIG_COUNT` set in the process environment at all, `apply_credentials`
+    /// must fall back to starting at index 0 (the pre-fix behavior), not error or skip.
+    #[test]
+    fn apply_credentials_starts_at_index_zero_with_no_preexisting_config() {
+        let _guard = GIT_CONFIG_ENV_MUTEX.lock().unwrap();
+        // SAFETY: serialized via `GIT_CONFIG_ENV_MUTEX`; ensures a clean slate regardless of
+        // what an earlier test in this process left behind.
+        unsafe {
+            std::env::remove_var("GIT_CONFIG_COUNT");
+        }
+
+        let mut cmd = Command::new("git");
+        let credentials = GitCredentials {
+            username: "x-access-token".to_string(),
+            token: Zeroizing::new("tok".to_string()),
+        };
+        apply_credentials(&mut cmd, Some(&credentials));
+
+        let envs: std::collections::HashMap<_, _> = cmd.get_envs().collect();
+        assert_eq!(
+            envs.get(std::ffi::OsStr::new("GIT_CONFIG_COUNT")),
+            Some(&Some(std::ffi::OsStr::new("1")))
+        );
+        assert_eq!(
+            envs.get(std::ffi::OsStr::new("GIT_CONFIG_KEY_0")),
+            Some(&Some(std::ffi::OsStr::new("http.extraheader")))
+        );
+    }
+}

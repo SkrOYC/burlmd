@@ -21,7 +21,8 @@ The repository follows the default `flutter_rust_bridge` template structure to m
 │   ├── src/
 │   │   ├── components/      # Reusable UI blocks
 │   │   ├── providers/       # Riverpod state definitions
-│   │   └── rust/            # Auto-generated FRB Dart bindings
+│   │   ├── rust/            # Auto-generated FRB Dart bindings
+│   │   └── screens/         # Full-screen routes (e.g. login.dart)
 ├── test/                    # Dart widget tests
 ├── rust/                    # Rust Core Engine source code
 │   ├── Cargo.toml
@@ -34,7 +35,9 @@ The repository follows the default `flutter_rust_bridge` template structure to m
 │   │   ├── error.rs         # Shared AppError, so db/security don't depend on api
 │   │   ├── git/             # gix integration
 │   │   ├── markdown/        # AST parsing logic
-│   │   └── security/        # OS Keychain root-key integration
+│   │   ├── security/        # OS Keychain root-key integration
+│   │   ├── sync/            # Debounced background sync scheduler
+│   │   └── test_support.rs  # #[cfg(test)]-only fixtures shared across unit test modules
 ├── pubspec.yaml             # Dart dependencies
 └── flutter_rust_bridge.yaml # FRB configuration
 ```
