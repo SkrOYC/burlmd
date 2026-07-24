@@ -6,3 +6,4 @@ mod frb_generated;
 pub mod git;
 pub mod markdown;
 pub mod security;
+pub mod sync;
