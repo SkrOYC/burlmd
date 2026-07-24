@@ -7,7 +7,7 @@ import '../error.dart';
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `authenticate_workspace_impl`, `begin_oauth_flow_impl`, `build_authorize_url`, `current_unix_time`, `default_github_endpoints`, `exchange_code_for_token`, `fetch_github_login`, `generate_pkce`, `github_client_id`, `github_client_secret`, `new_keyring_entry`, `random_url_safe_token`, `real_endpoints`, `s256_code_challenge`, `set_or_delete`, `store_tokens_in_keyring`
+// These functions are ignored because they are not marked as `pub`: `authenticate_workspace_impl`, `begin_oauth_flow_impl`, `build_authorize_url`, `current_unix_time`, `default_github_endpoints`, `ensure_supported_provider`, `exchange_code_for_token`, `fetch_github_account_id`, `generate_pkce`, `github_client_id`, `github_client_secret`, `new_keyring_entry`, `random_url_safe_token`, `real_endpoints`, `s256_code_challenge`, `set_or_delete`, `store_tokens_in_keyring`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `GitHubOAuthEndpoints`, `OAuthTokens`, `PkceChallenge`, `RawGitHubUser`, `RawTokenError`, `RawTokenResponse`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `fmt`
 

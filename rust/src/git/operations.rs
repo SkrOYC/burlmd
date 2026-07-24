@@ -360,11 +360,47 @@ fn collect_files(
     Ok(())
 }
 
+/// Deterministic author/committer identity injected into every `git` CLI invocation's
+/// environment by [`git_command`] (`GIT_AUTHOR_NAME`/`GIT_AUTHOR_EMAIL` +
+/// `GIT_COMMITTER_NAME`/`GIT_COMMITTER_EMAIL`).
+///
+/// `pull`'s `git merge --no-edit` creates a real merge commit whenever the fetched history
+/// and the local history have both diverged and merge cleanly (i.e. neither side is a
+/// fast-forward of the other) — see `reindex_failure_on_a_clean_auto_merge_is_not_masked` in
+/// `sync::scheduler` for exactly that shape. Unlike `commit_all`, `git merge` is `git`'s own
+/// CLI machinery, not our tree-editor code, so it has no caller-supplied name/email to draw
+/// on; it falls back to reading `user.name`/`user.email` out of git config, which is
+/// unconfigured on a fresh production machine (nothing in this app's install/setup path ever
+/// runs `git config --global user.name`). Without an identity, that `git merge` invocation
+/// fails outright with "fatal: unable to auto-detect email address" /
+/// "Committer identity unknown", which `flow-sync-push.md`'s pull-then-merge step depends on
+/// succeeding. Setting these four env vars gives every CLI-driven `git` invocation in this
+/// module a deterministic identity that never depends on host git config, matching in shape
+/// (a plain name/email pair) how `commit_all` builds its own `gix::actor::Signature` from an
+/// explicit name/email a few lines above — the difference is that `commit_all`'s identity is
+/// always supplied by its caller (there is no fixed default to literally copy), while a
+/// `git merge` auto-merge commit has no caller-facing "author" of its own at all, so it is
+/// attributed to the app itself rather than to whichever user happened to trigger the sync.
+/// Applying the same env vars to `fetch`/`push` too is harmless (they never read identity) and
+/// keeps every call in this module going through one consistently-configured builder.
+const CLI_IDENTITY_NAME: &str = "BurlMD";
+const CLI_IDENTITY_EMAIL: &str = "sync@burlmd.app";
+
 /// Builds a `git` CLI [`Command`] rooted at `workdir` with the settings every `git` CLI
 /// invocation in this module needs, and MUST be the single entry point every such invocation
 /// goes through: no stdin (so a `git` that would otherwise prompt interactively fails fast
-/// instead of hanging), stdout/stderr piped for capture, and — critically — `LC_ALL=C` pinned
-/// in the child's environment.
+/// instead of hanging), stdout/stderr piped for capture, `LC_ALL=C` pinned in the child's
+/// environment, `GIT_TERMINAL_PROMPT=0` to kill any remaining interactive-prompt path (stdin
+/// being `/dev/null` already stops most of these; some `git` builds' credential-helper prompts
+/// go through a pty instead of stdin, which `GIT_TERMINAL_PROMPT=0` closes off too), a fixed
+/// author/committer identity (see [`CLI_IDENTITY_NAME`]/[`CLI_IDENTITY_EMAIL`] above), and
+/// `GIT_CONFIG_GLOBAL`/`GIT_CONFIG_SYSTEM` pointed at `/dev/null` so none of this — the
+/// identity included — can be silently overridden by whatever `~/.gitconfig` or `/etc/gitconfig`
+/// happens to exist on the machine this runs on. That last point is also what makes this
+/// module's own test suite deterministic: without it, a developer or CI machine that *does*
+/// have a global git identity configured (as most developer machines do) would mask the exact
+/// "no identity configured" failure this module needs to handle, the way it did until this was
+/// added — see `pull_auto_merges_with_no_git_identity_configured_anywhere` below.
 ///
 /// `LC_ALL=C` is not optional politeness: `classify_git_cli_failure` below classifies outcomes
 /// by substring-matching *English* fragments of `git`'s own stderr (`"non-fast-forward"`,
@@ -381,6 +417,13 @@ fn git_command(workdir: &Path) -> Command {
     let mut cmd = Command::new("git");
     cmd.current_dir(workdir)
         .env("LC_ALL", "C")
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .env("GIT_CONFIG_GLOBAL", "/dev/null")
+        .env("GIT_CONFIG_SYSTEM", "/dev/null")
+        .env("GIT_AUTHOR_NAME", CLI_IDENTITY_NAME)
+        .env("GIT_AUTHOR_EMAIL", CLI_IDENTITY_EMAIL)
+        .env("GIT_COMMITTER_NAME", CLI_IDENTITY_NAME)
+        .env("GIT_COMMITTER_EMAIL", CLI_IDENTITY_EMAIL)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
@@ -863,22 +906,116 @@ mod tests {
         );
     }
 
-    /// Regression test for the locale-sensitive stderr classification bug:
-    /// `classify_git_cli_failure` substring-matches English `git` diagnostics, which only
-    /// appear when the child inherits a C locale. `git_command` is the single builder every
-    /// CLI invocation in this module goes through, so asserting it pins `LC_ALL=C` here covers
-    /// every call site.
+    /// Regression test for the locale-sensitive stderr classification bug, plus every other
+    /// fixed env var `git_command` MUST set on every invocation: `classify_git_cli_failure`
+    /// substring-matches English `git` diagnostics, which only appear when the child inherits
+    /// a C locale; `GIT_TERMINAL_PROMPT=0` closes off pty-based credential-helper prompts that
+    /// nulled stdin alone doesn't stop; `GIT_CONFIG_GLOBAL`/`GIT_CONFIG_SYSTEM` pointed at
+    /// `/dev/null` stop a host's `~/.gitconfig`/`/etc/gitconfig` from overriding anything
+    /// (including the identity below); and the fixed author/committer identity is what lets
+    /// `git merge` create an auto-merge commit on a machine with no git identity configured at
+    /// all. `git_command` is the single builder every CLI invocation in this module goes
+    /// through, so asserting all of this here covers every call site.
     #[test]
-    fn git_command_pins_lc_all_to_c() {
+    fn git_command_pins_locale_prompt_config_isolation_and_identity() {
         let dir = tempdir().unwrap();
         let cmd = git_command(dir.path());
         let envs: std::collections::HashMap<_, _> = cmd.get_envs().collect();
+        let os = std::ffi::OsStr::new;
         assert_eq!(
-            envs.get(std::ffi::OsStr::new("LC_ALL")),
-            Some(&Some(std::ffi::OsStr::new("C"))),
+            envs.get(os("LC_ALL")),
+            Some(&Some(os("C"))),
             "git_command must pin LC_ALL=C so classify_git_cli_failure's English substring \
              matching stays correct regardless of the host process's own locale"
         );
+        assert_eq!(
+            envs.get(os("GIT_TERMINAL_PROMPT")),
+            Some(&Some(os("0"))),
+            "git_command must set GIT_TERMINAL_PROMPT=0 as belt-and-suspenders prompt \
+             suppression alongside the already-nulled stdin"
+        );
+        assert_eq!(
+            envs.get(os("GIT_CONFIG_GLOBAL")),
+            Some(&Some(os("/dev/null"))),
+            "git_command must isolate the child from the host's global git config"
+        );
+        assert_eq!(
+            envs.get(os("GIT_CONFIG_SYSTEM")),
+            Some(&Some(os("/dev/null"))),
+            "git_command must isolate the child from the host's system git config"
+        );
+        assert_eq!(
+            envs.get(os("GIT_AUTHOR_NAME")),
+            Some(&Some(os(CLI_IDENTITY_NAME)))
+        );
+        assert_eq!(
+            envs.get(os("GIT_AUTHOR_EMAIL")),
+            Some(&Some(os(CLI_IDENTITY_EMAIL)))
+        );
+        assert_eq!(
+            envs.get(os("GIT_COMMITTER_NAME")),
+            Some(&Some(os(CLI_IDENTITY_NAME)))
+        );
+        assert_eq!(
+            envs.get(os("GIT_COMMITTER_EMAIL")),
+            Some(&Some(os(CLI_IDENTITY_EMAIL)))
+        );
+    }
+
+    /// Regression test for the "Committer identity unknown" bug: `pull`'s `git merge --no-edit`
+    /// creates a real merge commit whenever both sides have diverged and merge cleanly (not a
+    /// fast-forward), and `git merge` needs *some* author/committer identity to do that. Before
+    /// `git_command` injected `GIT_AUTHOR_*`/`GIT_COMMITTER_*`, this only worked by accident on
+    /// a machine with a global `user.name`/`user.email` already configured (as most developer
+    /// machines — including the one this fix was written on — happen to have); a genuinely
+    /// fresh machine (or CI) with no git identity configured anywhere would fail here.
+    ///
+    /// This repo's `.git` directory has no `user.name`/`user.email` set (neither `init_repo`
+    /// nor `test_support::git` — used here only for `init_bare` — ever configures one), and
+    /// `git_command` itself now points `GIT_CONFIG_GLOBAL`/`GIT_CONFIG_SYSTEM` at `/dev/null`
+    /// for every invocation it builds, so this test is not relying on (or vulnerable to) the
+    /// host machine's own global git config either way — it would pass or fail identically on
+    /// a machine with no global identity at all.
+    #[test]
+    fn pull_auto_merges_with_no_git_identity_configured_anywhere() {
+        let bare_parent = tempdir().unwrap();
+        let bare = bare_parent.path().join("remote.git");
+        init_bare(&bare);
+
+        // Seed a common ancestor both clones diverge from.
+        let seed_parent = tempdir().unwrap();
+        let seed = seed_parent.path().join("seed");
+        clone_repo(&bare.to_string_lossy(), &seed, None).unwrap();
+        std::fs::write(seed.join("shared.md"), b"base\n").unwrap();
+        commit_all(&seed, "seed", "Seed", "seed@example.com").unwrap();
+        push(&seed, "origin", "main", None).unwrap();
+
+        // Clone B *before* A pushes, so both diverge from the same ancestor rather than one
+        // being a fast-forward of the other (a fast-forward merge creates no merge commit and
+        // so would never exercise the identity bug this test guards against).
+        let work_b_parent = tempdir().unwrap();
+        let work_b = work_b_parent.path().join("b");
+        clone_repo(&bare.to_string_lossy(), &work_b, None).unwrap();
+
+        // Clone A diverges with a *different* file, so the eventual merge is non-conflicting.
+        let work_a_parent = tempdir().unwrap();
+        let work_a = work_a_parent.path().join("a");
+        clone_repo(&bare.to_string_lossy(), &work_a, None).unwrap();
+        std::fs::write(work_a.join("from_a.md"), b"from a\n").unwrap();
+        commit_all(&work_a, "a adds a new file", "A", "a@example.com").unwrap();
+        push(&work_a, "origin", "main", None).unwrap();
+
+        // B, unaware of A's push, diverges independently with an unrelated new file.
+        std::fs::write(work_b.join("from_b.md"), b"from b\n").unwrap();
+        commit_all(&work_b, "b adds a different new file", "B", "b@example.com").unwrap();
+
+        pull(&work_b, "origin", "main", None)
+            .expect("pull's auto-merge must succeed even with no git identity configured anywhere");
+
+        // Both files should be present in the merged tree.
+        let names = ls_tree_paths(&work_b);
+        assert!(names.contains(&"from_a.md".to_string()));
+        assert!(names.contains(&"from_b.md".to_string()));
     }
 
     /// Serializes the handful of tests below that mutate process-global `GIT_CONFIG_*`
