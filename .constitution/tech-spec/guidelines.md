@@ -34,9 +34,17 @@ The repository follows the default `flutter_rust_bridge` template structure to m
 │   │   │                      the open-note cache, block_path-addressed edits
 │   │   ├── error.rs         # Shared AppError, so db/security don't depend on api
 │   │   ├── git/             # gix integration
-│   │   ├── markdown/        # AST parsing logic
+│   │   ├── index/           # Bundle -> SQLite indexer: notes, notes_fts,
+│   │   │                      fts_mapping, links, directories; full and
+│   │   │                      incremental. Owns reindex_workspace.
+│   │   ├── markdown/        # AST parsing logic; owns the span map (ADR-007)
+│   │   ├── okf/             # OKF v0.2 bundle domain: frontmatter read/validate,
+│   │   │                      concept-id <-> path, link target resolution,
+│   │   │                      reserved-filename rules
 │   │   ├── security/        # OS Keychain root-key integration
 │   │   ├── sync/            # Debounced background sync scheduler
+│   │   ├── workspace/       # Workspace lifecycle: init/open, note & directory
+│   │   │                      CRUD, atomic write, the ADR-008 tiers
 │   │   └── test_support.rs  # #[cfg(test)]-only fixtures shared across unit test modules
 ├── pubspec.yaml             # Dart dependencies
 └── flutter_rust_bridge.yaml # FRB configuration
@@ -57,15 +65,28 @@ All commands below assume the `devenv` shell (`devenv shell`, or automatic via
    - Must pass `cargo clippy -- -D warnings`.
    - Must be formatted with `cargo fmt`.
    - Avoid async/await unless absolutely necessary (e.g., long-running sync operations on a dedicated thread). Local index queries remain synchronous for maximum performance, except where `tech-spec/contracts/ffi_api.rs` itself declares a function `async` (e.g. `search_notes`) — the contract's FFI-boundary signature takes precedence over this preference; the function's own body should still execute synchronously to completion rather than actually yielding to an executor.
+   - Source spans are Core-side state, keyed by `block_path`, and must never be added as fields on `AstNode` or otherwise cross the FFI boundary (ADR-007 decision 3). The UI cannot use byte offsets into a file it does not own, and carrying them would inflate every edit round trip against the 16ms budget — `architecture/risks.md` risk 1.
+   - No code path may rewrite bytes outside the span of an edited Block. This is the Edit Fidelity constraint in `prd/constraints.md` and it is the reason no AST-to-Markdown serializer exists for the save path; adding one for that path reintroduces exactly the failure the constraint forbids.
 2. **Dart:**
    - Must pass `dart analyze`.
    - Must be formatted with `dart format`.
-   - UI widgets must be completely stateless regarding note content. All active note state is pulled from Riverpod providers connected to the FRB.
+   - UI widgets must be completely stateless regarding note content. All active note state is pulled from Riverpod providers connected to the FRB. Ephemeral selection coordinates (`block_path` plus character offset) are UI state, not note content, and are exempt — this is what allows cross-Block selection under ADR-006 without amending `architecture/containers.md`.
+   - The rendered and raw presentations of a Block must be typographically identical. Only the text differs (`**bold**` versus bold); font, size, weight, line height, and padding must not, or the Block visibly jumps when it takes focus.
 3. **Nix:**
    - Every `*.nix` file must be formatted with `nixfmt` (RFC style). Today that is only `devenv.nix`.
 4. **Testing:**
    - Rust: Unit tests for AST parsing, SQLite migrations, and Git merge logic.
-   - Dart: Widget tests for the hybrid editor rendering (verifying AST nodes render correctly).
+   - Dart: Widget tests for editor rendering (verifying AST nodes render correctly).
+   - **Round-trip property tests are mandatory for the splice path.** For any Note and any Block, splicing that Block's own unmodified source back over its span must produce a byte-identical file. This is the executable form of the Edit Fidelity constraint and is cheap to state as a property over a corpus of fixture Notes, including ones with frontmatter keys the application does not manage.
+   - **Every ticket touching UI must launch the real application in its Verification Command.** Not `flutter test` alone. The gap this closes is documented under "Running the real app" below: through Epic B, no ticket's gate ever started the app, and a real regression shipped that six passing widget tests could not see.
+
+## Workspace location
+
+The default local Workspace (ADR-005 decision 1) resolves to `$XDG_DATA_HOME/burlmd/workspace`, falling back to `~/.local/share/burlmd/workspace` when `XDG_DATA_HOME` is unset, and to `~/Library/Application Support/burlmd/workspace` on macOS.
+
+This is deliberately *not* a visible directory in the user's home. The bundle is a Git repository the application manages, and CAP-WS-05 already provides the path for pointing burlmd at a Workspace the user placed wherever they prefer. Moving this default later is a user-visible migration, so it is recorded here rather than left to the implementation.
+
+The encrypted index does not live inside the bundle. It is derived state (`data-models/schema.sql`), and placing it in the bundle would put an encrypted binary blob inside a Git repository whose entire premise is human-readable plaintext, producing a large opaque diff on every write. It belongs alongside the Workspace, not within it.
 
 The *mechanical* rules above — `cargo fmt`, `cargo clippy`, `dart format`,
 `dart analyze`, `nixfmt` — are enforced as pre-commit hooks installed on entry

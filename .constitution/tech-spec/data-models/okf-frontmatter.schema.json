@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://burlmd.local/schemas/okf-frontmatter.schema.json",
+  "title": "OKF v0.2 Note Frontmatter",
+  "description": "Validation contract for the YAML frontmatter block of a Note in a burlmd Workspace, expressed against the YAML block's decoded mapping. Conformance to Open Knowledge Format v0.2 requires only that the block parse and that `type` be present and non-empty (SPEC.md section 11). Every other property here is either recommended by the specification or tolerated by it; unknown properties MUST be accepted and, per ADR-007, are preserved byte-for-byte on disk rather than round-tripped through this model.",
+
+  "type": "object",
+  "required": ["type"],
+  "additionalProperties": true,
+
+  "properties": {
+    "type": {
+      "description": "REQUIRED by OKF section 11.2. A short string identifying the kind of concept. There is no central registry; consumers MUST tolerate unknown types. burlmd writes the constant 'Note' unless a richer type vocabulary is introduced as a product capability.",
+      "type": "string",
+      "minLength": 1,
+      "default": "Note"
+    },
+    "title": {
+      "description": "RECOMMENDED by OKF section 4.1, not required. Consumers MAY derive a title from the filename when absent. burlmd always writes it, so that a Note's display title is decoupled from its filename and therefore from its identity (ADR-004 decision 3).",
+      "type": "string",
+      "minLength": 1
+    },
+    "description": {
+      "description": "RECOMMENDED by OKF. A single sentence summarizing the concept. burlmd neither writes nor requires this, but preserves it when present.",
+      "type": "string"
+    },
+    "resource": {
+      "description": "RECOMMENDED by OKF. A URI uniquely identifying the underlying asset. Not meaningful for a personal Note, where the Note is itself the asset; preserved when present.",
+      "type": "string",
+      "format": "uri"
+    },
+    "tags": {
+      "description": "RECOMMENDED by OKF. Short strings for cross-cutting categorization. Preserved when present; not yet surfaced as a product capability.",
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "timestamp": {
+      "description": "OPTIONAL. An ISO 8601 datetime. burlmd does not write this: the authoritative modification time is the Git history, and writing a timestamp into the file body on every save would violate the Edit Fidelity constraint by producing a diff on every write.",
+      "type": "string",
+      "format": "date-time"
+    },
+    "status": {
+      "description": "OPTIONAL lifecycle field (OKF section 5.4). Absent is equivalent to 'stable'. Preserved when present; surfacing it is deferred product scope.",
+      "type": "string",
+      "enum": ["draft", "stable", "deprecated"]
+    },
+    "stale_after": {
+      "description": "OPTIONAL lifecycle field (OKF section 5.5). An absolute date after which the concept should be treated as potentially outdated.",
+      "type": "string",
+      "format": "date"
+    },
+    "generated": {
+      "description": "OPTIONAL trust field (OKF section 5.2). Records how the content was produced. Actor identifiers follow OKF section 7: '<producer>/<version>' for tools and agents, 'human:<id>' for people, 'process:<id>' for processes.",
+      "type": "object",
+      "required": ["by"],
+      "additionalProperties": true,
+      "properties": {
+        "by": { "type": "string", "minLength": 1 },
+        "at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "verified": {
+      "description": "OPTIONAL trust field (OKF section 5.2). One verification event, or a list of them.",
+      "oneOf": [
+        { "$ref": "#/$defs/verificationEvent" },
+        { "type": "array", "items": { "$ref": "#/$defs/verificationEvent" } }
+      ]
+    },
+    "sources": {
+      "description": "OPTIONAL provenance field (OKF section 5.1). Materials the concept derives from.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["resource"],
+        "additionalProperties": true,
+        "properties": {
+          "resource": { "type": "string" },
+          "id": { "type": "string" },
+          "title": { "type": "string" },
+          "author": { "type": "string" },
+          "usage_count": { "type": "integer", "minimum": 0 },
+          "last_modified": { "type": "string" }
+        }
+      }
+    },
+    "usage_window": {
+      "description": "OPTIONAL provenance field (OKF section 5.1). Frames the date range that `sources[].usage_count` was measured over.",
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "from": { "type": "string", "format": "date" },
+        "to": { "type": "string", "format": "date" }
+      }
+    },
+    "okf_version": {
+      "description": "OPTIONAL, and valid ONLY in the frontmatter of a bundle-root index.md (OKF section 12). burlmd does not generate index.md (ADR-004 decision 6), so a burlmd-authored bundle never declares this. Listed here so that a bundle authored elsewhere and opened by burlmd validates rather than being rejected.",
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+$"
+    }
+  },
+
+  "$defs": {
+    "verificationEvent": {
+      "type": "object",
+      "required": ["by"],
+      "additionalProperties": true,
+      "properties": {
+        "by": { "type": "string", "minLength": 1 },
+        "at": { "type": "string", "format": "date-time" }
+      }
+    }
+  },
+
+  "examples": [
+    { "type": "Note", "title": "burlmd" },
+    { "type": "Note", "title": "Q3 planning", "tags": ["work", "planning"], "status": "draft" }
+  ]
+}

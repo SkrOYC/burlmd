@@ -1,5 +1,22 @@
 # Stage 2: Architecture Changelog
 
+## v1.1.0
+Amendments driven by PRD v1.1.0 and the decisions recorded in `tech-spec/` ADR-004 through ADR-008. Minor bump: an execution flow was added and two were materially rewritten, but no logical container was added, removed, or repurposed.
+
+These edits were made during a Stage 3 pass. They are recorded here rather than inside `tech-spec/` because the framework's non-trespass rule forbids repairing an upstream defect in a downstream directory — and these are upstream defects. Two of them are the direct cause of the application's current unusable state, so they are corrections of fact, not preference.
+
+**Added `flows/flow-workspace-bootstrap.md`.** The path from a cold start to a writable Workspace had no flow at all. Every documented route to a Workspace ran through `flow-auth-handshake.md`, which is why one did not exist without a network. The new flow contains no network step and no credential.
+
+**Rewrote `flows/flow-auth-handshake.md`.** Three defects corrected. It *cloned* a repository as the only way to obtain a Workspace, making a network round trip a precondition to writing the first word — a direct contradiction of `constraints.md`'s Local-First Mandate, which the implementation faithfully reproduced by gating all of `lib/main.dart` behind a login screen. It *owned the root encryption key*, which protects the local index and has no relationship to whether a Remote exists; that step moved to bootstrap. And it never distinguished "provision" from "connect" despite `capabilities.md` offering both words; both branches are now explicit, and adopting a non-empty remote is excluded as a distinct problem.
+
+**Rewrote `flows/flow-edit-note.md`.** The save phase specified serializing the AST back to Markdown — never implemented, and unimplementable without first inventing a canonical Markdown form that nothing specified. PRD v1.1.0's Edit Fidelity constraint rules that approach out entirely, since a serializer rewrites the whole file by definition. Replaced with source splicing, and the write path expanded into the four tiers of ADR-008.
+
+**Amended `risks.md`.** Risk 6's OCC token is now a content hash rather than a `last_modified` timestamp, which additionally fixes a latent defect the prior status note had not identified: `open_note` returned the placeholder `"head"` while `save_note` compared a stringified `last_modified`, so the two ends were never the same token and any real save would have failed by construction. Added risk 7 (span invalidation under splicing — a silent data-corruption mode, mitigated by whole-file reparse) and risk 8 (positional identity and link rewriting, arising from OKF's path-based concept id).
+
+**Amended `containers.md`.** The Sync Manager is now explicitly optional at runtime, correcting an assumption threaded through v1.0.x that a Remote always exists. Secure Storage's entry now separates the root key from OAuth tokens — v1.0.x coupled them by generating the key inside the OAuth handshake — and records the readback path needed for session restore.
+
+**Not changed.** `strategy.md` and `resilience.md` required no amendment: the Local-First Thick Client pattern and every resilience guarantee hold unchanged, and in the case of the Local-First Mandate the amendments above bring the rest of the architecture into line with what `strategy.md` already claimed.
+
 ## v1.0.1
 Constitution Freshness & Reconciliation Pass following Epic B execution (UIDB-B001–B007).
 - Corrected `containers.md`'s Local Repository description, which implied the raw OKF directory tree was encrypted by this container. The shipped implementation only encrypts the SQLite index (via SQLCipher); raw Markdown files rely on OS-level Full Disk Encryption, per `prd/constraints.md`'s existing rationale (preserving native Git merge capability). This same inconsistency also existed in `prd/capabilities.md` (corrected there, see `prd/changelog.md` v1.0.1).
