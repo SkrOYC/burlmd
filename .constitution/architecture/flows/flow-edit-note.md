@@ -30,18 +30,19 @@ sequenceDiagram
 
         loop Keystroke
             UI->>Core: Update Block (block_path, new source)
+            Core->>Core: Substitute into working source; resize this span, shift later ones
             Core->>Local: Write draft row (tier 1, every keystroke)
             Core-->>UI: Acknowledge (no parse, no AST returned)
         end
 
         Note over Core,Local: ~1s idle may elapse while still focused
         Core->>Local: Compare on-disk hash to the current revision
-        Core->>Local: Atomic write (tier 2): splices buffered source, no reparse
+        Core->>Local: Atomic write (tier 2): writes the working source verbatim
         Local-->>Core: New revision, which replaces the baseline
 
         Note over UI,Core: Block loses focus
         UI->>Core: Commit Block (block_path)
-        Core->>Core: Splice source over the Block's span, reparse
+        Core->>Core: Reparse the working source, rebuild the span map
         Core-->>UI: NoteState (new AST)
 
         Note over Core,Local: ~1s idle after the commit

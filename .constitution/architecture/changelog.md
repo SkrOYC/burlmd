@@ -44,6 +44,9 @@ Folded into v1.1.0, since nothing in this pass has merged.
 - **`risks.md` risk 7 proscribed the offset arithmetic ADR-008 mandates**, and `SPK-WSPC-D001` was chartered to decide a question ADR-008 had already answered. Reconciled by narrowing the risk to what it is actually about — arithmetic replacing a reparse across a structural change, where the errors are silent — rather than by asserting the conflict away. The spike still owns the committed-splice question.
 - **`flow-workspace-bootstrap.md` never drew the `workspaces` row being written**, though the prose lists it as a required post-condition and the contract makes it explicit. Every other post-condition had a diagram step. Same shape as the CSRF `state` in round 2 and the OCC baseline in round 6, at much lower stakes.
 
+### Corrections from PR review, round 8
+- **`flow-edit-note.md` had not received round 7's one-writer fix.** It still drew tier 2 splicing the buffered source, and never showed `update_block` performing the substitution and span adjustment at all — so following the diagram leads into exactly the duplication ADR-008 works through. Third round in which a contract fix failed to reach this set of diagrams, after the CSRF `state` and the OCC baseline.
+
 ## v1.0.1
 Constitution Freshness & Reconciliation Pass following Epic B execution (UIDB-B001–B007).
 - Corrected `containers.md`'s Local Repository description, which implied the raw OKF directory tree was encrypted by this container. The shipped implementation only encrypts the SQLite index (via SQLCipher); raw Markdown files rely on OS-level Full Disk Encryption, per `prd/constraints.md`'s existing rationale (preserving native Git merge capability). This same inconsistency also existed in `prd/capabilities.md` (corrected there, see `prd/changelog.md` v1.0.1).

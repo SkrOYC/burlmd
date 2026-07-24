@@ -445,8 +445,14 @@ pub fn update_block(
     unimplemented!()
 }
 
-/// Commits the focused Block: splices its buffered source over that Block's
-/// span, reparses, and returns the new state (ADR-007 decision 1).
+/// Commits the focused Block: reparses the Note's working source, rebuilds the
+/// span map from that parse, and returns the new state (ADR-007 decision 1).
+///
+/// It performs no splice. `update_block` already substituted the text and
+/// adjusted the spans, so splicing "the buffered source over that Block's
+/// span" here would re-apply an edit the working source already contains — the
+/// duplication ADR-008 decision 2 works through. There is exactly one writer
+/// of the working source, and it is not this call.
 ///
 /// Called when the Block loses focus, not on every keystroke. This is where
 /// the reparse cost lands: off the typing path, and *separate from* the tier 2
@@ -533,6 +539,15 @@ pub fn merge_block_with_previous(
 /// participates in an enclosing `SelectableRegion`), so it is assigned to
 /// `EDIT-F001`, which has both presentations in front of it, rather than
 /// guessed at here.
+///
+/// That assignment also covers the harder variant: a range whose **interior**
+/// contains the focused Block. It fails the rendered-offset rule for the same
+/// reason, and additionally its inline span map is deliberately stale between
+/// `update_block` and `commit_block` (ADR-008 decision 2) — while
+/// `delete_range` and `replace_range` splice using exactly that map. The
+/// likely resolution is that a range operation blurs first and dispatches
+/// after, which dissolves both cases at once; that is cheap, and it is what
+/// `EDIT-F001` should confirm rather than what `EDIT-F003` should discover.
 #[frb]
 pub struct BlockRange {
     pub start_path: Vec<usize>,

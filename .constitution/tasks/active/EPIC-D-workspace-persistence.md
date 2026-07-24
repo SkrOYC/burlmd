@@ -13,9 +13,10 @@ Entirely Core-side. No ticket here touches Dart, and nothing in this epic is vis
   - `.constitution/spikes/SPK-WSPC-D001.md`
 - **Scope (Out-of-Scope Files):**
   - `rust/src/**` (no production code in a Spike)
-- **Verification Command:** `! grep -q 'Status: placeholder' .constitution/spikes/SPK-WSPC-D001.md && ! grep -q 'To be filled' .constitution/spikes/SPK-WSPC-D001.md && git diff --quiet $(git merge-base HEAD master) HEAD -- rust/src`
+- **Verification Command:** `! grep -q 'Status: placeholder' .constitution/spikes/SPK-WSPC-D001.md && ! grep -q 'To be filled' .constitution/spikes/SPK-WSPC-D001.md && git diff --quiet HEAD~1 HEAD -- rust/src`
 - **Expected Success Output:** `exit 0`
 - **STOP Conditions:**
+  - "STOP if this Spike is landed across more than one commit. Its gate asserts that the Spike's own commit touched no production code (`git diff --quiet HEAD~1 HEAD -- rust/src`), which is the only form that is neither trivially true — as `git diff --quiet HEAD` was — nor order-dependent, as comparing against the branch base is: `WSPC-D001` and `WSPC-D002` both have no dependencies, and `critical-path.md` numbers D002 first, so a branch-base comparison would already be dirty when this Spike arrives."
   - "STOP if the tier 2 timer's synchronization with the synchronous FFI calls it races is left undecided. The timer is Core-owned and fires on its own thread while `update_block`/`commit_block` run on the Dart caller's; both touch the working source and span map, and the timer side does an encrypted database write and a file write. Reusing `db::connection`'s process-wide mutex naively lets a keystroke block on a lock held across a disk write, inside the 16ms budget. Record the shape and the measured contention — see ADR-008's consequences."
   - "STOP if the investigation concludes that whole-file reparse cannot meet the 16ms budget in `prd/constraints.md` at realistic Note sizes; that invalidates ADR-007's mitigation and requires a Stage 3 pass, not an improvised offset-arithmetic implementation."
   - "STOP if no production code change is required by the findings; a Spike that recommends implementation changes must name the ticket, not perform them."
@@ -47,7 +48,7 @@ And no file under rust/src has been modified
 - **Scope (Out-of-Scope Files):**
   - `rust/src/api/**` (no FFI surface in this ticket)
   - `rust/src/db/**`
-- **Verification Command:** `cd rust && cargo test okf:: -- --list | grep -q ': test' && cargo test okf:: && cargo test && cargo clippy --all-targets -- -D warnings`
+- **Verification Command:** `cd rust && cargo test okf:: -- --list | grep -q ': test' && cargo test okf:: && cargo test -- --skip keyring --skip keyring_token_store && cargo clippy --all-targets -- -D warnings`
 - **Expected Success Output:** `exit 0`
 - **STOP Conditions:**
   - "STOP if the YAML reader dependency named in `tech-spec/stack.md` cannot parse a fixture block; do not hand-roll a YAML parser, and do not substitute a different crate without a Stage 3 pass."
@@ -143,6 +144,7 @@ Then the extracted text is exactly the source spanned by the selection, delimite
 - **Dependencies:** WSPC-D002
 - **Category:** Correctness
 - **Scope (In-Scope Files):**
+  - `rust/src/git/operations.rs` (**adds the repository-initialization function, which does not exist.** The module exposes `clone_repo`, `commit_all`, `push` and `pull`, and `gix::prepare_clone` is the only repository-creating call in the crate — yet ADR-005 decision 2 makes "`init`, not `clone`" the whole point of this flow, and this ticket's own criterion asserts a repository is initialized. Without this the only in-scope option is inlining `gix::init` in `bootstrap.rs`, putting Git plumbing outside the directory `guidelines.md` designates for it.)
   - `rust/src/lib.rs` (declares `pub mod workspace;`. Without it the module is not part of the crate, so this ticket's own gate — which since round 4 asserts the test filter matched something — fails against a filter matching nothing.)
   - `rust/src/workspace/mod.rs`
   - `rust/src/workspace/bootstrap.rs`
@@ -155,7 +157,7 @@ Then the extracted text is exactly the source spanned by the selection, delimite
 - **Scope (Out-of-Scope Files):**
   - `rust/src/api/auth.rs` (no credential path participates in bootstrap)
   - `lib/main.dart`, `lib/src/components/**`, `lib/src/screens/**`, `lib/src/providers/**` (hand-written Dart is Epic E)
-- **Verification Command:** `cd rust && cargo test workspace::bootstrap -- --list | grep -q ': test' && cargo test workspace::bootstrap && cargo test && cargo clippy --all-targets -- -D warnings`
+- **Verification Command:** `cd rust && cargo test workspace::bootstrap -- --list | grep -q ': test' && cargo test workspace::bootstrap && cargo test -- --skip keyring --skip keyring_token_store && cargo clippy --all-targets -- -D warnings`
 - **Expected Success Output:** `exit 0`
 - **STOP Conditions:**
   - "STOP if bootstrap requires reading a credential, contacting a network host, or consulting authentication state; `flow-workspace-bootstrap.md` contains no such step and CAP-WS-01 forbids one."
@@ -327,6 +329,7 @@ Then the rename succeeds and the two inbound edges collapse to one, rather than 
 - **Dependencies:** WSPC-D003, WSPC-D005
 - **Category:** Correctness
 - **Scope (In-Scope Files):**
+  - `rust/src/git/operations.rs` (**adds a pathspec-scoped commit.** The existing `commit_all` commits the whole worktree, so with two Notes dirty on disk, closing one would sweep both — contradicting ADR-008's "approximately one commit per Note per writing session". Also the place the author identity from ADR-008's consequences is applied.)
   - `rust/src/workspace/mod.rs` (declares `persist`)
   - `rust/src/workspace/persist.rs`
   - `rust/src/draft.rs` (**where `NoteMetadata` and `NoteState` are actually defined** — `api/ffi_api.rs` only re-exports them. The contract reshapes both: `NoteMetadata` loses `workspace_id` and gains `okf_conformant`, `NoteState` gains `restored_from_draft`.)
@@ -374,7 +377,15 @@ Then it contains the typed text exactly once — the case where a second writer 
 
 Given a Note with edits from this session
 When the Note is closed
-Then exactly one commit is made, the draft row is cleared, and the sync scheduler is notified — this commit is the whole of `CAP-WS-02`, the durability guarantee that makes a local-only Workspace trustworthy before any Remote exists
+Then exactly one commit is made, the draft row is cleared, and the sync scheduler is notified
+
+Given two Notes have unwritten changes on disk
+When one of them is closed
+Then the commit contains that Note only — a whole-worktree commit would sweep both and break the one-commit-per-Note-per-session guarantee
+
+Given any commit this tier makes
+When its author is inspected
+Then it is the fixed application identity from ADR-008, not a value read from the user or from global Git configuration — this commit is the whole of `CAP-WS-02`, the durability guarantee that makes a local-only Workspace trustworthy before any Remote exists
 
 Given a Note with edits and no external modification
 When the idle write tier fires twice in one session
@@ -400,7 +411,7 @@ Then the measured write completes within the frame budget, and the measurement i
   - `rust/src/frb_generated.rs`
   - `lib/src/rust/**` (regenerated bindings only)
   - `lib/src/providers/note_providers.dart` (calls `openNote(path)` and assigns `updateBlock`'s return value; both signatures change here, so `dart analyze` cannot pass without it)
-  - `lib/src/providers/rust_api_provider.dart` (the layer `note_providers.dart` actually calls, and the only place that touches `ffi.*` directly: it wraps `openNote`, `searchNotes`, `saveNote` — which this contract deletes outright — and `updateBlock` with its old `AstNode` parameter. Every one of those becomes an unresolved identifier or a wrong-argument error once the bindings regenerate.)
+  - `lib/src/providers/rust_api_provider.dart` (**lands the editing half of the wrapper surface in full, not only the four methods that change.** This file is the seam every widget and every widget test overrides — `editor_test.dart` already fakes it — and it is the only place touching `ffi.*` directly. Eight later tickets in Epics E and F call methods that do not exist on `RustApi` yet, and none of them scopes this file, so each would fail its own `flutter test` gate against a class lacking the method. This ticket adds wrappers for every editing, lifecycle and persistence function in the contract: `openNote`, `closeNote`, `flushNote`, `getBlockSource`, `updateBlock`, `commitBlock`, `insertBlock`, `deleteBlock`, `splitBlock`, `mergeBlockWithPrevious`, `copyRangeAsMarkdown`, `deleteRange`, `replaceRange`, `createNote`, `renameNote`, `moveNote`, `deleteNote`, `createDirectory`, `renameDirectory`, `deleteDirectory`, `pendingDrafts`. `WSPC-D009` lands the discovery half. Cheap here, and unownable anywhere else: it wraps `openNote`, `searchNotes`, `saveNote` — which this contract deletes outright — and `updateBlock` with its old `AstNode` parameter. Every one of those becomes an unresolved identifier or a wrong-argument error once the bindings regenerate.)
   - `test/components/editor_test.dart` (overrides `RustApi.updateBlock(String, List<int>, AstNode) -> NoteState`, an invalid override once the base signature changes. `dart analyze` covers `test/`, and it reports no issues on the current tree — so this gate goes genuinely red rather than merely staying noisy.)
 - **Scope (Out-of-Scope Files):**
   - `lib/src/components/**` (Epic F consumes this surface)
@@ -424,7 +435,7 @@ Then a draft row is written, no parse occurs, and no AST is returned
 
 Given a Block whose buffered source differs from the file
 When the Block is committed
-Then the source is spliced over its span, the Note is reparsed, and the new state is returned
+Then the Note's working source is reparsed and the span map rebuilt, with no second substitution — `update_block` already performed it, and the new state is returned
 
 Given a Block and a character offset
 When the Block is split at that offset
@@ -451,7 +462,8 @@ And no exposed function takes a workspace_id parameter
 - **Category:** Correctness
 - **Scope (In-Scope Files):**
   - `rust/src/api/ffi_api.rs`
-  - `lib/src/providers/rust_api_provider.dart` (wraps `searchNotes`, which gains a `limit`; this ticket's gate ends in `dart analyze`)
+  - `lib/src/providers/rust_api_provider.dart` (**lands the discovery half of the wrapper surface in full**: `searchNotes` with its new `limit`, plus `findNotesByTitle`, `linkCompletions`, `backlinks` and `workspaceTree`. `SHEL-E003` depends on this ticket and needs `workspaceTree`; `EDIT-F006` depends on it and needs `linkCompletions`; neither scopes this file. `WSPC-D008` lands the editing half.)
+  - `test/components/editor_test.dart` (constructs `NoteMetadata(id:, workspaceId:, …)` directly, and this ticket removes `workspaceId`. This ticket's gate ends in `dart analyze`, which covers `test/`, and it depends only on `WSPC-D005` — so it is schedulable before `WSPC-D008`, the only other ticket scoping this file. Note `WSPC-D007` adds `restoredFromDraft` to `NoteState`, which the same file constructs, and D007's gate has no `dart analyze`: whichever of D008/D009 runs after it inherits that too.)
   - `rust/src/index/mod.rs` (declares `query`)
   - `rust/src/index/query.rs`
   - `rust/src/draft.rs` (four functions here return `Vec<NoteMetadata>`, which is defined in this file and loses `workspace_id` under the contract. This ticket depends only on `WSPC-D005`, so it can be scheduled before `WSPC-D007` — the other ticket that scopes this file — and its own gate would then be unpassable without it.)
