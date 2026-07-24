@@ -28,7 +28,7 @@ When it is reviewed
 Then it records measured reparse timings across at least three Note sizes spanning small, typical and pathological
 And it states the Note size at which reparse approaches the 16ms frame budget
 And it names the chosen span-maintenance strategy and the tickets it unlocks
-And no file under rust/src is modified by the Spike's own commit — throwaway prototyping is expected, since the timings and contention numbers this Spike must report cannot be obtained otherwise, and belongs in rust/examples/ which the default target does not build; what must not happen is production code arriving under cover of a Spike
+And no file under rust/src is modified by the Spike's own commit — throwaway prototyping is expected, since the timings and contention numbers this Spike must report cannot be obtained otherwise, and must live outside the crate entirely — a scratch checkout or a throwaway binary — not in rust/examples/. That location was named in an earlier revision on the grounds that the default target does not build it, which is true of cargo build and false of cargo clippy --all-targets, the tail of every Epic D gate: --all-targets expands to include --examples, so committed prototype code becomes a deny-warnings gate on WSPC-D003, the very ticket this Spike unblocks. What must not happen is production code arriving under cover of a Spike
 ```
 
 #### WSPC-D002 OKF Bundle Domain Module
@@ -48,7 +48,7 @@ And no file under rust/src is modified by the Spike's own commit — throwaway p
 - **Scope (Out-of-Scope Files):**
   - `rust/src/api/**` (no FFI surface in this ticket)
   - `rust/src/db/**`
-- **Verification Command:** `cd rust && cargo test okf:: -- --list | grep -q ': test' && cargo test okf:: && cargo test -- --skip keyring --skip keyring_token_store && cargo clippy --all-targets -- -D warnings`
+- **Verification Command:** `cd rust && cargo test okf:: -- --list | grep -q ': test' && cargo test okf:: && cargo test -- --skip keyring && cargo clippy --all-targets -- -D warnings`
 - **Expected Success Output:** `exit 0`
 - **STOP Conditions:**
   - "STOP if the YAML reader dependency named in `tech-spec/stack.md` cannot parse a fixture block; do not hand-roll a YAML parser, and do not substitute a different crate without a Stage 3 pass."
@@ -157,7 +157,7 @@ Then the extracted text is exactly the source spanned by the selection, delimite
 - **Scope (Out-of-Scope Files):**
   - `rust/src/api/auth.rs` (no credential path participates in bootstrap)
   - `lib/main.dart`, `lib/src/components/**`, `lib/src/screens/**`, `lib/src/providers/**` (hand-written Dart is Epic E)
-- **Verification Command:** `cd rust && cargo test workspace::bootstrap -- --list | grep -q ': test' && cargo test workspace::bootstrap && cargo test -- --skip keyring --skip keyring_token_store && cargo clippy --all-targets -- -D warnings`
+- **Verification Command:** `cd rust && cargo test workspace::bootstrap -- --list | grep -q ': test' && cargo test workspace::bootstrap && cargo test -- --skip keyring && cargo clippy --all-targets -- -D warnings`
 - **Expected Success Output:** `exit 0`
 - **STOP Conditions:**
   - "STOP if bootstrap requires reading a credential, contacting a network host, or consulting authentication state; `flow-workspace-bootstrap.md` contains no such step and CAP-WS-01 forbids one."
@@ -241,6 +241,10 @@ Then a Link edge is recorded with the target's concept id and it resolves
 Given a Note containing a link to a Note that does not exist
 When the Workspace is indexed
 Then a Link edge is still recorded and is reported as unresolved rather than dropped
+
+Given any Note whose AST is requested
+When its inline Links are examined
+Then `InlineElement::Link.exists` reflects whether the target concept id matches an indexed Note — `WSPC-D003` declares the field but sits upstream of the index and has nothing to resolve it against, so populating it is this ticket's obligation
 
 Given an empty Directory in the bundle
 When the Workspace is indexed
@@ -339,6 +343,10 @@ Given Note B carries an unflushed draft row and contains a Link to Note A
 When A is renamed and B is later opened
 Then B's restored draft contains the rewritten Link, not the old one — the draft is parsed in preference to disk, so a draft left unrewritten reverts the rename one session later
 
+Given three Notes link to a fourth
+When the fourth Note is renamed
+Then the returned `LifecycleEffects.rewritten` names all three — their own ids did not change, so the shell has no other way to learn their bytes moved, and `SHEL-E005` depends on this list to reload them
+
 Given a Note contains a Link to itself
 When it is renamed
 Then both its frontmatter title and its self-Link are rewritten
@@ -375,6 +383,14 @@ Then the rename succeeds and the two inbound edges collapse to one, rather than 
 Given a Note is being edited
 When a Block edit is committed
 Then a draft row exists for that Note and the file on disk is unchanged
+
+Given a Note with no pending edits
+When a Block is split, merged, inserted, deleted, or a multi-Block range is replaced
+Then a draft row exists for that Note immediately, before the write tier fires — each of these is a discrete user action with no preceding keystroke call, so scoping tier 1 to `update_block` would leave the edit only in memory until the timer
+
+Given a structural edit has been made and the process is killed before the write tier fires
+When the Note is next opened
+Then that edit is present
 
 Given a draft row exists and the process is terminated without cleanup
 When the Note is next opened

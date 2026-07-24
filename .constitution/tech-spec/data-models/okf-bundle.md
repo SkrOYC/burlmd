@@ -54,6 +54,23 @@ A file that is missing frontmatter, whose frontmatter does not parse, or whose f
 
 Bringing such a file into conformance is an **explicit user action, never automatic**, and no ticket in the current wave implements it. Two things force that. First, prepending a frontmatter block to a file that has none writes bytes outside the span of any edited Block, which `guidelines.md` states as an absolute — ADR-007 decision 5 covers rewriting an *existing* block when `title` changes, and deliberately does not cover creating one that was never there. Second, doing it silently on first edit would mean the application rewrites the header of a file the user opened to change one word, which is exactly the whole-file-churn behaviour the Edit Fidelity constraint exists to prevent. The `okf_conformant` flag therefore exists so the UI can *offer* the repair; until the user accepts, the file stays as its author wrote it. Surfacing that offer is deferred with the rest of the foreign-Workspace path.
 
+## Deriving a filename from a title
+
+`create_note` and `rename_note` both take a title and derive a filename from it. Under positional identity that derivation *is* the mapping between what the user typed and what `notes.id` becomes, so it is specified here rather than left to the implementation:
+
+**The filename is the title verbatim, plus `.md`.** No slugification, no case folding, no whitespace collapsing, no transliteration. `My Great Idea` becomes `My Great Idea.md` with concept id `My Great Idea`.
+
+Three reasons, in order of weight:
+
+1. **`CAP-GRAPH-04` requires the derivation to be invertible.** Following a ghost Link means creating the Note the Link already points at, and the Link carries a *concept id*, not a title. The UI must recover the `(directory_path, title)` pair `create_note` takes — and `EDIT-F006`'s STOP forbids it from constructing link targets itself. Any lossy transformation makes inversion guesswork: the Note gets created somewhere other than where the Link points, the ticket's criterion ("the target Note is created and opened") still passes, and the Link is still a ghost. Identity is the only derivation that inverts by construction.
+2. **The user chose the title.** Slugifying it means the filename another tool sees is not the name that was typed — the same quiet rewriting of the user's own bytes that `prd/constraints.md`'s Edit Fidelity constraint forbids inside a Note, applied to its name instead.
+3. It requires no specification of its own beyond this paragraph.
+
+Two consequences to accept:
+
+- **A title containing `/`, or a character the target filesystem rejects, is not derivable.** That returns `PathUnavailable`, whose meaning widens from "occupied or reserved" to "this path cannot be used", with the reason carried in the payload. Refusing is right: silently substituting a character produces a Note at an id the user did not ask for, and the user is present and can retype.
+- **Case sensitivity follows the filesystem, not the index.** `notes.id` is a `TEXT` primary key and case-sensitive, while macOS's default filesystem is not — so `Ideas` and `ideas` are two ids over one file there. Creation therefore checks path availability against the *filesystem*, not only against the index, and reports `PathUnavailable` when the filesystem already holds the path under different case.
+
 ## Links
 
 Per OKF §6.1 a link is a standard Markdown link, and the **bundle-absolute** form — leading `/`, resolved from the bundle root — is the recommended one. That is the form burlmd writes.

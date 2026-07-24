@@ -4,7 +4,7 @@
 | :--- | :--- | :--- |
 | Note | A single conceptual document created by the user, representing a unit of knowledge. | Page, Document, File, Concept |
 | Directory | A hierarchical container used to logically group and organize Notes. | Folder, Collection |
-| Link | A lateral connection from one Note to another, forming the knowledge graph structure. | Backlink, Reference, Tag, Wikilink |
+| Link | A lateral connection from one Note to another, forming the knowledge graph structure. | Backlink (as a synonym for Link), Reference, Tag, Wikilink |
 | Workspace | The root container holding all Notes and Directories. It is local by default and may optionally be connected to a Remote. | Vault, Brain, Repo, Database |
 | Remote | The user's private hosted repository that a connected Workspace synchronizes against. Optional: a Workspace is fully functional without one. | Server, Backend, Cloud, Origin |
 | Suggestion | An inline paradigm for resolving concurrent edit conflicts without exposing raw conflict markers. | Conflict, Merge, Diff, Fork |

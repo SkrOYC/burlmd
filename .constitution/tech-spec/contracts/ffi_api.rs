@@ -190,8 +190,18 @@ pub struct NoteMetadata {
 }
 
 /// Creates a Note in `directory_path` (empty string for the bundle root) with
-/// an OKF-conformant frontmatter block (`type: Note`, `title`). The filename
-/// is derived from `title`; a collision, or a title deriving to a reserved
+/// an OKF-conformant frontmatter block (`type: Note`, `title`), and **opens
+/// it**: the returned `NoteState` is a state of an open Note, so the working
+/// source buffer, the span map and the recorded revision are all established
+/// before this returns, and `note_write_status` reports on it immediately.
+/// Stated because the alternative reading — create the file, return a state,
+/// register nothing — leaves the first `update_block` substituting into a
+/// buffer that was never established. `SHEL-E005` has a new Note "open for
+/// editing" the moment it is created.
+///
+/// The filename is derived from `title` by the rule in
+/// `data-models/okf-bundle.md` — verbatim, plus `.md`, with no slugification,
+/// because CAP-GRAPH-04's create-on-follow has to invert it; a collision, or a title deriving to a reserved
 /// filename, returns `PathUnavailable` rather than silently disambiguating.
 #[frb]
 pub async fn create_note(directory_path: String, title: String) -> Result<NoteState, AppError> {
@@ -268,7 +278,10 @@ pub async fn delete_note(note_id: String) -> Result<(), AppError> {
 /// Also rewrites `notes.title` and the Note's `notes_fts` title row, which is
 /// what full-text search matches titles against.
 #[frb]
-pub async fn rename_note(note_id: String, new_title: String) -> Result<NoteState, AppError> {
+pub async fn rename_note(
+    note_id: String,
+    new_title: String,
+) -> Result<(NoteState, LifecycleEffects), AppError> {
     unimplemented!()
 }
 
@@ -289,7 +302,10 @@ pub async fn rename_note(note_id: String, new_title: String) -> Result<NoteState
 /// and note that the source Notes needing rewrites are *not* confined to that
 /// subtree — anything anywhere in the bundle may link into it.
 #[frb]
-pub async fn move_note(note_id: String, new_directory_path: String) -> Result<NoteState, AppError> {
+pub async fn move_note(
+    note_id: String,
+    new_directory_path: String,
+) -> Result<(NoteState, LifecycleEffects), AppError> {
     unimplemented!()
 }
 
@@ -311,12 +327,45 @@ pub struct IdRemap {
     pub new_id: String,
 }
 
-/// Renames a Directory, moving its contents and rewriting inbound Links to
-/// every Note beneath it (CAP-LIFE-06). Returns the id remapping for every
-/// affected Note, for the same reason `rename_note` returns the new state:
-/// positional identity means the caller's existing ids are now stale.
+/// What a lifecycle operation changed, beyond the Note it was invoked on.
+///
+/// Every rename and move rewrites two disjoint sets of Notes, and the caller
+/// has to act differently on each:
+///
+/// - `remapped` — Notes whose **concept id** changed. An open one is holding a
+///   dead identifier and must re-anchor to the new id.
+/// - `rewritten` — Notes whose **bytes** changed because an inbound Link in
+///   them was rewritten. Their ids are unchanged, so nothing looks wrong, and
+///   that is the problem: an open one still holds an `InlineElement::Link`
+///   carrying the *old* `target_id`. Following it reaches nothing, and under
+///   CAP-GRAPH-04 the create-on-follow path would then **recreate the concept
+///   the rename just removed** — risk 8's silent graph degradation, arriving
+///   through the surface built to traverse the graph. Worse, if the Block
+///   holding that Link is focused, the UI's editable field still contains the
+///   pre-rewrite source, so the next `update_block` substitutes it back into
+///   the working source and reverts the rewrite from a buffer the Core does not
+///   own.
+///
+/// The caller must reload any open Note appearing in either list. The Core
+/// carries its own state forward (see `rename_note`); this is the half the
+/// Core cannot reach.
 #[frb]
-pub async fn rename_directory(path: String, new_name: String) -> Result<Vec<IdRemap>, AppError> {
+pub struct LifecycleEffects {
+    pub remapped: Vec<IdRemap>,
+    pub rewritten: Vec<String>,
+}
+
+/// Renames a Directory, moving its contents and rewriting inbound Links to
+/// every Note beneath it (CAP-LIFE-06). Returns `LifecycleEffects` for the
+/// same reason `rename_note` does: positional identity means the caller's
+/// existing ids are now stale, and separately the Notes holding rewritten
+/// Links are not confined to the renamed subtree — anything anywhere in the
+/// bundle may link into it.
+#[frb]
+pub async fn rename_directory(
+    path: String,
+    new_name: String,
+) -> Result<LifecycleEffects, AppError> {
     unimplemented!()
 }
 
@@ -358,6 +407,11 @@ pub enum InlineElement {
         /// OKF section 6.1 requires consumers to tolerate and which
         /// CAP-GRAPH-04 makes a feature. The UI renders these distinctly and
         /// creates the Note on follow.
+        ///
+        /// Resolving this requires the index, not the parser: it is whether
+        /// `target_id` matches a `notes` row. `WSPC-D003` declares the field
+        /// and cannot fill it — it is upstream of the indexer — so
+        /// `WSPC-D005` populates it and carries the criterion.
         exists: bool,
         content: Vec<InlineElement>,
     },
@@ -437,14 +491,32 @@ pub struct NoteState {
 // ---------------------------------------------------------------------------
 // Editing (ADR-006, ADR-007)
 //
-// Two tiers, and the distinction is load-bearing for the frame budget.
+// Two kinds of call, and the distinction is load-bearing for the frame
+// budget.
 //
-// `update_block` is the per-keystroke call: it substitutes text into the
-// Note's working source, adjusts spans, writes a draft row, returns nothing,
-// and never parses. Every OTHER mutating call below reparses that working
-// source and rebuilds the span map, returning
-// the whole new state -- and each is triggered by a discrete user action
-// (blur, Enter, Backspace, a range edit), not by typing.
+// **Every mutating call below writes the Note's working source and its draft
+// row.** That is the tier 1 obligation in ADR-008 decision 1, and it belongs to
+// all of them, not only to `update_block`: a split, a merge, a Block insertion
+// and a range replace are each triggered by a discrete user action with no
+// preceding `update_block`, so if they skipped the draft write the edit would
+// live only in memory until the ~1s tier 2 timer fired. A kill in that window
+// loses it, which CAP-WS-03 and `architecture/resilience.md`'s SQLite Draft
+// Persistence guarantee both forbid — and it would make "no draft row" mean
+// "nothing unwritten" falsely, which is the under-reporting direction of the
+// invariant tier 2's draft-clearing establishes.
+//
+// What distinguishes the calls is **parsing**, not writing:
+//
+//   - `update_block` is the per-keystroke call and is the only one that does
+//     NOT parse. It substitutes text, adjusts spans arithmetically, writes the
+//     draft row, and returns nothing.
+//   - Every other mutating call reparses the working source, rebuilds the span
+//     map, and returns the whole new state. Each is triggered by a discrete
+//     user action (Enter, Backspace, a range edit), not by typing, which is
+//     what keeps the reparse off the per-keystroke path.
+//   - `commit_block` is the one exception in both directions: it reparses but
+//     writes nothing, because the text it reparses is already in the working
+//     source and already in the draft row, put there by `update_block`.
 //
 // `block_path` is an index path into the AST and is NOT stable across a
 // reparsing call: a splice can change a Block's node shape (a paragraph
@@ -516,8 +588,18 @@ pub fn update_block(
 /// It performs no splice. `update_block` already substituted the text and
 /// adjusted the spans, so splicing "the buffered source over that Block's
 /// span" here would re-apply an edit the working source already contains — the
-/// duplication ADR-008 decision 2 works through. There is exactly one writer
-/// of the working source, and it is not this call.
+/// duplication ADR-008 decision 2 works through. For *this* text there is
+/// exactly one writer, and it is `update_block`, not this call.
+///
+/// That is narrower than it once read here. An earlier revision generalised it
+/// to "there is exactly one writer of the working source" full stop, which is
+/// false for six of the eight mutators: `insert_block`, `delete_block`,
+/// `split_block`, `merge_block_with_previous`, `delete_range` and
+/// `replace_range` are each triggered by a discrete user action with no
+/// preceding `update_block`, so each necessarily writes. The rule that does
+/// hold generally is in the section header: every mutating call writes the
+/// working source and the draft row, and this one is the exception because its
+/// input is already in both.
 ///
 /// Called when the Block loses focus, not on every keystroke. This is where
 /// the reparse cost lands: off the typing path, and *separate from* the tier 2

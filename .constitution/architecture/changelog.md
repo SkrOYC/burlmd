@@ -59,6 +59,9 @@ Folded into v1.1.0, since nothing in this pass has merged.
 - **`flow-edit-note.md`'s second tier 2 write was missing the draft-clearing step its sibling has**, the same one-instance-fixed-sibling-missed shape rounds 6 and 8 catalogued for this diagram.
 - **`flow-sync-push.md` and `flow-conflict-resolution.md` carried pre-v1.1.0 traceability headers**, one asserting P0 for a capability the PRD now makes P1. Headers corrected and both bodies marked explicitly as predating ADR-005/006/007, since Epics G and H own the revisions.
 
+### Corrections from PR review, round 11
+- **`flow-search.md` carried a pre-v1.1.0 traceability header** — the flow round 10's sweep missed, and unlike the two sync flows this one is built in the current wave (`WSPC-D009`, `SHEL-E006`) and its contract changed here: a caller-supplied `limit` replacing a hardcoded cap of 50 that truncated silently, and Workspace scoping moved from a parameter into the Core.
+
 ## v1.0.1
 Constitution Freshness & Reconciliation Pass following Epic B execution (UIDB-B001–B007).
 - Corrected `containers.md`'s Local Repository description, which implied the raw OKF directory tree was encrypted by this container. The shipped implementation only encrypts the SQLite index (via SQLCipher); raw Markdown files rely on OS-level Full Disk Encryption, per `prd/constraints.md`'s existing rationale (preserving native Git merge capability). This same inconsistency also existed in `prd/capabilities.md` (corrected there, see `prd/changelog.md` v1.0.1).

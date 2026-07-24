@@ -160,6 +160,7 @@ Then its rendered content is visible
 - **STOP Conditions:**
   - "STOP if deletion is offered without confirmation."
   - "STOP if a rejected name collision is worked around client-side by altering the name; the Core reports the path unavailable and the user must be told."
+  - "STOP if `LifecycleEffects.rewritten` is ignored. Those Notes' ids did not change and nothing about them looks stale, which is exactly why the Core returns the list — an open one holds a Link to an id that no longer exists, and following it recreates the concept the rename removed."
 - **Description:** Surface creation, rename, move and deletion for Notes, and creation, rename and deletion for Directories. Because a rename or move changes a Note's identity, the open Note must re-anchor to the returned state rather than retaining its previous identifier. Moving is available at least through an explicit action; drag-and-drop is not required.
 - **Acceptance Criteria (Gherkin):**
 ```gherkin
@@ -186,6 +187,18 @@ Then it appears under the new Directory in the tree
 Given a Note from inside a Directory is open
 When that Directory is renamed
 Then the open Note re-anchors using the id remapping the Core returns, rather than holding a dead identifier
+
+Given Note B is open and contains a Link to Note A
+When A is renamed
+Then B reloads, because `LifecycleEffects.rewritten` names it — B's own id did not change, so nothing looks wrong, but its in-memory AST still carries A's old `target_id`
+
+Given B was not reloaded after such a rename
+When its stale Link is followed
+Then the failure this criterion exists to prevent is visible: the create-on-follow path recreates the concept the rename removed
+
+Given the Block containing that Link is the focused one in B
+When A is renamed
+Then B's editable field is refreshed from the returned state before the next keystroke — otherwise `update_block` substitutes the pre-rewrite source back and reverts the rename
 
 Given a Note is open
 When its containing Directory is deleted

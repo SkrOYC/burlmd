@@ -119,6 +119,15 @@ Folded into v1.4.0. Totals, graph and critical path unchanged.
 - **`WSPC-D007` gained the no-edit close criterion.** Reading a Note and navigating away is the most common path through the commit tier, and nothing said not to commit.
 - **`EDIT-F004`'s Enter criterion was replaced with three** that specify the empty-Block state the Core cannot represent: UI-side until the first character, then `insert_block`, then `update_block` against the returned path — and nothing inserted if focus leaves without typing.
 
+### Corrections from PR review, round 11
+Folded into v1.4.0. Totals, graph and critical path unchanged.
+
+- **`WSPC-D007` gained the tier-1 breadth criteria.** The draft-row obligation was written for `update_block` alone, so a structural edit — split, merge, insert, delete — had no specified persistence until the write tier fired ~1s later. Two criteria: a structural edit writes a draft row immediately, and a kill inside that window preserves it.
+- **`WSPC-D005` was given the `InlineElement::Link.exists` obligation**, which `WSPC-D003` declares but cannot satisfy from upstream of the index.
+- **`SHEL-E005` gained four criteria and a STOP for `LifecycleEffects.rewritten`.** A rename rewrites Links inside other Notes; without the list the shell cannot refresh them, and a stale Link followed from a stale view recreates the concept the rename just removed.
+- **Both Spikes were moved out of `rust/examples/`.** `cargo clippy --all-targets` compiles examples, which would have made Spike prototype code a lint gate on `WSPC-D003`.
+- **A verification command filtered on `--skip keyring --skip keyring_token_store`**, where the second is a substring of the first and therefore had no effect.
+
 ## v1.3.0
 - Completed **Epic C: Security & Sync** (`SYNC-C001`–`SYNC-C003`), total 16 story points: a `gix`/`git`-CLI hybrid for clone/commit/push/pull against the local Workspace, a GitHub OAuth PKCE login flow with OS-Keychain token storage, and a debounced background sync scheduler with exponential-backoff retry and conflict-path re-index/notify hooks.
 - Each milestone passed an independent single-pass review gate before the next started; `SYNC-C001` needed one follow-up fix commit (`ecd705e`) for two P2 findings (a `commit_all` deletion/rename bug, and redacting `GitCredentials`' `Debug` output so a stray `{:?}` can never print a token). `SYNC-C002` and `SYNC-C003` each passed their single review pass clean.
