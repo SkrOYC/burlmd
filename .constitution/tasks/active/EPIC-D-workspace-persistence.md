@@ -28,7 +28,7 @@ When it is reviewed
 Then it records measured reparse timings across at least three Note sizes spanning small, typical and pathological
 And it states the Note size at which reparse approaches the 16ms frame budget
 And it names the chosen span-maintenance strategy and the tickets it unlocks
-And no file under rust/src has been modified
+And no file under rust/src is modified by the Spike's own commit — throwaway prototyping is expected, since the timings and contention numbers this Spike must report cannot be obtained otherwise, and belongs in rust/examples/ which the default target does not build; what must not happen is production code arriving under cover of a Spike
 ```
 
 #### WSPC-D002 OKF Bundle Domain Module
@@ -188,7 +188,15 @@ Then that file is neither opened nor migrated, and the Workspace opens against a
 
 Given an existing directory of Markdown files that this application did not create
 When it is opened as a Workspace
-Then it becomes the active Workspace, a Workspace row is written for it, and no file in it is modified
+Then it becomes the active Workspace, a Workspace row is written for it, and no Note in it is modified
+
+Given that directory contains no version history
+When it is opened as a Workspace
+Then a repository is initialized in it — otherwise the close tier has nothing to commit into and CAP-WS-02 is unsatisfiable for every session in that Workspace (ADR-005 decision 8)
+
+Given that directory already contains version history
+When it is opened as a Workspace
+Then the existing history is adopted unchanged
 
 Given any connection opened against the encrypted index
 When `PRAGMA foreign_keys` is queried on it
@@ -262,10 +270,11 @@ Then results return in under 100 milliseconds
   - `rust/src/workspace/links_rewrite.rs`
   - `rust/src/api/ffi_api.rs`
   - `rust/src/frb_generated.rs`, `lib/src/rust/**` (regenerated bindings only — this ticket adds `#[frb]` functions)
+  - `lib/src/providers/rust_api_provider.dart` (**lands the seven lifecycle wrappers** — `createNote`, `renameNote`, `moveNote`, `deleteNote`, `createDirectory`, `renameDirectory`, `deleteDirectory` — because this is the ticket implementing the functions they wrap. `WSPC-D008` originally carried them but does not depend on this ticket, so `ffi.createNote` and friends would be unresolved identifiers at its `dart analyze` gate. The rule is that a wrapper ships with the function it wraps.)
 - **Scope (Out-of-Scope Files):**
   - `rust/src/markdown/**`
-  - `lib/**`
-- **Verification Command:** `cd rust && cargo test workspace::lifecycle -- --list | grep -q ': test' && cargo test workspace::lifecycle && cargo clippy --all-targets -- -D warnings`
+  - `lib/**` except the provider above
+- **Verification Command:** `cd rust && cargo test workspace::lifecycle -- --list | grep -q ': test' && cargo test workspace::lifecycle && cargo clippy --all-targets -- -D warnings && cd .. && dart analyze`
 - **Expected Success Output:** `exit 0`
 - **STOP Conditions:**
   - "STOP if a rename or move can complete having rewritten only some inbound Links; `architecture/risks.md` risk 8 identifies partial rewriting as a silent graph-corruption mode, so the operation must be atomic or must fail."
@@ -316,7 +325,11 @@ Then nothing matches — the `notes` cascade removes `fts_mapping`, which is the
 
 Given a Note carrying an unflushed draft row is renamed
 When the draft table is inspected
-Then the row is re-keyed to the new concept id and the drafted content is intact — this is the one case the missing foreign key exists to permit, so it is the one case that must be tested
+Then the row is re-keyed to the new concept id and the drafted body is intact, with its frontmatter `title` carrying the new value — this is the one case the missing foreign key exists to permit, so it is the one case that must be tested, and preserving the draft byte-for-byte would make the next write revert the rename
+
+Given a Note is open with buffered edits when it is renamed
+When the idle write tier next fires
+Then it writes the new title and is not refused with a revision mismatch — the working source, the span map and the recorded revision all move with the rename, since renaming is the only other thing that writes the file
 
 Given a Note links to both `Old` and a not-yet-created `New`
 When `Old` is renamed to `New`
@@ -411,7 +424,9 @@ Then the measured write completes within the frame budget, and the measurement i
   - `rust/src/frb_generated.rs`
   - `lib/src/rust/**` (regenerated bindings only)
   - `lib/src/providers/note_providers.dart` (calls `openNote(path)` and assigns `updateBlock`'s return value; both signatures change here, so `dart analyze` cannot pass without it)
-  - `lib/src/providers/rust_api_provider.dart` (**lands the editing half of the wrapper surface in full, not only the four methods that change.** This file is the seam every widget and every widget test overrides — `editor_test.dart` already fakes it — and it is the only place touching `ffi.*` directly. Eight later tickets in Epics E and F call methods that do not exist on `RustApi` yet, and none of them scopes this file, so each would fail its own `flutter test` gate against a class lacking the method. This ticket adds wrappers for every editing, lifecycle and persistence function in the contract: `openNote`, `closeNote`, `flushNote`, `getBlockSource`, `updateBlock`, `commitBlock`, `insertBlock`, `deleteBlock`, `splitBlock`, `mergeBlockWithPrevious`, `copyRangeAsMarkdown`, `deleteRange`, `replaceRange`, `createNote`, `renameNote`, `moveNote`, `deleteNote`, `createDirectory`, `renameDirectory`, `deleteDirectory`, `pendingDrafts`. `WSPC-D009` lands the discovery half. Cheap here, and unownable anywhere else: it wraps `openNote`, `searchNotes`, `saveNote` — which this contract deletes outright — and `updateBlock` with its old `AstNode` parameter. Every one of those becomes an unresolved identifier or a wrong-argument error once the bindings regenerate.)
+  - `lib/src/providers/rust_api_provider.dart` (**lands the editing half of the wrapper surface in full, not only the four methods that change.** This file is the seam every widget and every widget test overrides — `editor_test.dart` already fakes it — and it is the only place touching `ffi.*` directly. Eight later tickets in Epics E and F call methods that do not exist on `RustApi` yet, and none of them scopes this file, so each would fail its own `flutter test` gate against a class lacking the method. This ticket adds wrappers for every editing and persistence function in the contract: `openNote`, `closeNote`, `flushNote`, `noteWriteStatus`, `getBlockSource`, `updateBlock`, `commitBlock`, `insertBlock`, `deleteBlock`, `splitBlock`, `mergeBlockWithPrevious`, `copyRangeAsMarkdown`, `deleteRange`, `replaceRange`, `pendingDrafts`. It does **not** add the lifecycle wrappers — those belong to `WSPC-D006`, which implements the functions behind them, and this ticket does not depend on D006, so wrapping them here would leave `ffi.createNote` and friends unresolved at the `dart analyze` gate below. `WSPC-D009` lands the discovery wrappers on the same principle.
+
+    It must also repair what is already there: the file currently wraps `saveNote`, which this contract deletes outright, and `updateBlock` with its old `AstNode` parameter. Both become unresolved identifiers or wrong-argument errors the moment the bindings regenerate.)
   - `test/components/editor_test.dart` (overrides `RustApi.updateBlock(String, List<int>, AstNode) -> NoteState`, an invalid override once the base signature changes. `dart analyze` covers `test/`, and it reports no issues on the current tree — so this gate goes genuinely red rather than merely staying noisy.)
 - **Scope (Out-of-Scope Files):**
   - `lib/src/components/**` (Epic F consumes this surface)

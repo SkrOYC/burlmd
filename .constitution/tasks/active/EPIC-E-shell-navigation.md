@@ -242,7 +242,8 @@ Then results or an empty state are shown and no error surfaces
 - **Expected Success Output:** `exit 0`
 - **STOP Conditions:**
   - "STOP if recovered content is discarded when the user dismisses the notice; dismissal hides the notice, it does not delete work."
-- **Description:** Make crash recovery visible. On startup, Notes carrying an unflushed draft from a previous session are surfaced so the user knows work was recovered rather than silently finding a Note in an unexpected state. Opening such a Note shows the recovered content, and the state carries the fact that it came from a draft.
+  - "STOP if a write-tier failure is left unsurfaced. `note_write_status` exists because the write tier's trigger is a Core-owned timer with no caller to return an error to; if nothing polls it, `RevisionMismatch`, `DiskFull` and `IoError` are raised into nothing while the user keeps typing into a buffer nothing can persist."
+- **Description:** Make crash recovery visible, and write failure visible with it — the two share a surface because both are the application telling the user something about durability that it cannot say through the editor itself. On startup, Notes carrying an unflushed draft from a previous session are surfaced so the user knows work was recovered rather than silently finding a Note in an unexpected state. Opening such a Note shows the recovered content, and the state carries the fact that it came from a draft.
 - **Acceptance Criteria (Gherkin):**
 ```gherkin
 Given a draft exists from a session that ended without flushing
@@ -256,4 +257,12 @@ Then it shows the drafted content rather than the last content written to disk
 Given the recovery notice is dismissed
 When the Note is opened afterwards
 Then the recovered content is still present
+
+Given the write tier fails with a revision mismatch on an open Note
+When the UI next polls its write status
+Then the failure is shown, and the user is offered a reload rather than a retry — the file changed underneath the draft, so retrying would overwrite it
+
+Given the write tier fails because the disk is full
+When the UI next polls
+Then the failure is shown persistently rather than once, since every subsequent write fails the same way until it is resolved
 ```

@@ -25,6 +25,10 @@ PRD v1.1.0 resolved this at the product layer with CAP-WS-01 (write on first lau
 
    The consequence to accept: the Core carries process-wide state that the contract's signatures do not reveal, which is the usual cost of ambient scope. It is consistent with the existing `db::connection` singleton, and it is bounded — the active Workspace changes only through the two functions that open one.
 
+8. **`open_workspace` initializes a repository when the directory has none.** It is the third way to reach a Workspace, and the other two — initialize-local and clone — were deliberately required to converge "so that no later code needs to ask which path produced the Workspace it is looking at". This one has to converge too, or tier 3 has nothing to commit into: `close_note` makes a Git commit on the routine path, and CAP-WS-02 promises every editing session lands in local version history. A Workspace adopted from a directory with no history would fail both.
+
+   Creating `.git/` in a directory the user pointed at is a real side effect, and it is the reason `WSPC-D004`'s criterion says "no file in it is modified" rather than "nothing is created" — no *Note* is touched, and the alternative is worse: adopting a Workspace that silently cannot keep history, discovered later, on the first close. A directory that already has history is left exactly as it is.
+
 ## Consequences
 - **Positive:** The Local-First Mandate becomes literally true rather than aspirational, and the application becomes usable at all — which it currently is not.
 - **Positive:** GitHub OAuth App registration leaves the critical path entirely. It becomes a parallel, non-blocking concern rather than the sole blocker on writing a single Note.

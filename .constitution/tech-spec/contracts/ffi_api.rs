@@ -213,6 +213,27 @@ pub async fn delete_note(note_id: String) -> Result<(), AppError> {
 /// filename derived from `new_title` is already taken, or derives to a
 /// reserved OKF filename. Renaming is not a weaker check than creating.
 ///
+/// **This writes the Note's bytes, which makes it the one exception to the
+/// single-writer rule** in ADR-007 decision 1 — and if the Note is open, the
+/// exception has to be paid for rather than merely noted. All three pieces of
+/// per-open state must be brought forward in the same transaction:
+///
+/// - The **working source** gets the same frontmatter `title` substitution.
+///   Skip it and the buffer still holds the pre-rename bytes, so the next
+///   tier 2 write — which copies the buffer verbatim — silently reverts the
+///   title this call just wrote.
+/// - The **span map** is adjusted for the delta, or discarded and rebuilt.
+/// - The **recorded revision** is re-recorded from the post-rename file.
+///   Skip it and the next tier 2 write raises `RevisionMismatch` against this
+///   application's own rename. That is the same baseline-drift shape three
+///   earlier passes removed elsewhere; it reappears here because renaming is
+///   the only other thing that writes the file.
+///
+/// Refusing while a Note is open would also be a defensible answer. It is not
+/// the one taken, because `SHEL-E005` makes renaming an open Note a
+/// criterion-backed workflow and `prd/capabilities.md` treats renaming as
+/// routine during writing.
+///
 /// Also rewrites `notes.title` and the Note's `notes_fts` title row, which is
 /// what full-text search matches titles against.
 #[frb]
@@ -224,6 +245,12 @@ pub async fn rename_note(note_id: String, new_title: String) -> Result<NoteState
 /// (CAP-LIFE-03). Changes the Note's id, as `rename_note` does.
 /// Returns `PathUnavailable` when the destination already holds a Note of
 /// that filename, or when the destination path does not exist.
+///
+/// Carries the same open-Note obligations as `rename_note`, minus the
+/// frontmatter substitution: a move changes the concept id and the file's
+/// location but not its bytes, so the working source is untouched while the
+/// recorded revision and the open-note cache key both move with it.
+/// `rename_directory` inherits both, for every Note beneath it.
 #[frb]
 pub async fn move_note(note_id: String, new_directory_path: String) -> Result<NoteState, AppError> {
     unimplemented!()
@@ -621,6 +648,39 @@ pub fn replace_range(
 /// display and diagnostics; it is not an input.
 #[frb]
 pub async fn flush_note(note_id: String) -> Result<String, AppError> {
+    unimplemented!()
+}
+
+/// The state of the write tier for one open Note, polled by the UI.
+///
+/// This exists because tier 2's routine trigger is a **Core-owned idle
+/// timer**, so when its write fails there is no caller to return the error
+/// to. Without a poll, `RevisionMismatch` — which is the entirety of risk 6's
+/// mitigation — is raised into nothing, and so are `DiskFull` and `IoError`
+/// from the same path. The user would keep typing into a buffer nothing can
+/// persist, in an application that deliberately shows no save control so that
+/// they trust it. A specified control with nowhere to be acted on is the
+/// shape this contract already removed once, in the OAuth `state`.
+///
+/// A poll rather than a stream, matching the `sync_status` precedent: the UI
+/// is already rebuilding on its own cadence, and a failure that persists for
+/// one frame is not materially different from one reported instantly.
+#[frb]
+pub struct NoteWriteStatus {
+    /// Unix timestamp of the last successful tier 2 write, if any.
+    pub last_written_at: Option<i64>,
+    /// Set when the most recent write attempt failed. Cleared by the next
+    /// success. `RevisionMismatch` here means the file changed underneath the
+    /// draft and the user must be offered a reload rather than a retry.
+    pub last_error: Option<AppError>,
+    /// True when edits are buffered that no successful write has yet covered.
+    pub has_unwritten_edits: bool,
+}
+
+/// Status of the write tier for one open Note (ADR-008). Never fails: a Note
+/// that is not open reports no error and no unwritten edits.
+#[frb(sync)]
+pub fn note_write_status(note_id: String) -> NoteWriteStatus {
     unimplemented!()
 }
 

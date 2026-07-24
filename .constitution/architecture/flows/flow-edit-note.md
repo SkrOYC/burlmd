@@ -38,6 +38,7 @@ sequenceDiagram
         Note over Core,Local: ~1s idle may elapse while still focused
         Core->>Local: Compare on-disk hash to the current revision
         Core->>Local: Atomic write (tier 2): writes the working source verbatim
+        Core->>Local: Clear the draft row — it now matches disk
         Local-->>Core: New revision, which replaces the baseline
 
         Note over UI,Core: Block loses focus

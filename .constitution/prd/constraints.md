@@ -12,7 +12,7 @@
 
 ## Correctness & Fidelity
 - **Edit Fidelity:** Writing a Note to disk must not alter any region of that Note the user did not edit. A session that modifies one Block must produce a change confined to that Block's source, leaving all other bytes — including whitespace, delimiter style, and any metadata keys the application does not itself manage — byte-identical.
-- **Format Conformance:** Every Note the application writes must satisfy the Open Knowledge Format's conformance rules at the moment it is written, not only at Export time.
+- **Format Conformance:** Every Note the application **creates** satisfies the Open Knowledge Format's conformance rules from the moment it is created, not only at Export time, and no operation the application performs makes a conformant Note non-conformant. Stated as *creates* rather than *writes* because the two differ in a case the design explicitly supports: under CAP-WS-05 and CAP-PORT-03 a user may open a Workspace another tool wrote and edit a file that has no frontmatter, and the application will write that file while it remains non-conformant. Repairing it is an explicit user action, never automatic, because prepending a frontmatter block writes bytes outside the edited Block's span, which Edit Fidelity forbids.
 - **Non-Destructive Reconciliation:** Reconciling concurrent edits must never discard either side's content or duplicate a Note. Both variants must remain recoverable until the user resolves the Suggestion.
 
 ## Security & Sovereignty

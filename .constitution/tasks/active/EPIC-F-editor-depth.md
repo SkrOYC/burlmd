@@ -33,7 +33,7 @@ When it is reviewed
 Then it contains rendered screenshot comparisons of at least paragraph, heading and list-item Blocks in both states
 And it names every property that must be held identical between the two states
 And it records a viable or not-viable verdict on promote-on-focus with reasoning
-And no file under lib or rust/src has been modified
+And no file under lib or rust/src is modified by the Spike's own commit — throwaway prototyping is expected and necessary here, since the screenshot comparisons require a running widget and the raw-source presentation for headings and list items is EDIT-F002's deliverable, which depends on this Spike; prototype outside lib/, and do not let production code arrive under cover of a Spike
 ```
 
 #### EDIT-F002 Live Preview Block Promotion

@@ -47,6 +47,12 @@ Folded into v1.1.0, since nothing in this pass has merged.
 ### Corrections from PR review, round 8
 - **`flow-edit-note.md` had not received round 7's one-writer fix.** It still drew tier 2 splicing the buffered source, and never showed `update_block` performing the substitution and span adjustment at all — so following the diagram leads into exactly the duplication ADR-008 works through. Third round in which a contract fix failed to reach this set of diagrams, after the CSRF `state` and the OCC baseline.
 
+### Corrections from PR review, round 9
+- **`risks.md` risk 6's Mitigation still specified the design three rounds removed** — a caller-supplied `expected_base_revision` on a deleted `save_note`. The appended Resolution redefined the token without recording that the parameter was deleted outright, so the Mitigation still read as buildable. Marked superseded, matching how the same file already handles its Epic B notes.
+- **`flow-edit-note.md` never showed tier 2 clearing the draft row**, which is what makes the flow's own claim — "a draft row exists precisely when its content differs from disk" — true rather than aspirational.
+- **`flow-auth-handshake.md`'s Connect Remote sequence sat outside the CSRF `alt`**, so Mermaid drew it as unconditional continuation after `OAuthStateMismatch`. A note marking it a separate later user action removes the ambiguity without restructuring the diagram.
+- **Recorded why risks jump from 3 to 6.** Risks 4 and 5 were removed before v1.0.0 and the numbers are cited across roughly a dozen files, so renumbering would silently redirect every citation. A comment now says so, rather than leaving the next reader to wonder whether a citation was lost.
+
 ## v1.0.1
 Constitution Freshness & Reconciliation Pass following Epic B execution (UIDB-B001–B007).
 - Corrected `containers.md`'s Local Repository description, which implied the raw OKF directory tree was encrypted by this container. The shipped implementation only encrypts the SQLite index (via SQLCipher); raw Markdown files rely on OS-level Full Disk Encryption, per `prd/constraints.md`'s existing rationale (preserving native Git merge capability). This same inconsistency also existed in `prd/capabilities.md` (corrected there, see `prd/changelog.md` v1.0.1).

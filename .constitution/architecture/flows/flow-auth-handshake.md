@@ -35,6 +35,7 @@ sequenceDiagram
         Core-->>UI: SessionState (authenticated)
     end
 
+    Note over UI,Core: Later, as a separate user action
     UI->>Core: Connect Remote (provider, repository?)
     alt No repository named
         Core->>Remote: Provision new private repository
