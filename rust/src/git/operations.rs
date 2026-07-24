@@ -39,17 +39,31 @@ use crate::error::AppError;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::atomic::AtomicBool;
+use zeroize::Zeroizing;
 
 /// Credentials for authenticating against a remote (e.g. a GitHub OAuth access token).
 /// SYNC-C002 is responsible for retrieving this from `keyring`; this ticket only defines the
 /// shape so that wiring point exists.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+///
+/// The token is wrapped in `Zeroizing` (same pattern as `security::keyring`) so it is wiped
+/// from memory on drop, and `Debug` is implemented by hand to redact it: the derived `Debug`
+/// would otherwise print the cleartext token in panic messages, logs, or `{:?}` output.
+#[derive(Clone, Default, PartialEq, Eq)]
 pub struct GitCredentials {
     /// The username to authenticate with. For GitHub token auth this is conventionally
     /// ignored by the server but must be non-empty; `"x-access-token"` is a safe default.
     pub username: String,
     /// The bearer token / personal access token / OAuth access token.
-    pub token: String,
+    pub token: Zeroizing<String>,
+}
+
+impl std::fmt::Debug for GitCredentials {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("GitCredentials")
+            .field("username", &self.username)
+            .field("token", &"***")
+            .finish()
+    }
 }
 
 /// Clone `url` into `dest`, checking out the default branch's worktree.
@@ -77,7 +91,7 @@ pub fn clone_repo(
                     Ok(Some(gix::credentials::protocol::Outcome {
                         identity: gix::sec::identity::Account {
                             username: creds.username.clone(),
-                            password: creds.token.clone(),
+                            password: creds.token.to_string(),
                             oauth_refresh_token: None,
                         },
                         next: gix::credentials::helper::NextAction::from(ctx),
@@ -106,7 +120,11 @@ pub fn clone_repo(
 ///
 /// This is a full-worktree snapshot rather than an index-diff commit: it is equivalent to
 /// `git add -A && git commit`, which is the semantics the Gherkin ("a local directory with
-/// changes" -> "a Git commit is created") calls for.
+/// changes" -> "a Git commit is created") calls for. In particular, the new tree is built
+/// starting from the *empty* tree (not the parent commit's tree) and populated only with
+/// files `collect_files` currently finds in the worktree: a path that existed in the parent
+/// commit but is no longer present on disk (deleted, or the source half of a rename) is
+/// therefore correctly absent from the new tree, rather than surviving into it.
 pub fn commit_all(
     repo_path: &Path,
     message: &str,
@@ -115,16 +133,18 @@ pub fn commit_all(
 ) -> Result<String, AppError> {
     let repo = gix::open(repo_path).map_err(|e| AppError::IoError(format!("open repo: {e}")))?;
 
-    let base_tree_id = match repo.head_tree_id() {
-        Ok(id) => id.detach(),
-        Err(_) => gix::ObjectId::empty_tree(repo.object_hash()),
-    };
-
     let mut files = Vec::new();
     collect_files(repo_path, repo_path, &mut files)?;
 
+    // Always start from the empty tree, rather than the parent commit's tree: the tree
+    // editor only ever `upsert`s paths found in the worktree below, so seeding it with the
+    // parent's tree would let deleted/renamed-away paths silently survive into the new
+    // commit (they'd never be visited, let alone removed). Building from empty and
+    // re-adding exactly what's on disk makes the result an accurate full-worktree snapshot
+    // regardless of what was deleted or renamed since the parent commit.
+    let empty_tree_id = gix::ObjectId::empty_tree(repo.object_hash());
     let mut editor = repo
-        .edit_tree(base_tree_id)
+        .edit_tree(empty_tree_id)
         .map_err(|e| AppError::IoError(format!("start tree edit: {e}")))?;
 
     for file in &files {
@@ -309,7 +329,8 @@ fn collect_files(root: &Path, dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), 
 /// `GIT_CONFIG_VALUE_n`, supported since Git 2.31) to set a one-shot `http.extraHeader`.
 fn apply_credentials(cmd: &mut Command, credentials: Option<&GitCredentials>) {
     if let Some(creds) = credentials {
-        let basic = base64_encode(format!("{}:{}", creds.username, creds.token).as_bytes());
+        let basic =
+            base64_encode(format!("{}:{}", creds.username, creds.token.as_str()).as_bytes());
         cmd.env("GIT_CONFIG_COUNT", "1");
         cmd.env("GIT_CONFIG_KEY_0", "http.extraheader");
         cmd.env(
@@ -579,5 +600,135 @@ mod tests {
             result,
             Err(AppError::NetworkError(_)) | Err(AppError::IoError(_))
         ));
+    }
+
+    fn ls_tree_paths(dir: &Path) -> Vec<String> {
+        let ls = StdCommand::new("git")
+            .args(["ls-tree", "-r", "--name-only", "HEAD"])
+            .current_dir(dir)
+            .output()
+            .unwrap();
+        String::from_utf8_lossy(&ls.stdout)
+            .lines()
+            .map(|s| s.to_string())
+            .collect()
+    }
+
+    /// Regression test for the tree-editor deletion bug: `commit_all` used to seed the tree
+    /// editor from the parent commit's tree and only `upsert` worktree files, so a file
+    /// deleted from the worktree was never visited and survived into the new commit.
+    #[test]
+    fn commit_all_reflects_a_deleted_file() {
+        let dir = tempdir().unwrap();
+        init_repo(dir.path());
+        std::fs::write(dir.path().join("keep.md"), b"keep\n").unwrap();
+        std::fs::write(dir.path().join("gone.md"), b"gone\n").unwrap();
+        commit_all(dir.path(), "add both", "Test User", "test@example.com").unwrap();
+
+        std::fs::remove_file(dir.path().join("gone.md")).unwrap();
+        commit_all(
+            dir.path(),
+            "delete gone.md",
+            "Test User",
+            "test@example.com",
+        )
+        .unwrap();
+
+        let names = ls_tree_paths(dir.path());
+        assert!(names.contains(&"keep.md".to_string()));
+        assert!(
+            !names.iter().any(|n| n == "gone.md"),
+            "deleted file must not survive into the new commit's tree, got: {names:?}"
+        );
+    }
+
+    /// Regression test for the tree-editor rename bug: renaming used to leave the old path
+    /// present in the new commit's tree alongside the new one, since the old path was never
+    /// removed from the parent tree the editor started from.
+    #[test]
+    fn commit_all_reflects_a_renamed_file() {
+        let dir = tempdir().unwrap();
+        init_repo(dir.path());
+        std::fs::write(dir.path().join("old_name.md"), b"content\n").unwrap();
+        commit_all(
+            dir.path(),
+            "add old_name.md",
+            "Test User",
+            "test@example.com",
+        )
+        .unwrap();
+
+        std::fs::rename(
+            dir.path().join("old_name.md"),
+            dir.path().join("new_name.md"),
+        )
+        .unwrap();
+        commit_all(
+            dir.path(),
+            "rename old_name.md to new_name.md",
+            "Test User",
+            "test@example.com",
+        )
+        .unwrap();
+
+        let names = ls_tree_paths(dir.path());
+        assert!(names.contains(&"new_name.md".to_string()));
+        assert!(
+            !names.iter().any(|n| n == "old_name.md"),
+            "old path must not survive a rename, got: {names:?}"
+        );
+    }
+
+    /// Same deletion bug, but for a file nested inside a subdirectory, to make sure the fix
+    /// isn't just correct for top-level paths.
+    #[test]
+    fn commit_all_reflects_a_deleted_file_in_a_subdirectory() {
+        let dir = tempdir().unwrap();
+        init_repo(dir.path());
+        std::fs::create_dir_all(dir.path().join("notes/sub")).unwrap();
+        std::fs::write(dir.path().join("notes/sub/keep.md"), b"keep\n").unwrap();
+        std::fs::write(dir.path().join("notes/sub/gone.md"), b"gone\n").unwrap();
+        commit_all(
+            dir.path(),
+            "add nested files",
+            "Test User",
+            "test@example.com",
+        )
+        .unwrap();
+
+        std::fs::remove_file(dir.path().join("notes/sub/gone.md")).unwrap();
+        commit_all(
+            dir.path(),
+            "delete nested gone.md",
+            "Test User",
+            "test@example.com",
+        )
+        .unwrap();
+
+        let names = ls_tree_paths(dir.path());
+        assert!(names.contains(&"notes/sub/keep.md".to_string()));
+        assert!(
+            !names.iter().any(|n| n == "notes/sub/gone.md"),
+            "deleted nested file must not survive into the new commit's tree, got: {names:?}"
+        );
+    }
+
+    /// Regression test for the credential-leak bug: `GitCredentials`'s derived `Debug` used
+    /// to print the raw token in cleartext (e.g. in a panic message or `{:?}` log line).
+    #[test]
+    fn git_credentials_debug_output_redacts_the_token() {
+        let creds = GitCredentials {
+            username: "x-access-token".to_string(),
+            token: Zeroizing::new("super-secret-token-value".to_string()),
+        };
+
+        let debug_output = format!("{creds:?}");
+
+        assert!(
+            !debug_output.contains("super-secret-token-value"),
+            "Debug output must not contain the raw token, got: {debug_output}"
+        );
+        assert!(debug_output.contains("username"));
+        assert!(debug_output.contains("x-access-token"));
     }
 }
