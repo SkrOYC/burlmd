@@ -20,8 +20,13 @@ sequenceDiagram
     Core-->>UI: Authorize URL + verifier + state
 
     UI->>OAuth: User authorizes via system browser
-    OAuth-->>UI: Redirect to loopback with auth code
-    UI->>Core: Auth code + verifier
+    OAuth-->>UI: Redirect to loopback with auth code + state
+    UI->>Core: Auth code + verifier + returned state
+
+    Core->>Core: Compare returned state to generated state
+    alt State does not match
+        Core-->>UI: Reject; no token exchange is attempted
+    end
 
     Core->>OAuth: Exchange code for tokens (PKCE)
     OAuth-->>Core: Access / refresh tokens
@@ -47,11 +52,12 @@ sequenceDiagram
 
 ## What changed, and why
 
-The previous version of this flow sequenced authorization → token exchange → key generation → **clone repository** → initialize index → "Login Successful, Workspace Ready". Three defects, all corrected above:
+The previous version of this flow sequenced authorization → token exchange → key generation → **clone repository** → initialize index → "Login Successful, Workspace Ready". Four defects, all corrected above:
 
 1. **It cloned.** There was no branch through the flow that did not involve a Remote, which made a network round trip a precondition to writing the first word and contradicted the Local-First Mandate outright. The implementation followed it faithfully, which is why `lib/main.dart` gates the whole application behind a login screen. Replaced by initialization in `flow-workspace-bootstrap.md`, with `clone` retained only for onboarding an already-remote Workspace onto a second device.
 2. **It owned the encryption key.** Moved to bootstrap, where it belongs — the key protects the local index, which has no relationship to whether a Remote exists.
-3. **It never distinguished "provision" from "connect".** `prd/capabilities.md` said OAuth would "provision or connect" a Workspace without defining either. Both branches are now explicit, and adopting a *non-empty* remote is deliberately excluded — that is a Workspace-adoption problem (CAP-WS-05), not a connection problem, and merging two populated histories is a materially different operation.
+3. **It generated a `state` parameter and never checked it.** The value was minted, handed to the UI, and then dropped: the redirect came back and the code was exchanged without any comparison. A CSRF parameter that is generated but never compared is decoration — it is exactly as protective as omitting it, while reading in review as though the protection exists. The comparison is now an explicit step, and failing it terminates the flow before the token exchange rather than after.
+4. **It never distinguished "provision" from "connect".** `prd/capabilities.md` said OAuth would "provision or connect" a Workspace without defining either. Both branches are now explicit, and adopting a *non-empty* remote is deliberately excluded — that is a Workspace-adoption problem (CAP-WS-05), not a connection problem, and merging two populated histories is a materially different operation.
 
 ## Session persistence
 

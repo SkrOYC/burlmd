@@ -70,7 +70,7 @@ See [Architecture](/projects/architecture.md) for the container split.
 
 OKF §3.1 reserves `index.md` (directory listing, §8) and `log.md` (update history, §9). Both are optional, and §11 constrains their structure only when they are present.
 
-burlmd **reserves both names and generates neither** (ADR-004 decision 6). A user attempting to create a Note that would occupy either name is redirected to a different filename rather than being allowed to produce a non-conformant bundle.
+burlmd **reserves both names and generates neither** (ADR-004 decision 6). A Note whose title would derive to either filename is **rejected with `PathUnavailable`**, and the user is told. It is not silently disambiguated into a different filename — that is the same rule `create_note` states in `contracts/ffi_api.rs` and that `WSPC-D006` carries as a STOP condition, and silently altering a name the user chose is worse than refusing it.
 
 One consequence is worth stating plainly: OKF §12 allows a bundle to declare its target specification version via `okf_version` in the frontmatter of a bundle-root `index.md` — and *only* there. Declining to generate that file means a burlmd-authored bundle ships untagged, and a consumer must infer the version. This is acceptable because §11's tolerance rules oblige consumers to accept unknown keys, unknown types, broken links, and missing indices regardless of version.
 
@@ -84,4 +84,6 @@ Images (CAP-EDIT-06) live inside the bundle and are referenced by bundle-absolut
 2. Every Note that burlmd has written has a parseable frontmatter block with a non-empty `type`.
 3. A Note's `notes.id` equals its bundle-relative path with `.md` removed, and `notes.path` equals that path with `.md` retained. These are two views of one fact, stored separately so that the FTS and Link tables can key on the id without re-deriving it.
 4. Bytes outside the span of an edited Block are identical before and after a write (ADR-007).
-5. The bundle is conformant at every point at which the application is not mid-write. Conformance is not a mode and is never restored by an export step (CAP-PORT-01).
+5. Every Note **burlmd has written** is conformant the moment the write completes, not at some later export step (CAP-PORT-01). Conformance is not a mode.
+
+Invariant 5 is deliberately scoped to Notes burlmd wrote. A Workspace may legitimately contain files it did not write — CAP-WS-05 opens foreign Workspaces and CAP-PORT-03 tolerates external tools writing into this one — and those are indexed with `okf_conformant = 0` and brought into conformance only when the user next edits them, which may be never. A stronger invariant covering the whole bundle at all times would be false the moment a foreign Note is added, and would oblige the application to rewrite files the user never asked it to touch.

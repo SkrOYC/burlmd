@@ -38,6 +38,7 @@ Then it exits non-zero and no screenshot is written
 - **Category:** Correctness
 - **Scope (In-Scope Files):**
   - `lib/main.dart`
+  - `lib/src/screens/workspace.dart` (created here as the minimal shell this ticket's screenshot asserts on; `SHEL-E003` fills it with the tree)
   - `lib/src/providers/workspace_provider.dart`
   - `lib/src/providers/rust_api_provider.dart`
   - `test/widget_test.dart`

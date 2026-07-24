@@ -14,7 +14,7 @@ This epic became substantially cheaper and less risky when the editing model cha
 - **Scope (Out-of-Scope Files):**
   - `lib/**` (no production code in a Spike)
   - `rust/src/**`
-- **Verification Command:** `test -s .constitution/spikes/SPK-EDIT-F001.md`
+- **Verification Command:** `! grep -q 'Status: placeholder' .constitution/spikes/SPK-EDIT-F001.md && ! grep -q 'To be filled' .constitution/spikes/SPK-EDIT-F001.md && git diff --quiet HEAD -- lib rust/src`
 - **Expected Success Output:** `exit 0`
 - **STOP Conditions:**
   - "STOP if the promotion cannot be made typographically stable; that outcome selects the custom-selectable escalation path recorded in ADR-006 decision 6, which is a Stage 3 decision rather than an improvised widget change."

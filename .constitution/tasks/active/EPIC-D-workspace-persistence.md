@@ -13,7 +13,7 @@ Entirely Core-side. No ticket here touches Dart, and nothing in this epic is vis
   - `.constitution/spikes/SPK-WSPC-D001.md`
 - **Scope (Out-of-Scope Files):**
   - `rust/src/**` (no production code in a Spike)
-- **Verification Command:** `test -s .constitution/spikes/SPK-WSPC-D001.md`
+- **Verification Command:** `! grep -q 'Status: placeholder' .constitution/spikes/SPK-WSPC-D001.md && ! grep -q 'To be filled' .constitution/spikes/SPK-WSPC-D001.md && git diff --quiet HEAD -- rust/src`
 - **Expected Success Output:** `exit 0`
 - **STOP Conditions:**
   - "STOP if the investigation concludes that whole-file reparse cannot meet the 16ms budget in `prd/constraints.md` at realistic Note sizes; that invalidates ADR-007's mitigation and requires a Stage 3 pass, not an improvised offset-arithmetic implementation."
@@ -140,8 +140,9 @@ Then the resulting node at that position is a list rather than a paragraph
 - **Expected Success Output:** `exit 0`
 - **STOP Conditions:**
   - "STOP if bootstrap requires reading a credential, contacting a network host, or consulting authentication state; `flow-workspace-bootstrap.md` contains no such step and CAP-WS-01 forbids one."
-  - "STOP if the encrypted index is placed inside the bundle directory; `tech-spec/guidelines.md` requires it live alongside, not within."
-- **Description:** Implement `open_or_create_local_workspace` per `flow-workspace-bootstrap.md`. Resolves the default Workspace location specified in `guidelines.md`, creates the directory when absent, initializes a version-controlled repository in place, generates and stores the root encryption key on first boot, opens the encrypted index, and writes a Workspace row with a local provider and no remote. The root key path moves here from the authentication flow, where it never belonged. Both this path and a future clone path must converge on identical post-conditions.
+  - "STOP if the encrypted index is placed inside the bundle directory; `tech-spec/guidelines.md` requires it live alongside, not within, and names the exact path."
+  - "STOP if an index file found at the old `$HOME/.burlmd/index.sqlite3` path is opened, migrated, or copied. It is stale derived state under a path the specification no longer names; the new path starts empty and `WSPC-D005` rebuilds it from the bundle."
+- **Description:** Implement `open_or_create_local_workspace` per `flow-workspace-bootstrap.md`. Resolves the default Workspace location and the index location specified in `guidelines.md` — the latter replacing the `$HOME/.burlmd/index.sqlite3` placeholder `connection.rs` carries from Epic B — creates the directory when absent, initializes a version-controlled repository in place, generates and stores the root encryption key on first boot, opens the encrypted index, and writes a Workspace row with a local provider and no remote. The root key path moves here from the authentication flow, where it never belonged. Both this path and a future clone path must converge on identical post-conditions.
 - **Acceptance Criteria (Gherkin):**
 ```gherkin
 Given no Workspace directory exists and no network is reachable
@@ -158,7 +159,11 @@ Then the existing repository and Workspace row are reused and no second key is g
 
 Given a Workspace has been opened
 When the index file location is inspected
-Then it is outside the bundle directory
+Then it is outside the bundle directory, at the path `guidelines.md` names, and not at `$HOME/.burlmd/index.sqlite3`
+
+Given an index file exists at the old `$HOME/.burlmd/index.sqlite3` path
+When the local Workspace is opened
+Then that file is neither opened nor migrated, and the Workspace opens against an index at the new path
 ```
 
 #### WSPC-D005 Bundle Indexer
@@ -270,7 +275,9 @@ Then the deletion is committed and the prior content is recoverable
 - **STOP Conditions:**
   - "STOP if a commit is triggered on a timer rather than on Note close; ADR-008 rejected timer-based commits explicitly."
   - "STOP if a file write is not atomic; `architecture/resilience.md` guarantees the previous state survives an abrupt termination mid-write."
-- **Description:** Implement the four tiers of ADR-008. Every Block edit writes a draft row; roughly a second of inactivity splices and writes the file atomically; closing a Note or quitting flushes any pending write, makes one commit for the session, clears the draft row, and notifies the sync scheduler — giving `notify_activity()` its first caller since Epic C. Saving compares a content hash and rejects on mismatch, which is the Optimistic Concurrency Control in `architecture/risks.md` risk 6, now guarding file content rather than a database column. Switching away from a Note counts as closing it.
+- **Description:** Implement the four tiers of ADR-008. Every Block edit writes a draft row; roughly a second of inactivity splices and writes the file atomically; closing a Note or quitting flushes any pending write, makes one commit for the session, clears the draft row, and notifies the sync scheduler — giving `notify_activity()` its first caller since Epic C. The write tier compares the content hash it recorded when the Note was opened against the file on disk immediately before writing, and refuses the write on mismatch — the Optimistic Concurrency Control in `architecture/risks.md` risk 6, now guarding file content rather than a database column. That comparison belongs entirely to the Core: `flush_note` takes no revision token, because the UI never learns when the idle tier fires and any token it held would be stale by construction. Switching away from a Note counts as closing it.
+
+  Tier 1 puts a synchronous encrypted write of the Note's full source on the keystroke path. That is the one place in this design where a per-keystroke cost scales with document length, so it is measured rather than assumed against the 16ms frame budget in `prd/constraints.md`.
 - **Acceptance Criteria (Gherkin):**
 ```gherkin
 Given a Note is being edited
@@ -293,9 +300,13 @@ Given a Note with edits from this session
 When the Note is closed
 Then exactly one commit is made, the draft row is cleared, and the sync scheduler is notified
 
-Given the on-disk file changed after a draft was opened
-When the Note is saved with the stale revision
-Then the save is rejected with a revision mismatch carrying the current revision
+Given the on-disk file changed after the Note was opened
+When the idle write tier fires
+Then the write is refused with a revision mismatch carrying the current revision, and the file on disk is left untouched
+
+Given a Note whose source is 100 kilobytes
+When a single Block edit is committed to the draft tier
+Then the measured write completes within the frame budget, and the measurement is recorded in the test rather than asserted by inspection
 ```
 
 #### WSPC-D008 Editing FFI Surface
@@ -307,6 +318,7 @@ Then the save is rejected with a revision mismatch carrying the current revision
   - `rust/src/api/ffi_api.rs`
   - `rust/src/frb_generated.rs`
   - `lib/src/rust/**` (regenerated bindings only)
+  - `lib/src/providers/note_providers.dart` (calls `openNote(path)` and assigns `updateBlock`'s return value; both signatures change here, so `dart analyze` cannot pass without it)
 - **Scope (Out-of-Scope Files):**
   - `lib/src/components/**` (Epic F consumes this surface)
   - `lib/src/screens/**`
@@ -345,7 +357,8 @@ Then the returned text reproduces the selected content across all three
 
 Given the exposed surface
 When it is compared against contracts/ffi_api.rs
-Then no function named open_note_by_id exists and open_note accepts a concept id
+Then open_note accepts a concept id and there is exactly one open-a-Note entry point
+And no exposed function takes a workspace_id parameter
 ```
 
 #### WSPC-D009 Discovery and Graph FFI Surface

@@ -27,6 +27,12 @@ Evolution pass driven by a pre-Tasks interview, which surfaced that the previous
 
 **Deliberately not resolved here.** Storage-format specifics — the exact specification version pinned, frontmatter field set, link target form, and canonical file layout — are implementation decisions and belong to Stage 3. `vision.md`'s Operator Preferences records only that conformance is intended.
 
+### Corrections from PR review, rounds 1 and 2
+Folded into v1.1.0, since nothing in this pass has merged.
+
+- **Round 1** reworded `constraints.md`'s at-rest claim, which asserted operating-system full-disk encryption as though it were a platform guarantee. On the primary desktop target it is an install-time opt-in this application cannot assure.
+- **Round 2** found the same claim standing in `capabilities.md` (`CAP-WS-04`), because round 1 fixed the sentence it was shown rather than searching for the assertion. Both now state the two protections separately: the encrypted index is a guarantee this application makes, and what protects the plaintext Notes beside it is not.
+
 ## v1.0.1
 Constitution Freshness & Reconciliation Pass following Epic B execution (UIDB-B001–B007).
 - Corrected `capabilities.md`'s at-rest encryption capability, which implied Notes on disk and the SQLite index receive identical, uniform encryption. The shipped implementation (and `constraints.md`'s own pre-existing rationale) draws a real distinction: Notes on disk are protected via OS-level Full Disk Encryption only, while the SQLite search index is additionally encrypted at the application level via SQLCipher. Reworded to state that distinction explicitly rather than imply both are encrypted the same way.

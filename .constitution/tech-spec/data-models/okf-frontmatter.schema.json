@@ -2,12 +2,12 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://burlmd.local/schemas/okf-frontmatter.schema.json",
   "title": "OKF v0.2 Note Frontmatter",
-  "description": "Validation contract for the YAML frontmatter block of a Note in a burlmd Workspace, expressed against the YAML block's decoded mapping. Conformance to Open Knowledge Format v0.2 requires only that the block parse and that `type` be present and non-empty (SPEC.md section 11). Every other property here is either recommended by the specification or tolerated by it; unknown properties MUST be accepted and, per ADR-007, are preserved byte-for-byte on disk rather than round-tripped through this model.",
-
+  "description": "Validation contract for the YAML frontmatter block of a Note in a burlmd Workspace, expressed against the YAML block's decoded mapping. IMPORTANT: only `type` is conformance-bearing. Open Knowledge Format v0.2 section 11 makes a bundle conformant if every non-reserved .md file has a parseable frontmatter block containing a non-empty `type`, and it requires consumers to NOT reject a bundle for missing optional fields, unknown types, unknown keys, broken links, or missing indices. Every other property below is ADVISORY: it documents the shape burlmd recognises so it can surface those fields, and a value that does not match it MUST NOT set `okf_conformant = 0` -- doing so would flag legitimate foreign bundles as broken and undermine CAP-WS-05 and CAP-PORT-03. See `x-conformance-bearing` below.",
   "type": "object",
-  "required": ["type"],
+  "required": [
+    "type"
+  ],
   "additionalProperties": true,
-
   "properties": {
     "type": {
       "description": "REQUIRED by OKF section 11. A short string identifying the kind of concept. There is no central registry; consumers MUST tolerate unknown types. burlmd writes the constant 'Note' unless a richer type vocabulary is introduced as a product capability.",
@@ -25,14 +25,15 @@
       "type": "string"
     },
     "resource": {
-      "description": "RECOMMENDED by OKF. A URI uniquely identifying the underlying asset. Not meaningful for a personal Note, where the Note is itself the asset; preserved when present.",
-      "type": "string",
-      "format": "uri"
+      "description": "ADVISORY, not conformance-bearing. RECOMMENDED by OKF. A URI uniquely identifying the underlying asset. Not meaningful for a personal Note, where the Note is itself the asset; preserved when present. The URI shape is documented rather than enforced -- a foreign bundle carrying a non-URI value here is still conformant.",
+      "type": "string"
     },
     "tags": {
       "description": "RECOMMENDED by OKF. Short strings for cross-cutting categorization. Preserved when present; not yet surfaced as a product capability.",
       "type": "array",
-      "items": { "type": "string" }
+      "items": {
+        "type": "string"
+      }
     },
     "timestamp": {
       "description": "LEGACY (OKF v0.1). Superseded by `generated.at` in v0.2 per SPEC.md section 13.1; it is not a current v0.2 option. Listed here only so a bundle authored against v0.1 validates rather than being rejected. burlmd never writes it, and never writes `generated` either — see the `generated` property and ADR-004 decision 8 for why recording any modification time in the file would violate the Edit Fidelity constraint.",
@@ -41,9 +42,13 @@
       "deprecated": true
     },
     "status": {
-      "description": "OPTIONAL lifecycle field (OKF section 5.4). Absent is equivalent to 'stable'. Preserved when present; surfacing it is deferred product scope.",
+      "description": "ADVISORY, not conformance-bearing. OPTIONAL lifecycle field (OKF section 5.4). Absent is equivalent to 'stable'. The values below are the ones the specification lists and the ones burlmd recognises; OKF does not close the set, so an unrecognised value is preserved and surfaced as-is, never treated as non-conformant.",
       "type": "string",
-      "enum": ["draft", "stable", "deprecated"]
+      "examples": [
+        "draft",
+        "stable",
+        "deprecated"
+      ]
     },
     "stale_after": {
       "description": "OPTIONAL lifecycle field (OKF section 5.5). An absolute date after which the concept should be treated as potentially outdated.",
@@ -51,20 +56,32 @@
       "format": "date"
     },
     "generated": {
-      "description": "OPTIONAL trust field (OKF section 5.2). Records how the content was produced. Actor identifiers follow OKF section 7: '<producer>/<version>' for tools and agents, 'human:<id>' for people, 'process:<id>' for processes.",
+      "description": "ADVISORY, not conformance-bearing. OPTIONAL trust field (OKF section 5.2) recording how the content was produced; supersedes v0.1's `timestamp` per section 13.1. Actor identifiers follow OKF section 7: '<producer>/<version>' for tools and agents, 'human:<id>' for people, 'process:<id>' for processes. burlmd never writes this -- see ADR-004 decision 8.",
       "type": "object",
-      "required": ["by"],
       "additionalProperties": true,
       "properties": {
-        "by": { "type": "string", "minLength": 1 },
-        "at": { "type": "string", "format": "date-time" }
+        "by": {
+          "type": "string",
+          "minLength": 1
+        },
+        "at": {
+          "type": "string",
+          "format": "date-time"
+        }
       }
     },
     "verified": {
       "description": "OPTIONAL trust field (OKF section 5.2). One verification event, or a list of them.",
       "oneOf": [
-        { "$ref": "#/$defs/verificationEvent" },
-        { "type": "array", "items": { "$ref": "#/$defs/verificationEvent" } }
+        {
+          "$ref": "#/$defs/verificationEvent"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/verificationEvent"
+          }
+        }
       ]
     },
     "sources": {
@@ -72,15 +89,30 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["resource"],
+        "required": [
+          "resource"
+        ],
         "additionalProperties": true,
         "properties": {
-          "resource": { "type": "string" },
-          "id": { "type": "string" },
-          "title": { "type": "string" },
-          "author": { "type": "string" },
-          "usage_count": { "type": "integer", "minimum": 0 },
-          "last_modified": { "type": "string" }
+          "resource": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "author": {
+            "type": "string"
+          },
+          "usage_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "last_modified": {
+            "type": "string"
+          }
         }
       }
     },
@@ -89,8 +121,14 @@
       "type": "object",
       "additionalProperties": true,
       "properties": {
-        "from": { "type": "string", "format": "date" },
-        "to": { "type": "string", "format": "date" }
+        "from": {
+          "type": "string",
+          "format": "date"
+        },
+        "to": {
+          "type": "string",
+          "format": "date"
+        }
       }
     },
     "okf_version": {
@@ -99,21 +137,42 @@
       "pattern": "^[0-9]+\\.[0-9]+$"
     }
   },
-
   "$defs": {
     "verificationEvent": {
       "type": "object",
-      "required": ["by"],
       "additionalProperties": true,
       "properties": {
-        "by": { "type": "string", "minLength": 1 },
-        "at": { "type": "string", "format": "date-time" }
-      }
+        "by": {
+          "type": "string",
+          "minLength": 1
+        },
+        "at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "description": "ADVISORY. A verification event; `by` is the conventional key, not an enforced one."
     }
   },
-
   "examples": [
-    { "type": "Note", "title": "burlmd" },
-    { "type": "Note", "title": "Q3 planning", "tags": ["work", "planning"], "status": "draft" }
-  ]
+    {
+      "type": "Note",
+      "title": "burlmd"
+    },
+    {
+      "type": "Note",
+      "title": "Q3 planning",
+      "tags": [
+        "work",
+        "planning"
+      ],
+      "status": "draft"
+    }
+  ],
+  "x-conformance-bearing": {
+    "description": "The only properties whose violation may set `okf_conformant = 0`. Everything else in `properties` is advisory shape documentation. An implementation that validates a whole foreign bundle against this schema and treats any failure as non-conformance is wrong.",
+    "properties": [
+      "type"
+    ]
+  }
 }

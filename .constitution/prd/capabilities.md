@@ -122,8 +122,8 @@ Priorities express the critical path to a Workspace the primary actor can rely o
 
 - **Priority:** P0
 - **Capability ID:** CAP-WS-04
-- **Capability:** Local data is protected at rest: Notes on disk rely on operating-system full-disk encryption so that standard tooling can still operate on them, while the local search index — which aggregates the content of every Note — is additionally encrypted by the application, with its key held in operating-system secure storage.
-- **Rationale:** Ensures data privacy if the physical device is compromised, without making the Notes themselves unreadable to the tooling that must merge them.
+- **Capability:** The local search index — which aggregates the content of every Note into one file — is encrypted by the application, with its key held in operating-system secure storage. Notes themselves are stored as plaintext so that standard tooling can operate on them, and their at-rest protection is whatever the operating system provides rather than anything the application guarantees.
+- **Rationale:** Limits what a compromised device yields without making the Notes unreadable to the tooling that must merge them. Stated as two separate guarantees deliberately: only the first is something this application can actually deliver.
 
 - **Priority:** P1
 - **Capability ID:** CAP-WS-05

@@ -5,16 +5,28 @@
 // Workspace), ADR-006 (raw-on-focus editing), ADR-007 (span-preserving source
 // splicing), ADR-008 (four-tier persistence).
 //
-// Two contract-wide rules follow from ADR-007 and are not repeated per function:
+// Three contract-wide rules, not repeated per function:
 //
 //   1. A Note is addressed by its OKF concept id -- its bundle-relative path
 //      with `.md` removed (OKF v0.2 SPEC.md section 2). Never by a UUID, and
 //      never by an absolute filesystem path.
-//   2. Source spans are Core-side state keyed by `block_path`. They never
-//      appear on `AstNode` and never cross this boundary. The UI has no use
-//      for byte offsets into a file it does not own, and carrying them would
-//      inflate every edit round trip against the 16ms budget in
-//      `prd/constraints.md` (see `architecture/risks.md` risk 1).
+//   2. **Exactly one Workspace is active at a time, and the Core owns which.**
+//      No call below takes a `workspace_id`: the active Workspace is
+//      established by `open_or_create_local_workspace` or `open_workspace`
+//      and every subsequent call is implicitly scoped to it. This is
+//      load-bearing rather than cosmetic. A concept id is unique within a
+//      bundle but NOT globally (`data-models/schema.sql`), so two Workspaces
+//      may each hold a `Welcome`; a bare `note_id` is only unambiguous
+//      because the Core supplies the Workspace. The index still stores
+//      `workspace_id` on every row -- it accumulates rows for every Workspace
+//      ever opened (CAP-WS-05) -- and every query filters on the active one.
+//      Concurrent Workspaces are out of scope by product decision; see
+//      `prd/out-of-scope/multiple-simultaneous-workspaces.md` and ADR-005
+//      decision 7.
+//   3. Source spans are Core-side state keyed by `block_path`. They never
+//      appear on `AstNode` and never cross this boundary. A byte offset into
+//      a file the Presentation Container does not own, cannot read and must
+//      not write is meaningless to it (ADR-007 decision 3).
 
 use flutter_rust_bridge::frb;
 
@@ -63,8 +75,16 @@ pub struct WorkspaceInfo {
 /// per level.
 #[frb]
 pub enum TreeNode {
-    Directory { name: String, path: String, children: Vec<TreeNode> },
-    Note { id: String, title: String, path: String },
+    Directory {
+        name: String,
+        path: String,
+        children: Vec<TreeNode>,
+    },
+    Note {
+        id: String,
+        title: String,
+        path: String,
+    },
 }
 
 /// Opens the local Workspace, creating and initializing it if absent
@@ -78,7 +98,9 @@ pub enum TreeNode {
 /// (CAP-WS-01). `path` is `None` to use the default location specified in
 /// `guidelines.md`.
 #[frb]
-pub async fn open_or_create_local_workspace(path: Option<String>) -> Result<WorkspaceInfo, AppError> {
+pub async fn open_or_create_local_workspace(
+    path: Option<String>,
+) -> Result<WorkspaceInfo, AppError> {
     unimplemented!()
 }
 
@@ -104,14 +126,14 @@ pub async fn open_workspace(path: String) -> Result<WorkspaceInfo, AppError> {
 /// keeping the index current; incremental updates on write are. It exists for
 /// first open, post-merge reconciliation, and recovery.
 #[frb]
-pub async fn reindex_workspace(workspace_id: String) -> Result<u32, AppError> {
+pub async fn reindex_workspace() -> Result<u32, AppError> {
     unimplemented!()
 }
 
 /// The Directory tree for the sidebar, Directories before Notes, each level
 /// sorted by name.
 #[frb]
-pub async fn workspace_tree(workspace_id: String) -> Result<Vec<TreeNode>, AppError> {
+pub async fn workspace_tree() -> Result<Vec<TreeNode>, AppError> {
     unimplemented!()
 }
 
@@ -120,7 +142,7 @@ pub async fn workspace_tree(workspace_id: String) -> Result<Vec<TreeNode>, AppEr
 /// this is a tree copy plus a conformance check, not a decrypt-and-transform
 /// pipeline. `.git/` is excluded.
 #[frb]
-pub async fn export_workspace(workspace_id: String, destination: String) -> Result<(), AppError> {
+pub async fn export_workspace(destination: String) -> Result<(), AppError> {
     unimplemented!()
 }
 
@@ -130,9 +152,10 @@ pub async fn export_workspace(workspace_id: String, destination: String) -> Resu
 
 #[frb]
 pub struct NoteMetadata {
-    /// OKF concept id: bundle-relative path, `.md` removed.
+    /// OKF concept id: bundle-relative path, `.md` removed. Unambiguous
+    /// without a Workspace qualifier, per rule 2 above: every row returned
+    /// across this boundary belongs to the one active Workspace.
     pub id: String,
-    pub workspace_id: String,
     /// Bundle-relative path, `.md` retained.
     pub path: String,
     pub title: String,
@@ -150,7 +173,7 @@ pub struct NoteMetadata {
 /// is derived from `title`; a collision, or a title deriving to a reserved
 /// filename, returns `PathUnavailable` rather than silently disambiguating.
 #[frb]
-pub async fn create_note(workspace_id: String, directory_path: String, title: String) -> Result<NoteState, AppError> {
+pub async fn create_note(directory_path: String, title: String) -> Result<NoteState, AppError> {
     unimplemented!()
 }
 
@@ -183,7 +206,7 @@ pub async fn move_note(note_id: String, new_directory_path: String) -> Result<No
 /// Directory has no file to represent it, so it exists only in the
 /// `directories` table until it holds a Note.
 #[frb]
-pub async fn create_directory(workspace_id: String, path: String) -> Result<(), AppError> {
+pub async fn create_directory(path: String) -> Result<(), AppError> {
     unimplemented!()
 }
 
@@ -202,7 +225,7 @@ pub struct IdRemap {
 /// affected Note, for the same reason `rename_note` returns the new state:
 /// positional identity means the caller's existing ids are now stale.
 #[frb]
-pub async fn rename_directory(workspace_id: String, path: String, new_name: String) -> Result<Vec<IdRemap>, AppError> {
+pub async fn rename_directory(path: String, new_name: String) -> Result<Vec<IdRemap>, AppError> {
     unimplemented!()
 }
 
@@ -210,7 +233,7 @@ pub async fn rename_directory(workspace_id: String, path: String, new_name: Stri
 /// Returns the concept ids of every Note removed, so a caller with one of them
 /// open can close it rather than discovering it is gone on next access.
 #[frb]
-pub async fn delete_directory(workspace_id: String, path: String) -> Result<Vec<String>, AppError> {
+pub async fn delete_directory(path: String) -> Result<Vec<String>, AppError> {
     unimplemented!()
 }
 
@@ -249,19 +272,41 @@ pub enum InlineElement {
     },
     /// Any link that is not an internal Note reference: has a URL scheme, or
     /// does not end in `.md`.
-    ExternalLink { url: String, content: Vec<InlineElement> },
+    ExternalLink {
+        url: String,
+        content: Vec<InlineElement>,
+    },
 }
 
 #[frb]
 pub enum AstNode {
-    Heading { level: u8, content: Vec<InlineElement> },
-    Paragraph { content: Vec<InlineElement> },
-    List { ordered: bool, items: Vec<AstNode> },
-    ListItem { content: Vec<AstNode>, checked: Option<bool> },
-    Blockquote { nodes: Vec<AstNode> },
-    CodeBlock { language: Option<String>, code: String },
+    Heading {
+        level: u8,
+        content: Vec<InlineElement>,
+    },
+    Paragraph {
+        content: Vec<InlineElement>,
+    },
+    List {
+        ordered: bool,
+        items: Vec<AstNode>,
+    },
+    ListItem {
+        content: Vec<AstNode>,
+        checked: Option<bool>,
+    },
+    Blockquote {
+        nodes: Vec<AstNode>,
+    },
+    CodeBlock {
+        language: Option<String>,
+        code: String,
+    },
     ThematicBreak,
-    Image { alt_text: String, url_or_path: String },
+    Image {
+        alt_text: String,
+        url_or_path: String,
+    },
 
     /// A pending conflict the user must resolve, rendered inline as a
     /// Suggestion (CAP-SYNC-04).
@@ -329,9 +374,16 @@ pub fn get_block_source(note_id: String, block_path: Vec<usize>) -> Result<Strin
 }
 
 /// Records the focused Block's current source text. This is the per-keystroke
-/// call, and it is deliberately cheap: it buffers the text and writes the
-/// `drafts` row (ADR-008 tier 1). It does **not** splice, does not reparse,
-/// does not touch the file, and does not return an AST.
+/// call, and it is deliberately cheap: it substitutes the text into the
+/// in-memory note source and writes the resulting `drafts` row (ADR-008
+/// tier 1). It does **not parse**, does not touch the file on disk, and does
+/// not return an AST.
+///
+/// The distinction that matters is parse, not splice. A byte substitution
+/// into a buffer is O(file) memcpy at worst and carries no correctness risk;
+/// a parse is what costs, and what the span map depends on. `drafts`
+/// stores the full note source (`schema.sql`), so producing that row
+/// necessarily involves substituting this Block's text into it.
 ///
 /// Takes source text, not an `AstNode` -- the prior AST-based signature
 /// required reconstructing Markdown from a tree, which needed a canonical
@@ -346,7 +398,11 @@ pub fn get_block_source(note_id: String, block_path: Vec<usize>) -> Result<Strin
 /// `#[frb(sync)]` call, which is exactly what ADR-007, ADR-008 and
 /// `architecture/risks.md` risk 7 all claim the tiering avoids.
 #[frb(sync)]
-pub fn update_block(note_id: String, block_path: Vec<usize>, new_source: String) -> Result<(), AppError> {
+pub fn update_block(
+    note_id: String,
+    block_path: Vec<usize>,
+    new_source: String,
+) -> Result<(), AppError> {
     unimplemented!()
 }
 
@@ -367,7 +423,11 @@ pub fn commit_block(note_id: String, block_path: Vec<usize>) -> Result<NoteState
 
 /// Inserts a new Block at `block_path`, shifting subsequent Blocks down.
 #[frb(sync)]
-pub fn insert_block(note_id: String, block_path: Vec<usize>, source: String) -> Result<NoteState, AppError> {
+pub fn insert_block(
+    note_id: String,
+    block_path: Vec<usize>,
+    source: String,
+) -> Result<NoteState, AppError> {
     unimplemented!()
 }
 
@@ -379,14 +439,21 @@ pub fn delete_block(note_id: String, block_path: Vec<usize>) -> Result<NoteState
 /// Splits a Block at a character offset -- pressing Enter mid-Block
 /// (CAP-EDIT-03).
 #[frb(sync)]
-pub fn split_block(note_id: String, block_path: Vec<usize>, offset: usize) -> Result<NoteState, AppError> {
+pub fn split_block(
+    note_id: String,
+    block_path: Vec<usize>,
+    offset: usize,
+) -> Result<NoteState, AppError> {
     unimplemented!()
 }
 
 /// Merges a Block into its predecessor -- pressing Backspace at offset 0
 /// (CAP-EDIT-03). A no-op on the first Block.
 #[frb(sync)]
-pub fn merge_block_with_previous(note_id: String, block_path: Vec<usize>) -> Result<NoteState, AppError> {
+pub fn merge_block_with_previous(
+    note_id: String,
+    block_path: Vec<usize>,
+) -> Result<NoteState, AppError> {
     unimplemented!()
 }
 
@@ -417,7 +484,11 @@ pub fn delete_range(note_id: String, range: BlockRange) -> Result<NoteState, App
 /// crosses Blocks. The fiddliest interaction in ADR-006; the caller must
 /// re-derive caret position from the returned state.
 #[frb(sync)]
-pub fn replace_range(note_id: String, range: BlockRange, replacement: String) -> Result<NoteState, AppError> {
+pub fn replace_range(
+    note_id: String,
+    range: BlockRange,
+    replacement: String,
+) -> Result<NoteState, AppError> {
     unimplemented!()
 }
 
@@ -425,15 +496,29 @@ pub fn replace_range(note_id: String, range: BlockRange, replacement: String) ->
 // Persistence (ADR-008)
 // ---------------------------------------------------------------------------
 
-/// Tier 2: splices pending edits into the file and writes it atomically
-/// (temp file plus rename). Returns the new `base_revision`.
+/// Forces tier 2 immediately: splices pending edits into the file and writes
+/// it atomically (temp file plus rename). Returns the new `base_revision`.
 ///
-/// Rejects with `RevisionMismatch` when the on-disk content hash no longer
-/// matches `expected_base_revision` -- the Optimistic Concurrency Control in
-/// `architecture/risks.md` risk 6, now guarding file content rather than only
-/// a database column.
+/// **The debounce that normally triggers tier 2 lives in the Core, not the
+/// UI.** This function is the explicit-flush escape hatch — used by
+/// `close_note`, by application shutdown, and by tests — not the routine
+/// path. The UI is not required to call it at all.
+///
+/// It deliberately takes no `expected_base_revision`. The Core recorded the
+/// on-disk hash when the Note was opened and compares against that, rejecting
+/// with `RevisionMismatch` if the file changed underneath the draft — the
+/// Optimistic Concurrency Control in `architecture/risks.md` risk 6, now
+/// guarding file content rather than a database column.
+///
+/// Requiring the token from the caller would be actively wrong here: a
+/// Core-owned idle timer writes the file and advances the revision without
+/// the UI observing it, so any token the UI still held from `open_note` would
+/// be stale and every subsequent call would fail deterministically. That is
+/// structurally the same defect ADR-007 decision 7 exists to fix, one layer
+/// up. `NoteState.base_revision` remains exposed for display and diagnostics;
+/// it is not an input.
 #[frb]
-pub async fn save_note(note_id: String, expected_base_revision: String) -> Result<String, AppError> {
+pub async fn flush_note(note_id: String) -> Result<String, AppError> {
     unimplemented!()
 }
 
@@ -452,7 +537,7 @@ pub async fn close_note(note_id: String) -> Result<(), AppError> {
 /// Notes with an unflushed draft from a previous session, for surfacing
 /// recovered work on startup (CAP-WS-03).
 #[frb]
-pub async fn pending_drafts(workspace_id: String) -> Result<Vec<NoteMetadata>, AppError> {
+pub async fn pending_drafts() -> Result<Vec<NoteMetadata>, AppError> {
     unimplemented!()
 }
 
@@ -462,18 +547,19 @@ pub async fn pending_drafts(workspace_id: String) -> Result<Vec<NoteMetadata>, A
 
 /// Full-text search within one Workspace (CAP-FIND-01), bm25-ranked.
 ///
-/// `workspace_id` closes a real gap: the previous signature had no Workspace
-/// filter at all despite the capability being scoped to "all Notes in their
-/// Workspace". `limit` replaces the hardcoded cap of 50, which silently
-/// truncated with no signal to the caller.
+/// Scoped to the active Workspace, closing a real gap: the shipped signature
+/// had no Workspace filter at all despite the capability being scoped to "all
+/// Notes in their Workspace". The filter is applied Core-side rather than
+/// taken as a parameter, per rule 2 above. `limit` replaces the hardcoded cap
+/// of 50, which silently truncated with no signal to the caller.
 #[frb]
-pub async fn search_notes(workspace_id: String, query: String, limit: u32) -> Result<Vec<NoteMetadata>, AppError> {
+pub async fn search_notes(query: String, limit: u32) -> Result<Vec<NoteMetadata>, AppError> {
     unimplemented!()
 }
 
 /// Title-prefix jump (CAP-FIND-02).
 #[frb]
-pub async fn find_notes_by_title(workspace_id: String, query: String, limit: u32) -> Result<Vec<NoteMetadata>, AppError> {
+pub async fn find_notes_by_title(query: String, limit: u32) -> Result<Vec<NoteMetadata>, AppError> {
     unimplemented!()
 }
 
@@ -491,7 +577,7 @@ pub struct LinkCompletion {
 /// Candidates for the completion triggered by `[[` (CAP-GRAPH-02). The
 /// trigger is a UI affordance; what gets inserted is `insert_text`.
 #[frb]
-pub async fn link_completions(workspace_id: String, query: String, limit: u32) -> Result<Vec<LinkCompletion>, AppError> {
+pub async fn link_completions(query: String, limit: u32) -> Result<Vec<LinkCompletion>, AppError> {
     unimplemented!()
 }
 
@@ -551,7 +637,10 @@ pub struct OAuthFlowStart {
 /// make the Core stateful across the browser leg for one comparison, and it
 /// is recorded as an accepted trade-off rather than an oversight.
 #[frb(sync)]
-pub fn begin_oauth_flow(provider: String, redirect_uri: String) -> Result<OAuthFlowStart, AppError> {
+pub fn begin_oauth_flow(
+    provider: String,
+    redirect_uri: String,
+) -> Result<OAuthFlowStart, AppError> {
     unimplemented!()
 }
 
@@ -560,7 +649,11 @@ pub fn begin_oauth_flow(provider: String, redirect_uri: String) -> Result<OAuthF
 /// or attach a Workspace. Under ADR-005 the Workspace already exists locally
 /// before any of this is called.
 #[frb]
-pub async fn authenticate_workspace(provider: String, auth_code: String, code_verifier: String) -> Result<SessionState, AppError> {
+pub async fn authenticate_workspace(
+    provider: String,
+    auth_code: String,
+    code_verifier: String,
+) -> Result<SessionState, AppError> {
     unimplemented!()
 }
 
@@ -570,7 +663,10 @@ pub async fn authenticate_workspace(provider: String, auth_code: String, code_ve
 /// empty. Updates `workspaces.provider` and `remote_url` in place; never
 /// re-clones or discards local state.
 #[frb]
-pub async fn connect_remote(workspace_id: String, provider: String, repository: Option<String>) -> Result<WorkspaceInfo, AppError> {
+pub async fn connect_remote(
+    provider: String,
+    repository: Option<String>,
+) -> Result<WorkspaceInfo, AppError> {
     unimplemented!()
 }
 
@@ -634,13 +730,17 @@ pub enum SuggestionChoice {
 /// Notes currently holding unresolved conflict markers, so the UI can list
 /// them rather than requiring the user to find them by opening Notes.
 #[frb]
-pub async fn notes_with_conflicts(workspace_id: String) -> Result<Vec<NoteMetadata>, AppError> {
+pub async fn notes_with_conflicts() -> Result<Vec<NoteMetadata>, AppError> {
     unimplemented!()
 }
 
 /// Replaces a `Suggestion` node with the chosen resolution, splicing clean
 /// Markdown with no conflict markers over its span.
 #[frb(sync)]
-pub fn resolve_suggestion(note_id: String, block_path: Vec<usize>, choice: SuggestionChoice) -> Result<NoteState, AppError> {
+pub fn resolve_suggestion(
+    note_id: String,
+    block_path: Vec<usize>,
+    choice: SuggestionChoice,
+) -> Result<NoteState, AppError> {
     unimplemented!()
 }

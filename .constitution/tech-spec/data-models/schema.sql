@@ -131,10 +131,17 @@ CREATE TABLE IF NOT EXISTS drafts (
     raw_markdown TEXT NOT NULL,    -- Full current source text of the Note
     updated_at INTEGER NOT NULL,
     PRIMARY KEY (workspace_id, note_id)
-    -- Deliberately no foreign key to notes: a new Note exists as a draft
-    -- before its file, and therefore its `notes` row, exists. The cost is that
-    -- nothing cascades here, so renaming a Note with a live draft must re-key
-    -- this row explicitly in the same transaction -- see WSPC-D006.
+    -- Deliberately no foreign key to notes, for the RENAME case only: a
+    -- draft must survive its Note's concept id changing, and adding a FK here
+    -- would either block the rename or cascade it, neither of which is what
+    -- `WSPC-D006` needs while it re-keys rows explicitly in one transaction.
+    --
+    -- Note this is NOT because a draft can precede its `notes` row. Under this
+    -- design it cannot: `create_note` writes the file with conformant
+    -- frontmatter and returns a full `NoteState`, so the row exists before the
+    -- first keystroke. An orphan draft is therefore not a supported state, and
+    -- `pending_drafts` -- which returns `NoteMetadata` -- could not represent
+    -- one anyway.
 );
 
 -- Directories. Only strictly necessary for empty ones -- a Directory holding

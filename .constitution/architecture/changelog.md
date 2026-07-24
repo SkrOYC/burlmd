@@ -17,6 +17,12 @@ These edits were made during a Stage 3 pass. They are recorded here rather than 
 
 **Not changed.** `strategy.md` and `resilience.md` required no amendment: the Local-First Thick Client pattern and every resilience guarantee hold unchanged, and in the case of the Local-First Mandate the amendments above bring the rest of the architecture into line with what `strategy.md` already claimed.
 
+### Corrections from PR review, rounds 1 and 2
+Folded into v1.1.0, since nothing in this pass has merged.
+
+- **Round 1:** `flows/flow-auth-handshake.md` referenced an undeclared `Local` participant, which Mermaid auto-created to the right of `Remote` — reading as though the local repository sat beyond the network boundary. Declared in position.
+- **Round 2:** the same flow generated a PKCE `state` parameter, handed it to the UI, and never compared it on the way back. A CSRF parameter that is never checked is exactly as protective as omitting it, while reading in review as though the protection exists. The comparison is now an explicit step that terminates the flow before the token exchange, and the "what changed, and why" list records it as a fourth defect rather than three.
+
 ## v1.0.1
 Constitution Freshness & Reconciliation Pass following Epic B execution (UIDB-B001–B007).
 - Corrected `containers.md`'s Local Repository description, which implied the raw OKF directory tree was encrypted by this container. The shipped implementation only encrypts the SQLite index (via SQLCipher); raw Markdown files rely on OS-level Full Disk Encryption, per `prd/constraints.md`'s existing rationale (preserving native Git merge capability). This same inconsistency also existed in `prd/capabilities.md` (corrected there, see `prd/changelog.md` v1.0.1).

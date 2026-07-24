@@ -86,7 +86,9 @@ The default local Workspace (ADR-005 decision 1) resolves to `$XDG_DATA_HOME/bur
 
 This is deliberately *not* a visible directory in the user's home. The bundle is a Git repository the application manages, and CAP-WS-05 already provides the path for pointing burlmd at a Workspace the user placed wherever they prefer. Moving this default later is a user-visible migration, so it is recorded here rather than left to the implementation.
 
-The encrypted index does not live inside the bundle. It is derived state (`data-models/schema.sql`), and placing it in the bundle would put an encrypted binary blob inside a Git repository whose entire premise is human-readable plaintext, producing a large opaque diff on every write. It belongs alongside the Workspace, not within it.
+The encrypted index does not live inside the bundle. It is derived state (`data-models/schema.sql`), and placing it in the bundle would put an encrypted binary blob inside a Git repository whose entire premise is human-readable plaintext, producing a large opaque diff on every write. It belongs alongside the Workspace, not within it: it resolves to `$XDG_DATA_HOME/burlmd/index.sqlite3`, one level above the bundle root, with the same fallbacks as the Workspace path above, and `BURLMD_DB_PATH` continuing to override it for tests.
+
+This is a change from what the code does today. `rust/src/db/connection.rs` resolves `$HOME/.burlmd/index.sqlite3`, a placeholder written in Epic B before any Workspace path existed and never reconciled with one. `WSPC-D004` moves it. Because that ticket also rewrites the index schema, an index file left at the old path by a development build is not migrated and not read — it is stale derived state under a path this specification no longer names, and the bundle it was derived from can rebuild it.
 
 The *mechanical* rules above — `cargo fmt`, `cargo clippy`, `dart format`,
 `dart analyze`, `nixfmt` — are enforced as pre-commit hooks installed on entry
