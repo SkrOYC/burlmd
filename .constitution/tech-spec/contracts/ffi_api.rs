@@ -504,6 +504,16 @@ pub fn merge_block_with_previous(
 /// conventions differ because the Blocks differ: a range spans unfocused
 /// Blocks, which the user sees rendered, while a split happens in the focused
 /// Block, which the user sees as raw source.
+///
+/// **Open: the drag-outward anchor.** ADR-006 accepts that a selection may
+/// begin inside the focused Block and extend past it, and for that one
+/// endpoint the "unfocused, therefore rendered" justification does not hold —
+/// a focused Block displays raw source, so the offset the widget reports is a
+/// source offset. Whether the case is reachable at all depends on something
+/// Flutter's documentation is silent about (whether an `EditableText`
+/// participates in an enclosing `SelectableRegion`), so it is assigned to
+/// `EDIT-F001`, which has both presentations in front of it, rather than
+/// guessed at here.
 #[frb]
 pub struct BlockRange {
     pub start_path: Vec<usize>,

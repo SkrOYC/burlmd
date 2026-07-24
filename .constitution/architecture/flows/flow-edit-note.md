@@ -35,7 +35,9 @@ sequenceDiagram
         end
 
         Note over Core,Local: ~1s idle may elapse while still focused
+        Core->>Local: Compare on-disk hash to the current revision
         Core->>Local: Atomic write (tier 2): splices buffered source, no reparse
+        Local-->>Core: New revision, which replaces the baseline
 
         Note over UI,Core: Block loses focus
         UI->>Core: Commit Block (block_path)
@@ -43,8 +45,9 @@ sequenceDiagram
         Core-->>UI: NoteState (new AST)
 
         Note over Core,Local: ~1s idle after the commit
+        Core->>Local: Compare on-disk hash to the current revision
         Core->>Local: Atomic write (tier 2): temp file + rename
-        Local-->>Core: New revision (content hash), which becomes the new baseline
+        Local-->>Core: New revision (content hash), which replaces the baseline
     end
 
     UI->>Core: Close Note (navigate away / quit)

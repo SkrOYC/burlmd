@@ -36,6 +36,10 @@ Folded into v1.1.0, since nothing in this pass has merged.
 - **`flow-auth-handshake.md`'s CSRF `alt` had no `else`**, so Mermaid rendered the token exchange as unconditional continuation rather than as the branch not taken. The prose was unambiguous, but the entire point of the round 2 and 3 fixes was that the diagram is what an implementer follows.
 - **`flow-edit-note.md` drew the tier 2 write only after the blur commit**, while ADR-008 specifies the timer may fire while the Block is still focused — which is the case `WSPC-D007`'s mid-focus criterion exists to require. Both placements are now drawn.
 
+### Corrections from PR review, round 6
+- **`containers.md` carried a mangled sentence from round 5's own sweep** — the replacement clause was inserted without removing the one it replaced. The fix for an overclaim should not itself need a fix, and this one did.
+- **`flow-edit-note.md` never received round 5's OCC fix.** The mid-focus tier 2 write was drawn with no return arrow and no comparison, so following the diagram literally reproduces the defect round 5 removed: the baseline never advances and the next write fails against this application's own output. Both tier 2 writes now show the comparison and the re-record.
+
 ## v1.0.1
 Constitution Freshness & Reconciliation Pass following Epic B execution (UIDB-B001–B007).
 - Corrected `containers.md`'s Local Repository description, which implied the raw OKF directory tree was encrypted by this container. The shipped implementation only encrypts the SQLite index (via SQLCipher); raw Markdown files rely on OS-level Full Disk Encryption, per `prd/constraints.md`'s existing rationale (preserving native Git merge capability). This same inconsistency also existed in `prd/capabilities.md` (corrected there, see `prd/changelog.md` v1.0.1).

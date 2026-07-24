@@ -51,7 +51,7 @@ And no file under rust/src has been modified
 - **STOP Conditions:**
   - "STOP if the YAML reader dependency named in `tech-spec/stack.md` cannot parse a fixture block; do not hand-roll a YAML parser, and do not substitute a different crate without a Stage 3 pass."
   - "STOP if any code path in this module writes or re-serializes a frontmatter block; ADR-007 makes the block a read-only span."
-- **Description:** Implement the on-disk format domain specified in `tech-spec/data-models/okf-bundle.md`. Covers reading and validating a frontmatter block against `okf-frontmatter.schema.json`'s required/recommended split, converting between a bundle-relative path and an OKF concept id in both directions, classifying a Markdown link target as an internal Link or an external link, deriving a Link's target concept id, and enforcing the reserved-filename rule. A file must be reported as non-conformant — rather than rejected — when its frontmatter is absent, unparseable, **or parses without a non-empty `type`**. All three, because OKF section 11 states exactly two conformance conditions and the second is the `type` field; `okf-frontmatter.schema.json` already treats it as the sole conformance-bearing property.
+- **Description:** Implement the on-disk format domain specified in `tech-spec/data-models/okf-bundle.md`. Covers reading and validating a frontmatter block against `okf-frontmatter.schema.json`'s required/recommended split, converting between a bundle-relative path and an OKF concept id in both directions, classifying a Markdown link target as an internal Link or an external link, deriving a Link's target concept id, and enforcing the reserved-filename rule. A file must be reported as non-conformant — rather than rejected — when its frontmatter is absent, unparseable, **or parses without a non-empty `type`**. All three, because OKF section 11 states three conformance conditions and the second is the `type` field; `okf-frontmatter.schema.json` already treats it as the sole conformance-bearing property.
 - **Acceptance Criteria (Gherkin):**
 ```gherkin
 Given a Note file containing a frontmatter block with type and title
@@ -98,6 +98,8 @@ Then it is rejected as reserved
   - `rust/src/markdown/splice.rs`
   - `rust/src/markdown/ast.rs` (reshapes `InlineElement::Link` from `{target_title, resolved_note_id}` to `{target_id, exists}` per the contract; the enum lives here)
   - `rust/src/markdown/mod.rs`
+  - `rust/Cargo.toml` (tightens `pulldown-cmark` from the caret range `"0.12"` to `=0.12.2`. `stack.md` calls the version pinned and the manifest does not: `Cargo.lock` resolves 0.12.2 today, but a `cargo update` would move the one dependency whose specific APIs ADR-007 decisions 1 and 8 are built on.)
+  - `rust/src/frb_generated.rs`, `lib/src/rust/**` (regenerated bindings only. `InlineElement` is `#[frb]`, so reshaping its `Link` variant breaks ten references in `frb_generated.rs` and two in `lib/src/rust/markdown/ast.dart` — and unlike `WSPC-D002`'s variant addition, which merely panicked at runtime, this one does not compile. This ticket's own `cargo clippy --all-targets` gate builds the whole crate, so it cannot pass without them.)
 - **Scope (Out-of-Scope Files):**
   - `rust/src/api/**`
   - `rust/src/workspace/**`
@@ -372,6 +374,8 @@ Then the measured write completes within the frame budget, and the measurement i
   - `rust/src/frb_generated.rs`
   - `lib/src/rust/**` (regenerated bindings only)
   - `lib/src/providers/note_providers.dart` (calls `openNote(path)` and assigns `updateBlock`'s return value; both signatures change here, so `dart analyze` cannot pass without it)
+  - `lib/src/providers/rust_api_provider.dart` (the layer `note_providers.dart` actually calls, and the only place that touches `ffi.*` directly: it wraps `openNote`, `searchNotes`, `saveNote` — which this contract deletes outright — and `updateBlock` with its old `AstNode` parameter. Every one of those becomes an unresolved identifier or a wrong-argument error once the bindings regenerate.)
+  - `test/components/editor_test.dart` (overrides `RustApi.updateBlock(String, List<int>, AstNode) -> NoteState`, an invalid override once the base signature changes. `dart analyze` covers `test/`, and it reports no issues on the current tree — so this gate goes genuinely red rather than merely staying noisy.)
 - **Scope (Out-of-Scope Files):**
   - `lib/src/components/**` (Epic F consumes this surface)
   - `lib/src/screens/**`
@@ -381,7 +385,7 @@ Then the measured write completes within the frame budget, and the measurement i
   - "STOP if `update_block` retains its AST-based signature; ADR-007 decision 4 replaces it with source text, and leaving both is a divergence the UI will pick the wrong one from."
   - "STOP if `update_block` parses, splices, or returns a `NoteState`. It is the per-keystroke call and must stay cheap; the reparse belongs in `commit_block`. Putting it back on the typing path contradicts ADR-007, ADR-008 and `architecture/risks.md` risk 7 simultaneously."
   - "STOP if generated bindings are hand-edited rather than regenerated and committed."
-- **Description:** Expose the editing operations across the FFI boundary exactly as `contracts/ffi_api.rs` declares them: fetching a Block's raw source, the per-keystroke `update_block` that buffers text and writes the draft row without parsing, the `commit_block` that splices and reparses on blur, block insert, delete, split and merge, and the three range operations over a multi-Block selection. Remove `open_note_by_id` by merging it into `open_note`, which now takes a concept id. Regenerate and commit the bindings. Note that a splice can change a Block's node shape, so the returned state is authoritative and callers must not retain a block path across a reparsing call.
+- **Description:** Expose the editing operations across the FFI boundary exactly as `contracts/ffi_api.rs` declares them: fetching a Block's raw source, the per-keystroke `update_block` that buffers text and writes the draft row without parsing, the `commit_block` that splices and reparses on blur, block insert, delete, split and merge, and the three range operations over a multi-Block selection. Leave exactly one entry point for opening a Note, `open_note`, taking a concept id. (The pre-v1.1.0 contract also listed `open_note_by_id`; it was never implemented, so there is no function to delete — the pair existed only because identity was ambiguous, and under ADR-004 it is not.) Delete `save_note`, which does exist in `api/ffi_api.rs`, in favour of `flush_note`, which now takes a concept id. Regenerate and commit the bindings. Note that a splice can change a Block's node shape, so the returned state is authoritative and callers must not retain a block path across a reparsing call.
 - **Acceptance Criteria (Gherkin):**
 ```gherkin
 Given an open Note
@@ -421,6 +425,7 @@ And no exposed function takes a workspace_id parameter
 - **Category:** Correctness
 - **Scope (In-Scope Files):**
   - `rust/src/api/ffi_api.rs`
+  - `lib/src/providers/rust_api_provider.dart` (wraps `searchNotes`, which gains a `limit`; this ticket's gate ends in `dart analyze`)
   - `rust/src/index/query.rs`
   - `rust/src/draft.rs` (four functions here return `Vec<NoteMetadata>`, which is defined in this file and loses `workspace_id` under the contract. This ticket depends only on `WSPC-D005`, so it can be scheduled before `WSPC-D007` — the other ticket that scopes this file — and its own gate would then be unpassable without it.)
   - `rust/src/frb_generated.rs`

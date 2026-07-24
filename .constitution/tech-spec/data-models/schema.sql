@@ -78,7 +78,7 @@ CREATE TABLE IF NOT EXISTS notes (
     content_hash TEXT NOT NULL,
     -- False when the file has no frontmatter, when its frontmatter does not
     -- parse, OR when it parses but carries no non-empty `type`. All three,
-    -- because OKF section 11 states exactly two conformance conditions and the
+    -- because OKF section 11 states three conformance conditions and the
     -- second is the `type` field -- a block containing only `title:` parses
     -- perfectly and is still non-conformant. Earlier revisions of this comment
     -- listed only the first two cases, which contradicted

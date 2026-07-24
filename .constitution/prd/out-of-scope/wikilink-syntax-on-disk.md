@@ -7,7 +7,7 @@
 Storing Links in Notes as double-bracket wiki-style syntax (`[[Some Note]]`) — the convention used by several existing Markdown knowledge tools — rather than as standard Markdown links.
 
 ## Why it was considered
-It is markedly more concise to read and type, which matters a great deal now that the primary actor edits raw source directly (CAP-EDIT-01) and therefore sees the stored syntax constantly. It is also directly compatible with other tools in this category, and it matches the shape of the domain model, where a Link is defined by the *title* of its target rather than by a location.
+It is markedly more concise to read and type, which matters a great deal now that the primary actor edits raw source directly (CAP-EDIT-01) and therefore sees the stored syntax constantly. It is also directly compatible with other tools in this category, and — *as the domain model stood when this was considered* — it matched its shape, a Link being defined by the *title* of its target rather than by a location. That is no longer the model: under ADR-004 a Link carries its target's concept id, which is a path. The argument is left as it was made because the conclusion never rested on it.
 
 ## Why it was rejected
 It is not resolvable by standard Markdown tooling. A conforming Open Knowledge Format consumer reading the Workspace sees double-bracket syntax as literal text, not as a traversable edge — so the knowledge graph, which is half the product's organizing premise, would be invisible to exactly the Automated Consumer actor that on-disk format conformance exists to serve.

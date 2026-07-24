@@ -115,6 +115,10 @@ Synchronization is **not** required for that outcome, and this is load-bearing r
 
 ### Deferred (Next Planning Wave)
 - **Epic G — Sync Integration.** Connecting a Workspace to a Remote, provisioning or adopting a repository, session restore, credential readback, scheduler lifecycle wiring, the sync status indicator, bounding the scheduler's shutdown wait, and the post-conflict re-push timing question. This absorbs all six of Epic C's deferred follow-ups. The contract surface already exists in `tech-spec/contracts/ffi_api.rs`, so it needs no further Stage 3 work.
+
+  **It must also carry the `rust/src/api/auth.rs` rework, which is not a wiring item.** `OAuthFlowStart` currently returns `code_verifier` and `state`; the contract returns a single-use `flow_id` and neither secret. `authenticate_workspace(provider, auth_code, code_verifier) -> String` becomes `authenticate_workspace(flow_id, auth_code, returned_state) -> SessionState`, raising `OAuthStateMismatch` before the token request. Recording this is not bookkeeping: the CSRF check that rounds 2 and 3 of the review spent two passes relocating has **no owning ticket anywhere in this 105-point wave**, and until Epic G lands, the shipped code still mints a `state` that nothing compares — the original defect, unchanged. Round 3's rationale for moving the check Core-side counted "it removes an obligation no ticket owned" as a benefit; that is only true once the Core-side obligation is owned, and it is not owned yet.
+
+  This also supersedes `tasks/completed/EPIC-C-security-sync.md`'s recorded position that the `code_verifier` transiting Dart is an "accepted design decision (not a gap)". Under the new contract it does not transit Dart at all. Said here rather than left as two documents disagreeing.
 - **Epic H — Conflict & Suggestions.** The conflict-marker pre-processor, populating the Suggestion node, and the resolution surface. Note the concrete prerequisite recorded in the contract: `Suggestion.base_content` can only ever be populated if the pull path sets a three-way conflict style, since the default emits no base section — as implemented today that field is structurally dead.
 - **Epic I — Quality & Portability.** Continuous integration, images, Export, and the graph visualization. CI was explicitly considered for this wave and deferred by decision; it is recorded as a known risk in `changelog.md` rather than an oversight.
 
@@ -134,7 +138,7 @@ Separately, three capability fragments — two P0, one P1 — are covered by tic
 Sweeping every `CAP-*` id against the active tickets and the contract afterwards left four unreferenced, all deferred by design and all already accounted for above: `CAP-EDIT-06` (images) and `CAP-GRAPH-06` (graph visualization) to Epic I, `CAP-SYNC-02` to Epic G, and `CAP-EDIT-07`, a P2 explicitly redundant with the keyboard shortcuts `EDIT-F005` delivers. Two P0s — `CAP-WS-02` and `CAP-WS-04` — were covered by `WSPC-D007` and `WSPC-D004` without being named in either; they are named now.
 
 
-All three need only UI work to become reachable, and all three belong in the next wave alongside Epic G.
+The three built-but-unsurfaced capabilities above — backlinks, the title-prefix jump, and opening a foreign Workspace — need only UI work to become reachable, and all three belong in the next wave alongside Epic G. The traceability fragments listed after them are a separate matter, and are closed in this wave.
 
 ### Deferred (Future Scope)
 Mobile targets, multiple simultaneous Workspaces, and adopting a non-empty Remote. Each has a standing entry under `prd/out-of-scope/` explaining the reasoning and the conditions that would reopen it.
