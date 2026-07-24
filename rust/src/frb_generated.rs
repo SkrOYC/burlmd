@@ -38,7 +38,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.12.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 1981903595;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -674186166;
 
 // Section: executor
 
@@ -46,6 +46,80 @@ flutter_rust_bridge::frb_generated_default_handler!();
 
 // Section: wire_funcs
 
+fn wire__crate__api__auth__authenticate_workspace_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "authenticate_workspace",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_provider = <String>::sse_decode(&mut deserializer);
+            let api_auth_code = <String>::sse_decode(&mut deserializer);
+            let api_code_verifier = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, crate::error::AppError>(
+                    (move || async move {
+                        let output_ok = crate::api::auth::authenticate_workspace(
+                            api_provider,
+                            api_auth_code,
+                            api_code_verifier,
+                        )
+                        .await?;
+                        Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
+fn wire__crate__api__auth__begin_oauth_flow_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "begin_oauth_flow",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_provider = <String>::sse_decode(&mut deserializer);
+            let api_redirect_uri = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, crate::error::AppError>((move || {
+                let output_ok = crate::api::auth::begin_oauth_flow(api_provider, api_redirect_uri)?;
+                Ok(output_ok)
+            })())
+        },
+    )
+}
 fn wire__crate__api__simple__init_app_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -494,6 +568,20 @@ impl SseDecode for crate::draft::NoteState {
     }
 }
 
+impl SseDecode for crate::api::auth::OAuthFlowStart {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_authorizeUrl = <String>::sse_decode(deserializer);
+        let mut var_codeVerifier = <String>::sse_decode(deserializer);
+        let mut var_state = <String>::sse_decode(deserializer);
+        return crate::api::auth::OAuthFlowStart {
+            authorize_url: var_authorizeUrl,
+            code_verifier: var_codeVerifier,
+            state: var_state,
+        };
+    }
+}
+
 impl SseDecode for Option<String> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -582,8 +670,9 @@ fn pde_ffi_dispatcher_primary_impl(
 ) {
     // Codec=Pde (Serialization + dispatch), see doc to use other codecs
     match func_id {
-        1 => wire__crate__api__simple__init_app_impl(port, ptr, rust_vec_len, data_len),
-        4 => wire__crate__api__ffi_api__search_notes_impl(port, ptr, rust_vec_len, data_len),
+        1 => wire__crate__api__auth__authenticate_workspace_impl(port, ptr, rust_vec_len, data_len),
+        3 => wire__crate__api__simple__init_app_impl(port, ptr, rust_vec_len, data_len),
+        6 => wire__crate__api__ffi_api__search_notes_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -596,9 +685,10 @@ fn pde_ffi_dispatcher_sync_impl(
 ) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
     // Codec=Pde (Serialization + dispatch), see doc to use other codecs
     match func_id {
-        2 => wire__crate__api__ffi_api__open_note_impl(ptr, rust_vec_len, data_len),
-        3 => wire__crate__api__ffi_api__save_note_impl(ptr, rust_vec_len, data_len),
-        5 => wire__crate__api__ffi_api__update_block_impl(ptr, rust_vec_len, data_len),
+        2 => wire__crate__api__auth__begin_oauth_flow_impl(ptr, rust_vec_len, data_len),
+        4 => wire__crate__api__ffi_api__open_note_impl(ptr, rust_vec_len, data_len),
+        5 => wire__crate__api__ffi_api__save_note_impl(ptr, rust_vec_len, data_len),
+        7 => wire__crate__api__ffi_api__update_block_impl(ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -786,6 +876,28 @@ impl flutter_rust_bridge::IntoDart for crate::draft::NoteState {
 impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::draft::NoteState {}
 impl flutter_rust_bridge::IntoIntoDart<crate::draft::NoteState> for crate::draft::NoteState {
     fn into_into_dart(self) -> crate::draft::NoteState {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::auth::OAuthFlowStart {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.authorize_url.into_into_dart().into_dart(),
+            self.code_verifier.into_into_dart().into_dart(),
+            self.state.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::auth::OAuthFlowStart
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::auth::OAuthFlowStart>
+    for crate::api::auth::OAuthFlowStart
+{
+    fn into_into_dart(self) -> crate::api::auth::OAuthFlowStart {
         self
     }
 }
@@ -1034,6 +1146,15 @@ impl SseEncode for crate::draft::NoteState {
         <Vec<crate::markdown::ast::AstNode>>::sse_encode(self.ast, serializer);
         <crate::draft::NoteMetadata>::sse_encode(self.metadata, serializer);
         <String>::sse_encode(self.base_revision, serializer);
+    }
+}
+
+impl SseEncode for crate::api::auth::OAuthFlowStart {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.authorize_url, serializer);
+        <String>::sse_encode(self.code_verifier, serializer);
+        <String>::sse_encode(self.state, serializer);
     }
 }
 

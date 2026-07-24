@@ -3,6 +3,7 @@
 
 // ignore_for_file: unused_import, unused_element, unnecessary_import, duplicate_ignore, invalid_use_of_internal_member, annotate_overrides, non_constant_identifier_names, curly_braces_in_flow_control_structures, prefer_const_literals_to_create_immutables, unused_field
 
+import 'api/auth.dart';
 import 'api/ffi_api.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -69,7 +70,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.12.0';
 
   @override
-  int get rustContentHash => 1981903595;
+  int get rustContentHash => -674186166;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -81,6 +82,17 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
 }
 
 abstract class RustLibApi extends BaseApi {
+  Future<String> crateApiAuthAuthenticateWorkspace({
+    required String provider,
+    required String authCode,
+    required String codeVerifier,
+  });
+
+  OAuthFlowStart crateApiAuthBeginOauthFlow({
+    required String provider,
+    required String redirectUri,
+  });
+
   Future<void> crateApiSimpleInitApp();
 
   NoteState crateApiFfiApiOpenNote({required String path});
@@ -108,6 +120,72 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   });
 
   @override
+  Future<String> crateApiAuthAuthenticateWorkspace({
+    required String provider,
+    required String authCode,
+    required String codeVerifier,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(provider, serializer);
+          sse_encode_String(authCode, serializer);
+          sse_encode_String(codeVerifier, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 1,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_app_error,
+        ),
+        constMeta: kCrateApiAuthAuthenticateWorkspaceConstMeta,
+        argValues: [provider, authCode, codeVerifier],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiAuthAuthenticateWorkspaceConstMeta =>
+      const TaskConstMeta(
+        debugName: "authenticate_workspace",
+        argNames: ["provider", "authCode", "codeVerifier"],
+      );
+
+  @override
+  OAuthFlowStart crateApiAuthBeginOauthFlow({
+    required String provider,
+    required String redirectUri,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(provider, serializer);
+          sse_encode_String(redirectUri, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 2)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_o_auth_flow_start,
+          decodeErrorData: sse_decode_app_error,
+        ),
+        constMeta: kCrateApiAuthBeginOauthFlowConstMeta,
+        argValues: [provider, redirectUri],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiAuthBeginOauthFlowConstMeta => const TaskConstMeta(
+    debugName: "begin_oauth_flow",
+    argNames: ["provider", "redirectUri"],
+  );
+
+  @override
   Future<void> crateApiSimpleInitApp() {
     return handler.executeNormal(
       NormalTask(
@@ -116,7 +194,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 1,
+            funcId: 3,
             port: port_,
           );
         },
@@ -141,7 +219,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(path, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 2)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 4)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_note_state,
@@ -168,7 +246,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(noteId, serializer);
           sse_encode_String(expectedBaseRevision, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 3)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 5)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
@@ -198,7 +276,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 4,
+            funcId: 6,
             port: port_,
           );
         },
@@ -229,7 +307,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           sse_encode_String(noteId, serializer);
           sse_encode_list_prim_usize_strict(blockPath, serializer);
           sse_encode_box_autoadd_ast_node(newNode, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 5)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 7)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_note_state,
@@ -436,6 +514,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       ast: dco_decode_list_ast_node(arr[0]),
       metadata: dco_decode_note_metadata(arr[1]),
       baseRevision: dco_decode_String(arr[2]),
+    );
+  }
+
+  @protected
+  OAuthFlowStart dco_decode_o_auth_flow_start(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return OAuthFlowStart(
+      authorizeUrl: dco_decode_String(arr[0]),
+      codeVerifier: dco_decode_String(arr[1]),
+      state: dco_decode_String(arr[2]),
     );
   }
 
@@ -724,6 +815,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  OAuthFlowStart sse_decode_o_auth_flow_start(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_authorizeUrl = sse_decode_String(deserializer);
+    var var_codeVerifier = sse_decode_String(deserializer);
+    var var_state = sse_decode_String(deserializer);
+    return OAuthFlowStart(
+      authorizeUrl: var_authorizeUrl,
+      codeVerifier: var_codeVerifier,
+      state: var_state,
+    );
+  }
+
+  @protected
   String? sse_decode_opt_String(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
@@ -1000,6 +1104,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_list_ast_node(self.ast, serializer);
     sse_encode_note_metadata(self.metadata, serializer);
     sse_encode_String(self.baseRevision, serializer);
+  }
+
+  @protected
+  void sse_encode_o_auth_flow_start(
+    OAuthFlowStart self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.authorizeUrl, serializer);
+    sse_encode_String(self.codeVerifier, serializer);
+    sse_encode_String(self.state, serializer);
   }
 
   @protected

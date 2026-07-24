@@ -6,6 +6,7 @@
 // Static analysis wrongly picks the IO variant, thus ignore this
 // ignore_for_file: argument_type_not_assignable
 
+import 'api/auth.dart';
 import 'api/ffi_api.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -70,6 +71,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   NoteState dco_decode_note_state(dynamic raw);
+
+  @protected
+  OAuthFlowStart dco_decode_o_auth_flow_start(dynamic raw);
 
   @protected
   String? dco_decode_opt_String(dynamic raw);
@@ -143,6 +147,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   NoteState sse_decode_note_state(SseDeserializer deserializer);
+
+  @protected
+  OAuthFlowStart sse_decode_o_auth_flow_start(SseDeserializer deserializer);
 
   @protected
   String? sse_decode_opt_String(SseDeserializer deserializer);
@@ -227,6 +234,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_note_state(NoteState self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_o_auth_flow_start(
+    OAuthFlowStart self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_opt_String(String? self, SseSerializer serializer);
