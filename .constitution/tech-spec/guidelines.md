@@ -36,7 +36,8 @@ The repository follows the default `flutter_rust_bridge` template structure to m
 │   │   ├── git/             # gix integration
 │   │   ├── markdown/        # AST parsing logic
 │   │   ├── security/        # OS Keychain root-key integration
-│   │   └── sync/            # Debounced background sync scheduler
+│   │   ├── sync/            # Debounced background sync scheduler
+│   │   └── test_support.rs  # #[cfg(test)]-only fixtures shared across unit test modules
 ├── pubspec.yaml             # Dart dependencies
 └── flutter_rust_bridge.yaml # FRB configuration
 ```

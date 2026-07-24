@@ -243,14 +243,8 @@ pub fn push(
     branch: &str,
     credentials: Option<&GitCredentials>,
 ) -> Result<(), AppError> {
-    let mut cmd = Command::new("git");
-    cmd.arg("push")
-        .arg(remote)
-        .arg(branch)
-        .current_dir(repo_path)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+    let mut cmd = git_command(repo_path);
+    cmd.arg("push").arg(remote).arg(branch);
     apply_credentials(&mut cmd, credentials);
 
     let output = cmd
@@ -278,15 +272,8 @@ pub fn pull(
     branch: &str,
     credentials: Option<&GitCredentials>,
 ) -> Result<(), AppError> {
-    let mut fetch_cmd = Command::new("git");
-    fetch_cmd
-        .arg("fetch")
-        .arg(remote)
-        .arg(branch)
-        .current_dir(repo_path)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+    let mut fetch_cmd = git_command(repo_path);
+    fetch_cmd.arg("fetch").arg(remote).arg(branch);
     apply_credentials(&mut fetch_cmd, credentials);
 
     let fetch_output = fetch_cmd
@@ -296,14 +283,10 @@ pub fn pull(
         return Err(classify_git_cli_failure(&fetch_output.stderr));
     }
 
-    let merge_output = Command::new("git")
+    let merge_output = git_command(repo_path)
         .arg("merge")
         .arg("--no-edit")
         .arg(format!("{remote}/{branch}"))
-        .current_dir(repo_path)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
         .output()
         .map_err(|e| AppError::IoError(format!("spawn git merge: {e}")))?;
 
@@ -377,6 +360,33 @@ fn collect_files(
     Ok(())
 }
 
+/// Builds a `git` CLI [`Command`] rooted at `workdir` with the settings every `git` CLI
+/// invocation in this module needs, and MUST be the single entry point every such invocation
+/// goes through: no stdin (so a `git` that would otherwise prompt interactively fails fast
+/// instead of hanging), stdout/stderr piped for capture, and — critically — `LC_ALL=C` pinned
+/// in the child's environment.
+///
+/// `LC_ALL=C` is not optional politeness: `classify_git_cli_failure` below classifies outcomes
+/// by substring-matching *English* fragments of `git`'s own stderr (`"non-fast-forward"`,
+/// `"CONFLICT"`, `"Authentication failed"`, etc.). `git` localizes that stderr via gettext
+/// according to `LC_ALL`/`LC_MESSAGES`/`LANG` (POSIX precedence, in that order), so a `git`
+/// invoked while inheriting a non-English locale from this process's environment (e.g. a
+/// contributor's machine running under `LANG=es_ES.UTF-8`) would otherwise silently misroute a
+/// real non-fast-forward push into `AppError::IoError`, skipping the entire fetch+merge
+/// conflict flow `flow-sync-push.md` and `flow-conflict-resolution.md` depend on. `LC_ALL`
+/// overrides both `LANG` and `LC_MESSAGES` when set, so pinning only `LC_ALL` here is
+/// sufficient to force `git`'s stderr back to the C-locale (English) text the classifier
+/// depends on, regardless of what the host process's own locale is.
+fn git_command(workdir: &Path) -> Command {
+    let mut cmd = Command::new("git");
+    cmd.current_dir(workdir)
+        .env("LC_ALL", "C")
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    cmd
+}
+
 /// Inject HTTP(S) auth (if any) into a `git` CLI invocation without putting the token on the
 /// command line (where it would be visible via `/proc/<pid>/cmdline` / `ps`). Uses git's
 /// environment-variable config-injection mechanism (`GIT_CONFIG_COUNT`/`GIT_CONFIG_KEY_n`/
@@ -395,12 +405,37 @@ fn apply_credentials(cmd: &mut Command, credentials: Option<&GitCredentials>) {
         let user_pass = Zeroizing::new(format!("{}:{}", creds.username, creds.token.as_str()));
         let basic = Zeroizing::new(BASE64_STANDARD.encode(user_pass.as_bytes()));
         let header_value = Zeroizing::new(format!("Authorization: Basic {}", basic.as_str()));
-        cmd.env("GIT_CONFIG_COUNT", "1");
-        cmd.env("GIT_CONFIG_KEY_0", "http.extraheader");
-        cmd.env("GIT_CONFIG_VALUE_0", header_value.as_str());
+        // The `Command` inherits this process's own environment, which may already carry an
+        // injected `GIT_CONFIG_COUNT`/`GIT_CONFIG_KEY_n`/`GIT_CONFIG_VALUE_n` sequence (e.g.
+        // from a wrapper this binary itself was launched under). Unconditionally starting our
+        // own entry at index 0 with `GIT_CONFIG_COUNT=1` would silently discard or mis-index
+        // whatever was already there; append after it instead.
+        let index = existing_git_config_count();
+        cmd.env("GIT_CONFIG_COUNT", (index + 1).to_string());
+        cmd.env(format!("GIT_CONFIG_KEY_{index}"), "http.extraheader");
+        cmd.env(format!("GIT_CONFIG_VALUE_{index}"), header_value.as_str());
     }
 }
 
+/// How many `GIT_CONFIG_COUNT`-style entries are already present in *this process's own*
+/// environment (i.e. what the spawned `git` child would inherit before `apply_credentials`
+/// adds its own), so that entry can be appended after them rather than clobbering index 0.
+/// Absent or unparseable is treated as zero, matching `git`'s own behavior for a missing
+/// `GIT_CONFIG_COUNT`.
+fn existing_git_config_count() -> usize {
+    std::env::var("GIT_CONFIG_COUNT")
+        .ok()
+        .and_then(|s| s.parse::<usize>().ok())
+        .unwrap_or(0)
+}
+
+/// Classifies a failed `git` CLI invocation's stderr by substring-matching known English
+/// fragments of `git`'s own diagnostic text. This depends entirely on that stderr actually
+/// being in the C locale (English) — every call site in this module must build its `Command`
+/// via [`git_command`], which pins `LC_ALL=C` for exactly this reason (see its doc comment);
+/// calling this against stderr captured from a `git` invocation that inherited a different
+/// `LANG`/`LC_MESSAGES` would silently misclassify real conflicts/auth failures as a generic
+/// `IoError`.
 fn classify_git_cli_failure(stderr: &[u8]) -> AppError {
     let text = String::from_utf8_lossy(stderr);
     let lower = text.to_lowercase();
@@ -461,15 +496,9 @@ fn classify_gix_fetch_err(err: &gix::clone::fetch::Error) -> AppError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_support::{git, init_bare};
+    use crate::test_support::{git, init_bare, init_repo};
     use std::process::Command as StdCommand;
     use tempfile::tempdir;
-
-    fn init_repo(dir: &Path) {
-        git(dir, &["init", "--initial-branch=main", "-q"]);
-        git(dir, &["config", "user.name", "Test"]);
-        git(dir, &["config", "user.email", "test@example.com"]);
-    }
 
     /// Gherkin: Given a local directory with changes, When the commit function is called,
     /// Then a Git commit is created in the local `.git` index.
@@ -831,6 +860,111 @@ mod tests {
         assert!(
             !names.iter().any(|n| n == "notes/sub/ignored.md"),
             "a gitignored file nested in a subdirectory must not be committed, got: {names:?}"
+        );
+    }
+
+    /// Regression test for the locale-sensitive stderr classification bug:
+    /// `classify_git_cli_failure` substring-matches English `git` diagnostics, which only
+    /// appear when the child inherits a C locale. `git_command` is the single builder every
+    /// CLI invocation in this module goes through, so asserting it pins `LC_ALL=C` here covers
+    /// every call site.
+    #[test]
+    fn git_command_pins_lc_all_to_c() {
+        let dir = tempdir().unwrap();
+        let cmd = git_command(dir.path());
+        let envs: std::collections::HashMap<_, _> = cmd.get_envs().collect();
+        assert_eq!(
+            envs.get(std::ffi::OsStr::new("LC_ALL")),
+            Some(&Some(std::ffi::OsStr::new("C"))),
+            "git_command must pin LC_ALL=C so classify_git_cli_failure's English substring \
+             matching stays correct regardless of the host process's own locale"
+        );
+    }
+
+    /// Serializes the handful of tests below that mutate process-global `GIT_CONFIG_*`
+    /// environment variables, since `cargo test`'s default parallel runner would otherwise let
+    /// two such tests race on the same process environment.
+    static GIT_CONFIG_ENV_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    /// Regression test for the `GIT_CONFIG_COUNT` clobbering bug: `apply_credentials` used to
+    /// unconditionally write `GIT_CONFIG_COUNT=1`/`GIT_CONFIG_KEY_0`/`GIT_CONFIG_VALUE_0`,
+    /// discarding (or mis-indexing) any config-injection entries this process's own environment
+    /// already carried. It must instead append after whatever is already there.
+    #[test]
+    fn apply_credentials_appends_after_an_existing_injected_config_entry() {
+        let _guard = GIT_CONFIG_ENV_MUTEX.lock().unwrap();
+        // SAFETY: serialized against every other test in this file that touches process env via
+        // `GIT_CONFIG_ENV_MUTEX`, and no other thread in this test binary sets these particular
+        // vars, so this is not racing a concurrent read/write of the same keys.
+        unsafe {
+            std::env::set_var("GIT_CONFIG_COUNT", "1");
+            std::env::set_var("GIT_CONFIG_KEY_0", "some.preexisting");
+            std::env::set_var("GIT_CONFIG_VALUE_0", "preexisting-value");
+        }
+
+        let mut cmd = Command::new("git");
+        let credentials = GitCredentials {
+            username: "x-access-token".to_string(),
+            token: Zeroizing::new("tok".to_string()),
+        };
+        apply_credentials(&mut cmd, Some(&credentials));
+
+        // SAFETY: see the comment on the `set_var` calls above; same guard, same scope.
+        unsafe {
+            std::env::remove_var("GIT_CONFIG_COUNT");
+            std::env::remove_var("GIT_CONFIG_KEY_0");
+            std::env::remove_var("GIT_CONFIG_VALUE_0");
+        }
+
+        let envs: std::collections::HashMap<_, _> = cmd.get_envs().collect();
+        assert_eq!(
+            envs.get(std::ffi::OsStr::new("GIT_CONFIG_COUNT")),
+            Some(&Some(std::ffi::OsStr::new("2"))),
+            "count must grow to existing (1) + our own entry (1) = 2"
+        );
+        assert_eq!(
+            envs.get(std::ffi::OsStr::new("GIT_CONFIG_KEY_1")),
+            Some(&Some(std::ffi::OsStr::new("http.extraheader"))),
+            "our entry must land at the next free index (1), not clobber index 0"
+        );
+        assert!(
+            envs.contains_key(std::ffi::OsStr::new("GIT_CONFIG_VALUE_1")),
+            "our entry's value must be set at the matching index"
+        );
+        // The pre-existing entry at index 0 must be left completely untouched by
+        // `apply_credentials` (it never even sees it — it's inherited, not on the `Command`).
+        assert!(
+            !envs.contains_key(std::ffi::OsStr::new("GIT_CONFIG_KEY_0")),
+            "apply_credentials must not overwrite the pre-existing index-0 entry"
+        );
+    }
+
+    /// With no `GIT_CONFIG_COUNT` set in the process environment at all, `apply_credentials`
+    /// must fall back to starting at index 0 (the pre-fix behavior), not error or skip.
+    #[test]
+    fn apply_credentials_starts_at_index_zero_with_no_preexisting_config() {
+        let _guard = GIT_CONFIG_ENV_MUTEX.lock().unwrap();
+        // SAFETY: serialized via `GIT_CONFIG_ENV_MUTEX`; ensures a clean slate regardless of
+        // what an earlier test in this process left behind.
+        unsafe {
+            std::env::remove_var("GIT_CONFIG_COUNT");
+        }
+
+        let mut cmd = Command::new("git");
+        let credentials = GitCredentials {
+            username: "x-access-token".to_string(),
+            token: Zeroizing::new("tok".to_string()),
+        };
+        apply_credentials(&mut cmd, Some(&credentials));
+
+        let envs: std::collections::HashMap<_, _> = cmd.get_envs().collect();
+        assert_eq!(
+            envs.get(std::ffi::OsStr::new("GIT_CONFIG_COUNT")),
+            Some(&Some(std::ffi::OsStr::new("1")))
+        );
+        assert_eq!(
+            envs.get(std::ffi::OsStr::new("GIT_CONFIG_KEY_0")),
+            Some(&Some(std::ffi::OsStr::new("http.extraheader")))
         );
     }
 }

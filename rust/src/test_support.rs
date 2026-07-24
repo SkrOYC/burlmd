@@ -32,3 +32,13 @@ pub(crate) fn init_bare(dir: &Path) {
     std::fs::create_dir_all(dir).unwrap();
     git(dir, &["init", "--bare", "--initial-branch=main", "-q"]);
 }
+
+/// Initializes a non-bare repository at `dir` (which must already exist) with a fixed
+/// `user.name`/`user.email` committer identity, ready for `git::operations::commit_all` to
+/// commit into. Was previously duplicated verbatim across `git::operations`'s and
+/// `sync::scheduler`'s test modules; centralized here for the same reason as `git`/`init_bare`.
+pub(crate) fn init_repo(dir: &Path) {
+    git(dir, &["init", "--initial-branch=main", "-q"]);
+    git(dir, &["config", "user.name", "Test"]);
+    git(dir, &["config", "user.email", "test@example.com"]);
+}

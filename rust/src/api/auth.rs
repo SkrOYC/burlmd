@@ -280,6 +280,14 @@ struct RawTokenError {
 
 #[derive(serde::Deserialize)]
 struct RawGitHubUser {
+    /// The GitHub account's numeric id — immutable for the life of the account, unlike
+    /// `login`. This is what gets used as the workspace id (see
+    /// `fetch_github_account_id`'s doc comment for why).
+    id: u64,
+    /// The account's current username. GitHub usernames are user-changeable (GitHub's own
+    /// docs document the rename flow), so this must never be used as a durable identifier —
+    /// kept here only to fully model the `/user` response shape; nothing currently reads it.
+    #[allow(dead_code)]
     login: String,
 }
 
@@ -380,10 +388,13 @@ fn exchange_code_for_token(
     })
 }
 
-/// `GET {endpoints.user_url}` with the freshly-exchanged access token, used
-/// only to recover the authenticated GitHub login as a stable, non-secret
-/// workspace id (see `authenticate_workspace_impl`'s doc comment for why).
-fn fetch_github_login(
+/// `GET {endpoints.user_url}` with the freshly-exchanged access token, used to recover the
+/// authenticated GitHub account's numeric `id` — rendered as a decimal string, since the
+/// workspace id this feeds into (`authenticate_workspace_impl`'s return value, and
+/// `schema.sql`'s `workspaces.id` column) is a `TEXT PRIMARY KEY` — as a stable, non-secret
+/// workspace id (see `authenticate_workspace_impl`'s doc comment for why `id` rather than the
+/// mutable `login`).
+fn fetch_github_account_id(
     endpoints: &GitHubOAuthEndpoints,
     access_token: &str,
 ) -> Result<String, AppError> {
@@ -407,7 +418,7 @@ fn fetch_github_login(
     let user: RawGitHubUser = response
         .json()
         .map_err(|e| AppError::OAuthError(format!("unexpected /user response shape: {e}")))?;
-    Ok(user.login)
+    Ok(user.id.to_string())
 }
 
 // ---------------------------------------------------------------------------
@@ -520,11 +531,20 @@ fn set_or_delete(service: &str, account: &str, value: Option<&str>) -> Result<()
 /// actually mints one — `db::connection`/`api::simple` only ever seed or
 /// reference workspace ids as pre-existing test fixtures. Absent an
 /// established minting scheme to stay consistent with, the authenticated
-/// GitHub login (e.g. `"octocat"`) is used directly as the workspace id:
-/// it's already stable and non-secret (exactly what `AppError`-free
-/// `Ok(String)` needs to carry back across the FFI boundary per the
-/// contract), unique per GitHub account, and avoids inventing a second,
-/// disconnected id space this ticket has no mandate to wire into `schema.sql`.
+/// GitHub account's numeric `id` (e.g. `583231`, rendered as a decimal
+/// string) is used as the workspace id: it's stable and non-secret (exactly
+/// what `AppError`-free `Ok(String)` needs to carry back across the FFI
+/// boundary per the contract), unique per GitHub account, and avoids
+/// inventing a second, disconnected id space this ticket has no mandate to
+/// wire into `schema.sql`.
+///
+/// Deliberately **not** the GitHub `login` (username): GitHub users can
+/// rename their account at any time (GitHub's own docs document the rename
+/// flow), while `id` is immutable for the account's lifetime. `schema.sql`
+/// keys several tables to `workspaces.id` via `ON DELETE CASCADE` foreign
+/// keys, so deriving the workspace id from a value that can change out from
+/// under a user would silently orphan all of that user's local data on
+/// their next login after a rename.
 fn authenticate_workspace_impl(
     provider: &str,
     auth_code: &str,
@@ -542,9 +562,9 @@ fn authenticate_workspace_impl(
         auth_code,
         code_verifier,
     )?;
-    let login = fetch_github_login(endpoints, tokens.access_token.as_str())?;
+    let workspace_id = fetch_github_account_id(endpoints, tokens.access_token.as_str())?;
     store(&tokens)?;
-    Ok(login)
+    Ok(workspace_id)
 }
 
 // ---------------------------------------------------------------------------
@@ -978,9 +998,10 @@ mod tests {
     }
 
     #[test]
-    fn authenticate_workspace_impl_stores_tokens_and_returns_the_github_login_as_workspace_id() {
+    fn authenticate_workspace_impl_stores_tokens_and_returns_the_github_account_id_as_workspace_id()
+    {
         let token_body = r#"{"access_token":"gho_test123","token_type":"bearer","scope":"repo"}"#;
-        let user_body = r#"{"login":"octocat"}"#;
+        let user_body = r#"{"id":583231,"login":"octocat"}"#;
         let server = MockServer::start(vec![
             (200, "application/json", token_body.to_string()),
             (200, "application/json", user_body.to_string()),
@@ -999,7 +1020,10 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(workspace_id, "octocat");
+        assert_eq!(
+            workspace_id, "583231",
+            "the workspace id must be the immutable numeric account id, not the mutable login"
+        );
         let stored = store.stored.lock().unwrap().clone().unwrap();
         assert_eq!(stored.access_token, "gho_test123");
         assert!(stored.refresh_token.is_none());

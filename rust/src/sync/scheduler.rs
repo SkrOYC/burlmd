@@ -138,16 +138,19 @@ pub type CredentialsFn = Box<dyn Fn() -> Option<GitCredentials> + Send>;
 /// so both closure slots below share one alias.
 pub type GitOpFn =
     Box<dyn Fn(&Path, &str, &str, Option<&GitCredentials>) -> Result<(), AppError> + Send>;
-/// Triggered once, unconditionally, after a rejected push's follow-up pull
-/// completes (regardless of whether that pull itself succeeded or produced
-/// conflict markers) — per `flow-sync-push.md`'s "Trigger re-index of notes
-/// and notes_fts tables" step.
+/// Triggered after a rejected push's follow-up pull completes, but only when a merge actually
+/// ran — i.e. the pull returned `Ok(())` (clean auto-merge) or `Err(AppError::GitConflict)`
+/// (merge landed real conflict markers). `flow-sync-push.md` sequences re-index strictly after
+/// a merge; if the pull itself failed before ever reaching the merge step (e.g. a
+/// `NetworkError` mid-`fetch`), nothing was merged and there is nothing new to index, so this
+/// hook does not fire and the pull error is recorded via `status`/`last_error` instead — see
+/// `run_sync_cycle`'s `GitConflict` arm.
 pub type ReindexFn = Box<dyn Fn() -> Result<(), AppError> + Send>;
-/// Triggered alongside `reindex`, carrying the follow-up pull's own result
-/// so the caller can distinguish "merged cleanly, nothing to review" from
-/// `Err(AppError::GitConflict)` ("conflict markers are now in the working
-/// tree, `flow-conflict-resolution.md`'s Suggestion-node path should take
-/// over") from any other error the pull itself hit.
+/// Triggered alongside `reindex` (same "only when a merge actually ran" condition — see
+/// [`ReindexFn`]'s doc comment), carrying the follow-up pull's own result so the caller can
+/// distinguish "merged cleanly, nothing to review" (`Ok(())`) from `Err(AppError::GitConflict)`
+/// ("conflict markers are now in the working tree, `flow-conflict-resolution.md`'s
+/// Suggestion-node path should take over").
 pub type ConflictHookFn = Box<dyn Fn(Result<(), AppError>) + Send>;
 
 /// The scheduler's side-effecting operations, injected rather than hard
@@ -425,12 +428,10 @@ fn run_sync_cycle(
             // Push Failure (Conflict, non-fast-forward) -> fetch + merge
             // upstream (`pull`'s own contract: leaves raw conflict markers
             // in the working tree on a real overlap and returns
-            // `AppError::GitConflict`, without aborting the merge), then
-            // unconditionally fire the re-index and conflict-notification
-            // hooks, per `flow-sync-push.md`'s Conflict branch.
+            // `AppError::GitConflict`, without aborting the merge).
             //
             // Note `pull` failing with `AuthExpired` falls into the
-            // `Err(other)` arm below just like any other non-conflict
+            // "no merge ran" branch below just like any other non-conflict
             // pull failure: no backoff is scheduled either way, since the
             // whole conflict branch unconditionally resets the backoff
             // state below regardless of `pull_result` — the same
@@ -443,17 +444,35 @@ fn run_sync_cycle(
                 credentials.as_ref(),
             );
 
+            // A conflict is a distinct scenario from a network failure;
+            // don't carry over a network backoff delay into it.
+            *backoff_delay = config.backoff_base;
+            *backoff_deadline = None;
+
+            // The re-index/conflict-notification hooks only make sense once a merge has
+            // actually run: `flow-sync-push.md` sequences re-index strictly after a merge.
+            // `pull_result` is `Ok(())` (clean auto-merge) or `Err(GitConflict)` (merge ran
+            // and landed real conflict markers) exactly when a merge happened; any other
+            // pull error (e.g. `NetworkError` failing mid-`fetch`, before a merge was ever
+            // attempted) means nothing was merged, so there's nothing new to index and the
+            // hooks must not fire — just record the pull's own error below instead.
+            let merge_ran = matches!(pull_result, Ok(()) | Err(AppError::GitConflict));
+
+            if !merge_ran {
+                let err = pull_result.expect_err(
+                    "merge_ran is false only when pull_result is neither Ok(()) nor Err(GitConflict)",
+                );
+                set_last_error(last_error, Some(err));
+                set_status(status, SyncStatus::Error);
+                return;
+            }
+
             let reindex_result = (deps.reindex)();
             let reindex_failed = reindex_result.is_err();
             if let Err(reindex_err) = reindex_result {
                 set_last_error(last_error, Some(reindex_err));
             }
             (deps.on_conflict)(pull_result.clone());
-
-            // A conflict is a distinct scenario from a network failure;
-            // don't carry over a network backoff delay into it.
-            *backoff_delay = config.backoff_base;
-            *backoff_deadline = None;
 
             match pull_result {
                 Ok(()) if !reindex_failed => {
@@ -474,12 +493,20 @@ fn run_sync_cycle(
                     set_status(status, SyncStatus::Error);
                 }
                 Err(AppError::GitConflict) => {
+                    // Deliberate precedence, not an oversight: a reindex failure recorded
+                    // moments earlier (if any) is intentionally overwritten here by the
+                    // conflict. Unlike the clean-merge arm above — where a reindex failure
+                    // is the *only* signal anything went wrong, so masking it would hide a
+                    // real problem — a conflict is itself the primary, user-actionable
+                    // signal for this cycle, and `flow-conflict-resolution.md`'s downstream
+                    // resolution flow re-triggers indexing once the user resolves the
+                    // markers, so the transient reindex failure doesn't need to survive as
+                    // `last_error` here.
                     set_last_error(last_error, Some(AppError::GitConflict));
                     set_status(status, SyncStatus::Conflict);
                 }
-                Err(other) => {
-                    set_last_error(last_error, Some(other));
-                    set_status(status, SyncStatus::Error);
+                Err(_) => {
+                    unreachable!("merge_ran guards this match to Ok(()) or Err(GitConflict) only")
                 }
             }
         }
@@ -499,7 +526,7 @@ fn run_sync_cycle(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_support::{git, init_bare};
+    use crate::test_support::{init_bare, init_repo};
     use std::process::Command as StdCommand;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Mutex as StdMutex;
@@ -721,9 +748,7 @@ mod tests {
         let work_parent = tempdir().unwrap();
         let work = work_parent.path().join("work");
         std::fs::create_dir_all(&work).unwrap();
-        git(&work, &["init", "--initial-branch=main", "-q"]);
-        git(&work, &["config", "user.name", "Test"]);
-        git(&work, &["config", "user.email", "test@example.com"]);
+        init_repo(&work);
         std::fs::write(work.join("note.md"), b"hello\n").unwrap();
         operations::commit_all(&work, "add note", "Test", "test@example.com").unwrap();
 
@@ -790,9 +815,7 @@ mod tests {
         let work_parent = tempdir().unwrap();
         let work = work_parent.path().join("work");
         std::fs::create_dir_all(&work).unwrap();
-        git(&work, &["init", "--initial-branch=main", "-q"]);
-        git(&work, &["config", "user.name", "Test"]);
-        git(&work, &["config", "user.email", "test@example.com"]);
+        init_repo(&work);
         std::fs::write(work.join("note.md"), b"hello\n").unwrap();
         operations::commit_all(&work, "add note", "Test", "test@example.com").unwrap();
 
@@ -844,9 +867,7 @@ mod tests {
         let work_parent = tempdir().unwrap();
         let work = work_parent.path().join("work");
         std::fs::create_dir_all(&work).unwrap();
-        git(&work, &["init", "--initial-branch=main", "-q"]);
-        git(&work, &["config", "user.name", "Test"]);
-        git(&work, &["config", "user.email", "test@example.com"]);
+        init_repo(&work);
         std::fs::write(work.join("note.md"), b"hello\n").unwrap();
         operations::commit_all(&work, "add note", "Test", "test@example.com").unwrap();
 
@@ -969,6 +990,74 @@ mod tests {
                 "notes_fts reindex failed".to_string()
             )),
             "the reindex failure must not be masked by the clean merge result"
+        );
+    }
+
+    /// A rejected push whose follow-up pull fails before any merge ever runs (e.g. the
+    /// `fetch` half of `pull` hits a `NetworkError`) must NOT fire the re-index or
+    /// conflict-notification hooks — no merge happened, so there's nothing new to index and
+    /// nothing conflict-shaped to report. The pull's own error must still be recorded via
+    /// `status`/`last_error`, matching every other "unexpected error" arm.
+    #[test]
+    fn rejected_push_with_a_pull_that_fails_before_merging_does_not_fire_reindex_or_conflict_hooks()
+    {
+        let work_parent = tempdir().unwrap();
+        let work = work_parent.path().join("work");
+        std::fs::create_dir_all(&work).unwrap();
+
+        let reindex_calls = Arc::new(AtomicUsize::new(0));
+        let reindex_calls_thread = Arc::clone(&reindex_calls);
+        let conflict_calls = Arc::new(AtomicUsize::new(0));
+        let conflict_calls_thread = Arc::clone(&conflict_calls);
+
+        let mut config = SyncConfig::new(work.clone(), "origin", "main");
+        config.debounce = Duration::from_millis(20);
+        config.poll_interval = no_interference_poll_interval();
+
+        let deps = SyncDeps {
+            push: Box::new(|_, _, _, _| Err(AppError::GitConflict)),
+            pull: Box::new(|_, _, _, _| {
+                Err(AppError::NetworkError(
+                    "simulated fetch failure before any merge ran".to_string(),
+                ))
+            }),
+            reindex: Box::new(move || {
+                reindex_calls_thread.fetch_add(1, Ordering::SeqCst);
+                Ok(())
+            }),
+            on_conflict: Box::new(move |_result| {
+                conflict_calls_thread.fetch_add(1, Ordering::SeqCst);
+            }),
+            ..SyncDeps::default()
+        };
+
+        let scheduler = SyncScheduler::start(config, deps);
+        scheduler.notify_activity();
+
+        let settled = wait_until(Duration::from_secs(3), || {
+            !matches!(scheduler.status(), SyncStatus::Idle | SyncStatus::Syncing)
+        });
+        scheduler.stop();
+
+        assert!(
+            settled,
+            "expected the scheduler to leave Idle/Syncing once the cycle finished"
+        );
+        assert_eq!(
+            reindex_calls.load(Ordering::SeqCst),
+            0,
+            "reindex must not fire when the follow-up pull failed before any merge ran"
+        );
+        assert_eq!(
+            conflict_calls.load(Ordering::SeqCst),
+            0,
+            "on_conflict must not fire when the follow-up pull failed before any merge ran"
+        );
+        assert_eq!(scheduler.status(), SyncStatus::Error);
+        assert!(
+            matches!(scheduler.last_error(), Some(AppError::NetworkError(_))),
+            "the pull's own NetworkError must still be recorded, got: {:?}",
+            scheduler.last_error()
         );
     }
 }
