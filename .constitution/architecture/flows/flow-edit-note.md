@@ -24,10 +24,14 @@ sequenceDiagram
 
         loop Keystroke
             UI->>Core: Update Block (block_path, new source)
-            Core->>Core: Splice source over the Block's span, reparse
             Core->>Local: Write draft row (tier 1, every keystroke)
-            Core-->>UI: NoteState (new AST)
+            Core-->>UI: Acknowledge (no parse, no AST returned)
         end
+
+        Note over UI,Core: Block loses focus
+        UI->>Core: Commit Block (block_path)
+        Core->>Core: Splice source over the Block's span, reparse
+        Core-->>UI: NoteState (new AST)
 
         Note over Core,Local: ~1s idle
         Core->>Local: Atomic write (tier 2): temp file + rename
@@ -51,6 +55,12 @@ The previous version of this flow specified "Serialize final AST back to Markdow
 ## Why three write tiers rather than one
 
 Draft rows absorb crash durability, so file writes need not be per-keystroke; file writes make the bundle correct on disk, so commits need not be per-write. The commit boundary is the editing *session* — closing the Note — rather than a timer, so that version history reads as one entry per Note per sitting instead of arbitrary time slices splitting a single thought. The accepted cost is that a Note left open for hours is written but uncommitted, and therefore unpushed, for hours. See `tech-spec/adrs/ADR-008-save-and-commit-granularity.md`.
+
+## Nothing parses on the typing path
+
+The keystroke loop above deliberately does not reparse and does not return an AST. While a Block is focused it displays raw source the Presentation Container already holds — the text the user just typed — and no other Block's rendering can change, so a per-keystroke AST would tell the caller nothing. The splice and reparse happen once, when the Block loses focus.
+
+This matters because the alternative is not merely wasteful: a whole-file reparse plus an encrypted draft write plus a full-AST payload, on a synchronous FFI call, is exactly the composition that would blow the 16ms budget in `prd/constraints.md`. An earlier draft of this flow placed the reparse inside the keystroke loop, contradicting `risks.md` risk 7 and both ADR-007 and ADR-008, all three of which claim the tiering keeps reparse off the typing path.
 
 ## `block_path` is not stable across a commit
 

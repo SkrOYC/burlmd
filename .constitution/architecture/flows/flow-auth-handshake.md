@@ -8,6 +8,7 @@ This flow is **opt-in and never a precondition to use.** A Workspace already exi
 sequenceDiagram
     participant UI as Presentation Container
     participant Core as Core Engine
+    participant Local as Local Repository
     participant OS as Secure Storage (Keychain)
     participant OAuth as OAuth Provider
     participant Remote as Remote Repository

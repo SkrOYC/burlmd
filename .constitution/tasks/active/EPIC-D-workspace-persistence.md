@@ -39,6 +39,7 @@ And no file under rust/src has been modified
   - `rust/src/okf/frontmatter.rs`
   - `rust/src/okf/concept_id.rs`
   - `rust/src/okf/links.rs`
+  - `rust/src/error.rs` (adds the `PathUnavailable` and `NotFound` variants this module reports; `AppError` lives here, not in `api`)
   - `rust/Cargo.toml`
   - `rust/src/lib.rs`
 - **Scope (Out-of-Scope Files):**
@@ -90,6 +91,7 @@ Then it is rejected as reserved
   - `rust/src/markdown/parser.rs`
   - `rust/src/markdown/spans.rs`
   - `rust/src/markdown/splice.rs`
+  - `rust/src/markdown/ast.rs` (reshapes `InlineElement::Link` from `{target_title, resolved_note_id}` to `{target_id, exists}` per the contract; the enum lives here)
   - `rust/src/markdown/mod.rs`
 - **Scope (Out-of-Scope Files):**
   - `rust/src/api/**`
@@ -129,9 +131,11 @@ Then the resulting node at that position is a list rather than a paragraph
   - `rust/src/workspace/bootstrap.rs`
   - `rust/src/api/ffi_api.rs`
   - `rust/src/db/connection.rs`
+  - `rust/src/db/schema.sql` (**the DDL the application actually executes**, via `include_str!` in `connection.rs`. It is currently byte-identical to the pre-v1.1.0 constitution schema and must be brought in line with `tech-spec/data-models/schema.sql` — composite `(workspace_id, id)` keys, `ON UPDATE CASCADE`, `content_hash`, `okf_conformant`, `links.target_id`, `idx_links_target`. Without this, every later ticket writes columns that do not exist.)
+  - `rust/src/frb_generated.rs`, `lib/src/rust/**` (regenerated bindings only — this ticket adds `#[frb]` functions, and adding one without regenerating leaves the Dart side unable to call it)
 - **Scope (Out-of-Scope Files):**
   - `rust/src/api/auth.rs` (no credential path participates in bootstrap)
-  - `lib/**`
+  - `lib/main.dart`, `lib/src/components/**`, `lib/src/screens/**`, `lib/src/providers/**` (hand-written Dart is Epic E)
 - **Verification Command:** `cd rust && cargo test workspace::bootstrap && cargo clippy --all-targets -- -D warnings`
 - **Expected Success Output:** `exit 0`
 - **STOP Conditions:**
@@ -167,6 +171,7 @@ Then it is outside the bundle directory
   - `rust/src/index/scan.rs`
   - `rust/src/index/incremental.rs`
   - `rust/src/api/ffi_api.rs`
+  - `rust/src/frb_generated.rs`, `lib/src/rust/**` (regenerated bindings only — this ticket adds `#[frb]` functions)
 - **Scope (Out-of-Scope Files):**
   - `rust/src/sync/scheduler.rs` (wiring the scheduler's hook is deferred scope)
 - **Verification Command:** `cd rust && cargo test index:: && cargo clippy --all-targets -- -D warnings`
@@ -211,6 +216,7 @@ Then results return in under 100 milliseconds
   - `rust/src/workspace/lifecycle.rs`
   - `rust/src/workspace/links_rewrite.rs`
   - `rust/src/api/ffi_api.rs`
+  - `rust/src/frb_generated.rs`, `lib/src/rust/**` (regenerated bindings only — this ticket adds `#[frb]` functions)
 - **Scope (Out-of-Scope Files):**
   - `rust/src/markdown/**`
   - `lib/**`
@@ -256,6 +262,7 @@ Then the deletion is committed and the prior content is recoverable
   - `rust/src/workspace/persist.rs`
   - `rust/src/draft.rs`
   - `rust/src/api/ffi_api.rs`
+  - `rust/src/frb_generated.rs`, `lib/src/rust/**` (regenerated bindings only — this ticket adds `#[frb]` functions)
 - **Scope (Out-of-Scope Files):**
   - `rust/src/sync/scheduler.rs` (called, not modified)
 - **Verification Command:** `cd rust && cargo test workspace::persist && cargo clippy --all-targets -- -D warnings`
@@ -307,8 +314,9 @@ Then the save is rejected with a revision mismatch carrying the current revision
 - **Expected Success Output:** `exit 0`
 - **STOP Conditions:**
   - "STOP if `update_block` retains its AST-based signature; ADR-007 decision 4 replaces it with source text, and leaving both is a divergence the UI will pick the wrong one from."
+  - "STOP if `update_block` parses, splices, or returns a `NoteState`. It is the per-keystroke call and must stay cheap; the reparse belongs in `commit_block`. Putting it back on the typing path contradicts ADR-007, ADR-008 and `architecture/risks.md` risk 7 simultaneously."
   - "STOP if generated bindings are hand-edited rather than regenerated and committed."
-- **Description:** Expose the editing operations across the FFI boundary exactly as `contracts/ffi_api.rs` declares them: fetching a Block's raw source, the source-based `update_block`, block insert, delete, split and merge, and the three range operations over a multi-Block selection. Remove `open_note_by_id` by merging it into `open_note`, which now takes a concept id. Regenerate and commit the bindings. Note that a splice can change a Block's node shape, so the returned state is authoritative and callers must not retain a block path across a call.
+- **Description:** Expose the editing operations across the FFI boundary exactly as `contracts/ffi_api.rs` declares them: fetching a Block's raw source, the per-keystroke `update_block` that buffers text and writes the draft row without parsing, the `commit_block` that splices and reparses on blur, block insert, delete, split and merge, and the three range operations over a multi-Block selection. Remove `open_note_by_id` by merging it into `open_note`, which now takes a concept id. Regenerate and commit the bindings. Note that a splice can change a Block's node shape, so the returned state is authoritative and callers must not retain a block path across a reparsing call.
 - **Acceptance Criteria (Gherkin):**
 ```gherkin
 Given an open Note
@@ -317,7 +325,11 @@ Then the raw Markdown for that Block is returned, including its delimiters
 
 Given an open Note
 When a Block is updated with new source text
-Then the returned state reflects the reparsed Note and a draft row is written
+Then a draft row is written, no parse occurs, and no AST is returned
+
+Given a Block whose buffered source differs from the file
+When the Block is committed
+Then the source is spliced over its span, the Note is reparsed, and the new state is returned
 
 Given a Block and a character offset
 When the Block is split at that offset

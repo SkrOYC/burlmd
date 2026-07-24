@@ -10,7 +10,7 @@
 
   "properties": {
     "type": {
-      "description": "REQUIRED by OKF section 11.2. A short string identifying the kind of concept. There is no central registry; consumers MUST tolerate unknown types. burlmd writes the constant 'Note' unless a richer type vocabulary is introduced as a product capability.",
+      "description": "REQUIRED by OKF section 11. A short string identifying the kind of concept. There is no central registry; consumers MUST tolerate unknown types. burlmd writes the constant 'Note' unless a richer type vocabulary is introduced as a product capability.",
       "type": "string",
       "minLength": 1,
       "default": "Note"
@@ -35,9 +35,10 @@
       "items": { "type": "string" }
     },
     "timestamp": {
-      "description": "OPTIONAL. An ISO 8601 datetime. burlmd does not write this: the authoritative modification time is the Git history, and writing a timestamp into the file body on every save would violate the Edit Fidelity constraint by producing a diff on every write.",
+      "description": "LEGACY (OKF v0.1). Superseded by `generated.at` in v0.2 per SPEC.md section 13.1; it is not a current v0.2 option. Listed here only so a bundle authored against v0.1 validates rather than being rejected. burlmd never writes it, and never writes `generated` either — see the `generated` property and ADR-004 decision 8 for why recording any modification time in the file would violate the Edit Fidelity constraint.",
       "type": "string",
-      "format": "date-time"
+      "format": "date-time",
+      "deprecated": true
     },
     "status": {
       "description": "OPTIONAL lifecycle field (OKF section 5.4). Absent is equivalent to 'stable'. Preserved when present; surfacing it is deferred product scope.",

@@ -32,7 +32,7 @@ Per OKF §2, a concept's id is "the path of the concept's file within the bundle
 
 ## Frontmatter
 
-Every non-reserved `.md` file opens with a YAML frontmatter block. This is not a burlmd preference: OKF §11.1 and §11.2 make a parseable block containing a non-empty `type` the entire basis of conformance.
+Every non-reserved `.md` file opens with a YAML frontmatter block. This is not a burlmd preference: OKF §11 makes a parseable block containing a non-empty `type` the entire basis of conformance.
 
 ```markdown
 ---
@@ -47,7 +47,7 @@ Git-backed notes. See [Architecture](/projects/architecture.md).
 
 - **Written by burlmd:** `type` (always, default `Note`) and `title`.
 - **Preserved verbatim:** every other key, in its original order, spelling, and formatting. Per ADR-007 the block is a byte span that is only rewritten when `title` changes, so preservation requires no round-trip machinery and cannot silently reorder or reformat a user's own keys.
-- **Never written:** `timestamp`. Git history is the authoritative modification record, and writing a timestamp on every save would produce a diff on every save, violating the Edit Fidelity constraint in `prd/constraints.md`.
+- **Never written:** `generated`, and therefore no modification time of any kind. Per OKF §13.1 this is the v0.2 field of record for a concept's last content change — it supersedes v0.1's `timestamp`, which is legacy and which burlmd also never writes. The reason is the Edit Fidelity constraint in `prd/constraints.md`: writing a timestamp on every save produces a diff on every save, which is precisely the whole-file-churn failure that constraint exists to prevent. Git history is the authoritative modification record for this application. The cost is stated plainly in ADR-004 decision 8 — the Agent actor gets no modification time from the bundle and must read it from Git or the filesystem.
 - `title` is recommended rather than required by OKF §4.1, which permits consumers to derive one from the filename. burlmd writes it anyway so that display title is decoupled from filename, and therefore from identity.
 
 A file that is missing frontmatter, or whose frontmatter does not parse, is **not** rejected — it is indexed with a derived title and reported as non-conformant, so that CAP-PORT-03 (tolerating files written by external tools) and CAP-WS-05 (opening a foreign Workspace) both hold. burlmd brings such a file into conformance only when the user next edits it.
@@ -68,7 +68,7 @@ See [Architecture](/projects/architecture.md) for the container split.
 
 ## Reserved filenames
 
-OKF §3.1 reserves `index.md` (directory listing, §8) and `log.md` (update history, §9). Both are optional, and §11.3 constrains their structure only when they are present.
+OKF §3.1 reserves `index.md` (directory listing, §8) and `log.md` (update history, §9). Both are optional, and §11 constrains their structure only when they are present.
 
 burlmd **reserves both names and generates neither** (ADR-004 decision 6). A user attempting to create a Note that would occupy either name is redirected to a different filename rather than being allowed to produce a non-conformant bundle.
 

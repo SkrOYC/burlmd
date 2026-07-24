@@ -187,16 +187,30 @@ pub async fn create_directory(workspace_id: String, path: String) -> Result<(), 
     unimplemented!()
 }
 
-/// Renames a Directory, moving its contents and rewriting inbound Links to
-/// every Note beneath it (CAP-LIFE-06).
+/// One Note whose concept id changed as a side effect of an operation on its
+/// containing Directory. Renaming a Directory changes the id of every Note
+/// beneath it, so a caller holding an open Note from that subtree would
+/// otherwise be left with a dead id and no way to learn the new one.
 #[frb]
-pub async fn rename_directory(workspace_id: String, path: String, new_name: String) -> Result<(), AppError> {
+pub struct IdRemap {
+    pub old_id: String,
+    pub new_id: String,
+}
+
+/// Renames a Directory, moving its contents and rewriting inbound Links to
+/// every Note beneath it (CAP-LIFE-06). Returns the id remapping for every
+/// affected Note, for the same reason `rename_note` returns the new state:
+/// positional identity means the caller's existing ids are now stale.
+#[frb]
+pub async fn rename_directory(workspace_id: String, path: String, new_name: String) -> Result<Vec<IdRemap>, AppError> {
     unimplemented!()
 }
 
 /// Deletes a Directory and everything beneath it, in one commit (CAP-LIFE-06).
+/// Returns the concept ids of every Note removed, so a caller with one of them
+/// open can close it rather than discovering it is gone on next access.
 #[frb]
-pub async fn delete_directory(workspace_id: String, path: String) -> Result<(), AppError> {
+pub async fn delete_directory(workspace_id: String, path: String) -> Result<Vec<String>, AppError> {
     unimplemented!()
 }
 
@@ -284,11 +298,18 @@ pub struct NoteState {
 // ---------------------------------------------------------------------------
 // Editing (ADR-006, ADR-007)
 //
-// Every mutating call below commits a splice into the file's source text and
-// reparses, returning the whole new state. `block_path` is an index path into
-// the AST and is NOT stable across a call: a splice can change a Block's node
-// shape (a paragraph becoming a list). Callers must re-derive focus from the
-// returned state rather than retaining a path across a mutation.
+// Two tiers, and the distinction is load-bearing for the frame budget.
+//
+// `update_block` is the per-keystroke call: it buffers text and writes a
+// draft row, returns nothing, and never parses. Every OTHER mutating call
+// below commits a splice into the file's source text and reparses, returning
+// the whole new state -- and each is triggered by a discrete user action
+// (blur, Enter, Backspace, a range edit), not by typing.
+//
+// `block_path` is an index path into the AST and is NOT stable across a
+// reparsing call: a splice can change a Block's node shape (a paragraph
+// becoming a list). Callers must re-derive focus from the returned state
+// rather than retaining a path across such a mutation.
 // ---------------------------------------------------------------------------
 
 /// Opens a Note by concept id, restoring an unflushed draft if one exists.
@@ -307,18 +328,40 @@ pub fn get_block_source(note_id: String, block_path: Vec<usize>) -> Result<Strin
     unimplemented!()
 }
 
-/// Commits an edit to one Block by splicing `new_source` over that Block's
-/// span and reparsing (ADR-007 decision 1).
+/// Records the focused Block's current source text. This is the per-keystroke
+/// call, and it is deliberately cheap: it buffers the text and writes the
+/// `drafts` row (ADR-008 tier 1). It does **not** splice, does not reparse,
+/// does not touch the file, and does not return an AST.
 ///
 /// Takes source text, not an `AstNode` -- the prior AST-based signature
 /// required reconstructing Markdown from a tree, which needed a canonical
 /// form nothing ever specified and would have rewritten unedited regions in
 /// violation of the Edit Fidelity constraint.
 ///
-/// Also writes tier 1 of ADR-008 (the `drafts` row). It does not write the
-/// file; `save_note` does.
+/// Returning nothing is what keeps the 16ms budget reachable. While a Block
+/// is focused it displays raw source the UI already holds -- the text the
+/// user just typed -- and no other Block's rendering can change, so there is
+/// nothing for a per-keystroke AST to tell the caller. Reparsing here would
+/// put an O(file) parse plus a full-AST FFI payload on every keystroke of a
+/// `#[frb(sync)]` call, which is exactly what ADR-007, ADR-008 and
+/// `architecture/risks.md` risk 7 all claim the tiering avoids.
 #[frb(sync)]
-pub fn update_block(note_id: String, block_path: Vec<usize>, new_source: String) -> Result<NoteState, AppError> {
+pub fn update_block(note_id: String, block_path: Vec<usize>, new_source: String) -> Result<(), AppError> {
+    unimplemented!()
+}
+
+/// Commits the focused Block: splices its buffered source over that Block's
+/// span, reparses, and returns the new state (ADR-007 decision 1).
+///
+/// Called when the Block loses focus, not on every keystroke. This is where
+/// the reparse cost lands, alongside the tier 2 write, off the typing path.
+///
+/// A splice can change a Block's node shape -- a paragraph gaining a leading
+/// list marker reparses as a list -- so the returned state is authoritative
+/// and the caller must re-derive focus from it rather than reusing the
+/// `block_path` it passed in.
+#[frb(sync)]
+pub fn commit_block(note_id: String, block_path: Vec<usize>) -> Result<NoteState, AppError> {
     unimplemented!()
 }
 
@@ -492,10 +535,21 @@ pub struct OAuthFlowStart {
 /// Generates the PKCE verifier, challenge and state Core-side and returns the
 /// authorize URL for the UI to open in the system browser.
 ///
-/// The split is deliberate: the UI is not a trusted party to mint the
-/// verifier that `authenticate_workspace` later checks the exchange against,
-/// while only the UI can open a browser and run the loopback listener.
-/// `redirect_uri` is the loopback URL the UI is already listening on.
+/// The split is deliberate: generating cryptographic material belongs on the
+/// Core side, while only the UI can open a browser and run the loopback
+/// listener. `redirect_uri` is the loopback URL the UI is already listening
+/// on.
+///
+/// **The Core does not validate either value.** It mints the verifier and
+/// forwards it to the token endpoint on the UI's behalf; it mints `state` and
+/// never sees it again. Comparing the `state` returned on the redirect
+/// against the one issued here — the CSRF check required by RFC 6749 §10.12 —
+/// is therefore a **UI obligation**, and a UI that skips it silently loses
+/// that protection with nothing in the Core able to detect the omission.
+/// Retaining the pair Core-side keyed by a flow id would move the check
+/// behind this boundary; that is deliberately not done here, because it would
+/// make the Core stateful across the browser leg for one comparison, and it
+/// is recorded as an accepted trade-off rather than an oversight.
 #[frb(sync)]
 pub fn begin_oauth_flow(provider: String, redirect_uri: String) -> Result<OAuthFlowStart, AppError> {
     unimplemented!()

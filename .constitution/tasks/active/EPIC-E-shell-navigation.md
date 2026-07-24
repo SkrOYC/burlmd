@@ -178,6 +178,14 @@ Then it disappears from the tree and the editor closes it
 Given a Note is moved to another Directory
 When the move completes
 Then it appears under the new Directory in the tree
+
+Given a Note from inside a Directory is open
+When that Directory is renamed
+Then the open Note re-anchors using the id remapping the Core returns, rather than holding a dead identifier
+
+Given a Note is open
+When its containing Directory is deleted
+Then the editor closes that Note rather than leaving it open against a removed file
 ```
 
 #### SHEL-E006 Search Surface

@@ -48,8 +48,9 @@ And no file under lib or rust/src has been modified
 - **STOP Conditions:**
   - "STOP if the editable field renders formatted text rather than raw source; the whole point of this model is that the user sees and types real Markdown."
   - "STOP if the promotion introduces visible layout movement that the Spike identified as avoidable."
-  - "STOP if edits are held in Dart state rather than committed through the Core; the Presentation Container must not become an owner of Note content."
-- **Description:** Implement CAP-EDIT-01. Every Block renders formatted except the one holding the caret, which displays its raw Markdown source in an editable field with the caret placed where the user clicked. Blurring returns it to formatted output. Every keystroke commits through the Core, which reparses and returns the authoritative state. Because a splice can change a Block's node shape, focus is re-derived from the returned state rather than from a retained path. All Block types in scope are editable this way, not only paragraphs.
+  - "STOP if edits are held in Dart state rather than sent to the Core; the Presentation Container must not become an owner of Note content."
+  - "STOP if the editor calls a reparsing Core function on every keystroke; typing uses the buffering call, and the commit happens on blur. Reparsing per keystroke is what the 16ms budget cannot absorb."
+- **Description:** Implement CAP-EDIT-01. Every Block renders formatted except the one holding the caret, which displays its raw Markdown source in an editable field with the caret placed where the user clicked. Every keystroke goes to the Core's per-keystroke call, which buffers the text and writes the draft row without parsing and without returning an AST — while a Block is focused the UI already holds the text being displayed, so there is nothing for a per-keystroke round trip to tell it. Blurring commits the Block, at which point the Core splices, reparses, and returns the authoritative state; because a splice can change a Block's node shape, focus is re-derived from that state rather than from a retained path. All Block types in scope are editable this way, not only paragraphs.
 - **Acceptance Criteria (Gherkin):**
 ```gherkin
 Given a Note with a paragraph containing bold text
