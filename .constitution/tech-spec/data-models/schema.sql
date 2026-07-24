@@ -23,7 +23,26 @@ PRAGMA foreign_keys = ON;
 -- file exists on any machine, so the v1.1.0 corrections here are edits to the
 -- baseline rather than a migration away from it. The first migration written
 -- after this project has real users should branch on this value.
+--
+-- This statement is therefore NOT part of the batch `init_schema` replays on
+-- every open. `connection.rs` runs `execute_batch(SCHEMA)` unconditionally, so
+-- an unconditional `PRAGMA user_version = 1` would silently reset a migrated
+-- database back to the baseline on its next open -- turning the one value a
+-- future migration branches on into a constant. The Core reads
+-- `PRAGMA user_version` first and sets it only when it reads 0, i.e. on a
+-- freshly created file. It is written here because this file is the schema
+-- contract and the version belongs with it, not because it is replayable.
 PRAGMA user_version = 1;
+
+-- Foreign key enforcement is per CONNECTION and is not stored in the database
+-- file: SQLite defaults it OFF, so every connection the application opens must
+-- issue the pragma above before it does anything else. This is not defensive.
+-- Both cascades below are load-bearing -- `ON UPDATE CASCADE` is what makes a
+-- rename possible at all -- and with the pragma off they do not error, they
+-- simply do not fire, leaving orphaned `links` and `fts_mapping` rows behind
+-- with nothing to signal it. `guidelines.md` states this as a connection-open
+-- obligation, and `WSPC-D004` carries a criterion for it, because
+-- `open_encrypted_db_with_key` is reachable without `init_schema` today.
 
 -- A Workspace. Local by default (ADR-005): `provider` is 'local' and
 -- `remote_url` is NULL until the user explicitly connects one (CAP-SYNC-01),
@@ -85,6 +104,19 @@ CREATE TABLE IF NOT EXISTS links (
     -- to the same target with different wording are one graph edge; the second
     -- INSERT OR IGNORE keeps the first row's `target_title`. Accepted: this
     -- table indexes the graph, it does not reproduce the prose.
+    --
+    -- The rename path needs the same tolerance and cannot get it the same way,
+    -- because it is an UPDATE and UPDATE has no OR IGNORE equivalent that keeps
+    -- the row. Renaming `Old` to `New` rewrites `target_id` on every inbound
+    -- edge, and collides whenever one Note already links to BOTH `Old` and a
+    -- ghost `New` -- which is not contrived, it is exactly the CAP-GRAPH-04
+    -- workflow of writing forward into an uncreated concept and then creating
+    -- it. Reproduced against this file: a bare UPDATE fails with
+    -- `UNIQUE constraint failed`, so a P0 rename (CAP-LIFE-02) breaks on a
+    -- graph the product itself encourages. The rewrite must therefore be
+    -- `UPDATE OR REPLACE`, which drops the duplicate edge and keeps the
+    -- renamed link's own `target_title` -- the same "the graph, not the prose"
+    -- trade-off already accepted above. See WSPC-D006.
     PRIMARY KEY (workspace_id, source_id, target_id),
     -- ON UPDATE CASCADE is load-bearing, not defensive: renaming a Note
     -- rewrites `notes.id`, and without this a rename of any Note that links

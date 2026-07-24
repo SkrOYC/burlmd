@@ -80,6 +80,12 @@ All commands below assume the `devenv` shell (`devenv shell`, or automatic via
    - **Round-trip property tests are mandatory for the splice path.** For any Note and any Block, splicing that Block's own unmodified source back over its span must produce a byte-identical file. This is the executable form of the Edit Fidelity constraint and is cheap to state as a property over a corpus of fixture Notes, including ones with frontmatter keys the application does not manage.
    - **Every ticket touching UI must launch the real application in its Verification Command.** Not `flutter test` alone. The gap this closes is documented under "Running the real app" below: through Epic B, no ticket's gate ever started the app, and a real regression shipped that six passing widget tests could not see.
 
+## Index connection obligations
+
+Every connection opened against the encrypted index must issue `PRAGMA foreign_keys = ON` before any other statement. SQLite defaults it off and does not persist it in the file, so it is a property of the connection rather than of the database. The entire key design in `data-models/schema.sql` depends on it: with the pragma off the `ON UPDATE CASCADE` clauses that make a rename possible do not error, they silently do not fire, and the result is orphaned `links` and `fts_mapping` rows with nothing to signal the loss. Today only `init_schema` reliably runs on the singleton connection, while `open_encrypted_db_with_key` is reachable without it — which is how the tests use it.
+
+`PRAGMA user_version` is the other connection-time concern, in the opposite direction: it must be *read* on open and written only when it reads 0. `init_schema` replays the whole schema batch on every open, so a `user_version` assignment left inside that batch would reset a migrated database to the baseline every time it was opened.
+
 ## Workspace location
 
 The default local Workspace (ADR-005 decision 1) resolves to `$XDG_DATA_HOME/burlmd/workspace`, falling back to `~/.local/share/burlmd/workspace` when `XDG_DATA_HOME` is unset, and to `~/Library/Application Support/burlmd/workspace` on macOS.

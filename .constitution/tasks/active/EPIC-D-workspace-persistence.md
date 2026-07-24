@@ -13,7 +13,7 @@ Entirely Core-side. No ticket here touches Dart, and nothing in this epic is vis
   - `.constitution/spikes/SPK-WSPC-D001.md`
 - **Scope (Out-of-Scope Files):**
   - `rust/src/**` (no production code in a Spike)
-- **Verification Command:** `! grep -q 'Status: placeholder' .constitution/spikes/SPK-WSPC-D001.md && ! grep -q 'To be filled' .constitution/spikes/SPK-WSPC-D001.md && git diff --quiet HEAD -- rust/src`
+- **Verification Command:** `! grep -q 'Status: placeholder' .constitution/spikes/SPK-WSPC-D001.md && ! grep -q 'To be filled' .constitution/spikes/SPK-WSPC-D001.md && git diff --quiet $(git merge-base HEAD master) HEAD -- rust/src`
 - **Expected Success Output:** `exit 0`
 - **STOP Conditions:**
   - "STOP if the investigation concludes that whole-file reparse cannot meet the 16ms budget in `prd/constraints.md` at realistic Note sizes; that invalidates ADR-007's mitigation and requires a Stage 3 pass, not an improvised offset-arithmetic implementation."
@@ -39,13 +39,14 @@ And no file under rust/src has been modified
   - `rust/src/okf/frontmatter.rs`
   - `rust/src/okf/concept_id.rs`
   - `rust/src/okf/links.rs`
+  - `rust/src/frb_generated.rs`, `lib/src/rust/**` (regenerated bindings only. Required even though this ticket adds no `#[frb]` *function*: `AppError` is an `#[frb]` type mirrored into `lib/src/rust/error.dart`, and the generated codecs fall through to `unimplemented!()` on an unknown discriminant — so a Rust-only variant addition compiles, passes this gate, and panics the first time the new variant crosses the boundary.)
   - `rust/src/error.rs` (adds **every** variant the contract introduces — `PathUnavailable`, `NotFound`, `RevisionMismatch` and `OAuthStateMismatch` — not only the two this module itself reports. `AppError` lives here, not in `api`, and the later tickets that raise the other two do not scope this file. Adding all four at once costs nothing and is what keeps `WSPC-D007` able to pass its own revision-mismatch criterion.)
   - `rust/Cargo.toml`
   - `rust/src/lib.rs`
 - **Scope (Out-of-Scope Files):**
   - `rust/src/api/**` (no FFI surface in this ticket)
   - `rust/src/db/**`
-- **Verification Command:** `cd rust && cargo test okf:: && cargo clippy --all-targets -- -D warnings`
+- **Verification Command:** `cd rust && cargo test okf:: -- --list | grep -q ': test' && cargo test okf:: && cargo clippy --all-targets -- -D warnings`
 - **Expected Success Output:** `exit 0`
 - **STOP Conditions:**
   - "STOP if the YAML reader dependency named in `tech-spec/stack.md` cannot parse a fixture block; do not hand-roll a YAML parser, and do not substitute a different crate without a Stage 3 pass."
@@ -96,7 +97,7 @@ Then it is rejected as reserved
 - **Scope (Out-of-Scope Files):**
   - `rust/src/api/**`
   - `rust/src/workspace/**`
-- **Verification Command:** `cd rust && cargo test markdown:: && cargo clippy --all-targets -- -D warnings`
+- **Verification Command:** `cd rust && cargo test markdown:: -- --list | grep -q ': test' && cargo test markdown:: && cargo clippy --all-targets -- -D warnings`
 - **Expected Success Output:** `exit 0`
 - **STOP Conditions:**
   - "STOP if satisfying Edit Fidelity appears to require adding a byte range to any `AstNode` variant; `tech-spec/guidelines.md` forbids spans crossing the FFI boundary and ADR-007 decision 3 states why."
@@ -144,7 +145,7 @@ Then the extracted text is exactly the source spanned by the selection, delimite
 - **Scope (Out-of-Scope Files):**
   - `rust/src/api/auth.rs` (no credential path participates in bootstrap)
   - `lib/main.dart`, `lib/src/components/**`, `lib/src/screens/**`, `lib/src/providers/**` (hand-written Dart is Epic E)
-- **Verification Command:** `cd rust && cargo test workspace::bootstrap && cargo clippy --all-targets -- -D warnings`
+- **Verification Command:** `cd rust && cargo test workspace::bootstrap -- --list | grep -q ': test' && cargo test workspace::bootstrap && cargo clippy --all-targets -- -D warnings`
 - **Expected Success Output:** `exit 0`
 - **STOP Conditions:**
   - "STOP if bootstrap requires reading a credential, contacting a network host, or consulting authentication state; `flow-workspace-bootstrap.md` contains no such step and CAP-WS-01 forbids one."
@@ -159,7 +160,7 @@ Then the directory is created, a repository is initialized in it, and a Workspac
 
 Given no root encryption key exists in secure storage
 When the local Workspace is opened
-Then a key is generated, stored, and used to open the encrypted index
+Then a key is generated, stored, and used to open the encrypted index (`CAP-WS-04` — the key generation moves here from the authentication flow, where it never belonged)
 
 Given a Workspace that already exists
 When the local Workspace is opened again
@@ -176,6 +177,14 @@ Then that file is neither opened nor migrated, and the Workspace opens against a
 Given an existing directory of Markdown files that this application did not create
 When it is opened as a Workspace
 Then it becomes the active Workspace, a Workspace row is written for it, and no file in it is modified
+
+Given any connection opened against the encrypted index
+When `PRAGMA foreign_keys` is queried on it
+Then it reports enabled — the setting is per-connection and not stored in the file, and every cascade in the schema is inert without it
+
+Given an index file whose `user_version` reads something other than 0
+When the schema batch is re-applied on open
+Then `user_version` is left as it was rather than reset to the baseline
 ```
 
 #### WSPC-D005 Bundle Indexer
@@ -191,7 +200,7 @@ Then it becomes the active Workspace, a Workspace row is written for it, and no 
   - `rust/src/frb_generated.rs`, `lib/src/rust/**` (regenerated bindings only — this ticket adds `#[frb]` functions)
 - **Scope (Out-of-Scope Files):**
   - `rust/src/sync/scheduler.rs` (wiring the scheduler's hook is deferred scope)
-- **Verification Command:** `cd rust && cargo test index:: && cargo clippy --all-targets -- -D warnings`
+- **Verification Command:** `cd rust && cargo test index:: -- --list | grep -q ': test' && cargo test index:: && cargo clippy --all-targets -- -D warnings`
 - **Expected Success Output:** `exit 0`
 - **STOP Conditions:**
   - "STOP if a full rescan is required to keep the index current during ordinary editing; `architecture/risks.md` risk 3 requires incremental updates as the routine path."
@@ -237,11 +246,12 @@ Then results return in under 100 milliseconds
 - **Scope (Out-of-Scope Files):**
   - `rust/src/markdown/**`
   - `lib/**`
-- **Verification Command:** `cd rust && cargo test workspace::lifecycle && cargo clippy --all-targets -- -D warnings`
+- **Verification Command:** `cd rust && cargo test workspace::lifecycle -- --list | grep -q ': test' && cargo test workspace::lifecycle && cargo clippy --all-targets -- -D warnings`
 - **Expected Success Output:** `exit 0`
 - **STOP Conditions:**
   - "STOP if a rename or move can complete having rewritten only some inbound Links; `architecture/risks.md` risk 8 identifies partial rewriting as a silent graph-corruption mode, so the operation must be atomic or must fail."
   - "STOP if a title collision is resolved by silently disambiguating the filename; the contract specifies an error."
+  - "STOP if a rename is refused because rewriting inbound Links violated the `links` primary key. That is a collision to merge, not a conflict to report — see the note on the key in `data-models/schema.sql`. The STOP above requires the operation be atomic or fail; it does not make this a legitimate failure."
 - **Description:** Implement creation, deletion, rename and move for Notes, and creation, rename and deletion for Directories, per `contracts/ffi_api.rs`. Because OKF identity is positional, rename and move change a Note's concept id, so each must rewrite the file, its index rows, and every inbound Link in one atomic operation committed together. Creation writes a conformant frontmatter block. Deletion is committed so it stays recoverable.
 - **Acceptance Criteria (Gherkin):**
 ```gherkin
@@ -272,6 +282,14 @@ Then the deletion is committed and the prior content is recoverable
 Given a Note carrying an unflushed draft row is deleted
 When the draft table is inspected
 Then no row remains for it — the table has no foreign key, so nothing cascades and the deletion must clear it explicitly
+
+Given a Note carrying an unflushed draft row is renamed
+When the draft table is inspected
+Then the row is re-keyed to the new concept id and the drafted content is intact — this is the one case the missing foreign key exists to permit, so it is the one case that must be tested
+
+Given a Note links to both `Old` and a not-yet-created `New`
+When `Old` is renamed to `New`
+Then the rename succeeds and the two inbound edges collapse to one, rather than failing on the `links` primary key
 ```
 
 #### WSPC-D007 Persistence Tiers
@@ -286,7 +304,7 @@ Then no row remains for it — the table has no foreign key, so nothing cascades
   - `rust/src/frb_generated.rs`, `lib/src/rust/**` (regenerated bindings only — this ticket adds `#[frb]` functions)
 - **Scope (Out-of-Scope Files):**
   - `rust/src/sync/scheduler.rs` (called, not modified)
-- **Verification Command:** `cd rust && cargo test workspace::persist && cargo clippy --all-targets -- -D warnings`
+- **Verification Command:** `cd rust && cargo test workspace::persist -- --list | grep -q ': test' && cargo test workspace::persist && cargo clippy --all-targets -- -D warnings`
 - **Expected Success Output:** `exit 0`
 - **STOP Conditions:**
   - "STOP if a commit is triggered on a timer rather than on Note close; ADR-008 rejected timer-based commits explicitly."
@@ -318,7 +336,7 @@ Then the buffered source is spliced and written, later spans shift by the byte d
 
 Given a Note with edits from this session
 When the Note is closed
-Then exactly one commit is made, the draft row is cleared, and the sync scheduler is notified
+Then exactly one commit is made, the draft row is cleared, and the sync scheduler is notified — this commit is the whole of `CAP-WS-02`, the durability guarantee that makes a local-only Workspace trustworthy before any Remote exists
 
 Given the on-disk file changed after the Note was opened
 When the idle write tier fires
@@ -343,7 +361,7 @@ Then the measured write completes within the frame budget, and the measurement i
 - **Scope (Out-of-Scope Files):**
   - `lib/src/components/**` (Epic F consumes this surface)
   - `lib/src/screens/**`
-- **Verification Command:** `cd rust && cargo test api::ffi_api && cargo clippy --all-targets -- -D warnings && cd .. && dart analyze`
+- **Verification Command:** `cd rust && cargo test api::ffi_api -- --list | grep -q ': test' && cargo test api::ffi_api && cargo clippy --all-targets -- -D warnings && cd .. && dart analyze`
 - **Expected Success Output:** `exit 0`
 - **STOP Conditions:**
   - "STOP if `update_block` retains its AST-based signature; ADR-007 decision 4 replaces it with source text, and leaving both is a divergence the UI will pick the wrong one from."
@@ -395,7 +413,7 @@ And no exposed function takes a workspace_id parameter
   - `lib/src/rust/**` (regenerated bindings only)
 - **Scope (Out-of-Scope Files):**
   - `lib/src/components/**`
-- **Verification Command:** `cd rust && cargo test index::query && cargo clippy --all-targets -- -D warnings && cd .. && dart analyze`
+- **Verification Command:** `cd rust && cargo test index::query -- --list | grep -q ': test' && cargo test index::query && cargo clippy --all-targets -- -D warnings && cd .. && dart analyze`
 - **Expected Success Output:** `exit 0`
 - **STOP Conditions:**
   - "STOP if search results are capped by a hardcoded constant rather than the caller's limit; silent truncation is the defect this ticket removes."

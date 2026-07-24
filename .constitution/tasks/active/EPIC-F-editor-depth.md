@@ -16,7 +16,7 @@ It is not gone entirely, and `EDIT-F003`/`EDIT-F007` are where it survives. A `B
 - **Scope (Out-of-Scope Files):**
   - `lib/**` (no production code in a Spike)
   - `rust/src/**`
-- **Verification Command:** `! grep -q 'Status: placeholder' .constitution/spikes/SPK-EDIT-F001.md && ! grep -q 'To be filled' .constitution/spikes/SPK-EDIT-F001.md && git diff --quiet HEAD -- lib rust/src`
+- **Verification Command:** `! grep -q 'Status: placeholder' .constitution/spikes/SPK-EDIT-F001.md && ! grep -q 'To be filled' .constitution/spikes/SPK-EDIT-F001.md && git diff --quiet $(git merge-base HEAD master) HEAD -- lib rust/src`
 - **Expected Success Output:** `exit 0`
 - **STOP Conditions:**
   - "STOP if the promotion cannot be made typographically stable; that outcome selects the custom-selectable escalation path recorded in ADR-006 decision 6, which is a Stage 3 decision rather than an improvised widget change."
@@ -67,6 +67,10 @@ Then it displays its raw Markdown source including the emphasis delimiters
 Given a heading, a list item, a blockquote and a code Block
 When each receives focus in turn
 Then each displays its own raw source and accepts edits
+
+Given a thematic break
+When it is not focused
+Then it renders as a rule, and when focused it displays its own source like any other Block — completing the `CAP-EDIT-02` Block-type list, whose last member no criterion previously mentioned
 
 Given a Block is clicked partway through its text
 When it is promoted
@@ -219,11 +223,15 @@ Then the trigger is replaced by a Markdown link supplied by the Core and no doub
 
 Given a Block containing a Link to an existing Note
 When the Block is rendered
-Then the Link is followable and opens the target Note
+Then the Link is followable and opens the target Note (`CAP-GRAPH-03`, whose only home in this wave is this ticket even though its subject is insertion)
 
 Given a Block containing a Link whose target does not exist
 When the Block is rendered
 Then the Link renders distinctly from a resolving Link
+
+Given a Link whose target does not exist
+When it is followed
+Then the target Note is created and opened — the second half of `CAP-GRAPH-04`, which the contract asserts the UI performs and which no criterion previously covered
 
 Given the completion is open
 When it is dismissed without accepting

@@ -11,8 +11,14 @@ sequenceDiagram
     UI->>Core: Open Note (concept id)
     Core->>Local: Read Markdown source
     Local-->>Core: Raw source
-    Core->>Core: Parse to AST + span map (spans stay Core-side)
-    Core->>Local: Restore unflushed draft, if any
+    Core->>Core: Hash the disk bytes -> base_revision
+    Core->>Local: Look for an unflushed draft row
+    alt A draft exists
+        Local-->>Core: Drafted source
+        Core->>Core: Parse THE DRAFT to AST + span map
+    else No draft
+        Core->>Core: Parse the disk source to AST + span map
+    end
     Core-->>UI: NoteState (AST, base_revision, restored_from_draft)
 
     UI->>UI: Render every Block formatted, inside one selection region
@@ -45,6 +51,12 @@ sequenceDiagram
     Core->>Core: notify_activity() to the sync scheduler
     Local-->>Core: Commit success
 ```
+
+## Opening a Note with a recovered draft parses the draft
+
+The branch in the open sequence is load-bearing, not presentational. A draft row exists precisely when its content differs from disk, so parsing the disk bytes and *then* reporting that a draft was restored would return an AST of the wrong document — and, worse, build the Core-side span map against bytes that are not the working source, so the first `commit_block` after a recovery would splice at offsets derived from a different file.
+
+The working source is therefore whichever of the two is authoritative, while `base_revision` stays the hash of what is **on disk**, because that is what the tier 2 write must compare against before overwriting it. The two are deliberately drawn from different places, and this is what `SHEL-E007`'s "shows the drafted content rather than the last content written to disk" criterion actually requires.
 
 ## The save phase is a splice, not a serialization
 

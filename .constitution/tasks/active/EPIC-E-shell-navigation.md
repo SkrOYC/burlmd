@@ -4,6 +4,8 @@ Makes the application usable. Epic D produces a working Core with nothing on scr
 
 Every ticket here changes what the user sees, so every Verification Command launches the real application. That standard exists because no ticket through Epic B ever did, and a rendering regression shipped past six passing widget tests as a result.
 
+That makes `SHEL-E001` a 2-point ticket gating twelve of this wave's fourteen UI tickets, on tooling (`grim`/`wtype`) that `tech-spec/guidelines.md` records as Wayland-only and outside every build path. Its STOP condition already forbids substituting a widget-test assertion if capture proves impossible, and the consequence of hitting it is stated here rather than left implicit: the twelve dependent gates degrade to `flutter test` alone, which is the exact blind spot this standard exists to close, so hitting it is a signal to fix the harness or change platform — not to proceed with weaker gates.
+
 #### SHEL-E001 Manual-QA Smoke Harness
 - **Type:** Chore
 - **Effort:** 2
@@ -12,6 +14,7 @@ Every ticket here changes what the user sees, so every Verification Command laun
 - **Scope (In-Scope Files):**
   - `scripts/smoke-shot.sh`
   - `devenv.nix`
+  - `.gitignore` (adds `.qa/`. Twelve later tickets each write a screenshot there, and a repository whose stated premise is readable plaintext diffs should not accumulate PNGs — nor should every UI ticket leave the tree dirty.)
 - **Scope (Out-of-Scope Files):**
   - `lib/**`
   - `rust/src/**`

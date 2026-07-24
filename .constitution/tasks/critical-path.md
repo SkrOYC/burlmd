@@ -10,9 +10,9 @@ version: v1.4.0
 - Epic E — Shell & Navigation: 25
 - Epic F — Editor Depth: 30
 
-Epics A, B and C (52 points) are complete and archived under `completed/`; they contribute nothing to the totals or the graph below.
+Epics A, B and C (49 points — 10, 23 and 16, summed from the ticket efforts in `completed/`, correcting a 52 carried forward from an earlier revision) are complete and archived under `completed/`; they contribute nothing to the totals or the graph below.
 
-This wave is roughly twice the size of everything built so far, which is proportionate to what it does. Epics A–C built four well-tested components — a parser, an encrypted index, Git operations, a sync scheduler — with no wiring between any of them and no reachable path from launching the application to writing a Note. Every production `INSERT` in the repository is still inside a test module, and the application currently opens to a login screen that cannot be passed. This wave builds the application.
+This wave is more than twice the size of everything built so far, which is proportionate to what it does. Epics A–C built four well-tested components — a parser, an encrypted index, Git operations, a sync scheduler — with no wiring between any of them and no reachable path from launching the application to writing a Note. Every production `INSERT` in the repository is still inside a test module, and the application currently opens to a login screen that cannot be passed. This wave builds the application.
 
 ## Critical Path
 
@@ -124,6 +124,15 @@ Three Core capabilities land in Epic D with no consumer in Epic E or F, and are 
 - **Backlinks** (`CAP-GRAPH-05`, P1). `WSPC-D009` builds the query and `idx_links_target` backs it, but no ticket surfaces inbound Links in the UI. The index work is not wasted: the same table and index serve the link rewriting that `WSPC-D006` depends on, which is why it is built now rather than deferred wholesale.
 - **Title-prefix jump** (`CAP-FIND-02`, P1). `WSPC-D009` builds `find_notes_by_title`, but `SHEL-E006` is full-text search and no ticket surfaces the title jump.
 - **Opening a foreign Workspace** (`CAP-WS-05`, P1). `WSPC-D004` exposes it and the indexer tolerates non-conformant files for its sake, but no ticket adds a directory picker.
+
+Separately, three **P0** capability fragments are covered by ticket criteria that never cite them, which is a traceability gap rather than a coverage one — but this section exists precisely so gaps get written down rather than discovered:
+
+- `CAP-EDIT-02`'s Block-type list is covered by `EDIT-F002` for headings, lists, blockquotes and code, but the ticket cites no capability id and **thematic breaks appear in no criterion anywhere**. Added to `EDIT-F002`.
+- `CAP-GRAPH-03` (follow a Link to open its target) survives only as an incidental criterion inside `EDIT-F006`, a ticket about *insertion*. Named there explicitly now.
+- `CAP-GRAPH-04`'s second half — create the Note by following a ghost Link — had no criterion at all, despite the contract asserting the UI "creates the Note on follow". Added to `EDIT-F006`.
+
+Sweeping every `CAP-*` id against the active tickets and the contract afterwards left four unreferenced, all deferred by design and all already accounted for above: `CAP-EDIT-06` (images) and `CAP-GRAPH-06` (graph visualization) to Epic I, `CAP-SYNC-02` to Epic G, and `CAP-EDIT-07`, a P2 explicitly redundant with the keyboard shortcuts `EDIT-F005` delivers. Two P0s — `CAP-WS-02` and `CAP-WS-04` — were covered by `WSPC-D007` and `WSPC-D004` without being named in either; they are named now.
+
 
 All three need only UI work to become reachable, and all three belong in the next wave alongside Epic G.
 
