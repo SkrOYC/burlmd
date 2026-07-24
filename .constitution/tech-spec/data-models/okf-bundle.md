@@ -76,14 +76,40 @@ Two consequences to accept:
 Per OKF §6.1 a link is a standard Markdown link, and the **bundle-absolute** form — leading `/`, resolved from the bundle root — is the recommended one. That is the form burlmd writes.
 
 ```markdown
-See [Architecture](/projects/architecture.md) for the container split.
+See [Architecture](</projects/architecture.md>) for the container split.
 ```
 
-- **Internal Link** (`InlineElement::Link`): target has no URL scheme and ends in `.md`. Its concept id is the target path with the leading `/` and trailing `.md` removed.
+- **Internal Link** (`InlineElement::Link`): target has no URL scheme and ends in `.md`. Its concept id is the target path with the leading `/` and trailing `.md` removed, after the unescaping described below.
 - **External link** (`InlineElement::ExternalLink`): everything else.
 - **Ghost Links are valid.** OKF §6.1 requires that "consumers MUST tolerate broken links: a link whose target does not exist in the bundle is not malformed." A Link to a Note that has not been created yet is indexed normally, resolves to nothing, and satisfies CAP-GRAPH-04.
 - **`[[` is never stored.** It is only the UI trigger for the completion in CAP-GRAPH-02, which inserts a full Markdown link. The reasoning, including why this was a closer call than it looks, is in `prd/out-of-scope/wikilink-syntax-on-disk.md`.
 - Relative links are permitted by OKF §6.1 and are read and resolved correctly when encountered in a foreign bundle, but are never generated.
+- **Bare destinations are read, never written.** A foreign bundle may contain `[a](/Notes.md)` with no brackets, and it parses fine because it has no space. Reading is governed by what `pulldown-cmark` accepts; only writing is governed by the rule below.
+
+### The destination is always angle-bracket wrapped
+
+**Every link destination burlmd writes is enclosed in `<`…`>`.** Inside those brackets, a literal `\`, `<` or `>` in the path is prefixed with a backslash; nothing else is transformed.
+
+This is forced by the composition of two rules stated elsewhere in this file, which are individually fine and jointly broken without it. Filenames are derived from titles verbatim, so `Meeting Notes` yields `Meeting Notes.md` — and CommonMark forbids a *bare* link destination from containing a space. The bare form is therefore not a link at all for the ordinary case of a multi-word title. Measured against `pulldown-cmark` 0.12.2, the version `WSPC-D003` pins:
+
+```
+[a](/Meeting Notes.md)      -> NOT A LINK  (emitted as literal text)
+[a](</Meeting Notes.md>)    -> LINK, dest "/Meeting Notes.md"
+[a](/Q3 (draft).md)         -> NOT A LINK
+[a](</Q3 (draft).md>)       -> LINK, dest "/Q3 (draft).md"
+[a](</A > B.md>)            -> NOT A LINK  (unescaped `>` closes the destination)
+[a](</A \> B.md>)           -> LINK, dest "/A > B.md"
+[a](</100% Done.md>)        -> LINK, dest "/100% Done.md"
+```
+
+What a bare destination containing a space actually produces is not a malformed link but ordinary paragraph text, which is the reason this is worth this much space. Nothing reports an error. `WSPC-D005` records no `links` edge, so backlinks and `exists` come back empty; `WSPC-D006`'s inbound-Link rewrite then finds nothing to rewrite, so a rename silently leaves the old path sitting in the prose — risk 8's partial-rewrite corruption arriving through a path the atomicity STOP cannot see, because from the rewriter's perspective there was nothing there. And `WSPC-D006`'s criterion "all three links resolve to the new concept id" passes vacuously against any fixture whose Notes happen to have single-word titles.
+
+Two further points:
+
+- **Wrap unconditionally, not only when the path needs it.** Conditional wrapping requires a predicate that exactly matches CommonMark's rule for what a bare destination may contain, and a predicate that is subtly wrong reproduces this defect for whichever character it forgot. Wrapping always is one rule with no branch, and makes the failure unrepresentable rather than unlikely — the same reasoning ADR-007's reparse-over-arithmetic decision turns on. The cost is four extra characters visible in raw view on a focused Block.
+- **Percent-encoding was the alternative and is rejected.** `[a](/Plan%20A.md)` also parses, but it makes deriving `target_id` lossy: the parser hands back the destination verbatim, so recovering the path requires a percent-decode, and a title that legitimately contains `%` — `100% Done` — then decodes to something the user never wrote. Angle brackets round-trip through `pulldown-cmark` unchanged, so `target_id` derivation stays a pure strip.
+
+Deriving `target_id` from a parsed destination is therefore: unescape `\\`, `\<` and `\>`, then remove the leading `/` and the trailing `.md`. The parser has already removed the angle brackets — `dest_url` never contains them.
 
 ## Reserved filenames
 
@@ -103,6 +129,6 @@ Images (CAP-EDIT-06) live inside the bundle and are referenced by bundle-absolut
 2. Every Note that burlmd has written has a parseable frontmatter block with a non-empty `type`.
 3. A Note's `notes.id` equals its bundle-relative path with `.md` removed, and `notes.path` equals that path with `.md` retained. These are two views of one fact, stored separately so that the FTS and Link tables can key on the id without re-deriving it.
 4. Bytes outside the span of an edited Block are identical before and after a write (ADR-007).
-5. Every Note **burlmd has written** is conformant the moment the write completes, not at some later export step (CAP-PORT-01). Conformance is not a mode.
+5. Every Note **burlmd created** is conformant the moment it is created, not at some later export step (CAP-PORT-01), and no operation burlmd performs makes a conformant Note non-conformant. Conformance is not a mode.
 
-Invariant 5 is deliberately scoped to Notes burlmd wrote. A Workspace may legitimately contain files it did not write — CAP-WS-05 opens foreign Workspaces and CAP-PORT-03 tolerates external tools writing into this one — and those are indexed with `okf_conformant = 0` and brought into conformance only if the user explicitly asks, which may be never. A stronger invariant covering the whole bundle at all times would be false the moment a foreign Note is added, and would oblige the application to rewrite files the user never asked it to touch.
+Invariant 5 is deliberately scoped to Notes burlmd *created*, and says *created* rather than *written* for a reason the difference makes concrete: editing a foreign file that has no frontmatter **writes** it and leaves it non-conformant. `prd/constraints.md`'s Format Conformance constraint and CAP-PORT-01 are worded the same way and mean the same thing. A Workspace may legitimately contain files it did not write — CAP-WS-05 opens foreign Workspaces and CAP-PORT-03 tolerates external tools writing into this one — and those are indexed with `okf_conformant = 0` and brought into conformance only if the user explicitly asks, which may be never. A stronger invariant covering the whole bundle at all times would be false the moment a foreign Note is added, and would oblige the application to rewrite files the user never asked it to touch.

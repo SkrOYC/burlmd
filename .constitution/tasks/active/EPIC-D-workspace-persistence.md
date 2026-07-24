@@ -84,6 +84,18 @@ Given a link target "https://example.com/page"
 When the link is classified
 Then it is an external link
 
+Given a concept id "projects/Meeting Notes"
+When a link to it is serialized
+Then the destination is angle-bracket wrapped — `[text](</projects/Meeting Notes.md>)` — because CommonMark forbids a space in a bare destination and the unwrapped form parses as paragraph text rather than as a link, producing no edge to index and nothing for a rename to rewrite
+
+Given a concept id containing a literal `<`, `>` or backslash
+When a link to it is serialized
+Then each is backslash-escaped inside the brackets, and parsing the result yields the original concept id unchanged
+
+Given any Note title the derivation accepts
+When a link to that Note is serialized and the result is parsed back
+Then the recovered concept id equals the original — the round trip is a property test over titles including spaces, parentheses, `#`, `%` and the escaped characters above, not a fixture of single-word names
+
 Given a proposed Note filename of "index" or "log"
 When the name is validated
 Then it is rejected as reserved
@@ -261,6 +273,14 @@ Then a search for text belonging to no current Note matches nothing — a rebuil
 Given an indexed Workspace of at least one thousand Notes
 When a full-text query is executed
 Then results return in under 100 milliseconds
+
+Given any path that rebuilds or incrementally updates the index has just finished
+When the search query's plan is examined
+Then it drives from `notes_fts` and reaches `fts_mapping` through `idx_fts_mapping_rowid`, with no AUTOMATIC COVERING INDEX step — asserted on the plan rather than on a timing, because at a thousand Notes the wrong plan is still comfortably inside the 100ms budget and the criterion above passes with the defect in place
+
+Given a full or incremental reindex has completed
+When the index's table statistics are inspected
+Then `ANALYZE` has been run — without it the planner reaches `notes` by building a second automatic index per query, which the index alone does not fix
 ```
 
 #### WSPC-D006 Note and Directory Lifecycle
@@ -291,9 +311,9 @@ Given a Workspace with a Directory
 When a Note is created in it with a title
 Then a file exists with a frontmatter block containing a non-empty type and that title, and it is indexed
 
-Given three Notes link to a fourth
+Given three Notes link to a fourth whose title contains a space
 When the fourth Note is renamed
-Then all three links resolve to the new concept id and no link is left pointing at the old one
+Then all three links resolve to the new concept id and no link is left pointing at the old one — the title is specified to contain a space because a fixture of single-word titles passes this criterion vacuously if links are serialized without angle brackets: there is no edge to rewrite and none left pointing anywhere
 
 Given a Note is moved to a different Directory
 When the move completes
@@ -541,6 +561,10 @@ Then it returns results or an empty list, and never a query syntax error
 Given Notes exist whose titles match a completion query
 When link completions are requested
 Then each result carries insert text that is a bundle-absolute Markdown link
+
+Given a matching Note whose title contains a space
+When its completion's insert text is parsed as Markdown
+Then it yields a Link whose target is that Note — the wrapping is the Core's obligation because `EDIT-F006`'s STOP forbids the UI from touching the target, and multi-word titles are the ordinary case rather than an edge one
 
 Given three Notes link to a target Note
 When backlinks for that Note are requested

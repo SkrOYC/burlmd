@@ -101,8 +101,11 @@ CREATE TABLE IF NOT EXISTS notes (
 CREATE TABLE IF NOT EXISTS links (
     workspace_id TEXT NOT NULL,
     source_id TEXT NOT NULL,
-    -- The target's concept id, derived from the link target by stripping the
-    -- leading '/' and trailing '.md'. NOT NULL: unlike the previous
+    -- The target's concept id, derived from the parsed link destination by
+    -- unescaping '\\', '\<' and '\>' and then stripping the leading '/' and
+    -- trailing '.md'. The destination is angle-bracket wrapped on disk (see
+    -- data-models/okf-bundle.md) and the parser strips the brackets, so they
+    -- never appear here. NOT NULL: unlike the previous
     -- title-based model, this is always computable. A "ghost link" is a row
     -- whose target_id matches no `notes.id` in the same Workspace -- which OKF
     -- section 6.1 requires consumers to tolerate, and which CAP-GRAPH-04 makes
@@ -177,6 +180,23 @@ CREATE TABLE IF NOT EXISTS fts_mapping (
     FOREIGN KEY (workspace_id, note_id) REFERENCES notes(workspace_id, id)
         ON DELETE CASCADE ON UPDATE CASCADE
 );
+
+-- The primary key above serves DELETION, which is what this table exists for.
+-- RETRIEVAL joins the other way: the search query drives from `notes_fts` and
+-- joins `ON fts_mapping.fts_rowid = notes_fts.rowid`, and `fts_rowid` is not a
+-- prefix of that key. Without this index SQLite builds an AUTOMATIC COVERING
+-- INDEX over the whole table on every single search -- it still picks the
+-- right drive order, so this is not the catastrophic re-run-MATCH-per-row
+-- plan, but it is O(N) transient work per query, repeated and discarded.
+-- Measured over 20,000 Notes in one Workspace, in memory: 19.8ms as written,
+-- 15.7ms with this index, 4.5ms with this index AND table statistics. Both
+-- halves matter, and the second is the less obvious one -- `ANALYZE` is what
+-- lets the planner reach `notes` through its own primary key instead of
+-- building a second automatic index for that join too. Every path that
+-- rebuilds the index must therefore run `ANALYZE` when it finishes.
+-- Same reasoning as `idx_links_target` above; against a SQLCipher file on
+-- disk rather than an in-memory database the gap is wider.
+CREATE INDEX IF NOT EXISTS idx_fts_mapping_rowid ON fts_mapping(fts_rowid);
 
 -- Tier 1 of ADR-008: in-progress Block edits, written on every keystroke so
 -- that unwritten work survives an abrupt process kill (CAP-WS-03, and

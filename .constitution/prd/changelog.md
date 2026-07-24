@@ -39,6 +39,9 @@ Folded into v1.1.0, since nothing in this pass has merged.
 ### Corrections from PR review, round 9
 - **The Format Conformance constraint promised something a supported workflow falsifies.** It covered every Note the application "writes", while the tech spec decides that repairing a non-conformant file another tool wrote is an explicit user action — so editing such a file writes it and leaves it non-conformant. Round 3 caught the same shape on `CAP-PORT-01` and rescoped it to "writes", which turns out to be the ambiguous word between *creates* and *writes bytes to*. Now pinned to **creates**, with the exception stated in the constraint itself rather than three documents away.
 
+### Corrections from PR review, round 12
+- **CAP-PORT-01 still scoped conformance to every Note the application *writes*.** Round 9 pinned the equivalent sentence in `constraints.md` to *creates*, with the reasoning stated there in full: editing a foreign file that has no frontmatter **writes** it and leaves it non-conformant, and both CAP-WS-05 and CAP-PORT-03 support that state deliberately. The constraint was fixed by rewriting the sentence it was shown; the P0 capability it derives from was not swept. Corrected here, and `tech-spec/data-models/okf-bundle.md` invariant 5 — a third wording of the same rule — aligned with both.
+
 ## v1.0.1
 Constitution Freshness & Reconciliation Pass following Epic B execution (UIDB-B001–B007).
 - Corrected `capabilities.md`'s at-rest encryption capability, which implied Notes on disk and the SQLite index receive identical, uniform encryption. The shipped implementation (and `constraints.md`'s own pre-existing rationale) draws a real distinction: Notes on disk are protected via OS-level Full Disk Encryption only, while the SQLite search index is additionally encrypted at the application level via SQLCipher. Reworded to state that distinction explicitly rather than imply both are encrypted the same way.

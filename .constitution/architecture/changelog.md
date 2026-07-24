@@ -62,6 +62,12 @@ Folded into v1.1.0, since nothing in this pass has merged.
 ### Corrections from PR review, round 11
 - **`flow-search.md` carried a pre-v1.1.0 traceability header** — the flow round 10's sweep missed, and unlike the two sync flows this one is built in the current wave (`WSPC-D009`, `SHEL-E006`) and its contract changed here: a caller-supplied `limit` replacing a hardcoded cap of 50 that truncated silently, and Workspace scoping moved from a parameter into the Core.
 
+### Corrections from PR review, round 12
+- **`flow-edit-note.md` drew tier 2's revision comparison with no mismatch branch**, and `note_write_status` appeared nowhere in the flow — the surface round 9 added precisely because tier 2's trigger is a Core-owned timer with no caller to return `RevisionMismatch`, `DiskFull` or `IoError` to. An implementer following the sequence literally builds the version that raises them into nothing. Both tier 2 writes now branch, matching the treatment round 5 gave the auth flow.
+- **The same diagram drew tier 3 committing unconditionally**, where ADR-008 decision 3 as amended in round 10 says a close with nothing to commit makes no commit and notifies nothing — and calls that the *most common* path through the tier. As drawn it specified one empty commit per Note visited.
+
+This is the third round in which a fix landed everywhere except this diagram. The pattern is now explicit enough to state: a change to the persistence tiers is not finished until `flow-edit-note.md` shows it.
+
 ## v1.0.1
 Constitution Freshness & Reconciliation Pass following Epic B execution (UIDB-B001–B007).
 - Corrected `containers.md`'s Local Repository description, which implied the raw OKF directory tree was encrypted by this container. The shipped implementation only encrypts the SQLite index (via SQLCipher); raw Markdown files rely on OS-level Full Disk Encryption, per `prd/constraints.md`'s existing rationale (preserving native Git merge capability). This same inconsistency also existed in `prd/capabilities.md` (corrected there, see `prd/changelog.md` v1.0.1).

@@ -397,11 +397,21 @@ pub struct TextRun {
 pub enum InlineElement {
     Text(TextRun),
     /// A Link to another Note. On disk this is a standard bundle-absolute
-    /// Markdown link, `[text](/dir/note.md)` (ADR-004 decision 5, OKF section
-    /// 6.1) -- the `[[` sequence is a UI trigger only and is never stored.
+    /// Markdown link with an angle-bracket-wrapped destination,
+    /// `[text](</dir/note.md>)` (ADR-004 decision 5, OKF section 6.1) -- the
+    /// `[[` sequence is a UI trigger only and is never stored.
+    ///
+    /// The brackets are not optional and not cosmetic. Filenames derive from
+    /// titles verbatim (`data-models/okf-bundle.md`), so a multi-word title
+    /// yields a path containing spaces, and CommonMark forbids a *bare* link
+    /// destination from containing one -- `[a](/Meeting Notes.md)` parses as
+    /// paragraph text, not as a link, so no `Link` event reaches this enum at
+    /// all. Verified against `pulldown-cmark` 0.12.2.
     Link {
-        /// The target's OKF concept id, derived by stripping the leading `/`
-        /// and trailing `.md`. Always present, even when nothing matches it.
+        /// The target's OKF concept id: unescape `\\`, `\<` and `\>`, then
+        /// strip the leading `/` and trailing `.md`. The parser has already
+        /// removed the angle brackets, so `dest_url` never contains them.
+        /// Always present, even when nothing matches it.
         target_id: String,
         /// False for a ghost Link -- a Link to a Note not yet created, which
         /// OKF section 6.1 requires consumers to tolerate and which
@@ -858,8 +868,13 @@ pub struct LinkCompletion {
     pub note_id: String,
     pub title: String,
     /// The exact text to splice at the cursor, already in bundle-absolute
-    /// Markdown form. Constructed Core-side so the UI never assembles a link
-    /// target and cannot produce a non-conformant one.
+    /// Markdown form with the destination angle-bracket wrapped and `\\`, `\<`
+    /// and `\>` escaped inside it, per `data-models/okf-bundle.md`.
+    /// Constructed Core-side so the UI never assembles a link target and
+    /// cannot produce a non-conformant one -- which is only true if the Core
+    /// applies the wrapping, since the ordinary multi-word title produces a
+    /// path with a space in it and the unwrapped form of that is not a link.
+    /// `EDIT-F006`'s STOP forbids the UI from repairing it afterwards.
     pub insert_text: String,
 }
 
@@ -1035,6 +1050,17 @@ pub async fn notes_with_conflicts() -> Result<Vec<NoteMetadata>, AppError> {
 
 /// Replaces a `Suggestion` node with the chosen resolution, splicing clean
 /// Markdown with no conflict markers over its span.
+///
+/// This is a mutator, and the tier 1 obligation stated in the editing section
+/// header applies to it in full: it writes the Note's working source, writes
+/// the draft row, and reparses. Stated here because that header's "every
+/// mutating call below" reads as scoping to the editing section it introduces,
+/// not to every remaining line of this file -- so a mutator living in the
+/// conflict surface is not obviously covered by it. Without this sentence,
+/// `resolve_suggestion` is the one mutator for which "no draft row means
+/// nothing unwritten" is unestablished, and that invariant is what the whole
+/// tiering rests on. ADR-008 decision 1's enumeration names it for the same
+/// reason.
 #[frb(sync)]
 pub fn resolve_suggestion(
     note_id: String,

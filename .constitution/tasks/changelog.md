@@ -128,6 +128,15 @@ Folded into v1.4.0. Totals, graph and critical path unchanged.
 - **Both Spikes were moved out of `rust/examples/`.** `cargo clippy --all-targets` compiles examples, which would have made Spike prototype code a lint gate on `WSPC-D003`.
 - **A verification command filtered on `--skip keyring --skip keyring_token_store`**, where the second is a substring of the first and therefore had no effect.
 
+### Corrections from PR review, round 12
+Folded into v1.4.0. Points unchanged at 105; one dependency edge added, so the graph is now 34 edges. The critical path is unchanged — `EDIT-F006` rises to 51 points and `EDIT-F007` remains the longest terminal at 54.
+
+- **`EDIT-F006` could not pass its own gate.** Its create-on-follow criterion needs `RustApi.createNote`, which `WSPC-D006` lands, and `WSPC-D006` was nowhere in `EDIT-F006`'s transitive closure. Its gate ends in a `flutter test` whose `RustApi` override would not compile against a class lacking the method, and it scopes no provider file and no Rust, so it could not self-remedy. Same shape as rounds 8 and 9 — and it survived round 9's closure check for a recordable reason: that check walked the wrapper *table*, and this ticket's row lists only `linkCompletions`. The `createNote` need came from a criterion round 4 added. Closure checks have to run against criteria text, not against the wrapper inventory.
+- **`WSPC-D002` gained three link-serialization criteria**, including a round-trip property test over titles containing spaces, parentheses, `#` and `%` — because the on-disk link form must be angle-bracket wrapped or a multi-word title produces something CommonMark does not parse as a link at all.
+- **`WSPC-D006`'s rename criterion now specifies a target title containing a space.** As written it passed vacuously against single-word fixtures: with no edge indexed there is nothing to rewrite and nothing left pointing anywhere.
+- **`WSPC-D009` gained a criterion that `insert_text` parses back to a Link** for a multi-word title, since `EDIT-F006`'s STOP forbids the UI from repairing it.
+- **`WSPC-D005` gained two criteria** asserting the search query plan and the `ANALYZE` obligation, rather than relying on a timing at a corpus size where the wrong plan still passes.
+
 ## v1.3.0
 - Completed **Epic C: Security & Sync** (`SYNC-C001`–`SYNC-C003`), total 16 story points: a `gix`/`git`-CLI hybrid for clone/commit/push/pull against the local Workspace, a GitHub OAuth PKCE login flow with OS-Keychain token storage, and a debounced background sync scheduler with exponential-backoff retry and conflict-path re-index/notify hooks.
 - Each milestone passed an independent single-pass review gate before the next started; `SYNC-C001` needed one follow-up fix commit (`ecd705e`) for two P2 findings (a `commit_all` deletion/rename bug, and redacting `GitCredentials`' `Debug` output so a stray `{:?}` can never print a token). `SYNC-C002` and `SYNC-C003` each passed their single review pass clean.

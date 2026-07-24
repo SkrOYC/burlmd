@@ -173,8 +173,8 @@ Priorities express the critical path to a Workspace the primary actor can rely o
 
 - **Priority:** P0
 - **Capability ID:** CAP-PORT-01
-- **Capability:** Every Note the application writes conforms to the Open Knowledge Format the moment the write completes, so that any conforming tool or agent can read the Notes and traverse the Links with no export step and no application-specific parser.
-- **Rationale:** Makes data sovereignty concrete rather than aspirational, and serves the Automated Consumer actor directly. Conformance is continuous, not a mode. Scoped to what the application writes rather than to the whole Workspace at all times, because the format defines conformance over an entire bundle: one file an external tool dropped in without frontmatter makes the bundle non-conformant, and CAP-WS-05 and CAP-PORT-03 both make that a supported and possibly permanent state. Promising more would be a promise the application can only keep by rewriting files the user never asked it to touch.
+- **Capability:** Every Note the application *creates* conforms to the Open Knowledge Format the moment it is created, so that any conforming tool or agent can read the Notes and traverse the Links with no export step and no application-specific parser.
+- **Rationale:** Makes data sovereignty concrete rather than aspirational, and serves the Automated Consumer actor directly. Conformance is continuous, not a mode. Scoped to what the application *creates* rather than to the whole Workspace at all times, because the format defines conformance over an entire bundle: one file an external tool dropped in without frontmatter makes the bundle non-conformant, and CAP-WS-05 and CAP-PORT-03 both make that a supported and possibly permanent state. Promising more would be a promise the application can only keep by rewriting files the user never asked it to touch. *Creates* rather than *writes* for a second reason inside that same scoping: editing one of those foreign files **writes** it and leaves it non-conformant, so the wider verb would be false on a path the design supports rather than merely optimistic.
 
 - **Priority:** P1
 - **Capability ID:** CAP-PORT-02

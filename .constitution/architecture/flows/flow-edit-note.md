@@ -36,10 +36,15 @@ sequenceDiagram
         end
 
         Note over Core,Local: ~1s idle may elapse while still focused
-        Core->>Local: Compare on-disk hash to the current revision
-        Core->>Local: Atomic write (tier 2): writes the working source verbatim
-        Core->>Local: Clear the draft row — it now matches disk
-        Local-->>Core: New revision, which replaces the baseline
+        alt On-disk hash matches the current revision
+            Core->>Local: Atomic write (tier 2): writes the working source verbatim
+            Core->>Local: Clear the draft row — it now matches disk
+            Local-->>Core: New revision, which replaces the baseline
+        else Mismatch, or the write fails
+            Core->>Core: Record the error; leave the draft row in place
+            UI->>Core: note_write_status(note_id) — polled, not pushed
+            Core-->>UI: last_error, has_unwritten_edits
+        end
 
         Note over UI,Core: Block loses focus
         UI->>Core: Commit Block (block_path)
@@ -47,18 +52,27 @@ sequenceDiagram
         Core-->>UI: NoteState (new AST)
 
         Note over Core,Local: ~1s idle after the commit
-        Core->>Local: Compare on-disk hash to the current revision
-        Core->>Local: Atomic write (tier 2): temp file + rename
-        Core->>Local: Clear the draft row — it now matches disk
-        Local-->>Core: New revision (content hash), which replaces the baseline
+        alt On-disk hash matches the current revision
+            Core->>Local: Atomic write (tier 2): temp file + rename
+            Core->>Local: Clear the draft row — it now matches disk
+            Local-->>Core: New revision (content hash), which replaces the baseline
+        else Mismatch, or the write fails
+            Core->>Core: Record the error; leave the draft row in place
+            UI->>Core: note_write_status(note_id) — polled, not pushed
+            Core-->>UI: last_error, has_unwritten_edits
+        end
     end
 
     UI->>Core: Close Note (navigate away / quit)
     Core->>Local: Flush pending write
-    Core->>Local: One Git commit for this session (tier 3)
-    Core->>Local: Clear draft row
-    Core->>Core: notify_activity() to the sync scheduler
-    Local-->>Core: Commit success
+    alt This session changed the Note
+        Core->>Local: One Git commit for this session (tier 3)
+        Core->>Local: Clear draft row
+        Core->>Core: notify_activity() to the sync scheduler
+        Local-->>Core: Commit success
+    else Nothing to commit
+        Core->>Core: No commit, no notify — ADR-008 decision 3
+    end
 ```
 
 ## Opening a Note with a recovered draft parses the draft

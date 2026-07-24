@@ -208,7 +208,7 @@ Then the selection is wrapped in the corresponding delimiters
 #### EDIT-F006 Link Insertion Completion
 - **Type:** Feature
 - **Effort:** 5
-- **Dependencies:** EDIT-F002, WSPC-D009
+- **Dependencies:** EDIT-F002, WSPC-D009, WSPC-D006 (**`WSPC-D006` is here for `createNote`, not for `linkCompletions`.** The create-on-follow criterion below calls it, and this ticket scopes no provider file and no Rust, so it cannot land the wrapper itself — the test's `RustApi` override would not compile against a class lacking the method. Recorded because the dependency is invisible from the wrapper table, which lists only `linkCompletions` for this ticket.)
 - **Category:** Correctness
 - **Scope (In-Scope Files):**
   - `lib/src/components/link_completion.dart`
