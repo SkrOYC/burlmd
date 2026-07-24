@@ -219,17 +219,26 @@ fn build_authorize_url(
     Ok(url.to_string())
 }
 
+/// Both FFI entry points below (`begin_oauth_flow_impl`/
+/// `authenticate_workspace_impl`) only support the `"github"` provider
+/// today; centralizing the guard keeps the check and its error message in
+/// exactly one place instead of two verbatim copies.
+fn ensure_supported_provider(provider: &str) -> Result<(), AppError> {
+    if provider != "github" {
+        return Err(AppError::OAuthError(format!(
+            "unsupported OAuth provider: {provider}"
+        )));
+    }
+    Ok(())
+}
+
 fn begin_oauth_flow_impl(
     provider: &str,
     redirect_uri: &str,
     endpoints: &GitHubOAuthEndpoints,
     client_id: &str,
 ) -> Result<OAuthFlowStart, AppError> {
-    if provider != "github" {
-        return Err(AppError::OAuthError(format!(
-            "unsupported OAuth provider: {provider}"
-        )));
-    }
+    ensure_supported_provider(provider)?;
     let pkce = generate_pkce()?;
     let state = random_url_safe_token()?;
     let authorize_url = build_authorize_url(
@@ -525,11 +534,7 @@ fn authenticate_workspace_impl(
     client_secret: Option<&str>,
     store: impl FnOnce(&OAuthTokens) -> Result<(), AppError>,
 ) -> Result<String, AppError> {
-    if provider != "github" {
-        return Err(AppError::OAuthError(format!(
-            "unsupported OAuth provider: {provider}"
-        )));
-    }
+    ensure_supported_provider(provider)?;
     let tokens = exchange_code_for_token(
         endpoints,
         client_id,

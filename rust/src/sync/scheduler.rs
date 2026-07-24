@@ -406,6 +406,21 @@ fn run_sync_cycle(
             *backoff_deadline = Some(Instant::now() + *backoff_delay);
             *backoff_delay = (*backoff_delay * 2).min(config.backoff_cap);
         }
+        Err(AppError::AuthExpired) => {
+            // Push Failure (expired/invalid credentials) -> deliberately
+            // do NOT enter the backoff retry loop: retrying against the
+            // same stale credentials is guaranteed to fail again, forever,
+            // which would otherwise spin silently in the background
+            // without ever giving the user a chance to re-authenticate.
+            // Record the failure via status/last_error and let the next
+            // natural trigger (an explicit `notify_activity()` — e.g.
+            // after the caller refreshes credentials via `deps.credentials`
+            // — or the periodic poll tick) attempt the push again.
+            set_last_error(last_error, Some(AppError::AuthExpired));
+            set_status(status, SyncStatus::Error);
+            *backoff_delay = config.backoff_base;
+            *backoff_deadline = None;
+        }
         Err(AppError::GitConflict) => {
             // Push Failure (Conflict, non-fast-forward) -> fetch + merge
             // upstream (`pull`'s own contract: leaves raw conflict markers
@@ -413,6 +428,14 @@ fn run_sync_cycle(
             // `AppError::GitConflict`, without aborting the merge), then
             // unconditionally fire the re-index and conflict-notification
             // hooks, per `flow-sync-push.md`'s Conflict branch.
+            //
+            // Note `pull` failing with `AuthExpired` falls into the
+            // `Err(other)` arm below just like any other non-conflict
+            // pull failure: no backoff is scheduled either way, since the
+            // whole conflict branch unconditionally resets the backoff
+            // state below regardless of `pull_result` — the same
+            // "surface it and wait for the next natural trigger" behavior
+            // the standalone push `AuthExpired` arm above documents.
             let pull_result = (deps.pull)(
                 &config.repo_path,
                 &config.remote,
@@ -420,7 +443,9 @@ fn run_sync_cycle(
                 credentials.as_ref(),
             );
 
-            if let Err(reindex_err) = (deps.reindex)() {
+            let reindex_result = (deps.reindex)();
+            let reindex_failed = reindex_result.is_err();
+            if let Err(reindex_err) = reindex_result {
                 set_last_error(last_error, Some(reindex_err));
             }
             (deps.on_conflict)(pull_result.clone());
@@ -431,9 +456,22 @@ fn run_sync_cycle(
             *backoff_deadline = None;
 
             match pull_result {
-                Ok(()) => {
+                Ok(()) if !reindex_failed => {
                     set_last_error(last_error, None);
                     set_status(status, SyncStatus::Idle);
+                }
+                Ok(()) => {
+                    // The merge itself completed cleanly, but the
+                    // notes/notes_fts re-index that must follow it (per
+                    // `flow-sync-push.md`) failed above: the on-disk index
+                    // is now desynced from the freshly-merged notes.
+                    // `last_error` already holds that reindex failure from
+                    // above — leave it alone and report a real Error
+                    // status rather than Idle, which would otherwise
+                    // silently mask a failure with real user-visible
+                    // consequences (stale/missing search results) behind
+                    // an apparently-successful sync cycle.
+                    set_status(status, SyncStatus::Error);
                 }
                 Err(AppError::GitConflict) => {
                     set_last_error(last_error, Some(AppError::GitConflict));
@@ -461,28 +499,11 @@ fn run_sync_cycle(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support::{git, init_bare};
     use std::process::Command as StdCommand;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Mutex as StdMutex;
     use tempfile::tempdir;
-
-    fn git(dir: &Path, args: &[&str]) {
-        let status = StdCommand::new("git")
-            .args(args)
-            .current_dir(dir)
-            .env("GIT_AUTHOR_NAME", "Test")
-            .env("GIT_AUTHOR_EMAIL", "test@example.com")
-            .env("GIT_COMMITTER_NAME", "Test")
-            .env("GIT_COMMITTER_EMAIL", "test@example.com")
-            .status()
-            .expect("git CLI available in devenv shell");
-        assert!(status.success(), "git {:?} failed in {:?}", args, dir);
-    }
-
-    fn init_bare(dir: &Path) {
-        std::fs::create_dir_all(dir).unwrap();
-        git(dir, &["init", "--bare", "--initial-branch=main", "-q"]);
-    }
 
     fn rev_parse(dir: &Path, rev: &str) -> String {
         let out = StdCommand::new("git")
@@ -809,6 +830,145 @@ mod tests {
         assert!(
             stop_elapsed < Duration::from_millis(500),
             "stop() should interrupt a pending 5s backoff wait almost immediately, took {stop_elapsed:?}"
+        );
+    }
+
+    /// A push that fails with `AppError::AuthExpired` must NOT be retried
+    /// with backoff — retrying against the same stale/invalid credentials
+    /// would just fail again, forever, silently, in the background. The
+    /// scheduler must instead surface the failure via `status()`/
+    /// `last_error()` and make exactly one attempt until the next explicit
+    /// trigger (`notify_activity()` or a periodic poll tick).
+    #[test]
+    fn auth_expired_push_failure_does_not_backoff_retry() {
+        let work_parent = tempdir().unwrap();
+        let work = work_parent.path().join("work");
+        std::fs::create_dir_all(&work).unwrap();
+        git(&work, &["init", "--initial-branch=main", "-q"]);
+        git(&work, &["config", "user.name", "Test"]);
+        git(&work, &["config", "user.email", "test@example.com"]);
+        std::fs::write(work.join("note.md"), b"hello\n").unwrap();
+        operations::commit_all(&work, "add note", "Test", "test@example.com").unwrap();
+
+        let push_calls = Arc::new(AtomicUsize::new(0));
+        let push_calls_thread = Arc::clone(&push_calls);
+
+        let mut config = SyncConfig::new(work.clone(), "origin", "main");
+        config.debounce = Duration::from_millis(20);
+        config.poll_interval = no_interference_poll_interval();
+        // Deliberately short: if a bug mistakenly schedules a backoff
+        // retry anyway, it would fire well within this test's wait window
+        // below and be caught by the final call-count assertion.
+        config.backoff_base = Duration::from_millis(30);
+        config.backoff_cap = Duration::from_millis(30);
+
+        let deps = SyncDeps {
+            push: Box::new(move |_, _, _, _| {
+                push_calls_thread.fetch_add(1, Ordering::SeqCst);
+                Err(AppError::AuthExpired)
+            }),
+            ..SyncDeps::default()
+        };
+
+        let scheduler = SyncScheduler::start(config, deps);
+        scheduler.notify_activity();
+
+        let attempted = wait_until(Duration::from_secs(1), || {
+            push_calls.load(Ordering::SeqCst) >= 1
+        });
+        assert!(attempted, "expected the push to be attempted at least once");
+
+        // A generous window well past the (short) configured backoff delay:
+        // a correct implementation schedules no retry at all, so the call
+        // count must stay at exactly 1 for the whole window.
+        thread::sleep(Duration::from_millis(300));
+        scheduler.stop();
+
+        assert_eq!(
+            push_calls.load(Ordering::SeqCst),
+            1,
+            "AuthExpired must not trigger a backoff retry"
+        );
+        assert_eq!(scheduler.status(), SyncStatus::Error);
+        assert_eq!(scheduler.last_error(), Some(AppError::AuthExpired));
+    }
+
+    /// If the re-index hook fails, that failure must not be silently
+    /// swallowed just because the follow-up pull happened to auto-merge
+    /// cleanly (no real conflict markers) — `status()`/`last_error()` must
+    /// still reflect the reindex failure rather than reporting `Idle`,
+    /// which would otherwise leave the on-disk index desynced from the
+    /// merged notes with no signal to the caller at all.
+    #[test]
+    fn reindex_failure_on_a_clean_auto_merge_is_not_masked() {
+        let bare_parent = tempdir().unwrap();
+        let bare = bare_parent.path().join("remote.git");
+        init_bare(&bare);
+
+        // Seed a common ancestor both clones diverge from.
+        let seed_parent = tempdir().unwrap();
+        let seed = seed_parent.path().join("seed");
+        operations::clone_repo(&bare.to_string_lossy(), &seed, None).unwrap();
+        std::fs::write(seed.join("shared.md"), b"base\n").unwrap();
+        operations::commit_all(&seed, "seed", "Seed", "seed@example.com").unwrap();
+        operations::push(&seed, "origin", "main", None).unwrap();
+
+        // Clone B (the one the scheduler will run against) *before* A
+        // pushes, so both diverge from the same ancestor.
+        let work_parent = tempdir().unwrap();
+        let work = work_parent.path().join("b");
+        operations::clone_repo(&bare.to_string_lossy(), &work, None).unwrap();
+
+        // Clone A diverges (a *different* new file, so the eventual merge
+        // has no real content overlap) and pushes upstream first.
+        let a_parent = tempdir().unwrap();
+        let a = a_parent.path().join("a");
+        operations::clone_repo(&bare.to_string_lossy(), &a, None).unwrap();
+        std::fs::write(a.join("from_a.md"), b"from a\n").unwrap();
+        operations::commit_all(&a, "a adds a new file", "A", "a@example.com").unwrap();
+        operations::push(&a, "origin", "main", None).unwrap();
+
+        // B, unaware of A's push, diverges independently with an unrelated
+        // new file and has an unpushed local commit.
+        std::fs::write(work.join("from_b.md"), b"from b\n").unwrap();
+        operations::commit_all(&work, "b adds a different new file", "B", "b@example.com").unwrap();
+
+        let mut config = SyncConfig::new(work.clone(), "origin", "main");
+        config.debounce = Duration::from_millis(50);
+        config.poll_interval = no_interference_poll_interval();
+
+        let deps = SyncDeps {
+            reindex: Box::new(|| {
+                Err(AppError::DatabaseError(
+                    "notes_fts reindex failed".to_string(),
+                ))
+            }),
+            ..SyncDeps::default()
+        };
+
+        let scheduler = SyncScheduler::start(config, deps);
+        scheduler.notify_activity();
+
+        let settled = wait_until(Duration::from_secs(3), || {
+            !matches!(scheduler.status(), SyncStatus::Idle | SyncStatus::Syncing)
+        });
+        scheduler.stop();
+
+        assert!(
+            settled,
+            "expected the scheduler to leave Idle/Syncing once the cycle finished"
+        );
+        assert_eq!(
+            scheduler.status(),
+            SyncStatus::Error,
+            "a failed reindex on an otherwise-clean auto-merge must not report Idle"
+        );
+        assert_eq!(
+            scheduler.last_error(),
+            Some(AppError::DatabaseError(
+                "notes_fts reindex failed".to_string()
+            )),
+            "the reindex failure must not be masked by the clean merge result"
         );
     }
 }

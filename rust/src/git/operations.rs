@@ -36,6 +36,8 @@
 //! later. No keyring integration happens in this ticket.
 
 use crate::error::AppError;
+use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
+use base64::Engine as _;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::atomic::AtomicBool;
@@ -113,14 +115,17 @@ pub fn clone_repo(
     Ok(())
 }
 
-/// Snapshot every file currently in the working tree (excluding `.git`) into a new tree
-/// object and create a commit on top of the current `HEAD`, moving the branch ref forward.
+/// Snapshot every file currently in the working tree (excluding `.git` and anything matched
+/// by `.gitignore`) into a new tree object and create a commit on top of the current `HEAD`,
+/// moving the branch ref forward.
 ///
 /// Returns the new commit's hex object id.
 ///
 /// This is a full-worktree snapshot rather than an index-diff commit: it is equivalent to
 /// `git add -A && git commit`, which is the semantics the Gherkin ("a local directory with
-/// changes" -> "a Git commit is created") calls for. In particular, the new tree is built
+/// changes" -> "a Git commit is created") calls for — including `git add -A`'s own real
+/// behavior of skipping gitignored paths unless `-f` is given, honored here via
+/// `Repository::excludes` (see `collect_files`). In particular, the new tree is built
 /// starting from the *empty* tree (not the parent commit's tree) and populated only with
 /// files `collect_files` currently finds in the worktree: a path that existed in the parent
 /// commit but is no longer present on disk (deleted, or the source half of a rename) is
@@ -133,8 +138,23 @@ pub fn commit_all(
 ) -> Result<String, AppError> {
     let repo = gix::open(repo_path).map_err(|e| AppError::IoError(format!("open repo: {e}")))?;
 
+    // `Repository::excludes` needs *some* `gix_index::State` to resolve id-mapped ignore
+    // sources against (irrelevant here, since the default `Source` below reads `.gitignore`
+    // straight off the worktree instead), so an empty index when none is present on disk yet
+    // is exactly right rather than an error.
+    let index = repo
+        .index_or_empty()
+        .map_err(|e| AppError::IoError(format!("open index: {e}")))?;
+    let mut excludes = repo
+        .excludes(
+            &index,
+            None,
+            gix::worktree::stack::state::ignore::Source::default(),
+        )
+        .map_err(|e| AppError::IoError(format!("configure .gitignore excludes: {e}")))?;
+
     let mut files = Vec::new();
-    collect_files(repo_path, repo_path, &mut files)?;
+    collect_files(repo_path, repo_path, &mut excludes, &mut files)?;
 
     // Always start from the empty tree, rather than the parent commit's tree: the tree
     // editor only ever `upsert`s paths found in the worktree below, so seeding it with the
@@ -303,8 +323,20 @@ pub fn pull(
     Err(classify_git_cli_failure(&merge_output.stderr))
 }
 
-/// Recursively collect every regular file under `dir`, skipping `.git`.
-fn collect_files(root: &Path, dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), AppError> {
+/// Recursively collect every regular file under `dir`, skipping the top-level `.git`
+/// directory and anything matched by `.gitignore` (checked via `excludes`, a `gix`
+/// exclude-stack cache built once in `commit_all` and threaded through recursive calls so
+/// per-directory `.gitignore` files are only parsed once each rather than per file).
+///
+/// A whole directory that matches `.gitignore` is pruned rather than recursed into, so a
+/// pattern like `build/` correctly skips everything underneath it too, not just a literal
+/// `build` entry.
+fn collect_files(
+    root: &Path,
+    dir: &Path,
+    excludes: &mut gix::AttributeStack<'_>,
+    out: &mut Vec<PathBuf>,
+) -> Result<(), AppError> {
     for entry in std::fs::read_dir(dir).map_err(|e| AppError::IoError(e.to_string()))? {
         let entry = entry.map_err(|e| AppError::IoError(e.to_string()))?;
         let path = entry.path();
@@ -314,8 +346,30 @@ fn collect_files(root: &Path, dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), 
         if path.file_name().map(|n| n == ".git").unwrap_or(false) && path.parent() == Some(root) {
             continue;
         }
+
+        let relative = path
+            .strip_prefix(root)
+            .expect("entry was discovered under root");
+        let mode = if file_type.is_dir() {
+            gix::index::entry::Mode::DIR
+        } else {
+            gix::index::entry::Mode::FILE
+        };
+        let is_excluded = excludes
+            .at_path(relative, Some(mode))
+            .map_err(|e| {
+                AppError::IoError(format!(
+                    "check .gitignore exclusion for {}: {e}",
+                    relative.display()
+                ))
+            })?
+            .is_excluded();
+        if is_excluded {
+            continue;
+        }
+
         if file_type.is_dir() {
-            collect_files(root, &path, out)?;
+            collect_files(root, &path, excludes, out)?;
         } else if file_type.is_file() {
             out.push(path);
         }
@@ -327,40 +381,24 @@ fn collect_files(root: &Path, dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), 
 /// command line (where it would be visible via `/proc/<pid>/cmdline` / `ps`). Uses git's
 /// environment-variable config-injection mechanism (`GIT_CONFIG_COUNT`/`GIT_CONFIG_KEY_n`/
 /// `GIT_CONFIG_VALUE_n`, supported since Git 2.31) to set a one-shot `http.extraHeader`.
+///
+/// The `user:token` pair and the base64-encoded header value are both wrapped in `Zeroizing`
+/// so *this process's* copies are wiped on drop (same discipline as `GitCredentials::token`
+/// itself). That said, the wipe is necessarily partial: `Command::env` copies the value into
+/// the `Command`'s own internal env map immediately, and the OS copies it again into the
+/// child process's env block at spawn time — neither of those copies is reachable to zero.
+/// The token surviving un-wiped in the child process's environment for the lifetime of that
+/// process is therefore a conscious, accepted bound of authenticating via `git`'s CLI env
+/// mechanism at all, not something this function can close.
 fn apply_credentials(cmd: &mut Command, credentials: Option<&GitCredentials>) {
     if let Some(creds) = credentials {
-        let basic =
-            base64_encode(format!("{}:{}", creds.username, creds.token.as_str()).as_bytes());
+        let user_pass = Zeroizing::new(format!("{}:{}", creds.username, creds.token.as_str()));
+        let basic = Zeroizing::new(BASE64_STANDARD.encode(user_pass.as_bytes()));
+        let header_value = Zeroizing::new(format!("Authorization: Basic {}", basic.as_str()));
         cmd.env("GIT_CONFIG_COUNT", "1");
         cmd.env("GIT_CONFIG_KEY_0", "http.extraheader");
-        cmd.env(
-            "GIT_CONFIG_VALUE_0",
-            format!("Authorization: Basic {basic}"),
-        );
+        cmd.env("GIT_CONFIG_VALUE_0", header_value.as_str());
     }
-}
-
-/// Minimal RFC 4648 base64 encoder (standard alphabet, with padding). Avoids pulling in a
-/// dependency solely to encode a `user:token` pair for an HTTP Basic auth header.
-fn base64_encode(input: &[u8]) -> String {
-    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut out = String::with_capacity(input.len().div_ceil(3) * 4);
-    for chunk in input.chunks(3) {
-        let b0 = chunk[0];
-        let b1 = chunk.get(1).copied();
-        let b2 = chunk.get(2).copied();
-        out.push(ALPHABET[(b0 >> 2) as usize] as char);
-        out.push(ALPHABET[(((b0 & 0x03) << 4) | (b1.unwrap_or(0) >> 4)) as usize] as char);
-        out.push(match b1 {
-            Some(b1) => ALPHABET[(((b1 & 0x0f) << 2) | (b2.unwrap_or(0) >> 6)) as usize] as char,
-            None => '=',
-        });
-        out.push(match b2 {
-            Some(b2) => ALPHABET[(b2 & 0x3f) as usize] as char,
-            None => '=',
-        });
-    }
-    out
 }
 
 fn classify_git_cli_failure(stderr: &[u8]) -> AppError {
@@ -371,13 +409,34 @@ fn classify_git_cli_failure(stderr: &[u8]) -> AppError {
         || lower.contains("conflict")
     {
         AppError::GitConflict
+    } else if lower.contains("authentication failed")
+        || lower.contains("invalid credentials")
+        || lower.contains("invalid username or password")
+        || lower.contains("bad credentials")
+        || lower.contains("permission denied")
+        || lower.contains("access denied")
+        || lower.contains("error: 401")
+        || lower.contains("error: 403")
+        || lower.contains("returned error: 401")
+        || lower.contains("returned error: 403")
+        || lower.contains("http basic: access denied")
+        || lower.contains("support for password authentication was removed")
+    {
+        // Checked ahead of the generic network-error branch below: git's own auth-failure
+        // stderr (`fatal: Authentication failed for '...'`, an HTTP 401/403 status line, an
+        // SSH `Permission denied (publickey)`, etc.) also often contains phrases like
+        // "unable to access" that would otherwise be caught by the network branch — this
+        // ordering makes sure a stale/invalid credential is reported distinctly as
+        // `AuthExpired`, matching `tech-spec/contracts/ffi_api.rs`'s dedicated variant for
+        // exactly this case, rather than being misclassified as a transient `NetworkError`
+        // the scheduler would otherwise retry forever with backoff.
+        AppError::AuthExpired
     } else if lower.contains("could not resolve host")
         || lower.contains("could not read from remote repository")
         || lower.contains("connection refused")
         || lower.contains("connection timed out")
         || lower.contains("unable to access")
         || lower.contains("network")
-        || lower.contains("authentication failed")
     {
         AppError::NetworkError(text.trim().to_string())
     } else {
@@ -402,21 +461,9 @@ fn classify_gix_fetch_err(err: &gix::clone::fetch::Error) -> AppError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support::{git, init_bare};
     use std::process::Command as StdCommand;
     use tempfile::tempdir;
-
-    fn git(dir: &Path, args: &[&str]) {
-        let status = StdCommand::new("git")
-            .args(args)
-            .current_dir(dir)
-            .env("GIT_AUTHOR_NAME", "Test")
-            .env("GIT_AUTHOR_EMAIL", "test@example.com")
-            .env("GIT_COMMITTER_NAME", "Test")
-            .env("GIT_COMMITTER_EMAIL", "test@example.com")
-            .status()
-            .expect("git CLI available in devenv shell");
-        assert!(status.success(), "git {:?} failed in {:?}", args, dir);
-    }
 
     fn init_repo(dir: &Path) {
         git(dir, &["init", "--initial-branch=main", "-q"]);
@@ -508,11 +555,6 @@ mod tests {
         let contents = std::fs::read_to_string(dest.join("readme.md")).unwrap();
         assert_eq!(contents, "hello\n");
         assert!(dest.join(".git").is_dir());
-    }
-
-    fn init_bare(dir: &Path) {
-        std::fs::create_dir_all(dir).unwrap();
-        git(dir, &["init", "--bare", "--initial-branch=main", "-q"]);
     }
 
     #[test]
@@ -730,5 +772,65 @@ mod tests {
         );
         assert!(debug_output.contains("username"));
         assert!(debug_output.contains("x-access-token"));
+    }
+
+    /// `commit_all` must honor `.gitignore`, matching real `git add -A`'s own behavior
+    /// (skipping gitignored paths unless `-f` is given): a top-level ignored file must not
+    /// be committed, a directory-level ignore pattern must prune everything underneath it
+    /// (not just a literal name match), the same must hold for a file nested inside a
+    /// tracked subdirectory, and — since `.gitignore` itself is an ordinary tracked file
+    /// unless something ignores it too — it must still be committed.
+    #[test]
+    fn commit_all_honors_gitignore() {
+        let dir = tempdir().unwrap();
+        init_repo(dir.path());
+        std::fs::write(dir.path().join(".gitignore"), b"ignored.md\nbuild/\n").unwrap();
+        std::fs::write(dir.path().join("ignored.md"), b"should not be committed\n").unwrap();
+        std::fs::write(dir.path().join("tracked.md"), b"should be committed\n").unwrap();
+        std::fs::create_dir_all(dir.path().join("build")).unwrap();
+        std::fs::write(
+            dir.path().join("build/output.md"),
+            b"excluded via a directory-level rule\n",
+        )
+        .unwrap();
+        std::fs::create_dir_all(dir.path().join("notes/sub")).unwrap();
+        std::fs::write(
+            dir.path().join("notes/sub/ignored.md"),
+            b"nested ignored file\n",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.path().join("notes/sub/tracked.md"),
+            b"nested tracked file\n",
+        )
+        .unwrap();
+
+        commit_all(
+            dir.path(),
+            "respect gitignore",
+            "Test User",
+            "test@example.com",
+        )
+        .unwrap();
+
+        let names = ls_tree_paths(dir.path());
+        assert!(
+            names.contains(&".gitignore".to_string()),
+            "the .gitignore file itself must be committed, got: {names:?}"
+        );
+        assert!(names.contains(&"tracked.md".to_string()));
+        assert!(names.contains(&"notes/sub/tracked.md".to_string()));
+        assert!(
+            !names.iter().any(|n| n == "ignored.md"),
+            "a gitignored top-level file must not be committed, got: {names:?}"
+        );
+        assert!(
+            !names.iter().any(|n| n.starts_with("build/")),
+            "a gitignored directory's contents must not be committed, got: {names:?}"
+        );
+        assert!(
+            !names.iter().any(|n| n == "notes/sub/ignored.md"),
+            "a gitignored file nested in a subdirectory must not be committed, got: {names:?}"
+        );
     }
 }
