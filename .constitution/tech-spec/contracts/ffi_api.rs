@@ -109,10 +109,22 @@ pub async fn open_or_create_local_workspace(
     unimplemented!()
 }
 
-/// Opens an existing Workspace directory that this application did not
-/// create, including one populated by another tool (CAP-WS-05). Files with
-/// absent or unparseable frontmatter are indexed with `okf_conformant = 0`
-/// rather than rejected.
+/// Opens an existing Workspace directory that this application did not create,
+/// including one populated by another tool (CAP-WS-05). Files with absent or
+/// unparseable frontmatter are indexed with `okf_conformant = 0` rather than
+/// rejected, and no Note in the directory is modified or repaired.
+///
+/// Converges on the same post-conditions as `open_or_create_local_workspace` —
+/// index initialized, root key present, `workspaces` row written, bundle
+/// indexed, **repository present** — because `flow-workspace-bootstrap.md`
+/// requires every bootstrap path to, so that no later code has to ask which
+/// one produced the Workspace it is holding.
+///
+/// That last post-condition means it **initializes a repository when the
+/// directory has none**, and adopts existing history when it has one
+/// (ADR-005 decision 8). Tier 3 commits on every Note close, so adopting
+/// without one would leave CAP-WS-02 unsatisfiable and `close_note` failing on
+/// the routine path.
 #[frb]
 pub async fn open_workspace(path: String) -> Result<WorkspaceInfo, AppError> {
     unimplemented!()
@@ -213,26 +225,45 @@ pub async fn delete_note(note_id: String) -> Result<(), AppError> {
 /// filename derived from `new_title` is already taken, or derives to a
 /// reserved OKF filename. Renaming is not a weaker check than creating.
 ///
-/// **This writes the Note's bytes, which makes it the one exception to the
-/// single-writer rule** in ADR-007 decision 1 — and if the Note is open, the
-/// exception has to be paid for rather than merely noted. All three pieces of
-/// per-open state must be brought forward in the same transaction:
+/// **This writes Note bytes, which makes it an exception to the single-writer
+/// rule** in ADR-007 decision 1 — and it writes *more than one Note*. It
+/// rewrites the renamed Note's frontmatter `title` and filename, and it
+/// rewrites the inbound Link in **every source Note that points at it**
+/// (CAP-LIFE-02, risk 8). Each of those files has its own possible open state
+/// and its own possible draft row, and all of them must be carried forward in
+/// the same transaction. Three obligations, applied to every affected Note and
+/// not only the renamed one:
 ///
-/// - The **working source** gets the same frontmatter `title` substitution.
-///   Skip it and the buffer still holds the pre-rename bytes, so the next
-///   tier 2 write — which copies the buffer verbatim — silently reverts the
-///   title this call just wrote.
-/// - The **span map** is adjusted for the delta, or discarded and rebuilt.
-/// - The **recorded revision** is re-recorded from the post-rename file.
-///   Skip it and the next tier 2 write raises `RevisionMismatch` against this
-///   application's own rename. That is the same baseline-drift shape three
-///   earlier passes removed elsewhere; it reappears here because renaming is
-///   the only other thing that writes the file.
+/// - The **working source** of any open affected Note gets the same
+///   substitution the file got — the frontmatter `title` for the renamed Note,
+///   the rewritten Link target for each source Note. Skip it and the next
+///   tier 2 write, which copies the buffer verbatim, silently reverts the
+///   change. For a source Note that means reverting to a Link pointing at a
+///   dead concept id: exactly the silent partial-rewrite graph corruption
+///   risk 8 exists to prevent, arriving *after* the atomic rename that was
+///   supposed to make it impossible.
+/// - The **span map** of each is adjusted for the delta, or discarded and
+///   rebuilt.
+/// - The **recorded revision** of each is re-recorded from its post-rewrite
+///   file. Skip it and that Note's next tier 2 write raises
+///   `RevisionMismatch` against this application's own rewrite — reported to
+///   the user through `note_write_status` as "the file changed underneath the
+///   draft", on a routine rename. `flush_note` states the rule this breaks:
+///   only a change the Core did not make should raise it.
 ///
-/// Refusing while a Note is open would also be a defensible answer. It is not
-/// the one taken, because `SHEL-E005` makes renaming an open Note a
-/// criterion-backed workflow and `prd/capabilities.md` treats renaming as
-/// routine during writing.
+/// **Draft rows of affected Notes are rewritten too**, not merely re-keyed.
+/// A source Note with an unflushed draft holds the old Link text, and
+/// `open_note` parses the draft in preference to disk — so leaving it produces
+/// the same reversion one session later. `WSPC-D006` owns this.
+///
+/// A Note that links to *itself* is both cases at once and gets both
+/// substitutions.
+///
+/// Refusing while any affected Note is open would also be a defensible answer.
+/// It is not the one taken, because `SHEL-E005` makes renaming an open Note a
+/// criterion-backed workflow, `prd/capabilities.md` treats renaming as routine
+/// during writing, and the set of *source* Notes is not something the user can
+/// see in order to close them first.
 ///
 /// Also rewrites `notes.title` and the Note's `notes_fts` title row, which is
 /// what full-text search matches titles against.
@@ -246,11 +277,17 @@ pub async fn rename_note(note_id: String, new_title: String) -> Result<NoteState
 /// Returns `PathUnavailable` when the destination already holds a Note of
 /// that filename, or when the destination path does not exist.
 ///
-/// Carries the same open-Note obligations as `rename_note`, minus the
-/// frontmatter substitution: a move changes the concept id and the file's
-/// location but not its bytes, so the working source is untouched while the
-/// recorded revision and the open-note cache key both move with it.
-/// `rename_directory` inherits both, for every Note beneath it.
+/// Carries the same obligations as `rename_note` for every affected Note,
+/// minus the frontmatter substitution on the moved Note itself: a move changes
+/// its concept id and location but not its bytes, so its working source is
+/// untouched while its recorded revision and open-note cache key move with it.
+/// The **source Notes are affected identically to a rename** — their inbound
+/// Links are rewritten, so their buffers, spans, revisions and draft rows all
+/// need carrying forward.
+///
+/// `rename_directory` inherits all of it for every Note beneath the directory,
+/// and note that the source Notes needing rewrites are *not* confined to that
+/// subtree — anything anywhere in the bundle may link into it.
 #[frb]
 pub async fn move_note(note_id: String, new_directory_path: String) -> Result<NoteState, AppError> {
     unimplemented!()
@@ -402,9 +439,10 @@ pub struct NoteState {
 //
 // Two tiers, and the distinction is load-bearing for the frame budget.
 //
-// `update_block` is the per-keystroke call: it buffers text and writes a
-// draft row, returns nothing, and never parses. Every OTHER mutating call
-// below commits a splice into the file's source text and reparses, returning
+// `update_block` is the per-keystroke call: it substitutes text into the
+// Note's working source, adjusts spans, writes a draft row, returns nothing,
+// and never parses. Every OTHER mutating call below reparses that working
+// source and rebuilds the span map, returning
 // the whole new state -- and each is triggered by a discrete user action
 // (blur, Enter, Backspace, a range edit), not by typing.
 //
@@ -484,8 +522,15 @@ pub fn update_block(
 /// Called when the Block loses focus, not on every keystroke. This is where
 /// the reparse cost lands: off the typing path, and *separate from* the tier 2
 /// file write, which is on its own idle timer and may not have fired yet. A
-/// commit updates the AST, the span map and the draft row; it does not touch
-/// the file.
+/// commit updates the AST and the span map; it touches neither the file nor
+/// the draft row.
+///
+/// It leaves the draft row alone deliberately. `update_block` already wrote
+/// whatever this commit reparses, and tier 2 *clears* the row on a successful
+/// write (ADR-008 decision 1) so that a row present means work not yet on
+/// disk. Writing one here would re-create a row byte-identical to the file
+/// whenever a Block is blurred with no intervening keystrokes — which a kill
+/// before `close_note` then reports as recovered work that was never lost.
 ///
 /// A splice can change a Block's node shape -- a paragraph gaining a leading
 /// list marker reparses as a list -- so the returned state is authoritative

@@ -109,7 +109,15 @@ Folded into v1.4.0. Totals, graph and critical path unchanged.
 - **`WSPC-D006` gained the open-Note rename criteria**, covering the working source, the span map and the recorded revision — and its existing draft criterion was corrected, since "the drafted content is intact" mandated preserving the pre-rename frontmatter and would have made the next write revert the rename.
 - **`SHEL-E007` gained the write-failure surface**, a STOP and two criteria. Nothing in Epic E acted on a tier 2 failure, which no caller can observe.
 - **Both Spikes required running code while scoping only their own report.** `WSPC-D001` must report measured reparse timings and timer contention; `EDIT-F001` must produce screenshot comparisons of a presentation `EDIT-F002` builds — and `EDIT-F002` depends on it. The gates only forbid *committing* production code, but the Gherkin said "no file under lib or rust/src has been modified", which reads as the working tree and closes the door on the prototyping both require. Both now say the constraint is on the Spike's own commit and name where prototypes go.
-- **`WSPC-D004` gained the no-history criterion** for `open_workspace`, per ADR-005 decision 7.
+- **`WSPC-D004` gained the no-history criterion** for `open_workspace`, per ADR-005 decision 8.
+
+### Corrections from PR review, round 10
+Folded into v1.4.0. Totals, graph and critical path unchanged.
+
+- **`WSPC-D004`'s description contradicted its own acceptance criteria** on whether `open_workspace` initializes a repository. The criteria were round 9's fix; the description was the sentence round 9 did not reach.
+- **`WSPC-D006` gained the source-Note obligations.** A rename rewrites every inbound Link, so it writes files other than the renamed Note — and those Notes' buffers, spans, revisions and draft rows all have to move with it, or the rewrite is reverted later by a verbatim write. Four criteria: a source Note open with buffered edits, a source Note with an unflushed draft, the self-link case, and the renamed Note itself.
+- **`WSPC-D007` gained the no-edit close criterion.** Reading a Note and navigating away is the most common path through the commit tier, and nothing said not to commit.
+- **`EDIT-F004`'s Enter criterion was replaced with three** that specify the empty-Block state the Core cannot represent: UI-side until the first character, then `insert_block`, then `update_block` against the returned path — and nothing inserted if focus leaves without typing.
 
 ## v1.3.0
 - Completed **Epic C: Security & Sync** (`SYNC-C001`–`SYNC-C003`), total 16 story points: a `gix`/`git`-CLI hybrid for clone/commit/push/pull against the local Workspace, a GitHub OAuth PKCE login flow with OS-Keychain token storage, and a debounced background sync scheduler with exponential-backoff retry and conflict-path re-index/notify hooks.

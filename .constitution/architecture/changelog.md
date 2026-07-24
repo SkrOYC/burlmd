@@ -53,6 +53,12 @@ Folded into v1.1.0, since nothing in this pass has merged.
 - **`flow-auth-handshake.md`'s Connect Remote sequence sat outside the CSRF `alt`**, so Mermaid drew it as unconditional continuation after `OAuthStateMismatch`. A note marking it a separate later user action removes the ambiguity without restructuring the diagram.
 - **Recorded why risks jump from 3 to 6.** Risks 4 and 5 were removed before v1.0.0 and the numbers are cited across roughly a dozen files, so renumbering would silently redirect every citation. A comment now says so, rather than leaving the next reader to wonder whether a citation was lost.
 
+### Corrections from PR review, round 10
+- **`flow-workspace-bootstrap.md` never learned about the third bootstrap path.** It still said "Two bootstrap paths, one post-condition" and did not mention `open_workspace` at all — while `WSPC-D004` instructs the implementer to build `open_workspace` *per this flow*. Now three paths, with repository-present added to the shared post-condition and the reason stated.
+- **Risk 8's mitigation was necessary and not sufficient.** File-level atomicity does not prevent the corruption it describes, because a source Note that is open — or that carries an unflushed draft — reverts the Link rewrite afterwards from its buffer. The mitigation now says so and names what has to move with the rename.
+- **`flow-edit-note.md`'s second tier 2 write was missing the draft-clearing step its sibling has**, the same one-instance-fixed-sibling-missed shape rounds 6 and 8 catalogued for this diagram.
+- **`flow-sync-push.md` and `flow-conflict-resolution.md` carried pre-v1.1.0 traceability headers**, one asserting P0 for a capability the PRD now makes P1. Headers corrected and both bodies marked explicitly as predating ADR-005/006/007, since Epics G and H own the revisions.
+
 ## v1.0.1
 Constitution Freshness & Reconciliation Pass following Epic B execution (UIDB-B001–B007).
 - Corrected `containers.md`'s Local Repository description, which implied the raw OKF directory tree was encrypted by this container. The shipped implementation only encrypts the SQLite index (via SQLCipher); raw Markdown files rely on OS-level Full Disk Encryption, per `prd/constraints.md`'s existing rationale (preserving native Git merge capability). This same inconsistency also existed in `prd/capabilities.md` (corrected there, see `prd/changelog.md` v1.0.1).

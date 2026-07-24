@@ -163,7 +163,7 @@ Then the extracted text is exactly the source spanned by the selection, delimite
   - "STOP if bootstrap requires reading a credential, contacting a network host, or consulting authentication state; `flow-workspace-bootstrap.md` contains no such step and CAP-WS-01 forbids one."
   - "STOP if the encrypted index is placed inside the bundle directory; `tech-spec/guidelines.md` requires it live alongside, not within, and names the exact path."
   - "STOP if an index file found at the old `$HOME/.burlmd/index.sqlite3` path is opened, migrated, or copied. It is stale derived state under a path the specification no longer names; the new path starts empty and `WSPC-D005` rebuilds it from the bundle."
-- **Description:** Implement `open_or_create_local_workspace` and `open_workspace` per `flow-workspace-bootstrap.md`. The second takes a caller-supplied directory and is what `CAP-WS-05` and ADR-005 decision 7 both already assume exists; it shares every post-condition with the first except that it neither creates the directory nor initializes a repository in one that has no history. Resolves the default Workspace location and the index location specified in `guidelines.md` — the latter replacing the `$HOME/.burlmd/index.sqlite3` placeholder `connection.rs` carries from Epic B — creates the directory when absent, initializes a version-controlled repository in place, generates and stores the root encryption key on first boot, opens the encrypted index, and writes a Workspace row with a local provider and no remote. The root key path moves here from the authentication flow, where it never belonged. Both this path and a future clone path must converge on identical post-conditions.
+- **Description:** Implement `open_or_create_local_workspace` and `open_workspace` per `flow-workspace-bootstrap.md`. The second takes a caller-supplied directory and is what `CAP-WS-05` and ADR-005 decision 7 both already assume exists. It converges on **every** post-condition of the first — index initialized, root key present, `workspaces` row written, bundle indexed, and a repository present — differing only in that it does not create the directory, and adopts existing history rather than replacing it. In particular it **does** initialize a repository when the directory has none (ADR-005 decision 8): tier 3 commits on every Note close, so a Workspace adopted without one leaves `CAP-WS-02` unsatisfiable and `close_note` failing on the routine path. Resolves the default Workspace location and the index location specified in `guidelines.md` — the latter replacing the `$HOME/.burlmd/index.sqlite3` placeholder `connection.rs` carries from Epic B — creates the directory when absent, initializes a version-controlled repository in place, generates and stores the root encryption key on first boot, opens the encrypted index, and writes a Workspace row with a local provider and no remote. The root key path moves here from the authentication flow, where it never belonged. Both this path and a future clone path must converge on identical post-conditions.
 - **Acceptance Criteria (Gherkin):**
 ```gherkin
 Given no Workspace directory exists and no network is reachable
@@ -329,7 +329,19 @@ Then the row is re-keyed to the new concept id and the drafted body is intact, w
 
 Given a Note is open with buffered edits when it is renamed
 When the idle write tier next fires
-Then it writes the new title and is not refused with a revision mismatch — the working source, the span map and the recorded revision all move with the rename, since renaming is the only other thing that writes the file
+Then it writes the new title and is not refused with a revision mismatch — its working source, span map and recorded revision all move with the rename
+
+Given Note B is open with buffered edits and contains a Link to Note A
+When A is renamed
+Then B's next idle write succeeds without a revision mismatch, and B's Link resolves to A's new concept id — a rename rewrites B's bytes too, so B's buffer, spans and revision must move with it or the verbatim write reverts the rewrite
+
+Given Note B carries an unflushed draft row and contains a Link to Note A
+When A is renamed and B is later opened
+Then B's restored draft contains the rewritten Link, not the old one — the draft is parsed in preference to disk, so a draft left unrewritten reverts the rename one session later
+
+Given a Note contains a Link to itself
+When it is renamed
+Then both its frontmatter title and its self-Link are rewritten
 
 Given a Note links to both `Old` and a not-yet-created `New`
 When `Old` is renamed to `New`
@@ -391,6 +403,10 @@ Then it contains the typed text exactly once — the case where a second writer 
 Given a Note with edits from this session
 When the Note is closed
 Then exactly one commit is made, the draft row is cleared, and the sync scheduler is notified
+
+Given a Note is opened and closed with no edits
+When local version history is inspected
+Then no commit was made — reading a Note is the most common path through this tier, and an empty commit per Note visited would destroy the readable history this design exists to produce
 
 Given two Notes have unwritten changes on disk
 When one of them is closed

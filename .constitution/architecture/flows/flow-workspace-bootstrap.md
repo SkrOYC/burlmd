@@ -39,9 +39,11 @@ sequenceDiagram
 
 `flow-auth-handshake.md` previously generated and stored the root encryption key as a step of the OAuth handshake. The two were only ever adjacent in the original sequence, never causally related: the key encrypts the *local* index, which exists whether or not a Remote is ever attached. Placing the key behind authentication meant an unauthenticated user had no index, and therefore no application — see `prd/out-of-scope/mandatory-account-on-first-run.md`. Bootstrap owns it now, unconditionally.
 
-## Two bootstrap paths, one post-condition
+## Three bootstrap paths, one post-condition
 
-A Workspace can also arrive by clone, when a user attaches an existing Remote on a second device. Both paths must converge on identical post-conditions — index initialized, root key present, `workspaces` row written, bundle indexed — so that no later code needs to ask which path produced the Workspace it is looking at.
+A Workspace can also arrive by **clone**, when a user attaches an existing Remote on a second device, or by **adoption** — `open_workspace`, pointing the application at a directory it did not create (CAP-WS-05). All three must converge on identical post-conditions — index initialized, root key present, `workspaces` row written, bundle indexed, **repository present** — so that no later code needs to ask which path produced the Workspace it is looking at.
+
+The last of those post-conditions is what makes adoption a real third path rather than a shortcut. Tier 3 makes a Git commit on every Note close, so a Workspace adopted from a directory with no history has nothing to commit into: `CAP-WS-02` would be unsatisfiable for every session in it and `close_note` would fail on the routine path. Adoption therefore initializes a repository when the directory has none, and adopts the existing history when it has one — see ADR-005 decision 8. Creating `.git/` in a directory the user pointed at is a real side effect, and the accepted one: the alternative is a Workspace that silently cannot keep history, discovered on the first close.
 
 ## Indexing cost
 

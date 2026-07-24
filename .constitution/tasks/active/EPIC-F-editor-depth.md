@@ -144,7 +144,15 @@ Then the selection behaves normally within that Block
 ```gherkin
 Given the caret is at the end of a Block
 When Enter is pressed
-Then a new empty Block follows it and receives focus
+Then a new empty Block receives focus, held as UI-side caret position rather than committed to the Core — CommonMark has no representation of an empty paragraph, so `insert_block("")` splices only blank lines and the reparse returns an AST without it, leaving no `block_path` for the first keystroke to address
+
+Given that new empty Block
+When the first character is typed
+Then `insert_block` is called with that character as its source, and every subsequent keystroke goes through `update_block` against the returned path
+
+Given that new empty Block
+When focus leaves it without anything being typed
+Then nothing is inserted and the Note is unchanged
 
 Given the caret is in the middle of a Block's text
 When Enter is pressed

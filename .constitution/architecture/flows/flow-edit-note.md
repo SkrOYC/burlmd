@@ -49,6 +49,7 @@ sequenceDiagram
         Note over Core,Local: ~1s idle after the commit
         Core->>Local: Compare on-disk hash to the current revision
         Core->>Local: Atomic write (tier 2): temp file + rename
+        Core->>Local: Clear the draft row — it now matches disk
         Local-->>Core: New revision (content hash), which replaces the baseline
     end
 
