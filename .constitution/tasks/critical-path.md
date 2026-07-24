@@ -29,7 +29,7 @@ The longest dependency chain is 54 of the 105 points. Everything else can be sch
 9. `EDIT-F003` — Cross-Block Selection and Copy
 10. `EDIT-F007` — Editing Across a Multi-Block Selection
 
-`WSPC-D001` (the splicing Spike) is deliberately *not* on the critical path: it runs in parallel with `WSPC-D002` and completes sooner, so it gates `WSPC-D003` without delaying it. `SHEL-E001` (the smoke harness) is likewise off the path, and should be done early regardless since seven later tickets use it as their gate.
+`WSPC-D001` (the splicing Spike) is deliberately *not* on the critical path: it runs in parallel with `WSPC-D002` and completes sooner, so it gates `WSPC-D003` without delaying it. `SHEL-E001` (the smoke harness) is likewise off the path, and should be done early regardless since twelve later tickets use it as their gate — `SHEL-E002` through `SHEL-E007` and `EDIT-F002` through `EDIT-F007`, every one of which invokes `smoke-shot.sh`.
 
 ## Build Order Diagram
 
@@ -125,7 +125,7 @@ Three Core capabilities land in Epic D with no consumer in Epic E or F, and are 
 - **Title-prefix jump** (`CAP-FIND-02`, P1). `WSPC-D009` builds `find_notes_by_title`, but `SHEL-E006` is full-text search and no ticket surfaces the title jump.
 - **Opening a foreign Workspace** (`CAP-WS-05`, P1). `WSPC-D004` exposes it and the indexer tolerates non-conformant files for its sake, but no ticket adds a directory picker.
 
-Separately, three **P0** capability fragments are covered by ticket criteria that never cite them, which is a traceability gap rather than a coverage one — but this section exists precisely so gaps get written down rather than discovered:
+Separately, three capability fragments — two P0, one P1 — are covered by ticket criteria that never cite them, which is a traceability gap rather than a coverage one — but this section exists precisely so gaps get written down rather than discovered:
 
 - `CAP-EDIT-02`'s Block-type list is covered by `EDIT-F002` for headings, lists, blockquotes and code, but the ticket cites no capability id and **thematic breaks appear in no criterion anywhere**. Added to `EDIT-F002`.
 - `CAP-GRAPH-03` (follow a Link to open its target) survives only as an incidental criterion inside `EDIT-F006`, a ticket about *insertion*. Named there explicitly now.

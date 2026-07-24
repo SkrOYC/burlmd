@@ -76,9 +76,18 @@ CREATE TABLE IF NOT EXISTS notes (
     -- construction. Also lets an externally modified file be detected on open
     -- without reparsing it (CAP-PORT-03).
     content_hash TEXT NOT NULL,
-    -- False when the file has no frontmatter, or frontmatter that does not
-    -- parse. Such a file is indexed anyway rather than rejected, so that a
-    -- Workspace written by another tool still opens (CAP-WS-05, CAP-PORT-03).
+    -- False when the file has no frontmatter, when its frontmatter does not
+    -- parse, OR when it parses but carries no non-empty `type`. All three,
+    -- because OKF section 11 states exactly two conformance conditions and the
+    -- second is the `type` field -- a block containing only `title:` parses
+    -- perfectly and is still non-conformant. Earlier revisions of this comment
+    -- listed only the first two cases, which contradicted
+    -- `okf-frontmatter.schema.json`, where `type` is both `required` and the
+    -- sole entry in `x-conformance-bearing`. The parseable-but-typeless file
+    -- is the only case where this check is non-trivial, so it is the one that
+    -- must be tested. Such a file is indexed anyway rather than rejected, so
+    -- that a Workspace written by another tool still opens (CAP-WS-05,
+    -- CAP-PORT-03).
     okf_conformant INTEGER NOT NULL DEFAULT 1,
     PRIMARY KEY (workspace_id, id),
     UNIQUE(workspace_id, path),
@@ -143,6 +152,19 @@ CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
 );
 
 -- Maps a Note to its FTS5 internal rowid, for O(1) deletion.
+--
+-- ORDERING OBLIGATION, and the reason this table is dangerous as well as
+-- useful: the cascade below destroys the only pointer to the FTS row. Deleting
+-- the `notes` row removes the mapping in the same statement, and `notes_fts`
+-- is a virtual table with no foreign keys and no `workspace_id`, so the rowid
+-- is then unrecoverable and the row is unreachable AND undeletable.
+-- Reproduced: after `DELETE FROM notes`, the mapping is gone, the FTS row
+-- remains, and its content still matches a `MATCH` query. `delete_note` and
+-- `delete_directory` must therefore delete from `notes_fts` via this mapping
+-- FIRST, in the same transaction, before touching `notes`. Left unordered the
+-- consequence is not merely disk growth: the full text of every deleted Note
+-- accumulates permanently in the one file this product encrypts precisely
+-- because it aggregates the content of every Note.
 CREATE TABLE IF NOT EXISTS fts_mapping (
     workspace_id TEXT NOT NULL,
     note_id TEXT NOT NULL,

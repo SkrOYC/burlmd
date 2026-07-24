@@ -14,7 +14,7 @@
 
 ## 3. Local Repository (Index & Storage)
 - **Logical Type:** Storage Boundary
-- **Responsibility:** Persists the Open Knowledge Format (OKF) directory tree and maintains an application-level-encrypted (SQLCipher) search index for graph relationships and full-text queries. The raw OKF directory tree itself is not independently encrypted by this container — it relies on OS-level Full Disk Encryption (see `prd/constraints.md`), so that native Git merge tooling can still operate on plaintext files.
+- **Responsibility:** Persists the Open Knowledge Format (OKF) directory tree and maintains an application-level-encrypted (SQLCipher) search index for graph relationships and full-text queries. The raw OKF directory tree itself is not independently encrypted by this container — it is **not** encrypted by this container; whatever at-rest protection it has comes from the host operating system and is not a guarantee this system delivers (see `prd/constraints.md`), so that native Git merge tooling can still operate on plaintext files.
 - **Inputs / Outputs:** Receives finalized encrypted document commits and search queries; outputs queried encrypted documents.
 - **Depends on:** Secure Storage (retrieves the root key before the SQLCipher index can be opened; corrected from "None" once Epic B's implementation made this dependency concrete — see `rust/src/db/connection.rs`).
 

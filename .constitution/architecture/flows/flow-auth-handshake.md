@@ -26,14 +26,14 @@ sequenceDiagram
 
     Core->>Core: Compare returned state to the one retained for that flow id
     alt State does not match, or flow id unknown/consumed
-        Core-->>UI: OAuthStateMismatch; no token exchange is attempted
+        Core-->>UI: OAuthStateMismatch; flow terminates here
+    else State matches
+        Core->>OAuth: Exchange code for tokens (PKCE)
+        OAuth-->>Core: Access / refresh tokens
+        Core->>OS: Store tokens securely
+        OS-->>Core: OK
+        Core-->>UI: SessionState (authenticated)
     end
-
-    Core->>OAuth: Exchange code for tokens (PKCE)
-    OAuth-->>Core: Access / refresh tokens
-    Core->>OS: Store tokens securely
-    OS-->>Core: OK
-    Core-->>UI: SessionState (authenticated)
 
     UI->>Core: Connect Remote (provider, repository?)
     alt No repository named

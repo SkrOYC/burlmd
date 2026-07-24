@@ -46,12 +46,12 @@ And no file under rust/src has been modified
 - **Scope (Out-of-Scope Files):**
   - `rust/src/api/**` (no FFI surface in this ticket)
   - `rust/src/db/**`
-- **Verification Command:** `cd rust && cargo test okf:: -- --list | grep -q ': test' && cargo test okf:: && cargo clippy --all-targets -- -D warnings`
+- **Verification Command:** `cd rust && cargo test okf:: -- --list | grep -q ': test' && cargo test okf:: && cargo test && cargo clippy --all-targets -- -D warnings`
 - **Expected Success Output:** `exit 0`
 - **STOP Conditions:**
   - "STOP if the YAML reader dependency named in `tech-spec/stack.md` cannot parse a fixture block; do not hand-roll a YAML parser, and do not substitute a different crate without a Stage 3 pass."
   - "STOP if any code path in this module writes or re-serializes a frontmatter block; ADR-007 makes the block a read-only span."
-- **Description:** Implement the on-disk format domain specified in `tech-spec/data-models/okf-bundle.md`. Covers reading and validating a frontmatter block against `okf-frontmatter.schema.json`'s required/recommended split, converting between a bundle-relative path and an OKF concept id in both directions, classifying a Markdown link target as an internal Link or an external link, deriving a Link's target concept id, and enforcing the reserved-filename rule. A file with absent or unparseable frontmatter must be reported as non-conformant rather than rejected.
+- **Description:** Implement the on-disk format domain specified in `tech-spec/data-models/okf-bundle.md`. Covers reading and validating a frontmatter block against `okf-frontmatter.schema.json`'s required/recommended split, converting between a bundle-relative path and an OKF concept id in both directions, classifying a Markdown link target as an internal Link or an external link, deriving a Link's target concept id, and enforcing the reserved-filename rule. A file must be reported as non-conformant — rather than rejected — when its frontmatter is absent, unparseable, **or parses without a non-empty `type`**. All three, because OKF section 11 states exactly two conformance conditions and the second is the `type` field; `okf-frontmatter.schema.json` already treats it as the sole conformance-bearing property.
 - **Acceptance Criteria (Gherkin):**
 ```gherkin
 Given a Note file containing a frontmatter block with type and title
@@ -65,6 +65,10 @@ Then those keys are reported present and their original bytes are left untouched
 Given a Note file with no frontmatter block at all
 When the frontmatter is read
 Then the file is reported non-conformant and is not rejected
+
+Given a Note file whose frontmatter block parses cleanly but carries no `type`
+When the frontmatter is read
+Then the file is reported non-conformant and is not rejected — OKF section 11's second condition is a non-empty `type`, so this is the only case where the check is more than a parse attempt, and it is the case a naive implementation gets wrong
 
 Given the bundle-relative path "projects/burlmd.md"
 When the concept id is derived
@@ -140,12 +144,14 @@ Then the extracted text is exactly the source spanned by the selection, delimite
   - `rust/src/workspace/bootstrap.rs`
   - `rust/src/api/ffi_api.rs`
   - `rust/src/db/connection.rs`
-  - `rust/src/db/schema.sql` (**the DDL the application actually executes**, via `include_str!` in `connection.rs`. It is currently byte-identical to the pre-v1.1.0 constitution schema and must be brought in line with `tech-spec/data-models/schema.sql` — composite `(workspace_id, id)` keys, `ON UPDATE CASCADE`, `content_hash`, `okf_conformant`, `links.target_id`, `idx_links_target`. Without this, every later ticket writes columns that do not exist.)
+  - `rust/src/db/schema.sql` (**the DDL the application actually executes**, via `include_str!` in `connection.rs`. It is currently byte-identical to the pre-v1.1.0 constitution schema and must be brought in line with `tech-spec/data-models/schema.sql` — composite `(workspace_id, id)` keys, `ON UPDATE CASCADE`, `content_hash`, `okf_conformant`, `links.target_id`, `idx_links_target`. Without this, every later ticket writes columns that do not exist.
+
+    Two things it must **not** copy verbatim. `PRAGMA user_version = 1` does not belong in this file at all: `init_schema` replays the batch on every open, so a literal assignment resets a migrated database to the baseline. The Core reads the pragma and writes it only when it reads 0. And bringing the DDL in line breaks the existing tests in `rust/src/api/ffi_api.rs`, which insert into `notes` without `content_hash` and into `fts_mapping` without `workspace_id`, both now `NOT NULL` — which is why this ticket's gate runs an unfiltered `cargo test`, since every filtered gate between here and `WSPC-D008` would sail past a red suite.)
   - `rust/src/frb_generated.rs`, `lib/src/rust/**` (regenerated bindings only — this ticket adds `#[frb]` functions, and adding one without regenerating leaves the Dart side unable to call it)
 - **Scope (Out-of-Scope Files):**
   - `rust/src/api/auth.rs` (no credential path participates in bootstrap)
   - `lib/main.dart`, `lib/src/components/**`, `lib/src/screens/**`, `lib/src/providers/**` (hand-written Dart is Epic E)
-- **Verification Command:** `cd rust && cargo test workspace::bootstrap -- --list | grep -q ': test' && cargo test workspace::bootstrap && cargo clippy --all-targets -- -D warnings`
+- **Verification Command:** `cd rust && cargo test workspace::bootstrap -- --list | grep -q ': test' && cargo test workspace::bootstrap && cargo test && cargo clippy --all-targets -- -D warnings`
 - **Expected Success Output:** `exit 0`
 - **STOP Conditions:**
   - "STOP if bootstrap requires reading a credential, contacting a network host, or consulting authentication state; `flow-workspace-bootstrap.md` contains no such step and CAP-WS-01 forbids one."
@@ -283,6 +289,10 @@ Given a Note carrying an unflushed draft row is deleted
 When the draft table is inspected
 Then no row remains for it — the table has no foreign key, so nothing cascades and the deletion must clear it explicitly
 
+Given a Note whose content is indexed for full-text search is deleted
+When the search index is queried for text unique to it
+Then nothing matches — the `notes` cascade removes `fts_mapping`, which is the only pointer to the FTS row, so the FTS row must be deleted first or it becomes permanently unreachable and undeletable
+
 Given a Note carrying an unflushed draft row is renamed
 When the draft table is inspected
 Then the row is re-keyed to the new concept id and the drafted content is intact — this is the one case the missing foreign key exists to permit, so it is the one case that must be tested
@@ -309,7 +319,7 @@ Then the rename succeeds and the two inbound edges collapse to one, rather than 
 - **STOP Conditions:**
   - "STOP if a commit is triggered on a timer rather than on Note close; ADR-008 rejected timer-based commits explicitly."
   - "STOP if a file write is not atomic; `architecture/resilience.md` guarantees the previous state survives an abrupt termination mid-write."
-- **Description:** Implement the four tiers of ADR-008. Every Block edit writes a draft row; roughly a second of inactivity splices and writes the file atomically; closing a Note or quitting flushes any pending write, makes one commit for the session, clears the draft row, and notifies the sync scheduler — giving `notify_activity()` its first caller since Epic C. The write tier compares the content hash it recorded when the Note was opened against the file on disk immediately before writing, and refuses the write on mismatch — the Optimistic Concurrency Control in `architecture/risks.md` risk 6, now guarding file content rather than a database column. That comparison belongs entirely to the Core: `flush_note` takes no revision token, because the UI never learns when the idle tier fires and any token it held would be stale by construction. Switching away from a Note counts as closing it.
+- **Description:** Implement the four tiers of ADR-008. Every Block edit writes a draft row; roughly a second of inactivity splices and writes the file atomically; closing a Note or quitting flushes any pending write, makes one commit for the session, clears the draft row, and notifies the sync scheduler — giving `notify_activity()` its first caller since Epic C. The write tier compares the file on disk against the Core's current revision for that Note — initialised to the on-disk hash at open and **re-recorded after every successful write** — immediately before writing, and refuses the write on mismatch. The re-recording is the load-bearing half: the timer fires repeatedly in one session, so a baseline pinned to open time would make the second write fail against the first — the Optimistic Concurrency Control in `architecture/risks.md` risk 6, now guarding file content rather than a database column. That comparison belongs entirely to the Core: `flush_note` takes no revision token, because the UI never learns when the idle tier fires and any token it held would be stale by construction. Switching away from a Note counts as closing it.
 
   Tier 1 puts a synchronous encrypted write of the Note's full source on the keystroke path. That is the one place in this design where a per-keystroke cost scales with document length, so it is measured rather than assumed against the 16ms frame budget in `prd/constraints.md`.
 - **Acceptance Criteria (Gherkin):**
@@ -338,7 +348,11 @@ Given a Note with edits from this session
 When the Note is closed
 Then exactly one commit is made, the draft row is cleared, and the sync scheduler is notified — this commit is the whole of `CAP-WS-02`, the durability guarantee that makes a local-only Workspace trustworthy before any Remote exists
 
-Given the on-disk file changed after the Note was opened
+Given a Note with edits and no external modification
+When the idle write tier fires twice in one session
+Then both writes succeed and neither is refused — the baseline advances with each write, so the second is not compared against the state the first replaced
+
+Given the on-disk file was changed by something other than this application
 When the idle write tier fires
 Then the write is refused with a revision mismatch carrying the current revision, and the file on disk is left untouched
 

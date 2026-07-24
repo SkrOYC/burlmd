@@ -34,14 +34,17 @@ sequenceDiagram
             Core-->>UI: Acknowledge (no parse, no AST returned)
         end
 
+        Note over Core,Local: ~1s idle may elapse while still focused
+        Core->>Local: Atomic write (tier 2): splices buffered source, no reparse
+
         Note over UI,Core: Block loses focus
         UI->>Core: Commit Block (block_path)
         Core->>Core: Splice source over the Block's span, reparse
         Core-->>UI: NoteState (new AST)
 
-        Note over Core,Local: ~1s idle
+        Note over Core,Local: ~1s idle after the commit
         Core->>Local: Atomic write (tier 2): temp file + rename
-        Local-->>Core: New base_revision (content hash)
+        Local-->>Core: New revision (content hash), which becomes the new baseline
     end
 
     UI->>Core: Close Note (navigate away / quit)

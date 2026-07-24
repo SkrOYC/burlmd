@@ -31,6 +31,11 @@ Folded into v1.1.0, since nothing in this pass has merged.
 - **`strategy.md` never had its version marker bumped** to v1.1.0 with the rest of the stage, because this changelog recorded the file as needing no amendment. It did: its Initial Load Latency trade-off still described a full clone as the cost of provisioning a Workspace, which ADR-005 replaces with `init` for the first device.
 - **`resilience.md` carried the last stale Epic B status note**, saying the `drafts` mechanism needed its own ticket. `WSPC-D007` is that ticket, and ADR-008 is now the specification for the guarantee.
 
+### Corrections from PR review, round 5
+- **`containers.md` carried the fourth surviving instance of the at-rest overclaim.** Section 3 still said the OKF tree "relies on OS-level Full Disk Encryption", pointing at a `prd/constraints.md` that this pass had already changed to say the opposite. Sections 4 and 5 of the same file were edited here; section 3 was not read for it.
+- **`flow-auth-handshake.md`'s CSRF `alt` had no `else`**, so Mermaid rendered the token exchange as unconditional continuation rather than as the branch not taken. The prose was unambiguous, but the entire point of the round 2 and 3 fixes was that the diagram is what an implementer follows.
+- **`flow-edit-note.md` drew the tier 2 write only after the blur commit**, while ADR-008 specifies the timer may fire while the Block is still focused — which is the case `WSPC-D007`'s mid-focus criterion exists to require. Both placements are now drawn.
+
 ## v1.0.1
 Constitution Freshness & Reconciliation Pass following Epic B execution (UIDB-B001–B007).
 - Corrected `containers.md`'s Local Repository description, which implied the raw OKF directory tree was encrypted by this container. The shipped implementation only encrypts the SQLite index (via SQLCipher); raw Markdown files rely on OS-level Full Disk Encryption, per `prd/constraints.md`'s existing rationale (preserving native Git merge capability). This same inconsistency also existed in `prd/capabilities.md` (corrected there, see `prd/changelog.md` v1.0.1).

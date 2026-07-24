@@ -167,9 +167,11 @@ pub struct NoteMetadata {
     pub last_modified: i64,
     /// Populated by search results only.
     pub snippet: Option<String>,
-    /// False when the file has no frontmatter or it does not parse. Such a
-    /// file is still fully usable; the flag exists so the UI can offer to
-    /// bring it into conformance (CAP-PORT-03).
+    /// False when the file has no frontmatter, when it does not parse, or
+    /// when it parses without a non-empty `type` — OKF §11's two conformance
+    /// conditions, the second of which an implementation that only tries to
+    /// parse will miss. Such a file is still fully usable; the flag exists so
+    /// the UI can offer to bring it into conformance (CAP-PORT-03).
     pub okf_conformant: bool,
 }
 
@@ -184,9 +186,16 @@ pub async fn create_note(directory_path: String, title: String) -> Result<NoteSt
 
 /// Deletes a Note and commits the deletion, so it stays recoverable from
 /// local version history (CAP-LIFE-04).
-/// Also clears any `drafts` row for this Note, in the same transaction. That
-/// table carries no foreign key (`data-models/schema.sql`), so nothing
-/// cascades and the row would otherwise outlive the Note it belongs to.
+/// Two cleanups the `notes` row's own cascade does not perform, both in the
+/// same transaction:
+///
+/// - The `drafts` row, which carries no foreign key at all and would otherwise
+///   outlive the Note it belongs to.
+/// - The `notes_fts` row, which must be deleted **before** the `notes` row.
+///   Deleting `notes` cascades `fts_mapping` away, and that mapping is the
+///   only pointer to the FTS rowid, so afterwards the row is unreachable and
+///   undeletable — leaving the deleted Note's full text searchable in the
+///   encrypted index indefinitely. See `data-models/schema.sql`.
 #[frb]
 pub async fn delete_note(note_id: String) -> Result<(), AppError> {
     unimplemented!()
@@ -540,19 +549,27 @@ pub fn replace_range(
 /// `close_note`, by application shutdown, and by tests — not the routine
 /// path. The UI is not required to call it at all.
 ///
-/// It deliberately takes no `expected_base_revision`. The Core recorded the
-/// on-disk hash when the Note was opened and compares against that, rejecting
-/// with `RevisionMismatch` if the file changed underneath the draft — the
-/// Optimistic Concurrency Control in `architecture/risks.md` risk 6, now
-/// guarding file content rather than a database column.
+/// It deliberately takes no `expected_base_revision`. The Core holds a
+/// current revision per open Note, initialised to the on-disk hash at
+/// `open_note` and **replaced by the hash of what it just wrote** after every
+/// successful write. Each write compares the file on disk against that value
+/// and rejects with `RevisionMismatch` on a mismatch — the Optimistic
+/// Concurrency Control in `architecture/risks.md` risk 6, now guarding file
+/// content rather than a database column.
 ///
-/// Requiring the token from the caller would be actively wrong here: a
-/// Core-owned idle timer writes the file and advances the revision without
+/// The re-recording is not an implementation detail. The tier 2 timer fires
+/// repeatedly within one editing session, so a baseline pinned to open time
+/// would make every write after the first fail against **this application's
+/// own previous write** — turning `RevisionMismatch` from an external-change
+/// signal into a guaranteed second-write failure. Only a change the Core did
+/// not make should raise it.
+///
+/// Requiring the token from the caller would be wrong for the same underlying
+/// reason, one layer up: a Core-owned idle timer advances the revision without
 /// the UI observing it, so any token the UI still held from `open_note` would
-/// be stale and every subsequent call would fail deterministically. That is
-/// structurally the same defect ADR-007 decision 7 exists to fix, one layer
-/// up. `NoteState.base_revision` remains exposed for display and diagnostics;
-/// it is not an input.
+/// be stale by construction. That is structurally the defect ADR-007
+/// decision 7 exists to fix. `NoteState.base_revision` remains exposed for
+/// display and diagnostics; it is not an input.
 #[frb]
 pub async fn flush_note(note_id: String) -> Result<String, AppError> {
     unimplemented!()

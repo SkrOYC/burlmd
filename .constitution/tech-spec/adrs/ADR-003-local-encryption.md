@@ -7,7 +7,7 @@ While the remote repository (e.g., GitHub) is secured by the provider's infrastr
 
 ## Decision
 1. **SQLite:** We will use `sqlcipher` (bundled via `rusqlite`) to transparently encrypt the entire SQLite index and FTS5 virtual tables using AES-256. This prevents sandbox escapes from scraping the user's aggregated knowledge graph in bulk.
-2. **Markdown Files:** Raw Markdown files will be written to disk in **plaintext**. We will rely exclusively on the OS-level Full Disk Encryption (FDE) and iOS/Android Data Protection APIs to secure these files at rest.
+2. **Markdown Files:** Raw Markdown files will be written to disk in **plaintext**, and this application provides no at-rest protection for them. Whatever protection they have is whatever the host operating system happens to give them — full-disk encryption where the user enabled it, nothing where they did not. Stated as an absence rather than as reliance on a platform feature, because on the primary desktop target FDE is an install-time opt-in the application can neither check nor require, and describing it as something we "rely on" reads as a guarantee. See `prd/constraints.md`.
 3. **Key Management:** The root symmetric key for the SQLite database will be generated locally on first boot and stored in the OS-level secure enclave (Keychain/Keystore) using the Rust `keyring` crate.
 
 ## Consequences
