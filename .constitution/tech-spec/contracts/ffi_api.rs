@@ -168,9 +168,11 @@ pub struct NoteMetadata {
     /// Populated by search results only.
     pub snippet: Option<String>,
     /// False when the file has no frontmatter, when it does not parse, or
-    /// when it parses without a non-empty `type` — OKF §11's two conformance
-    /// conditions, the second of which an implementation that only tries to
-    /// parse will miss. Such a file is still fully usable; the flag exists so
+    /// when it parses without a non-empty `type` — the first two of OKF §11's
+    /// three conformance conditions, the second of which an implementation
+    /// that only tries to parse will miss. (§11's third condition constrains
+    /// the structure of `index.md` and `log.md` when present; burlmd writes
+    /// neither, per ADR-004 decision 6.) Such a file is still fully usable; the flag exists so
     /// the UI can offer to bring it into conformance (CAP-PORT-03).
     pub okf_conformant: bool,
 }
@@ -207,6 +209,12 @@ pub async fn delete_note(note_id: String) -> Result<(), AppError> {
 /// Because OKF identity is positional (SPEC.md section 2), this changes the
 /// Note's id. The returned `NoteState` carries the new id; callers must not
 /// retain the old one.
+/// Returns `PathUnavailable` on the same terms as `create_note`: when the
+/// filename derived from `new_title` is already taken, or derives to a
+/// reserved OKF filename. Renaming is not a weaker check than creating.
+///
+/// Also rewrites `notes.title` and the Note's `notes_fts` title row, which is
+/// what full-text search matches titles against.
 #[frb]
 pub async fn rename_note(note_id: String, new_title: String) -> Result<NoteState, AppError> {
     unimplemented!()
@@ -214,6 +222,8 @@ pub async fn rename_note(note_id: String, new_title: String) -> Result<NoteState
 
 /// Moves a Note to another Directory, rewriting every inbound Link
 /// (CAP-LIFE-03). Changes the Note's id, as `rename_note` does.
+/// Returns `PathUnavailable` when the destination already holds a Note of
+/// that filename, or when the destination path does not exist.
 #[frb]
 pub async fn move_note(note_id: String, new_directory_path: String) -> Result<NoteState, AppError> {
     unimplemented!()
@@ -410,6 +420,15 @@ pub fn get_block_source(note_id: String, block_path: Vec<usize>) -> Result<Strin
 /// form nothing ever specified and would have rewritten unedited regions in
 /// violation of the Edit Fidelity constraint.
 ///
+/// Substitutes the text into the Note's working source — one buffer per open
+/// Note holding its full current text, the same thing `drafts.raw_markdown`
+/// persists — then moves the edited Block's span **end** by the byte delta and
+/// shifts every later span by that same delta. Both halves matter: the edited
+/// span is resized rather than shifted, and a rule covering only later spans
+/// would leave the next splice replacing too little and duplicating the typed
+/// bytes. See ADR-008 decision 2, which works the case through. No parse
+/// happens here; `commit_block` reparses on blur and rebuilds the map.
+///
 /// Returning nothing is what keeps the 16ms budget reachable. While a Block
 /// is focused it displays raw source the UI already holds -- the text the
 /// user just typed -- and no other Block's rendering can change, so there is
@@ -551,8 +570,13 @@ pub fn replace_range(
 // Persistence (ADR-008)
 // ---------------------------------------------------------------------------
 
-/// Forces tier 2 immediately: splices pending edits into the file and writes
-/// it atomically (temp file plus rename). Returns the new `base_revision`.
+/// Forces tier 2 immediately: writes the Note's working source to the file
+/// atomically (temp file plus rename). Returns the new `base_revision`.
+///
+/// It writes that buffer verbatim and splices nothing — `update_block` already
+/// substituted the text and adjusted the spans, and having two writers of the
+/// working source is what produced the duplication ADR-008 decision 2
+/// records.
 ///
 /// **The debounce that normally triggers tier 2 lives in the Core, not the
 /// UI.** This function is the explicit-flush escape hatch — used by

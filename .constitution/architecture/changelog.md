@@ -40,6 +40,10 @@ Folded into v1.1.0, since nothing in this pass has merged.
 - **`containers.md` carried a mangled sentence from round 5's own sweep** — the replacement clause was inserted without removing the one it replaced. The fix for an overclaim should not itself need a fix, and this one did.
 - **`flow-edit-note.md` never received round 5's OCC fix.** The mid-focus tier 2 write was drawn with no return arrow and no comparison, so following the diagram literally reproduces the defect round 5 removed: the baseline never advances and the next write fails against this application's own output. Both tier 2 writes now show the comparison and the re-record.
 
+### Corrections from PR review, round 7
+- **`risks.md` risk 7 proscribed the offset arithmetic ADR-008 mandates**, and `SPK-WSPC-D001` was chartered to decide a question ADR-008 had already answered. Reconciled by narrowing the risk to what it is actually about — arithmetic replacing a reparse across a structural change, where the errors are silent — rather than by asserting the conflict away. The spike still owns the committed-splice question.
+- **`flow-workspace-bootstrap.md` never drew the `workspaces` row being written**, though the prose lists it as a required post-condition and the contract makes it explicit. Every other post-condition had a diagram step. Same shape as the CSRF `state` in round 2 and the OCC baseline in round 6, at much lower stakes.
+
 ## v1.0.1
 Constitution Freshness & Reconciliation Pass following Epic B execution (UIDB-B001–B007).
 - Corrected `containers.md`'s Local Repository description, which implied the raw OKF directory tree was encrypted by this container. The shipped implementation only encrypts the SQLite index (via SQLCipher); raw Markdown files rely on OS-level Full Disk Encryption, per `prd/constraints.md`'s existing rationale (preserving native Git merge capability). This same inconsistency also existed in `prd/capabilities.md` (corrected there, see `prd/changelog.md` v1.0.1).

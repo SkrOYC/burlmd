@@ -28,6 +28,7 @@ sequenceDiagram
     OS-->>Core: Root key
 
     Core->>Local: Open encrypted index with root key
+    Core->>Local: Write workspaces row (provider 'local', remote_url NULL)
     Core->>Local: Scan bundle, build index
     Local-->>Core: Notes, Directories, Links indexed
 

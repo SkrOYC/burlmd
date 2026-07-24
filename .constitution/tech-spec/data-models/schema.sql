@@ -159,9 +159,13 @@ CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
 -- is a virtual table with no foreign keys and no `workspace_id`, so the rowid
 -- is then unrecoverable and the row is unreachable AND undeletable.
 -- Reproduced: after `DELETE FROM notes`, the mapping is gone, the FTS row
--- remains, and its content still matches a `MATCH` query. `delete_note` and
--- `delete_directory` must therefore delete from `notes_fts` via this mapping
--- FIRST, in the same transaction, before touching `notes`. Left unordered the
+-- remains, and its content still matches a `MATCH` query. EVERY path that
+-- removes a `notes` row must therefore delete from `notes_fts` via this
+-- mapping FIRST, in the same transaction, before touching `notes`. That is
+-- `delete_note` and `delete_directory`, and also `reindex_workspace` and the
+-- incremental single-Note rewrite -- both of which are worse, because a
+-- rebuild strands the WHOLE Workspace's text at once and reindex runs on
+-- first open, after a merge, and on recovery. Left unordered the
 -- consequence is not merely disk growth: the full text of every deleted Note
 -- accumulates permanently in the one file this product encrypts precisely
 -- because it aggregates the content of every Note.

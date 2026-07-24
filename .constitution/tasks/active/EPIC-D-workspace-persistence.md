@@ -16,6 +16,7 @@ Entirely Core-side. No ticket here touches Dart, and nothing in this epic is vis
 - **Verification Command:** `! grep -q 'Status: placeholder' .constitution/spikes/SPK-WSPC-D001.md && ! grep -q 'To be filled' .constitution/spikes/SPK-WSPC-D001.md && git diff --quiet $(git merge-base HEAD master) HEAD -- rust/src`
 - **Expected Success Output:** `exit 0`
 - **STOP Conditions:**
+  - "STOP if the tier 2 timer's synchronization with the synchronous FFI calls it races is left undecided. The timer is Core-owned and fires on its own thread while `update_block`/`commit_block` run on the Dart caller's; both touch the working source and span map, and the timer side does an encrypted database write and a file write. Reusing `db::connection`'s process-wide mutex naively lets a keystroke block on a lock held across a disk write, inside the 16ms budget. Record the shape and the measured contention — see ADR-008's consequences."
   - "STOP if the investigation concludes that whole-file reparse cannot meet the 16ms budget in `prd/constraints.md` at realistic Note sizes; that invalidates ADR-007's mitigation and requires a Stage 3 pass, not an improvised offset-arithmetic implementation."
   - "STOP if no production code change is required by the findings; a Spike that recommends implementation changes must name the ticket, not perform them."
 - **Description:** Establish empirically how the Core Engine should maintain source spans across a splice, and at what Note size the chosen approach stops being viable. `architecture/risks.md` risk 7 names whole-file reparse as the mitigation because it makes an incorrect span map unrepresentable, but the cost has never been measured. Determine the reparse cost curve against Note size using the pinned parser, identify the size at which it approaches the frame budget, and confirm whether reparse-after-commit keeps that cost off the per-keystroke path given the tiering in ADR-008. Record whether offset arithmetic is ever warranted, and if so under exactly what conditions.
@@ -142,6 +143,7 @@ Then the extracted text is exactly the source spanned by the selection, delimite
 - **Dependencies:** WSPC-D002
 - **Category:** Correctness
 - **Scope (In-Scope Files):**
+  - `rust/src/lib.rs` (declares `pub mod workspace;`. Without it the module is not part of the crate, so this ticket's own gate — which since round 4 asserts the test filter matched something — fails against a filter matching nothing.)
   - `rust/src/workspace/mod.rs`
   - `rust/src/workspace/bootstrap.rs`
   - `rust/src/api/ffi_api.rs`
@@ -201,6 +203,7 @@ Then `user_version` is left as it was rather than reset to the baseline
 - **Dependencies:** WSPC-D003, WSPC-D004
 - **Category:** Correctness
 - **Scope (In-Scope Files):**
+  - `rust/src/lib.rs` (declares `pub mod index;`, for the same reason `WSPC-D004` declares `workspace`)
   - `rust/src/index/mod.rs`
   - `rust/src/index/scan.rs`
   - `rust/src/index/incremental.rs`
@@ -213,7 +216,8 @@ Then `user_version` is left as it was rather than reset to the baseline
 - **STOP Conditions:**
   - "STOP if a full rescan is required to keep the index current during ordinary editing; `architecture/risks.md` risk 3 requires incremental updates as the routine path."
   - "STOP if a file with unparseable frontmatter causes indexing to fail rather than being recorded as non-conformant; CAP-WS-05 and CAP-PORT-03 both depend on tolerating it."
-- **Description:** Populate and maintain every index table from the bundle on disk — the work no production code has ever done. Covers a full scan producing Note rows with content hashes and conformance flags, full-text rows with their mapping rows, Link edges with derived target ids including ghost Links, and Directory rows including empty ones. Also provides the incremental path used on every write, and `reindex_workspace`, which closes Epic C's deferred item 3 where the sync scheduler's re-index hook currently calls a documented no-op. Full-text search must satisfy the sub-100ms constraint at a realistic corpus size.
+  - "STOP if any path here clears `notes` before clearing `notes_fts` through `fts_mapping`. Deleting a `notes` row cascades the mapping away, and the mapping is the only pointer to the FTS row — see `data-models/schema.sql`. This applies to the full rebuild and to the incremental rewrite of a single Note, and it matters more here than on the delete path because reindex runs on first open, after a merge, and on recovery, orphaning the whole Workspace's text each time."
+- **Description:** Populate and maintain every index table from the bundle on disk — the work no production code has ever done. Covers a full scan producing Note rows with content hashes and conformance flags, full-text rows with their mapping rows, Link edges with derived target ids including ghost Links, and Directory rows including empty ones. Also provides the incremental path used on every write, and `reindex_workspace`, which closes Epic C's deferred item 3 where the sync scheduler's re-index hook currently calls a documented no-op. Every path that removes an existing row — the full rebuild, and the incremental rewrite of one Note — must clear `notes_fts` through `fts_mapping` *before* clearing `notes`, for the reason `schema.sql` gives at the mapping table. Full-text search must satisfy the sub-100ms constraint at a realistic corpus size.
 - **Acceptance Criteria (Gherkin):**
 ```gherkin
 Given a bundle containing Notes in nested Directories
@@ -236,6 +240,10 @@ Given a single Note has changed on disk
 When the incremental index path runs
 Then only that Note's rows are rewritten and no full rescan occurs
 
+Given an indexed Workspace whose Notes contain distinctive text
+When the Workspace is fully reindexed
+Then a search for text belonging to no current Note matches nothing — a rebuild that clears `notes` first strands every FTS row beyond reach, and reindex runs often enough that the leak is unbounded
+
 Given an indexed Workspace of at least one thousand Notes
 When a full-text query is executed
 Then results return in under 100 milliseconds
@@ -247,6 +255,7 @@ Then results return in under 100 milliseconds
 - **Dependencies:** WSPC-D005
 - **Category:** Correctness
 - **Scope (In-Scope Files):**
+  - `rust/src/workspace/mod.rs` (declares the two modules below; `WSPC-D004` creates this file but cannot know what later tickets add to it)
   - `rust/src/workspace/lifecycle.rs`
   - `rust/src/workspace/links_rewrite.rs`
   - `rust/src/api/ffi_api.rs`
@@ -283,6 +292,14 @@ Given a Note already exists with a name derived from a requested title
 When a second Note is created with that title
 Then the operation reports the path as unavailable and creates nothing
 
+Given a Note is renamed to a title deriving to an existing filename, or to a reserved one
+When the rename is attempted
+Then it reports the path as unavailable and changes nothing — renaming is checked on the same terms as creating
+
+Given a Note is renamed
+When the search index is queried by its new title
+Then it is found, and its old title no longer matches — `notes_fts` indexes the title, so a rename that updates only `notes` leaves search answering with the previous one
+
 Given a Note is deleted
 When local version history is inspected
 Then the deletion is committed and the prior content is recoverable
@@ -310,6 +327,7 @@ Then the rename succeeds and the two inbound edges collapse to one, rather than 
 - **Dependencies:** WSPC-D003, WSPC-D005
 - **Category:** Correctness
 - **Scope (In-Scope Files):**
+  - `rust/src/workspace/mod.rs` (declares `persist`)
   - `rust/src/workspace/persist.rs`
   - `rust/src/draft.rs` (**where `NoteMetadata` and `NoteState` are actually defined** — `api/ffi_api.rs` only re-exports them. The contract reshapes both: `NoteMetadata` loses `workspace_id` and gains `okf_conformant`, `NoteState` gains `restored_from_draft`.)
   - `rust/src/api/ffi_api.rs`
@@ -344,7 +362,15 @@ Then no commit exists for this session yet
 
 Given a Block is still focused and the idle interval elapses
 When the write tier fires
-Then the buffered source is spliced and written, later spans shift by the byte delta, and no reparse occurs
+Then the Note's working source is written verbatim and atomically, and no splice and no reparse occur in this tier
+
+Given a Block whose source grows by two bytes
+When the edit is buffered
+Then that Block's own span end moves by two as well as every later span shifting by two — resizing the edited span, not only shifting the ones after it
+
+Given a Block edited, written mid-focus by the idle tier, and then blurred
+When the file is inspected
+Then it contains the typed text exactly once — the case where a second writer re-splices over an unresized span duplicates it
 
 Given a Note with edits from this session
 When the Note is closed
@@ -426,6 +452,7 @@ And no exposed function takes a workspace_id parameter
 - **Scope (In-Scope Files):**
   - `rust/src/api/ffi_api.rs`
   - `lib/src/providers/rust_api_provider.dart` (wraps `searchNotes`, which gains a `limit`; this ticket's gate ends in `dart analyze`)
+  - `rust/src/index/mod.rs` (declares `query`)
   - `rust/src/index/query.rs`
   - `rust/src/draft.rs` (four functions here return `Vec<NoteMetadata>`, which is defined in this file and loses `workspace_id` under the contract. This ticket depends only on `WSPC-D005`, so it can be scheduled before `WSPC-D007` — the other ticket that scopes this file — and its own gate would then be unpassable without it.)
   - `rust/src/frb_generated.rs`
