@@ -9,6 +9,20 @@ crate-type = ["cdylib", "staticlib"]
 [dependencies]
 flutter_rust_bridge = "=2.12.0"
 getrandom = "0.4.3"
+gix = { version = "0.86.0", default-features = false, features = [
+    "max-performance-safe",
+    "sha1",
+    "blob-diff",
+    "revision",
+    "index",
+    "excludes",
+    "worktree-mutation",
+    "credentials",
+    "interrupt",
+    "tree-editor",
+    "blocking-network-client",
+    "blocking-http-transport-reqwest-rust-tls",
+] }
 keyring = "4.1.5"
 pulldown-cmark = "0.12"
 rusqlite = { version = "0.40.1", features = ["bundled-sqlcipher"] }

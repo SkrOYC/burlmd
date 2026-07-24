@@ -1,5 +1,9 @@
 # Stage 3: Technical Implementation Changelog
 
+## v1.0.3
+SYNC-C001 implementation (Epic C execution).
+- Corrected `stack.md`'s "Git Implementation" bullet from a bare "`gix` (gitoxide)" to the verified hybrid actually built: `gix` 0.86.0 for `clone` and `commit` (including rebuilding `.git/index` from the committed tree, since `Repository::commit_as` alone only writes the commit object and moves the branch ref), and the `git` CLI shelled out to for `push` and `pull`. This follows directly from upstream's own `crate-status.md` at `gix` 0.86.0: `push` has no client plumbing implemented at all, and `merge` support stops at blobs and trees — commit-level three-way merge, and the raw conflict markers `flow-conflict-resolution.md` parses, do not exist in `gix` today. Confirmed live: `cargo test git::` exercises clone, commit, a push+pull round trip against a local bare-repository fixture, and a genuine diverging-history pull that surfaces (and does not clobber) `<<<<<<<`/`=======`/`>>>>>>>` markers in the working tree.
+
 ## v1.0.2
 UIDB-B002 implementation (Epic B execution).
 - Corrected `stack.md`'s Database Encryption bullet: the root key is applied to SQLCipher via the raw-key PRAGMA form (`PRAGMA key = "x'<64 hex chars>'"`), not a passphrase string. The v1.0.1 wording ("key derived via PBKDF2-HMAC-SHA512... 256,000 iterations") described SQLCipher's passphrase mode, which this project does not use — PBKDF2 exists to strengthen low-entropy human passphrases and adds cost with no benefit when the input key is already full-entropy CSPRNG output from the OS Keychain (UIDB-B001). Confirmed live: `cargo test db::` verifies the resulting file is unreadable without the key and its raw bytes don't match SQLite's plaintext header.

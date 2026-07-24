@@ -15,6 +15,16 @@ When the commit function is called
 Then `gix` successfully creates a Git commit in the local `.git` index
 ```
 
+##### SYNC-C001 Deviations & Justifications
+- **Touched Files:**
+  - `rust/src/git/operations.rs` (in scope) — `clone_repo`, `commit_all`, `push`, `pull`, and the `GitCredentials` auth wiring point.
+  - `rust/src/git/mod.rs` (new) — declares `pub mod operations;`; `git/` already existed as a directory name in `guidelines.md`'s documented layout but had no `mod.rs` yet.
+  - `rust/src/lib.rs` — added `pub mod git;` so the new module is reachable; every other top-level module (`api`, `db`, `markdown`, `security`) is wired the same way, so this follows existing convention rather than deviating from it.
+  - `rust/Cargo.toml` / `rust/Cargo.lock` — added `gix = "0.86.0"` with `default-features = false` and an explicit feature list (`max-performance-safe`, `sha1`, `blob-diff`, `revision`, `index`, `excludes`, `worktree-mutation`, `credentials`, `interrupt`, `tree-editor`, `blocking-network-client`, `blocking-http-transport-reqwest-rust-tls`) — the minimal set covering clone (with HTTPS transport, for eventual GitHub remotes), commit/tree-editing, and index read/write, verified by `cargo check` against gix 0.86.0.
+  - `.constitution/tech-spec/stack.md` — corrected the "Git Implementation" line to describe the verified gix/git-CLI hybrid instead of just "`gix` (gitoxide)".
+  - `.constitution/tech-spec/changelog.md` — new `v1.0.3` entry recording the same correction with its justification.
+- **Justification:** The ticket's scope line names only `rust/src/git/operations.rs`, but a new module cannot compile or be reachable without `mod.rs` + a `lib.rs` wire-up, and a new crate dependency cannot exist without `Cargo.toml`/`Cargo.lock` changes — these are mechanical consequences of the in-scope file existing at all, not scope creep. The `stack.md`/`changelog.md` edits are required by the "Spec honesty" rule: this ticket's actual, verified design is a gix/git-CLI hybrid (gix has no push support at all, and its merge support does not yet cover commits — see the capability findings in `rust/src/git/operations.rs`'s module doc comment), which is materially different from the stack's original single-word "`gix` (gitoxide)" claim.
+
 #### SYNC-C002 Implement OAuth Handshake
 - **Type:** Feature
 - **Effort:** 5

@@ -1,5 +1,5 @@
 ---
-version: v1.0.2
+version: v1.0.3
 ---
 
 # Bill of Materials (BOM) & Stack
@@ -11,7 +11,7 @@ version: v1.0.2
 ## Core Engine & Local Index
 - **Language:** Rust (edition 2021)
 - **FFI Bridge:** `flutter_rust_bridge` (v2)
-- **Git Implementation:** `gix` (gitoxide)
+- **Git Implementation:** Hybrid. `gix` (gitoxide) `0.86.0` handles `clone` (checkout included) and `commit` (tree construction via the `tree-editor` feature, object/ref writes, and rebuilding `.git/index` from the committed tree). The `git` CLI is shelled out to for `push` and `pull`: as of `gix` 0.86.0, upstream's own `crate-status.md` lists `push` as entirely unimplemented (no send-pack/receive-pack client plumbing at all), and its `merge` support covers only blobs and trees, not commits — there is no three-way commit merge, and therefore no way to produce the raw `<<<<<<<`/`=======`/`>>>>>>>` conflict markers `flow-conflict-resolution.md` depends on, purely through `gix`. `pull` shells to `git fetch` + `git merge` (equivalent to `git pull --no-rebase`) specifically because `git merge` leaves those markers in the working tree on conflict without destroying them, which is required. Verified against `gix` 0.86.0 (published 2026-07-23 on crates.io) and the `GitoxideLabs/gitoxide` `crate-status.md` at the same date; re-check this split on any future `gix` major/minor bump, since push and commit-merge are both active development areas upstream.
 - **Local Database:** SQLite via `rusqlite` (with the `bundled-sqlcipher` feature). As of `rusqlite` 0.40 there is no separate `fts5` feature: FTS5 is compiled into the bundled amalgamation by default, and `bundled-sqlcipher` transitively enables `bundled`. Verified in the devenv shell against SQLCipher 4.14.0.
 - **Markdown Parser:** `pulldown-cmark` (with custom pre-processor for Git conflict markers).
 

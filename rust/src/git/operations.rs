@@ -1,0 +1,583 @@
+//! Programmatic Git `clone`, `commit`, `push`, and `pull` operations against a local
+//! Workspace directory (ticket SYNC-C001).
+//!
+//! ## Verified capability split (checked 2026-07-24 against gix 0.86.0 on crates.io,
+//! published 2026-07-23, and its upstream `crate-status.md`)
+//!
+//! `gix` (gitoxide) is used for the operations it implements robustly, and the `git` CLI
+//! (available in the devenv shell; the ticket explicitly permits this) is used for the rest:
+//!
+//! - **clone -> gix.** `crate-status.md` lists remote `clone` (including shallow) as
+//!   implemented ("usable"), and `gix::prepare_clone(..).fetch_then_checkout(..)` plus
+//!   `PrepareCheckout::main_worktree(..)` is the documented, exercised path
+//!   (docs.rs `gix::clone`).
+//! - **commit -> gix.** `crate-status.md` lists `commit` and "low-level ref/object/index
+//!   mutation" as implemented. We build the new tree with `Repository::edit_tree`
+//!   (`tree-editor` feature) from blobs written via `Repository::write_blob`, then write the
+//!   commit object and move the branch ref with `Repository::commit_as` (docs.rs
+//!   `gix::Repository`), matching the ticket's Gherkin literally: a commit lands in the local
+//!   `.git` object database and its branch ref.
+//! - **push -> `git` CLI.** Upstream is unambiguous: `crate-status.md` lists `push` as
+//!   entirely unimplemented for the `gix` crate ("- [ ] push") and the plumbing crates
+//!   (`gix-transport`/`gix-protocol`) explicitly do not implement "send-pack / receive-pack
+//!   client plumbing" or "report-status, sideband, delete-refs, push-options and atomic
+//!   pushes". There is no gix API to fall back to here at all, so this ticket shells out.
+//! - **pull -> `git` CLI.** `gix` implements `fetch`, but `crate-status.md`'s merge row is
+//!   only partial ("merge: [x] blobs, [x] trees, [ ] commits") — there is no commit-level
+//!   merge/three-way-merge-with-conflict-markers machinery in the `gix` crate today. Since
+//!   `flow-conflict-resolution.md` depends on real `<<<<<<<`/`=======`/`>>>>>>>` conflict
+//!   markers being left in the working tree by a failed merge, and `git merge`'s behavior
+//!   here is exactly that contract, pull is implemented as `git fetch` + `git merge`
+//!   (equivalent to `git pull --no-rebase`) via the CLI rather than reimplemented against
+//!   partial plumbing.
+//!
+//! Authentication is accepted as an optional [`GitCredentials`] parameter on every operation
+//! that talks to a remote, so SYNC-C002's keyring-backed OAuth token can be threaded through
+//! later. No keyring integration happens in this ticket.
+
+use crate::error::AppError;
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
+use std::sync::atomic::AtomicBool;
+
+/// Credentials for authenticating against a remote (e.g. a GitHub OAuth access token).
+/// SYNC-C002 is responsible for retrieving this from `keyring`; this ticket only defines the
+/// shape so that wiring point exists.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct GitCredentials {
+    /// The username to authenticate with. For GitHub token auth this is conventionally
+    /// ignored by the server but must be non-empty; `"x-access-token"` is a safe default.
+    pub username: String,
+    /// The bearer token / personal access token / OAuth access token.
+    pub token: String,
+}
+
+/// Clone `url` into `dest`, checking out the default branch's worktree.
+///
+/// Uses `gix::prepare_clone` (see module docs). `dest` must not already exist.
+pub fn clone_repo(
+    url: &str,
+    dest: &Path,
+    credentials: Option<&GitCredentials>,
+) -> Result<(), AppError> {
+    let interrupt = AtomicBool::new(false);
+
+    let mut prepare = gix::prepare_clone(url, dest).map_err(|e| classify_gix_clone_err(&e))?;
+
+    if let Some(creds) = credentials {
+        let creds = creds.clone();
+        prepare = prepare.configure_connection(move |connection| {
+            let creds = creds.clone();
+            // The `Err` variant of `gix_credentials::protocol::Error` is dictated by the
+            // `set_credentials` trait signature upstream, not by anything under our control
+            // here; boxing it would change the callback's required type.
+            #[allow(clippy::result_large_err)]
+            connection.set_credentials(move |action| match action {
+                gix::credentials::helper::Action::Get(ctx) => {
+                    Ok(Some(gix::credentials::protocol::Outcome {
+                        identity: gix::sec::identity::Account {
+                            username: creds.username.clone(),
+                            password: creds.token.clone(),
+                            oauth_refresh_token: None,
+                        },
+                        next: gix::credentials::helper::NextAction::from(ctx),
+                    }))
+                }
+                gix::credentials::helper::Action::Store(_)
+                | gix::credentials::helper::Action::Erase(_) => Ok(None),
+            });
+            Ok(())
+        });
+    }
+
+    let (mut checkout, _outcome) = prepare
+        .fetch_then_checkout(gix::progress::Discard, &interrupt)
+        .map_err(|e| classify_gix_fetch_err(&e))?;
+    checkout
+        .main_worktree(gix::progress::Discard, &interrupt)
+        .map_err(|e| AppError::IoError(format!("checkout after clone failed: {e}")))?;
+    Ok(())
+}
+
+/// Snapshot every file currently in the working tree (excluding `.git`) into a new tree
+/// object and create a commit on top of the current `HEAD`, moving the branch ref forward.
+///
+/// Returns the new commit's hex object id.
+///
+/// This is a full-worktree snapshot rather than an index-diff commit: it is equivalent to
+/// `git add -A && git commit`, which is the semantics the Gherkin ("a local directory with
+/// changes" -> "a Git commit is created") calls for.
+pub fn commit_all(
+    repo_path: &Path,
+    message: &str,
+    author_name: &str,
+    author_email: &str,
+) -> Result<String, AppError> {
+    let repo = gix::open(repo_path).map_err(|e| AppError::IoError(format!("open repo: {e}")))?;
+
+    let base_tree_id = match repo.head_tree_id() {
+        Ok(id) => id.detach(),
+        Err(_) => gix::ObjectId::empty_tree(repo.object_hash()),
+    };
+
+    let mut files = Vec::new();
+    collect_files(repo_path, repo_path, &mut files)?;
+
+    let mut editor = repo
+        .edit_tree(base_tree_id)
+        .map_err(|e| AppError::IoError(format!("start tree edit: {e}")))?;
+
+    for file in &files {
+        let relative = file
+            .strip_prefix(repo_path)
+            .expect("file was discovered under repo_path");
+        let rela_path: String = relative
+            .components()
+            .map(|c| c.as_os_str().to_string_lossy().into_owned())
+            .collect::<Vec<_>>()
+            .join("/");
+        let bytes = std::fs::read(file).map_err(|e| AppError::IoError(e.to_string()))?;
+        let blob_id = repo
+            .write_blob(bytes)
+            .map_err(|e| AppError::IoError(format!("write blob: {e}")))?;
+        editor
+            .upsert(
+                rela_path.as_str(),
+                gix::object::tree::EntryKind::Blob,
+                blob_id.detach(),
+            )
+            .map_err(|e| AppError::IoError(format!("stage {}: {e}", relative.display())))?;
+    }
+
+    let tree_id = editor
+        .write()
+        .map_err(|e| AppError::IoError(format!("write tree: {e}")))?;
+
+    let parents: Vec<gix::ObjectId> = match repo.head_id() {
+        Ok(id) => vec![id.detach()],
+        Err(_) => Vec::new(),
+    };
+
+    let time = gix::date::Time::now_local_or_utc();
+    let signature = gix::actor::Signature {
+        name: author_name.into(),
+        email: author_email.into(),
+        time,
+    };
+
+    let mut time_buf = gix::date::parse::TimeBuf::default();
+    let signature_ref = signature.to_ref(&mut time_buf);
+    let commit_id = repo
+        .commit_as(
+            signature_ref,
+            signature_ref,
+            "HEAD",
+            message,
+            tree_id,
+            parents,
+        )
+        .map_err(|e| AppError::IoError(format!("write commit: {e}")))?;
+
+    // `Repository::commit_as` only writes the commit object and moves the branch ref; it does
+    // not touch `.git/index`. Without this, the on-disk index still reflects the pre-commit
+    // state, so a subsequent `git merge`/`git status` (used by push/pull's `git` CLI shell-out)
+    // would see phantom uncommitted changes and refuse to proceed. Rebuild the index from the
+    // tree we just committed and write it back so the index and worktree agree, matching what
+    // `git commit` itself does.
+    let mut index_file = repo
+        .index_from_tree(&tree_id)
+        .map_err(|e| AppError::IoError(format!("build index from tree: {e}")))?;
+    index_file
+        .write(gix::index::write::Options::default())
+        .map_err(|e| AppError::IoError(format!("write index: {e}")))?;
+
+    Ok(commit_id.detach().to_string())
+}
+
+/// Push `branch` to `remote` (a configured remote name, e.g. `"origin"`).
+///
+/// Shells out to `git push` (see module docs: `gix` has no push support at all).
+pub fn push(
+    repo_path: &Path,
+    remote: &str,
+    branch: &str,
+    credentials: Option<&GitCredentials>,
+) -> Result<(), AppError> {
+    let mut cmd = Command::new("git");
+    cmd.arg("push")
+        .arg(remote)
+        .arg(branch)
+        .current_dir(repo_path)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    apply_credentials(&mut cmd, credentials);
+
+    let output = cmd
+        .output()
+        .map_err(|e| AppError::IoError(format!("spawn git push: {e}")))?;
+    if output.status.success() {
+        return Ok(());
+    }
+    Err(classify_git_cli_failure(&output.stderr))
+}
+
+/// Fetch and merge `branch` from `remote` into the current branch (equivalent to
+/// `git pull --no-rebase`).
+///
+/// On a merge conflict, the working tree is left with raw `<<<<<<<`/`=======`/`>>>>>>>`
+/// conflict markers (as `flow-conflict-resolution.md` requires) and `AppError::GitConflict`
+/// is returned; the merge is deliberately *not* aborted, so callers must not assume the
+/// working tree is clean after an `Err(GitConflict)`.
+///
+/// Shells out to `git fetch` + `git merge` (see module docs: `gix`'s `merge` support does not
+/// yet cover commits, only blobs and trees).
+pub fn pull(
+    repo_path: &Path,
+    remote: &str,
+    branch: &str,
+    credentials: Option<&GitCredentials>,
+) -> Result<(), AppError> {
+    let mut fetch_cmd = Command::new("git");
+    fetch_cmd
+        .arg("fetch")
+        .arg(remote)
+        .arg(branch)
+        .current_dir(repo_path)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    apply_credentials(&mut fetch_cmd, credentials);
+
+    let fetch_output = fetch_cmd
+        .output()
+        .map_err(|e| AppError::IoError(format!("spawn git fetch: {e}")))?;
+    if !fetch_output.status.success() {
+        return Err(classify_git_cli_failure(&fetch_output.stderr));
+    }
+
+    let merge_output = Command::new("git")
+        .arg("merge")
+        .arg("--no-edit")
+        .arg(format!("{remote}/{branch}"))
+        .current_dir(repo_path)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .map_err(|e| AppError::IoError(format!("spawn git merge: {e}")))?;
+
+    if merge_output.status.success() {
+        return Ok(());
+    }
+
+    let combined = [
+        merge_output.stdout.as_slice(),
+        merge_output.stderr.as_slice(),
+    ]
+    .concat();
+    let text = String::from_utf8_lossy(&combined);
+    if text.contains("CONFLICT") || text.contains("Automatic merge failed") {
+        return Err(AppError::GitConflict);
+    }
+    Err(classify_git_cli_failure(&merge_output.stderr))
+}
+
+/// Recursively collect every regular file under `dir`, skipping `.git`.
+fn collect_files(root: &Path, dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), AppError> {
+    for entry in std::fs::read_dir(dir).map_err(|e| AppError::IoError(e.to_string()))? {
+        let entry = entry.map_err(|e| AppError::IoError(e.to_string()))?;
+        let path = entry.path();
+        let file_type = entry
+            .file_type()
+            .map_err(|e| AppError::IoError(e.to_string()))?;
+        if path.file_name().map(|n| n == ".git").unwrap_or(false) && path.parent() == Some(root) {
+            continue;
+        }
+        if file_type.is_dir() {
+            collect_files(root, &path, out)?;
+        } else if file_type.is_file() {
+            out.push(path);
+        }
+    }
+    Ok(())
+}
+
+/// Inject HTTP(S) auth (if any) into a `git` CLI invocation without putting the token on the
+/// command line (where it would be visible via `/proc/<pid>/cmdline` / `ps`). Uses git's
+/// environment-variable config-injection mechanism (`GIT_CONFIG_COUNT`/`GIT_CONFIG_KEY_n`/
+/// `GIT_CONFIG_VALUE_n`, supported since Git 2.31) to set a one-shot `http.extraHeader`.
+fn apply_credentials(cmd: &mut Command, credentials: Option<&GitCredentials>) {
+    if let Some(creds) = credentials {
+        let basic = base64_encode(format!("{}:{}", creds.username, creds.token).as_bytes());
+        cmd.env("GIT_CONFIG_COUNT", "1");
+        cmd.env("GIT_CONFIG_KEY_0", "http.extraheader");
+        cmd.env(
+            "GIT_CONFIG_VALUE_0",
+            format!("Authorization: Basic {basic}"),
+        );
+    }
+}
+
+/// Minimal RFC 4648 base64 encoder (standard alphabet, with padding). Avoids pulling in a
+/// dependency solely to encode a `user:token` pair for an HTTP Basic auth header.
+fn base64_encode(input: &[u8]) -> String {
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(input.len().div_ceil(3) * 4);
+    for chunk in input.chunks(3) {
+        let b0 = chunk[0];
+        let b1 = chunk.get(1).copied();
+        let b2 = chunk.get(2).copied();
+        out.push(ALPHABET[(b0 >> 2) as usize] as char);
+        out.push(ALPHABET[(((b0 & 0x03) << 4) | (b1.unwrap_or(0) >> 4)) as usize] as char);
+        out.push(match b1 {
+            Some(b1) => ALPHABET[(((b1 & 0x0f) << 2) | (b2.unwrap_or(0) >> 6)) as usize] as char,
+            None => '=',
+        });
+        out.push(match b2 {
+            Some(b2) => ALPHABET[(b2 & 0x3f) as usize] as char,
+            None => '=',
+        });
+    }
+    out
+}
+
+fn classify_git_cli_failure(stderr: &[u8]) -> AppError {
+    let text = String::from_utf8_lossy(stderr);
+    let lower = text.to_lowercase();
+    if lower.contains("non-fast-forward")
+        || lower.contains("fetch first")
+        || lower.contains("conflict")
+    {
+        AppError::GitConflict
+    } else if lower.contains("could not resolve host")
+        || lower.contains("could not read from remote repository")
+        || lower.contains("connection refused")
+        || lower.contains("connection timed out")
+        || lower.contains("unable to access")
+        || lower.contains("network")
+        || lower.contains("authentication failed")
+    {
+        AppError::NetworkError(text.trim().to_string())
+    } else {
+        AppError::IoError(text.trim().to_string())
+    }
+}
+
+fn classify_gix_clone_err(err: &gix::clone::Error) -> AppError {
+    AppError::IoError(format!("prepare clone: {err}"))
+}
+
+fn classify_gix_fetch_err(err: &gix::clone::fetch::Error) -> AppError {
+    let text = err.to_string();
+    let lower = text.to_lowercase();
+    if lower.contains("could not resolve") || lower.contains("connect") || lower.contains("i/o") {
+        AppError::NetworkError(text)
+    } else {
+        AppError::IoError(text)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::process::Command as StdCommand;
+    use tempfile::tempdir;
+
+    fn git(dir: &Path, args: &[&str]) {
+        let status = StdCommand::new("git")
+            .args(args)
+            .current_dir(dir)
+            .env("GIT_AUTHOR_NAME", "Test")
+            .env("GIT_AUTHOR_EMAIL", "test@example.com")
+            .env("GIT_COMMITTER_NAME", "Test")
+            .env("GIT_COMMITTER_EMAIL", "test@example.com")
+            .status()
+            .expect("git CLI available in devenv shell");
+        assert!(status.success(), "git {:?} failed in {:?}", args, dir);
+    }
+
+    fn init_repo(dir: &Path) {
+        git(dir, &["init", "--initial-branch=main", "-q"]);
+        git(dir, &["config", "user.name", "Test"]);
+        git(dir, &["config", "user.email", "test@example.com"]);
+    }
+
+    /// Gherkin: Given a local directory with changes, When the commit function is called,
+    /// Then a Git commit is created in the local `.git` index.
+    #[test]
+    fn commit_all_creates_commit_in_fresh_repo() {
+        let dir = tempdir().unwrap();
+        init_repo(dir.path());
+        std::fs::write(dir.path().join("note.md"), b"# Hello\n").unwrap();
+
+        let commit_id = commit_all(
+            dir.path(),
+            "initial commit",
+            "Test User",
+            "test@example.com",
+        )
+        .expect("commit_all should succeed");
+
+        assert_eq!(commit_id.len(), 40, "expected a sha1 hex object id");
+
+        let log = StdCommand::new("git")
+            .args(["log", "--oneline", "-1"])
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+        let log_text = String::from_utf8_lossy(&log.stdout);
+        assert!(log_text.contains("initial commit"));
+
+        let show = StdCommand::new("git")
+            .args(["show", "HEAD:note.md"])
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+        assert_eq!(String::from_utf8_lossy(&show.stdout), "# Hello\n");
+    }
+
+    #[test]
+    fn commit_all_creates_second_commit_on_top_of_first() {
+        let dir = tempdir().unwrap();
+        init_repo(dir.path());
+        std::fs::write(dir.path().join("a.md"), b"a\n").unwrap();
+        commit_all(dir.path(), "first", "Test User", "test@example.com").unwrap();
+
+        std::fs::write(dir.path().join("b.md"), b"b\n").unwrap();
+        let second = commit_all(dir.path(), "second", "Test User", "test@example.com").unwrap();
+
+        let parent = StdCommand::new("git")
+            .args(["rev-parse", "HEAD^"])
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+        assert!(!String::from_utf8_lossy(&parent.stdout).trim().is_empty());
+
+        // Both files should be present in the resulting tree (full worktree snapshot).
+        let ls = StdCommand::new("git")
+            .args(["ls-tree", "-r", "--name-only", "HEAD"])
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+        let names = String::from_utf8_lossy(&ls.stdout);
+        assert!(names.contains("a.md"));
+        assert!(names.contains("b.md"));
+
+        let head = StdCommand::new("git")
+            .args(["rev-parse", "HEAD"])
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+        assert_eq!(String::from_utf8_lossy(&head.stdout).trim(), second);
+    }
+
+    #[test]
+    fn clone_repo_checks_out_working_tree_from_local_path() {
+        let src = tempdir().unwrap();
+        init_repo(src.path());
+        std::fs::write(src.path().join("readme.md"), b"hello\n").unwrap();
+        commit_all(src.path(), "seed", "Test User", "test@example.com").unwrap();
+
+        let dest_parent = tempdir().unwrap();
+        let dest = dest_parent.path().join("clone");
+
+        clone_repo(&src.path().to_string_lossy(), &dest, None).expect("clone should succeed");
+
+        let contents = std::fs::read_to_string(dest.join("readme.md")).unwrap();
+        assert_eq!(contents, "hello\n");
+        assert!(dest.join(".git").is_dir());
+    }
+
+    fn init_bare(dir: &Path) {
+        std::fs::create_dir_all(dir).unwrap();
+        git(dir, &["init", "--bare", "--initial-branch=main", "-q"]);
+    }
+
+    #[test]
+    fn push_then_pull_round_trip_via_local_bare_remote() {
+        let bare_parent = tempdir().unwrap();
+        let bare = bare_parent.path().join("remote.git");
+        init_bare(&bare);
+
+        // First clone: makes a commit and pushes it upstream.
+        let work_a_parent = tempdir().unwrap();
+        let work_a = work_a_parent.path().join("a");
+        clone_repo(&bare.to_string_lossy(), &work_a, None).expect("clone A should succeed");
+        std::fs::write(work_a.join("from_a.md"), b"from a\n").unwrap();
+        commit_all(&work_a, "commit from a", "A", "a@example.com").unwrap();
+        push(&work_a, "origin", "main", None).expect("push should succeed");
+
+        // Second clone: pulls what A pushed.
+        let work_b_parent = tempdir().unwrap();
+        let work_b = work_b_parent.path().join("b");
+        clone_repo(&bare.to_string_lossy(), &work_b, None).expect("clone B should succeed");
+        pull(&work_b, "origin", "main", None).expect("pull should succeed");
+
+        let contents = std::fs::read_to_string(work_b.join("from_a.md")).unwrap();
+        assert_eq!(contents, "from a\n");
+    }
+
+    #[test]
+    fn pull_surfaces_conflict_markers_without_destroying_them() {
+        let bare_parent = tempdir().unwrap();
+        let bare = bare_parent.path().join("remote.git");
+        init_bare(&bare);
+
+        // Seed the bare remote with an initial commit both clones will diverge from.
+        let seed_parent = tempdir().unwrap();
+        let seed = seed_parent.path().join("seed");
+        clone_repo(&bare.to_string_lossy(), &seed, None).unwrap();
+        std::fs::write(seed.join("shared.md"), b"base\n").unwrap();
+        commit_all(&seed, "seed", "Seed", "seed@example.com").unwrap();
+        push(&seed, "origin", "main", None).unwrap();
+
+        // Clone B *before* A pushes, so both start from the same "seed" ancestor and
+        // genuinely diverge rather than one being a fast-forward of the other.
+        let work_b_parent = tempdir().unwrap();
+        let work_b = work_b_parent.path().join("b");
+        clone_repo(&bare.to_string_lossy(), &work_b, None).unwrap();
+
+        // Clone A diverges and pushes upstream.
+        let work_a_parent = tempdir().unwrap();
+        let work_a = work_a_parent.path().join("a");
+        clone_repo(&bare.to_string_lossy(), &work_a, None).unwrap();
+        std::fs::write(work_a.join("shared.md"), b"from a\n").unwrap();
+        commit_all(&work_a, "a changes shared.md", "A", "a@example.com").unwrap();
+        push(&work_a, "origin", "main", None).unwrap();
+
+        // B, unaware of A's push, diverges independently from the same seed commit.
+        std::fs::write(work_b.join("shared.md"), b"from b\n").unwrap();
+        commit_all(&work_b, "b changes shared.md", "B", "b@example.com").unwrap();
+
+        let result = pull(&work_b, "origin", "main", None);
+        assert_eq!(result, Err(AppError::GitConflict));
+
+        let contents = std::fs::read_to_string(work_b.join("shared.md")).unwrap();
+        assert!(
+            contents.contains("<<<<<<<"),
+            "expected raw conflict markers to survive in the working tree, got: {contents}"
+        );
+        assert!(contents.contains("======="));
+        assert!(contents.contains(">>>>>>>"));
+        assert!(contents.contains("from a\n") || contents.contains("from b\n"));
+    }
+
+    #[test]
+    fn push_to_nonexistent_remote_is_a_network_error() {
+        let dir = tempdir().unwrap();
+        init_repo(dir.path());
+        std::fs::write(dir.path().join("a.md"), b"a\n").unwrap();
+        commit_all(dir.path(), "first", "Test User", "test@example.com").unwrap();
+        git(
+            dir.path(),
+            &["remote", "add", "origin", "/nonexistent/path/repo.git"],
+        );
+
+        let result = push(dir.path(), "origin", "main", None);
+        assert!(matches!(
+            result,
+            Err(AppError::NetworkError(_)) | Err(AppError::IoError(_))
+        ));
+    }
+}
