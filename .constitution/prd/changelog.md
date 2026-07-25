@@ -1,5 +1,47 @@
 # Stage 1: Product Requirements Changelog
 
+## v1.1.0
+Evolution pass driven by a pre-Tasks interview, which surfaced that the previous PRD described a different product for a different person than the one actually being built. Minor bump: new capabilities and materially expanded scope, no structural rewrite of the stage.
+
+**Primary actor corrected.** `actors.md` described a "General Consumer" whose defining friction was being "intimidated by technical tools, raw Markdown syntax, and Git concepts." The actual primary actor writes Markdown by preference and wants to see the real source of what they are editing. Replaced with the **Writer** persona: Markdown-literate, desktop-first, comfortable with version control as a concept while unwilling to perform merges by hand. Their frictions inverted accordingly — the problem is now editors that *hide* Markdown, and tools that reformat regions of a file the user did not touch.
+
+**Secondary actor added.** Introduced the **Agent** persona: an external tool or AI agent reading the Workspace directly from disk while the application is not running. This makes the on-disk format-conformance requirement traceable to a stated actor instead of appearing as an unmotivated technical preference.
+
+**Editing model replaced.** The first P0 capability — formatting "without seeing raw Markdown asterisks/backticks" — was rejected outright and replaced by **CAP-EDIT-01 (Live Preview)**: the focused Block shows raw Markdown source, every other Block renders formatted. Recorded in `out-of-scope/hidden-markdown-wysiwyg.md` with the full reasoning, including that this was also the single largest engineering risk in the plan and the source of a real shipped regression.
+
+**Local-first made literal.** The previous capability set had authorization as the only path to a Workspace, which contradicted `constraints.md`'s own Local-First Mandate and, in the shipped implementation, gated the entire application behind a login screen that cannot currently be passed at all. Added **CAP-WS-01** (write immediately on first launch with no account and no network) and rewrote **CAP-SYNC-01** so connecting to a Remote is an opt-in step that publishes existing local history upward. Rejection recorded in `out-of-scope/mandatory-account-on-first-run.md`.
+
+**Note and Directory lifecycle added.** The previous capability set never stated that users can create, rename, move, or delete a Note, or create a Directory — the application's most basic operations had no capability to trace to. Added as a new epic (**CAP-LIFE-01** … **CAP-LIFE-06**), including the requirement that renaming or moving a Note updates inbound Links automatically.
+
+**Portability & Interoperability added as an epic.** **CAP-PORT-01** requires the on-disk Workspace to conform to the Open Knowledge Format continuously rather than at export time. **CAP-PORT-02** promotes "Export Workspace" from a clause inside `constraints.md`'s Data Portability constraint into a real capability with an owner and a priority. **CAP-PORT-03** requires tolerating external tools having written to the Workspace — the reciprocal obligation of adopting a format other tools can write.
+
+**Glossary expanded and drift closed.** `vision.md` and `constraints.md` both referenced "Open Knowledge Format (OKF)" while `glossary.md` never defined it, leaving the project's own storage format as undefined canonical vocabulary. Now defined as the published open specification it actually is. Added **Live Preview**, **Remote**, and **Export** as canonical terms, and split **Remote** out of the **Workspace** definition, which previously asserted a Workspace is "backed by a remote repository" — no longer true, and the assertion was the root of the login-gate error. Added `Wikilink` and `Concept` to avoided synonyms.
+
+**Capability IDs introduced.** Every capability now carries a stable `CAP-*` identifier so downstream architecture, specification, and task artifacts can trace to it by reference rather than by quotation.
+
+**Constraints tightened and de-leaked.** Added **Edit Fidelity** (writing a Note must leave untouched regions byte-identical), **Format Conformance**, **Non-Destructive Reconciliation**, **Credential Isolation**, **Non-Proprietary Storage**, **Durability of In-Progress Work**, and **Workspace Open Latency**. Removed the "Export Workspace" clause, now CAP-PORT-02. Rewrote the at-rest protection constraint to describe the *distinction* it draws — Notes rely on operating-system encryption so standard tooling can still merge them, the index is encrypted by the application — without naming specific database engines or mobile platforms, which were implementation leaks into Stage 1.
+
+**Domain model updated.** The Remote is now explicitly optional rather than the Workspace's backing store, the Agent actor and the Suggestion concept appear, and a Link may target a Note that does not exist yet.
+
+**Anti-scope database established.** `out-of-scope/` created, with five entries: `hidden-markdown-wysiwyg.md`, `mandatory-account-on-first-run.md`, `wikilink-syntax-on-disk.md`, `multiple-simultaneous-workspaces.md`, and `mobile-targets.md`.
+
+**Deliberately not resolved here.** Storage-format specifics — the exact specification version pinned, frontmatter field set, link target form, and canonical file layout — are implementation decisions and belong to Stage 3. `vision.md`'s Operator Preferences records only that conformance is intended.
+
+### Corrections from PR review, rounds 1 and 2
+Folded into v1.1.0, since nothing in this pass has merged.
+
+- **Round 1** reworded `constraints.md`'s at-rest claim, which asserted operating-system full-disk encryption as though it were a platform guarantee. On the primary desktop target it is an install-time opt-in this application cannot assure.
+- **Round 2** found the same claim standing in `capabilities.md` (`CAP-WS-04`), because round 1 fixed the sentence it was shown rather than searching for the assertion. Both now state the two protections separately: the encrypted index is a guarantee this application makes, and what protects the plaintext Notes beside it is not.
+
+### Corrections from PR review, round 3
+- **`CAP-PORT-01` promised more than the format allows.** It asserted the Workspace conforms to OKF "at all times", but §11 defines conformance over an entire bundle, so a single file an external tool dropped in without frontmatter falsifies it — and CAP-WS-05 and CAP-PORT-03 both make that state supported and possibly permanent. Round 2 scoped the derived statements in `tech-spec/` without sweeping the capability they derive from. Now scoped to what the application writes, which is the promise it can actually keep without rewriting files the user never asked it to touch.
+
+### Corrections from PR review, round 9
+- **The Format Conformance constraint promised something a supported workflow falsifies.** It covered every Note the application "writes", while the tech spec decides that repairing a non-conformant file another tool wrote is an explicit user action — so editing such a file writes it and leaves it non-conformant. Round 3 caught the same shape on `CAP-PORT-01` and rescoped it to "writes", which turns out to be the ambiguous word between *creates* and *writes bytes to*. Now pinned to **creates**, with the exception stated in the constraint itself rather than three documents away.
+
+### Corrections from PR review, round 12
+- **CAP-PORT-01 still scoped conformance to every Note the application *writes*.** Round 9 pinned the equivalent sentence in `constraints.md` to *creates*, with the reasoning stated there in full: editing a foreign file that has no frontmatter **writes** it and leaves it non-conformant, and both CAP-WS-05 and CAP-PORT-03 support that state deliberately. The constraint was fixed by rewriting the sentence it was shown; the P0 capability it derives from was not swept. Corrected here, and `tech-spec/data-models/okf-bundle.md` invariant 5 — a third wording of the same rule — aligned with both.
+
 ## v1.0.1
 Constitution Freshness & Reconciliation Pass following Epic B execution (UIDB-B001–B007).
 - Corrected `capabilities.md`'s at-rest encryption capability, which implied Notes on disk and the SQLite index receive identical, uniform encryption. The shipped implementation (and `constraints.md`'s own pre-existing rationale) draws a real distinction: Notes on disk are protected via OS-level Full Disk Encryption only, while the SQLite search index is additionally encrypted at the application level via SQLCipher. Reworded to state that distinction explicitly rather than imply both are encrypted the same way.

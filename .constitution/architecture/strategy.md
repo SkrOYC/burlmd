@@ -1,5 +1,5 @@
 ---
-version: v1.0.0
+version: v1.1.0
 ---
 
 # Architectural Strategy
@@ -12,5 +12,5 @@ This pattern perfectly satisfies the PRD's constraints for sub-16ms UI responsiv
 
 ## Trade-offs Accepted
 - **Client Footprint:** The application binary will be significantly larger than a standard API-driven app because it must embed a full local index and Git-equivalent operational logic.
-- **Initial Load Latency:** Provisioning a Workspace on a new device requires a full repository clone, which may be slow on degraded mobile networks compared to lazy-loading a single note from a cloud database.
+- **Initial Load Latency:** Adopting an existing Workspace on a *second* device requires a full repository clone, which may be slow on a degraded network compared to lazy-loading a single Note from a cloud database. This no longer applies to first use: under ADR-005 the first Workspace is created locally with `init`, so nothing is cloned and no network is contacted before the first word is written.
 - **FFI Complexity:** Maintaining a strict, zero-overhead boundary between a stateless UI and a stateful Core Engine requires rigorous serialization contracts (AST passing), increasing development overhead.
