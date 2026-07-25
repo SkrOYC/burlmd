@@ -275,6 +275,14 @@ Given the write tier fails with a revision mismatch on an open Note
 When the UI next polls its write status
 Then the failure is shown, and the user is offered a reload rather than a retry — the file changed underneath the draft, so retrying would overwrite it
 
+Given that reload is accepted
+When it completes
+Then the Note re-renders from disk and the write status clears — the offer calls `reload_note`, not `open_note`, which would restore the surviving draft and reproduce the mismatch on the next tick
+
+Given that reload is offered
+When the user has not yet chosen
+Then their buffered text is still reachable, and the confirmation says plainly that reloading discards it — `reload_note` destroys unwritten work by design, and this is the only prompt in the application that does
+
 Given the write tier fails because the disk is full
 When the UI next polls
 Then the failure is shown persistently rather than once, since every subsequent write fails the same way until it is resolved

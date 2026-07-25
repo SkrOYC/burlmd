@@ -102,8 +102,10 @@ CREATE TABLE IF NOT EXISTS links (
     workspace_id TEXT NOT NULL,
     source_id TEXT NOT NULL,
     -- The target's concept id, derived from the parsed link destination by
-    -- unescaping '\\', '\<' and '\>' and then stripping the leading '/' and
-    -- trailing '.md'. The destination is angle-bracket wrapped on disk (see
+    -- unescaping '\\', '\<', '\>' and '\&' and then stripping the leading '/'
+    -- and trailing '.md'. '&' is escaped on the way out because CommonMark
+    -- decodes HTML entity references inside a destination, so an unescaped
+    -- '&eacute;' in a title would parse back as a different concept id. The destination is angle-bracket wrapped on disk (see
     -- data-models/okf-bundle.md) and the parser strips the brackets, so they
     -- never appear here. NOT NULL: unlike the previous
     -- title-based model, this is always computable. A "ghost link" is a row

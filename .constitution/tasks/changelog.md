@@ -137,6 +137,16 @@ Folded into v1.4.0. Points unchanged at 105; one dependency edge added, so the g
 - **`WSPC-D009` gained a criterion that `insert_text` parses back to a Link** for a multi-word title, since `EDIT-F006`'s STOP forbids the UI from repairing it.
 - **`WSPC-D005` gained two criteria** asserting the search query plan and the `ANALYZE` obligation, rather than relying on a timing at a corpus size where the wrong plan still passes.
 
+### Corrections from PR review, round 13
+Folded into v1.4.0. Totals, graph and critical path unchanged.
+
+- **`WSPC-D008` could not pass its own `dart analyze` gate.** It scopes `note_providers.dart` and `editor_test.dart` for exactly this reason but excludes `lib/src/components/**`, and `editor.dart` builds an `AstNode.paragraph` and passes it to `NoteController.updateBlock` — an argument-type error the moment that becomes source-text-based, which the ticket's own STOP requires. `NoteController.open` breaks the same way when `open_note` becomes `async`. `editor.dart` is now carved out of the exclusion, narrowly: adapt the call sites, do not start `EDIT-F002`'s work five tickets early.
+- **`WSPC-D007` gained three `reload_note` criteria** — the draft row is deleted and everything rebuilt from disk, the next write succeeds rather than repeating the mismatch, and conflict markers arrive as Suggestion nodes. `SHEL-E007` gained the two consuming criteria, including that the confirmation says plainly that reloading discards the buffered text. It is the only prompt in the application that destroys unwritten work.
+- **`EDIT-F003`'s selection fixture is now heterogeneous.** Rendered-text offsets are defined per `AstNode` variant, so a three-paragraph fixture exercises one definition while satisfying the criterion.
+- **`EDIT-F006` gained the two `exists`-staleness criteria**, in both directions: a ghost Link whose target was created elsewhere, and a resolving Link whose target was deleted.
+- **`WSPC-D002`'s round-trip property test now includes `&`, a named entity and a numeric reference.** Without them it passed with the entity defect in place — the same vacuous-criterion shape round 12 recorded.
+- **Both Spike gates passed when their report file was missing.** `! grep -q PATTERN FILE` inverts `grep`'s exit 2 into success. Prefixed with `test -s`. Rounds 2, 4 and 8 each caught a different variant of a spike gate that could not fail.
+
 ## v1.3.0
 - Completed **Epic C: Security & Sync** (`SYNC-C001`–`SYNC-C003`), total 16 story points: a `gix`/`git`-CLI hybrid for clone/commit/push/pull against the local Workspace, a GitHub OAuth PKCE login flow with OS-Keychain token storage, and a debounced background sync scheduler with exponential-backoff retry and conflict-path re-index/notify hooks.
 - Each milestone passed an independent single-pass review gate before the next started; `SYNC-C001` needed one follow-up fix commit (`ecd705e`) for two P2 findings (a `commit_all` deletion/rename bug, and redacting `GitCredentials`' `Debug` output so a stray `{:?}` can never print a token). `SYNC-C002` and `SYNC-C003` each passed their single review pass clean.

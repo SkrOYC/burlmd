@@ -68,6 +68,9 @@ Folded into v1.1.0, since nothing in this pass has merged.
 
 This is the third round in which a fix landed everywhere except this diagram. The pattern is now explicit enough to state: a change to the persistence tiers is not finished until `flow-edit-note.md` shows it.
 
+### Corrections from PR review, round 13
+- **Risk 6's residual paragraph named a recovery with no function behind it.** "The UI must reload" was the terminal step of the OCC mitigation in three documents, and nothing in the contract performed one — `open_note` restores the surviving draft in preference to disk, so it would hand back the buffer that just lost the comparison and fail identically on the next tick. The paragraph now names `reload_note`, added to the contract this round, and states why the obvious candidate cannot serve.
+
 ## v1.0.1
 Constitution Freshness & Reconciliation Pass following Epic B execution (UIDB-B001–B007).
 - Corrected `containers.md`'s Local Repository description, which implied the raw OKF directory tree was encrypted by this container. The shipped implementation only encrypts the SQLite index (via SQLCipher); raw Markdown files rely on OS-level Full Disk Encryption, per `prd/constraints.md`'s existing rationale (preserving native Git merge capability). This same inconsistency also existed in `prd/capabilities.md` (corrected there, see `prd/changelog.md` v1.0.1).

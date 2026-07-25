@@ -13,7 +13,7 @@ Entirely Core-side. No ticket here touches Dart, and nothing in this epic is vis
   - `.constitution/spikes/SPK-WSPC-D001.md`
 - **Scope (Out-of-Scope Files):**
   - `rust/src/**` (no production code in a Spike)
-- **Verification Command:** `! grep -q 'Status: placeholder' .constitution/spikes/SPK-WSPC-D001.md && ! grep -q 'To be filled' .constitution/spikes/SPK-WSPC-D001.md && git diff --quiet HEAD~1 HEAD -- rust/src`
+- **Verification Command:** `test -s .constitution/spikes/SPK-WSPC-D001.md && ! grep -q 'Status: placeholder' .constitution/spikes/SPK-WSPC-D001.md && ! grep -q 'To be filled' .constitution/spikes/SPK-WSPC-D001.md && git diff --quiet HEAD~1 HEAD -- rust/src`
 - **Expected Success Output:** `exit 0`
 - **STOP Conditions:**
   - "STOP if this Spike is landed across more than one commit. Its gate asserts that the Spike's own commit touched no production code (`git diff --quiet HEAD~1 HEAD -- rust/src`), which is the only form that is neither trivially true — as `git diff --quiet HEAD` was — nor order-dependent, as comparing against the branch base is: `WSPC-D001` and `WSPC-D002` both have no dependencies, and `critical-path.md` numbers D002 first, so a branch-base comparison would already be dirty when this Spike arrives."
@@ -88,13 +88,13 @@ Given a concept id "projects/Meeting Notes"
 When a link to it is serialized
 Then the destination is angle-bracket wrapped — `[text](</projects/Meeting Notes.md>)` — because CommonMark forbids a space in a bare destination and the unwrapped form parses as paragraph text rather than as a link, producing no edge to index and nothing for a rename to rewrite
 
-Given a concept id containing a literal `<`, `>` or backslash
+Given a concept id containing a literal `<`, `>`, `&` or backslash
 When a link to it is serialized
-Then each is backslash-escaped inside the brackets, and parsing the result yields the original concept id unchanged
+Then each is backslash-escaped inside the brackets, and parsing the result yields the original concept id unchanged — `&` included, because CommonMark decodes entity references inside a destination and `</Caf&eacute;.md>` parses back as `/Café.md`
 
 Given any Note title the derivation accepts
 When a link to that Note is serialized and the result is parsed back
-Then the recovered concept id equals the original — the round trip is a property test over titles including spaces, parentheses, `#`, `%` and the escaped characters above, not a fixture of single-word names
+Then the recovered concept id equals the original — the round trip is a property test over titles including spaces, parentheses, `#`, `%`, a bare `&`, a named entity (`&amp;`, `&eacute;`), a numeric reference (`&#65;`) and the escaped characters above, not a fixture of single-word names
 
 Given a proposed Note filename of "index" or "log"
 When the name is validated
@@ -460,6 +460,18 @@ Given the on-disk file was changed by something other than this application
 When the idle write tier fires
 Then the write is refused with a revision mismatch carrying the current revision, and the file on disk is left untouched
 
+Given a Note whose write tier has just refused a write with a revision mismatch
+When the Note is reloaded
+Then the draft row is deleted, the file's current bytes are reparsed, the working source, span map and revision baseline are all rebuilt from them, and the returned state reports it was not restored from a draft
+
+Given a Note has been reloaded
+When the idle write tier next fires
+Then it succeeds — the baseline now matches disk, so the mismatch does not repeat; without a reload the same comparison fails on every tick indefinitely, because `open_note` parses the surviving draft in preference to disk and would hand back the buffer that just lost
+
+Given the reloaded file contains Git conflict markers written by the sync path
+When the reloaded state is examined
+Then they appear as Suggestion nodes rather than as literal text — this is the only call that reads externally-written bytes into an already-open Note, so it is where risk 6's residual path terminates
+
 Given a Note whose source is 100 kilobytes
 When a single Block edit is committed to the draft tier
 Then the measured write completes within the frame budget, and the measurement is recorded in the test rather than asserted by inspection
@@ -476,12 +488,13 @@ Then the measured write completes within the frame budget, and the measurement i
   - `rust/src/frb_generated.rs`
   - `lib/src/rust/**` (regenerated bindings only)
   - `lib/src/providers/note_providers.dart` (calls `openNote(path)` and assigns `updateBlock`'s return value; both signatures change here, so `dart analyze` cannot pass without it)
-  - `lib/src/providers/rust_api_provider.dart` (**lands the editing half of the wrapper surface in full, not only the four methods that change.** This file is the seam every widget and every widget test overrides — `editor_test.dart` already fakes it — and it is the only place touching `ffi.*` directly. Eight later tickets in Epics E and F call methods that do not exist on `RustApi` yet, and none of them scopes this file, so each would fail its own `flutter test` gate against a class lacking the method. This ticket adds wrappers for every editing and persistence function in the contract: `openNote`, `closeNote`, `flushNote`, `noteWriteStatus`, `getBlockSource`, `updateBlock`, `commitBlock`, `insertBlock`, `deleteBlock`, `splitBlock`, `mergeBlockWithPrevious`, `copyRangeAsMarkdown`, `deleteRange`, `replaceRange`, `pendingDrafts`. It does **not** add the lifecycle wrappers — those belong to `WSPC-D006`, which implements the functions behind them, and this ticket does not depend on D006, so wrapping them here would leave `ffi.createNote` and friends unresolved at the `dart analyze` gate below. `WSPC-D009` lands the discovery wrappers on the same principle.
+  - `lib/src/providers/rust_api_provider.dart` (**lands the editing half of the wrapper surface in full, not only the four methods that change.** This file is the seam every widget and every widget test overrides — `editor_test.dart` already fakes it — and it is the only place touching `ffi.*` directly. Eight later tickets in Epics E and F call methods that do not exist on `RustApi` yet, and none of them scopes this file, so each would fail its own `flutter test` gate against a class lacking the method. This ticket adds wrappers for every editing and persistence function in the contract: `openNote`, `reloadNote`, `closeNote`, `flushNote`, `noteWriteStatus`, `getBlockSource`, `updateBlock`, `commitBlock`, `insertBlock`, `deleteBlock`, `splitBlock`, `mergeBlockWithPrevious`, `copyRangeAsMarkdown`, `deleteRange`, `replaceRange`, `pendingDrafts`. It does **not** add the lifecycle wrappers — those belong to `WSPC-D006`, which implements the functions behind them, and this ticket does not depend on D006, so wrapping them here would leave `ffi.createNote` and friends unresolved at the `dart analyze` gate below. `WSPC-D009` lands the discovery wrappers on the same principle.
 
     It must also repair what is already there: the file currently wraps `saveNote`, which this contract deletes outright, and `updateBlock` with its old `AstNode` parameter. Both become unresolved identifiers or wrong-argument errors the moment the bindings regenerate.)
   - `test/components/editor_test.dart` (overrides `RustApi.updateBlock(String, List<int>, AstNode) -> NoteState`, an invalid override once the base signature changes. `dart analyze` covers `test/`, and it reports no issues on the current tree — so this gate goes genuinely red rather than merely staying noisy.)
+  - `lib/src/components/editor.dart` (**call-site adaptation only, and the gate cannot pass without it.** `editor.dart:119-134` builds an `AstNode.paragraph` and passes it to `NoteController.updateBlock(List<int>, AstNode)`; once that becomes source-text-based it is an argument-type error, and `NoteController.open` breaks the same way when `open_note` becomes `async`. This is the one file carved out of the `lib/src/components/**` exclusion below, and the carve-out is deliberately narrow: pass the Block's source text instead of constructing a node, and await the open. Live Preview, promotion and raw rendering are `EDIT-F002`'s, five tickets later — do not start them here.)
 - **Scope (Out-of-Scope Files):**
-  - `lib/src/components/**` (Epic F consumes this surface)
+  - `lib/src/components/**` **except `editor.dart`** (Epic F consumes this surface; the exception above is a compile fix, not a feature)
   - `lib/src/screens/**`
 - **Verification Command:** `cd rust && cargo test api::ffi_api -- --list | grep -q ': test' && cargo test api::ffi_api && cargo clippy --all-targets -- -D warnings && cd .. && dart analyze`
 - **Expected Success Output:** `exit 0`

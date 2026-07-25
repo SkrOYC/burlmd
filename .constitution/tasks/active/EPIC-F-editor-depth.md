@@ -16,7 +16,7 @@ It is not gone entirely, and `EDIT-F003`/`EDIT-F007` are where it survives. A `B
 - **Scope (Out-of-Scope Files):**
   - `lib/**` (no production code in a Spike)
   - `rust/src/**`
-- **Verification Command:** `! grep -q 'Status: placeholder' .constitution/spikes/SPK-EDIT-F001.md && ! grep -q 'To be filled' .constitution/spikes/SPK-EDIT-F001.md && git diff --quiet HEAD~1 HEAD -- lib rust/src`
+- **Verification Command:** `test -s .constitution/spikes/SPK-EDIT-F001.md && ! grep -q 'Status: placeholder' .constitution/spikes/SPK-EDIT-F001.md && ! grep -q 'To be filled' .constitution/spikes/SPK-EDIT-F001.md && git diff --quiet HEAD~1 HEAD -- lib rust/src`
 - **Expected Success Output:** `exit 0`
 - **STOP Conditions:**
   - "STOP if this Spike is landed across more than one commit; its gate asserts that the Spike's own commit touched no production code, for the reason recorded on `WSPC-D001`."
@@ -114,6 +114,10 @@ Then the selection spans all three Blocks and is visibly highlighted across them
 Given a selection spanning three Blocks
 When it is copied
 Then the clipboard contains Markdown reproducing the selected content across all three
+
+Given a Note whose Blocks include a code block, a list and a paragraph
+When a selection spanning all three is copied
+Then the clipboard reproduces each — the fixture is specified to be heterogeneous because the rendered-text offsets a range is expressed in are defined per `AstNode` variant, and a three-paragraph fixture exercises exactly one of those definitions while passing the criterion above
 
 Given a selection spanning Blocks
 When select-all is invoked
@@ -243,6 +247,14 @@ Then the Link renders distinctly from a resolving Link
 Given a Link whose target does not exist
 When it is followed
 Then the target Note is created and opened — the second half of `CAP-GRAPH-04`, which the contract asserts the UI performs and which no criterion previously covered
+
+Given a Note is open holding a ghost Link, and its target is created elsewhere in the meantime
+When that Link is followed
+Then the existing Note opens rather than the create path running — `InlineElement::Link.exists` is advisory and goes stale the moment any other Note is created or deleted, so the follow path re-resolves against the index rather than trusting the flag; trusting it here calls `create_note` and gets `PathUnavailable` for a Link that resolves perfectly well, which `SHEL-E005`'s STOP then forbids working around
+
+Given a Note is open holding a resolving Link, and its target is deleted elsewhere in the meantime
+When that Link is followed
+Then the create-on-follow offer appears rather than a not-found error — the mirror of the case above, from the same stale flag
 
 Given the completion is open
 When it is dismissed without accepting

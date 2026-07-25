@@ -88,7 +88,7 @@ See [Architecture](</projects/architecture.md>) for the container split.
 
 ### The destination is always angle-bracket wrapped
 
-**Every link destination burlmd writes is enclosed in `<`…`>`.** Inside those brackets, a literal `\`, `<` or `>` in the path is prefixed with a backslash; nothing else is transformed.
+**Every link destination burlmd writes is enclosed in `<`…`>`.** Inside those brackets, a literal `\`, `<`, `>` or `&` in the path is prefixed with a backslash; nothing else is transformed.
 
 This is forced by the composition of two rules stated elsewhere in this file, which are individually fine and jointly broken without it. Filenames are derived from titles verbatim, so `Meeting Notes` yields `Meeting Notes.md` — and CommonMark forbids a *bare* link destination from containing a space. The bare form is therefore not a link at all for the ordinary case of a multi-word title. Measured against `pulldown-cmark` 0.12.2, the version `WSPC-D003` pins:
 
@@ -100,16 +100,28 @@ This is forced by the composition of two rules stated elsewhere in this file, wh
 [a](</A > B.md>)            -> NOT A LINK  (unescaped `>` closes the destination)
 [a](</A \> B.md>)           -> LINK, dest "/A > B.md"
 [a](</100% Done.md>)        -> LINK, dest "/100% Done.md"
+[a](</Caf&eacute;.md>)      -> LINK, dest "/Café.md"        <- round trip LOST
+[a](</Caf\&eacute;.md>)     -> LINK, dest "/Caf&eacute;.md"
+[a](</Tom &amp; Jerry.md>)  -> LINK, dest "/Tom & Jerry.md"  <- collides
+[a](</Tom \&amp; Jerry.md>) -> LINK, dest "/Tom &amp; Jerry.md"
+[a](</A&B.md>)              -> LINK, dest "/A&B.md"          <- bare & is fine...
+[a](</A\&B.md>)             -> LINK, dest "/A&B.md"          <- ...and escaping it is too
 ```
 
 What a bare destination containing a space actually produces is not a malformed link but ordinary paragraph text, which is the reason this is worth this much space. Nothing reports an error. `WSPC-D005` records no `links` edge, so backlinks and `exists` come back empty; `WSPC-D006`'s inbound-Link rewrite then finds nothing to rewrite, so a rename silently leaves the old path sitting in the prose — risk 8's partial-rewrite corruption arriving through a path the atomicity STOP cannot see, because from the rewriter's perspective there was nothing there. And `WSPC-D006`'s criterion "all three links resolve to the new concept id" passes vacuously against any fixture whose Notes happen to have single-word titles.
 
+**`&` is in that list because CommonMark decodes HTML entity references inside a link destination**, and the angle brackets do not suppress it. A title containing an entity-shaped substring — `Café` written as `Caf&eacute;`, or `Tom &amp; Jerry` — therefore parses back to a *different* concept id than the one written, with the same consequences as the space case: an edge pointing at a concept that does not exist, `exists` false, no backlinks, and nothing for a rename to find. `Tom &amp; Jerry` and `Tom & Jerry` are two distinct titles that collapse onto one `target_id`, so a rename of either rewrites both.
+
+The last two lines above are why escaping `&` **unconditionally** is correct rather than merely sufficient: a bare `&` that begins no valid entity already round-trips, and escaping it round-trips to the same string. There is no case where the escape is wrong, so no predicate is needed — the same property the bracket rule itself is chosen for.
+
 Two further points:
 
 - **Wrap unconditionally, not only when the path needs it.** Conditional wrapping requires a predicate that exactly matches CommonMark's rule for what a bare destination may contain, and a predicate that is subtly wrong reproduces this defect for whichever character it forgot. Wrapping always is one rule with no branch, and makes the failure unrepresentable rather than unlikely — the same reasoning ADR-007's reparse-over-arithmetic decision turns on. The cost is four extra characters visible in raw view on a focused Block.
-- **Percent-encoding was the alternative and is rejected.** `[a](/Plan%20A.md)` also parses, but it makes deriving `target_id` lossy: the parser hands back the destination verbatim, so recovering the path requires a percent-decode, and a title that legitimately contains `%` — `100% Done` — then decodes to something the user never wrote. Angle brackets round-trip through `pulldown-cmark` unchanged, so `target_id` derivation stays a pure strip.
+- **Percent-encoding was the alternative and is rejected.** `[a](/Plan%20A.md)` also parses, but it makes deriving `target_id` lossy: the parser hands back the destination verbatim, so recovering the path requires a percent-decode, and a title that legitimately contains `%` — `100% Done` — then decodes to something the user never wrote. Angle brackets round-trip through `pulldown-cmark` unchanged, so `target_id` derivation stays a strip plus a fixed four-character unescape — no decoding table, and no character whose meaning depends on what follows it.
 
-Deriving `target_id` from a parsed destination is therefore: unescape `\\`, `\<` and `\>`, then remove the leading `/` and the trailing `.md`. The parser has already removed the angle brackets — `dest_url` never contains them.
+Deriving `target_id` from a parsed destination is therefore: unescape `\\`, `\<`, `\>` and `\&`, then remove the leading `/` and the trailing `.md`. The parser has already removed the angle brackets — `dest_url` never contains them.
+
+One case this deliberately does not repair: a **foreign** bundle may contain an unescaped entity reference, and the parser will have decoded it before the Core sees it. The recovered `target_id` is then whatever the entity decoded to, which may match no file. That is a broken link in someone else's bundle, and OKF §6.1 requires tolerating it rather than guessing what was meant.
 
 ## Reserved filenames
 

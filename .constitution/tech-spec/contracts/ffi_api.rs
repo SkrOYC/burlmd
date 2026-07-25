@@ -155,9 +155,19 @@ pub async fn workspace_tree() -> Result<Vec<TreeNode>, AppError> {
 }
 
 /// Copies the bundle to `destination` (CAP-PORT-02). Cheap by construction:
-/// the live Workspace is already conformant plaintext OKF (CAP-PORT-01), so
-/// this is a tree copy plus a conformance check, not a decrypt-and-transform
-/// pipeline. `.git/` is excluded.
+/// the Workspace is plaintext Markdown on disk at all times, so this is a tree
+/// copy plus a conformance check, not a decrypt-and-transform pipeline.
+/// `.git/` is excluded.
+///
+/// Deliberately *not* justified by "the live Workspace is already conformant".
+/// CAP-PORT-01 is scoped to Notes this application **creates**, and CAP-WS-05
+/// and CAP-PORT-03 make a permanently non-conformant bundle a supported state
+/// -- a foreign file with no frontmatter is exported as it is. What makes the
+/// copy cheap is the plaintext, not the conformance. The conformance check
+/// therefore reports rather than gates: it returns which Notes are
+/// non-conformant and copies everything regardless, because refusing to export
+/// a Workspace the user is entitled to take elsewhere would invert the
+/// capability's purpose.
 #[frb]
 pub async fn export_workspace(destination: String) -> Result<(), AppError> {
     unimplemented!()
@@ -408,15 +418,36 @@ pub enum InlineElement {
     /// paragraph text, not as a link, so no `Link` event reaches this enum at
     /// all. Verified against `pulldown-cmark` 0.12.2.
     Link {
-        /// The target's OKF concept id: unescape `\\`, `\<` and `\>`, then
-        /// strip the leading `/` and trailing `.md`. The parser has already
-        /// removed the angle brackets, so `dest_url` never contains them.
-        /// Always present, even when nothing matches it.
+        /// The target's OKF concept id: unescape `\\`, `\<`, `\>` and `\&`,
+        /// then strip the leading `/` and trailing `.md`. The parser has
+        /// already removed the angle brackets, so `dest_url` never contains
+        /// them. `&` is in the list because CommonMark decodes HTML entity
+        /// references inside a destination and the brackets do not suppress
+        /// that -- `</Caf&eacute;.md>` parses back as `/Café.md`, a different
+        /// concept id than the one written. Always present, even when nothing
+        /// matches it.
         target_id: String,
         /// False for a ghost Link -- a Link to a Note not yet created, which
         /// OKF section 6.1 requires consumers to tolerate and which
         /// CAP-GRAPH-04 makes a feature. The UI renders these distinctly and
         /// creates the Note on follow.
+        ///
+        /// **Advisory, and only as fresh as the state it came from.** Creating
+        /// or deleting a Note flips this field for every inbound Link in every
+        /// other Note, by the same mechanism `LifecycleEffects.rewritten`
+        /// exists for -- but `create_note` and `delete_note` return no such
+        /// list, deliberately: the affected set is every Note holding a ghost
+        /// Link to that id, which is unbounded and mostly not open. So the
+        /// **follow path must re-resolve against the index rather than trust
+        /// this flag.** Without that rule, following a ghost Link to a concept
+        /// created moments ago runs create-on-follow into `create_note` and
+        /// gets `PathUnavailable` for a Link that resolves perfectly well --
+        /// and `SHEL-E005`'s STOP then forbids working around it client-side,
+        /// so the user is simply told no. The mirror case returns `NotFound`
+        /// instead of the create offer. What the flag is *for* is rendering:
+        /// deciding whether to draw a Link distinctly is a per-frame question
+        /// where a stale answer costs nothing and re-querying costs a round
+        /// trip per Link.
         ///
         /// Resolving this requires the index, not the parser: it is whether
         /// `target_id` matches a `notes` row. `WSPC-D003` declares the field
@@ -675,13 +706,49 @@ pub fn merge_block_with_previous(
 
 /// A selection spanning one or more Blocks (ADR-006 decision 3).
 ///
-/// Offsets are character offsets into each Block's **rendered text**, defined
-/// as the in-order concatenation of the `TextRun.content` values reachable
-/// from that Block's `AstNode`, descending into `Link`/`ExternalLink`
-/// `content`. That definition is what makes the number well-defined: it is a
-/// pure function of the `AstNode` both sides already hold, not of whatever
-/// the widget laid out, so the Core reproduces the same string the UI
-/// selected in without the UI describing its geometry.
+/// Offsets are character offsets into each Block's **rendered text**, which is
+/// a pure function of that Block's `AstNode` -- of what both sides already
+/// hold, not of whatever the widget laid out. That is what makes the number
+/// well-defined: the Core reproduces the same string the UI selected in
+/// without the UI having to describe its geometry.
+///
+/// It is defined **per variant**, because a rule phrased only over `TextRun`
+/// does not cover the nine. Three variants hold no `TextRun` under any
+/// reading -- `CodeBlock` holds a bare `String`, `Image` holds two, and
+/// `ThematicBreak` holds nothing -- so their rendered text came out empty. A
+/// further four (`List`, `ListItem`, `Blockquote`, `Suggestion`) hold
+/// `AstNode`s rather than `InlineElement`s, and whether the old word
+/// "reachable" was meant to recurse through them was never stated either way.
+/// Only `Heading` and `Paragraph` were unambiguous.
+///
+/// The three hard cases are the damaging ones. A code block's rendered length
+/// was zero while the user could see and select through it, so
+/// `copy_range_as_markdown` returns the wrong text and `delete_range` splices
+/// against an offset space that does not describe the selection -- silent
+/// content loss, on the default path, since CAP-EDIT-02 makes code blocks
+/// authorable and CAP-EDIT-04 makes selection cross Blocks.
+///
+///   - `Heading`, `Paragraph`: concatenate the `TextRun.content` values in
+///     `content` in order, descending into `Link`/`ExternalLink` `content`.
+///   - `List`, `ListItem`, `Blockquote`, `Suggestion`: concatenate the
+///     rendered text of each child `AstNode` in order, recursively, joining
+///     children with a single `\n`.
+///   - `CodeBlock`: the `code` string verbatim. Not the fence, not the
+///     language.
+///   - `Image`: the `alt_text`. It is what a screen reader and a text
+///     selection both see.
+///   - `ThematicBreak`: the empty string. It has no selectable text, so a
+///     `BlockRange` endpoint may name it only at offset 0; any other offset is
+///     out of range.
+///
+/// **What this deliberately does not model** is decoration the widget draws as
+/// text but that no `AstNode` field contains -- a list bullet, an ordered
+/// list's `1. `, a code fence's gutter or line numbers. The rendered string is
+/// the Core's definition and the UI must map its own selection onto it rather
+/// than the reverse, because the alternative is the Core knowing the widget's
+/// presentation, which rule 3 exists to prevent. `EDIT-F003` owns proving the
+/// two agree, and its criteria must use a fixture containing a code block and
+/// a list, not three paragraphs.
 ///
 /// Resolving these to the source offsets a splice needs requires an
 /// inline-granularity rendered→source map, which the Core builds during the
@@ -821,6 +888,38 @@ pub fn note_write_status(note_id: String) -> NoteWriteStatus {
     unimplemented!()
 }
 
+/// **Discards the buffered edits and re-reads the Note from disk.** Deletes the
+/// `drafts` row, reparses the file's current bytes, rebuilds the working source
+/// and the span map from them, re-records the revision baseline, and returns
+/// the resulting state with `restored_from_draft = false`.
+///
+/// This is the other half of `RevisionMismatch`, and without it that error has
+/// no exit. Every document routes the recovery the same way -- risk 6's
+/// residual-risk paragraph, `NoteWriteStatus.last_error` above, and
+/// `SHEL-E007`'s criterion all say the user is offered a **reload** -- while
+/// earlier revisions of this contract gave the UI nothing to call. The one
+/// candidate, `open_note`, is specifically wrong for it: it restores an
+/// unflushed draft in preference to disk, and tier 2 deliberately leaves the
+/// draft row in place when it fails. So the reload would return the same
+/// buffer that just lost the comparison, never show the changed file, and fail
+/// again on the next timer tick, forever. `close_note` is not an exit either,
+/// since it flushes first and so either raises the same error or overwrites the
+/// external change the mismatch existed to protect.
+///
+/// This is the surface at which the Sync Manager's conflict markers become
+/// `AstNode::Suggestion` nodes, because it is the only call that reads bytes
+/// this application did not write into a Note that is already open.
+///
+/// **It destroys unwritten work by design**, which is why it is a separate call
+/// and not something the mismatch path does on its own. The UI must confirm,
+/// and must offer the user their own text first: `get_block_source` still reads
+/// from the pre-reload buffer, and `copy_range_as_markdown` over the whole Note
+/// is how a user keeps a copy before accepting the file.
+#[frb]
+pub async fn reload_note(note_id: String) -> Result<NoteState, AppError> {
+    unimplemented!()
+}
+
 /// Tier 3: flushes any pending write, makes one Git commit covering this
 /// editing session, clears the `drafts` row, and calls the sync scheduler's
 /// `notify_activity()` -- which has existed since Epic C with no caller
@@ -868,8 +967,9 @@ pub struct LinkCompletion {
     pub note_id: String,
     pub title: String,
     /// The exact text to splice at the cursor, already in bundle-absolute
-    /// Markdown form with the destination angle-bracket wrapped and `\\`, `\<`
-    /// and `\>` escaped inside it, per `data-models/okf-bundle.md`.
+    /// Markdown form with the destination angle-bracket wrapped and `\\`,
+    /// `\<`, `\>` and `\&` escaped inside it, per
+    /// `data-models/okf-bundle.md`.
     /// Constructed Core-side so the UI never assembles a link target and
     /// cannot produce a non-conformant one -- which is only true if the Core
     /// applies the wrapping, since the ordinary multi-word title produces a
