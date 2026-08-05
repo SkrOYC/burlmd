@@ -308,29 +308,44 @@ impl SseDecode for crate::error::AppError {
                 return crate::error::AppError::AuthExpired;
             }
             2 => {
-                return crate::error::AppError::GitConflict;
+                let mut var_field0 = <String>::sse_decode(deserializer);
+                return crate::error::AppError::RevisionMismatch(var_field0);
             }
             3 => {
-                let mut var_field0 = <String>::sse_decode(deserializer);
-                return crate::error::AppError::DatabaseError(var_field0);
+                return crate::error::AppError::GitConflict;
             }
             4 => {
                 let mut var_field0 = <String>::sse_decode(deserializer);
-                return crate::error::AppError::CryptoError(var_field0);
+                return crate::error::AppError::PathUnavailable(var_field0);
             }
             5 => {
                 let mut var_field0 = <String>::sse_decode(deserializer);
-                return crate::error::AppError::NetworkError(var_field0);
+                return crate::error::AppError::NotFound(var_field0);
             }
             6 => {
                 let mut var_field0 = <String>::sse_decode(deserializer);
-                return crate::error::AppError::OAuthError(var_field0);
+                return crate::error::AppError::DatabaseError(var_field0);
             }
             7 => {
                 let mut var_field0 = <String>::sse_decode(deserializer);
-                return crate::error::AppError::IoError(var_field0);
+                return crate::error::AppError::CryptoError(var_field0);
             }
             8 => {
+                let mut var_field0 = <String>::sse_decode(deserializer);
+                return crate::error::AppError::NetworkError(var_field0);
+            }
+            9 => {
+                return crate::error::AppError::OAuthStateMismatch;
+            }
+            10 => {
+                let mut var_field0 = <String>::sse_decode(deserializer);
+                return crate::error::AppError::OAuthError(var_field0);
+            }
+            11 => {
+                let mut var_field0 = <String>::sse_decode(deserializer);
+                return crate::error::AppError::IoError(var_field0);
+            }
+            12 => {
                 let mut var_field0 = <String>::sse_decode(deserializer);
                 return crate::error::AppError::ParseError(var_field0);
             }
@@ -701,24 +716,34 @@ impl flutter_rust_bridge::IntoDart for crate::error::AppError {
         match self {
             crate::error::AppError::DiskFull => [0.into_dart()].into_dart(),
             crate::error::AppError::AuthExpired => [1.into_dart()].into_dart(),
-            crate::error::AppError::GitConflict => [2.into_dart()].into_dart(),
-            crate::error::AppError::DatabaseError(field0) => {
-                [3.into_dart(), field0.into_into_dart().into_dart()].into_dart()
+            crate::error::AppError::RevisionMismatch(field0) => {
+                [2.into_dart(), field0.into_into_dart().into_dart()].into_dart()
             }
-            crate::error::AppError::CryptoError(field0) => {
+            crate::error::AppError::GitConflict => [3.into_dart()].into_dart(),
+            crate::error::AppError::PathUnavailable(field0) => {
                 [4.into_dart(), field0.into_into_dart().into_dart()].into_dart()
             }
-            crate::error::AppError::NetworkError(field0) => {
+            crate::error::AppError::NotFound(field0) => {
                 [5.into_dart(), field0.into_into_dart().into_dart()].into_dart()
             }
-            crate::error::AppError::OAuthError(field0) => {
+            crate::error::AppError::DatabaseError(field0) => {
                 [6.into_dart(), field0.into_into_dart().into_dart()].into_dart()
             }
-            crate::error::AppError::IoError(field0) => {
+            crate::error::AppError::CryptoError(field0) => {
                 [7.into_dart(), field0.into_into_dart().into_dart()].into_dart()
             }
-            crate::error::AppError::ParseError(field0) => {
+            crate::error::AppError::NetworkError(field0) => {
                 [8.into_dart(), field0.into_into_dart().into_dart()].into_dart()
+            }
+            crate::error::AppError::OAuthStateMismatch => [9.into_dart()].into_dart(),
+            crate::error::AppError::OAuthError(field0) => {
+                [10.into_dart(), field0.into_into_dart().into_dart()].into_dart()
+            }
+            crate::error::AppError::IoError(field0) => {
+                [11.into_dart(), field0.into_into_dart().into_dart()].into_dart()
+            }
+            crate::error::AppError::ParseError(field0) => {
+                [12.into_dart(), field0.into_into_dart().into_dart()].into_dart()
             }
             _ => {
                 unimplemented!("");
@@ -940,31 +965,46 @@ impl SseEncode for crate::error::AppError {
             crate::error::AppError::AuthExpired => {
                 <i32>::sse_encode(1, serializer);
             }
-            crate::error::AppError::GitConflict => {
+            crate::error::AppError::RevisionMismatch(field0) => {
                 <i32>::sse_encode(2, serializer);
-            }
-            crate::error::AppError::DatabaseError(field0) => {
-                <i32>::sse_encode(3, serializer);
                 <String>::sse_encode(field0, serializer);
             }
-            crate::error::AppError::CryptoError(field0) => {
+            crate::error::AppError::GitConflict => {
+                <i32>::sse_encode(3, serializer);
+            }
+            crate::error::AppError::PathUnavailable(field0) => {
                 <i32>::sse_encode(4, serializer);
                 <String>::sse_encode(field0, serializer);
             }
-            crate::error::AppError::NetworkError(field0) => {
+            crate::error::AppError::NotFound(field0) => {
                 <i32>::sse_encode(5, serializer);
                 <String>::sse_encode(field0, serializer);
             }
-            crate::error::AppError::OAuthError(field0) => {
+            crate::error::AppError::DatabaseError(field0) => {
                 <i32>::sse_encode(6, serializer);
                 <String>::sse_encode(field0, serializer);
             }
-            crate::error::AppError::IoError(field0) => {
+            crate::error::AppError::CryptoError(field0) => {
                 <i32>::sse_encode(7, serializer);
                 <String>::sse_encode(field0, serializer);
             }
-            crate::error::AppError::ParseError(field0) => {
+            crate::error::AppError::NetworkError(field0) => {
                 <i32>::sse_encode(8, serializer);
+                <String>::sse_encode(field0, serializer);
+            }
+            crate::error::AppError::OAuthStateMismatch => {
+                <i32>::sse_encode(9, serializer);
+            }
+            crate::error::AppError::OAuthError(field0) => {
+                <i32>::sse_encode(10, serializer);
+                <String>::sse_encode(field0, serializer);
+            }
+            crate::error::AppError::IoError(field0) => {
+                <i32>::sse_encode(11, serializer);
+                <String>::sse_encode(field0, serializer);
+            }
+            crate::error::AppError::ParseError(field0) => {
+                <i32>::sse_encode(12, serializer);
                 <String>::sse_encode(field0, serializer);
             }
             _ => {

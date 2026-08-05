@@ -340,18 +340,26 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       case 1:
         return AppError_AuthExpired();
       case 2:
-        return AppError_GitConflict();
+        return AppError_RevisionMismatch(dco_decode_String(raw[1]));
       case 3:
-        return AppError_DatabaseError(dco_decode_String(raw[1]));
+        return AppError_GitConflict();
       case 4:
-        return AppError_CryptoError(dco_decode_String(raw[1]));
+        return AppError_PathUnavailable(dco_decode_String(raw[1]));
       case 5:
-        return AppError_NetworkError(dco_decode_String(raw[1]));
+        return AppError_NotFound(dco_decode_String(raw[1]));
       case 6:
-        return AppError_OAuthError(dco_decode_String(raw[1]));
+        return AppError_DatabaseError(dco_decode_String(raw[1]));
       case 7:
-        return AppError_IoError(dco_decode_String(raw[1]));
+        return AppError_CryptoError(dco_decode_String(raw[1]));
       case 8:
+        return AppError_NetworkError(dco_decode_String(raw[1]));
+      case 9:
+        return AppError_OAuthStateMismatch();
+      case 10:
+        return AppError_OAuthError(dco_decode_String(raw[1]));
+      case 11:
+        return AppError_IoError(dco_decode_String(raw[1]));
+      case 12:
         return AppError_ParseError(dco_decode_String(raw[1]));
       default:
         throw Exception("unreachable");
@@ -599,23 +607,34 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       case 1:
         return AppError_AuthExpired();
       case 2:
-        return AppError_GitConflict();
-      case 3:
         var var_field0 = sse_decode_String(deserializer);
-        return AppError_DatabaseError(var_field0);
+        return AppError_RevisionMismatch(var_field0);
+      case 3:
+        return AppError_GitConflict();
       case 4:
         var var_field0 = sse_decode_String(deserializer);
-        return AppError_CryptoError(var_field0);
+        return AppError_PathUnavailable(var_field0);
       case 5:
         var var_field0 = sse_decode_String(deserializer);
-        return AppError_NetworkError(var_field0);
+        return AppError_NotFound(var_field0);
       case 6:
         var var_field0 = sse_decode_String(deserializer);
-        return AppError_OAuthError(var_field0);
+        return AppError_DatabaseError(var_field0);
       case 7:
         var var_field0 = sse_decode_String(deserializer);
-        return AppError_IoError(var_field0);
+        return AppError_CryptoError(var_field0);
       case 8:
+        var var_field0 = sse_decode_String(deserializer);
+        return AppError_NetworkError(var_field0);
+      case 9:
+        return AppError_OAuthStateMismatch();
+      case 10:
+        var var_field0 = sse_decode_String(deserializer);
+        return AppError_OAuthError(var_field0);
+      case 11:
+        var var_field0 = sse_decode_String(deserializer);
+        return AppError_IoError(var_field0);
+      case 12:
         var var_field0 = sse_decode_String(deserializer);
         return AppError_ParseError(var_field0);
       default:
@@ -914,25 +933,36 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_i_32(0, serializer);
       case AppError_AuthExpired():
         sse_encode_i_32(1, serializer);
-      case AppError_GitConflict():
+      case AppError_RevisionMismatch(field0: final field0):
         sse_encode_i_32(2, serializer);
-      case AppError_DatabaseError(field0: final field0):
-        sse_encode_i_32(3, serializer);
         sse_encode_String(field0, serializer);
-      case AppError_CryptoError(field0: final field0):
+      case AppError_GitConflict():
+        sse_encode_i_32(3, serializer);
+      case AppError_PathUnavailable(field0: final field0):
         sse_encode_i_32(4, serializer);
         sse_encode_String(field0, serializer);
-      case AppError_NetworkError(field0: final field0):
+      case AppError_NotFound(field0: final field0):
         sse_encode_i_32(5, serializer);
         sse_encode_String(field0, serializer);
-      case AppError_OAuthError(field0: final field0):
+      case AppError_DatabaseError(field0: final field0):
         sse_encode_i_32(6, serializer);
         sse_encode_String(field0, serializer);
-      case AppError_IoError(field0: final field0):
+      case AppError_CryptoError(field0: final field0):
         sse_encode_i_32(7, serializer);
         sse_encode_String(field0, serializer);
-      case AppError_ParseError(field0: final field0):
+      case AppError_NetworkError(field0: final field0):
         sse_encode_i_32(8, serializer);
+        sse_encode_String(field0, serializer);
+      case AppError_OAuthStateMismatch():
+        sse_encode_i_32(9, serializer);
+      case AppError_OAuthError(field0: final field0):
+        sse_encode_i_32(10, serializer);
+        sse_encode_String(field0, serializer);
+      case AppError_IoError(field0: final field0):
+        sse_encode_i_32(11, serializer);
+        sse_encode_String(field0, serializer);
+      case AppError_ParseError(field0: final field0):
+        sse_encode_i_32(12, serializer);
         sse_encode_String(field0, serializer);
     }
   }

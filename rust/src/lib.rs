@@ -5,6 +5,7 @@ mod error;
 mod frb_generated;
 pub mod git;
 pub mod markdown;
+pub mod okf;
 pub mod security;
 pub mod sync;
 #[cfg(test)]
