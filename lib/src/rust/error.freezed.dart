@@ -55,16 +55,20 @@ extension AppErrorPatterns on AppError {
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( AppError_DiskFull value)?  diskFull,TResult Function( AppError_AuthExpired value)?  authExpired,TResult Function( AppError_GitConflict value)?  gitConflict,TResult Function( AppError_DatabaseError value)?  databaseError,TResult Function( AppError_CryptoError value)?  cryptoError,TResult Function( AppError_NetworkError value)?  networkError,TResult Function( AppError_OAuthError value)?  oAuthError,TResult Function( AppError_IoError value)?  ioError,TResult Function( AppError_ParseError value)?  parseError,required TResult orElse(),}){
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( AppError_DiskFull value)?  diskFull,TResult Function( AppError_AuthExpired value)?  authExpired,TResult Function( AppError_RevisionMismatch value)?  revisionMismatch,TResult Function( AppError_GitConflict value)?  gitConflict,TResult Function( AppError_PathUnavailable value)?  pathUnavailable,TResult Function( AppError_NotFound value)?  notFound,TResult Function( AppError_DatabaseError value)?  databaseError,TResult Function( AppError_CryptoError value)?  cryptoError,TResult Function( AppError_NetworkError value)?  networkError,TResult Function( AppError_OAuthStateMismatch value)?  oAuthStateMismatch,TResult Function( AppError_OAuthError value)?  oAuthError,TResult Function( AppError_IoError value)?  ioError,TResult Function( AppError_ParseError value)?  parseError,required TResult orElse(),}){
 final _that = this;
 switch (_that) {
 case AppError_DiskFull() when diskFull != null:
 return diskFull(_that);case AppError_AuthExpired() when authExpired != null:
-return authExpired(_that);case AppError_GitConflict() when gitConflict != null:
-return gitConflict(_that);case AppError_DatabaseError() when databaseError != null:
+return authExpired(_that);case AppError_RevisionMismatch() when revisionMismatch != null:
+return revisionMismatch(_that);case AppError_GitConflict() when gitConflict != null:
+return gitConflict(_that);case AppError_PathUnavailable() when pathUnavailable != null:
+return pathUnavailable(_that);case AppError_NotFound() when notFound != null:
+return notFound(_that);case AppError_DatabaseError() when databaseError != null:
 return databaseError(_that);case AppError_CryptoError() when cryptoError != null:
 return cryptoError(_that);case AppError_NetworkError() when networkError != null:
-return networkError(_that);case AppError_OAuthError() when oAuthError != null:
+return networkError(_that);case AppError_OAuthStateMismatch() when oAuthStateMismatch != null:
+return oAuthStateMismatch(_that);case AppError_OAuthError() when oAuthError != null:
 return oAuthError(_that);case AppError_IoError() when ioError != null:
 return ioError(_that);case AppError_ParseError() when parseError != null:
 return parseError(_that);case _:
@@ -85,16 +89,20 @@ return parseError(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( AppError_DiskFull value)  diskFull,required TResult Function( AppError_AuthExpired value)  authExpired,required TResult Function( AppError_GitConflict value)  gitConflict,required TResult Function( AppError_DatabaseError value)  databaseError,required TResult Function( AppError_CryptoError value)  cryptoError,required TResult Function( AppError_NetworkError value)  networkError,required TResult Function( AppError_OAuthError value)  oAuthError,required TResult Function( AppError_IoError value)  ioError,required TResult Function( AppError_ParseError value)  parseError,}){
+@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( AppError_DiskFull value)  diskFull,required TResult Function( AppError_AuthExpired value)  authExpired,required TResult Function( AppError_RevisionMismatch value)  revisionMismatch,required TResult Function( AppError_GitConflict value)  gitConflict,required TResult Function( AppError_PathUnavailable value)  pathUnavailable,required TResult Function( AppError_NotFound value)  notFound,required TResult Function( AppError_DatabaseError value)  databaseError,required TResult Function( AppError_CryptoError value)  cryptoError,required TResult Function( AppError_NetworkError value)  networkError,required TResult Function( AppError_OAuthStateMismatch value)  oAuthStateMismatch,required TResult Function( AppError_OAuthError value)  oAuthError,required TResult Function( AppError_IoError value)  ioError,required TResult Function( AppError_ParseError value)  parseError,}){
 final _that = this;
 switch (_that) {
 case AppError_DiskFull():
 return diskFull(_that);case AppError_AuthExpired():
-return authExpired(_that);case AppError_GitConflict():
-return gitConflict(_that);case AppError_DatabaseError():
+return authExpired(_that);case AppError_RevisionMismatch():
+return revisionMismatch(_that);case AppError_GitConflict():
+return gitConflict(_that);case AppError_PathUnavailable():
+return pathUnavailable(_that);case AppError_NotFound():
+return notFound(_that);case AppError_DatabaseError():
 return databaseError(_that);case AppError_CryptoError():
 return cryptoError(_that);case AppError_NetworkError():
-return networkError(_that);case AppError_OAuthError():
+return networkError(_that);case AppError_OAuthStateMismatch():
+return oAuthStateMismatch(_that);case AppError_OAuthError():
 return oAuthError(_that);case AppError_IoError():
 return ioError(_that);case AppError_ParseError():
 return parseError(_that);}
@@ -111,16 +119,20 @@ return parseError(_that);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( AppError_DiskFull value)?  diskFull,TResult? Function( AppError_AuthExpired value)?  authExpired,TResult? Function( AppError_GitConflict value)?  gitConflict,TResult? Function( AppError_DatabaseError value)?  databaseError,TResult? Function( AppError_CryptoError value)?  cryptoError,TResult? Function( AppError_NetworkError value)?  networkError,TResult? Function( AppError_OAuthError value)?  oAuthError,TResult? Function( AppError_IoError value)?  ioError,TResult? Function( AppError_ParseError value)?  parseError,}){
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( AppError_DiskFull value)?  diskFull,TResult? Function( AppError_AuthExpired value)?  authExpired,TResult? Function( AppError_RevisionMismatch value)?  revisionMismatch,TResult? Function( AppError_GitConflict value)?  gitConflict,TResult? Function( AppError_PathUnavailable value)?  pathUnavailable,TResult? Function( AppError_NotFound value)?  notFound,TResult? Function( AppError_DatabaseError value)?  databaseError,TResult? Function( AppError_CryptoError value)?  cryptoError,TResult? Function( AppError_NetworkError value)?  networkError,TResult? Function( AppError_OAuthStateMismatch value)?  oAuthStateMismatch,TResult? Function( AppError_OAuthError value)?  oAuthError,TResult? Function( AppError_IoError value)?  ioError,TResult? Function( AppError_ParseError value)?  parseError,}){
 final _that = this;
 switch (_that) {
 case AppError_DiskFull() when diskFull != null:
 return diskFull(_that);case AppError_AuthExpired() when authExpired != null:
-return authExpired(_that);case AppError_GitConflict() when gitConflict != null:
-return gitConflict(_that);case AppError_DatabaseError() when databaseError != null:
+return authExpired(_that);case AppError_RevisionMismatch() when revisionMismatch != null:
+return revisionMismatch(_that);case AppError_GitConflict() when gitConflict != null:
+return gitConflict(_that);case AppError_PathUnavailable() when pathUnavailable != null:
+return pathUnavailable(_that);case AppError_NotFound() when notFound != null:
+return notFound(_that);case AppError_DatabaseError() when databaseError != null:
 return databaseError(_that);case AppError_CryptoError() when cryptoError != null:
 return cryptoError(_that);case AppError_NetworkError() when networkError != null:
-return networkError(_that);case AppError_OAuthError() when oAuthError != null:
+return networkError(_that);case AppError_OAuthStateMismatch() when oAuthStateMismatch != null:
+return oAuthStateMismatch(_that);case AppError_OAuthError() when oAuthError != null:
 return oAuthError(_that);case AppError_IoError() when ioError != null:
 return ioError(_that);case AppError_ParseError() when parseError != null:
 return parseError(_that);case _:
@@ -140,15 +152,19 @@ return parseError(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function()?  diskFull,TResult Function()?  authExpired,TResult Function()?  gitConflict,TResult Function( String field0)?  databaseError,TResult Function( String field0)?  cryptoError,TResult Function( String field0)?  networkError,TResult Function( String field0)?  oAuthError,TResult Function( String field0)?  ioError,TResult Function( String field0)?  parseError,required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function()?  diskFull,TResult Function()?  authExpired,TResult Function( String field0)?  revisionMismatch,TResult Function()?  gitConflict,TResult Function( String field0)?  pathUnavailable,TResult Function( String field0)?  notFound,TResult Function( String field0)?  databaseError,TResult Function( String field0)?  cryptoError,TResult Function( String field0)?  networkError,TResult Function()?  oAuthStateMismatch,TResult Function( String field0)?  oAuthError,TResult Function( String field0)?  ioError,TResult Function( String field0)?  parseError,required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case AppError_DiskFull() when diskFull != null:
 return diskFull();case AppError_AuthExpired() when authExpired != null:
-return authExpired();case AppError_GitConflict() when gitConflict != null:
-return gitConflict();case AppError_DatabaseError() when databaseError != null:
+return authExpired();case AppError_RevisionMismatch() when revisionMismatch != null:
+return revisionMismatch(_that.field0);case AppError_GitConflict() when gitConflict != null:
+return gitConflict();case AppError_PathUnavailable() when pathUnavailable != null:
+return pathUnavailable(_that.field0);case AppError_NotFound() when notFound != null:
+return notFound(_that.field0);case AppError_DatabaseError() when databaseError != null:
 return databaseError(_that.field0);case AppError_CryptoError() when cryptoError != null:
 return cryptoError(_that.field0);case AppError_NetworkError() when networkError != null:
-return networkError(_that.field0);case AppError_OAuthError() when oAuthError != null:
+return networkError(_that.field0);case AppError_OAuthStateMismatch() when oAuthStateMismatch != null:
+return oAuthStateMismatch();case AppError_OAuthError() when oAuthError != null:
 return oAuthError(_that.field0);case AppError_IoError() when ioError != null:
 return ioError(_that.field0);case AppError_ParseError() when parseError != null:
 return parseError(_that.field0);case _:
@@ -169,15 +185,19 @@ return parseError(_that.field0);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function()  diskFull,required TResult Function()  authExpired,required TResult Function()  gitConflict,required TResult Function( String field0)  databaseError,required TResult Function( String field0)  cryptoError,required TResult Function( String field0)  networkError,required TResult Function( String field0)  oAuthError,required TResult Function( String field0)  ioError,required TResult Function( String field0)  parseError,}) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function()  diskFull,required TResult Function()  authExpired,required TResult Function( String field0)  revisionMismatch,required TResult Function()  gitConflict,required TResult Function( String field0)  pathUnavailable,required TResult Function( String field0)  notFound,required TResult Function( String field0)  databaseError,required TResult Function( String field0)  cryptoError,required TResult Function( String field0)  networkError,required TResult Function()  oAuthStateMismatch,required TResult Function( String field0)  oAuthError,required TResult Function( String field0)  ioError,required TResult Function( String field0)  parseError,}) {final _that = this;
 switch (_that) {
 case AppError_DiskFull():
 return diskFull();case AppError_AuthExpired():
-return authExpired();case AppError_GitConflict():
-return gitConflict();case AppError_DatabaseError():
+return authExpired();case AppError_RevisionMismatch():
+return revisionMismatch(_that.field0);case AppError_GitConflict():
+return gitConflict();case AppError_PathUnavailable():
+return pathUnavailable(_that.field0);case AppError_NotFound():
+return notFound(_that.field0);case AppError_DatabaseError():
 return databaseError(_that.field0);case AppError_CryptoError():
 return cryptoError(_that.field0);case AppError_NetworkError():
-return networkError(_that.field0);case AppError_OAuthError():
+return networkError(_that.field0);case AppError_OAuthStateMismatch():
+return oAuthStateMismatch();case AppError_OAuthError():
 return oAuthError(_that.field0);case AppError_IoError():
 return ioError(_that.field0);case AppError_ParseError():
 return parseError(_that.field0);}
@@ -194,15 +214,19 @@ return parseError(_that.field0);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function()?  diskFull,TResult? Function()?  authExpired,TResult? Function()?  gitConflict,TResult? Function( String field0)?  databaseError,TResult? Function( String field0)?  cryptoError,TResult? Function( String field0)?  networkError,TResult? Function( String field0)?  oAuthError,TResult? Function( String field0)?  ioError,TResult? Function( String field0)?  parseError,}) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function()?  diskFull,TResult? Function()?  authExpired,TResult? Function( String field0)?  revisionMismatch,TResult? Function()?  gitConflict,TResult? Function( String field0)?  pathUnavailable,TResult? Function( String field0)?  notFound,TResult? Function( String field0)?  databaseError,TResult? Function( String field0)?  cryptoError,TResult? Function( String field0)?  networkError,TResult? Function()?  oAuthStateMismatch,TResult? Function( String field0)?  oAuthError,TResult? Function( String field0)?  ioError,TResult? Function( String field0)?  parseError,}) {final _that = this;
 switch (_that) {
 case AppError_DiskFull() when diskFull != null:
 return diskFull();case AppError_AuthExpired() when authExpired != null:
-return authExpired();case AppError_GitConflict() when gitConflict != null:
-return gitConflict();case AppError_DatabaseError() when databaseError != null:
+return authExpired();case AppError_RevisionMismatch() when revisionMismatch != null:
+return revisionMismatch(_that.field0);case AppError_GitConflict() when gitConflict != null:
+return gitConflict();case AppError_PathUnavailable() when pathUnavailable != null:
+return pathUnavailable(_that.field0);case AppError_NotFound() when notFound != null:
+return notFound(_that.field0);case AppError_DatabaseError() when databaseError != null:
 return databaseError(_that.field0);case AppError_CryptoError() when cryptoError != null:
 return cryptoError(_that.field0);case AppError_NetworkError() when networkError != null:
-return networkError(_that.field0);case AppError_OAuthError() when oAuthError != null:
+return networkError(_that.field0);case AppError_OAuthStateMismatch() when oAuthStateMismatch != null:
+return oAuthStateMismatch();case AppError_OAuthError() when oAuthError != null:
 return oAuthError(_that.field0);case AppError_IoError() when ioError != null:
 return ioError(_that.field0);case AppError_ParseError() when parseError != null:
 return parseError(_that.field0);case _:
@@ -280,6 +304,72 @@ String toString() {
 /// @nodoc
 
 
+class AppError_RevisionMismatch extends AppError {
+  const AppError_RevisionMismatch(this.field0): super._();
+  
+
+ final  String field0;
+
+/// Create a copy of AppError
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$AppError_RevisionMismatchCopyWith<AppError_RevisionMismatch> get copyWith => _$AppError_RevisionMismatchCopyWithImpl<AppError_RevisionMismatch>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is AppError_RevisionMismatch&&(identical(other.field0, field0) || other.field0 == field0));
+}
+
+
+@override
+int get hashCode => Object.hash(runtimeType,field0);
+
+@override
+String toString() {
+  return 'AppError.revisionMismatch(field0: $field0)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $AppError_RevisionMismatchCopyWith<$Res> implements $AppErrorCopyWith<$Res> {
+  factory $AppError_RevisionMismatchCopyWith(AppError_RevisionMismatch value, $Res Function(AppError_RevisionMismatch) _then) = _$AppError_RevisionMismatchCopyWithImpl;
+@useResult
+$Res call({
+ String field0
+});
+
+
+
+
+}
+/// @nodoc
+class _$AppError_RevisionMismatchCopyWithImpl<$Res>
+    implements $AppError_RevisionMismatchCopyWith<$Res> {
+  _$AppError_RevisionMismatchCopyWithImpl(this._self, this._then);
+
+  final AppError_RevisionMismatch _self;
+  final $Res Function(AppError_RevisionMismatch) _then;
+
+/// Create a copy of AppError
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') $Res call({Object? field0 = null,}) {
+  return _then(AppError_RevisionMismatch(
+null == field0 ? _self.field0 : field0 // ignore: cast_nullable_to_non_nullable
+as String,
+  ));
+}
+
+
+}
+
+/// @nodoc
+
+
 class AppError_GitConflict extends AppError {
   const AppError_GitConflict(): super._();
   
@@ -308,6 +398,138 @@ String toString() {
 
 
 
+
+/// @nodoc
+
+
+class AppError_PathUnavailable extends AppError {
+  const AppError_PathUnavailable(this.field0): super._();
+  
+
+ final  String field0;
+
+/// Create a copy of AppError
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$AppError_PathUnavailableCopyWith<AppError_PathUnavailable> get copyWith => _$AppError_PathUnavailableCopyWithImpl<AppError_PathUnavailable>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is AppError_PathUnavailable&&(identical(other.field0, field0) || other.field0 == field0));
+}
+
+
+@override
+int get hashCode => Object.hash(runtimeType,field0);
+
+@override
+String toString() {
+  return 'AppError.pathUnavailable(field0: $field0)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $AppError_PathUnavailableCopyWith<$Res> implements $AppErrorCopyWith<$Res> {
+  factory $AppError_PathUnavailableCopyWith(AppError_PathUnavailable value, $Res Function(AppError_PathUnavailable) _then) = _$AppError_PathUnavailableCopyWithImpl;
+@useResult
+$Res call({
+ String field0
+});
+
+
+
+
+}
+/// @nodoc
+class _$AppError_PathUnavailableCopyWithImpl<$Res>
+    implements $AppError_PathUnavailableCopyWith<$Res> {
+  _$AppError_PathUnavailableCopyWithImpl(this._self, this._then);
+
+  final AppError_PathUnavailable _self;
+  final $Res Function(AppError_PathUnavailable) _then;
+
+/// Create a copy of AppError
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') $Res call({Object? field0 = null,}) {
+  return _then(AppError_PathUnavailable(
+null == field0 ? _self.field0 : field0 // ignore: cast_nullable_to_non_nullable
+as String,
+  ));
+}
+
+
+}
+
+/// @nodoc
+
+
+class AppError_NotFound extends AppError {
+  const AppError_NotFound(this.field0): super._();
+  
+
+ final  String field0;
+
+/// Create a copy of AppError
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$AppError_NotFoundCopyWith<AppError_NotFound> get copyWith => _$AppError_NotFoundCopyWithImpl<AppError_NotFound>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is AppError_NotFound&&(identical(other.field0, field0) || other.field0 == field0));
+}
+
+
+@override
+int get hashCode => Object.hash(runtimeType,field0);
+
+@override
+String toString() {
+  return 'AppError.notFound(field0: $field0)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $AppError_NotFoundCopyWith<$Res> implements $AppErrorCopyWith<$Res> {
+  factory $AppError_NotFoundCopyWith(AppError_NotFound value, $Res Function(AppError_NotFound) _then) = _$AppError_NotFoundCopyWithImpl;
+@useResult
+$Res call({
+ String field0
+});
+
+
+
+
+}
+/// @nodoc
+class _$AppError_NotFoundCopyWithImpl<$Res>
+    implements $AppError_NotFoundCopyWith<$Res> {
+  _$AppError_NotFoundCopyWithImpl(this._self, this._then);
+
+  final AppError_NotFound _self;
+  final $Res Function(AppError_NotFound) _then;
+
+/// Create a copy of AppError
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') $Res call({Object? field0 = null,}) {
+  return _then(AppError_NotFound(
+null == field0 ? _self.field0 : field0 // ignore: cast_nullable_to_non_nullable
+as String,
+  ));
+}
+
+
+}
 
 /// @nodoc
 
@@ -506,6 +728,38 @@ as String,
 
 
 }
+
+/// @nodoc
+
+
+class AppError_OAuthStateMismatch extends AppError {
+  const AppError_OAuthStateMismatch(): super._();
+  
+
+
+
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is AppError_OAuthStateMismatch);
+}
+
+
+@override
+int get hashCode => runtimeType.hashCode;
+
+@override
+String toString() {
+  return 'AppError.oAuthStateMismatch()';
+}
+
+
+}
+
+
+
 
 /// @nodoc
 

@@ -1,0 +1,351 @@
+// GENERATED CODE - DO NOT MODIFY BY HAND
+// coverage:ignore-file
+// ignore_for_file: type=lint
+// ignore_for_file: unused_element, deprecated_member_use, deprecated_member_use_from_same_package, use_function_type_syntax_for_parameters, unnecessary_const, avoid_init_to_null, invalid_override_different_default_values_named, prefer_expression_function_bodies, annotate_overrides, invalid_annotation_target, unnecessary_question_mark
+
+part of 'query.dart';
+
+// **************************************************************************
+// FreezedGenerator
+// **************************************************************************
+
+// dart format off
+T _$identity<T>(T value) => value;
+/// @nodoc
+mixin _$TreeNode {
+
+ String get path;
+/// Create a copy of TreeNode
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$TreeNodeCopyWith<TreeNode> get copyWith => _$TreeNodeCopyWithImpl<TreeNode>(this as TreeNode, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is TreeNode&&(identical(other.path, path) || other.path == path));
+}
+
+
+@override
+int get hashCode => Object.hash(runtimeType,path);
+
+@override
+String toString() {
+  return 'TreeNode(path: $path)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $TreeNodeCopyWith<$Res>  {
+  factory $TreeNodeCopyWith(TreeNode value, $Res Function(TreeNode) _then) = _$TreeNodeCopyWithImpl;
+@useResult
+$Res call({
+ String path
+});
+
+
+
+
+}
+/// @nodoc
+class _$TreeNodeCopyWithImpl<$Res>
+    implements $TreeNodeCopyWith<$Res> {
+  _$TreeNodeCopyWithImpl(this._self, this._then);
+
+  final TreeNode _self;
+  final $Res Function(TreeNode) _then;
+
+/// Create a copy of TreeNode
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') @override $Res call({Object? path = null,}) {
+  return _then(_self.copyWith(
+path: null == path ? _self.path : path // ignore: cast_nullable_to_non_nullable
+as String,
+  ));
+}
+
+}
+
+
+/// Adds pattern-matching-related methods to [TreeNode].
+extension TreeNodePatterns on TreeNode {
+/// A variant of `map` that fallback to returning `orElse`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( TreeNode_Directory value)?  directory,TResult Function( TreeNode_Note value)?  note,required TResult orElse(),}){
+final _that = this;
+switch (_that) {
+case TreeNode_Directory() when directory != null:
+return directory(_that);case TreeNode_Note() when note != null:
+return note(_that);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// Callbacks receives the raw object, upcasted.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case final Subclass2 value:
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( TreeNode_Directory value)  directory,required TResult Function( TreeNode_Note value)  note,}){
+final _that = this;
+switch (_that) {
+case TreeNode_Directory():
+return directory(_that);case TreeNode_Note():
+return note(_that);}
+}
+/// A variant of `map` that fallback to returning `null`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( TreeNode_Directory value)?  directory,TResult? Function( TreeNode_Note value)?  note,}){
+final _that = this;
+switch (_that) {
+case TreeNode_Directory() when directory != null:
+return directory(_that);case TreeNode_Note() when note != null:
+return note(_that);case _:
+  return null;
+
+}
+}
+/// A variant of `when` that fallback to an `orElse` callback.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( String name,  String path,  List<TreeNode> children)?  directory,TResult Function( String id,  String title,  String path)?  note,required TResult orElse(),}) {final _that = this;
+switch (_that) {
+case TreeNode_Directory() when directory != null:
+return directory(_that.name,_that.path,_that.children);case TreeNode_Note() when note != null:
+return note(_that.id,_that.title,_that.path);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// As opposed to `map`, this offers destructuring.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case Subclass2(:final field2):
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( String name,  String path,  List<TreeNode> children)  directory,required TResult Function( String id,  String title,  String path)  note,}) {final _that = this;
+switch (_that) {
+case TreeNode_Directory():
+return directory(_that.name,_that.path,_that.children);case TreeNode_Note():
+return note(_that.id,_that.title,_that.path);}
+}
+/// A variant of `when` that fallback to returning `null`
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( String name,  String path,  List<TreeNode> children)?  directory,TResult? Function( String id,  String title,  String path)?  note,}) {final _that = this;
+switch (_that) {
+case TreeNode_Directory() when directory != null:
+return directory(_that.name,_that.path,_that.children);case TreeNode_Note() when note != null:
+return note(_that.id,_that.title,_that.path);case _:
+  return null;
+
+}
+}
+
+}
+
+/// @nodoc
+
+
+class TreeNode_Directory extends TreeNode {
+  const TreeNode_Directory({required this.name, required this.path, required final  List<TreeNode> children}): _children = children,super._();
+  
+
+ final  String name;
+@override final  String path;
+ final  List<TreeNode> _children;
+ List<TreeNode> get children {
+  if (_children is EqualUnmodifiableListView) return _children;
+  // ignore: implicit_dynamic_type
+  return EqualUnmodifiableListView(_children);
+}
+
+
+/// Create a copy of TreeNode
+/// with the given fields replaced by the non-null parameter values.
+@override @JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$TreeNode_DirectoryCopyWith<TreeNode_Directory> get copyWith => _$TreeNode_DirectoryCopyWithImpl<TreeNode_Directory>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is TreeNode_Directory&&(identical(other.name, name) || other.name == name)&&(identical(other.path, path) || other.path == path)&&const DeepCollectionEquality().equals(other._children, _children));
+}
+
+
+@override
+int get hashCode => Object.hash(runtimeType,name,path,const DeepCollectionEquality().hash(_children));
+
+@override
+String toString() {
+  return 'TreeNode.directory(name: $name, path: $path, children: $children)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $TreeNode_DirectoryCopyWith<$Res> implements $TreeNodeCopyWith<$Res> {
+  factory $TreeNode_DirectoryCopyWith(TreeNode_Directory value, $Res Function(TreeNode_Directory) _then) = _$TreeNode_DirectoryCopyWithImpl;
+@override @useResult
+$Res call({
+ String name, String path, List<TreeNode> children
+});
+
+
+
+
+}
+/// @nodoc
+class _$TreeNode_DirectoryCopyWithImpl<$Res>
+    implements $TreeNode_DirectoryCopyWith<$Res> {
+  _$TreeNode_DirectoryCopyWithImpl(this._self, this._then);
+
+  final TreeNode_Directory _self;
+  final $Res Function(TreeNode_Directory) _then;
+
+/// Create a copy of TreeNode
+/// with the given fields replaced by the non-null parameter values.
+@override @pragma('vm:prefer-inline') $Res call({Object? name = null,Object? path = null,Object? children = null,}) {
+  return _then(TreeNode_Directory(
+name: null == name ? _self.name : name // ignore: cast_nullable_to_non_nullable
+as String,path: null == path ? _self.path : path // ignore: cast_nullable_to_non_nullable
+as String,children: null == children ? _self._children : children // ignore: cast_nullable_to_non_nullable
+as List<TreeNode>,
+  ));
+}
+
+
+}
+
+/// @nodoc
+
+
+class TreeNode_Note extends TreeNode {
+  const TreeNode_Note({required this.id, required this.title, required this.path}): super._();
+  
+
+ final  String id;
+ final  String title;
+@override final  String path;
+
+/// Create a copy of TreeNode
+/// with the given fields replaced by the non-null parameter values.
+@override @JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$TreeNode_NoteCopyWith<TreeNode_Note> get copyWith => _$TreeNode_NoteCopyWithImpl<TreeNode_Note>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is TreeNode_Note&&(identical(other.id, id) || other.id == id)&&(identical(other.title, title) || other.title == title)&&(identical(other.path, path) || other.path == path));
+}
+
+
+@override
+int get hashCode => Object.hash(runtimeType,id,title,path);
+
+@override
+String toString() {
+  return 'TreeNode.note(id: $id, title: $title, path: $path)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $TreeNode_NoteCopyWith<$Res> implements $TreeNodeCopyWith<$Res> {
+  factory $TreeNode_NoteCopyWith(TreeNode_Note value, $Res Function(TreeNode_Note) _then) = _$TreeNode_NoteCopyWithImpl;
+@override @useResult
+$Res call({
+ String id, String title, String path
+});
+
+
+
+
+}
+/// @nodoc
+class _$TreeNode_NoteCopyWithImpl<$Res>
+    implements $TreeNode_NoteCopyWith<$Res> {
+  _$TreeNode_NoteCopyWithImpl(this._self, this._then);
+
+  final TreeNode_Note _self;
+  final $Res Function(TreeNode_Note) _then;
+
+/// Create a copy of TreeNode
+/// with the given fields replaced by the non-null parameter values.
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? title = null,Object? path = null,}) {
+  return _then(TreeNode_Note(
+id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
+as String,title: null == title ? _self.title : title // ignore: cast_nullable_to_non_nullable
+as String,path: null == path ? _self.path : path // ignore: cast_nullable_to_non_nullable
+as String,
+  ));
+}
+
+
+}
+
+// dart format on

@@ -16,10 +16,9 @@ under [`.constitution/`](.constitution/). Start with
 
 ## Status
 
-Phase 0 — tooling. The developer environment is complete and verified; no
-application code exists yet. The first work item is `CORE-A001` in
-[`.constitution/tasks/active/EPIC-A-scaffolding-core.md`](.constitution/tasks/active/EPIC-A-scaffolding-core.md),
-which scaffolds the `flutter_rust_bridge` monorepo.
+Epics A–D are complete. The Rust core engine covers local Workspace bootstrap (no account, no network), the OKF v0.2 bundle domain, span-preserving Markdown editing that never rewrites a byte the user did not touch, an encrypted SQLite index with full-text search, the four persistence tiers from draft row to Git commit, and Note and Directory lifecycle with atomic inbound-link rewriting.
+
+None of it is reachable from the running application yet. The app still opens to the login screen, which Epic E removes when it builds the shell — the Directory tree, the mounted editor, search and draft recovery. Backlog: [`.constitution/tasks/critical-path.md`](.constitution/tasks/critical-path.md).
 
 The current phase targets **desktop only** (Linux and macOS). Mobile
 cross-compilation, graph visualisation and GitLab support are deferred.

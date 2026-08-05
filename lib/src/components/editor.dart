@@ -88,14 +88,18 @@ class _EditableParagraphState extends ConsumerState<_EditableParagraph> {
   void didUpdateWidget(covariant _EditableParagraph oldWidget) {
     super.didUpdateWidget(oldWidget);
     // Flutter reuses this State for the block at the same list index across
-    // rebuilds, so if `activeNoteProvider` ever swaps in a different note
-    // (or a future insert_block/delete_block reindexes positions), this
-    // node's content can change out from under an already-mounted field.
-    // Resync only when the incoming text actually differs from what the
-    // field currently shows — on this field's own keystroke round-trip
-    // through updateBlock, the echoed-back node already matches, so this
-    // guard leaves the cursor alone; it only fires on a genuinely external
-    // change.
+    // rebuilds. `updateBlock` no longer writes this field's own keystrokes
+    // back into `activeNoteProvider`'s state (see the notifier's doc
+    // comment), so typing here never itself triggers a rebuild — but any
+    // *other* reason `activeNoteProvider`'s state changes (switching notes,
+    // a future insert_block/delete_block reindexing positions, a
+    // reload/commit) rebuilds `Editor` and hands every visible block a
+    // freshly decoded, structurally new `content` object, even for blocks
+    // whose text didn't actually change. Resync only when the incoming text
+    // actually differs from what the field currently shows, so an edit
+    // elsewhere in the note can't reset this field's cursor to the end of
+    // unrelated, unchanged text; it only overwrites the field on a
+    // genuinely external content change.
     final incomingText = _singleRunText(widget.content);
     if (incomingText != _controller.text) {
       _controller.text = incomingText;
@@ -116,22 +120,31 @@ class _EditableParagraphState extends ConsumerState<_EditableParagraph> {
     style: _paragraphStyle(widget.content),
     decoration: const InputDecoration(border: InputBorder.none),
     onChanged: (text) {
-      final newNode = AstNode.paragraph(
-        content: [
-          InlineElement.text(
-            TextRun(
-              content: text,
-              bold: false,
-              italic: false,
-              strikethrough: false,
-              code: false,
-            ),
-          ),
-        ],
-      );
-      ref
-          .read(activeNoteProvider.notifier)
-          .updateBlock(widget.blockPath, newNode);
+      // The Block's raw source text, not a reconstructed AstNode — WSPC-D008
+      // replaces the AST-based `update_block` with the contract's
+      // source-text version (ADR-007 decision 4).
+      //
+      // EDIT-F002 is now load-bearing for *correctness*, not only for looks,
+      // and the reason is that this field is populated from the rendered
+      // inline run rather than from `get_block_source`. `**bold**` reaches
+      // the controller as `bold`, so the first keystroke sends a Block source
+      // with the delimiters already gone. Under WSPC-D008 that no longer stops
+      // at a redraw: `update_block` splices the text into the Note's working
+      // source, ADR-008 tier 1 writes it to the draft row, and tier 2's idle
+      // timer writes that to the file — so the formatting is dropped from the
+      // user's Markdown on disk, not merely from this frame. Raw-on-focus
+      // editing (EDIT-F002), which populates the field from `get_block_source`
+      // and hands the delimiters back verbatim, is what closes it. Fixing it
+      // here would mean threading the Note's id into this widget and
+      // re-deriving the field's text and its resync comparison from the Core,
+      // which is that ticket's work rather than a line of it. And the deferred
+      // surface is wider than "unstyled": `updateBlock` is `#[frb(sync)]` and
+      // therefore throws synchronously on every refusal the Core can raise — an
+      // unaddressable or container `block_path`, a conflicted Note, a failed
+      // draft write — and neither this callback nor `NoteController.updateBlock`
+      // catches or reports one, so until EDIT-F002 wires an error path those
+      // failures are invisible to the user rather than merely unstyled.
+      ref.read(activeNoteProvider.notifier).updateBlock(widget.blockPath, text);
     },
   );
 }

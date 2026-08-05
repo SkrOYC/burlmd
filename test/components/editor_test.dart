@@ -20,29 +20,43 @@ class _FixedNoteController extends NoteController {
   NoteState? build() => _initial;
 }
 
-/// A [RustApi] whose `updateBlock` never touches the real FFI: it just
-/// echoes the edited node back as a single-element AST, which is enough to
-/// prove the Dart-side round trip (keystroke -> provider update) is
-/// synchronous, without needing the compiled Rust dylib loaded in a widget
-/// test.
+/// A [RustApi] whose `updateBlock` never touches the real FFI. `update_block`
+/// is the per-keystroke call (ADR-007 decision 4): it buffers raw source
+/// text into the Note's working source and writes the draft row, returning
+/// nothing and reparsing nothing. This fake is therefore a spy rather than a
+/// stand-in that echoes a reparsed state back — recording the arguments it
+/// was called with is enough to prove the Dart-side round trip (keystroke ->
+/// `RustApi.updateBlock`) fires with the right Block path and raw text,
+/// without needing the compiled Rust dylib loaded in a widget test.
 class _FakeRustApi extends RustApi {
-  const _FakeRustApi();
+  _FakeRustApi();
+
+  String? lastNoteId;
+  List<int>? lastBlockPath;
+  String? lastSource;
 
   @override
-  NoteState updateBlock(String noteId, List<int> blockPath, AstNode newNode) =>
-      NoteState(ast: [newNode], metadata: _testMetadata, baseRevision: 'head');
+  void updateBlock(String noteId, List<int> blockPath, String source) {
+    lastNoteId = noteId;
+    lastBlockPath = blockPath;
+    lastSource = source;
+  }
 }
 
 const _testMetadata = NoteMetadata(
   id: 'test-note',
-  workspaceId: 'ws',
   path: 'test-note.md',
   title: 'Test Note',
   lastModified: 0,
+  okfConformant: true,
 );
 
-NoteState _testNoteState(List<AstNode> ast) =>
-    NoteState(ast: ast, metadata: _testMetadata, baseRevision: 'head');
+NoteState _testNoteState(List<AstNode> ast) => NoteState(
+  ast: ast,
+  metadata: _testMetadata,
+  baseRevision: 'head',
+  restoredFromDraft: false,
+);
 
 Future<void> pumpEditor(WidgetTester tester, List<AstNode> ast) =>
     tester.pumpWidget(
@@ -213,34 +227,53 @@ void main() {
     expect(find.text('•'), findsNothing);
   });
 
-  testWidgets('typing in a paragraph updates the note state within one frame', (
-    tester,
-  ) async {
-    final container = ProviderContainer(
-      overrides: [
-        activeNoteProvider.overrideWith(
-          () => _FixedNoteController(_testNoteState([_paragraphOf('before')])),
+  testWidgets(
+    'typing in a paragraph calls update_block with the raw source text '
+    'within one frame, and does not itself reparse the note',
+    (tester) async {
+      final fakeApi = _FakeRustApi();
+      final container = ProviderContainer(
+        overrides: [
+          activeNoteProvider.overrideWith(
+            () =>
+                _FixedNoteController(_testNoteState([_paragraphOf('before')])),
+          ),
+          rustApiProvider.overrideWithValue(fakeApi),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(home: Scaffold(body: Editor())),
         ),
-        rustApiProvider.overrideWithValue(const _FakeRustApi()),
-      ],
-    );
-    addTearDown(container.dispose);
+      );
 
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: const MaterialApp(home: Scaffold(body: Editor())),
-      ),
-    );
+      await tester.enterText(find.byType(TextField).first, 'after');
+      await tester.pump(); // exactly one frame — no extra async round trip
 
-    await tester.enterText(find.byType(TextField).first, 'after');
-    await tester.pump(); // exactly one frame — no extra async round trip
+      // `update_block` (ADR-007 decision 4) is the per-keystroke call: it
+      // takes the Block's raw source text, not a reconstructed AstNode, and
+      // this is what proves the field's keystroke reaches it with the right
+      // arguments.
+      expect(fakeApi.lastNoteId, _testMetadata.id);
+      expect(fakeApi.lastBlockPath, [0]);
+      expect(fakeApi.lastSource, 'after');
 
-    final updated = container.read(activeNoteProvider);
-    final paragraph = updated!.ast.single as AstNode_Paragraph;
-    final leaf = paragraph.content.single as InlineElement_Text;
-    expect(leaf.field0.content, 'after');
-  });
+      // The field itself already shows the typed text via its own
+      // TextEditingController — that is what the user sees.
+      expect(find.text('after'), findsOneWidget);
+
+      // `update_block` returns nothing and performs no parse (that is
+      // `commit_block`'s job, on blur — EDIT-F002 territory, not wired up
+      // here), so the provider's own note state is left exactly as it was.
+      final updated = container.read(activeNoteProvider);
+      final paragraph = updated!.ast.single as AstNode_Paragraph;
+      final leaf = paragraph.content.single as InlineElement_Text;
+      expect(leaf.field0.content, 'before');
+    },
+  );
 
   testWidgets(
     'swapping to a different note resyncs an untouched, reused field',

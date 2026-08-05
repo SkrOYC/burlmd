@@ -14,13 +14,33 @@ pub struct TextRun {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum InlineElement {
     Text(TextRun),
-    /// A lateral link to another note `[[title]]`
+    /// A Link to another Note. On disk this is a standard bundle-absolute
+    /// Markdown link with an angle-bracket-wrapped destination,
+    /// `[text](</dir/note.md>)` (ADR-004 decision 5, OKF §6.1) — the `[[`
+    /// sequence is a UI trigger only and is never stored.
     Link {
-        target_title: String,
-        resolved_note_id: Option<String>,
+        /// The target's OKF concept id, as `okf::links::classify` derived it
+        /// from the parsed destination. Always present, even when nothing
+        /// matches it.
+        target_id: String,
+        /// False for a ghost Link — a Link to a Note not yet created, which
+        /// OKF §6.1 requires consumers to tolerate and which CAP-GRAPH-04
+        /// makes a feature.
+        ///
+        /// Resolving this requires the index, not the parser: it is whether
+        /// `target_id` matches a `notes` row. `WSPC-D003` declares the field
+        /// and sits upstream of the indexer, so it leaves the field `false`
+        /// and `WSPC-D005` populates it.
+        ///
+        /// **Advisory, and only as fresh as the state it came from.** Creating
+        /// or deleting a Note flips it for every inbound Link in every other
+        /// Note, so the follow path must re-resolve against the index rather
+        /// than trust the flag; what it is *for* is rendering.
+        exists: bool,
         content: Vec<InlineElement>,
     },
-    /// A standard markdown link `[text](url)`
+    /// Any link that is not an internal Note reference: it has a URL scheme,
+    /// or does not end in `.md`.
     ExternalLink {
         url: String,
         content: Vec<InlineElement>,

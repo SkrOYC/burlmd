@@ -115,6 +115,182 @@ pub fn clone_repo(
     Ok(())
 }
 
+/// Initializes a Git repository in `dest` (ADR-005 decision 2: `init`, not `clone`), creating
+/// `dest` itself if it does not yet exist. A no-op when `dest` already contains a repository —
+/// reached when `open_workspace` adopts a directory the user pointed at that already has
+/// history, or when `open_or_create_local_workspace`/`open_workspace` runs a second time
+/// against the same Workspace directory (ADR-005 decision 8, `flow-workspace-bootstrap.md`):
+/// existing history is adopted unchanged rather than re-initialized, which is what makes this
+/// safe to call unconditionally on every bootstrap path.
+///
+/// Checked via `gix::open` first rather than a bare `.git`-directory existence check, since
+/// that is the same definition of "already a repository" every other function in this module
+/// uses. `gix::init` itself would otherwise fail outright the moment `.git` exists
+/// (`gix_discover::repository::Path`'s `DirectoryExists` error) — there is no idempotent
+/// "init or open" call on `gix`'s own surface to delegate this to.
+///
+/// Either way — initialized here or adopted — the bundle is left with a
+/// `.gitignore` carrying `workspace::SCRATCH_IGNORE_PATTERNS`. See
+/// [`ensure_scratch_ignored`] for why that has to happen on the adoption path
+/// too, and for how a user's existing file is extended rather than replaced.
+///
+/// Returns **whether that `.gitignore` was created or extended**, because the
+/// file is a write into the user's bundle that nothing here commits. Left
+/// uncommitted it is an untracked (or modified) path in every `git status` the
+/// user ever runs against their own bundle, forever, and it is resolved at a
+/// time nobody chose by whatever commits next — a tier 3 close sweeping it into
+/// a Note's commit, or a `commit_all` from a sync. The caller that owns the
+/// bundle-opening flow ([`crate::workspace::bootstrap`]) records it in one
+/// pathspec'd commit of its own, and only when this reports `true`: a repeat
+/// open writes nothing and must therefore commit nothing.
+pub fn init_repo(dest: &Path) -> Result<bool, AppError> {
+    // Bootstrap's first phase, and one of the three that used to run inside a
+    // `with_connection` closure — `SPK-WSPC-D001` §6.2.7's first standing rule.
+    crate::db::connection::assert_no_io_under_the_connection("initializing a repository");
+
+    if gix::open(dest).is_ok() {
+        return ensure_scratch_ignored(dest);
+    }
+
+    gix::init(dest).map_err(|e| AppError::IoError(format!("init repo: {e}")))?;
+    ensure_scratch_ignored(dest)
+}
+
+/// Makes sure `dest/.gitignore` excludes burlmd's own scratch files, creating
+/// the file when there is none and **appending only the missing patterns** when
+/// there is one.
+///
+/// Applied on adoption as well as on init, because the hazard is a property of
+/// the bundle rather than of who created it: `commit_all` snapshots the whole
+/// worktree, so a `.burlmd-trash.*` entry or an `.{name}.tmp` left behind by a
+/// `SIGKILL` — the two cases where no `Drop` and no rename get to run — is
+/// plaintext that the next broad commit records and a connected Remote then
+/// publishes. A bundle adopted from another tool is exactly as exposed to that
+/// as one this application created.
+///
+/// The existing file is never rewritten or reordered. It is the user's, may
+/// carry patterns that matter to tools burlmd knows nothing about, and the only
+/// edit made here is appending the lines that are genuinely absent.
+///
+/// # Why this publishes by rename
+///
+/// The append is composed in memory and then written through
+/// [`crate::workspace::persist::atomic_write`], not `std::fs::write`. This is
+/// the one write this application makes into a file the *user* owns — every
+/// other write into a bundle is a Note, and every one of those already goes
+/// through that call — and a truncating write is the one shape that can destroy
+/// the file it is extending: `std::fs::write` opens with `O_TRUNC`, so a kill
+/// (or a full disk) between the truncate and the write leaves the user's own
+/// `.gitignore` empty, having lost patterns burlmd never had any business
+/// touching. Publishing by rename means the previous contents stay addressable
+/// until the new ones are complete and `fsync`ed. `atomic_write` also carries
+/// the target's mode forward, which matters for the same reason it matters for
+/// a Note: the file the user ends up with is the temporary one, so without that
+/// step a restricted `.gitignore` would come back world-readable.
+///
+/// A `.gitignore` this call *creates* therefore lands at `atomic_write`'s
+/// private creation mode rather than at the umask, which is consistent with
+/// every Note this application creates rather than a special case.
+///
+/// Returns `true` when the file was actually created or appended to, so that
+/// [`init_repo`]'s caller can commit it exactly once. See [`init_repo`].
+///
+/// # A symlinked `.gitignore` is left alone
+///
+/// Publishing by rename is what makes the append safe, and it is also what makes
+/// it wrong here: a rename replaces the *link* with a regular file, so a
+/// `.gitignore` the user symlinked into a dotfiles repository — the ordinary way
+/// a shared ignore file is kept — would be silently detached from its source,
+/// with the patterns still present but every future edit at the other end no
+/// longer arriving. Resolving the link and appending through it instead means
+/// writing into a file outside the bundle that the user never pointed this
+/// application at, which is worse.
+///
+/// So the extension is declined and `false` returned, leaving the user's
+/// arrangement exactly as they built it. What that gives up is only the
+/// *backstop*: the scratch files this pattern list covers are swept on every
+/// bootstrap ([`crate::workspace::bootstrap`]), and every commit this
+/// application makes is pathspec-scoped to the Notes it touched, so a scratch
+/// file reaching a commit needs the sweep to have missed it *and* a broad
+/// `commit_all` to run. The creation path is unaffected — there is no link to
+/// detach when there is no file.
+///
+/// # A `.gitignore` that cannot be read is declined too, not raised
+///
+/// Same policy, same reasoning, and it is a stronger requirement than it looks:
+/// this call sits under `init_repo`, which sits under
+/// [`crate::workspace::bootstrap::converge`], which every `open_workspace` runs.
+/// An error raised here therefore does not degrade the backstop, it makes the
+/// bundle **unopenable** — and the inputs that produce one all belong to bundles
+/// this application did not create. A `.gitignore` written in latin-1 (or any
+/// other non-UTF-8 encoding, which `git` itself is perfectly happy to match
+/// patterns from), a directory someone left at that name, a file whose mode
+/// denies this process: each used to surface as `IoError` out of a plain
+/// `read_to_string` and lock the user out of their own notes over a housekeeping
+/// file.
+///
+/// The bytes are therefore read as bytes and the extension declined whenever
+/// they cannot be read or are not UTF-8. Declining rather than appending blind
+/// matters for the non-UTF-8 case specifically: the "already present" test is a
+/// line comparison, so without decodable text this call cannot tell whether the
+/// patterns are there and would duplicate them on every open.
+///
+/// Write failures on the append path are still errors. By then the file has been
+/// read, the decision to extend it has been made, and a failure to publish is a
+/// real one — not a foreign bundle presenting bytes this application has no
+/// business insisting on.
+fn ensure_scratch_ignored(dest: &Path) -> Result<bool, AppError> {
+    let path = dest.join(".gitignore");
+    if std::fs::symlink_metadata(&path).is_ok_and(|metadata| metadata.is_symlink()) {
+        return Ok(false);
+    }
+    let existing = match std::fs::read(&path) {
+        Ok(bytes) => match String::from_utf8(bytes) {
+            Ok(contents) => Some(contents),
+            // Not text this call can reason about, so it cannot tell which
+            // patterns are already present and must not append blind.
+            Err(_) => return Ok(false),
+        },
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
+        // Unreadable for any other reason -- a directory at that name, a mode
+        // that denies this process, a device error. See above.
+        Err(_) => return Ok(false),
+    };
+
+    let present: Vec<&str> = existing
+        .as_deref()
+        .unwrap_or_default()
+        .lines()
+        .map(str::trim)
+        .collect();
+    let missing: Vec<&str> = crate::workspace::SCRATCH_IGNORE_PATTERNS
+        .iter()
+        .copied()
+        .filter(|pattern| !present.contains(pattern))
+        .collect();
+    if missing.is_empty() {
+        return Ok(false);
+    }
+
+    let mut out = String::new();
+    if let Some(contents) = &existing {
+        out.push_str(contents);
+        if !contents.is_empty() && !contents.ends_with('\n') {
+            out.push('\n');
+        }
+        if !contents.is_empty() {
+            out.push('\n');
+        }
+    }
+    out.push_str("# burlmd scratch files: never bundle content, and plaintext.\n");
+    for pattern in missing {
+        out.push_str(pattern);
+        out.push('\n');
+    }
+    crate::workspace::persist::atomic_write(&path, out.as_bytes())?;
+    Ok(true)
+}
+
 /// Snapshot every file currently in the working tree (excluding `.git` and anything matched
 /// by `.gitignore`) into a new tree object and create a commit on top of the current `HEAD`,
 /// moving the branch ref forward.
@@ -181,11 +357,7 @@ pub fn commit_all(
             .write_blob(bytes)
             .map_err(|e| AppError::IoError(format!("write blob: {e}")))?;
         editor
-            .upsert(
-                rela_path.as_str(),
-                gix::object::tree::EntryKind::Blob,
-                blob_id.detach(),
-            )
+            .upsert(rela_path.as_str(), blob_kind(file), blob_id.detach())
             .map_err(|e| AppError::IoError(format!("stage {}: {e}", relative.display())))?;
     }
 
@@ -232,6 +404,386 @@ pub fn commit_all(
         .map_err(|e| AppError::IoError(format!("write index: {e}")))?;
 
     Ok(commit_id.detach().to_string())
+}
+
+/// The identity every commit this application makes is authored and committed
+/// as (ADR-008's consequences).
+///
+/// Deliberately **not** the user's identity and deliberately not read from
+/// `user.name`/`user.email`: the local Workspace has no account, and asking
+/// for one would reintroduce the onboarding step ADR-005 removed. `.invalid`
+/// is reserved by RFC 2606 precisely so it can never resolve. Once a Remote is
+/// attached, Epic G may set a provider identity for *subsequent* commits; it
+/// must not rewrite earlier ones, since the whole point of tier 3 is that
+/// history exists before any Remote does.
+pub const COMMIT_AUTHOR_NAME: &str = "burlmd";
+/// See [`COMMIT_AUTHOR_NAME`].
+pub const COMMIT_AUTHOR_EMAIL: &str = "noreply@burlmd.invalid";
+
+/// Commits **only** `relative_paths`, leaving every other change in the
+/// working tree uncommitted. Returns the new commit's hex object id, or `None`
+/// when the paths already match `HEAD` and there was therefore nothing to
+/// commit.
+///
+/// This is ADR-008 tier 3's operation, and the reason [`commit_all`] cannot
+/// serve it: a tier 3 commit covers one Note's editing session, so with two
+/// Notes dirty on disk a whole-worktree snapshot would sweep both and break
+/// the "approximately one commit per Note per writing session" guarantee that
+/// is this design's entire justification.
+///
+/// Authored and committed as [`COMMIT_AUTHOR_NAME`]/[`COMMIT_AUTHOR_EMAIL`],
+/// never as a value read from the user or from Git configuration — the
+/// signature is passed explicitly to `Repository::commit_as`, so no
+/// `~/.gitconfig` on the host can influence it.
+///
+/// The new tree starts from `HEAD`'s tree rather than from the empty tree,
+/// which is exactly the difference from [`commit_all`]: every path not named
+/// here keeps whatever `HEAD` recorded for it. A named path that is absent
+/// from disk is removed from the tree, so a deletion commits as a deletion.
+///
+/// Returning `None` rather than writing an empty commit is load-bearing, not
+/// tidiness. Opening a Note to read it and navigating away calls `close_note`,
+/// which is the *most common* path through tier 3; committing unconditionally
+/// would put one empty commit in history per Note visited.
+///
+/// # One `HEAD` snapshot, read once
+///
+/// The parent tree and the parent commit id come from the **same** read of
+/// `HEAD`, and that is a correctness requirement rather than tidiness. They used
+/// to be two reads — the tree at the top, the id just before `commit_as` — and a
+/// commit landing between them produced a commit that `gix` **accepts**: the
+/// reference update's compare-and-swap is `MustExistAndMatch(first parent)`
+/// (`gix::Repository::commit_as`), so a *fresh* parent satisfies it while the
+/// tree beneath it is still the stale one this call started from. Every path the
+/// intervening commit changed and this one did not name is then silently
+/// reverted to its pre-commit content, in a commit that reports success.
+///
+/// Reading `HEAD` once closes it by making the CAS mean what it looks like it
+/// means: the parent handed to `commit_as` is the commit whose tree this one was
+/// derived from, so an intervening commit fails the CAS and the operation
+/// **errors** instead. Tier 3's callers already treat a failed commit stage as a
+/// reportable outcome (`workspace::lifecycle`'s commit-stage reporting, and
+/// `bootstrap::converge` propagates it), which is the correct answer to "the
+/// bundle moved underneath this operation": retryable, and visible.
+pub fn commit_paths(
+    repo_path: &Path,
+    message: &str,
+    relative_paths: &[String],
+) -> Result<Option<String>, AppError> {
+    commit_paths_hooked(repo_path, message, relative_paths, || {})
+}
+
+/// [`commit_paths`] with a seam for the test that drives the torn `HEAD` window.
+///
+/// `after_snapshot` runs after this call has read `HEAD` and built its tree, and
+/// before the commit that names that snapshot as its parent is written — which
+/// is precisely the window a concurrent commit occupies. It is `|| {}`
+/// everywhere but that one test, and monomorphizes away.
+fn commit_paths_hooked(
+    repo_path: &Path,
+    message: &str,
+    relative_paths: &[String],
+    after_snapshot: impl FnOnce(),
+) -> Result<Option<String>, AppError> {
+    let repo = gix::open(repo_path).map_err(|e| AppError::IoError(format!("open repo: {e}")))?;
+
+    // The single `HEAD` snapshot everything below is derived from: the parent
+    // tree, the emptiness check, and the parent this commit claims. `None` is an
+    // unborn `HEAD`, which takes the empty tree and no parent — and therefore
+    // `MustNotExist` as its CAS, so a first commit racing this one fails just as
+    // loudly.
+    let head_id: Option<gix::ObjectId> = repo.head_id().ok().map(gix::Id::detach);
+    let parent_tree_id = match head_id {
+        Some(head) => repo
+            .find_commit(head)
+            .map_err(|e| AppError::IoError(format!("read HEAD commit: {e}")))?
+            .tree_id()
+            .map_err(|e| AppError::IoError(format!("read HEAD tree: {e}")))?
+            .detach(),
+        None => gix::ObjectId::empty_tree(repo.object_hash()),
+    };
+    let mut editor = repo
+        .edit_tree(parent_tree_id)
+        .map_err(|e| AppError::IoError(format!("start tree edit: {e}")))?;
+
+    let mut staged: Vec<StagedPath> = Vec::with_capacity(relative_paths.len());
+    for relative in relative_paths {
+        let absolute = repo_path.join(relative);
+        if absolute.is_file() {
+            let bytes = std::fs::read(&absolute)
+                .map_err(|e| AppError::IoError(format!("read {}: {e}", absolute.display())))?;
+            let blob_id = repo
+                .write_blob(bytes)
+                .map_err(|e| AppError::IoError(format!("write blob: {e}")))?;
+            let kind = blob_kind(&absolute);
+            editor
+                .upsert(relative.as_str(), kind, blob_id.detach())
+                .map_err(|e| AppError::IoError(format!("stage {relative}: {e}")))?;
+            staged.push(StagedPath {
+                relative: relative.clone(),
+                blob: Some((blob_id.detach(), kind)),
+            });
+        } else {
+            editor
+                .remove(relative.as_str())
+                .map_err(|e| AppError::IoError(format!("unstage {relative}: {e}")))?;
+            staged.push(StagedPath {
+                relative: relative.clone(),
+                blob: None,
+            });
+        }
+    }
+
+    let tree_id = editor
+        .write()
+        .map_err(|e| AppError::IoError(format!("write tree: {e}")))?
+        .detach();
+    if tree_id == parent_tree_id {
+        return Ok(None);
+    }
+
+    after_snapshot();
+
+    // The snapshot above, not a second read: see `commit_paths`.
+    let parents: Vec<gix::ObjectId> = head_id.into_iter().collect();
+
+    let signature = gix::actor::Signature {
+        name: COMMIT_AUTHOR_NAME.into(),
+        email: COMMIT_AUTHOR_EMAIL.into(),
+        time: gix::date::Time::now_local_or_utc(),
+    };
+    let mut time_buf = gix::date::parse::TimeBuf::default();
+    let signature_ref = signature.to_ref(&mut time_buf);
+    let commit_id = repo
+        .commit_as(
+            signature_ref,
+            signature_ref,
+            "HEAD",
+            message,
+            tree_id,
+            parents,
+        )
+        .map_err(|e| AppError::IoError(format!("write commit: {e}")))?;
+
+    // Same obligation as `commit_all`: `commit_as` moves the ref without
+    // touching `.git/index`, so a later `git status`/`git merge` (the CLI
+    // shell-outs push and pull use) would otherwise see phantom uncommitted
+    // changes for the paths just committed. Unlike `commit_all`, only the named
+    // paths' entries move — see [`refresh_index_entries`].
+    refresh_index_entries(&repo, &tree_id, &staged)?;
+
+    Ok(Some(commit_id.detach().to_string()))
+}
+
+/// What one named path became in the tree [`commit_paths`] just wrote: the blob
+/// it staged, with the mode it staged it under, or `None` when the path was gone
+/// from disk and the commit therefore recorded a deletion.
+struct StagedPath {
+    relative: String,
+    blob: Option<(gix::ObjectId, gix::object::tree::EntryKind)>,
+}
+
+/// Brings `.git/index` into line with a [`commit_paths`] commit by moving
+/// **only the entries for the paths that commit named**, leaving every other
+/// entry — and therefore everything the user has staged — exactly as it was.
+///
+/// # Why this is not `index_from_tree(...).write()`
+///
+/// It used to be, and that call does not update an index: it *replaces* one.
+/// The rebuilt index is the committed tree and nothing else, so every entry the
+/// user had staged and not yet committed was silently discarded — `git add A.md`
+/// followed by burlmd closing a session over `B.md` left `A.md`'s staged
+/// version gone from the index with no message, and `git diff --cached` empty.
+/// That runs on **every** `close_note` and again at `converge`, and it is worst
+/// exactly where it is least expected: an adopted repository (ADR-005 decision
+/// 8) whose owner uses Git normally alongside burlmd. A bundle is the user's
+/// directory and their repository; this application commits into it, and it has
+/// no business rearranging their staging area to do so.
+///
+/// `commit_all` keeps the wholesale rebuild, and the asymmetry is deliberate:
+/// it is `git add -A && git commit`, which stages the entire worktree anyway, so
+/// there is nothing of the user's left for it to preserve.
+///
+/// # What each named path does to the index
+///
+/// - A path the commit **removed** takes its index entry with it, at every
+///   stage, along with every entry beneath it — `commit_paths` reads a directory
+///   path as a subtree removal (that is how `delete_directory` and
+///   `rename_directory`'s old half are committed), and the index is flat, so the
+///   subtree has to be swept by prefix here.
+/// - A path the commit **staged** gets its entry's object id and mode set to
+///   what was committed, and its conflict stages (1/2/3) dropped: committing a
+///   path resolves it, which is what `git add` does too.
+/// - A staged path's **flags are narrowed, not cleared**. Only
+///   `INTENT_TO_ADD` is removed, because that is the one flag committing the
+///   path genuinely retires — `git add --intent-to-add` marks an entry whose
+///   content is not in the object database yet, and after this it is. Every
+///   other flag on that entry was set by the user with `git update-index`:
+///   `ASSUME_VALID` (`--assume-unchanged`) and `SKIP_WORKTREE`
+///   (`--skip-worktree`) are deliberate instructions to Git about how to treat
+///   *their* file, and they survive `git commit` in Git itself. Resetting the
+///   whole word to `Flags::empty()` silently revoked both, on every
+///   `close_note`, in a repository the user also uses normally (ADR-005
+///   decision 8) — the same class of overreach as the wholesale index rebuild
+///   above, one field down.
+/// - A staged path with no entry yet is appended and the entries re-sorted,
+///   since `dangerously_push_entry` breaks the ordering every later lookup by
+///   path relies on.
+///
+/// The stat data is left zeroed rather than `lstat`ed, which is precisely what
+/// `index_from_tree` produced for every entry before this and therefore is not a
+/// change in behavior. Git reads a zero `sd_size` as "never stat'ed" and falls
+/// back to comparing content (`read-cache.c`'s `ie_modified`), so the path reads
+/// as clean when it matches and dirty when it does not. Recording a stat taken
+/// *after* the bytes were read would be the unsafe direction: a write landing in
+/// between would leave the index asserting the worktree is clean when it is not.
+///
+/// The tree-cache extension is dropped, on `gix_index::File::write`'s own
+/// instruction: it is serialized as-is and is not invalidated against the
+/// entries, so leaving a stale one behind would let a later `git commit` capture
+/// outdated subtree content.
+fn refresh_index_entries(
+    repo: &gix::Repository,
+    tree_id: &gix::ObjectId,
+    staged: &[StagedPath],
+) -> Result<(), AppError> {
+    use gix::index::entry::{Flags, Mode, Stage, Stat};
+
+    // No index file at all — a repository initialized and never staged into.
+    // There is nothing of the user's to preserve, so seeding it from the tree
+    // just committed is both correct and the only thing available.
+    if !repo.index_path().exists() {
+        let mut built = repo
+            .index_from_tree(tree_id)
+            .map_err(|e| AppError::IoError(format!("build index from tree: {e}")))?;
+        built
+            .write(gix::index::write::Options::default())
+            .map_err(|e| AppError::IoError(format!("write index: {e}")))?;
+        return Ok(());
+    }
+
+    let mut index = repo
+        .open_index()
+        .map_err(|e| AppError::IoError(format!("open index: {e}")))?;
+
+    let removed: Vec<&[u8]> = staged
+        .iter()
+        .filter(|s| s.blob.is_none())
+        .map(|s| s.relative.as_bytes())
+        .collect();
+    let updated: Vec<&[u8]> = staged
+        .iter()
+        .filter(|s| s.blob.is_some())
+        .map(|s| s.relative.as_bytes())
+        .collect();
+    index.remove_entries(|_, path, entry| {
+        let path: &[u8] = path;
+        removed.iter().any(|r| is_at_or_under(path, r))
+            || (entry.stage() != Stage::Unconflicted && updated.contains(&path))
+    });
+
+    let mut appended = false;
+    for entry in staged {
+        let Some((blob_id, kind)) = entry.blob else {
+            continue;
+        };
+        let mode = if kind == gix::object::tree::EntryKind::BlobExecutable {
+            Mode::FILE_EXECUTABLE
+        } else {
+            Mode::FILE
+        };
+        let path = gix::bstr::BStr::new(entry.relative.as_bytes());
+        match index.entry_mut_by_path_and_stage(path, Stage::Unconflicted) {
+            Some(existing) => {
+                existing.id = blob_id;
+                existing.mode = mode;
+                existing.stat = Stat::default();
+                // Only intent-to-add is cleared — see this function's
+                // documentation on why the rest are the user's.
+                existing.flags -= Flags::INTENT_TO_ADD;
+            }
+            None => {
+                index.dangerously_push_entry(Stat::default(), blob_id, Flags::empty(), mode, path);
+                appended = true;
+            }
+        }
+    }
+    if appended {
+        index.sort_entries();
+    }
+    index.remove_tree();
+
+    index
+        .write(gix::index::write::Options::default())
+        .map_err(|e| AppError::IoError(format!("write index: {e}")))?;
+    Ok(())
+}
+
+/// Whether the index entry at `path` is the removed path `removed` itself or
+/// lives beneath it. `commit_paths` names a Directory as one path and reads it
+/// as a subtree removal; index entries are flat file paths, so the subtree has
+/// to be recognized by prefix — and by a prefix that ends at a `/` boundary, so
+/// that removing `Notes` does not also unstage `Notes-archive/a.md`.
+fn is_at_or_under(path: &[u8], removed: &[u8]) -> bool {
+    if path == removed {
+        return true;
+    }
+    path.len() > removed.len()
+        && path.starts_with(removed)
+        && !removed.is_empty()
+        && path[removed.len()] == b'/'
+}
+
+/// The tree entry kind for a regular file on disk: `100755` when it carries
+/// the executable bit, `100644` otherwise.
+///
+/// Staging everything as `Blob` flattened the mode of every file in the
+/// bundle, which undoes on the very next commit what
+/// `persist::atomic_write`'s permission carry-forward preserves on disk — and
+/// unlike a working-tree mode, the flattened one travels: a clone or a
+/// checkout of that history hands back a script that no longer runs. A bundle
+/// is an ordinary directory a user can put anything in
+/// (`data-models/okf-bundle.md`), so this is not hypothetical even though
+/// burlmd itself writes only Notes.
+///
+/// Unix only, and unconditionally so for the reason
+/// [`persist::atomic_write`](crate::workspace::persist)'s permission
+/// carry-forward gives: burlmd ships to desktop Linux and macOS
+/// (`tech-spec/stack.md`), and Windows has no bit to read. A metadata call
+/// that fails is not an error here — the bytes were already read successfully
+/// — so it falls back to the ordinary mode.
+#[cfg(unix)]
+fn blob_kind(absolute: &Path) -> gix::object::tree::EntryKind {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let executable = std::fs::metadata(absolute)
+        .map(|metadata| metadata.permissions().mode() & 0o111 != 0)
+        .unwrap_or(false);
+    if executable {
+        gix::object::tree::EntryKind::BlobExecutable
+    } else {
+        gix::object::tree::EntryKind::Blob
+    }
+}
+
+#[cfg(not(unix))]
+fn blob_kind(_absolute: &Path) -> gix::object::tree::EntryKind {
+    gix::object::tree::EntryKind::Blob
+}
+
+/// Whether `relative_path` is present in the commit `HEAD` points at — what
+/// tells tier 3's generated message whether this session created the Note or
+/// changed one that was already in history. `false` for an unborn `HEAD`.
+pub fn path_in_head(repo_path: &Path, relative_path: &str) -> Result<bool, AppError> {
+    let repo = gix::open(repo_path).map_err(|e| AppError::IoError(format!("open repo: {e}")))?;
+    let tree_id = repo
+        .head_tree_id_or_empty()
+        .map_err(|e| AppError::IoError(format!("read HEAD tree: {e}")))?
+        .detach();
+    let editor = repo
+        .edit_tree(tree_id)
+        .map_err(|e| AppError::IoError(format!("start tree edit: {e}")))?;
+    Ok(editor.get(relative_path).is_some())
 }
 
 /// Push `branch` to `remote` (a configured remote name, e.g. `"origin"`).
@@ -444,16 +996,41 @@ fn git_command(workdir: &Path) -> Command {
 /// process is therefore a conscious, accepted bound of authenticating via `git`'s CLI env
 /// mechanism at all, not something this function can close.
 fn apply_credentials(cmd: &mut Command, credentials: Option<&GitCredentials>) {
+    // The `Command` inherits this process's own environment, which may already carry an
+    // injected `GIT_CONFIG_COUNT`/`GIT_CONFIG_KEY_n`/`GIT_CONFIG_VALUE_n` sequence (e.g.
+    // from a wrapper this binary itself was launched under). Unconditionally starting our
+    // own entry at index 0 with `GIT_CONFIG_COUNT=1` would silently discard or mis-index
+    // whatever was already there; append after it instead.
+    apply_credentials_after(cmd, credentials, existing_git_config_count());
+}
+
+/// [`apply_credentials`] with the inherited entry count **passed in** rather than read from
+/// the process environment.
+///
+/// The split exists for the two tests that cover the appending behavior, and it is a real
+/// bug fix rather than a testing convenience. Those tests used to establish their fixture by
+/// `std::env::set_var`ing `GIT_CONFIG_COUNT`/`GIT_CONFIG_KEY_0`/`GIT_CONFIG_VALUE_0` into the
+/// *process* environment, holding `db::connection::ENV_LOCK` — a lock that, as the comment
+/// above them said in as many words, deliberately does not cover the many other tests in this
+/// crate that spawn a real `git` child. But `git` reads that sequence out of the environment
+/// it inherits at `fork`/`exec`, and the three variables cannot be set atomically: any `git`
+/// spawned in the window after `GIT_CONFIG_COUNT=1` and before `GIT_CONFIG_VALUE_0` exists
+/// dies with `error: missing config value for GIT_CONFIG_VALUE_0`. That is a `git init` in
+/// another test thread failing for reasons that have nothing to do with what it is testing,
+/// which is exactly the intermittent failure this crate had been carrying as "a rare flake".
+///
+/// Reading the count once, at the one place that needs it, means the tests can pass the
+/// fixture as an argument and mutate nothing process-wide.
+fn apply_credentials_after(
+    cmd: &mut Command,
+    credentials: Option<&GitCredentials>,
+    inherited_entries: usize,
+) {
     if let Some(creds) = credentials {
         let user_pass = Zeroizing::new(format!("{}:{}", creds.username, creds.token.as_str()));
         let basic = Zeroizing::new(BASE64_STANDARD.encode(user_pass.as_bytes()));
         let header_value = Zeroizing::new(format!("Authorization: Basic {}", basic.as_str()));
-        // The `Command` inherits this process's own environment, which may already carry an
-        // injected `GIT_CONFIG_COUNT`/`GIT_CONFIG_KEY_n`/`GIT_CONFIG_VALUE_n` sequence (e.g.
-        // from a wrapper this binary itself was launched under). Unconditionally starting our
-        // own entry at index 0 with `GIT_CONFIG_COUNT=1` would silently discard or mis-index
-        // whatever was already there; append after it instead.
-        let index = existing_git_config_count();
+        let index = inherited_entries;
         cmd.env("GIT_CONFIG_COUNT", (index + 1).to_string());
         cmd.env(format!("GIT_CONFIG_KEY_{index}"), "http.extraheader");
         cmd.env(format!("GIT_CONFIG_VALUE_{index}"), header_value.as_str());
@@ -543,6 +1120,662 @@ mod tests {
     use std::process::Command as StdCommand;
     use tempfile::tempdir;
 
+    /// WSPC-D004: `init_repo` creates a directory that does not exist yet and initializes a
+    /// Git repository in it (ADR-005 decision 2/decision 1, "creates the directory when
+    /// absent, initializes a version-controlled repository in place").
+    #[test]
+    fn init_repo_creates_the_directory_and_a_repository_when_neither_exists() {
+        let parent = tempdir().unwrap();
+        let dest = parent.path().join("workspace");
+        assert!(!dest.exists());
+
+        super::init_repo(&dest).expect("init_repo should succeed against a nonexistent directory");
+
+        assert!(dest.is_dir());
+        assert!(dest.join(".git").is_dir());
+    }
+
+    /// The point of the `.gitignore` `init_repo` writes: `commit_all` is a
+    /// **whole-worktree** snapshot, so a scratch file left inside the bundle by
+    /// a `SIGKILL` — a `.burlmd-trash.*` entry holding a deleted Note's entire
+    /// content, or an `.{name}.tmp` holding a Note mid-write — would otherwise
+    /// be committed as plaintext by the next commit, and pushed by the next
+    /// sync. Asserted against a real commit rather than against the file's
+    /// text, since what matters is `gix`'s reading of the patterns rather than
+    /// their spelling.
+    #[test]
+    fn scratch_files_a_kill_left_behind_are_never_committed() {
+        let dir = tempdir().unwrap();
+        super::init_repo(dir.path()).unwrap();
+        std::fs::create_dir_all(dir.path().join("projects")).unwrap();
+        std::fs::write(dir.path().join("Kept.md"), b"a real Note\n").unwrap();
+        std::fs::write(
+            dir.path().join(".burlmd-trash.Deleted.md.4242.0"),
+            b"the whole content of a deleted Note\n",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.path().join("projects/.Nested.md.4242.0.tmp"),
+            b"a Note as it was mid-write\n",
+        )
+        .unwrap();
+
+        commit_all(dir.path(), "snapshot", "Test User", "test@example.com").unwrap();
+
+        let tracked = StdCommand::new("git")
+            .args(["ls-tree", "-r", "--name-only", "HEAD"])
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+        let tracked = String::from_utf8_lossy(&tracked.stdout);
+        let mut paths: Vec<&str> = tracked.lines().collect();
+        paths.sort_unstable();
+        assert_eq!(
+            paths,
+            vec![".gitignore", "Kept.md"],
+            "no scratch file may reach a commit"
+        );
+    }
+
+    /// The `.gitignore` append is the only write this application makes into a
+    /// file the **user** owns, and it was the only one not going through
+    /// `persist::atomic_write`: a `std::fs::write` truncates in place, so a kill
+    /// between the truncate and the write left the user's own `.gitignore`
+    /// empty — on the adoption path, where the file is theirs and may carry
+    /// patterns burlmd knows nothing about (this function's own documentation
+    /// promises it is "never rewritten or reordered").
+    ///
+    /// Asserted by **inode identity**, which is what tells the two shapes
+    /// apart: a truncating write keeps the target's inode, while publishing by
+    /// rename replaces it — so the previous contents are addressable until the
+    /// instant the new ones are complete and durable. The mode assertion is the
+    /// second half of routing through that call rather than a second concern:
+    /// `carry_permissions_forward` is what keeps a rename from silently
+    /// widening a file the user had restricted.
+    #[cfg(unix)]
+    #[test]
+    fn extending_the_users_gitignore_publishes_by_rename_rather_than_truncating_it() {
+        use std::os::unix::fs::{MetadataExt, PermissionsExt};
+
+        let dir = tempdir().unwrap();
+        let path = dir.path().join(".gitignore");
+        std::fs::write(&path, "*.pdf\ndrafts/\n").unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
+        let before = std::fs::metadata(&path).unwrap().ino();
+
+        assert!(
+            super::init_repo(dir.path()).unwrap(),
+            "the patterns were absent, so this open must report having written them"
+        );
+
+        let after = std::fs::metadata(&path).unwrap();
+        assert_ne!(
+            before,
+            after.ino(),
+            "the .gitignore was written in place, so a kill mid-write would empty it"
+        );
+        assert_eq!(
+            after.permissions().mode() & 0o777,
+            0o600,
+            "the rename replaced the mode the user chose"
+        );
+        let contents = std::fs::read_to_string(&path).unwrap();
+        assert!(
+            contents.starts_with("*.pdf\ndrafts/\n"),
+            "the user's own patterns must survive verbatim, got {contents:?}"
+        );
+
+        let leftovers: Vec<String> = std::fs::read_dir(dir.path())
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+            .filter(|name| name.ends_with(".tmp"))
+            .collect();
+        assert!(
+            leftovers.is_empty(),
+            "the publishing rename left a temporary file behind: {leftovers:?}"
+        );
+    }
+
+    /// A `.gitignore` the user symlinked — into a dotfiles repository, say —
+    /// survives adoption as a symlink, and the file it points at is not written
+    /// either.
+    ///
+    /// The defect this pins: the append publishes by rename, and a rename over a
+    /// symlink replaces the *link* with a regular file. Adopting such a bundle
+    /// would have detached the user's shared ignore file from its source
+    /// silently, leaving the patterns in place but every later edit at the other
+    /// end no longer arriving. Declining costs only the backstop; see
+    /// `ensure_scratch_ignored`.
+    #[cfg(unix)]
+    #[test]
+    fn a_symlinked_gitignore_is_left_as_a_symlink_and_its_target_untouched() {
+        let dir = tempdir().unwrap();
+        let elsewhere = tempdir().unwrap();
+        let target = elsewhere.path().join("shared-gitignore");
+        std::fs::write(&target, "*.pdf\n").unwrap();
+        let link = dir.path().join(".gitignore");
+        std::os::unix::fs::symlink(&target, &link).unwrap();
+
+        assert!(
+            !super::init_repo(dir.path()).unwrap(),
+            "nothing was written, so this open must report nothing to commit"
+        );
+
+        assert!(
+            std::fs::symlink_metadata(&link).unwrap().is_symlink(),
+            "the publishing rename replaced the user's symlink with a regular file"
+        );
+        assert_eq!(
+            std::fs::read_link(&link).unwrap(),
+            target,
+            "the link now points somewhere else"
+        );
+        assert_eq!(
+            std::fs::read_to_string(&target).unwrap(),
+            "*.pdf\n",
+            "the file at the other end of the link was written through"
+        );
+    }
+
+    /// WSPC-D004 / ADR-005 decision 8: a directory of files this application did not create,
+    /// with no version history, gets a repository initialized in it rather than being left
+    /// unable to accumulate any (`close_note`'s tier 3 commit would otherwise have nothing to
+    /// commit into).
+    #[test]
+    fn init_repo_initializes_in_a_nonempty_directory_with_no_history() {
+        let dir = tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("existing.md"),
+            b"a note this app did not write\n",
+        )
+        .unwrap();
+
+        super::init_repo(dir.path()).expect("init_repo should succeed against a foreign directory");
+
+        assert!(dir.path().join(".git").is_dir());
+        // The file the user already had must be left completely untouched.
+        let contents = std::fs::read_to_string(dir.path().join("existing.md")).unwrap();
+        assert_eq!(contents, "a note this app did not write\n");
+    }
+
+    /// WSPC-D004 / ADR-005 decision 8: when the directory already has version history,
+    /// `init_repo` must adopt it unchanged rather than re-initializing (which would either
+    /// error against an existing `.git`, or — worse, if it silently succeeded — discard it).
+    #[test]
+    fn init_repo_is_a_noop_and_adopts_history_when_a_repository_already_exists() {
+        let dir = tempdir().unwrap();
+        super::init_repo(dir.path()).unwrap();
+        std::fs::write(dir.path().join("a.md"), b"a\n").unwrap();
+        let first_commit =
+            commit_all(dir.path(), "first", "Test User", "test@example.com").unwrap();
+
+        super::init_repo(dir.path()).expect("a second init_repo call must not fail");
+
+        let head = StdCommand::new("git")
+            .args(["rev-parse", "HEAD"])
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+        assert_eq!(
+            String::from_utf8_lossy(&head.stdout).trim(),
+            first_commit,
+            "existing history must be adopted unchanged, not reinitialized"
+        );
+    }
+
+    /// ADR-008 tier 3: a commit covers one Note's editing session, so with two
+    /// Notes dirty on disk, closing one must not sweep both.
+    #[test]
+    fn commit_paths_commits_only_the_named_path() {
+        let dir = tempdir().unwrap();
+        init_repo(dir.path());
+        std::fs::write(dir.path().join("a.md"), b"a first\n").unwrap();
+        std::fs::write(dir.path().join("b.md"), b"b first\n").unwrap();
+        commit_all(dir.path(), "baseline", "Test User", "test@example.com").unwrap();
+
+        std::fs::write(dir.path().join("a.md"), b"a second\n").unwrap();
+        std::fs::write(dir.path().join("b.md"), b"b second\n").unwrap();
+        let commit = commit_paths(dir.path(), "just a", &["a.md".to_string()])
+            .unwrap()
+            .expect("a changed path must produce a commit");
+
+        assert_eq!(commit.len(), 40, "expected a sha1 hex object id");
+        let changed = StdCommand::new("git")
+            .args(["show", "--name-only", "--format=", "HEAD"])
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+        assert_eq!(String::from_utf8_lossy(&changed.stdout).trim(), "a.md");
+        let committed_b = StdCommand::new("git")
+            .args(["show", "HEAD:b.md"])
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+        assert_eq!(
+            String::from_utf8_lossy(&committed_b.stdout),
+            "b first\n",
+            "the other Note's working-tree change was swept in"
+        );
+    }
+
+    /// A tier 3 commit updates the index entries for the paths it committed and
+    /// **nothing else** — the user's own staging area survives it untouched.
+    ///
+    /// The regression this pins: the index was brought up to date with
+    /// `index_from_tree(&tree_id).write()`, which does not update an index but
+    /// replaces one. Everything the user had staged and not yet committed was
+    /// discarded, silently, on every `close_note` and again at `converge` — so
+    /// `git add A.md` followed by burlmd closing a session over an unrelated
+    /// `B.md` left `git diff --cached` empty and A.md's staged version gone. A
+    /// bundle is the user's own repository (ADR-005 decision 8 adopts existing
+    /// ones); this application has no business rearranging their staging area to
+    /// commit into it.
+    #[test]
+    fn commit_paths_leaves_the_users_own_staged_changes_alone() {
+        let dir = tempdir().unwrap();
+        init_repo(dir.path());
+        std::fs::write(dir.path().join("a.md"), b"a first\n").unwrap();
+        std::fs::write(dir.path().join("b.md"), b"b first\n").unwrap();
+        commit_all(dir.path(), "baseline", "Test User", "test@example.com").unwrap();
+
+        // The user stages a change of their own and has not committed it yet.
+        std::fs::write(dir.path().join("a.md"), b"a staged by the user\n").unwrap();
+        git(dir.path(), &["add", "a.md"]);
+
+        // burlmd closes a session over an entirely different Note.
+        std::fs::write(dir.path().join("b.md"), b"b second\n").unwrap();
+        commit_paths(dir.path(), "just b", &["b.md".to_string()])
+            .unwrap()
+            .expect("a changed path must produce a commit");
+
+        let staged = StdCommand::new("git")
+            .args(["diff", "--cached", "--name-only"])
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+        assert_eq!(
+            String::from_utf8_lossy(&staged.stdout).trim(),
+            "a.md",
+            "the user's staged change was wiped out of the index"
+        );
+        let staged_bytes = StdCommand::new("git")
+            .args(["show", ":a.md"])
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+        assert_eq!(
+            String::from_utf8_lossy(&staged_bytes.stdout),
+            "a staged by the user\n",
+            "the staged version must be exactly what the user staged"
+        );
+        // The committed path itself still has to read as clean, which is the
+        // whole reason the index is touched at all.
+        let status = StdCommand::new("git")
+            .args(["status", "--porcelain"])
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+        assert_eq!(
+            String::from_utf8_lossy(&status.stdout).trim(),
+            "M  a.md",
+            "the committed path must be clean and only the user's own change staged"
+        );
+    }
+
+    /// The same obligation one field further in: the index **flags** the user
+    /// set on a path with `git update-index` survive a burlmd commit over it.
+    ///
+    /// The regression this pins: the entry's whole flag word was reset to
+    /// `Flags::empty()`, which silently revoked `--assume-unchanged`
+    /// (`ASSUME_VALID`) and `--skip-worktree` (`SKIP_WORKTREE`) on any path a
+    /// tier 3 commit named. Both are deliberate instructions the user gave Git
+    /// about how to treat their own file — `--skip-worktree` in particular is
+    /// how a tracked local config is kept out of every diff — and both survive
+    /// `git commit` in Git itself. A bundle is the user's repository (ADR-005
+    /// decision 8 adopts existing ones), so revoking them on every `close_note`
+    /// is the same overreach as rebuilding their staging area, one field down.
+    ///
+    /// Only `INTENT_TO_ADD` is cleared, and that one really is retired by
+    /// committing: it marks an entry whose content is not in the object database
+    /// yet, and after the commit it is.
+    #[test]
+    fn commit_paths_preserves_the_index_flags_the_user_set_with_update_index() {
+        use gix::index::entry::Flags;
+
+        let dir = tempdir().unwrap();
+        init_repo(dir.path());
+        std::fs::write(dir.path().join("assumed.md"), b"assumed first\n").unwrap();
+        std::fs::write(dir.path().join("skipped.md"), b"skipped first\n").unwrap();
+        commit_all(dir.path(), "baseline", "Test User", "test@example.com").unwrap();
+
+        git(
+            dir.path(),
+            &["update-index", "--assume-unchanged", "assumed.md"],
+        );
+        git(
+            dir.path(),
+            &["update-index", "--skip-worktree", "skipped.md"],
+        );
+
+        std::fs::write(dir.path().join("assumed.md"), b"assumed second\n").unwrap();
+        std::fs::write(dir.path().join("skipped.md"), b"skipped second\n").unwrap();
+        commit_paths(
+            dir.path(),
+            "close a session over both",
+            &["assumed.md".to_string(), "skipped.md".to_string()],
+        )
+        .unwrap()
+        .expect("both paths changed");
+
+        // Asserted through `git` itself, which is the reader that has to agree:
+        // `ls-files -v` prints `h` for assume-unchanged and `S` for
+        // skip-worktree, and `H` for an ordinary entry.
+        let listed = StdCommand::new("git")
+            .args(["ls-files", "-v"])
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+        let listed = String::from_utf8_lossy(&listed.stdout);
+        let mut lines: Vec<&str> = listed.lines().collect();
+        lines.sort_unstable();
+        assert_eq!(
+            lines,
+            vec!["S skipped.md", "h assumed.md"],
+            "the flags the user set with `git update-index` were revoked by a commit"
+        );
+
+        // And in the index this crate reads back, so the bits are really there
+        // rather than merely printed.
+        let repo = gix::open(dir.path()).unwrap();
+        let index = repo.open_index().unwrap();
+        let flags = |path: &str| {
+            index
+                .entry_by_path(gix::bstr::BStr::new(path.as_bytes()))
+                .expect("the committed path must still have an entry")
+                .flags
+        };
+        assert!(flags("assumed.md").contains(Flags::ASSUME_VALID));
+        assert!(flags("skipped.md").contains(Flags::SKIP_WORKTREE));
+        assert!(!flags("assumed.md").contains(Flags::INTENT_TO_ADD));
+        assert!(!flags("skipped.md").contains(Flags::INTENT_TO_ADD));
+    }
+
+    /// The other half of the same obligation: a commit that *removes* a
+    /// Directory has to take every index entry beneath it, not just an entry
+    /// spelled exactly like the Directory (the index is flat, and holds none).
+    #[test]
+    fn commit_paths_unstages_the_whole_subtree_a_directory_removal_committed() {
+        let dir = tempdir().unwrap();
+        init_repo(dir.path());
+        std::fs::create_dir_all(dir.path().join("doomed")).unwrap();
+        std::fs::write(dir.path().join("doomed/a.md"), b"a\n").unwrap();
+        std::fs::write(dir.path().join("doomed-kept.md"), b"kept\n").unwrap();
+        commit_all(dir.path(), "baseline", "Test User", "test@example.com").unwrap();
+
+        std::fs::remove_dir_all(dir.path().join("doomed")).unwrap();
+        commit_paths(dir.path(), "delete the directory", &["doomed".to_string()])
+            .unwrap()
+            .expect("a removal is a change");
+
+        let status = StdCommand::new("git")
+            .args(["status", "--porcelain"])
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+        assert_eq!(
+            String::from_utf8_lossy(&status.stdout).trim(),
+            "",
+            "the removed subtree's index entries were left behind"
+        );
+        let tracked = StdCommand::new("git")
+            .args(["ls-files"])
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+        let listing = String::from_utf8_lossy(&tracked.stdout);
+        let mut paths: Vec<&str> = listing.lines().collect();
+        paths.sort_unstable();
+        assert_eq!(
+            paths,
+            vec!["doomed-kept.md"],
+            "a sibling sharing the removed Directory's name prefix was unstaged too"
+        );
+    }
+
+    /// The most common path through tier 3 is a Note that was read and not
+    /// changed. One empty commit per Note visited would destroy the readable
+    /// history the design exists to produce.
+    #[test]
+    fn commit_paths_makes_no_commit_when_the_path_already_matches_head() {
+        let dir = tempdir().unwrap();
+        init_repo(dir.path());
+        std::fs::write(dir.path().join("a.md"), b"a\n").unwrap();
+        let baseline = commit_all(dir.path(), "baseline", "Test User", "test@example.com").unwrap();
+
+        let commit = commit_paths(dir.path(), "nothing changed", &["a.md".to_string()]).unwrap();
+
+        assert_eq!(commit, None);
+        let head = StdCommand::new("git")
+            .args(["rev-parse", "HEAD"])
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+        assert_eq!(String::from_utf8_lossy(&head.stdout).trim(), baseline);
+    }
+
+    /// A commit landing between this call's `HEAD` snapshot and its own write
+    /// must make the write **fail**, not silently revert it.
+    ///
+    /// The defect this pins: the parent tree was read at the top of
+    /// `commit_paths` and the parent commit id near the bottom, so a commit
+    /// landing between the two produced a commit `gix` **accepts** — the
+    /// reference update's compare-and-swap is `MustExistAndMatch(first parent)`,
+    /// and the parent was re-read fresh, so it matched — carrying a tree derived
+    /// from the *stale* snapshot. Every path the intervening commit touched and
+    /// this one did not name was reverted to its pre-commit content, in a commit
+    /// that reported success and that nothing downstream had any reason to
+    /// question. Two lifecycle operations racing, or a lifecycle commit racing a
+    /// sync's `commit_all`, is enough to reach it.
+    ///
+    /// Deterministic rather than timing-dependent: the intervening commit is
+    /// driven *through* the window by the seam
+    /// [`commit_paths_hooked`] exists for, so the interleaving is the one the
+    /// test names rather than one a scheduler might produce.
+    ///
+    /// The second half is the other obligation — the failure is a refusal, not a
+    /// dead end. Once the window is closed the same commit retries and lands,
+    /// with the intervening commit's work intact underneath it.
+    #[test]
+    fn a_commit_landing_inside_the_head_window_is_refused_rather_than_reverting_it() {
+        let dir = tempdir().unwrap();
+        init_repo(dir.path());
+        std::fs::write(dir.path().join("a.md"), b"a first\n").unwrap();
+        std::fs::write(dir.path().join("b.md"), b"b first\n").unwrap();
+        commit_all(dir.path(), "baseline", "Test User", "test@example.com").unwrap();
+        let baseline = head_of(dir.path());
+
+        // burlmd's commit, closing a session over `a.md`.
+        std::fs::write(dir.path().join("a.md"), b"a second\n").unwrap();
+
+        let landed = std::cell::Cell::new(None);
+        let result = super::commit_paths_hooked(
+            dir.path(),
+            "close the session over a",
+            &["a.md".to_string()],
+            || {
+                // Somebody else's commit, entirely inside the window.
+                std::fs::write(dir.path().join("b.md"), b"b second\n").unwrap();
+                git(dir.path(), &["add", "b.md"]);
+                git(dir.path(), &["commit", "-q", "-m", "someone else's commit"]);
+                landed.set(Some(head_of(dir.path())));
+            },
+        );
+
+        let landed = landed.into_inner().expect("the window hook must have run");
+        assert_ne!(landed, baseline, "the fixture's own commit did not land");
+        assert!(
+            result.is_err(),
+            "a commit derived from a stale HEAD was accepted: {result:?}"
+        );
+        assert_eq!(
+            head_of(dir.path()),
+            landed,
+            "the branch moved despite the compare-and-swap"
+        );
+        assert_eq!(
+            git_show(dir.path(), "HEAD:b.md"),
+            "b second\n",
+            "the intervening commit's work was reverted by a commit that reported success"
+        );
+
+        // Retryable: with the window closed, the same commit lands and keeps the
+        // other one's work.
+        commit_paths(
+            dir.path(),
+            "close the session over a",
+            &["a.md".to_string()],
+        )
+        .unwrap()
+        .expect("the retry must commit");
+        assert_eq!(git_show(dir.path(), "HEAD:a.md"), "a second\n");
+        assert_eq!(git_show(dir.path(), "HEAD:b.md"), "b second\n");
+    }
+
+    fn head_of(dir: &Path) -> String {
+        let output = StdCommand::new("git")
+            .args(["rev-parse", "HEAD"])
+            .current_dir(dir)
+            .output()
+            .unwrap();
+        String::from_utf8_lossy(&output.stdout).trim().to_string()
+    }
+
+    fn git_show(dir: &Path, spec: &str) -> String {
+        let output = StdCommand::new("git")
+            .args(["show", spec])
+            .current_dir(dir)
+            .output()
+            .unwrap();
+        String::from_utf8_lossy(&output.stdout).into_owned()
+    }
+
+    /// A named path that is gone from disk commits as a deletion, which is what
+    /// makes deletion recoverable from local history (CAP-LIFE-04).
+    #[test]
+    fn commit_paths_records_a_deletion_for_a_path_no_longer_on_disk() {
+        let dir = tempdir().unwrap();
+        init_repo(dir.path());
+        std::fs::write(dir.path().join("a.md"), b"a\n").unwrap();
+        std::fs::write(dir.path().join("b.md"), b"b\n").unwrap();
+        commit_all(dir.path(), "baseline", "Test User", "test@example.com").unwrap();
+
+        std::fs::remove_file(dir.path().join("a.md")).unwrap();
+        commit_paths(dir.path(), "delete a", &["a.md".to_string()])
+            .unwrap()
+            .expect("a deletion is a change");
+
+        let tree = StdCommand::new("git")
+            .args(["ls-tree", "--name-only", "HEAD"])
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+        assert_eq!(String::from_utf8_lossy(&tree.stdout).trim(), "b.md");
+    }
+
+    /// A bundle may hold files this application did not write, and round 3
+    /// made tier 2 carry the mode of the ones it does forward across its
+    /// publishing rename. Committing every path as `100644` undid that at the
+    /// next commit: the mode is part of what the tree records, so a checkout
+    /// of that history — or a clone of it on another machine — hands back a
+    /// script that no longer runs.
+    #[cfg(unix)]
+    #[test]
+    fn commit_paths_records_the_executable_bit_rather_than_flattening_it() {
+        use std::os::unix::fs::PermissionsExt as _;
+
+        let dir = tempdir().unwrap();
+        init_repo(dir.path());
+        let script = dir.path().join("hook.sh");
+        std::fs::write(&script, b"#!/bin/sh\necho hello\n").unwrap();
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+        std::fs::write(dir.path().join("a.md"), b"a\n").unwrap();
+
+        commit_paths(
+            dir.path(),
+            "add a script and a Note",
+            &["hook.sh".to_string(), "a.md".to_string()],
+        )
+        .unwrap()
+        .expect("two new paths are a change");
+
+        let tree = StdCommand::new("git")
+            .args(["ls-tree", "HEAD"])
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+        let listing = String::from_utf8_lossy(&tree.stdout);
+        let modes: Vec<(&str, &str)> = listing
+            .lines()
+            .filter_map(|line| {
+                let (mode, rest) = line.split_once(' ')?;
+                let name = rest.rsplit_once('\t')?.1;
+                Some((name, mode))
+            })
+            .collect();
+        assert!(
+            modes.contains(&("hook.sh", "100755")),
+            "an executable file must commit as 100755: {listing:?}"
+        );
+        assert!(
+            modes.contains(&("a.md", "100644")),
+            "an ordinary Note must still commit as 100644: {listing:?}"
+        );
+    }
+
+    /// ADR-008's consequences fix this identity, and it is deliberately not the
+    /// user's: the local Workspace has no account, and asking for one would
+    /// reintroduce the onboarding step ADR-005 removed. A repository-local
+    /// `user.name`/`user.email` — which `git commit` itself would have used —
+    /// must not reach it.
+    #[test]
+    fn commit_paths_authors_as_the_fixed_application_identity() {
+        let dir = tempdir().unwrap();
+        init_repo(dir.path());
+        git(dir.path(), &["config", "user.name", "Someone Else"]);
+        git(dir.path(), &["config", "user.email", "else@example.com"]);
+        std::fs::write(dir.path().join("a.md"), b"a\n").unwrap();
+
+        commit_paths(dir.path(), "add a", &["a.md".to_string()])
+            .unwrap()
+            .expect("a new path is a change");
+
+        let author = StdCommand::new("git")
+            .args(["log", "-1", "--format=%an <%ae>|%cn <%ce>"])
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+        assert_eq!(
+            String::from_utf8_lossy(&author.stdout).trim(),
+            "burlmd <noreply@burlmd.invalid>|burlmd <noreply@burlmd.invalid>"
+        );
+    }
+
+    /// What tells tier 3's generated message whether this session created the
+    /// Note or changed one already in history.
+    #[test]
+    fn path_in_head_distinguishes_a_new_note_from_one_already_in_history() {
+        let dir = tempdir().unwrap();
+        init_repo(dir.path());
+        std::fs::write(dir.path().join("a.md"), b"a\n").unwrap();
+
+        // An unborn HEAD holds nothing.
+        assert!(!path_in_head(dir.path(), "a.md").unwrap());
+
+        commit_all(dir.path(), "baseline", "Test User", "test@example.com").unwrap();
+
+        assert!(path_in_head(dir.path(), "a.md").unwrap());
+        assert!(!path_in_head(dir.path(), "never-existed.md").unwrap());
+    }
     /// Gherkin: Given a local directory with changes, When the commit function is called,
     /// Then a Git commit is created in the local `.git` index.
     #[test]
@@ -1018,40 +2251,37 @@ mod tests {
         assert!(names.contains(&"from_b.md".to_string()));
     }
 
-    /// Serializes the handful of tests below that mutate process-global `GIT_CONFIG_*`
-    /// environment variables, since `cargo test`'s default parallel runner would otherwise let
-    /// two such tests race on the same process environment.
-    static GIT_CONFIG_ENV_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
-
     /// Regression test for the `GIT_CONFIG_COUNT` clobbering bug: `apply_credentials` used to
     /// unconditionally write `GIT_CONFIG_COUNT=1`/`GIT_CONFIG_KEY_0`/`GIT_CONFIG_VALUE_0`,
     /// discarding (or mis-indexing) any config-injection entries this process's own environment
     /// already carried. It must instead append after whatever is already there.
+    ///
+    /// # Why the inherited count is an argument and not `std::env::set_var`
+    ///
+    /// This test and the one below it used to build their fixture by writing those three
+    /// variables into the *process* environment under `db::connection::ENV_LOCK`, and that is
+    /// what made this crate's test suite intermittently fail somewhere else entirely.
+    /// `ENV_LOCK` is not held by the many tests here that spawn a real `git` child, by design
+    /// — but `git` reads `GIT_CONFIG_COUNT` and friends out of the environment it inherits at
+    /// `fork`/`exec`, and three `set_var` calls are not one atomic step. A `git init` in
+    /// another test thread landing after `GIT_CONFIG_COUNT=1` and before `GIT_CONFIG_VALUE_0`
+    /// exists dies with `error: missing config value for GIT_CONFIG_VALUE_0`, taking an
+    /// unrelated test with it. The comment that used to live here asserted the opposite —
+    /// "none of those tests ... depend on inherited ambient ones" — which was true of
+    /// `git_command`'s own variables and false of this one, since nothing clears
+    /// `GIT_CONFIG_*` for a spawned child.
+    ///
+    /// So the fixture is passed in ([`apply_credentials_after`]) and nothing process-wide is
+    /// touched. No `ENV_LOCK`, no `unsafe`, and no other test can observe this one running.
     #[test]
     fn apply_credentials_appends_after_an_existing_injected_config_entry() {
-        let _guard = GIT_CONFIG_ENV_MUTEX.lock().unwrap();
-        // SAFETY: serialized against every other test in this file that touches process env via
-        // `GIT_CONFIG_ENV_MUTEX`, and no other thread in this test binary sets these particular
-        // vars, so this is not racing a concurrent read/write of the same keys.
-        unsafe {
-            std::env::set_var("GIT_CONFIG_COUNT", "1");
-            std::env::set_var("GIT_CONFIG_KEY_0", "some.preexisting");
-            std::env::set_var("GIT_CONFIG_VALUE_0", "preexisting-value");
-        }
-
         let mut cmd = Command::new("git");
         let credentials = GitCredentials {
             username: "x-access-token".to_string(),
             token: Zeroizing::new("tok".to_string()),
         };
-        apply_credentials(&mut cmd, Some(&credentials));
-
-        // SAFETY: see the comment on the `set_var` calls above; same guard, same scope.
-        unsafe {
-            std::env::remove_var("GIT_CONFIG_COUNT");
-            std::env::remove_var("GIT_CONFIG_KEY_0");
-            std::env::remove_var("GIT_CONFIG_VALUE_0");
-        }
+        // One entry already injected into the environment this `git` would inherit.
+        apply_credentials_after(&mut cmd, Some(&credentials), 1);
 
         let envs: std::collections::HashMap<_, _> = cmd.get_envs().collect();
         assert_eq!(
@@ -1077,22 +2307,17 @@ mod tests {
     }
 
     /// With no `GIT_CONFIG_COUNT` set in the process environment at all, `apply_credentials`
-    /// must fall back to starting at index 0 (the pre-fix behavior), not error or skip.
+    /// must fall back to starting at index 0 (the pre-fix behavior), not error or skip. That
+    /// absence is what [`existing_git_config_count`] reports as `0`, and it is passed in here
+    /// for the reason the test above states.
     #[test]
     fn apply_credentials_starts_at_index_zero_with_no_preexisting_config() {
-        let _guard = GIT_CONFIG_ENV_MUTEX.lock().unwrap();
-        // SAFETY: serialized via `GIT_CONFIG_ENV_MUTEX`; ensures a clean slate regardless of
-        // what an earlier test in this process left behind.
-        unsafe {
-            std::env::remove_var("GIT_CONFIG_COUNT");
-        }
-
         let mut cmd = Command::new("git");
         let credentials = GitCredentials {
             username: "x-access-token".to_string(),
             token: Zeroizing::new("tok".to_string()),
         };
-        apply_credentials(&mut cmd, Some(&credentials));
+        apply_credentials_after(&mut cmd, Some(&credentials), 0);
 
         let envs: std::collections::HashMap<_, _> = cmd.get_envs().collect();
         assert_eq!(

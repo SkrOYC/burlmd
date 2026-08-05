@@ -13,8 +13,12 @@ import 'dart:convert';
 import 'draft.dart';
 import 'error.dart';
 import 'frb_generated.dart';
+import 'index/query.dart';
 import 'markdown/ast.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated_web.dart';
+import 'workspace/bootstrap.dart';
+import 'workspace/lifecycle.dart';
+import 'workspace/persist.dart';
 
 abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   RustLibApiImplPlatform({
@@ -34,13 +38,22 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   AstNode dco_decode_ast_node(dynamic raw);
 
   @protected
+  BlockRange dco_decode_block_range(dynamic raw);
+
+  @protected
   bool dco_decode_bool(dynamic raw);
 
   @protected
-  AstNode dco_decode_box_autoadd_ast_node(dynamic raw);
+  AppError dco_decode_box_autoadd_app_error(dynamic raw);
+
+  @protected
+  BlockRange dco_decode_box_autoadd_block_range(dynamic raw);
 
   @protected
   bool dco_decode_box_autoadd_bool(dynamic raw);
+
+  @protected
+  PlatformInt64 dco_decode_box_autoadd_i_64(dynamic raw);
 
   @protected
   TextRun dco_decode_box_autoadd_text_run(dynamic raw);
@@ -49,13 +62,31 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   PlatformInt64 dco_decode_i_64(dynamic raw);
 
   @protected
+  IdRemap dco_decode_id_remap(dynamic raw);
+
+  @protected
   InlineElement dco_decode_inline_element(dynamic raw);
+
+  @protected
+  LifecycleEffects dco_decode_lifecycle_effects(dynamic raw);
+
+  @protected
+  LinkCompletion dco_decode_link_completion(dynamic raw);
+
+  @protected
+  List<String> dco_decode_list_String(dynamic raw);
 
   @protected
   List<AstNode> dco_decode_list_ast_node(dynamic raw);
 
   @protected
+  List<IdRemap> dco_decode_list_id_remap(dynamic raw);
+
+  @protected
   List<InlineElement> dco_decode_list_inline_element(dynamic raw);
+
+  @protected
+  List<LinkCompletion> dco_decode_list_link_completion(dynamic raw);
 
   @protected
   List<NoteMetadata> dco_decode_list_note_metadata(dynamic raw);
@@ -67,10 +98,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Uint64List dco_decode_list_prim_usize_strict(dynamic raw);
 
   @protected
+  List<TreeNode> dco_decode_list_tree_node(dynamic raw);
+
+  @protected
   NoteMetadata dco_decode_note_metadata(dynamic raw);
 
   @protected
   NoteState dco_decode_note_state(dynamic raw);
+
+  @protected
+  NoteWriteStatus dco_decode_note_write_status(dynamic raw);
 
   @protected
   OAuthFlowStart dco_decode_o_auth_flow_start(dynamic raw);
@@ -79,13 +116,30 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   String? dco_decode_opt_String(dynamic raw);
 
   @protected
+  AppError? dco_decode_opt_box_autoadd_app_error(dynamic raw);
+
+  @protected
   bool? dco_decode_opt_box_autoadd_bool(dynamic raw);
+
+  @protected
+  PlatformInt64? dco_decode_opt_box_autoadd_i_64(dynamic raw);
 
   @protected
   List<AstNode>? dco_decode_opt_list_ast_node(dynamic raw);
 
   @protected
+  (NoteState, LifecycleEffects) dco_decode_record_note_state_lifecycle_effects(
+    dynamic raw,
+  );
+
+  @protected
   TextRun dco_decode_text_run(dynamic raw);
+
+  @protected
+  TreeNode dco_decode_tree_node(dynamic raw);
+
+  @protected
+  int dco_decode_u_32(dynamic raw);
 
   @protected
   int dco_decode_u_8(dynamic raw);
@@ -97,6 +151,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   BigInt dco_decode_usize(dynamic raw);
 
   @protected
+  WorkspaceInfo dco_decode_workspace_info(dynamic raw);
+
+  @protected
   String sse_decode_String(SseDeserializer deserializer);
 
   @protected
@@ -106,13 +163,22 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   AstNode sse_decode_ast_node(SseDeserializer deserializer);
 
   @protected
+  BlockRange sse_decode_block_range(SseDeserializer deserializer);
+
+  @protected
   bool sse_decode_bool(SseDeserializer deserializer);
 
   @protected
-  AstNode sse_decode_box_autoadd_ast_node(SseDeserializer deserializer);
+  AppError sse_decode_box_autoadd_app_error(SseDeserializer deserializer);
+
+  @protected
+  BlockRange sse_decode_box_autoadd_block_range(SseDeserializer deserializer);
 
   @protected
   bool sse_decode_box_autoadd_bool(SseDeserializer deserializer);
+
+  @protected
+  PlatformInt64 sse_decode_box_autoadd_i_64(SseDeserializer deserializer);
 
   @protected
   TextRun sse_decode_box_autoadd_text_run(SseDeserializer deserializer);
@@ -121,13 +187,33 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   PlatformInt64 sse_decode_i_64(SseDeserializer deserializer);
 
   @protected
+  IdRemap sse_decode_id_remap(SseDeserializer deserializer);
+
+  @protected
   InlineElement sse_decode_inline_element(SseDeserializer deserializer);
+
+  @protected
+  LifecycleEffects sse_decode_lifecycle_effects(SseDeserializer deserializer);
+
+  @protected
+  LinkCompletion sse_decode_link_completion(SseDeserializer deserializer);
+
+  @protected
+  List<String> sse_decode_list_String(SseDeserializer deserializer);
 
   @protected
   List<AstNode> sse_decode_list_ast_node(SseDeserializer deserializer);
 
   @protected
+  List<IdRemap> sse_decode_list_id_remap(SseDeserializer deserializer);
+
+  @protected
   List<InlineElement> sse_decode_list_inline_element(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<LinkCompletion> sse_decode_list_link_completion(
     SseDeserializer deserializer,
   );
 
@@ -143,10 +229,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Uint64List sse_decode_list_prim_usize_strict(SseDeserializer deserializer);
 
   @protected
+  List<TreeNode> sse_decode_list_tree_node(SseDeserializer deserializer);
+
+  @protected
   NoteMetadata sse_decode_note_metadata(SseDeserializer deserializer);
 
   @protected
   NoteState sse_decode_note_state(SseDeserializer deserializer);
+
+  @protected
+  NoteWriteStatus sse_decode_note_write_status(SseDeserializer deserializer);
 
   @protected
   OAuthFlowStart sse_decode_o_auth_flow_start(SseDeserializer deserializer);
@@ -155,13 +247,30 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   String? sse_decode_opt_String(SseDeserializer deserializer);
 
   @protected
+  AppError? sse_decode_opt_box_autoadd_app_error(SseDeserializer deserializer);
+
+  @protected
   bool? sse_decode_opt_box_autoadd_bool(SseDeserializer deserializer);
+
+  @protected
+  PlatformInt64? sse_decode_opt_box_autoadd_i_64(SseDeserializer deserializer);
 
   @protected
   List<AstNode>? sse_decode_opt_list_ast_node(SseDeserializer deserializer);
 
   @protected
+  (NoteState, LifecycleEffects) sse_decode_record_note_state_lifecycle_effects(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   TextRun sse_decode_text_run(SseDeserializer deserializer);
+
+  @protected
+  TreeNode sse_decode_tree_node(SseDeserializer deserializer);
+
+  @protected
+  int sse_decode_u_32(SseDeserializer deserializer);
 
   @protected
   int sse_decode_u_8(SseDeserializer deserializer);
@@ -171,6 +280,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   BigInt sse_decode_usize(SseDeserializer deserializer);
+
+  @protected
+  WorkspaceInfo sse_decode_workspace_info(SseDeserializer deserializer);
 
   @protected
   int sse_decode_i_32(SseDeserializer deserializer);
@@ -185,13 +297,31 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_ast_node(AstNode self, SseSerializer serializer);
 
   @protected
+  void sse_encode_block_range(BlockRange self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bool(bool self, SseSerializer serializer);
 
   @protected
-  void sse_encode_box_autoadd_ast_node(AstNode self, SseSerializer serializer);
+  void sse_encode_box_autoadd_app_error(
+    AppError self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_block_range(
+    BlockRange self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_box_autoadd_bool(bool self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_i_64(
+    PlatformInt64 self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_box_autoadd_text_run(TextRun self, SseSerializer serializer);
@@ -200,14 +330,41 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_i_64(PlatformInt64 self, SseSerializer serializer);
 
   @protected
+  void sse_encode_id_remap(IdRemap self, SseSerializer serializer);
+
+  @protected
   void sse_encode_inline_element(InlineElement self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_lifecycle_effects(
+    LifecycleEffects self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_link_completion(
+    LinkCompletion self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_String(List<String> self, SseSerializer serializer);
 
   @protected
   void sse_encode_list_ast_node(List<AstNode> self, SseSerializer serializer);
 
   @protected
+  void sse_encode_list_id_remap(List<IdRemap> self, SseSerializer serializer);
+
+  @protected
   void sse_encode_list_inline_element(
     List<InlineElement> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_link_completion(
+    List<LinkCompletion> self,
     SseSerializer serializer,
   );
 
@@ -230,10 +387,19 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_list_tree_node(List<TreeNode> self, SseSerializer serializer);
+
+  @protected
   void sse_encode_note_metadata(NoteMetadata self, SseSerializer serializer);
 
   @protected
   void sse_encode_note_state(NoteState self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_note_write_status(
+    NoteWriteStatus self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_o_auth_flow_start(
@@ -245,7 +411,19 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_opt_String(String? self, SseSerializer serializer);
 
   @protected
+  void sse_encode_opt_box_autoadd_app_error(
+    AppError? self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_opt_box_autoadd_bool(bool? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_i_64(
+    PlatformInt64? self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_opt_list_ast_node(
@@ -254,7 +432,19 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_record_note_state_lifecycle_effects(
+    (NoteState, LifecycleEffects) self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_text_run(TextRun self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_tree_node(TreeNode self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_u_32(int self, SseSerializer serializer);
 
   @protected
   void sse_encode_u_8(int self, SseSerializer serializer);
@@ -264,6 +454,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_usize(BigInt self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_workspace_info(WorkspaceInfo self, SseSerializer serializer);
 
   @protected
   void sse_encode_i_32(int self, SseSerializer serializer);

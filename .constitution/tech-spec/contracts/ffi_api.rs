@@ -761,6 +761,19 @@ pub fn merge_block_with_previous(
 /// Blocks, which the user sees rendered, while a split happens in the focused
 /// Block, which the user sees as raw source.
 ///
+/// **A range covers everything between its two endpoints, including bytes the
+/// UI never showed.** A range resolves to two source offsets and the Core
+/// slices *between* them, so a selection whose endpoints straddle one of the
+/// preserved-but-unaddressable regions — a raw HTML block, a link reference
+/// definition, inline HTML; the class `rust/src/markdown/parser.rs` documents —
+/// includes that region by construction. `copy_range_as_markdown` therefore
+/// yields it, and `delete_range`/`replace_range` therefore destroy it. This is
+/// the intended behaviour and the difference from the single-Block mutators,
+/// which step over those regions rather than into them: a range is an explicit
+/// span the user dragged, not a Block the Core picked. `EDIT-F004` builds the
+/// selection UI knowing it, and should decide there whether a selection
+/// crossing invisible content warrants a confirmation.
+///
 /// **Open: the drag-outward anchor.** ADR-006 accepts that a selection may
 /// begin inside the focused Block and extend past it, and for that one
 /// endpoint the "unfocused, therefore rendered" justification does not hold —
@@ -956,6 +969,22 @@ pub async fn search_notes(query: String, limit: u32) -> Result<Vec<NoteMetadata>
 }
 
 /// Title-prefix jump (CAP-FIND-02).
+///
+/// **Prefix, not substring, and this is a deliberate Stage 3 narrowing of the
+/// capability.** CAP-FIND-02 says a user jumps to a Note "by typing part of
+/// its title"; this contract and `WSPC-D009`'s implementation both match a
+/// leading prefix only, so typing `lait` does not reach `Café au lait`.
+/// Prefix is the behaviour of the palettes this affordance is modelled on, and
+/// it is the form that *can* be made index-backed later: `title LIKE 'q%'` is
+/// the shape SQLite's LIKE optimization can serve from an index on
+/// `notes(title)`, whereas a leading wildcard never is. Neither is index-backed
+/// today -- `schema.sql` declares no index on `notes(title)`, so the shipped
+/// query scans the Workspace's rows, which is sound at current Note counts and
+/// is the cost `EPIC-E`'s palette ticket should measure before it goes on the
+/// per-keystroke path. Widening to substring match is a PRD/Stage-3 change
+/// rather than an implementation detail, since it needs its own index strategy
+/// (an FTS or trigram surface), so revisit it there if the narrowing turns out
+/// to be the wrong reading of "part of its title".
 #[frb]
 pub async fn find_notes_by_title(query: String, limit: u32) -> Result<Vec<NoteMetadata>, AppError> {
     unimplemented!()
@@ -975,6 +1004,12 @@ pub struct LinkCompletion {
     /// applies the wrapping, since the ordinary multi-word title produces a
     /// path with a space in it and the unwrapped form of that is not a link.
     /// `EDIT-F006`'s STOP forbids the UI from repairing it afterwards.
+    /// The link *text* is `title` with every whitespace run folded to a
+    /// single space, so it is not always byte-identical to `title`: a title
+    /// carrying an interior line terminator -- legal YAML, so reachable from a
+    /// foreign bundle -- would otherwise end the paragraph mid-link and splice
+    /// as two paragraphs of visible bracket syntax with no `Link` at all.
+    /// "Exact text to splice" is the promise; folding is what keeps it.
     pub insert_text: String,
 }
 

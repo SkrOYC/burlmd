@@ -14,10 +14,27 @@ sealed class AppError with _$AppError implements FrbException {
 
   const factory AppError.diskFull() = AppError_DiskFull;
   const factory AppError.authExpired() = AppError_AuthExpired;
+
+  /// The on-disk file changed underneath an active draft. Carries the
+  /// current `base_revision` so the caller can reload rather than guess.
+  const factory AppError.revisionMismatch(String field0) =
+      AppError_RevisionMismatch;
   const factory AppError.gitConflict() = AppError_GitConflict;
+
+  /// The target path is already occupied, or is a reserved OKF filename
+  /// (`index.md` / `log.md`, see ADR-004 decision 6).
+  const factory AppError.pathUnavailable(String field0) =
+      AppError_PathUnavailable;
+  const factory AppError.notFound(String field0) = AppError_NotFound;
   const factory AppError.databaseError(String field0) = AppError_DatabaseError;
   const factory AppError.cryptoError(String field0) = AppError_CryptoError;
   const factory AppError.networkError(String field0) = AppError_NetworkError;
+
+  /// The `state` returned on the OAuth redirect did not match the value
+  /// minted for the `flow_id`, or the `flow_id` is unknown or already
+  /// consumed. Distinct from `OAuthError` because it is a CSRF signal, not
+  /// a provider failure, and no token request is made when it is raised.
+  const factory AppError.oAuthStateMismatch() = AppError_OAuthStateMismatch;
   const factory AppError.oAuthError(String field0) = AppError_OAuthError;
   const factory AppError.ioError(String field0) = AppError_IoError;
   const factory AppError.parseError(String field0) = AppError_ParseError;
