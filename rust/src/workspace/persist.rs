@@ -1332,6 +1332,82 @@ pub fn pending_drafts(workspace: &Workspace) -> Result<Vec<NoteMetadata>, AppErr
 // Carrying an open session across a lifecycle operation (`WSPC-D006`)
 // ---------------------------------------------------------------------------
 
+/// The concept ids of every Note currently open in `workspace_id`.
+///
+/// `WSPC-D006`'s inbound-Link sweep needs these because the `links` table only
+/// knows about Links that have reached disk and been indexed. A Link typed into
+/// an open Note and not yet written exists **only** in that session's working
+/// source, so a sweep driven by the index alone would leave it pointing at a
+/// concept the rename removed — and the Note's own next write would then index
+/// the dead edge, which is the graph corruption `architecture/risks.md` risk 8
+/// describes, arriving from the one direction the index cannot see.
+pub(super) fn open_note_ids(workspace_id: &str) -> Result<Vec<String>, AppError> {
+    Ok(registry()?
+        .keys()
+        .filter(|(id, _)| id == workspace_id)
+        .map(|(_, note_id)| note_id.clone())
+        .collect())
+}
+
+/// Runs `f` holding the **tier 2 write lock of every Note open in this
+/// Workspace**, so that no idle write can land inside a lifecycle operation.
+///
+/// Without this, a timer firing between the moment `WSPC-D006` reads a Note's
+/// bytes and the moment it writes the rewritten ones silently loses whatever
+/// the timer wrote: the lifecycle operation overwrites the file from a snapshot
+/// taken before it. The tier 2 write lock is exactly the lock that exists to
+/// make check-write-record one unit, and a lifecycle rewrite is a tier 2 writer
+/// in every sense that matters, so it takes the same lock.
+///
+/// **Every open session, not only the affected ones**, because the affected set
+/// is what the operation is still computing when the locks must already be
+/// held. The set is bounded by how many Notes the user has open — a handful of
+/// tabs, not the size of the bundle — which is also why locking them by
+/// recursion is fine here.
+///
+/// Acquired in **sorted concept-id order**, which is what stops two concurrent
+/// lifecycle operations over overlapping sets from deadlocking against each
+/// other. The order against the other locks is unchanged and is the one the
+/// module documentation states: write lock, then state, then connection.
+/// Acquiring the registry lock *while* holding a write lock (which
+/// [`carry_session_forward`] does, inside `f`) is permitted by that same rule —
+/// what it forbids is holding the registry lock while acquiring any of the
+/// three, and nothing in this module does that.
+///
+/// One window this deliberately does not close: `update_block` never takes this
+/// lock, by design, so that no keystroke can wait on file I/O. A keystroke
+/// landing inside a lifecycle operation therefore still races it. That is
+/// inherent to tier 1 rather than a gap here — the same property the whole
+/// three-lock shape is chosen for.
+pub(super) fn with_write_locks<T>(
+    workspace: &Workspace,
+    f: impl FnOnce() -> Result<T, AppError>,
+) -> Result<T, AppError> {
+    let mut sessions: Vec<NoteSession> = {
+        let registry = registry()?;
+        registry
+            .iter()
+            .filter(|((id, _), _)| id == workspace.id())
+            .map(|(_, session)| session.clone())
+            .collect()
+    };
+    sessions.sort_by(|a, b| a.note_id().cmp(b.note_id()));
+    lock_each_write(&sessions, f)
+}
+
+fn lock_each_write<T>(
+    sessions: &[NoteSession],
+    f: impl FnOnce() -> Result<T, AppError>,
+) -> Result<T, AppError> {
+    match sessions.split_first() {
+        None => f(),
+        Some((head, rest)) => {
+            let _guard = head.lock_writes()?;
+            lock_each_write(rest, f)
+        }
+    }
+}
+
 /// Moves an open Note's session onto `new_id`, installing bytes a lifecycle
 /// operation rewrote and re-recording the OCC baseline from them.
 ///

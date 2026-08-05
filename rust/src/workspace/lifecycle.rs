@@ -152,8 +152,21 @@ pub fn create_note(
         })
     });
     if let Err(error) = written {
-        // The file is the only thing that moved, so undoing it is the whole
-        // rollback: nothing is left half-created.
+        // The file is the only thing worth undoing here. Two asymmetries are
+        // left standing deliberately, because both are benign and repairing
+        // either would cost more than it buys:
+        //
+        // - Any directory `create_dir_all` had to materialize stays. An empty
+        //   directory is not a Note, holds no user content, is invisible to
+        //   `walk_bundle`'s Note scan, and Git does not track it; removing it
+        //   would mean distinguishing the levels this call created from ones
+        //   that already existed, to undo something nothing can observe.
+        // - Nothing rolls back if `open_note` below fails *after* the index
+        //   transaction committed. That leaves the Note fully created and
+        //   correctly indexed but not open, which is a state the user can act
+        //   on — the Note is in the tree and opening it is one click — whereas
+        //   deleting a Note that was successfully created because the *open*
+        //   failed would discard a real result over a recoverable one.
         let _ = std::fs::remove_file(&new_path);
         return Err(error);
     }
@@ -173,7 +186,16 @@ pub fn create_note(
 /// searchable in the encrypted index, permanently and undeletably
 /// (`data-models/schema.sql`). [`index::remove_note_rows`] is what enforces the
 /// order.
+///
+/// Runs under the tier 2 write locks for the same reason a rename does: an idle
+/// write already inside its `atomic_write` would otherwise land its temporary
+/// file's rename onto the path *after* the deletion moved it aside, resurrecting
+/// the file against an index that has already forgotten it.
 pub fn delete_note(workspace: &Arc<Workspace>, note_id: &str) -> Result<(), AppError> {
+    persist::with_write_locks(workspace, || delete_note_locked(workspace, note_id))
+}
+
+fn delete_note_locked(workspace: &Arc<Workspace>, note_id: &str) -> Result<(), AppError> {
     let path = workspace.note_path(note_id)?;
     let title = indexed_title(workspace, note_id)?;
     if !path.exists() && title.is_none() {
@@ -198,13 +220,18 @@ pub fn delete_note(workspace: &Arc<Workspace>, note_id: &str) -> Result<(), AppE
 
     let relative = concept_id_to_path(note_id);
     let display = title.unwrap_or_else(|| file_stem(note_id).to_string());
-    crate::git::operations::commit_paths(
+    let committed = crate::git::operations::commit_paths(
         workspace.root(),
         &format!("Delete {display}\n\n{relative}\n"),
         std::slice::from_ref(&relative),
-    )?;
+    );
 
+    // Settled before the commit error is propagated: the file is gone and the
+    // index agrees, so the trash entry must go regardless of whether version
+    // history recorded it. Leaving it parked would keep the deleted Note's full
+    // content sitting untracked inside the bundle.
     journal.commit();
+    committed?;
     persist::discard_session(workspace, note_id)?;
     Ok(())
 }
@@ -409,6 +436,13 @@ pub fn rename_directory(
 /// makes that safe is the commit: every removed Note is recoverable from local
 /// version history, exactly as a single [`delete_note`] is.
 pub fn delete_directory(workspace: &Arc<Workspace>, path: &str) -> Result<Vec<String>, AppError> {
+    persist::with_write_locks(workspace, || delete_directory_locked(workspace, path))
+}
+
+fn delete_directory_locked(
+    workspace: &Arc<Workspace>,
+    path: &str,
+) -> Result<Vec<String>, AppError> {
     let directory = normalize_directory(path)?;
     if directory.is_empty() {
         return Err(AppError::PathUnavailable(
@@ -447,16 +481,24 @@ pub fn delete_directory(workspace: &Arc<Workspace>, path: &str) -> Result<Vec<St
         return Err(error);
     }
 
-    let paths: Vec<String> = removed.iter().map(|id| concept_id_to_path(id)).collect();
-    if !paths.is_empty() {
-        crate::git::operations::commit_paths(
-            workspace.root(),
-            &format!("Delete directory {directory}\n"),
-            &paths,
-        )?;
-    }
+    // The pathspec is the **Directory itself**, not the list of Notes removed.
+    //
+    // The trash step carried away everything beneath it, and a bundle legitimately
+    // holds files that are not Notes: an attachment (CAP-EDIT-06 references
+    // images by bundle-absolute path), a foreign tool's `index.md`, anything
+    // else an author put there. Committing only the `notes` rows would leave
+    // every one of those as a deletion Git knows about but was never told to
+    // record — a permanently dirty worktree, and one that the next broad commit
+    // or sync resolves at a time nobody chose.
+    let directory_pathspec = vec![directory.clone()];
+    let committed = crate::git::operations::commit_paths(
+        workspace.root(),
+        &format!("Delete directory {directory}\n"),
+        &directory_pathspec,
+    );
 
     journal.commit();
+    committed?;
     for note_id in &removed {
         persist::discard_session(workspace, note_id)?;
     }
@@ -512,7 +554,24 @@ struct Affected {
     revision: String,
 }
 
+/// Runs the whole re-identification under the tier 2 write lock of every open
+/// Note in this Workspace.
+///
+/// A lifecycle rewrite reads a Note's bytes, computes new ones, and writes them
+/// back — which is a tier 2 write with a longer read-to-write gap than the idle
+/// timer's own. Without the lock, a timer firing inside that gap writes its
+/// buffer to disk and this operation then overwrites it from the snapshot it
+/// took beforehand, losing the user's work from the file *and* from the buffer
+/// in one step. `workspace::persist::with_write_locks` documents the ordering
+/// this relies on.
 fn apply_reidentify(
+    workspace: &Arc<Workspace>,
+    plan: &Reidentify,
+) -> Result<LifecycleEffects, AppError> {
+    persist::with_write_locks(workspace, || apply_reidentify_locked(workspace, plan))
+}
+
+fn apply_reidentify_locked(
     workspace: &Arc<Workspace>,
     plan: &Reidentify,
 ) -> Result<LifecycleEffects, AppError> {
@@ -564,8 +623,14 @@ fn apply_reidentify(
             pathspec.push(concept_id_to_path(&a.new_id));
         }
     }
-    crate::git::operations::commit_paths(workspace.root(), &plan.message, &pathspec)?;
+    // The commit result is held rather than propagated with `?`, so that the
+    // journal is settled either way: the bundle and the index are already
+    // consistent by this point, and a failure to record that in version history
+    // must not also leave a trash entry parked in the bundle.
+    let committed =
+        crate::git::operations::commit_paths(workspace.root(), &plan.message, &pathspec);
     journal.commit();
+    committed?;
 
     // In-memory and infallible in the sense that matters: nothing after this
     // point can leave the bundle and the index disagreeing.
@@ -613,6 +678,25 @@ fn plan_affected(workspace: &Arc<Workspace>, plan: &Reidentify) -> Result<Vec<Af
         let sources = workspace.with_db(|conn| link_sources(conn, workspace.id(), old_id))?;
         candidates.extend(sources);
     }
+
+    // The `links` table only knows about Links that reached disk **and** were
+    // indexed, so driving the sweep from it alone misses two populations, and
+    // both of them survive the operation holding a dead concept id:
+    //
+    // - A Note with an **unflushed draft row**. The draft is persistent state
+    //   that outlives the process, `open_note` parses it in preference to disk,
+    //   and its next tier 2 write puts those bytes on disk and indexes them —
+    //   at which point the ghost edge the rename was supposed to remove is
+    //   recreated, and CAP-GRAPH-04's create-on-follow will happily recreate
+    //   the concept along with it.
+    // - A Note **open with buffered edits**, whose Link may exist only in the
+    //   working source. Same ending, one flush sooner.
+    //
+    // Both are cheap to fold in: `rewrite_note_text` returns `None` for a Note
+    // that holds no matching Link and the loop below drops it, so the cost of a
+    // false candidate is one read and one scan.
+    candidates.extend(workspace.with_db(|conn| draft_note_ids(conn, workspace.id()))?);
+    candidates.extend(persist::open_note_ids(workspace.id())?);
 
     let mut affected = Vec::new();
     for old_id in candidates {
@@ -944,8 +1028,12 @@ impl FileJournal {
     /// Undoes every step, newest first. Errors are deliberately swallowed:
     /// this runs on a path that is already returning an error, and the caller
     /// has nothing better to do with a second one than the first.
-    fn rollback(self) {
-        for step in self.steps.into_iter().rev() {
+    ///
+    /// Takes `&mut self` and drains, rather than consuming, so that
+    /// [`FileJournal`]'s `Drop` can be the backstop for a journal neither
+    /// committed nor rolled back.
+    fn rollback(&mut self) {
+        for step in std::mem::take(&mut self.steps).into_iter().rev() {
             match step {
                 FileStep::Overwrote { path, previous } => match previous {
                     Some(bytes) => {
@@ -965,15 +1053,39 @@ impl FileJournal {
         }
     }
 
-    fn commit(self) {
-        for step in self.steps {
-            if let FileStep::Trashed { trash, .. } = step {
-                if trash.is_dir() {
-                    let _ = std::fs::remove_dir_all(&trash);
-                } else {
-                    let _ = std::fs::remove_file(&trash);
-                }
-            }
+    /// Keeps every step and discards the trash entries a deletion parked.
+    fn commit(&mut self) {
+        for step in std::mem::take(&mut self.steps) {
+            Self::discard_trash(&step);
+        }
+    }
+
+    fn discard_trash(step: &FileStep) {
+        let FileStep::Trashed { trash, .. } = step else {
+            return;
+        };
+        if trash.is_dir() {
+            let _ = std::fs::remove_dir_all(trash);
+        } else {
+            let _ = std::fs::remove_file(trash);
+        }
+    }
+}
+
+/// The backstop for a journal that is dropped without being committed or rolled
+/// back — which is what an error returned *after* the filesystem and the index
+/// have both settled produces, the commit step being the one that can do it.
+///
+/// Only the trash entries are discarded, and that is the whole point: by the
+/// time such an error is raised the deletion is real and the index agrees with
+/// it, so restoring the file would put the bundle back out of step with the
+/// index. What must not survive is a `.burlmd-trash.*` entry parked inside the
+/// bundle, holding the full content of a deleted Note as an untracked file that
+/// a later broad commit or a sync could publish.
+impl Drop for FileJournal {
+    fn drop(&mut self) {
+        for step in &self.steps {
+            Self::discard_trash(step);
         }
     }
 }
@@ -1300,6 +1412,14 @@ fn read_draft_text(
     .map_err(AppError::from)
 }
 
+/// Every Note carrying an unflushed `drafts` row. See the sweep's candidate
+/// seeding in [`plan_affected`] for why the index alone is not enough.
+fn draft_note_ids(conn: &Connection, workspace_id: &str) -> Result<Vec<String>, AppError> {
+    let mut stmt = conn.prepare("SELECT note_id FROM drafts WHERE workspace_id = ?1")?;
+    let rows = stmt.query_map([workspace_id], |row| row.get::<_, String>(0))?;
+    rows.collect::<Result<Vec<_>, _>>().map_err(AppError::from)
+}
+
 /// Every Note holding an inbound Link to `target_id`, served by
 /// `idx_links_target` — the index `data-models/schema.sql` adds so that this
 /// sweep is cheap enough that there is no incentive to skip it (risk 8).
@@ -1582,6 +1702,53 @@ mod tests {
                          edit_seq) VALUES (?1, ?2, ?3, ?4, 1)",
                         rusqlite::params![self.workspace.id(), note_id, source, unix_now()],
                     )?;
+                    Ok(())
+                })
+                .unwrap();
+        }
+
+        /// Every `.burlmd-trash.*` entry anywhere in the bundle. A deletion
+        /// parks one of these and is obliged to remove it: it holds the full
+        /// content of a deleted Note as an untracked file, which a later broad
+        /// commit or a sync could publish.
+        fn trash_entries(&self) -> Vec<String> {
+            let mut found = Vec::new();
+            walk(&self.root(), &self.root(), &mut found);
+            found.sort();
+            return found;
+
+            fn walk(root: &Path, dir: &Path, found: &mut Vec<String>) {
+                let Ok(entries) = std::fs::read_dir(dir) else {
+                    return;
+                };
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    let name = entry.file_name().to_string_lossy().into_owned();
+                    if name == ".git" {
+                        continue;
+                    }
+                    if name.starts_with(".burlmd-trash") {
+                        found.push(
+                            path.strip_prefix(root)
+                                .unwrap_or(&path)
+                                .to_string_lossy()
+                                .into_owned(),
+                        );
+                    }
+                    if path.is_dir() {
+                        walk(root, &path, found);
+                    }
+                }
+            }
+        }
+
+        /// Makes the next statement against `table` fail, so that a failure
+        /// arising *after* the filesystem phase can be driven deterministically
+        /// rather than waited for.
+        fn inject_index_failure(&self, sql: &str) {
+            self.workspace
+                .with_db(|conn| {
+                    conn.execute_batch(sql)?;
                     Ok(())
                 })
                 .unwrap();
@@ -2143,12 +2310,24 @@ mod tests {
     /// Gherkin: B carries an unflushed draft holding a Link to A. `open_note`
     /// parses the draft in preference to disk, so a row left unrewritten
     /// reverts the rename one session later.
+    ///
+    /// **The Link is in the draft and *not* on disk**, which is the whole point
+    /// of the fixture. Putting it in both makes the test pass against a sweep
+    /// driven only by the `links` table — B would be a candidate because of its
+    /// on-disk Link, and the draft would be rewritten as a side effect of that.
+    /// A draft row is persistent state that outlives the process and is parsed
+    /// in preference to disk, so it is a Link the index has never seen and the
+    /// sweep must find on its own.
     #[test]
-    fn a_source_notes_unflushed_draft_carries_the_rewritten_link() {
+    fn a_link_that_exists_only_in_an_unflushed_draft_is_rewritten() {
         let f = fixture();
         f.write("Old Name.md", &note("Old Name", "target"));
-        f.write("b.md", &note("b", &link("Old Name", "Old Name")));
+        f.write("b.md", &note("b", "nothing on disk points anywhere"));
         f.reindex();
+        assert!(
+            f.backlink_sources("Old Name").is_empty(),
+            "the index must not know about this Link, or the test is vacuous"
+        );
         f.put_draft(
             "b",
             &note(
@@ -2159,6 +2338,13 @@ mod tests {
 
         rename_note(&f.workspace, "Old Name", "New Name").unwrap();
 
+        let draft = f.draft_row("b").expect("the draft must survive the rename");
+        assert!(
+            draft.contains("</New Name.md>"),
+            "the draft still holds the old Link, and it is parsed in preference \
+             to disk — the rename reverts one session later: {draft:?}"
+        );
+
         let (_, state) = persist::open_note(&f.workspace, "b").unwrap();
         assert!(state.restored_from_draft);
         let restored = persist::lookup(f.workspace.id(), "b")
@@ -2167,9 +2353,44 @@ mod tests {
             .working_source()
             .unwrap();
         assert!(restored.contains("drafted prose"), "{restored:?}");
+        assert!(restored.contains("</New Name.md>"), "{restored:?}");
+    }
+
+    /// The same hole one tier earlier: B is open and its buffer holds a Link
+    /// that has never reached disk, so the `links` table cannot know about it.
+    /// Left unrewritten, B's next tier 2 write puts the dead concept id on disk
+    /// *and indexes it* — recreating the ghost edge the rename removed, which
+    /// create-on-follow then turns back into the concept.
+    #[test]
+    fn a_link_that_exists_only_in_an_open_buffer_is_rewritten() {
+        let f = fixture();
+        f.write("Old Name.md", &note("Old Name", "target"));
+        f.write("b.md", &note("b", "placeholder"));
+        f.reindex();
+        let b = f.open("b");
+        b.update_block(&[0], &format!("see {}\n", link("Old Name", "Old Name")))
+            .unwrap();
         assert!(
-            restored.contains("</New Name.md>"),
-            "the restored draft still holds the old Link: {restored:?}"
+            f.backlink_sources("Old Name").is_empty(),
+            "the index must not know about this Link, or the test is vacuous"
+        );
+        assert!(!f.read("b.md").contains("Old Name.md"));
+
+        rename_note(&f.workspace, "Old Name", "New Name").unwrap();
+
+        let buffered = b.working_source().unwrap();
+        assert!(
+            buffered.contains("</New Name.md>"),
+            "B's buffer still holds the old Link: {buffered:?}"
+        );
+
+        // End to end: the buffer reaching disk must index the *new* edge.
+        b.flush().unwrap();
+        assert!(f.read("b.md").contains("</New Name.md>"));
+        assert_eq!(f.link_targets("b"), vec!["New Name".to_string()]);
+        assert!(
+            f.backlink_sources("Old Name").is_empty(),
+            "B's write resurrected the edge the rename removed"
         );
     }
 
@@ -2482,6 +2703,144 @@ mod tests {
         assert!(f
             .git(&["show", "HEAD~1:doomed/One.md"])
             .contains("distinctiveuno"));
+    }
+
+    // -- journal safety and the rollback arms --------------------------------
+
+    /// The commit is the one step that can fail *after* the bundle and the
+    /// index have both settled, and its error is propagated. The trash entry
+    /// the deletion parked must not survive that: it holds the deleted Note's
+    /// full content as an untracked file inside the bundle, which a later broad
+    /// commit or a sync would publish.
+    #[test]
+    fn a_failed_commit_does_not_leave_a_trash_entry_in_the_bundle() {
+        let f = fixture();
+        f.write("Doomed.md", &note("Doomed", "words"));
+        f.reindex();
+        // Breaks `commit_paths` and nothing else: the file and the index move
+        // exactly as they otherwise would.
+        std::fs::remove_dir_all(f.root().join(".git")).unwrap();
+
+        let result = delete_note(&f.workspace, "Doomed");
+
+        assert!(result.is_err(), "the commit failure must be reported");
+        assert!(
+            f.trash_entries().is_empty(),
+            "a trash entry survived a failed commit: {:?}",
+            f.trash_entries()
+        );
+        assert!(!f.exists("Doomed.md"));
+        assert!(f.note_ids().is_empty());
+    }
+
+    /// The same obligation for a Directory, whose trash entry is a whole
+    /// subtree rather than one file.
+    #[test]
+    fn a_failed_directory_commit_does_not_leave_a_trash_entry_in_the_bundle() {
+        let f = fixture();
+        f.write("doomed/One.md", &note("One", "words"));
+        f.reindex();
+        std::fs::remove_dir_all(f.root().join(".git")).unwrap();
+
+        let result = delete_directory(&f.workspace, "doomed");
+
+        assert!(result.is_err());
+        assert!(
+            f.trash_entries().is_empty(),
+            "a trash subtree survived a failed commit: {:?}",
+            f.trash_entries()
+        );
+    }
+
+    /// A bundle legitimately holds files that are not Notes — an attachment, a
+    /// foreign tool's `index.md`. `delete_directory` removes the whole subtree,
+    /// so a pathspec built from the `notes` table alone would leave every one of
+    /// those as a deletion Git knows about but was never told to record: a
+    /// permanently dirty worktree, resolved by whatever commits next.
+    #[test]
+    fn deleting_a_directory_commits_the_non_note_files_it_removed_too() {
+        let f = fixture();
+        f.write("doomed/One.md", &note("One", "words"));
+        f.write("doomed/diagram.png", "not a Note at all\n");
+        f.write("doomed/index.md", "a reserved filename, never indexed\n");
+        f.reindex();
+        f.commit_baseline();
+        assert_eq!(f.note_ids(), vec!["doomed/One".to_string()]);
+
+        delete_directory(&f.workspace, "doomed").unwrap();
+
+        assert_eq!(
+            f.git(&["status", "--porcelain"]),
+            "",
+            "the non-Note files under the Directory are deleted on disk but \
+             uncommitted, leaving the worktree permanently dirty"
+        );
+        assert!(f
+            .git(&["show", "HEAD~1:doomed/diagram.png"])
+            .contains("not a Note at all"));
+    }
+
+    /// The `Renamed` and `Overwrote` inverse arms, driven by the one failure
+    /// that can occur *after* the files have moved: the index transaction.
+    /// Every earlier failure is raised from the planning phase, where nothing
+    /// has moved and there is nothing to undo.
+    #[test]
+    fn an_index_failure_after_the_files_moved_restores_every_one_of_them() {
+        let f = fixture();
+        f.write("Old Name.md", &note("Old Name", "target"));
+        f.write("aaa.md", &note("aaa", &link("Old Name", "Old Name")));
+        f.reindex();
+        let before_target = f.read("Old Name.md");
+        let before_source = f.read("aaa.md");
+        f.inject_index_failure(
+            "CREATE TRIGGER injected_insert BEFORE INSERT ON notes \
+             BEGIN SELECT RAISE(ABORT, 'injected index failure'); END;",
+        );
+
+        let result = rename_note(&f.workspace, "Old Name", "New Name");
+
+        assert!(result.is_err(), "{result:?}");
+        assert!(!f.exists("New Name.md"), "the rename survived the rollback");
+        assert_eq!(
+            f.read("Old Name.md"),
+            before_target,
+            "the renamed file was not restored byte-identically"
+        );
+        assert_eq!(
+            f.read("aaa.md"),
+            before_source,
+            "the rewritten source was not restored byte-identically"
+        );
+        assert_eq!(
+            f.note_ids(),
+            vec!["Old Name".to_string(), "aaa".to_string()]
+        );
+        assert_eq!(f.backlink_sources("Old Name"), vec!["aaa".to_string()]);
+    }
+
+    /// The `Trashed` inverse arm: a deletion whose index transaction fails puts
+    /// the file back.
+    #[test]
+    fn an_index_failure_during_a_deletion_puts_the_file_back() {
+        let f = fixture();
+        f.write("Doomed.md", &note("Doomed", "words worth keeping"));
+        f.reindex();
+        let before = f.read("Doomed.md");
+        f.inject_index_failure(
+            "CREATE TRIGGER injected_delete BEFORE DELETE ON notes \
+             BEGIN SELECT RAISE(ABORT, 'injected index failure'); END;",
+        );
+
+        let result = delete_note(&f.workspace, "Doomed");
+
+        assert!(result.is_err(), "{result:?}");
+        assert_eq!(
+            f.read("Doomed.md"),
+            before,
+            "the deleted file was not restored byte-identically"
+        );
+        assert!(f.trash_entries().is_empty());
+        assert_eq!(f.note_ids(), vec!["Doomed".to_string()]);
     }
 
     // -- frontmatter rewriting ----------------------------------------------

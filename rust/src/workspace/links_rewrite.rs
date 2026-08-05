@@ -421,6 +421,33 @@ mod tests {
         assert_eq!(out, "[a](</dir/New.md>)");
     }
 
+    /// Text that merely *looks* like a Link — inside a fenced code block or an
+    /// inline code span — is not a Link and must not be rewritten. A rename
+    /// that edited a code sample would be silent corruption of the user's
+    /// prose, and the property rests on parser behaviour rather than on
+    /// anything this module does, which is exactly why it is pinned here.
+    #[test]
+    fn links_inside_fenced_and_inline_code_are_not_rewritten() {
+        let source = "Prose [a](</Old.md>).\n\n\
+                      Inline `[a](</Old.md>)` stays.\n\n\
+                      ```markdown\n[a](</Old.md>)\n```\n\n\
+                      Indented:\n\n    [a](</Old.md>)\n";
+
+        let out = rewrite(source, &[("Old", "New")]).unwrap();
+
+        assert_eq!(
+            out.matches("</New.md>").count(),
+            1,
+            "only the one real Link may move: {out:?}"
+        );
+        assert_eq!(
+            out.matches("</Old.md>").count(),
+            3,
+            "the inline code span, the fenced block and the indented block must \
+             all be left exactly as written: {out:?}"
+        );
+    }
+
     /// A self-Link is an inbound Link like any other and is found by the same
     /// scan — there is no separate code path for it, which is what makes the
     /// "rename a Note that links to itself" criterion fall out rather than need
