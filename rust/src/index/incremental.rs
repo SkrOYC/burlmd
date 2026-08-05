@@ -59,22 +59,51 @@ pub fn index_note(
         )));
     };
 
-    let stored_hash: Option<String> = conn
-        .query_row(
-            "SELECT content_hash FROM notes WHERE workspace_id = ?1 AND id = ?2",
-            rusqlite::params![workspace_id, concept_id],
-            |row| row.get(0),
-        )
-        .optional()?;
-    if stored_hash.as_deref() == Some(raw.content_hash.as_str()) {
+    if stored_content_hash(conn, workspace_id, concept_id)?.as_deref()
+        == Some(raw.content_hash.as_str())
+    {
         return Ok(IndexOutcome::Unchanged);
     }
 
-    let note = raw.derive(concept_id);
+    write_note_rows(conn, workspace_id, &raw.derive(concept_id))
+}
+
+/// What `notes.content_hash` currently records for this Note, or `None` when
+/// the index has no row for it.
+///
+/// Split out of [`index_note`] with [`write_note_rows`] for a caller that holds
+/// the bytes already and must not perform file I/O inside its connection
+/// closure — `workspace::persist`'s tier 2 write, which has just written the
+/// source it would otherwise ask this module to re-read, and which runs under
+/// the process-wide connection mutex a keystroke's own draft write waits on
+/// (`SPK-WSPC-D001` §6.2.7). **This function executes SQL and nothing else.**
+pub fn stored_content_hash(
+    conn: &Connection,
+    workspace_id: &str,
+    concept_id: &str,
+) -> Result<Option<String>, AppError> {
+    conn.query_row(
+        "SELECT content_hash FROM notes WHERE workspace_id = ?1 AND id = ?2",
+        rusqlite::params![workspace_id, concept_id],
+        |row| row.get(0),
+    )
+    .optional()
+    .map_err(AppError::from)
+}
+
+/// Rewrites every row one already-derived Note owns. **Executes SQL and
+/// nothing else**: the read, the hash and the parse all happened before the
+/// caller acquired the connection. See [`stored_content_hash`].
+pub fn write_note_rows(
+    conn: &Connection,
+    workspace_id: &str,
+    note: &crate::index::IndexedNote,
+) -> Result<IndexOutcome, AppError> {
+    let concept_id = note.concept_id.as_str();
     in_transaction(conn, |tx| {
         remove_note_rows(tx, workspace_id, concept_id)?;
         ensure_directories(tx, workspace_id, concept_id)?;
-        insert_note_rows(tx, workspace_id, &note)
+        insert_note_rows(tx, workspace_id, note)
     })?;
 
     // Only on a real rewrite, and bounded: see `analyze_bounded`. Running

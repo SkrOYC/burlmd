@@ -134,11 +134,16 @@ impl Workspace {
     /// Acquires the connection and runs `f` against it.
     ///
     /// Every caller in this module holds no state lock when it calls this, per
-    /// the acquisition order in the module documentation.
+    /// the acquisition order in the module documentation, and **no `f` may
+    /// perform file I/O** (`SPK-WSPC-D001` §6.2.7): the connection is
+    /// process-wide, so anything slow inside a closure is time a keystroke's
+    /// own tier 1 write spends waiting. The rule is enforced rather than
+    /// merely written down — see [`in_connection_closure`].
     fn with_db<T>(
         &self,
         f: impl FnOnce(&Connection) -> Result<T, AppError>,
     ) -> Result<T, AppError> {
+        let _scope = ConnectionScope::enter();
         match &self.db {
             DbHandle::Process => crate::db::connection::with_connection(f),
             #[cfg(test)]
@@ -151,8 +156,51 @@ impl Workspace {
         }
     }
 
-    fn note_path(&self, note_id: &str) -> PathBuf {
-        self.root.join(concept_id_to_path(note_id))
+    /// The absolute path of one Note's file, **rejecting any concept id that
+    /// does not name a file inside this Workspace**.
+    ///
+    /// A concept id is the bundle-relative path with `.md` removed (ADR-004),
+    /// so it is joined onto the root — and `Path::join` is happy to walk out of
+    /// it. `../../.ssh/authorized_keys` is a concept id as far as the type
+    /// system is concerned, and `WSPC-D008` wires this parameter straight to
+    /// ids the UI supplies. Every component must therefore be an ordinary name:
+    /// no `..`, no `.`, no absolute path, no Windows prefix or root.
+    ///
+    /// The check is lexical because it has to run *before* the file is read,
+    /// and a path that does not exist yet cannot be canonicalized. A symlink
+    /// planted inside the bundle would still resolve outside it, so a Note that
+    /// does exist is additionally checked against the canonicalized root, which
+    /// is the same containment test `index::path_is_in_workspace` applies.
+    fn note_path(&self, note_id: &str) -> Result<PathBuf, AppError> {
+        use std::path::Component;
+
+        let relative = concept_id_to_path(note_id);
+        let relative_path = Path::new(&relative);
+        let escapes = relative_path
+            .components()
+            .any(|component| !matches!(component, Component::Normal(_)));
+        if escapes || relative.is_empty() {
+            return Err(AppError::PathUnavailable(format!(
+                "concept id {note_id} does not name a file inside the Workspace"
+            )));
+        }
+
+        let absolute = self.root.join(relative_path);
+        if absolute.exists() {
+            let contained = match (
+                std::fs::canonicalize(&self.root),
+                std::fs::canonicalize(&absolute),
+            ) {
+                (Ok(root), Ok(resolved)) => resolved.starts_with(&root),
+                _ => false,
+            };
+            if !contained {
+                return Err(AppError::PathUnavailable(format!(
+                    "concept id {note_id} resolves outside the Workspace"
+                )));
+            }
+        }
+        Ok(absolute)
     }
 
     /// A Workspace over an injected connection, with the idle interval under
@@ -172,6 +220,52 @@ impl Workspace {
             idle_interval,
         })
     }
+}
+
+// ---------------------------------------------------------------------------
+// The rule that no connection closure performs file I/O, enforced
+// ---------------------------------------------------------------------------
+
+thread_local! {
+    /// Whether this thread is currently inside a [`Workspace::with_db`]
+    /// closure, and therefore holding the process-wide connection mutex.
+    static IN_CONNECTION_CLOSURE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Marks the calling thread as holding the connection for as long as it lives.
+struct ConnectionScope(bool);
+
+impl ConnectionScope {
+    fn enter() -> Self {
+        ConnectionScope(IN_CONNECTION_CLOSURE.with(|flag| flag.replace(true)))
+    }
+}
+
+impl Drop for ConnectionScope {
+    fn drop(&mut self) {
+        IN_CONNECTION_CLOSURE.with(|flag| flag.set(self.0));
+    }
+}
+
+fn in_connection_closure() -> bool {
+    IN_CONNECTION_CLOSURE.with(std::cell::Cell::get)
+}
+
+/// Panics in debug builds when `what` is being done while the connection is
+/// held.
+///
+/// `SPK-WSPC-D001` §6.2.7's three standing review rules are the ones "a tier 2
+/// implementation would break first", and the first of them — no file I/O
+/// inside a connection closure — is invisible at the call site once the I/O is
+/// two functions away. This turns it into a test failure rather than a review
+/// finding. Debug only, so a shipped build pays nothing for it.
+fn assert_no_io_under_the_connection(what: &str) {
+    debug_assert!(
+        !in_connection_closure(),
+        "{what} ran inside a connection closure: the process-wide connection \
+         mutex would be held across file I/O, which is what a keystroke's own \
+         tier 1 write then waits on (SPK-WSPC-D001 §6.2.7)"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -227,6 +321,13 @@ struct SessionInner {
 #[derive(Clone)]
 pub struct NoteSession(Arc<SessionInner>);
 
+/// What a successful tier 2 write put on disk: the new revision, and the edit
+/// sequence the written bytes covered.
+struct WrittenThrough {
+    revision: String,
+    seq: i64,
+}
+
 /// The open Notes of this process, keyed by Workspace and concept id.
 ///
 /// This lock is above every lock in the module documentation's order and is
@@ -279,7 +380,7 @@ pub fn open_note(
         return Ok((session, state));
     }
 
-    let absolute_path = workspace.note_path(note_id);
+    let absolute_path = workspace.note_path(note_id)?;
     let bytes = std::fs::read(&absolute_path).map_err(|e| {
         if e.kind() == std::io::ErrorKind::NotFound {
             AppError::NotFound(format!("no file on disk for concept id {note_id}"))
@@ -330,16 +431,27 @@ pub fn open_note(
         timer: IdleTimer::new(workspace.idle_interval),
     }));
 
-    registry()?.insert(
-        (workspace.id().to_string(), note_id.to_string()),
-        session.clone(),
-    );
-    if restored_from_draft {
-        // Recovered work reaches disk on the same idle interval as work typed
-        // in this session, rather than waiting for the user to touch a Note
-        // they may have opened only to check that it survived.
-        session.arm_idle_timer();
-    }
+    // Re-checked under the registry lock rather than trusting the check at the
+    // top of this function: two threads opening the same Note race between the
+    // two, and the loser would otherwise replace the winner's session in the
+    // map — stranding a live buffer, and with it any timer thread already armed
+    // against it, while the FFI surface addressed the replacement. Whoever
+    // inserts first wins and the other's freshly built session is dropped
+    // having done nothing but read.
+    let session = match registry()?.entry((workspace.id().to_string(), note_id.to_string())) {
+        std::collections::hash_map::Entry::Occupied(existing) => existing.get().clone(),
+        std::collections::hash_map::Entry::Vacant(slot) => {
+            slot.insert(session.clone());
+            if restored_from_draft {
+                // Recovered work reaches disk on the same idle interval as work
+                // typed in this session, rather than waiting for the user to
+                // touch a Note they may have opened only to check that it
+                // survived.
+                session.arm_idle_timer();
+            }
+            session
+        }
+    };
     let note_state = session.note_state()?;
     Ok((session, note_state))
 }
@@ -401,6 +513,13 @@ impl NoteSession {
     /// wrong by a factor of 36). It is roughly a thousand times the cost of the
     /// buffer and span work it accompanies, which is exactly why no lock is
     /// held across it.
+    ///
+    /// Addresses a **leaf** Block only. A path naming a `List`, `ListItem` or
+    /// `Blockquote` is refused with `ParseError` rather than served, because
+    /// buffered arithmetic cannot say where that container's child Blocks went
+    /// — see [`SpanMap::apply_buffered_edit`]. The caller edits the leaf the
+    /// user focused, or routes a genuinely structural change through a
+    /// reparsing mutator.
     pub fn update_block(&self, block_path: &[usize], new_source: &str) -> Result<(), AppError> {
         let (snapshot, seq) = {
             let mut guard = self.lock_state()?;
@@ -415,9 +534,21 @@ impl NoteSession {
                 .clone();
             check_span(&state.source, &span)?;
 
+            // The arithmetic is applied *first*, so that a refused edit leaves
+            // the buffer and the map both untouched rather than the buffer
+            // spliced against a map that never moved.
+            if Arc::make_mut(&mut state.spans)
+                .apply_buffered_edit(block_path, new_source.len())
+                .is_none()
+            {
+                return Err(AppError::ParseError(format!(
+                    "block_path {block_path:?} addresses a container Block, whose \
+                     child spans a buffered edit cannot maintain; edit the Block \
+                     that holds the text, or use a reparsing call"
+                )));
+            }
             // One writer of the working source for this text, and it is here.
             Arc::make_mut(&mut state.source).replace_range(span.clone(), new_source);
-            Arc::make_mut(&mut state.spans).apply_buffered_edit(block_path, new_source.len());
 
             state.edit_seq += 1;
             state.session_edited = true;
@@ -445,6 +576,13 @@ impl NoteSession {
     /// on the Dart thread and the timer never mutates the buffer, so the retry
     /// should never fire, but the failure it would otherwise hide is a span map
     /// describing a buffer that no longer exists.
+    ///
+    /// This is also where the Note's metadata is re-derived, because it is the
+    /// call that reparses what the user typed. A session that edits the
+    /// frontmatter Block — adding the `type` key that brings a foreign file
+    /// into conformance (CAP-PORT-03), or correcting the title — would
+    /// otherwise keep reporting `okf_conformant = false` for the rest of the
+    /// session and commit under the Note's old title.
     pub fn commit_block(&self, _block_path: &[usize]) -> Result<NoteState, AppError> {
         loop {
             let (source, seq) = {
@@ -459,6 +597,12 @@ impl NoteSession {
             if state.edit_seq != seq {
                 continue;
             }
+            state.metadata = derive_metadata(
+                &self.0.note_id,
+                &source,
+                &spans,
+                state.metadata.last_modified,
+            );
             state.ast = Arc::new(ast);
             state.spans = Arc::new(spans);
             // Deliberately no `edit_seq` increment here.
@@ -580,6 +724,15 @@ impl NoteSession {
                 if state.edit_seq != seq {
                     continue;
                 }
+                // Re-derived for the same reason `commit_block` re-derives it:
+                // these mutators reparse, and a structural edit can be the one
+                // that rewrites the frontmatter Block.
+                state.metadata = derive_metadata(
+                    &self.0.note_id,
+                    &new_source,
+                    &spans,
+                    state.metadata.last_modified,
+                );
                 state.source = Arc::new(new_source);
                 state.spans = Arc::new(spans);
                 state.ast = Arc::new(ast);
@@ -608,6 +761,15 @@ impl NoteSession {
             .with_db(|conn| index::resolve_link_existence(conn, &workspace_id, ast))
     }
 
+    /// Writes the tier 1 row, never letting it go backwards.
+    ///
+    /// The `WHERE excluded.edit_seq > drafts.edit_seq` guard makes "the row
+    /// holds the newest edit" a property of this statement rather than an
+    /// assumption about FRB serializing the calls that produce it. Without it,
+    /// two tier 1 writes completing out of order would leave the older bytes in
+    /// the row *under the newer sequence's protection from the conditional
+    /// clear* — the one combination that both loses an edit and hides that it
+    /// did.
     fn write_draft(&self, source: &str, edit_seq: i64) -> Result<(), AppError> {
         let workspace_id = self.0.workspace.id().to_string();
         let note_id = self.0.note_id.clone();
@@ -619,7 +781,8 @@ impl NoteSession {
                  ON CONFLICT(workspace_id, note_id) DO UPDATE SET \
                      raw_markdown = excluded.raw_markdown, \
                      updated_at = excluded.updated_at, \
-                     edit_seq = excluded.edit_seq",
+                     edit_seq = excluded.edit_seq \
+                 WHERE excluded.edit_seq > drafts.edit_seq",
                 rusqlite::params![workspace_id, note_id, source, now, edit_seq],
             )?;
             Ok(())
@@ -636,11 +799,19 @@ impl NoteSession {
     /// held from `open_note` would be stale by construction — a Core-owned idle
     /// timer advances the revision without the UI ever observing it.
     pub fn flush(&self) -> Result<String, AppError> {
-        let _write_guard = self
-            .0
-            .write_lock
-            .lock()
-            .map_err(|_| AppError::DatabaseError("tier 2 write lock poisoned".to_string()))?;
+        self.flush_covering().map(|written| written.revision)
+    }
+
+    /// [`flush`](Self::flush), reporting **which edit sequence the write
+    /// covered** as well as the new revision.
+    ///
+    /// `close_note` needs the sequence, not just the revision: clearing the
+    /// draft row unconditionally afterwards would destroy a keystroke that
+    /// landed between the write and the clear, and `SPK-WSPC-D001` §6.2.6's
+    /// asymmetry says that direction of error costs the user's work while the
+    /// other costs one spurious recovery notice.
+    fn flush_covering(&self) -> Result<WrittenThrough, AppError> {
+        let _write_guard = self.lock_writes()?;
 
         let (source, seq, revision, closed) = {
             let state = self.lock_state()?;
@@ -652,11 +823,11 @@ impl NoteSession {
             )
         };
         if closed {
-            return Ok(revision);
+            return Ok(WrittenThrough { revision, seq });
         }
 
         match self.write_locked(&source, seq, &revision) {
-            Ok(new_revision) => Ok(new_revision),
+            Ok(revision) => Ok(WrittenThrough { revision, seq }),
             Err(error) => {
                 // Failing toward keeping the draft row: the row is what holds
                 // the user's unwritten work, and every ambiguous case resolves
@@ -668,6 +839,17 @@ impl NoteSession {
         }
     }
 
+    /// The tier 2 write lock. Taken by tier 2 writers only — the idle timer,
+    /// `flush`, `close` and `reload` — and never by a call that merely mutates
+    /// state, so no keystroke can wait on it even though it is held across the
+    /// file I/O it exists to serialize.
+    fn lock_writes(&self) -> Result<MutexGuard<'_, ()>, AppError> {
+        self.0
+            .write_lock
+            .lock()
+            .map_err(|_| AppError::DatabaseError("tier 2 write lock poisoned".to_string()))
+    }
+
     /// The OCC sequence, run entirely under the tier 2 write lock: compare the
     /// bytes on disk against the recorded revision, write atomically, clear the
     /// draft row conditionally, re-record the revision.
@@ -676,16 +858,7 @@ impl NoteSession {
     /// and a `close_note` — both read the same revision, both pass, and the
     /// second silently discards the first.
     fn write_locked(&self, source: &str, seq: i64, revision: &str) -> Result<String, AppError> {
-        let on_disk = std::fs::read(&self.0.absolute_path).map_err(|e| {
-            if e.kind() == std::io::ErrorKind::NotFound {
-                AppError::NotFound(format!(
-                    "the file for {} is no longer on disk",
-                    self.0.note_id
-                ))
-            } else {
-                AppError::IoError(format!("read {}: {e}", self.0.absolute_path.display()))
-            }
-        })?;
+        let on_disk = self.read_file()?;
         let disk_revision = content_hash(&on_disk);
         if disk_revision != revision {
             // The file changed underneath the draft. The file is left exactly
@@ -700,18 +873,11 @@ impl NoteSession {
         }
 
         self.clear_draft_through(seq)?;
-        let workspace_id = self.0.workspace.id().to_string();
-        let note_id = self.0.note_id.clone();
-        self.0.workspace.with_db(|conn| {
-            // The index tracks disk, so it is brought level with what was just
-            // written. It short-circuits on the content hash, so a write that
-            // changed nothing costs a hash rather than a parse.
-            index::incremental::index_note(conn, &workspace_id, &note_id)?;
-            Ok(())
-        })?;
+        self.index_written_source(source, &new_revision)?;
 
         let mut state = self.lock_state()?;
         state.revision = new_revision.clone();
+        state.metadata.last_modified = unix_now();
         state.last_written_at = Some(unix_now());
         state.last_error = None;
         state.unwritten = state.edit_seq > seq;
@@ -722,6 +888,65 @@ impl NoteSession {
         // after it appeared, on the first idle write. `reload` clears it,
         // because that call replaces the recovered buffer outright.
         Ok(new_revision)
+    }
+
+    /// The Note's bytes as they are on disk right now.
+    ///
+    /// A file that is gone reports `NotFound` rather than a generic I/O error,
+    /// because the two have different exits: `NotFound` here means the file was
+    /// deleted by something outside this application — another tool, or the
+    /// user in a file manager — and `close` treats it as such rather than
+    /// leaving the session unclosable.
+    fn read_file(&self) -> Result<Vec<u8>, AppError> {
+        assert_no_io_under_the_connection("reading a Note's file");
+        std::fs::read(&self.0.absolute_path).map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                AppError::NotFound(format!(
+                    "the file for {} is no longer on disk",
+                    self.0.note_id
+                ))
+            } else {
+                AppError::IoError(format!("read {}: {e}", self.0.absolute_path.display()))
+            }
+        })
+    }
+
+    /// Brings the index level with the bytes tier 2 just wrote, **without
+    /// putting file I/O or a parse inside the connection closure**.
+    ///
+    /// `index::incremental::index_note` would be the obvious call and is the
+    /// wrong one here: it re-reads the file, stats it, and on a changed hash
+    /// parses it — all O(file) work, and all of it would run under the
+    /// process-wide connection mutex that a keystroke's own tier 1 write has to
+    /// acquire. That is the composition `SPK-WSPC-D001` §6.2.7 forbids in as
+    /// many words ("no closure passed to `with_connection` may perform file
+    /// I/O"), and it is exactly what this tier would have broken first. The
+    /// bytes are already in hand, so the hash comparison, the `stat` and the
+    /// derivation all happen out here and the two closures below run SQL only.
+    ///
+    /// The short-circuit is kept because it is what makes this cheap on the
+    /// common path: a write that changed nothing costs one indexed lookup
+    /// rather than a parse and a link walk.
+    fn index_written_source(&self, source: &str, revision: &str) -> Result<(), AppError> {
+        let workspace_id = self.0.workspace.id().to_string();
+        let note_id = self.0.note_id.clone();
+        let stored = self.0.workspace.with_db(|conn| {
+            index::incremental::stored_content_hash(conn, &workspace_id, &note_id)
+        })?;
+        if stored.as_deref() == Some(revision) {
+            return Ok(());
+        }
+
+        let note = index::derive_note(
+            &note_id,
+            source,
+            revision.to_string(),
+            file_mtime(&self.0.absolute_path),
+        );
+        self.0.workspace.with_db(|conn| {
+            index::incremental::write_note_rows(conn, &workspace_id, &note)?;
+            Ok(())
+        })
     }
 
     /// Clears the draft row **only if it holds nothing newer than what is now
@@ -743,10 +968,10 @@ impl NoteSession {
     /// The residual case is benign and stated so it is not mistaken for a
     /// defect: a keystroke's row landing *after* this statement survives
     /// holding bytes identical to disk, which is a false "restored from draft"
-    /// rather than a loss. The next timer firing clears it, and tier 3 clears
-    /// it unconditionally on close. The asymmetry is the point — failing to
-    /// clear costs one spurious recovery notice, clearing wrongly costs the
-    /// user's work.
+    /// rather than a loss, cleared by the next firing. The asymmetry is the
+    /// point — failing to clear costs one spurious recovery notice, clearing
+    /// wrongly costs the user's work — and it is why `close` clears through the
+    /// sequence its own flush covered rather than clearing outright.
     fn clear_draft_through(&self, seq: i64) -> Result<(), AppError> {
         let workspace_id = self.0.workspace.id().to_string();
         let note_id = self.0.note_id.clone();
@@ -790,7 +1015,25 @@ impl NoteSession {
     /// It is also the only call that reads bytes this application did not write
     /// into a Note that is already open, which is why it is where conflict
     /// markers become `Suggestion` nodes.
+    ///
+    /// It runs under the **tier 2 write lock** for its whole length, because it
+    /// re-records the OCC baseline and is therefore a tier 2 writer in the only
+    /// sense that matters: without the lock, a concurrent idle write can land
+    /// between this read and the baseline it derives from it, leaving the Core
+    /// recording a revision the file no longer has — the time-of-check to
+    /// time-of-use hole `SPK-WSPC-D001` §6.2.5 gave the lock to close. The
+    /// acquisition order is unchanged: write lock, then state, then connection.
+    ///
+    /// **It does not clear `session_edited`**, and that is a decision rather
+    /// than an omission. Work this session already wrote to disk before the
+    /// reload is on disk still, and clearing the flag would drop it out of
+    /// history at close for no gain: the pathspec commit no-ops when the path
+    /// already matches `HEAD`, so keeping the flag costs an unchanged-tree
+    /// check and buys the user's own pre-reload writes their commit. What is
+    /// discarded here is the *buffer*, which is unwritten by definition.
     pub fn reload(&self) -> Result<NoteState, AppError> {
+        let _write_guard = self.lock_writes()?;
+
         let workspace_id = self.0.workspace.id().to_string();
         let note_id = self.0.note_id.clone();
         self.0.workspace.with_db(|conn| {
@@ -801,9 +1044,7 @@ impl NoteSession {
             Ok(())
         })?;
 
-        let bytes = std::fs::read(&self.0.absolute_path).map_err(|e| {
-            AppError::IoError(format!("read {}: {e}", self.0.absolute_path.display()))
-        })?;
+        let bytes = self.read_file()?;
         let revision = content_hash(&bytes);
         let source = String::from_utf8_lossy(&bytes).into_owned();
         let dir = containing_dir(&self.0.note_id);
@@ -828,7 +1069,6 @@ impl NoteSession {
         state.metadata = metadata;
         state.restored_from_draft = false;
         state.unwritten = false;
-        state.session_edited = false;
         state.last_error = None;
         drop(state);
         self.note_state()
@@ -844,22 +1084,42 @@ impl NoteSession {
     /// through this tier, and one empty commit per Note visited would destroy
     /// the readable history the whole design exists to produce.
     ///
-    /// A failed flush aborts the close with the error and leaves the session,
+    /// A refused flush aborts the close with the error and leaves the session,
     /// the draft row and the file exactly as they were. Committing bytes this
     /// application did not write, or clearing a row holding work that never
     /// reached disk, are both worse than a close the UI has to follow with a
     /// reload — which is the exit the contract routes every mismatch through.
+    ///
+    /// **A file that has vanished is the one exception**, because it is the one
+    /// case where refusing traps the user. Something outside this application
+    /// deleted the Note; every subsequent flush and every reload will fail on
+    /// the same missing file, so a close that propagated the error would leave
+    /// a session that can never be closed and a Note that can never be
+    /// navigated away from. So the session is retired without a commit — there
+    /// is nothing on disk to commit — and **the draft row is left in place**,
+    /// which is what turns the deletion into recoverable work: the row survives
+    /// in the encrypted index and `pending_drafts` reports it. That is
+    /// `SPK-WSPC-D001` §6.2.6's asymmetry applied to the harshest case, and it
+    /// keeps `architecture/resilience.md`'s promise that unwritten work
+    /// survives events the application never got to handle.
     pub fn close(&self) -> Result<(), AppError> {
         let (edited, unwritten) = {
             let state = self.lock_state()?;
             (state.session_edited, state.unwritten)
         };
+
+        let mut written: Option<WrittenThrough> = None;
+        let mut file_vanished = false;
         if edited || unwritten {
-            self.flush()?;
+            match self.flush_covering() {
+                Ok(flushed) => written = Some(flushed),
+                Err(AppError::NotFound(_)) => file_vanished = true,
+                Err(error) => return Err(error),
+            }
         }
 
         let mut committed = false;
-        if edited {
+        if edited && !file_vanished {
             let message = self.commit_message()?;
             let commit = crate::git::operations::commit_paths(
                 self.0.workspace.root(),
@@ -869,21 +1129,20 @@ impl NoteSession {
             committed = commit.is_some();
         }
 
-        let workspace_id = self.0.workspace.id().to_string();
-        let note_id = self.0.note_id.clone();
-        self.0.workspace.with_db(|conn| {
-            conn.execute(
-                "DELETE FROM drafts WHERE workspace_id = ?1 AND note_id = ?2",
-                rusqlite::params![workspace_id, note_id],
-            )?;
-            Ok(())
-        })?;
+        // Bound to the sequence the write actually covered, for the same reason
+        // the timer's clear is: a keystroke landing between the flush returning
+        // and this statement is work no write has covered, and clearing it
+        // would destroy it. Nothing was written when the file vanished, so
+        // nothing is cleared.
+        if let Some(flushed) = &written {
+            self.clear_draft_through(flushed.seq)?;
+        }
 
         {
             let mut state = self.lock_state()?;
             state.closed = true;
             state.session_edited = false;
-            state.unwritten = false;
+            state.unwritten = file_vanished;
         }
         registry()?.remove(&(self.0.workspace.id().to_string(), self.0.note_id.clone()));
 
@@ -1106,8 +1365,20 @@ fn read_draft(
 /// and the loser renames a partially written file over the Note; and a
 /// temporary file in another directory cannot be renamed atomically onto this
 /// one, because `rename` is only atomic within a filesystem.
+///
+/// The containing **directory** is deliberately not `fsync`ed after the
+/// rename. What that costs is bounded and is not the guarantee this function
+/// makes: on a power loss the rename itself may not have reached the platter,
+/// so the file may still hold its previous contents — never a partial or
+/// interleaved one, because the bytes were `fsync`ed into the temporary file
+/// before the rename published them. Losing the last write to a power cut is
+/// already the accepted cost of `synchronous = NORMAL` on the index the draft
+/// row lives in (`SPK-WSPC-D001` §6.3), and tier 1's purpose is to survive an
+/// application crash, which this handles unconditionally.
 fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), AppError> {
     static NEXT_TEMP: AtomicU64 = AtomicU64::new(0);
+
+    assert_no_io_under_the_connection("an atomic write");
 
     let directory = path
         .parent()
@@ -2220,5 +2491,313 @@ mod tests {
             !format!("{:?}", state.ast).contains("<<<<<<<"),
             "the markers survived as literal text"
         );
+    }
+
+    // -- review findings -----------------------------------------------------
+
+    /// `SPK-WSPC-D001` §6.2.7's first standing rule: no closure passed to the
+    /// connection may perform file I/O. The process-wide connection is what a
+    /// keystroke's own tier 1 write waits on, so anything slow inside a closure
+    /// is latency charged to typing — and the obvious `index_note` call on the
+    /// tier 2 path did exactly that, reading, stat-ing and parsing the file it
+    /// had just been handed the bytes of.
+    ///
+    /// The rule is now enforced at runtime in debug builds, which is what this
+    /// asserts: the guard fires rather than merely being documented.
+    #[test]
+    #[should_panic(expected = "ran inside a connection closure")]
+    fn file_io_inside_a_connection_closure_is_a_hard_error() {
+        let f = fixture();
+        f.write("a.md", &note("A", "First."));
+
+        let _ = f.workspace.with_db(|_conn| {
+            atomic_write(&f.root().join("a.md"), b"written under the connection\n")
+        });
+    }
+
+    /// The same rule, from the other side: the tier 2 write path itself must
+    /// never reach the filesystem while holding the connection. This is the
+    /// regression the guard above exists to catch, exercised through the real
+    /// call rather than a synthetic one.
+    #[test]
+    fn a_tier_2_write_never_touches_the_filesystem_under_the_connection() {
+        let f = fixture();
+        f.write("a.md", &note("A", "Antidisestablishmentarianism."));
+        let session = f.open("a");
+        session
+            .update_block(&[0], "Supercalifragilistic.\n")
+            .unwrap();
+
+        // Panics through the debug guard if any of the write, the draft clear
+        // or the reindex reaches a file with the connection held.
+        session.flush().unwrap();
+
+        // And the index really was brought level, so the cheap path is not
+        // cheap by having skipped the work.
+        let indexed: i64 = f
+            .workspace
+            .with_db(|conn| {
+                conn.query_row(
+                    "SELECT count(*) FROM notes_fts WHERE notes_fts MATCH 'Supercalifragilistic'",
+                    [],
+                    |row| row.get(0),
+                )
+                .map_err(AppError::from)
+            })
+            .unwrap();
+        assert_eq!(indexed, 1);
+    }
+
+    /// A buffered edit cannot maintain a container's child spans, so
+    /// `update_block` refuses the path instead of leaving a map whose
+    /// descendants address bytes that no longer exist.
+    #[test]
+    fn update_block_refuses_a_container_path_and_changes_nothing() {
+        let f = fixture();
+        f.write("a.md", "- alpha\n- beta\n\ntail\n");
+        let session = f.open("a");
+        let before = session.working_source().unwrap();
+
+        let result = session.update_block(&[0], "- rewritten entirely\n");
+
+        assert!(matches!(result, Err(AppError::ParseError(_))), "{result:?}");
+        assert_eq!(
+            session.working_source().unwrap(),
+            before,
+            "the buffer moved"
+        );
+        assert!(f.draft("a").is_none(), "a refused edit wrote a draft row");
+
+        // The leaf inside the item is what the user actually focuses, and it
+        // is served.
+        session.update_block(&[0, 0, 0], "alpha edited").unwrap();
+        assert!(session.working_source().unwrap().contains("alpha edited"));
+    }
+
+    /// A keystroke landing between the close-time flush and the draft clear is
+    /// work no write has covered. Clearing it would destroy it, which is the
+    /// direction `SPK-WSPC-D001` §6.2.6 says must never be taken.
+    #[test]
+    fn a_close_clears_only_the_draft_the_flush_covered() {
+        let f = fixture();
+        f.write("a.md", &note("A", "First."));
+        f.commit_baseline();
+        let session = f.open("a");
+        session.update_block(&[0], "Flushed.\n").unwrap();
+        let flushed = session.flush_covering().unwrap();
+
+        // The racing keystroke: its row is newer than anything on disk.
+        session
+            .update_block(&[0], "Typed after the flush.\n")
+            .unwrap();
+        let racing_seq = session.edit_seq();
+        assert!(racing_seq > flushed.seq);
+
+        // Close re-flushes, so the racing row is covered this time; the case
+        // that matters is a clear bound to the *earlier* sequence, which is
+        // what the close would have used had it cleared unconditionally.
+        session.clear_draft_through(flushed.seq).unwrap();
+
+        let row = f
+            .draft("a")
+            .expect("the racing keystroke's row was destroyed");
+        assert_eq!(row.edit_seq, racing_seq);
+    }
+
+    /// A Note deleted by something outside this application must not trap the
+    /// session: every flush and every reload would fail on the same missing
+    /// file. Closing retires it without a commit and **keeps the draft row**,
+    /// which is what makes the deleted work recoverable.
+    #[test]
+    fn a_note_whose_file_vanished_can_still_be_closed_and_its_draft_survives() {
+        let f = fixture();
+        f.write("a.md", &note("A", "First."));
+        f.commit_baseline();
+        let session = f.open("a");
+        session
+            .update_block(&[0], "Work that only exists in the draft.\n")
+            .unwrap();
+
+        std::fs::remove_file(f.root().join("a.md")).unwrap();
+
+        // The write tier reports the deletion as such rather than as a generic
+        // I/O failure, so the close below can tell the two apart.
+        assert!(
+            matches!(session.flush(), Err(AppError::NotFound(_))),
+            "a vanished file must surface as NotFound"
+        );
+
+        session
+            .close()
+            .expect("a vanished file must not trap the session");
+
+        assert_eq!(
+            f.commit_subjects().len(),
+            1,
+            "nothing was on disk to commit"
+        );
+        let row = f
+            .draft("a")
+            .expect("the draft row is the only copy of the work left");
+        assert!(row
+            .raw_markdown
+            .contains("Work that only exists in the draft."));
+        // The session is gone, so a later open recovers from the row rather
+        // than addressing a session whose file is not there.
+        assert!(lookup(f.workspace.id(), "a").unwrap().is_none());
+        assert!(matches!(
+            open_note(&f.workspace, "a"),
+            Err(AppError::NotFound(_))
+        ));
+    }
+
+    /// Reload surfaces the same distinction, so the UI is told the file is gone
+    /// rather than that something unspecified went wrong with it.
+    #[test]
+    fn reloading_a_vanished_file_reports_not_found() {
+        let f = fixture();
+        f.write("a.md", &note("A", "First."));
+        let session = f.open("a");
+        std::fs::remove_file(f.root().join("a.md")).unwrap();
+
+        assert!(matches!(session.reload(), Err(AppError::NotFound(_))));
+    }
+
+    /// A session that brings a foreign file into conformance, or corrects its
+    /// title, must not keep reporting the old metadata — or commit under the
+    /// old title, which is what the user reads when recovering a version.
+    #[test]
+    fn reparsing_refreshes_the_title_and_the_conformance_flag() {
+        let f = fixture();
+        // No frontmatter at all: a file another tool wrote (CAP-WS-05).
+        f.write("a.md", "Just a body.\n");
+        f.commit_baseline();
+        let session = f.open("a");
+        let (_, opened) = open_note(&f.workspace, "a").unwrap();
+        assert!(!opened.metadata.okf_conformant);
+        assert_eq!(opened.metadata.title, "a");
+
+        // The user repairs it — an explicit action, never automatic.
+        session
+            .insert_block(&[0], "---\ntype: Note\ntitle: Repaired\n---".to_string())
+            .unwrap();
+        let state = session.commit_block(&[0]).unwrap();
+
+        assert!(
+            state.metadata.okf_conformant,
+            "conformance was not re-derived"
+        );
+        assert_eq!(state.metadata.title, "Repaired");
+        session.close().unwrap();
+        assert_eq!(f.commit_subjects()[0], "Update Repaired");
+    }
+
+    /// A concept id is joined onto the bundle root, and `WSPC-D008` wires that
+    /// parameter to ids the UI supplies. One that walks out of the Workspace is
+    /// refused before anything is read.
+    #[test]
+    fn a_concept_id_that_escapes_the_workspace_is_refused() {
+        let f = fixture();
+        f.write("a.md", &note("A", "First."));
+        // A real file outside the bundle, so the refusal cannot be mistaken for
+        // "no such file".
+        std::fs::write(f.dir.path().join("outside.md"), "secrets\n").unwrap();
+
+        // `..` itself is deliberately absent: `.md` is appended before the path
+        // is resolved, so it names a file called `...md` *inside* the bundle
+        // and is refused, correctly, as a Note that does not exist.
+        assert!(matches!(
+            open_note(&f.workspace, "..").map(|(_, state)| state),
+            Err(AppError::NotFound(_))
+        ));
+
+        for escaping in [
+            "../outside",
+            "../../etc/passwd",
+            "/etc/passwd",
+            "a/../../outside",
+        ] {
+            let refused = open_note(&f.workspace, escaping).map(|(_, state)| state);
+            assert!(
+                matches!(refused, Err(AppError::PathUnavailable(_))),
+                "{escaping} was not refused: {:?}",
+                refused.map(|state| state.metadata.path)
+            );
+        }
+        // The ordinary id still opens, and so does one in a subdirectory.
+        f.write("deep/nested/b.md", &note("B", "Nested."));
+        open_note(&f.workspace, "a").unwrap();
+        open_note(&f.workspace, "deep/nested/b").unwrap();
+    }
+
+    /// The draft row must never go backwards, as a property of the statement
+    /// rather than an assumption that the calls producing it arrive in order.
+    #[test]
+    fn a_draft_row_never_regresses_to_an_older_edit_sequence() {
+        let f = fixture();
+        f.write("a.md", &note("A", "First."));
+        let session = f.open("a");
+        session.update_block(&[0], "Newest.\n").unwrap();
+        let newest = f.draft("a").unwrap();
+
+        // An out-of-order tier 1 write, carrying older bytes and an older
+        // sequence than the row already holds.
+        session
+            .write_draft("stale bytes that must not win\n", newest.edit_seq - 1)
+            .unwrap();
+
+        let row = f.draft("a").unwrap();
+        assert_eq!(row.edit_seq, newest.edit_seq);
+        assert_eq!(row.raw_markdown, newest.raw_markdown);
+    }
+
+    /// Reload deliberately leaves `session_edited` alone: work this session
+    /// already wrote to disk is on disk still, and dropping it out of history
+    /// would buy nothing, since the pathspec commit no-ops when the path
+    /// already matches HEAD.
+    #[test]
+    fn work_written_before_a_reload_still_reaches_history_on_close() {
+        let f = fixture();
+        f.write("a.md", &note("A", "First."));
+        f.commit_baseline();
+        let session = f.open("a");
+        session
+            .update_block(&[0], "Written before the reload.\n")
+            .unwrap();
+        session.flush().unwrap();
+
+        session.reload().unwrap();
+        session.close().unwrap();
+
+        assert_eq!(
+            f.commit_subjects().len(),
+            2,
+            "the flushed work never reached history"
+        );
+        assert!(f
+            .git(&["show", "HEAD:a.md"])
+            .contains("Written before the reload."));
+    }
+
+    /// Two threads opening the same Note must converge on one session, or the
+    /// loser's buffer — and any timer already armed against it — is stranded
+    /// while the FFI surface addresses the winner's.
+    #[test]
+    fn opening_the_same_note_twice_converges_on_one_session() {
+        let f = fixture();
+        f.write("a.md", &note("A", "First."));
+
+        let first = f.open("a");
+        let second = f.open("a");
+
+        first
+            .update_block(&[0], "Typed into the first handle.\n")
+            .unwrap();
+        assert_eq!(
+            second.working_source().unwrap(),
+            first.working_source().unwrap(),
+            "the second open returned a different buffer"
+        );
+        assert!(Arc::ptr_eq(&first.0, &second.0));
     }
 }

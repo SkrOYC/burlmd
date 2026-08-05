@@ -360,7 +360,25 @@ impl SpanMap {
     /// `path` now occupies `new_len` bytes of source, and every byte after it
     /// has moved by the difference. Returns the span the Block occupied
     /// *before* the edit — the range a caller splices `new_len` bytes over —
-    /// or `None` when no Block is addressed by `path`.
+    /// or `None` when `path` addresses no Block **or addresses a container**.
+    ///
+    /// # Why a container is refused rather than handled
+    ///
+    /// A `List`, `ListItem` or `Blockquote` composes child Blocks that have
+    /// spans of their own *inside* its span. Replacing a container's whole
+    /// source replaces theirs, and no arithmetic recovers where they went: the
+    /// new text may hold a different number of items, or none. Shifting them by
+    /// the delta produces spans that look plausible and address bytes that no
+    /// longer mean what they did — a map that passes an eyeball and corrupts
+    /// the file at the next splice, which is `architecture/risks.md` risk 7
+    /// exactly. Extending the arithmetic "to descendants" is therefore not a
+    /// stricter version of this function; it is an unsound one.
+    ///
+    /// So a container edit is not a buffered edit at all. It is a structural
+    /// change, and it belongs on a reparsing path — `replace_range`, or a
+    /// `commit_block` following an edit to the leaf the user actually focused.
+    /// The refusal surfaces as an error from `update_block` rather than as a
+    /// silently wrong map.
     ///
     /// This is the **one** place offset arithmetic is permitted to stand in
     /// for a reparse, and `SPK-WSPC-D001` §6.1 states the boundary
@@ -387,10 +405,24 @@ impl SpanMap {
     /// were, and are therefore **stale until `commit_block` reparses**. That is
     /// the deliberate consequence ADR-008 decision 2 accepts: while the Block
     /// is focused the user is looking at raw source (ADR-006), nothing renders
-    /// from its node, and every consumer of inline granularity — the range
-    /// operations — blurs first.
+    /// from its node.
+    ///
+    /// **That staleness is a constraint on the caller, and `WSPC-D008` is where
+    /// it lands.** Inline runs are what `copy_range_as_markdown`, `delete_range`
+    /// and `replace_range` resolve rendered offsets through, so a range
+    /// operation dispatched while a Block is still focused resolves against runs
+    /// describing text the user has since retyped — off by the delta at best,
+    /// and pointing into the middle of a construct that no longer exists at
+    /// worst. The resolution the contract already anticipates (`BlockRange`'s
+    /// "Open: the drag-outward anchor") is that a range operation blurs first
+    /// and dispatches after, which repairs the map through `commit_block`'s
+    /// reparse before anything reads it. Nothing in this module can enforce
+    /// that; the editing surface has to.
     pub fn apply_buffered_edit(&mut self, path: &[usize], new_len: usize) -> Option<Range<usize>> {
         let index = *self.by_path.get(path)?;
+        if !self.blocks[index].is_leaf() {
+            return None;
+        }
         let old = self.blocks[index].source.clone();
         let delta = (new_len as isize) - ((old.end - old.start) as isize);
         if delta == 0 {
@@ -1331,5 +1363,147 @@ mod tests {
             Some("A _paragraph_ here.\n")
         );
         assert_eq!(parsed.spans.block_source(source, &[7]), None);
+    }
+
+    /// Applies one buffered edit and returns the source it produced together
+    /// with the map, so every test below can hold the two against each other.
+    fn buffered_edit(source: &str, path: &[usize], replacement: &str) -> (String, SpanMap) {
+        let mut spans = parse_note(source, "").spans;
+        let old = spans
+            .apply_buffered_edit(path, replacement.len())
+            .unwrap_or_else(|| panic!("apply_buffered_edit refused {path:?}"));
+        let mut edited = source.to_string();
+        edited.replace_range(old, replacement);
+        (edited, spans)
+    }
+
+    /// Grows or shrinks the Block's own text while keeping the shape of its
+    /// span — whether it ends in a newline, which for a paragraph inside a
+    /// tight list item it does not.
+    ///
+    /// Constructed rather than written out because a replacement that adds a
+    /// newline where the Block had none is not a buffered edit of that Block at
+    /// all: it splits a tight list in two, which is a *structural* change, and
+    /// ADR-008 decision 2 defers those to the reparse at blur by design.
+    fn retype(current: &str, replacement_body: &str) -> String {
+        match current.strip_suffix('\n') {
+            Some(_) => format!("{replacement_body}\n"),
+            None => replacement_body.to_string(),
+        }
+    }
+
+    /// The map a buffered edit leaves behind must still describe the buffer it
+    /// left behind. `invariants::check` is the same gate the parse path is held
+    /// to: char-boundary spans, children inside their parents, siblings
+    /// disjoint and in document order.
+    #[test]
+    fn a_buffered_edit_leaves_a_map_that_still_describes_the_source() {
+        let cases: &[(&str, &[usize], &str)] = &[
+            // Growing and shrinking a plain leaf.
+            ("AAA\n\nBBB\n", &[0], "AAAXX"),
+            ("AAA\n\nBBB\n", &[0], "A"),
+            ("AAA\n\nBBB\n", &[1], "BBBYYYY"),
+            // A leaf nested two levels down, where the resize has to carry
+            // through the ListItem and the List that contain it.
+            ("- alpha\n- beta\n\ntail\n", &[0, 0, 0], "alpha and more"),
+            ("- alpha\n- beta\n\ntail\n", &[0, 1, 0], "b"),
+            // A leaf inside a blockquote, and a leaf followed by a container.
+            ("> quoted\n\nafter\n", &[0, 0], "quoted further"),
+            ("intro\n\n- alpha\n- beta\n", &[0], "intro rewritten"),
+            // Frontmatter present: no Block may be dragged into it.
+            (
+                "---\ntype: Note\n---\n\nbody\n\nmore\n",
+                &[0],
+                "body, longer",
+            ),
+        ];
+
+        for (source, path, body) in cases {
+            let parsed = parse_note(source, "");
+            let current = parsed
+                .spans
+                .block_source(source, path)
+                .unwrap_or_else(|| panic!("no Block at {path:?} of {source:?}"));
+            let replacement = retype(current, body);
+
+            let (edited, spans) = buffered_edit(source, path, &replacement);
+            invariants::check(&edited, &spans).unwrap_or_else(|why| {
+                panic!("editing {path:?} of {source:?} to {replacement:?}: {why}")
+            });
+            // And the arithmetic agrees with a reparse about where every Block
+            // now sits, which is the property the next splice depends on.
+            let reparsed = parse_note(&edited, "").spans;
+            for block in reparsed.blocks() {
+                if let Some(arithmetic) = spans.block(&block.path) {
+                    assert_eq!(
+                        arithmetic.source, block.source,
+                        "block {:?} of {edited:?} disagrees with a reparse",
+                        block.path
+                    );
+                }
+            }
+        }
+    }
+
+    /// An edit that changes the Block's *structure* — here a newline typed at
+    /// the end of a paragraph in a tight list item, which splits the list in
+    /// two — still leaves a coherent map, and the map still describes the
+    /// buffer. What it does not do is agree with a reparse about the resulting
+    /// tree, and that is ADR-008 decision 2's stated bargain: the shape is
+    /// stale until `commit_block` reparses, and nothing renders from it
+    /// meanwhile because the Block is focused and showing raw source.
+    #[test]
+    fn a_structure_changing_buffered_edit_still_leaves_a_coherent_map() {
+        let source = "- alpha\n- beta\n\ntail\n";
+
+        let (edited, spans) = buffered_edit(source, &[0, 0, 0], "alpha and more\n");
+
+        assert_eq!(edited, "- alpha and more\n\n- beta\n\ntail\n");
+        invariants::check(&edited, &spans).expect("the map must still describe the buffer");
+    }
+
+    /// A container's child spans live inside its own, so replacing its whole
+    /// source replaces theirs and no delta says where they went. Refused rather
+    /// than served: the alternative is a map that passes an eyeball and
+    /// corrupts the file at the next splice.
+    #[test]
+    fn a_buffered_edit_of_a_container_is_refused_rather_than_corrupting_its_children() {
+        let source = "- alpha\n- beta\n\ntail\n";
+        let parsed = parse_note(source, "");
+        // The List and both ListItems are containers; only the paragraphs
+        // inside the items are leaves.
+        for path in [vec![0], vec![0, 0], vec![0, 1]] {
+            let mut spans = parsed.spans.clone();
+            assert_eq!(
+                spans.apply_buffered_edit(&path, 40),
+                None,
+                "a buffered edit of container {path:?} must be refused"
+            );
+            assert_eq!(
+                spans, parsed.spans,
+                "a refused edit must leave the map untouched"
+            );
+        }
+
+        // The leaf inside the item is the addressable one, and it is served.
+        let mut spans = parsed.spans.clone();
+        assert!(spans.apply_buffered_edit(&[0, 0, 0], 5).is_some());
+    }
+
+    /// The corruption this refusal prevents, stated as the thing that would
+    /// otherwise be observable: a descendant span escaping its resized parent.
+    #[test]
+    fn a_container_edit_would_have_left_descendants_outside_their_parent() {
+        let source = "- alpha\n- beta\n\ntail\n";
+        let parsed = parse_note(source, "");
+        let item = parsed.spans.block(&[0, 0]).expect("the first list item");
+        let child = parsed
+            .spans
+            .block(&[0, 0, 0])
+            .expect("the paragraph inside it");
+
+        // Shrinking the item to a byte would leave its child's span — which
+        // this function does not touch — pointing past the item's new end.
+        assert!(child.source.end > item.source.start + 1);
     }
 }

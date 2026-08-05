@@ -193,6 +193,22 @@ pub fn open_note(path: String) -> Result<NoteState, AppError> {
 /// it is derived here rather than taken as a parameter; a concept id is unique
 /// only within its bundle, which is exactly why this returns `None` rather
 /// than guessing for a file outside one.
+/// The returned state's `metadata.id` is the **concept id** and its
+/// `metadata.path` the bundle-relative path, as the contract specifies — not
+/// the absolute filesystem path the fallback branch below still reports. The
+/// two branches disagree on that, and deliberately: an id is what every other
+/// call in the persistence surface takes, and a file outside any bundle has no
+/// concept id to give.
+///
+/// The state is mirrored into `draft::active_note_cache` as well, because the
+/// legacy AST-based `update_block` below reads the note out of that cache and
+/// matches on `metadata.id`. Without the mirror, the ordinary Dart sequence —
+/// `openNote(path)` then `updateBlock(state.metadata.id, ...)`, which is what
+/// `note_providers.dart` does — would fail with "no open note with id". The
+/// mirror is a bridge, not a design: the cache and the session are two copies
+/// of the same buffer, and `WSPC-D008` removes the first when it replaces
+/// `update_block` with the contract's source-text version, which writes through
+/// the session and its draft row.
 fn open_note_in_active_workspace(path: &str) -> Result<Option<NoteState>, AppError> {
     let Ok(workspace) = crate::workspace::persist::Workspace::active() else {
         return Ok(None);
@@ -208,6 +224,7 @@ fn open_note_in_active_workspace(path: &str) -> Result<Option<NoteState>, AppErr
     };
     let note_id = crate::okf::path_to_concept_id(&relative.to_string_lossy());
     let (_, state) = crate::workspace::persist::open_note(&workspace, &note_id)?;
+    *crate::draft::active_note_cache()? = Some(state.clone());
     Ok(Some(state))
 }
 
