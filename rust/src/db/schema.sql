@@ -240,10 +240,19 @@ CREATE TABLE IF NOT EXISTS drafts (
     -- deleting the `notes` row, or the `workspaces` row above it, leaves this
     -- row behind. `delete_note` and `delete_directory` therefore clear the
     -- affected draft rows explicitly, in the same transaction, exactly as
-    -- `WSPC-D006` re-keys them explicitly on rename. An orphan draft is not a
-    -- supported state, but that is a property the Core enforces here, not one
-    -- the schema does -- and `pending_drafts`, which returns `NoteMetadata`,
-    -- could not represent one anyway.
+    -- `WSPC-D006` re-keys them explicitly on rename.
+    --
+    -- An orphaned draft is nevertheless a state the Core has to REPORT, not one
+    -- it can assume away: the schema does not forbid it, so anything that clears
+    -- a `notes` row without clearing the draft beside it -- a crash between the
+    -- two statements, an external write to the index, a future path that forgets
+    -- -- produces one, and the row it produces holds unflushed user work.
+    -- `pending_drafts` therefore LEFT JOINs `notes` rather than joining it, and
+    -- synthesizes the metadata the missing row would have carried (`path` from
+    -- the concept id, `title` from its filename stem, `last_modified` from
+    -- `updated_at`, `okf_conformant` false). An orphaned draft is reported and
+    -- recoverable; an inner join dropped it silently, which is the one outcome
+    -- unflushed work must never have.
 );
 
 -- Directories. Only strictly necessary for empty ones -- a Directory holding

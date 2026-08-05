@@ -227,15 +227,15 @@ fn delete_note_locked(workspace: &Arc<Workspace>, note_id: &str) -> Result<(), A
         })
     });
     if let Err(error) = removed {
-        journal.rollback();
-        return Err(error);
+        return Err(rolled_back(&mut journal, error));
     }
 
     let relative = concept_id_to_path(note_id);
     let display = title.unwrap_or_else(|| file_stem(note_id).to_string());
+    let subject = format!("Delete {display}");
     let committed = crate::git::operations::commit_paths(
         workspace.root(),
-        &format!("Delete {display}\n\n{relative}\n"),
+        &format!("{subject}\n\n{relative}\n"),
         std::slice::from_ref(&relative),
     );
 
@@ -244,9 +244,16 @@ fn delete_note_locked(workspace: &Arc<Workspace>, note_id: &str) -> Result<(), A
     // history recorded it. Leaving it parked would keep the deleted Note's full
     // content sitting untracked inside the bundle.
     journal.commit();
-    committed?;
-    persist::discard_session(workspace, note_id)?;
-    Ok(())
+    // Retired for the same reason, and *before* the commit error is surfaced.
+    // Propagating the commit failure first jumped over this, leaving a session
+    // open over a Note that no longer exists in either store — and a session
+    // that, closed normally, flushes its buffer and recreates the file the
+    // deletion just removed.
+    let discarded = persist::discard_session(workspace, note_id);
+    if let Err(error) = committed {
+        return Err(commit_stage_failure(&subject, error, &[]));
+    }
+    discarded
 }
 
 /// Renames a Note, rewriting its frontmatter `title`, its filename, and every
@@ -360,7 +367,7 @@ pub fn create_directory(workspace: &Arc<Workspace>, path: &str) -> Result<(), Ap
             "the bundle root already exists and cannot be created".to_string(),
         ));
     }
-    let absolute = workspace.root().join(&directory);
+    let absolute = directory_absolute(workspace, &directory)?;
     if absolute.is_file() {
         return Err(AppError::PathUnavailable(format!(
             "{directory} is already a file in this Workspace"
@@ -396,8 +403,8 @@ pub fn rename_directory(
     let parent = containing_dir(&directory);
     let new_directory = join_id(parent, new_name);
 
-    let old_absolute = workspace.root().join(&directory);
-    let new_absolute = workspace.root().join(&new_directory);
+    let old_absolute = directory_absolute(workspace, &directory)?;
+    let new_absolute = directory_absolute(workspace, &new_directory)?;
     if !old_absolute.is_dir() {
         return Err(AppError::NotFound(format!(
             "no Directory at {directory} in this Workspace"
@@ -462,7 +469,7 @@ fn delete_directory_locked(
             "the bundle root cannot be deleted".to_string(),
         ));
     }
-    let absolute = workspace.root().join(&directory);
+    let absolute = directory_absolute(workspace, &directory)?;
     let prefix = format!("{directory}/");
     let removed = workspace.with_db(|conn| note_ids_with_prefix(conn, workspace.id(), &prefix))?;
     if !absolute.exists() && removed.is_empty() {
@@ -507,8 +514,7 @@ fn delete_directory_locked(
         })
     });
     if let Err(error) = cleared {
-        journal.rollback();
-        return Err(error);
+        return Err(rolled_back(&mut journal, error));
     }
 
     // The pathspec is the **Directory itself**, not the list of Notes removed.
@@ -521,17 +527,31 @@ fn delete_directory_locked(
     // record — a permanently dirty worktree, and one that the next broad commit
     // or sync resolves at a time nobody chose.
     let directory_pathspec = vec![directory.clone()];
+    let subject = format!("Delete directory {directory}");
     let committed = crate::git::operations::commit_paths(
         workspace.root(),
-        &format!("Delete directory {directory}\n"),
+        &format!("{subject}\n"),
         &directory_pathspec,
     );
 
     journal.commit();
-    committed?;
+    // Every session is retired before the commit error is surfaced, for the
+    // reason `delete_note_locked` gives: the Notes are gone from both stores
+    // whether or not version history recorded it, and a session left open over
+    // one recreates its file on the next flush. The first failure is held and
+    // returned only if the commit itself succeeded — the commit error is the
+    // more informative of the two.
+    let mut discarded = Ok(());
     for note_id in &removed {
-        persist::discard_session(workspace, note_id)?;
+        let outcome = persist::discard_session(workspace, note_id);
+        if discarded.is_ok() {
+            discarded = outcome;
+        }
     }
+    if let Err(error) = committed {
+        return Err(commit_stage_failure(&subject, error, &[]));
+    }
+    discarded?;
     Ok(removed)
 }
 
@@ -609,8 +629,7 @@ fn apply_reidentify_locked(
 
     let mut journal = FileJournal::default();
     if let Err(error) = write_files(&affected, plan, &mut journal) {
-        journal.rollback();
-        return Err(error);
+        return Err(rolled_back(&mut journal, error));
     }
 
     // Derived out here rather than inside the connection closure: deriving
@@ -630,10 +649,7 @@ fn apply_reidentify_locked(
         .collect();
     let indexed = match indexed {
         Ok(indexed) => indexed,
-        Err(error) => {
-            journal.rollback();
-            return Err(error);
-        }
+        Err(error) => return Err(rolled_back(&mut journal, error)),
     };
 
     let written = workspace.with_db(|conn| {
@@ -642,16 +658,28 @@ fn apply_reidentify_locked(
         })
     });
     if let Err(error) = written {
-        journal.rollback();
-        return Err(error);
+        return Err(rolled_back(&mut journal, error));
     }
 
     // Once for the whole batch, and outside the transaction that rewrote it —
     // see `write_note_rows_deferring_analyze`. Not fatal on its own: the rows
     // are correct either way and stale statistics cost a worse query plan, not
-    // a wrong answer, but there is no reason to swallow the error when the
-    // caller can act on it.
-    workspace.with_db(index::analyze_bounded)?;
+    // a wrong answer.
+    //
+    // Deliberately **not** propagated with `?`, which corrects what this
+    // comment used to claim. The filesystem and the index have both moved by
+    // this point, so returning here reported failure for an operation that had
+    // already happened *and* jumped over the session reconciliation below,
+    // stranding every open Note on a concept id the rename had vacated. It is
+    // held instead, and surfaced only if the commit below fails too —
+    // [`commit_stage_failure`] explains why that is the whole of the record
+    // this crate can keep.
+    let best_effort: Vec<String> = workspace
+        .with_db(index::analyze_bounded)
+        .err()
+        .map(|e| format!("refreshing the query planner's statistics: {e:?}"))
+        .into_iter()
+        .collect();
 
     let mut pathspec: Vec<String> = Vec::new();
     for a in &affected {
@@ -684,19 +712,36 @@ fn apply_reidentify_locked(
     let committed =
         crate::git::operations::commit_paths(workspace.root(), &plan.message, &pathspec);
     journal.commit();
-    committed?;
 
     // In-memory and infallible in the sense that matters: nothing after this
     // point can leave the bundle and the index disagreeing.
+    //
+    // Runs **before** the commit error is surfaced, and that is the fix rather
+    // than an ordering nicety. The re-identification has happened in both
+    // stores; propagating the commit failure first left every open session
+    // keyed to the concept id the operation vacated, so its next idle write was
+    // refused with a revision mismatch against a file that no longer exists and
+    // the user's buffered work was stranded where nothing could reach it — the
+    // reversion `architecture/risks.md` risk 8 describes, reached from the one
+    // direction the journal cannot see.
+    let mut carried = Ok(());
     for a in &affected {
-        persist::carry_session_forward(
+        let outcome = persist::carry_session_forward(
             workspace,
             &a.old_id,
             &a.new_id,
             a.new_buffer.clone(),
             a.revision.clone(),
-        )?;
+        );
+        if carried.is_ok() {
+            carried = outcome;
+        }
     }
+    if let Err(error) = committed {
+        let subject = plan.message.lines().next().unwrap_or("the operation");
+        return Err(commit_stage_failure(subject, error, &best_effort));
+    }
+    carried?;
 
     let beyond_the_invoked =
         |a: &&Affected| plan.invoked.as_deref().is_none_or(|id| id != a.old_id);
@@ -1089,32 +1134,51 @@ impl FileJournal {
         Ok(())
     }
 
-    /// Undoes every step, newest first. Errors are deliberately swallowed:
-    /// this runs on a path that is already returning an error, and the caller
-    /// has nothing better to do with a second one than the first.
+    /// Undoes every step, newest first, and **reports what it could not undo**.
+    ///
+    /// A failing step no longer stops the unwind — the steps are independent,
+    /// and abandoning the rest would leave more of the operation standing than
+    /// necessary — but it is no longer discarded either. A rollback that cannot
+    /// put a file back is the one case where "either completes or changes
+    /// nothing" quietly stops being true, and the crate has no logging channel,
+    /// so [`rolled_back`] folds this summary into the error the caller is
+    /// already receiving. Everything else about a rollback stays best-effort:
+    /// this runs on a path that is already returning an error.
     ///
     /// Takes `&mut self` and drains, rather than consuming, so that
     /// [`FileJournal`]'s `Drop` can be the backstop for a journal neither
     /// committed nor rolled back.
-    fn rollback(&mut self) {
-        for step in std::mem::take(&mut self.steps).into_iter().rev() {
-            match step {
+    fn rollback(&mut self) -> Option<String> {
+        let steps = std::mem::take(&mut self.steps);
+        let total = steps.len();
+        let mut failures: Vec<String> = Vec::new();
+
+        for step in steps.into_iter().rev() {
+            let undone = match step {
                 FileStep::Overwrote { path, previous } => match previous {
-                    Some(bytes) => {
-                        let _ = persist::atomic_write(&path, &bytes);
-                    }
-                    None => {
-                        let _ = std::fs::remove_file(&path);
-                    }
+                    Some(bytes) => persist::atomic_write(&path, &bytes)
+                        .map_err(|e| format!("restore {}: {e:?}", path.display())),
+                    None => std::fs::remove_file(&path)
+                        .map_err(|e| format!("remove {}: {e}", path.display())),
                 },
-                FileStep::Renamed { from, to } => {
-                    let _ = std::fs::rename(&to, &from);
-                }
-                FileStep::Trashed { original, trash } => {
-                    let _ = std::fs::rename(&trash, &original);
-                }
+                FileStep::Renamed { from, to } => std::fs::rename(&to, &from)
+                    .map_err(|e| format!("move {} back to {}: {e}", to.display(), from.display())),
+                FileStep::Trashed { original, trash } => std::fs::rename(&trash, &original)
+                    .map_err(|e| format!("restore {}: {e}", original.display())),
+            };
+            if let Err(failure) = undone {
+                failures.push(failure);
             }
         }
+
+        if failures.is_empty() {
+            return None;
+        }
+        Some(format!(
+            "{} of {total} filesystem steps could not be undone, the first being: {}",
+            failures.len(),
+            failures[0]
+        ))
     }
 
     /// Keeps every step and discards the trash entries a deletion parked.
@@ -1133,6 +1197,87 @@ impl FileJournal {
         } else {
             let _ = std::fs::remove_file(trash);
         }
+    }
+}
+
+/// Rolls `journal` back behind an error that is already being returned, and
+/// folds any failure of the **rollback itself** into that error's message.
+///
+/// Every rollback site goes through this rather than calling
+/// [`FileJournal::rollback`] directly, because a rollback that does not complete
+/// is the single case where this module's headline property — "one operation
+/// that either completes or changes nothing" — stops holding, and it used to
+/// stop holding silently. There is no logging in this crate, so the error the
+/// caller is about to receive is the only channel available; that is a small
+/// channel, but the recovery is manual (the previous bytes are in Git) and the
+/// user cannot begin it without being told.
+fn rolled_back(journal: &mut FileJournal, error: AppError) -> AppError {
+    let Some(incomplete) = journal.rollback() else {
+        return error;
+    };
+    restate(error, |detail| {
+        format!(
+            "{detail} — and undoing it did not fully succeed, so the bundle is part-way \
+             through this operation on disk: {incomplete}"
+        )
+    })
+}
+
+/// The error a commit returns **after** the operation it records has already
+/// settled.
+///
+/// By the time `commit_paths` runs, the bundle and the index have both moved
+/// and the journal is committed — that ordering is deliberate, and it is what
+/// makes the composite operation recoverable. So a failure here does not mean
+/// "the operation failed"; it means "the operation happened and version history
+/// does not record it", and a caller acts differently on the two. `AppError` has
+/// no variant for a stage, so the stage is spelled out in the message.
+///
+/// `best_effort` carries any non-fatal step that was skipped on the way here
+/// (the deferred `ANALYZE`, whose failure is not worth an error of its own).
+/// It is attached only when there is already an error to attach it to, which is
+/// the whole of the record this crate can keep without a logging framework.
+fn commit_stage_failure(subject: &str, error: AppError, best_effort: &[String]) -> AppError {
+    let trailer = if best_effort.is_empty() {
+        String::new()
+    } else {
+        format!(
+            " (also, best-effort steps did not run: {})",
+            best_effort.join("; ")
+        )
+    };
+    restate(error, |detail| {
+        format!(
+            "{subject}: the operation completed — the bundle and the index have both moved — \
+             but the commit recording it in version history failed, so the Workspace is \
+             uncommitted: {detail}{trailer}"
+        )
+    })
+}
+
+/// Rewrites the prose inside `error`, keeping its variant so a caller keying on
+/// a specific one still sees it.
+///
+/// [`AppError::RevisionMismatch`] is excluded on purpose: its `String` is a
+/// revision the caller parses, not a sentence, and rewriting it would corrupt
+/// the reload it exists to drive. The remaining message-less variants are
+/// converted to [`AppError::IoError`] with their own name folded into the text,
+/// which is the lesser loss: the sentences this function writes are only ever
+/// added when the bundle has been left in a state the user has to act on, and
+/// that is more urgent than the affordance the original variant would have
+/// selected.
+fn restate(error: AppError, rewrite: impl FnOnce(&str) -> String) -> AppError {
+    match error {
+        AppError::RevisionMismatch(revision) => AppError::RevisionMismatch(revision),
+        AppError::PathUnavailable(m) => AppError::PathUnavailable(rewrite(&m)),
+        AppError::NotFound(m) => AppError::NotFound(rewrite(&m)),
+        AppError::DatabaseError(m) => AppError::DatabaseError(rewrite(&m)),
+        AppError::CryptoError(m) => AppError::CryptoError(rewrite(&m)),
+        AppError::NetworkError(m) => AppError::NetworkError(rewrite(&m)),
+        AppError::OAuthError(m) => AppError::OAuthError(rewrite(&m)),
+        AppError::IoError(m) => AppError::IoError(rewrite(&m)),
+        AppError::ParseError(m) => AppError::ParseError(rewrite(&m)),
+        other => AppError::IoError(rewrite(&format!("{other:?}"))),
     }
 }
 
@@ -1437,11 +1582,42 @@ fn normalize_directory(path: &str) -> Result<String, AppError> {
     Ok(trimmed.to_string())
 }
 
+/// The absolute path of a bundle-relative Directory, refusing one that does not
+/// resolve to where it names.
+///
+/// Every operation that turns a Directory path into an absolute one goes
+/// through this rather than calling `root().join(..)` itself, because each of
+/// them writes, moves or removes at the path it gets back and a symbolic link
+/// component redirects all three — `create_directory` materializes a folder
+/// outside the bundle, `rename_directory` moves one there, and
+/// `delete_directory` recursively removes whatever is really at the other end.
+/// [`Workspace::ensure_directory_contained`] carries the reasoning, including
+/// why a link back *inside* the bundle is refused too.
+fn directory_absolute(workspace: &Arc<Workspace>, directory: &str) -> Result<PathBuf, AppError> {
+    workspace
+        .ensure_directory_contained(Path::new(directory))
+        .map_err(|reason| {
+            AppError::PathUnavailable(format!(
+                "{directory} does not name a Directory inside the Workspace: {reason}"
+            ))
+        })?;
+    Ok(workspace.root().join(directory))
+}
+
+/// Resolves a Directory the caller named, materializing it when the index
+/// knows it but no on-disk folder represents it yet.
+///
+/// The containment check runs **first**, and on the Directory's own components
+/// rather than on a file inside it: `is_dir()` follows a symbolic link, so
+/// without this a Directory that is really a link was accepted here and every
+/// Note moved into it was written wherever the link pointed.
+/// [`Workspace::ensure_directory_contained`] documents why a link back inside
+/// the bundle is refused too.
 fn ensure_directory_exists(workspace: &Arc<Workspace>, directory: &str) -> Result<(), AppError> {
     if directory.is_empty() {
         return Ok(());
     }
-    let absolute = workspace.root().join(directory);
+    let absolute = directory_absolute(workspace, directory)?;
     if absolute.is_dir() {
         return Ok(());
     }
@@ -2952,6 +3128,173 @@ mod tests {
         assert!(f.note_ids().is_empty());
     }
 
+    /// A rollback that cannot finish says so in the error the caller receives.
+    ///
+    /// This is the one case where "one operation that either completes or
+    /// changes nothing" stops holding, and it used to stop holding silently:
+    /// every arm of `FileJournal::rollback` discarded its failure with
+    /// `let _ =`, so a bundle left part-way through an operation reported
+    /// exactly the same error as one that was cleanly unwound. There is no
+    /// logging in this crate, so the error is the only channel — and the
+    /// recovery is manual, out of Git, which the user cannot begin without
+    /// being told.
+    ///
+    /// The unwind is driven directly rather than through an operation, because
+    /// the failure has to be injected *between* the journal's step and its
+    /// inverse, which is a window no public entry point exposes.
+    #[test]
+    fn a_rollback_that_cannot_finish_is_named_in_the_error_it_returns() {
+        let f = fixture();
+        f.write("One.md", &note("One", "body"));
+        let mut journal = FileJournal::default();
+        journal
+            .rename(&f.root().join("One.md"), &f.root().join("Two.md"))
+            .unwrap();
+        // The file the inverse rename would move back is gone, so the unwind
+        // cannot complete.
+        std::fs::remove_file(f.root().join("Two.md")).unwrap();
+
+        let error = rolled_back(
+            &mut journal,
+            AppError::IoError("the failure that started this".to_string()),
+        );
+
+        let AppError::IoError(message) = error else {
+            panic!("the original variant must survive: {error:?}");
+        };
+        assert!(
+            message.contains("the failure that started this"),
+            "the original failure must still be reported: {message}"
+        );
+        assert!(
+            message.contains("1 of 1"),
+            "the message must count what could not be undone: {message}"
+        );
+        assert!(
+            message.contains("part-way"),
+            "the message must say the bundle was left mid-operation: {message}"
+        );
+    }
+
+    /// The ordinary case, unchanged: a rollback that completes adds nothing to
+    /// the error, so the common path reads exactly as it did.
+    #[test]
+    fn a_rollback_that_finishes_leaves_the_error_exactly_as_it_was() {
+        let f = fixture();
+        f.write("One.md", &note("One", "body"));
+        let before = f.read("One.md");
+        let mut journal = FileJournal::default();
+        journal
+            .overwrite(&f.root().join("One.md"), b"clobbered\n")
+            .unwrap();
+        journal
+            .rename(&f.root().join("One.md"), &f.root().join("Two.md"))
+            .unwrap();
+
+        let original = AppError::PathUnavailable("nothing to do with the journal".to_string());
+        let error = rolled_back(&mut journal, original.clone());
+
+        assert_eq!(error, original, "a clean unwind must not restate the error");
+        assert_eq!(f.read("One.md"), before);
+        assert!(!f.exists("Two.md"));
+    }
+
+    /// A commit that fails does not un-do the operation, so it must not skip
+    /// the session reconciliation either.
+    ///
+    /// By the time `commit_paths` runs, the bundle and the index have both
+    /// moved and there is nothing left to roll back — the journal is settled
+    /// deliberately, on exactly that reasoning. Propagating the commit error
+    /// with `?` at that point jumped over `carry_session_forward`, so the
+    /// rename really had happened while the open session stayed keyed to the id
+    /// the rename vacated: its next idle write is refused with a revision
+    /// mismatch against a file that no longer exists, and the user's buffered
+    /// work is stranded in a session nothing can reach.
+    ///
+    /// The error is still returned — version history genuinely did not record
+    /// the rename — but it has to say which stage failed, because "rename
+    /// failed" and "the rename happened and was not committed" call for
+    /// different things from the caller.
+    #[test]
+    fn a_failed_commit_still_carries_open_sessions_forward_and_names_the_stage() {
+        let f = fixture();
+        f.write("Old Name.md", &note("Old Name", "first block"));
+        f.reindex();
+        let session = f.open("Old Name");
+        session.update_block(&[0], "first block, edited\n").unwrap();
+        // Breaks `commit_paths` and nothing else.
+        std::fs::remove_dir_all(f.root().join(".git")).unwrap();
+
+        let result = rename_note(&f.workspace, "Old Name", "New Name");
+
+        let Err(error) = result else {
+            panic!("the commit failure must be reported");
+        };
+        let message = format!("{error:?}");
+        assert!(
+            message.contains("commit"),
+            "the error must name the commit as the failing stage, got {message}"
+        );
+        assert!(
+            message.contains("succeeded") || message.contains("completed"),
+            "the error must say the operation itself completed, got {message}"
+        );
+
+        // The rename really happened, so the session has to have followed it.
+        assert!(f.exists("New Name.md"));
+        assert!(!f.exists("Old Name.md"));
+        assert!(
+            persist::lookup(f.workspace.id(), "Old Name")
+                .unwrap()
+                .is_none(),
+            "a session was left keyed to the vacated concept id"
+        );
+        let moved = persist::lookup(f.workspace.id(), "New Name")
+            .unwrap()
+            .expect("the session must have followed the rename");
+        moved
+            .flush()
+            .expect("the carried-forward session must still be able to write");
+        assert!(f.read("New Name.md").contains("first block, edited"));
+    }
+
+    /// The deletion arm of the same rule: the Note is gone from the bundle and
+    /// from the index whether or not the commit recorded it, so its session
+    /// must be retired rather than left open over a file that no longer exists.
+    #[test]
+    fn a_failed_delete_commit_still_discards_the_open_session() {
+        let f = fixture();
+        f.write("Doomed.md", &note("Doomed", "body"));
+        f.write("doomed dir/Inside.md", &note("Inside", "body"));
+        f.reindex();
+        let _note_session = f.open("Doomed");
+        let _dir_session = f.open("doomed dir/Inside");
+        std::fs::remove_dir_all(f.root().join(".git")).unwrap();
+
+        let note_result = delete_note(&f.workspace, "Doomed");
+        let dir_result = delete_directory(&f.workspace, "doomed dir").map(|_| ());
+
+        for (what, result) in [("note", &note_result), ("directory", &dir_result)] {
+            let Err(error) = result else {
+                panic!("{what}: the commit failure must be reported");
+            };
+            let message = format!("{error:?}");
+            assert!(
+                message.contains("commit"),
+                "{what}: the error must name the commit as the failing stage, got {message}"
+            );
+        }
+
+        assert!(persist::lookup(f.workspace.id(), "Doomed")
+            .unwrap()
+            .is_none());
+        assert!(persist::lookup(f.workspace.id(), "doomed dir/Inside")
+            .unwrap()
+            .is_none());
+        assert!(!f.exists("Doomed.md"));
+        assert!(f.note_ids().is_empty());
+    }
+
     /// The same obligation for a Directory, whose trash entry is a whole
     /// subtree rather than one file.
     #[test]
@@ -3132,6 +3475,81 @@ mod tests {
         );
         assert_eq!(f.note_ids(), vec!["One".to_string()]);
         assert_eq!(f.directory_ids(), Vec::<String>::new());
+    }
+
+    /// A Directory that is really a symlink is refused as a place to create a
+    /// Note, whether it points outside the bundle or back inside it.
+    ///
+    /// The same shape as the dot-prefix defect above, reached by a different
+    /// route. `note_path`'s containment check only ran `if absolute.exists()`,
+    /// and on the creation path the file does not exist yet, so nothing looked
+    /// at the *directory* it was about to be written into. Two endings, both
+    /// bad:
+    ///
+    /// - pointing **outside** the bundle, the write lands wherever the link
+    ///   goes — an arbitrary-write primitive out of a concept id the UI
+    ///   supplies;
+    /// - pointing **inside** it, the write lands in the bundle but under a
+    ///   concept id nothing can reach: `index::scan::walk_bundle` skips
+    ///   symlinks, so the next reindex drops the row while the file stays and
+    ///   `ensure_path_available` keeps the name permanently taken.
+    #[cfg(unix)]
+    #[test]
+    fn a_note_cannot_be_created_through_a_symlinked_directory() {
+        let f = fixture();
+        let outside = f.dir.path().join("outside");
+        std::fs::create_dir_all(&outside).unwrap();
+        std::fs::create_dir_all(f.root().join("Real")).unwrap();
+        std::os::unix::fs::symlink(&outside, f.root().join("Escape")).unwrap();
+        std::os::unix::fs::symlink(f.root().join("Real"), f.root().join("Detour")).unwrap();
+        f.reindex();
+
+        for directory in ["Escape", "Detour"] {
+            let refused = create_note(&f.workspace, directory, "Planted");
+            assert!(
+                matches!(refused, Err(AppError::PathUnavailable(_))),
+                "{directory}: a symlinked Directory must be refused, got {refused:?}"
+            );
+        }
+
+        assert!(
+            !outside.join("Planted.md").exists(),
+            "a Note was written outside the bundle"
+        );
+        assert!(
+            !f.root().join("Real/Planted.md").exists(),
+            "a Note was written under a name the indexer cannot see"
+        );
+        assert!(f.note_ids().is_empty(), "a Note was indexed anyway");
+    }
+
+    /// The same rule applied by the other entry point onto a Directory:
+    /// `move_note`, which routes through `ensure_directory_exists` rather than
+    /// through `create_note`'s own path check.
+    #[cfg(unix)]
+    #[test]
+    fn a_note_cannot_be_moved_into_a_symlinked_directory() {
+        let f = fixture();
+        let outside = f.dir.path().join("outside");
+        std::fs::create_dir_all(&outside).unwrap();
+        std::fs::create_dir_all(f.root().join("Real")).unwrap();
+        std::os::unix::fs::symlink(&outside, f.root().join("Escape")).unwrap();
+        std::os::unix::fs::symlink(f.root().join("Real"), f.root().join("Detour")).unwrap();
+        f.write("One.md", &note("One", "body"));
+        f.reindex();
+
+        for directory in ["Escape", "Detour"] {
+            let refused = move_note(&f.workspace, "One", directory);
+            assert!(
+                matches!(refused, Err(AppError::PathUnavailable(_))),
+                "{directory}: a symlinked Directory must be refused, got {refused:?}"
+            );
+        }
+
+        assert!(f.exists("One.md"), "the Note was moved anyway");
+        assert!(!outside.join("One.md").exists());
+        assert!(!f.root().join("Real/One.md").exists());
+        assert_eq!(f.note_ids(), vec!["One".to_string()]);
     }
 
     /// A title carrying a control character round-trips through the frontmatter

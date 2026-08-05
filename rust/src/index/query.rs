@@ -94,6 +94,17 @@ fn note_metadata_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<NoteMetad
 /// hardcoded cap of 50 that "silently truncated with no signal to the caller"
 /// and states no lower bound, so a caller asking for zero results is asking a
 /// coherent question and gets the literal answer.
+///
+/// "Ordered alphabetically" is read the way [`workspace_tree_impl`] reads it,
+/// and for the same two reasons. `COLLATE NOCASE`, because plain `ORDER BY
+/// title` is byte order and puts every capitalized title ahead of every
+/// lowercase one — `Zebra` before `apple` — which is not the reading anyone
+/// scanning a jump list expects. And `, id` as a tie-break, because titles are
+/// unique only per `(workspace_id, path)` (`schema.sql`), so two Notes can
+/// share one verbatim and the remainder falls to SQLite's unspecified row
+/// order. The tie-break is load-bearing here in a way it is not in the tree:
+/// `LIMIT` is applied after the sort, so an unstable tie changes *which* Notes
+/// come back, not merely the order they come back in.
 pub fn find_notes_by_title_impl(
     conn: &Connection,
     workspace_id: &str,
@@ -104,7 +115,7 @@ pub fn find_notes_by_title_impl(
     let mut stmt = conn.prepare(
         "SELECT id, okf_conformant, path, title, last_modified FROM notes \
          WHERE workspace_id = ?1 AND title LIKE ?2 ESCAPE '\\' \
-         ORDER BY title LIMIT ?3",
+         ORDER BY title COLLATE NOCASE, id LIMIT ?3",
     )?;
     let rows = stmt.query_map(
         rusqlite::params![workspace_id, pattern, limit],
@@ -625,6 +636,60 @@ mod tests {
         let results = find_notes_by_title_impl(&f.conn, &f.workspace_id, "Alpha", 2).unwrap();
 
         assert_eq!(results.len(), 2, "the caller's limit, not a hardcoded cap");
+    }
+
+    /// The same ordering rule `workspace_tree` applies, for the same reason:
+    /// case-insensitively by title, tie-broken by concept id.
+    ///
+    /// `ORDER BY title` alone is byte order, which puts every capitalized
+    /// title ahead of every lowercase one — `Zebra` before `apple` — in a
+    /// list a user reads. It also left tied titles in SQLite's unspecified row
+    /// order, which the `limit` makes visible rather than merely untidy: with
+    /// `LIMIT` applied after the sort, an unstable tie changes *which* Notes
+    /// come back, not just their order.
+    #[test]
+    fn find_notes_by_title_orders_case_insensitively_with_a_deterministic_tie_break() {
+        let f = fixture();
+        f.write("z.md", &conformant("Alpha Zebra", "Body."));
+        f.write("a.md", &conformant("alpha apple", "Body."));
+        f.write("m.md", &conformant("Alpha Middle", "Body."));
+        // Two Notes sharing a title verbatim: titles are unique only per
+        // `(workspace_id, path)`, so this is representable.
+        f.write("dir/tie.md", &conformant("Alpha Same", "Body."));
+        f.write("tie.md", &conformant("Alpha Same", "Body."));
+        reindex_workspace_impl(&f.conn, &f.workspace_id).unwrap();
+
+        let results = find_notes_by_title_impl(&f.conn, &f.workspace_id, "Alpha", 10).unwrap();
+        let titles: Vec<&str> = results.iter().map(|n| n.title.as_str()).collect();
+
+        assert_eq!(
+            titles,
+            vec![
+                "alpha apple",
+                "Alpha Middle",
+                "Alpha Same",
+                "Alpha Same",
+                "Alpha Zebra"
+            ],
+            "titles must sort case-insensitively, not in byte order"
+        );
+        let tied: Vec<&str> = results
+            .iter()
+            .filter(|n| n.title == "Alpha Same")
+            .map(|n| n.id.as_str())
+            .collect();
+        assert_eq!(
+            tied,
+            vec!["dir/tie", "tie"],
+            "tied titles must break on concept id, not on SQLite's unspecified row order"
+        );
+
+        let again = find_notes_by_title_impl(&f.conn, &f.workspace_id, "Alpha", 10).unwrap();
+        assert_eq!(
+            results.iter().map(|n| n.id.clone()).collect::<Vec<_>>(),
+            again.iter().map(|n| n.id.clone()).collect::<Vec<_>>(),
+            "the order must be stable across repeated calls"
+        );
     }
 
     /// A `%` or `_` in the query is matched literally, not as a `LIKE`

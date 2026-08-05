@@ -178,6 +178,12 @@ impl Workspace {
     /// does exist is additionally checked against the canonicalized root, which
     /// is the same containment test `index::path_is_in_workspace` applies.
     ///
+    /// That last check alone was not enough, because on the **creation** path
+    /// the file does not exist yet and so nothing looked at the directory it
+    /// was about to be written into. [`Workspace::ensure_directory_contained`]
+    /// closes that: the containing directory is resolved, and a Note is refused
+    /// unless every component of it is really the directory it names.
+    ///
     /// A backslash **anywhere** in the concept id is refused before any of
     /// that, so that all three path-handling functions in this Workspace agree
     /// on what a segment may carry: `lifecycle::validate_segment` rejects it in
@@ -209,6 +215,13 @@ impl Workspace {
             )));
         }
 
+        self.ensure_directory_contained(relative_path.parent().unwrap_or(Path::new("")))
+            .map_err(|reason| {
+                AppError::PathUnavailable(format!(
+                    "concept id {note_id} does not name a file inside the Workspace: {reason}"
+                ))
+            })?;
+
         let absolute = self.root.join(relative_path);
         if absolute.exists() {
             let contained = match (
@@ -225,6 +238,61 @@ impl Workspace {
             }
         }
         Ok(absolute)
+    }
+
+    /// Refuses a bundle-relative directory path unless every component of it
+    /// that exists on disk **is** the directory it names — no component being a
+    /// symbolic link, and nothing resolving outside the Workspace.
+    ///
+    /// Returns the reason as a `String` rather than an `AppError`, so each
+    /// caller can name the thing it was asked for (a concept id, a Directory
+    /// path) in front of it.
+    ///
+    /// Both halves of the rule matter, and the second is the less obvious one:
+    ///
+    /// - A link pointing **outside** the bundle turns a concept id the UI
+    ///   supplies into an arbitrary write. Nothing before this looked, because
+    ///   the lexical check above sees only `Component::Normal` names and the
+    ///   `exists()` check below cannot run on a file being created.
+    /// - A link pointing back **inside** the bundle is refused too, even though
+    ///   the bytes would land in the Workspace. `index::scan::walk_bundle`
+    ///   skips symbolic links, so the file is reachable at the concept id it was
+    ///   created under only until the next reindex — which now runs on every
+    ///   Workspace open. After that the row is gone, the file is still on disk,
+    ///   and `lifecycle::ensure_path_available` consults the filesystem as well
+    ///   as the index, so the name stays permanently taken by a Note nothing can
+    ///   see. That is the same ending the dot-prefixed-name rule exists to
+    ///   prevent, reached by a different route.
+    ///
+    /// The walk stops at the first component that does not exist: a path cannot
+    /// have an existing descendant under a missing ancestor, and the levels a
+    /// create is about to materialize are ordinary directories by construction.
+    pub(super) fn ensure_directory_contained(&self, relative: &Path) -> Result<(), String> {
+        let canonical_root = std::fs::canonicalize(&self.root)
+            .map_err(|e| format!("resolve the Workspace root {}: {e}", self.root.display()))?;
+
+        let mut expected = canonical_root;
+        for component in relative.components() {
+            expected.push(component);
+            // `symlink_metadata` rather than `exists`, so a *broken* link is
+            // seen as present and refused below rather than mistaken for a
+            // level a create is free to materialize.
+            if std::fs::symlink_metadata(&expected).is_err() {
+                return Ok(());
+            }
+            let resolved = std::fs::canonicalize(&expected)
+                .map_err(|e| format!("resolve {}: {e}", expected.display()))?;
+            if resolved != expected {
+                return Err(format!(
+                    "{} is a symbolic link to {}, and the indexer skips those — a Note written \
+                     through one either lands outside the Workspace or disappears from it at the \
+                     next reindex while its file, and its name, stay taken",
+                    expected.display(),
+                    resolved.display()
+                ));
+            }
+        }
+        Ok(())
     }
 
     /// A Workspace over an injected connection, with the idle interval under
@@ -1763,6 +1831,15 @@ fn decode_source(path: &Path, bytes: Vec<u8>) -> Result<String, AppError> {
 /// already the accepted cost of `synchronous = NORMAL` on the index the draft
 /// row lives in (`SPK-WSPC-D001` §6.3), and tier 1's purpose is to survive an
 /// application crash, which this handles unconditionally.
+///
+/// **The target's permissions survive the rename.** Publishing by rename means
+/// the file the user ends up with is the *temporary* one, created at the
+/// process umask — 0644 in the ordinary case. Without the step below, the first
+/// idle write over a Note the user had restricted to 0600 relaxed it to
+/// world-readable, silently and with nothing in the UI to say so; the same held
+/// for `lifecycle`'s journal, whose overwrite and rollback both route here. The
+/// mode is copied from the existing target when there is one, and left at the
+/// umask default when this write is creating the file.
 pub(super) fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), AppError> {
     static NEXT_TEMP: AtomicU64 = AtomicU64::new(0);
 
@@ -1796,10 +1873,39 @@ pub(super) fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), AppError> {
         let _ = std::fs::remove_file(&temp);
         return Err(io_error(&temp, &e));
     }
+    if let Err(e) = carry_permissions_forward(path, &temp) {
+        let _ = std::fs::remove_file(&temp);
+        return Err(io_error(path, &e));
+    }
     if let Err(e) = std::fs::rename(&temp, path) {
         let _ = std::fs::remove_file(&temp);
         return Err(io_error(path, &e));
     }
+    Ok(())
+}
+
+/// Copies `target`'s permission bits onto `temp`, so that the rename that
+/// publishes `temp` does not also replace the mode the user chose.
+///
+/// A missing target is not an error: this write is creating the file, and the
+/// umask is then exactly the right answer for what its mode should be.
+///
+/// Unix only, and unconditionally so rather than behind a runtime check —
+/// burlmd ships to desktop Linux and macOS (`tech-spec/stack.md`), and Windows
+/// has no equivalent bits to carry, so the `cfg` is the whole story rather than
+/// a placeholder for a second implementation.
+#[cfg(unix)]
+fn carry_permissions_forward(target: &Path, temp: &Path) -> std::io::Result<()> {
+    let existing = match std::fs::metadata(target) {
+        Ok(metadata) => metadata,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(e) => return Err(e),
+    };
+    std::fs::set_permissions(temp, existing.permissions())
+}
+
+#[cfg(not(unix))]
+fn carry_permissions_forward(_target: &Path, _temp: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
@@ -2307,6 +2413,41 @@ mod tests {
         let written = f.read("a.md");
         assert_eq!(written, "AAAXXY\n\nBBB\n");
         assert_eq!(written.matches("XX").count(), 1, "typed text duplicated");
+    }
+
+    /// A tier 2 write must not relax the permissions the user chose.
+    ///
+    /// `atomic_write` publishes by renaming a fresh temporary file over the
+    /// target, and a fresh file is created at the process umask — 0644 in the
+    /// ordinary case. Renaming that over a Note the user had deliberately
+    /// restricted to 0600 replaced its mode along with its bytes, so the first
+    /// idle write after opening a private Note quietly made it world-readable
+    /// with nothing in the UI to say so.
+    #[cfg(unix)]
+    #[test]
+    fn a_tier_two_write_preserves_a_restrictive_file_mode() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let f = fixture();
+        f.write(
+            "private.md",
+            "---\ntype: Note\ntitle: Private\n---\n\nsecret\n",
+        );
+        let path = f.root().join("private.md");
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
+
+        let session = f.open("private");
+        session
+            .update_block(&[0], "secret and then some\n")
+            .unwrap();
+        session.flush().unwrap();
+
+        let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(
+            mode, 0o600,
+            "a tier 2 write widened the Note's mode to {mode:o}"
+        );
+        assert!(f.read("private.md").contains("secret and then some"));
     }
 
     /// A 100 KiB Note, one Block edit, measured rather than assumed:

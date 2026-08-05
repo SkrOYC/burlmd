@@ -148,15 +148,38 @@ pub fn read_frontmatter(source: &str) -> Frontmatter {
 /// block. Never hand-rolls YAML-block detection -- the STOP condition on
 /// this ticket forbids substituting parser logic of our own for what
 /// `pulldown-cmark` already recognizes.
+///
+/// **Every** `Event::Text` up to the block's end is accumulated, not just the
+/// first. `pulldown-cmark` coalesces a metadata block's lines into one text
+/// event only while they are separated by bare `\n`; a `\r\n` line ending
+/// breaks the run, so a CRLF-authored Note -- ordinary in a bundle a Windows
+/// tool or a `core.autocrlf` checkout wrote -- arrives as one text event per
+/// line. Taking only the first truncated such a block to its opening line,
+/// which silently lost whichever of `type`/`title` was written second:
+/// `type` gone means the Note is reported non-conformant, `title` gone means
+/// it falls back to its filename stem.
 fn extract_yaml_block(source: &str) -> Option<String> {
     let mut options = Options::empty();
     options.insert(Options::ENABLE_YAML_STYLE_METADATA_BLOCKS);
-    let parser = Parser::new_ext(source, options);
+    let mut parser = Parser::new_ext(source, options);
+    // A frontmatter block is the document's opening construct or it is not one
+    // at all, so anything else as the first event means there is no block.
+    if !matches!(
+        parser.next()?,
+        Event::Start(Tag::MetadataBlock(MetadataBlockKind::YamlStyle))
+    ) {
+        return None;
+    }
+
+    let mut yaml = String::new();
     for event in parser {
         match event {
-            Event::Start(Tag::MetadataBlock(MetadataBlockKind::YamlStyle)) => {}
-            Event::Text(text) => return Some(text.to_string()),
-            Event::End(TagEnd::MetadataBlock(_)) => return None,
+            Event::Text(text) => yaml.push_str(&text),
+            // A block that never closes yields no end tag, and the loop simply
+            // runs out -- returning `None` below, as before.
+            Event::End(TagEnd::MetadataBlock(_)) => {
+                return (!yaml.is_empty()).then_some(yaml);
+            }
             _ => return None,
         }
     }
@@ -340,6 +363,43 @@ mod tests {
         let fm = read_frontmatter(&source);
         assert_eq!(fm.note_type, None);
         assert!(!fm.is_conformant());
+    }
+
+    #[test]
+    fn a_crlf_block_reads_identically_to_its_lf_twin() {
+        // `pulldown-cmark` does not coalesce a metadata block's text across a
+        // `\r`: each line arrives as its own `Event::Text`. Returning the
+        // first one truncated a CRLF bundle's frontmatter to its opening line,
+        // so whichever of `type`/`title` came second was lost -- reported
+        // non-conformant, or titled from the filename stem. Both key orders
+        // are covered because taking only the first line loses a different key
+        // in each.
+        for lf in [
+            "---\ntype: Note\ntitle: burlmd\n---\n\n# burlmd\n",
+            "---\ntitle: burlmd\ntype: Note\n---\n\n# burlmd\n",
+        ] {
+            let crlf = lf.replace('\n', "\r\n");
+            let from_lf = read_frontmatter(lf);
+            let from_crlf = read_frontmatter(&crlf);
+            assert_eq!(
+                from_lf, from_crlf,
+                "CRLF and LF spellings of the same block must read identically"
+            );
+            assert_eq!(from_crlf.note_type.as_deref(), Some("Note"));
+            assert_eq!(from_crlf.title.as_deref(), Some("burlmd"));
+            assert!(from_crlf.is_conformant());
+        }
+    }
+
+    #[test]
+    fn a_crlf_block_reports_its_unmanaged_keys_like_its_lf_twin() {
+        let lf =
+            "---\ntype: Note\ntitle: burlmd\ntags:\n  - a\n  - b\nstatus: draft\n---\n\nBody.\n";
+        let crlf = lf.replace('\n', "\r\n");
+        assert_eq!(read_frontmatter(lf), read_frontmatter(&crlf));
+        let fm = read_frontmatter(&crlf);
+        assert!(fm.other_keys.contains(&"tags".to_string()));
+        assert!(fm.other_keys.contains(&"status".to_string()));
     }
 
     #[test]

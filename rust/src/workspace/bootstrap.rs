@@ -145,7 +145,12 @@ fn canonicalize_workspace_dir(dir: &Path) -> Result<PathBuf, AppError> {
 /// ([`sweep_scratch_files`]) — which are burlmd's, not the bundle's.
 fn converge(conn: &Connection, dir: &Path) -> Result<WorkspaceInfo, AppError> {
     crate::git::operations::init_repo(dir)?;
-    sweep_scratch_files(dir);
+    // Bound and dropped rather than propagated: a scratch entry that could not
+    // be removed is untidy, is already `.gitignore`d, and will be swept again
+    // at the next open — none of which is a reason to refuse the user their
+    // Notes. `ScratchSweep` exists so that "how much was left behind" is a
+    // value this call can be tested on rather than an error nobody sees.
+    let _swept = sweep_scratch_files(dir);
 
     let local_path = dir.to_string_lossy().to_string();
 
@@ -233,20 +238,40 @@ fn converge(conn: &Connection, dir: &Path) -> Result<WorkspaceInfo, AppError> {
 /// error on the session and **keeps the draft row**, which is where the
 /// unwritten work lives. Nothing is lost, and the next idle firing writes it.
 ///
-/// Errors are swallowed deliberately. This is housekeeping on a path whose
-/// real job is opening a Workspace, and a scratch file that cannot be removed —
-/// a read-only directory, a file another process holds — is not a reason to
-/// refuse the user their Notes. `.gitignore` is the backstop that makes it
-/// merely untidy rather than a disclosure.
+/// Failures do not abort the open, and that stays deliberate. This is
+/// housekeeping on a path whose real job is opening a Workspace, and a scratch
+/// file that cannot be removed — a read-only directory, a file another process
+/// holds — is not a reason to refuse the user their Notes. `.gitignore` is the
+/// backstop that makes it merely untidy rather than a disclosure.
+///
+/// They are no longer discarded outright, though. The outcome is returned as a
+/// [`ScratchSweep`], so "the sweep ran and left five files behind" is a fact
+/// this function's caller and its tests can see rather than one that existed
+/// only inside the loop. The crate has no logging framework, so this is the
+/// whole of the channel: [`converge`] does not fail on it — nothing about a
+/// leftover scratch file makes the Workspace unusable — and records in one
+/// place, in prose, that the decision is deliberate.
 ///
 /// `.git/` is skipped for the same reason `index::scan::walk_bundle` skips it:
 /// it is the application's own version history, holds thousands of files, and
 /// contains no bundle content.
-fn sweep_scratch_files(dir: &Path) {
-    let Ok(entries) = std::fs::read_dir(dir) else {
-        return;
+fn sweep_scratch_files(dir: &Path) -> ScratchSweep {
+    let mut outcome = ScratchSweep::default();
+    let entries = match std::fs::read_dir(dir) {
+        Ok(entries) => entries,
+        Err(e) => {
+            outcome.record(format!("read directory {}: {e}", dir.display()));
+            return outcome;
+        }
     };
-    for entry in entries.flatten() {
+    for entry in entries {
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(e) => {
+                outcome.record(format!("read an entry under {}: {e}", dir.display()));
+                continue;
+            }
+        };
         let name = entry.file_name().to_string_lossy().into_owned();
         if name == ".git" {
             continue;
@@ -254,13 +279,48 @@ fn sweep_scratch_files(dir: &Path) {
         let path = entry.path();
         let is_dir = entry.file_type().is_ok_and(|t| t.is_dir());
         if super::is_scratch_name(&name) {
-            let _ = if is_dir {
+            let removed = if is_dir {
                 std::fs::remove_dir_all(&path)
             } else {
                 std::fs::remove_file(&path)
             };
+            match removed {
+                Ok(()) => outcome.removed += 1,
+                Err(e) => outcome.record(format!("remove {}: {e}", path.display())),
+            }
         } else if is_dir {
-            sweep_scratch_files(&path);
+            outcome.absorb(sweep_scratch_files(&path));
+        }
+    }
+    outcome
+}
+
+/// What one [`sweep_scratch_files`] pass managed: how many scratch entries it
+/// removed, how many it could not, and the first reason it could not.
+///
+/// Deliberately not an error type. Every field here describes a best-effort
+/// step whose failure is survivable by construction, and the reason it is a
+/// value rather than a discarded `Result` is stated on `sweep_scratch_files`.
+#[derive(Debug, Default, PartialEq, Eq)]
+struct ScratchSweep {
+    removed: usize,
+    failed: usize,
+    first_failure: Option<String>,
+}
+
+impl ScratchSweep {
+    fn record(&mut self, failure: String) {
+        self.failed += 1;
+        if self.first_failure.is_none() {
+            self.first_failure = Some(failure);
+        }
+    }
+
+    fn absorb(&mut self, other: Self) {
+        self.removed += other.removed;
+        self.failed += other.failed;
+        if self.first_failure.is_none() {
+            self.first_failure = other.first_failure;
         }
     }
 }
@@ -449,6 +509,62 @@ mod tests {
             dir.path().join(".editorconfig").is_file(),
             "a dot-file that is not burlmd's must survive"
         );
+    }
+
+    /// The sweep reports what it did and what it could not do, instead of
+    /// discarding both.
+    ///
+    /// Every failure here is survivable — that is why the open does not fail on
+    /// one — but "survivable" and "invisible" are different things, and with no
+    /// logging in this crate the returned [`ScratchSweep`] is the only place the
+    /// distinction can live. The unremovable entry is a *non-empty directory
+    /// made read-only*, which is what really stops `remove_dir_all`: the
+    /// directory's own write bit is what permits unlinking the child inside it.
+    #[test]
+    fn the_scratch_sweep_reports_its_count_and_its_first_failure() {
+        let dir = tempdir().unwrap();
+        std::fs::write(dir.path().join(".burlmd-trash.One.md.4242.0"), "one\n").unwrap();
+        std::fs::create_dir_all(dir.path().join("nested")).unwrap();
+        std::fs::write(dir.path().join("nested/.burlmd.md.4242.0.tmp"), "two\n").unwrap();
+
+        let clean = sweep_scratch_files(dir.path());
+
+        assert_eq!(
+            clean,
+            ScratchSweep {
+                removed: 2,
+                failed: 0,
+                first_failure: None
+            }
+        );
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+
+            let stuck = dir.path().join(".burlmd-trash.Stuck.4242.1");
+            std::fs::create_dir_all(&stuck).unwrap();
+            std::fs::write(stuck.join("inside.md"), "held\n").unwrap();
+            std::fs::set_permissions(&stuck, std::fs::Permissions::from_mode(0o500)).unwrap();
+            std::fs::write(dir.path().join(".burlmd-trash.Free.md.4242.2"), "free\n").unwrap();
+
+            let partial = sweep_scratch_files(dir.path());
+
+            // Restored before any assertion, so a failing assert cannot leave
+            // the `TempDir`'s own cleanup unable to run.
+            std::fs::set_permissions(&stuck, std::fs::Permissions::from_mode(0o700)).unwrap();
+
+            assert_eq!(partial.removed, 1, "the removable entry must still go");
+            assert_eq!(partial.failed, 1);
+            let failure = partial
+                .first_failure
+                .expect("the first failure must be reported, not discarded");
+            assert!(
+                failure.contains(".burlmd-trash.Stuck.4242.1"),
+                "the report must name the entry that was left behind, got {failure}"
+            );
+            assert!(!dir.path().join(".burlmd-trash.Free.md.4242.2").exists());
+        }
     }
 
     /// The other half: `.gitignore` is the backstop for a scratch file created

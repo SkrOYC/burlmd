@@ -859,12 +859,25 @@ Nous étions à Paris — les cafés étaient **pleins** de monde.
 An entity café spelled caf&eacute; renders identically.
 ";
 
+    /// The same shapes written with `\r\n` line endings, which is what a
+    /// Windows editor or a `core.autocrlf=true` checkout puts in a bundle
+    /// burlmd is required to open unmodified (`CAP-PORT-03`).
+    ///
+    /// CRLF is not cosmetic to this module: a `\r` is a byte inside a span
+    /// like any other, and it is also what stops `pulldown-cmark` from
+    /// coalescing a metadata block into a single text event — the defect
+    /// `okf::frontmatter::extract_yaml_block` documents. Byte identity across
+    /// a splice therefore has to be asserted over CRLF source, not assumed
+    /// from the LF fixtures.
+    pub(crate) const CRLF_LINE_ENDINGS: &str = "---\r\ntype: note\r\ntitle: Windows Endings\r\nauthor: someone-the-app-does-not-manage\r\n---\r\n\r\n# Windows Endings\r\n\r\nA paragraph with _underscore emphasis_ and an inline `code span` in it.\r\n\r\n- bullet one\r\n- bullet two\r\n  - nested bullet\r\n\r\n> A blockquote with **bold** and x &amp; y in it.\r\n\r\n```text\r\nliteral &amp; stays literal\r\n```\r\n\r\nSee [Architecture](</projects/architecture.md>) and a trailing paragraph.\r\n";
+
     pub(crate) fn corpus() -> Vec<(&'static str, &'static str)> {
         vec![
             (
                 "FRONTMATTER_AND_DELIMITER_STYLE",
                 FRONTMATTER_AND_DELIMITER_STYLE,
             ),
+            ("CRLF_LINE_ENDINGS", CRLF_LINE_ENDINGS),
             ("CODE_AND_ENTITIES", CODE_AND_ENTITIES),
             ("ESCAPES_AND_LINKS", ESCAPES_AND_LINKS),
             ("NESTED_STRUCTURE", NESTED_STRUCTURE),
