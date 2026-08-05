@@ -1,0 +1,8 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 62e06e21592fceca7746b69e2996db72e333cb2054355afdc100da8c913076f8 # shrinks to blocks = ["- [![a](i.png)](u)\n- plain item"], with_frontmatter = false
+cc bcc97093158abc4cbefa19196e97e535f58baad64aeb8e846146d47509ee5eff # shrinks to blocks = ["# Heading with ![img](x.png)"], with_frontmatter = false

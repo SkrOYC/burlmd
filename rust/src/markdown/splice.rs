@@ -211,7 +211,9 @@ mod tests {
     use super::*;
     use crate::markdown::ast::AstNode;
     use crate::markdown::spans::fixtures::*;
+    use crate::markdown::spans::invariants;
     use proptest::prelude::*;
+    use proptest::test_runner::TestCaseError;
 
     /// Every Block's path, in the order the parser completed them.
     fn block_paths(spans: &SpanMap) -> Vec<BlockPath> {
@@ -274,6 +276,18 @@ mod tests {
             Just("---".to_string()),
             Just("Multibyte café — with an em dash.".to_string()),
             Just("A hard break\\\nand its continuation.".to_string()),
+            // The shapes the review reproduced the fabricated-span and
+            // overlapping-span defects with. They are in the generator as
+            // well as the fixed corpus so that combinations of them — a badge
+            // link inside a list beside an image-bearing heading — are
+            // exercised too, which is where a partial fix would survive a
+            // fixture-only gate.
+            Just("[![badge](i.png)](https://example.com)".to_string()),
+            Just("- [![a](i.png)](u)\n- plain item".to_string()),
+            Just("- []()\n- [](x)\n- [ ] [](y.md)".to_string()),
+            Just("# Heading with ![img](x.png)".to_string()),
+            Just("Text before ![mid](m.png) and after.".to_string()),
+            Just("<div class=notice>\n  <p>raw html</p>\n</div>".to_string()),
         ]
     }
 
@@ -291,6 +305,15 @@ mod tests {
             source.push('\n');
 
             let parsed = crate::markdown::parse_note(&source, "");
+
+            // The structural invariant is asserted over generated input too:
+            // a round trip alone cannot see a Block whose span overlaps
+            // another's, because splicing a Block's own bytes back is
+            // byte-identical whether or not the span is truthful.
+            if let Err(failure) = invariants::check(&source, &parsed.spans) {
+                return Err(TestCaseError::fail(failure));
+            }
+
             for path in block_paths(&parsed.spans) {
                 let block_source = parsed
                     .spans
@@ -300,6 +323,18 @@ mod tests {
                 let spliced = splice_block(&source, &parsed.spans, &path, &block_source, "")
                     .expect("splicing a Block's own source must succeed");
                 prop_assert_eq!(&spliced.source, &source);
+
+                // And an edit that does change the Block must leave every
+                // other byte alone — the half of Edit Fidelity that a
+                // fabricated or overlapping span actually violates.
+                let span = parsed.spans.block(&path).expect("span").source.clone();
+                let edited = splice_block(&source, &parsed.spans, &path, "REPLACED", "")
+                    .expect("splicing a replacement must succeed");
+                prop_assert_eq!(&edited.source[..span.start], &source[..span.start]);
+                prop_assert_eq!(
+                    &edited.source[span.start + "REPLACED".len()..],
+                    &source[span.end..]
+                );
             }
         }
     }
@@ -348,6 +383,47 @@ mod tests {
             assert_eq!(
                 &spliced.source[moved], original,
                 "editing block {path:?} disturbed the frontmatter"
+            );
+        }
+    }
+
+    /// Regions no Block addresses are still preserved byte for byte, and that
+    /// is a consequence of the design rather than a thing that needed writing:
+    /// the only writer is a splice over a registered span, and no span covers
+    /// a raw HTML block, inline HTML or a link reference definition. See the
+    /// `markdown::parser` module documentation for why they are unaddressable
+    /// and what that costs.
+    #[test]
+    fn regions_addressed_by_no_block_survive_an_edit_byte_for_byte() {
+        let source = HTML_AND_REFERENCES;
+        let parsed = crate::markdown::parse_note(source, "");
+
+        let html = "<div class=notice>\n  <p>Raw HTML, preserved verbatim and addressed by no Block.</p>\n</div>";
+        let reference = "[ref]: /projects/architecture.md";
+        assert!(source.contains(html));
+        assert!(source.contains(reference));
+
+        // No Block claims any of the HTML block's bytes.
+        let html_start = source.find(html).expect("html block");
+        let html_range = html_start..html_start + html.len();
+        assert!(
+            parsed.spans.blocks().all(|block| {
+                block.source.end <= html_range.start || block.source.start >= html_range.end
+            }),
+            "no Block may address the raw HTML region"
+        );
+
+        // Editing every Block that does exist leaves both regions untouched.
+        for path in block_paths(&parsed.spans) {
+            let spliced = splice_block(source, &parsed.spans, &path, "Rewritten.", "")
+                .unwrap_or_else(|error| panic!("block {path:?}: {error}"));
+            assert!(
+                spliced.source.contains(html),
+                "editing block {path:?} disturbed the raw HTML block"
+            );
+            assert!(
+                spliced.source.contains(reference),
+                "editing block {path:?} disturbed the link reference definition"
             );
         }
     }

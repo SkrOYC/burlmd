@@ -538,6 +538,94 @@ fn push_inline_text(content: &[InlineElement], out: &mut String) {
     }
 }
 
+/// The structural invariant a span map must satisfy for any input whatsoever.
+///
+/// Every individual criterion in this ticket is about one Block's span being
+/// *right*. This is about the set of them being *coherent*, and it is the
+/// check that catches the class of defect the others cannot see: a Block whose
+/// span was fabricated because its real extent could not be derived, or a
+/// Block hoisted out of another without the parent giving up the bytes. Both
+/// shipped, both were silent, and both are corruption rather than a wrong
+/// render — splicing one Block writes over another's source.
+///
+/// It is asserted over every corpus Note and inside the round-trip proptest,
+/// so it constrains generated input too.
+#[cfg(test)]
+pub(crate) mod invariants {
+    use super::SpanMap;
+
+    /// Returns `Err` with a description rather than panicking, so `proptest`
+    /// can shrink a failing case instead of aborting on it.
+    pub(crate) fn check(source: &str, spans: &SpanMap) -> Result<(), String> {
+        for block in spans.blocks() {
+            let span = &block.source;
+            if span.start >= span.end {
+                return Err(format!(
+                    "block {:?} has the degenerate span {span:?}; a Block that \
+                     cannot derive a truthful extent must be registered with no \
+                     span at all rather than a fabricated one",
+                    block.path
+                ));
+            }
+            if span.end > source.len()
+                || !source.is_char_boundary(span.start)
+                || !source.is_char_boundary(span.end)
+            {
+                return Err(format!(
+                    "block {:?} span {span:?} is not a character range of a \
+                     {}-byte Note",
+                    block.path,
+                    source.len()
+                ));
+            }
+
+            if block.path.len() > 1 {
+                if let Some(parent) = spans.block(&block.path[..block.path.len() - 1]) {
+                    if span.start < parent.source.start || span.end > parent.source.end {
+                        return Err(format!(
+                            "block {:?} span {span:?} escapes its parent {:?} span {:?}",
+                            block.path, parent.path, parent.source
+                        ));
+                    }
+                }
+            }
+        }
+
+        check_siblings(spans)
+    }
+
+    /// Sibling spans must be disjoint *and* ordered the way their paths are.
+    /// The ordering half is not pedantry: a Block hoisted out of an inline
+    /// frame used to be attached to the tree ahead of the Block that contained
+    /// it, so its path said it came first while its span said it came second.
+    fn check_siblings(spans: &SpanMap) -> Result<(), String> {
+        let mut groups: std::collections::HashMap<&[usize], Vec<&super::BlockSpan>> =
+            std::collections::HashMap::new();
+        for block in spans.blocks() {
+            groups
+                .entry(&block.path[..block.path.len() - 1])
+                .or_default()
+                .push(block);
+        }
+
+        for siblings in groups.values_mut() {
+            siblings.sort_by_key(|block| block.path.last().copied().unwrap_or(0));
+            for pair in siblings.windows(2) {
+                let (left, right) = (pair[0], pair[1]);
+                if left.source.end > right.source.start {
+                    return Err(format!(
+                        "sibling blocks {:?} span {:?} and {:?} span {:?} overlap \
+                         or are out of document order",
+                        left.path, left.source, right.path, right.source
+                    ));
+                }
+            }
+        }
+
+        Ok(())
+    }
+}
+
 /// The fixture corpus every span and splice test runs over.
 ///
 /// `SPK-WSPC-D001` §6.1 is explicit that `hello **bold** world` alone passes
@@ -628,6 +716,47 @@ Final paragraph.
 
 The final paragraph ends without one";
 
+    /// Inline content that renders nothing, and images hoisted out of the
+    /// Block that contained them.
+    ///
+    /// Every shape here produced a corrupt span map before the fixes in the
+    /// commit that added this fixture: an empty link left its enclosing Block
+    /// with no runs to derive an extent from, and a hoisted image left the
+    /// Block it came out of still claiming the bytes it had moved to. The
+    /// badge link is not a contrived case — it is ordinary in
+    /// externally-authored bundles, which `CAP-PORT-03` requires burlmd to
+    /// open without modifying.
+    pub(crate) const HOISTED_IMAGES_AND_EMPTY_INLINES: &str = r"# Heading with an image ![badge](i.png)
+
+- []()
+- [](x)
+- [ ] [](y.md)
+- [![a](i.png)](https://example.com)
+
+1. [](y.md)
+
+Text before ![mid](m.png) and after.
+
+[![alt](i.png)](https://example.com)
+
+A trailing paragraph.
+";
+
+    /// Regions that produce no `AstNode` and therefore no span: a raw HTML
+    /// block, inline HTML, and a link reference definition. They are preserved
+    /// verbatim precisely because nothing addresses them — see the module
+    /// documentation on `markdown::parser`.
+    pub(crate) const HTML_AND_REFERENCES: &str = r"# HTML and references
+
+<div class=notice>
+  <p>Raw HTML, preserved verbatim and addressed by no Block.</p>
+</div>
+
+A paragraph with <span>inline HTML</span> and a [reference link][ref] in it.
+
+[ref]: /projects/architecture.md
+";
+
     /// Multi-byte characters, so a character offset and a byte offset visibly
     /// disagree.
     pub(crate) const MULTIBYTE: &str = r"# Café notes
@@ -647,7 +776,28 @@ An entity café spelled caf&eacute; renders identically.
             ("ESCAPES_AND_LINKS", ESCAPES_AND_LINKS),
             ("NESTED_STRUCTURE", NESTED_STRUCTURE),
             ("NO_TRAILING_NEWLINE", NO_TRAILING_NEWLINE),
+            (
+                "HOISTED_IMAGES_AND_EMPTY_INLINES",
+                HOISTED_IMAGES_AND_EMPTY_INLINES,
+            ),
+            ("HTML_AND_REFERENCES", HTML_AND_REFERENCES),
             ("MULTIBYTE", MULTIBYTE),
+        ]
+    }
+
+    /// The exact inputs the review reproduced the fabricated-span and
+    /// overlapping-span defects with, kept as standalone Notes so a
+    /// regression names the shape that broke rather than a fixture index.
+    pub(crate) fn regression_inputs() -> Vec<&'static str> {
+        vec![
+            "- []()\n",
+            "- [](x)\n",
+            "1. [](y.md)\n",
+            "- [ ] [](y.md)\n",
+            "- [![a](i.png)](u)\n",
+            "[![alt](i.png)](https://example.com)\n",
+            "# Title ![a](x.png)\n\nbody\n",
+            "# [![a](i.png)](u)\n\nbody\n",
         ]
     }
 }
@@ -671,6 +821,66 @@ mod tests {
             AstNode::Blockquote { nodes } => node_at(nodes, rest),
             _ => None,
         }
+    }
+
+    /// The structural invariant, over the whole corpus. Non-degenerate spans,
+    /// children inside their parents, siblings disjoint and in document order.
+    #[test]
+    fn the_span_map_is_structurally_coherent_for_every_corpus_note() {
+        for (name, source) in corpus() {
+            let parsed = parse_note(source, "");
+            invariants::check(source, &parsed.spans)
+                .unwrap_or_else(|failure| panic!("{name}: {failure}"));
+        }
+    }
+
+    /// The same, over the exact inputs the review used. Each of these
+    /// registered a Block at `0..0`, or two Blocks claiming overlapping bytes,
+    /// before the parser stopped fabricating extents it could not derive.
+    #[test]
+    fn inline_content_that_renders_nothing_never_fabricates_a_span() {
+        for source in regression_inputs() {
+            let parsed = parse_note(source, "");
+            invariants::check(source, &parsed.spans)
+                .unwrap_or_else(|failure| panic!("{source:?}: {failure}"));
+        }
+    }
+
+    /// An image hoisted out of a heading lands *after* it, and the heading
+    /// gives up the bytes the image now owns. Before the fix the AST held the
+    /// image first, and the heading's span still covered it.
+    #[test]
+    fn an_image_hoisted_out_of_a_heading_follows_it_and_is_disjoint_from_it() {
+        let source = "# Title ![a](x.png)\n\nbody\n";
+        let parsed = parse_note(source, "");
+
+        assert!(
+            matches!(parsed.ast[0], AstNode::Heading { .. }),
+            "the heading must come first, got {:?}",
+            parsed.ast[0]
+        );
+        assert!(matches!(parsed.ast[1], AstNode::Image { .. }));
+
+        let heading = parsed.spans.block(&[0]).expect("heading span");
+        let image = parsed.spans.block(&[1]).expect("image span");
+        assert_eq!(&source[heading.source.clone()], "Title ");
+        assert_eq!(&source[image.source.clone()], "![a](x.png)");
+        assert!(heading.source.end <= image.source.start);
+    }
+
+    /// A link whose only content is a hoisted image renders nothing, so it is
+    /// not emitted at all and the paragraph around it claims none of its
+    /// bytes. The link syntax stays on disk, addressed by no Block.
+    #[test]
+    fn a_badge_link_leaves_only_the_image_addressable() {
+        let source = "[![alt](i.png)](https://example.com)\n";
+        let parsed = parse_note(source, "");
+
+        assert_eq!(parsed.ast.len(), 1);
+        assert!(matches!(parsed.ast[0], AstNode::Image { .. }));
+        let image = parsed.spans.block(&[0]).expect("image span");
+        assert_eq!(&source[image.source.clone()], "![alt](i.png)");
+        assert_eq!(parsed.spans.len(), 1);
     }
 
     /// The span map is only usable if every range it holds can actually be

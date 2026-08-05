@@ -5,6 +5,31 @@
 //! decision 8), and `SPK-WSPC-D001` §4.1 measured the incremental cost of
 //! building the map alongside the AST at 1.11-1.35x — rising with Note size —
 //! against the 2x a second parse would cost.
+//!
+//! # Regions that are preserved but not addressable
+//!
+//! Some of a Note's bytes produce no `AstNode` and therefore no entry in the
+//! span map. This is a decision rather than an oversight, and it is recorded
+//! here because the alternative reading — that these are gaps a future change
+//! should close by fabricating a span — is the exact mistake that produced
+//! this module's worst defect.
+//!
+//! The regions are: raw HTML blocks and inline HTML (`Event::Html` and
+//! `Event::InlineHtml`, which this AST has no variant for), link reference
+//! definitions (`[ref]: /target.md`, which `pulldown-cmark` consumes without
+//! emitting any event at all), and inline constructs that render no characters
+//! — an empty link text, or a link whose only content was an image already
+//! hoisted into a Block of its own.
+//!
+//! What follows from being unaddressable is narrow and safe. Nothing writes
+//! those bytes, because the only writer is a splice over a registered span and
+//! no span covers them, so **no edit can corrupt them and they survive every
+//! save byte-identically** — which is what the Edit Fidelity constraint asks
+//! for and what `CAP-PORT-03`'s externally-authored bundles need. What is lost
+//! is only that the UI does not render them and cannot focus them, and that
+//! insert and delete step over them rather than into them. Making raw HTML
+//! editable in place is `EPIC-F` territory (raw-mode editing), not something
+//! to reach by giving these regions a span here.
 
 use std::ops::Range;
 
@@ -189,6 +214,16 @@ struct Builder<'a> {
     link_stack: Vec<LinkFrame>,
     spans: SpanMapBuilder,
     in_metadata: bool,
+    /// Blocks hoisted out of a frame that cannot hold Block children, held
+    /// back so they land after it rather than before it. See `close_image`.
+    deferred: Vec<DeferredBlock>,
+}
+
+/// A Block waiting for its enclosing inline-only frame to close.
+struct DeferredBlock {
+    node: AstNode,
+    source: Range<usize>,
+    runs: Vec<InlineRun>,
 }
 
 impl<'a> Builder<'a> {
@@ -205,6 +240,7 @@ impl<'a> Builder<'a> {
             link_stack: Vec::new(),
             spans: SpanMapBuilder::default(),
             in_metadata: false,
+            deferred: Vec::new(),
         }
     }
 
@@ -225,7 +261,7 @@ impl<'a> Builder<'a> {
             Event::End(tag_end) => self.end(tag_end, range),
             Event::Text(text) => self.text(&text, range),
             Event::Code(text) => self.code_span(&text, range),
-            Event::Rule => self.push_block(AstNode::ThematicBreak, range, Vec::new()),
+            Event::Rule => self.push_block(AstNode::ThematicBreak, Some(range), Vec::new()),
             Event::SoftBreak | Event::HardBreak => self.line_break(range),
             Event::TaskListMarker(checked) => {
                 if let Some(FrameKind::ListItem { checked: slot, .. }) =
@@ -332,8 +368,12 @@ impl<'a> Builder<'a> {
                     return;
                 };
                 let runs = self.runs.take();
+                let source = split_adjusted_source(&frame, &runs);
                 let content = process_inlines(std::mem::take(&mut self.inlines));
-                self.push_block(AstNode::Heading { level, content }, frame.source, runs);
+                self.push_block(AstNode::Heading { level, content }, source, runs);
+                // Anything hoisted out of the heading follows it, in the order
+                // it appeared in the source.
+                self.drain_deferred();
             }
             TagEnd::Paragraph => {
                 let Some(frame) = self.frames.pop() else {
@@ -404,7 +444,7 @@ impl<'a> Builder<'a> {
                         language: accum.language,
                         code: accum.code,
                     },
-                    accum.source,
+                    Some(accum.source),
                     runs,
                 );
             }
@@ -421,6 +461,11 @@ impl<'a> Builder<'a> {
         if self.in_metadata {
             // ADR-007 decision 5 and ADR-004: the frontmatter block is read
             // only, and is not part of the rendered document.
+            return;
+        }
+        if text.is_empty() {
+            // Would push an inline element with no run behind it, which is the
+            // state that makes an enclosing Block unable to derive its extent.
             return;
         }
         if let Some(accum) = self.code_block.as_mut() {
@@ -464,6 +509,21 @@ impl<'a> Builder<'a> {
         let Some(frame) = self.link_stack.pop() else {
             return;
         };
+
+        // A link that renders no characters contributes nothing to either the
+        // tree or the map, and emitting it does active harm. Its run would be
+        // zero-width and therefore dropped, leaving an inline element with no
+        // run behind it — which is exactly the state that used to make the
+        // enclosing Block fall back to a fabricated span. The two shapes that
+        // reach here are an empty link text (`[](x)`) and a link whose only
+        // content was an Image that has already been hoisted into a Block of
+        // its own (`[![alt](i.png)](u)`, the badge link ordinary in
+        // externally-authored bundles). Its bytes stay on disk untouched, like
+        // any other region no Block addresses.
+        if frame.rendered_chars == 0 {
+            return;
+        }
+
         let content = process_inlines(frame.content);
         let element = match frame.kind {
             // `exists` is declared but not resolved here: it is whether
@@ -500,22 +560,35 @@ impl<'a> Builder<'a> {
             })
             .collect();
 
-        // Images are Block nodes in this AST, so inline text accumulated ahead
-        // of one has to become its own Block first to preserve document order.
-        // Deliberately excludes Heading: a heading's content is inline-only, so
-        // flushing there would strand its text in an empty node.
-        let flush = match self.frames.last_mut() {
-            Some(frame) => match frame.kind {
-                FrameKind::Paragraph => {
+        // `AstNode` has no inline image variant, so an inline image has to
+        // become a Block of its own. Whichever frame it came out of must then
+        // give up the bytes it now owns, or the two Blocks overlap and editing
+        // either destroys the other.
+        //
+        // Paragraph and ListItem can hold Block children, so the text ahead of
+        // the image is flushed into its own Block right here and document
+        // order comes out right. `split` additionally makes the fragment left
+        // behind derive its span from its runs rather than from the paragraph
+        // tag, which is what trims the tail the image occupies.
+        let mut defer = false;
+        if let Some(frame) = self.frames.last_mut() {
+            match frame.kind {
+                FrameKind::Paragraph => frame.split = true,
+                FrameKind::ListItem { .. } => {}
+                // A heading's content is inline-only, so it cannot hold the
+                // image and cannot be flushed mid-way without stranding its
+                // text. The image is held back and emitted as the heading's
+                // next *sibling* once the heading closes — pushing it
+                // immediately put it in the tree ahead of the heading that
+                // contained it, in the wrong document order.
+                FrameKind::Heading(_) => {
                     frame.split = true;
-                    true
+                    defer = true;
                 }
-                FrameKind::ListItem { .. } => true,
-                _ => false,
-            },
-            None => false,
-        };
-        if flush {
+                _ => {}
+            }
+        }
+        if !defer {
             self.flush_pending_inlines();
         }
 
@@ -525,14 +598,27 @@ impl<'a> Builder<'a> {
         let LinkKind::Image(url_or_path) = frame.kind else {
             return;
         };
-        self.push_block(
-            AstNode::Image {
-                alt_text,
-                url_or_path,
-            },
-            frame.source,
-            runs.take(),
-        );
+        let node = AstNode::Image {
+            alt_text,
+            url_or_path,
+        };
+        if defer {
+            self.deferred.push(DeferredBlock {
+                node,
+                source: frame.source,
+                runs: runs.take(),
+            });
+            return;
+        }
+        self.push_block(node, Some(frame.source), runs.take());
+    }
+
+    /// Emits the Blocks held back from an inline-only frame, as siblings
+    /// following the Block that frame produced.
+    fn drain_deferred(&mut self) {
+        for deferred in std::mem::take(&mut self.deferred) {
+            self.push_block(deferred.node, Some(deferred.source), deferred.runs);
+        }
     }
 
     fn push_run(&mut self, rendered: &CowStr<'_>, source: Range<usize>) {
@@ -571,17 +657,19 @@ impl<'a> Builder<'a> {
 
     /// Flushes inline content accumulated outside any `Paragraph` tag — bare
     /// text directly under a tight list item — into a synthetic paragraph.
-    /// Its span comes from its runs, since it has no tag of its own.
+    ///
+    /// Its span is the extent of its runs, since it has no tag of its own, and
+    /// it gets no span at all when it has no runs. That case is reachable
+    /// whenever inline content produces AST elements that render nothing, and
+    /// the previous fallback of `0..0` was a silent corruption: splicing that
+    /// path wrote at byte zero of the file and left the real Block alone.
     fn flush_pending_inlines(&mut self) {
         if self.inlines.is_empty() {
             self.runs.clear();
             return;
         }
         let runs = self.runs.take();
-        let source = match (runs.first(), runs.last()) {
-            (Some(first), Some(last)) => first.source.start..last.source.end,
-            _ => 0..0,
-        };
+        let source = run_extent(&runs);
         let content = process_inlines(std::mem::take(&mut self.inlines));
         self.push_block(AstNode::Paragraph { content }, source, runs);
     }
@@ -623,9 +711,20 @@ impl<'a> Builder<'a> {
         }
     }
 
-    fn push_block(&mut self, node: AstNode, source: Range<usize>, runs: Vec<InlineRun>) {
-        let path = self.next_path();
-        self.spans.push_block(path, source, runs);
+    /// Attaches a Block to the tree and, when a truthful source range for it
+    /// exists, registers that range in the span map.
+    ///
+    /// `source` is an `Option` because refusing to register is the correct
+    /// answer for a Block whose extent cannot be determined — inline content
+    /// that renders nothing, or a fragment left behind after a Block was
+    /// hoisted out of it. Registering a fabricated range is far worse than
+    /// registering none: an unregistered path makes `splice_block` return
+    /// `UnknownBlock`, while a wrong one makes it write over the wrong bytes.
+    fn push_block(&mut self, node: AstNode, source: Option<Range<usize>>, runs: Vec<InlineRun>) {
+        if let Some(source) = source {
+            let path = self.next_path();
+            self.spans.push_block(path, source, runs);
+        }
         self.attach(node);
     }
 
@@ -637,12 +736,32 @@ impl<'a> Builder<'a> {
     }
 }
 
-/// A paragraph an image was hoisted out of no longer starts where its tag
-/// does; its remaining text starts at its first surviving run.
-fn split_adjusted_source(frame: &Frame, runs: &[InlineRun]) -> Range<usize> {
-    match (frame.split, runs.first()) {
-        (true, Some(first)) => first.source.start..frame.source.end,
-        _ => frame.source.clone(),
+/// The source range to register for a Block built from an inline frame.
+///
+/// Ordinarily this is the frame's own tag range, which is what makes a
+/// heading's `# ` and a paragraph's terminating newline part of the Block a
+/// caller edits. A frame an inline Image was hoisted out of is the exception:
+/// the hoisted Image is registered as its own Block, so the fragment left
+/// behind must not claim any of the bytes the Image now owns, or editing
+/// either one destroys the other. For that case the range is the extent of the
+/// fragment's own runs — trimmed at *both* ends, since an Image may sit on
+/// either side of it — and `None` when the fragment has no runs to derive an
+/// extent from.
+fn split_adjusted_source(frame: &Frame, runs: &[InlineRun]) -> Option<Range<usize>> {
+    if !frame.split {
+        return Some(frame.source.clone());
+    }
+    run_extent(runs)
+}
+
+/// The source range spanned by a set of runs, or `None` when there are none.
+///
+/// Runs do not tile, so this is the outer extent rather than a union: the gaps
+/// between runs are markup belonging to the same Block.
+fn run_extent(runs: &[InlineRun]) -> Option<Range<usize>> {
+    match (runs.first(), runs.last()) {
+        (Some(first), Some(last)) => Some(first.source.start..last.source.end),
+        _ => None,
     }
 }
 

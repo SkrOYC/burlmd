@@ -154,6 +154,10 @@ When it is resolved and the selected source extracted
 Then the extracted text is exactly the source spanned by the selection, delimiters included
 ```
 
+##### WSPC-D003 Deviations & Justifications
+- **Touched Files:** `rust/proptest-regressions/markdown/splice.txt`
+- **Justification:** Harness-generated artifact of the in-scope round-trip proptest, created during this ticket's review round. It holds the shrunk minimal reproducers of the two review findings (the fabricated `0..0` span for zero-render list items, and the overlapping span left by image hoisting), and proptest re-runs checked-in regressions ahead of novel cases — committing it is the tool's own recommendation and is the standing guard against regressions of exactly this class.
+
 #### WSPC-D004 Local Workspace Bootstrap
 - **Type:** Feature
 - **Effort:** 5
