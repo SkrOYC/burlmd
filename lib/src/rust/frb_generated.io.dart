@@ -11,6 +11,7 @@ import 'dart:ffi' as ffi;
 import 'draft.dart';
 import 'error.dart';
 import 'frb_generated.dart';
+import 'index/query.dart';
 import 'markdown/ast.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated_io.dart';
 import 'workspace/bootstrap.dart';
@@ -58,10 +59,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   InlineElement dco_decode_inline_element(dynamic raw);
 
   @protected
+  LinkCompletion dco_decode_link_completion(dynamic raw);
+
+  @protected
   List<AstNode> dco_decode_list_ast_node(dynamic raw);
 
   @protected
   List<InlineElement> dco_decode_list_inline_element(dynamic raw);
+
+  @protected
+  List<LinkCompletion> dco_decode_list_link_completion(dynamic raw);
 
   @protected
   List<NoteMetadata> dco_decode_list_note_metadata(dynamic raw);
@@ -71,6 +78,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   Uint64List dco_decode_list_prim_usize_strict(dynamic raw);
+
+  @protected
+  List<TreeNode> dco_decode_list_tree_node(dynamic raw);
 
   @protected
   NoteMetadata dco_decode_note_metadata(dynamic raw);
@@ -101,6 +111,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   TextRun dco_decode_text_run(dynamic raw);
+
+  @protected
+  TreeNode dco_decode_tree_node(dynamic raw);
 
   @protected
   int dco_decode_u_32(dynamic raw);
@@ -151,10 +164,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   InlineElement sse_decode_inline_element(SseDeserializer deserializer);
 
   @protected
+  LinkCompletion sse_decode_link_completion(SseDeserializer deserializer);
+
+  @protected
   List<AstNode> sse_decode_list_ast_node(SseDeserializer deserializer);
 
   @protected
   List<InlineElement> sse_decode_list_inline_element(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<LinkCompletion> sse_decode_list_link_completion(
     SseDeserializer deserializer,
   );
 
@@ -168,6 +189,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   Uint64List sse_decode_list_prim_usize_strict(SseDeserializer deserializer);
+
+  @protected
+  List<TreeNode> sse_decode_list_tree_node(SseDeserializer deserializer);
 
   @protected
   NoteMetadata sse_decode_note_metadata(SseDeserializer deserializer);
@@ -198,6 +222,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   TextRun sse_decode_text_run(SseDeserializer deserializer);
+
+  @protected
+  TreeNode sse_decode_tree_node(SseDeserializer deserializer);
 
   @protected
   int sse_decode_u_32(SseDeserializer deserializer);
@@ -257,11 +284,23 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_inline_element(InlineElement self, SseSerializer serializer);
 
   @protected
+  void sse_encode_link_completion(
+    LinkCompletion self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_list_ast_node(List<AstNode> self, SseSerializer serializer);
 
   @protected
   void sse_encode_list_inline_element(
     List<InlineElement> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_link_completion(
+    List<LinkCompletion> self,
     SseSerializer serializer,
   );
 
@@ -282,6 +321,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
     Uint64List self,
     SseSerializer serializer,
   );
+
+  @protected
+  void sse_encode_list_tree_node(List<TreeNode> self, SseSerializer serializer);
 
   @protected
   void sse_encode_note_metadata(NoteMetadata self, SseSerializer serializer);
@@ -327,6 +369,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_text_run(TextRun self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_tree_node(TreeNode self, SseSerializer serializer);
 
   @protected
   void sse_encode_u_32(int self, SseSerializer serializer);

@@ -6,6 +6,7 @@
 import '../draft.dart';
 import '../error.dart';
 import '../frb_generated.dart';
+import '../index/query.dart';
 import '../markdown/ast.dart';
 import '../workspace/bootstrap.dart';
 import '../workspace/persist.dart';
@@ -130,8 +131,40 @@ NoteState updateBlock({
   newNode: newNode,
 );
 
-Future<List<NoteMetadata>> searchNotes({required String query}) =>
-    RustLib.instance.api.crateApiFfiApiSearchNotes(query: query);
+Future<List<NoteMetadata>> searchNotes({
+  required String query,
+  required int limit,
+}) =>
+    RustLib.instance.api.crateApiFfiApiSearchNotes(query: query, limit: limit);
+
+/// Title-prefix jump (CAP-FIND-02).
+Future<List<NoteMetadata>> findNotesByTitle({
+  required String query,
+  required int limit,
+}) => RustLib.instance.api.crateApiFfiApiFindNotesByTitle(
+  query: query,
+  limit: limit,
+);
+
+/// Candidates for the completion triggered by `[[` (CAP-GRAPH-02). The
+/// trigger is a UI affordance; what gets inserted is `LinkCompletion::insert_text`,
+/// built Core-side.
+Future<List<LinkCompletion>> linkCompletions({
+  required String query,
+  required int limit,
+}) => RustLib.instance.api.crateApiFfiApiLinkCompletions(
+  query: query,
+  limit: limit,
+);
+
+/// Notes linking *to* this one (CAP-GRAPH-05).
+Future<List<NoteMetadata>> backlinks({required String noteId}) =>
+    RustLib.instance.api.crateApiFfiApiBacklinks(noteId: noteId);
+
+/// The Directory tree for the sidebar, Directories before Notes, each level
+/// sorted by name.
+Future<List<TreeNode>> workspaceTree() =>
+    RustLib.instance.api.crateApiFfiApiWorkspaceTree();
 
 void saveNote({required String noteId, required String expectedBaseRevision}) =>
     RustLib.instance.api.crateApiFfiApiSaveNote(

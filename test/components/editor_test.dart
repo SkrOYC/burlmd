@@ -30,19 +30,28 @@ class _FakeRustApi extends RustApi {
 
   @override
   NoteState updateBlock(String noteId, List<int> blockPath, AstNode newNode) =>
-      NoteState(ast: [newNode], metadata: _testMetadata, baseRevision: 'head');
+      NoteState(
+        ast: [newNode],
+        metadata: _testMetadata,
+        baseRevision: 'head',
+        restoredFromDraft: false,
+      );
 }
 
 const _testMetadata = NoteMetadata(
   id: 'test-note',
-  workspaceId: 'ws',
   path: 'test-note.md',
   title: 'Test Note',
   lastModified: 0,
+  okfConformant: true,
 );
 
-NoteState _testNoteState(List<AstNode> ast) =>
-    NoteState(ast: ast, metadata: _testMetadata, baseRevision: 'head');
+NoteState _testNoteState(List<AstNode> ast) => NoteState(
+  ast: ast,
+  metadata: _testMetadata,
+  baseRevision: 'head',
+  restoredFromDraft: false,
+);
 
 Future<void> pumpEditor(WidgetTester tester, List<AstNode> ast) =>
     tester.pumpWidget(

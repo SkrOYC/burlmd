@@ -38,7 +38,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.12.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 1404605798;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1159880995;
 
 // Section: executor
 
@@ -81,6 +81,42 @@ fn wire__crate__api__auth__authenticate_workspace_impl(
                             api_code_verifier,
                         )
                         .await?;
+                        Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
+fn wire__crate__api__ffi_api__backlinks_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "backlinks",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_note_id = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, crate::error::AppError>(
+                    (move || async move {
+                        let output_ok = crate::api::ffi_api::backlinks(api_note_id).await?;
                         Ok(output_ok)
                     })()
                     .await,
@@ -156,6 +192,44 @@ fn wire__crate__api__ffi_api__close_note_impl(
         },
     )
 }
+fn wire__crate__api__ffi_api__find_notes_by_title_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "find_notes_by_title",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_query = <String>::sse_decode(&mut deserializer);
+            let api_limit = <u32>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, crate::error::AppError>(
+                    (move || async move {
+                        let output_ok =
+                            crate::api::ffi_api::find_notes_by_title(api_query, api_limit).await?;
+                        Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
 fn wire__crate__api__ffi_api__flush_note_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -222,6 +296,44 @@ fn wire__crate__api__simple__init_app_impl(
                     })?;
                     Ok(output_ok)
                 })())
+            }
+        },
+    )
+}
+fn wire__crate__api__ffi_api__link_completions_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "link_completions",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_query = <String>::sse_decode(&mut deserializer);
+            let api_limit = <u32>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, crate::error::AppError>(
+                    (move || async move {
+                        let output_ok =
+                            crate::api::ffi_api::link_completions(api_query, api_limit).await?;
+                        Ok(output_ok)
+                    })()
+                    .await,
+                )
             }
         },
     )
@@ -521,11 +633,13 @@ fn wire__crate__api__ffi_api__search_notes_impl(
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_query = <String>::sse_decode(&mut deserializer);
+            let api_limit = <u32>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| async move {
                 transform_result_sse::<_, crate::error::AppError>(
                     (move || async move {
-                        let output_ok = crate::api::ffi_api::search_notes(api_query).await?;
+                        let output_ok =
+                            crate::api::ffi_api::search_notes(api_query, api_limit).await?;
                         Ok(output_ok)
                     })()
                     .await,
@@ -564,6 +678,41 @@ fn wire__crate__api__ffi_api__update_block_impl(
                     crate::api::ffi_api::update_block(api_note_id, api_block_path, api_new_node)?;
                 Ok(output_ok)
             })())
+        },
+    )
+}
+fn wire__crate__api__ffi_api__workspace_tree_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "workspace_tree",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, crate::error::AppError>(
+                    (move || async move {
+                        let output_ok = crate::api::ffi_api::workspace_tree().await?;
+                        Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
         },
     )
 }
@@ -769,6 +918,20 @@ impl SseDecode for crate::markdown::ast::InlineElement {
     }
 }
 
+impl SseDecode for crate::index::query::LinkCompletion {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_noteId = <String>::sse_decode(deserializer);
+        let mut var_title = <String>::sse_decode(deserializer);
+        let mut var_insertText = <String>::sse_decode(deserializer);
+        return crate::index::query::LinkCompletion {
+            note_id: var_noteId,
+            title: var_title,
+            insert_text: var_insertText,
+        };
+    }
+}
+
 impl SseDecode for Vec<crate::markdown::ast::AstNode> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -788,6 +951,20 @@ impl SseDecode for Vec<crate::markdown::ast::InlineElement> {
         let mut ans_ = Vec::with_capacity(len_ as usize);
         for idx_ in 0..len_ {
             ans_.push(<crate::markdown::ast::InlineElement>::sse_decode(
+                deserializer,
+            ));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<crate::index::query::LinkCompletion> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::index::query::LinkCompletion>::sse_decode(
                 deserializer,
             ));
         }
@@ -826,6 +1003,18 @@ impl SseDecode for Vec<usize> {
         let mut ans_ = Vec::with_capacity(len_ as usize);
         for idx_ in 0..len_ {
             ans_.push(<usize>::sse_decode(deserializer));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<crate::index::query::TreeNode> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::index::query::TreeNode>::sse_decode(deserializer));
         }
         return ans_;
     }
@@ -970,6 +1159,39 @@ impl SseDecode for crate::markdown::ast::TextRun {
     }
 }
 
+impl SseDecode for crate::index::query::TreeNode {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut tag_ = <i32>::sse_decode(deserializer);
+        match tag_ {
+            0 => {
+                let mut var_name = <String>::sse_decode(deserializer);
+                let mut var_path = <String>::sse_decode(deserializer);
+                let mut var_children =
+                    <Vec<crate::index::query::TreeNode>>::sse_decode(deserializer);
+                return crate::index::query::TreeNode::Directory {
+                    name: var_name,
+                    path: var_path,
+                    children: var_children,
+                };
+            }
+            1 => {
+                let mut var_id = <String>::sse_decode(deserializer);
+                let mut var_title = <String>::sse_decode(deserializer);
+                let mut var_path = <String>::sse_decode(deserializer);
+                return crate::index::query::TreeNode::Note {
+                    id: var_id,
+                    title: var_title,
+                    path: var_path,
+                };
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+
 impl SseDecode for u32 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -1031,20 +1253,24 @@ fn pde_ffi_dispatcher_primary_impl(
     // Codec=Pde (Serialization + dispatch), see doc to use other codecs
     match func_id {
         1 => wire__crate__api__auth__authenticate_workspace_impl(port, ptr, rust_vec_len, data_len),
-        3 => wire__crate__api__ffi_api__close_note_impl(port, ptr, rust_vec_len, data_len),
-        4 => wire__crate__api__ffi_api__flush_note_impl(port, ptr, rust_vec_len, data_len),
-        5 => wire__crate__api__simple__init_app_impl(port, ptr, rust_vec_len, data_len),
-        8 => wire__crate__api__ffi_api__open_or_create_local_workspace_impl(
+        2 => wire__crate__api__ffi_api__backlinks_impl(port, ptr, rust_vec_len, data_len),
+        4 => wire__crate__api__ffi_api__close_note_impl(port, ptr, rust_vec_len, data_len),
+        5 => wire__crate__api__ffi_api__find_notes_by_title_impl(port, ptr, rust_vec_len, data_len),
+        6 => wire__crate__api__ffi_api__flush_note_impl(port, ptr, rust_vec_len, data_len),
+        7 => wire__crate__api__simple__init_app_impl(port, ptr, rust_vec_len, data_len),
+        8 => wire__crate__api__ffi_api__link_completions_impl(port, ptr, rust_vec_len, data_len),
+        11 => wire__crate__api__ffi_api__open_or_create_local_workspace_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        9 => wire__crate__api__ffi_api__open_workspace_impl(port, ptr, rust_vec_len, data_len),
-        10 => wire__crate__api__ffi_api__pending_drafts_impl(port, ptr, rust_vec_len, data_len),
-        11 => wire__crate__api__ffi_api__reindex_workspace_impl(port, ptr, rust_vec_len, data_len),
-        12 => wire__crate__api__ffi_api__reload_note_impl(port, ptr, rust_vec_len, data_len),
-        14 => wire__crate__api__ffi_api__search_notes_impl(port, ptr, rust_vec_len, data_len),
+        12 => wire__crate__api__ffi_api__open_workspace_impl(port, ptr, rust_vec_len, data_len),
+        13 => wire__crate__api__ffi_api__pending_drafts_impl(port, ptr, rust_vec_len, data_len),
+        14 => wire__crate__api__ffi_api__reindex_workspace_impl(port, ptr, rust_vec_len, data_len),
+        15 => wire__crate__api__ffi_api__reload_note_impl(port, ptr, rust_vec_len, data_len),
+        17 => wire__crate__api__ffi_api__search_notes_impl(port, ptr, rust_vec_len, data_len),
+        19 => wire__crate__api__ffi_api__workspace_tree_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -1057,11 +1283,11 @@ fn pde_ffi_dispatcher_sync_impl(
 ) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
     // Codec=Pde (Serialization + dispatch), see doc to use other codecs
     match func_id {
-        2 => wire__crate__api__auth__begin_oauth_flow_impl(ptr, rust_vec_len, data_len),
-        6 => wire__crate__api__ffi_api__note_write_status_impl(ptr, rust_vec_len, data_len),
-        7 => wire__crate__api__ffi_api__open_note_impl(ptr, rust_vec_len, data_len),
-        13 => wire__crate__api__ffi_api__save_note_impl(ptr, rust_vec_len, data_len),
-        15 => wire__crate__api__ffi_api__update_block_impl(ptr, rust_vec_len, data_len),
+        3 => wire__crate__api__auth__begin_oauth_flow_impl(ptr, rust_vec_len, data_len),
+        9 => wire__crate__api__ffi_api__note_write_status_impl(ptr, rust_vec_len, data_len),
+        10 => wire__crate__api__ffi_api__open_note_impl(ptr, rust_vec_len, data_len),
+        16 => wire__crate__api__ffi_api__save_note_impl(ptr, rust_vec_len, data_len),
+        18 => wire__crate__api__ffi_api__update_block_impl(ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -1226,6 +1452,28 @@ impl flutter_rust_bridge::IntoIntoDart<crate::markdown::ast::InlineElement>
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::index::query::LinkCompletion {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.note_id.into_into_dart().into_dart(),
+            self.title.into_into_dart().into_dart(),
+            self.insert_text.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::index::query::LinkCompletion
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::index::query::LinkCompletion>
+    for crate::index::query::LinkCompletion
+{
+    fn into_into_dart(self) -> crate::index::query::LinkCompletion {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::draft::NoteMetadata {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
@@ -1325,6 +1573,42 @@ impl flutter_rust_bridge::IntoIntoDart<crate::markdown::ast::TextRun>
     for crate::markdown::ast::TextRun
 {
     fn into_into_dart(self) -> crate::markdown::ast::TextRun {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::index::query::TreeNode {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            crate::index::query::TreeNode::Directory {
+                name,
+                path,
+                children,
+            } => [
+                0.into_dart(),
+                name.into_into_dart().into_dart(),
+                path.into_into_dart().into_dart(),
+                children.into_into_dart().into_dart(),
+            ]
+            .into_dart(),
+            crate::index::query::TreeNode::Note { id, title, path } => [
+                1.into_dart(),
+                id.into_into_dart().into_dart(),
+                title.into_into_dart().into_dart(),
+                path.into_into_dart().into_dart(),
+            ]
+            .into_dart(),
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::index::query::TreeNode {}
+impl flutter_rust_bridge::IntoIntoDart<crate::index::query::TreeNode>
+    for crate::index::query::TreeNode
+{
+    fn into_into_dart(self) -> crate::index::query::TreeNode {
         self
     }
 }
@@ -1523,6 +1807,15 @@ impl SseEncode for crate::markdown::ast::InlineElement {
     }
 }
 
+impl SseEncode for crate::index::query::LinkCompletion {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.note_id, serializer);
+        <String>::sse_encode(self.title, serializer);
+        <String>::sse_encode(self.insert_text, serializer);
+    }
+}
+
 impl SseEncode for Vec<crate::markdown::ast::AstNode> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -1539,6 +1832,16 @@ impl SseEncode for Vec<crate::markdown::ast::InlineElement> {
         <i32>::sse_encode(self.len() as _, serializer);
         for item in self {
             <crate::markdown::ast::InlineElement>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<crate::index::query::LinkCompletion> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::index::query::LinkCompletion>::sse_encode(item, serializer);
         }
     }
 }
@@ -1569,6 +1872,16 @@ impl SseEncode for Vec<usize> {
         <i32>::sse_encode(self.len() as _, serializer);
         for item in self {
             <usize>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<crate::index::query::TreeNode> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::index::query::TreeNode>::sse_encode(item, serializer);
         }
     }
 }
@@ -1671,6 +1984,33 @@ impl SseEncode for crate::markdown::ast::TextRun {
         <bool>::sse_encode(self.italic, serializer);
         <bool>::sse_encode(self.strikethrough, serializer);
         <bool>::sse_encode(self.code, serializer);
+    }
+}
+
+impl SseEncode for crate::index::query::TreeNode {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        match self {
+            crate::index::query::TreeNode::Directory {
+                name,
+                path,
+                children,
+            } => {
+                <i32>::sse_encode(0, serializer);
+                <String>::sse_encode(name, serializer);
+                <String>::sse_encode(path, serializer);
+                <Vec<crate::index::query::TreeNode>>::sse_encode(children, serializer);
+            }
+            crate::index::query::TreeNode::Note { id, title, path } => {
+                <i32>::sse_encode(1, serializer);
+                <String>::sse_encode(id, serializer);
+                <String>::sse_encode(title, serializer);
+                <String>::sse_encode(path, serializer);
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
     }
 }
 

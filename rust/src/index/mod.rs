@@ -40,6 +40,7 @@
 //! avoid.
 
 pub mod incremental;
+pub mod query;
 pub mod scan;
 
 use std::collections::HashSet;

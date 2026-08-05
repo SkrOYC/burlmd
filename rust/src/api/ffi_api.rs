@@ -22,6 +22,11 @@ pub use crate::workspace::WorkspaceInfo;
 // ADR-008's machinery and the type it reports through, and the `#[frb]`
 // functions below are wrappers over it.
 pub use crate::workspace::NoteWriteStatus;
+// `LinkCompletion` and `TreeNode` are owned by `index::query` (WSPC-D009),
+// the discovery-domain module, for the same reason as every re-export above:
+// the logic that fills them lives there, tested directly against an injected
+// `Connection`, and this module's own job is the thin `#[frb]` wrappers below.
+pub use crate::index::query::{LinkCompletion, TreeNode};
 
 /// Opens the local Workspace, creating and initializing it if absent
 /// (ADR-005 decision 1): creates the directory, initializes a Git repository
@@ -365,8 +370,7 @@ pub(crate) const SEARCH_NOTES_SQL: &str = "SELECT n.id, n.okf_conformant, n.path
      CROSS JOIN notes n ON n.workspace_id = fts_mapping.workspace_id \
                         AND n.id = fts_mapping.note_id \
      WHERE notes_fts MATCH ?1 AND fts_mapping.workspace_id = ?2 \
-     ORDER BY rank \
-     LIMIT 50";
+     ORDER BY rank";
 
 /// Full-text search over all indexed notes, ordered by FTS5 relevance
 /// (bm25, best match first). `notes_fts` only carries `(title, content)`;
@@ -384,24 +388,29 @@ pub(crate) const SEARCH_NOTES_SQL: &str = "SELECT n.id, n.okf_conformant, n.path
 /// scan of `fts_mapping` on every search rather than a lookup through its
 /// primary key.
 ///
-/// Capped at the top 50 matches, with no pagination cursor and no signal to
-/// the caller when a query matches more than that (see the matching note on
-/// this function in `tech-spec/contracts/ffi_api.rs`) — acceptable for now
-/// since no search UI exists yet to expose more, but worth revisiting before
-/// one does.
+/// `SEARCH_NOTES_SQL` deliberately carries no `LIMIT` of its own — this is
+/// the fix `WSPC-D009` makes for the hardcoded cap of 50 that used to sit at
+/// the end of that constant and silently truncate with no signal to the
+/// caller (`architecture/flows/flow-search.md`). The `limit` argument is
+/// bound as `?3` on a copy of the statement with `LIMIT ?3` appended, kept
+/// out of the shared constant so `index::scan`'s query-plan test — which
+/// asserts against `SEARCH_NOTES_SQL` by name and is out of this ticket's
+/// scope — keeps exercising the same base query this function actually runs.
 fn search_notes_impl(
     conn: &rusqlite::Connection,
     query: &str,
     workspace_id: &str,
+    limit: u32,
 ) -> Result<Vec<NoteMetadata>, AppError> {
     let fts_query = fts5_phrase_query(query);
     if fts_query.is_empty() {
         return Ok(Vec::new());
     }
 
-    let mut stmt = conn.prepare(SEARCH_NOTES_SQL)?;
+    let sql = format!("{SEARCH_NOTES_SQL} LIMIT ?3");
+    let mut stmt = conn.prepare(&sql)?;
 
-    let rows = stmt.query_map(rusqlite::params![fts_query, workspace_id], |row| {
+    let rows = stmt.query_map(rusqlite::params![fts_query, workspace_id, limit], |row| {
         Ok(NoteMetadata {
             id: row.get(0)?,
             okf_conformant: row.get(1)?,
@@ -422,9 +431,50 @@ fn search_notes_impl(
 // `async` marker only affects how FRB dispatches the call across the
 // boundary, not this function's own execution.
 #[frb]
-pub async fn search_notes(query: String) -> Result<Vec<NoteMetadata>, AppError> {
+pub async fn search_notes(query: String, limit: u32) -> Result<Vec<NoteMetadata>, AppError> {
     let workspace_id = crate::db::connection::active_workspace_id()?;
-    crate::db::connection::with_connection(|conn| search_notes_impl(conn, &query, &workspace_id))
+    crate::db::connection::with_connection(|conn| {
+        search_notes_impl(conn, &query, &workspace_id, limit)
+    })
+}
+
+/// Title-prefix jump (CAP-FIND-02).
+#[frb]
+pub async fn find_notes_by_title(query: String, limit: u32) -> Result<Vec<NoteMetadata>, AppError> {
+    let workspace_id = crate::db::connection::active_workspace_id()?;
+    crate::db::connection::with_connection(|conn| {
+        crate::index::query::find_notes_by_title_impl(conn, &workspace_id, &query, limit)
+    })
+}
+
+/// Candidates for the completion triggered by `[[` (CAP-GRAPH-02). The
+/// trigger is a UI affordance; what gets inserted is `LinkCompletion::insert_text`,
+/// built Core-side.
+#[frb]
+pub async fn link_completions(query: String, limit: u32) -> Result<Vec<LinkCompletion>, AppError> {
+    let workspace_id = crate::db::connection::active_workspace_id()?;
+    crate::db::connection::with_connection(|conn| {
+        crate::index::query::link_completions_impl(conn, &workspace_id, &query, limit)
+    })
+}
+
+/// Notes linking *to* this one (CAP-GRAPH-05).
+#[frb]
+pub async fn backlinks(note_id: String) -> Result<Vec<NoteMetadata>, AppError> {
+    let workspace_id = crate::db::connection::active_workspace_id()?;
+    crate::db::connection::with_connection(|conn| {
+        crate::index::query::backlinks_impl(conn, &workspace_id, &note_id)
+    })
+}
+
+/// The Directory tree for the sidebar, Directories before Notes, each level
+/// sorted by name.
+#[frb]
+pub async fn workspace_tree() -> Result<Vec<TreeNode>, AppError> {
+    let workspace_id = crate::db::connection::active_workspace_id()?;
+    crate::db::connection::with_connection(|conn| {
+        crate::index::query::workspace_tree_impl(conn, &workspace_id)
+    })
 }
 
 /// Optimistic-concurrency-controlled save: rejects with `AppError::GitConflict`
@@ -564,7 +614,7 @@ mod tests {
             2000,
         );
 
-        let results = search_notes_impl(&conn, "milk", "ws").unwrap();
+        let results = search_notes_impl(&conn, "milk", "ws", 50).unwrap();
 
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].id, "note-1");
@@ -578,7 +628,7 @@ mod tests {
         let conn = seeded_db();
         seed_note(&conn, "note-1", "Grocery List", "Buy milk and bread", 1000);
 
-        let results = search_notes_impl(&conn, "spaceship", "ws").unwrap();
+        let results = search_notes_impl(&conn, "spaceship", "ws", 50).unwrap();
 
         assert!(results.is_empty());
     }
@@ -594,7 +644,7 @@ mod tests {
         // unterminated string) — none of them should ever surface as an
         // AppError to a user just typing an ordinary search.
         for query in ["note-1", "budget:2024", "hello (world", "\"unbalanced"] {
-            search_notes_impl(&conn, query, "ws").unwrap();
+            search_notes_impl(&conn, query, "ws", 50).unwrap();
         }
     }
 
@@ -611,7 +661,7 @@ mod tests {
         );
         seed_note(&conn, "note-3", "Missing a term", "Buy milk only", 3000);
 
-        let results = search_notes_impl(&conn, "milk bread", "ws").unwrap();
+        let results = search_notes_impl(&conn, "milk bread", "ws", 50).unwrap();
 
         // A multi-word query is an implicit AND across per-token quoted
         // phrases (not one exact-phrase match), so word order shouldn't
@@ -626,8 +676,53 @@ mod tests {
         let conn = seeded_db();
         seed_note(&conn, "note-1", "Grocery List", "Buy milk and bread", 1000);
 
-        assert!(search_notes_impl(&conn, "", "ws").unwrap().is_empty());
-        assert!(search_notes_impl(&conn, "   ", "ws").unwrap().is_empty());
+        assert!(search_notes_impl(&conn, "", "ws", 50).unwrap().is_empty());
+        assert!(search_notes_impl(&conn, "   ", "ws", 50)
+            .unwrap()
+            .is_empty());
+    }
+
+    /// Gherkin: given an indexed Workspace, a full-text search run with a
+    /// limit returns at most that many results, ranked best match first.
+    #[test]
+    fn search_notes_returns_at_most_the_caller_supplied_limit() {
+        let conn = seeded_db();
+        seed_note(&conn, "note-1", "One", "shared token alpha", 1000);
+        seed_note(&conn, "note-2", "Two", "shared token beta", 2000);
+        seed_note(&conn, "note-3", "Three", "shared token gamma", 3000);
+
+        let results = search_notes_impl(&conn, "shared", "ws", 2).unwrap();
+
+        assert_eq!(
+            results.len(),
+            2,
+            "at most the caller's limit, not a hardcoded cap of 50"
+        );
+    }
+
+    /// Gherkin (ranking half of the same criterion): with a limit smaller
+    /// than the number of matches, the surviving result is the best match —
+    /// bm25 rewards the Note whose content repeats the query term, so a
+    /// limit of 1 must keep it over a Note mentioning the term only once.
+    #[test]
+    fn search_notes_ranks_the_better_match_first_under_a_tight_limit() {
+        let conn = seeded_db();
+        seed_note(&conn, "weak", "Weak Match", "distinctiveterm once", 1000);
+        seed_note(
+            &conn,
+            "strong",
+            "Strong Match",
+            "distinctiveterm distinctiveterm distinctiveterm repeated",
+            2000,
+        );
+
+        let results = search_notes_impl(&conn, "distinctiveterm", "ws", 1).unwrap();
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(
+            results[0].id, "strong",
+            "bm25 ranks the note repeating the term ahead of the one mentioning it once"
+        );
     }
 
     /// WSPC-D004 review finding #4: `notes`/`fts_mapping` moved onto a
@@ -667,7 +762,7 @@ mod tests {
         )
         .unwrap();
 
-        let results = search_notes_impl(&conn, "milk", "ws").unwrap();
+        let results = search_notes_impl(&conn, "milk", "ws", 50).unwrap();
 
         assert_eq!(
             results.len(),

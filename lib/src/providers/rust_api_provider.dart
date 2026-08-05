@@ -1,12 +1,14 @@
 import 'package:burlmd/src/rust/api/auth.dart' as auth_ffi;
 import 'package:burlmd/src/rust/api/ffi_api.dart' as ffi;
 import 'package:burlmd/src/rust/draft.dart';
+import 'package:burlmd/src/rust/index/query.dart';
 import 'package:burlmd/src/rust/markdown/ast.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart'
     show Uint64List;
 
 export 'package:burlmd/src/rust/api/auth.dart' show OAuthFlowStart;
+export 'package:burlmd/src/rust/index/query.dart' show LinkCompletion, TreeNode;
 
 /// Thin, app-owned wrapper around the generated FRB free functions. This is
 /// the seam application code depends on instead of importing `ffi_api.dart`
@@ -18,8 +20,30 @@ class RustApi {
 
   NoteState openNote(String path) => ffi.openNote(path: path);
 
-  Future<List<NoteMetadata>> searchNotes(String query) =>
-      ffi.searchNotes(query: query);
+  /// Full-text search within the active Workspace (CAP-FIND-01), bm25-ranked
+  /// and capped at `limit` — the caller-supplied cap that replaces the
+  /// hardcoded truncation `WSPC-D009` removes.
+  Future<List<NoteMetadata>> searchNotes(String query, int limit) =>
+      ffi.searchNotes(query: query, limit: limit);
+
+  /// Title-prefix jump (CAP-FIND-02).
+  Future<List<NoteMetadata>> findNotesByTitle(String query, int limit) =>
+      ffi.findNotesByTitle(query: query, limit: limit);
+
+  /// Candidates for the in-editor Link completion triggered by `[[`
+  /// (CAP-GRAPH-02). Each result's `insertText` is already a bundle-absolute,
+  /// escaped Markdown link built Core-side — the UI splices it verbatim and
+  /// must not construct or repair a link target itself.
+  Future<List<LinkCompletion>> linkCompletions(String query, int limit) =>
+      ffi.linkCompletions(query: query, limit: limit);
+
+  /// Notes linking *to* `noteId` (CAP-GRAPH-05).
+  Future<List<NoteMetadata>> backlinks(String noteId) =>
+      ffi.backlinks(noteId: noteId);
+
+  /// The Workspace tree for the sidebar (CAP-GRAPH-01): Directories before
+  /// Notes at each level, each group sorted by name.
+  Future<List<TreeNode>> workspaceTree() => ffi.workspaceTree();
 
   void saveNote(String noteId, String expectedBaseRevision) =>
       ffi.saveNote(noteId: noteId, expectedBaseRevision: expectedBaseRevision);
