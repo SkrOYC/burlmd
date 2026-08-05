@@ -139,7 +139,7 @@ impl Workspace {
     /// process-wide, so anything slow inside a closure is time a keystroke's
     /// own tier 1 write spends waiting. The rule is enforced rather than
     /// merely written down — see [`in_connection_closure`].
-    fn with_db<T>(
+    pub(super) fn with_db<T>(
         &self,
         f: impl FnOnce(&Connection) -> Result<T, AppError>,
     ) -> Result<T, AppError> {
@@ -171,7 +171,7 @@ impl Workspace {
     /// planted inside the bundle would still resolve outside it, so a Note that
     /// does exist is additionally checked against the canonicalized root, which
     /// is the same containment test `index::path_is_in_workspace` applies.
-    fn note_path(&self, note_id: &str) -> Result<PathBuf, AppError> {
+    pub(super) fn note_path(&self, note_id: &str) -> Result<PathBuf, AppError> {
         use std::path::Component;
 
         let relative = concept_id_to_path(note_id);
@@ -1329,6 +1329,170 @@ pub fn pending_drafts(workspace: &Workspace) -> Result<Vec<NoteMetadata>, AppErr
 }
 
 // ---------------------------------------------------------------------------
+// Carrying an open session across a lifecycle operation (`WSPC-D006`)
+// ---------------------------------------------------------------------------
+
+/// Moves an open Note's session onto `new_id`, installing bytes a lifecycle
+/// operation rewrote and re-recording the OCC baseline from them.
+///
+/// This is the half of `contracts/ffi_api.rs`'s three rename obligations that
+/// only this module can discharge, because the working source, the span map and
+/// the recorded revision are all private state of a live session:
+///
+/// - the **working source** gets the same substitution the file got, or the
+///   next tier 2 write copies the buffer verbatim over the rewrite;
+/// - the **span map** is rebuilt from it rather than adjusted, since a
+///   frontmatter title and a Link destination can both change length;
+/// - the **recorded revision** becomes the hash of the post-rewrite file, or
+///   that Note's next tier 2 write raises `RevisionMismatch` against this
+///   application's own rewrite.
+///
+/// `new_source` is `None` when the operation moved the Note without changing
+/// its bytes. A session that is not open is not an error: most affected Notes
+/// are not open, which is the whole reason the draft row is re-keyed separately.
+///
+/// When the id changes the session is **rebuilt rather than mutated**: the
+/// identity of a `SessionInner` — its concept id and the two paths derived from
+/// it — is immutable by construction, and every reader of it (the idle timer,
+/// tier 2's OCC sequence, tier 3's pathspec) reads it without a lock precisely
+/// because it cannot move. The retired session is marked closed first, so an
+/// idle write already in flight against it returns without touching the file it
+/// no longer names.
+pub(super) fn carry_session_forward(
+    workspace: &Arc<Workspace>,
+    old_id: &str,
+    new_id: &str,
+    new_source: Option<String>,
+    new_revision: String,
+) -> Result<(), AppError> {
+    let Some(session) = lookup(workspace.id(), old_id)? else {
+        return Ok(());
+    };
+
+    if old_id == new_id {
+        return session.install_rewrite(new_source, new_revision);
+    }
+
+    // The registry lock is above every other lock in this module's order, so it
+    // is taken and released around nothing but the map operation itself.
+    let retired = registry()?.remove(&(workspace.id().to_string(), old_id.to_string()));
+    let Some(session) = retired else {
+        return Ok(());
+    };
+
+    let snapshot = {
+        let mut state = session.lock_state()?;
+        state.closed = true;
+        SessionState {
+            source: Arc::clone(&state.source),
+            spans: Arc::clone(&state.spans),
+            ast: Arc::clone(&state.ast),
+            edit_seq: state.edit_seq,
+            revision: state.revision.clone(),
+            restored_from_draft: state.restored_from_draft,
+            session_edited: state.session_edited,
+            unwritten: state.unwritten,
+            last_written_at: state.last_written_at,
+            last_error: state.last_error.clone(),
+            closed: false,
+            metadata: state.metadata.clone(),
+        }
+    };
+
+    let absolute_path = workspace.note_path(new_id)?;
+    let source = match new_source {
+        Some(rewritten) => Arc::new(rewritten),
+        None => snapshot.source,
+    };
+    let ParsedNote { mut ast, spans } = parse_note(&source, containing_dir(new_id));
+    workspace.with_db(|conn| index::resolve_link_existence(conn, workspace.id(), &mut ast))?;
+    let metadata = derive_metadata(new_id, &source, &spans, file_mtime(&absolute_path));
+
+    let state = SessionState {
+        source,
+        spans: Arc::new(spans),
+        ast: Arc::new(ast),
+        revision: new_revision,
+        metadata,
+        ..snapshot
+    };
+    let unwritten = state.unwritten;
+
+    let moved = NoteSession(Arc::new(SessionInner {
+        workspace: Arc::clone(workspace),
+        note_id: new_id.to_string(),
+        relative_path: concept_id_to_path(new_id),
+        absolute_path,
+        state: Mutex::new(state),
+        write_lock: Mutex::new(()),
+        timer: IdleTimer::new(workspace.idle_interval),
+    }));
+    registry()?.insert(
+        (workspace.id().to_string(), new_id.to_string()),
+        moved.clone(),
+    );
+
+    // The retired session's timer died with it, so buffered work that has not
+    // reached disk needs a live one or it would sit in the buffer until close.
+    if unwritten {
+        moved.arm_idle_timer();
+    }
+    Ok(())
+}
+
+/// Retires an open session for a Note that no longer exists, without writing,
+/// committing, or clearing anything.
+///
+/// [`NoteSession::close`] is the wrong call for a deletion: it flushes tier 2
+/// first, which would recreate the file this operation just removed. Marking
+/// the session closed is what stops an idle write already in flight from doing
+/// the same.
+pub(super) fn discard_session(workspace: &Workspace, note_id: &str) -> Result<(), AppError> {
+    let retired = registry()?.remove(&(workspace.id().to_string(), note_id.to_string()));
+    if let Some(session) = retired {
+        let mut state = session.lock_state()?;
+        state.closed = true;
+        state.unwritten = false;
+    }
+    Ok(())
+}
+
+impl NoteSession {
+    /// Installs rewritten bytes and a fresh OCC baseline into a session whose
+    /// concept id did not change — the source-Note half of
+    /// [`carry_session_forward`].
+    fn install_rewrite(
+        &self,
+        new_source: Option<String>,
+        new_revision: String,
+    ) -> Result<(), AppError> {
+        let Some(rewritten) = new_source else {
+            let mut state = self.lock_state()?;
+            state.revision = new_revision;
+            return Ok(());
+        };
+
+        // Parsed with no lock held, like every other parse in this module.
+        let ParsedNote { mut ast, spans } = parse_note(&rewritten, containing_dir(&self.0.note_id));
+        self.resolve_links(&mut ast)?;
+        let metadata = derive_metadata(
+            &self.0.note_id,
+            &rewritten,
+            &spans,
+            file_mtime(&self.0.absolute_path),
+        );
+
+        let mut state = self.lock_state()?;
+        state.source = Arc::new(rewritten);
+        state.spans = Arc::new(spans);
+        state.ast = Arc::new(ast);
+        state.metadata = metadata;
+        state.revision = new_revision;
+        Ok(())
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
@@ -1375,7 +1539,7 @@ fn read_draft(
 /// already the accepted cost of `synchronous = NORMAL` on the index the draft
 /// row lives in (`SPK-WSPC-D001` §6.3), and tier 1's purpose is to survive an
 /// application crash, which this handles unconditionally.
-fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), AppError> {
+pub(super) fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), AppError> {
     static NEXT_TEMP: AtomicU64 = AtomicU64::new(0);
 
     assert_no_io_under_the_connection("an atomic write");

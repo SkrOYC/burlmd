@@ -22,6 +22,10 @@ pub use crate::workspace::WorkspaceInfo;
 // ADR-008's machinery and the type it reports through, and the `#[frb]`
 // functions below are wrappers over it.
 pub use crate::workspace::NoteWriteStatus;
+// Same reason again for the lifecycle domain: `workspace::lifecycle` owns the
+// atomic create/rename/move/delete machinery and the two shapes it reports
+// through, and the `#[frb]` functions below are wrappers over it.
+pub use crate::workspace::{IdRemap, LifecycleEffects};
 // `LinkCompletion` and `TreeNode` are owned by `index::query` (WSPC-D009),
 // the discovery-domain module, for the same reason as every re-export above:
 // the logic that fills them lives there, tested directly against an injected
@@ -172,6 +176,105 @@ pub async fn close_note(note_id: String) -> Result<(), AppError> {
 pub async fn pending_drafts() -> Result<Vec<NoteMetadata>, AppError> {
     let workspace = crate::workspace::persist::Workspace::active()?;
     crate::workspace::persist::pending_drafts(&workspace)
+}
+
+// ---------------------------------------------------------------------------
+// Note & Directory lifecycle (CAP-LIFE-01 .. CAP-LIFE-06)
+//
+// Because OKF identity is positional (ADR-004), rename and move change a
+// Note's concept id — so each rewrites the file, its index rows, every inbound
+// Link, every affected `drafts` row and every affected open session in one
+// operation that either completes or changes nothing
+// (`architecture/risks.md` risk 8). `workspace::lifecycle` is where that lives
+// and where it is tested; these are thin wrappers over it.
+// ---------------------------------------------------------------------------
+
+/// Creates a Note in `directory_path` (empty string for the bundle root) with
+/// an OKF-conformant frontmatter block, and **opens it**: the returned state is
+/// the state of an open Note, so the working source, span map and recorded
+/// revision are all established before this returns and `note_write_status`
+/// reports on it immediately.
+///
+/// The filename is the title **verbatim** plus `.md`
+/// (`data-models/okf-bundle.md`) — no slugification, because CAP-GRAPH-04's
+/// create-on-follow has to invert the derivation. A collision, or a title
+/// deriving to a reserved OKF filename, returns `PathUnavailable` rather than
+/// silently disambiguating.
+#[frb]
+pub async fn create_note(directory_path: String, title: String) -> Result<NoteState, AppError> {
+    let workspace = crate::workspace::persist::Workspace::active()?;
+    crate::workspace::lifecycle::create_note(&workspace, &directory_path, &title)
+}
+
+/// Deletes a Note and commits the deletion, so it stays recoverable from local
+/// version history (CAP-LIFE-04). Clears the `drafts` row and the `notes_fts`
+/// row explicitly — neither is reached by the `notes` cascade, and the FTS row
+/// must go first or it is stranded permanently (`data-models/schema.sql`).
+#[frb]
+pub async fn delete_note(note_id: String) -> Result<(), AppError> {
+    let workspace = crate::workspace::persist::Workspace::active()?;
+    crate::workspace::lifecycle::delete_note(&workspace, &note_id)
+}
+
+/// Renames a Note, rewriting its frontmatter `title`, its filename, and every
+/// inbound Link that targets it (CAP-LIFE-02).
+///
+/// This changes the Note's concept id: the returned state carries the new one
+/// and callers must not retain the old. The returned `LifecycleEffects` names
+/// every *other* Note whose bytes moved, which the caller must reload — an open
+/// one still holds an `InlineElement::Link` carrying the old `target_id`.
+#[frb]
+pub async fn rename_note(
+    note_id: String,
+    new_title: String,
+) -> Result<(NoteState, LifecycleEffects), AppError> {
+    let workspace = crate::workspace::persist::Workspace::active()?;
+    crate::workspace::lifecycle::rename_note(&workspace, &note_id, &new_title)
+}
+
+/// Moves a Note to another Directory, rewriting every inbound Link
+/// (CAP-LIFE-03). Changes the Note's id, as `rename_note` does. Returns
+/// `PathUnavailable` when the destination already holds a Note of that
+/// filename, or when the destination path does not exist.
+#[frb]
+pub async fn move_note(
+    note_id: String,
+    new_directory_path: String,
+) -> Result<(NoteState, LifecycleEffects), AppError> {
+    let workspace = crate::workspace::persist::Workspace::active()?;
+    crate::workspace::lifecycle::move_note(&workspace, &note_id, &new_directory_path)
+}
+
+/// Creates a Directory, including intermediate levels (CAP-LIFE-05). An empty
+/// Directory has no file to represent it, so it exists in the `directories`
+/// table until it holds a Note — and makes no commit, since Git tracks no
+/// empty directory.
+#[frb]
+pub async fn create_directory(path: String) -> Result<(), AppError> {
+    let workspace = crate::workspace::persist::Workspace::active()?;
+    crate::workspace::lifecycle::create_directory(&workspace, &path)
+}
+
+/// Renames a Directory, moving its contents and rewriting inbound Links to
+/// every Note beneath it (CAP-LIFE-06). The Notes holding rewritten Links are
+/// **not** confined to that subtree, which is why both halves of
+/// `LifecycleEffects` are populated here.
+#[frb]
+pub async fn rename_directory(
+    path: String,
+    new_name: String,
+) -> Result<LifecycleEffects, AppError> {
+    let workspace = crate::workspace::persist::Workspace::active()?;
+    crate::workspace::lifecycle::rename_directory(&workspace, &path, &new_name)
+}
+
+/// Deletes a Directory and everything beneath it, in one commit (CAP-LIFE-06).
+/// Returns the concept ids of every Note removed, so a caller with one of them
+/// open can close it rather than discovering it is gone on next access.
+#[frb]
+pub async fn delete_directory(path: String) -> Result<Vec<String>, AppError> {
+    let workspace = crate::workspace::persist::Workspace::active()?;
+    crate::workspace::lifecycle::delete_directory(&workspace, &path)
 }
 
 /// The open session for `note_id`, or `NotFound` when the Note is not open.
@@ -1405,6 +1508,96 @@ mod tests {
         );
     }
 
+    /// Drives all seven `WSPC-D006` lifecycle wrappers through the real
+    /// `#[frb]` functions, the real active-Workspace singleton and a real
+    /// bundle.
+    ///
+    /// The same mis-wiring hazard the editing wrappers above have:
+    /// `rename_note` and `move_note` share the signature `(String, String) ->
+    /// Result<(NoteState, LifecycleEffects), AppError>`, and `create_directory`
+    /// shares `(String) -> Result<(), AppError>` with `delete_note`. Each
+    /// assertion below is the one a swap within its group would break — a
+    /// rename that changed the directory instead of the filename, or a delete
+    /// that created.
+    #[test]
+    fn wrapper_layer_lifecycle_creates_renames_moves_and_deletes() {
+        let _guards = wrapper_guards();
+        let ws = wrapper_bootstrap();
+
+        block_on(create_directory("projects".to_string())).unwrap();
+        let created = block_on(create_note(
+            "projects".to_string(),
+            "Meeting Notes".to_string(),
+        ))
+        .unwrap();
+        assert_eq!(created.metadata.id, "projects/Meeting Notes");
+        assert!(ws.root.join("projects/Meeting Notes.md").is_file());
+
+        // A source Note holding an inbound Link, so the rename has an edge to
+        // sweep rather than passing vacuously. The title contains a space, per
+        // this ticket's second acceptance criterion.
+        wrapper_write_note(
+            &ws.root,
+            "src.md",
+            &note_source("src", "see [Meeting Notes](</projects/Meeting Notes.md>)"),
+        );
+        block_on(reindex_workspace()).unwrap();
+
+        let (renamed, effects) = block_on(rename_note(
+            "projects/Meeting Notes".to_string(),
+            "Standup Notes".to_string(),
+        ))
+        .unwrap();
+        assert_eq!(
+            renamed.metadata.id, "projects/Standup Notes",
+            "rename_note must change the filename and leave the Directory alone"
+        );
+        assert_eq!(
+            effects.rewritten,
+            vec!["src".to_string()],
+            "the source Note whose bytes moved must be reported so the shell reloads it"
+        );
+        assert!(std::fs::read_to_string(ws.root.join("src.md"))
+            .unwrap()
+            .contains("</projects/Standup Notes.md>"));
+
+        let (moved, _) = block_on(move_note(
+            "projects/Standup Notes".to_string(),
+            String::new(),
+        ))
+        .unwrap();
+        assert_eq!(
+            moved.metadata.id, "Standup Notes",
+            "move_note must change the Directory and leave the filename alone"
+        );
+
+        block_on(create_note("projects".to_string(), "Kept".to_string())).unwrap();
+        let dir_effects = block_on(rename_directory(
+            "projects".to_string(),
+            "archive".to_string(),
+        ))
+        .unwrap();
+        assert_eq!(
+            dir_effects.remapped,
+            vec![IdRemap {
+                old_id: "projects/Kept".to_string(),
+                new_id: "archive/Kept".to_string(),
+            }],
+            "rename_directory must report the ids it remapped underneath the caller"
+        );
+
+        let removed = block_on(delete_directory("archive".to_string())).unwrap();
+        assert_eq!(removed, vec!["archive/Kept".to_string()]);
+        assert!(!ws.root.join("archive").exists());
+
+        block_on(delete_note("Standup Notes".to_string())).unwrap();
+        assert!(
+            !ws.root.join("Standup Notes.md").exists(),
+            "delete_note must remove the file, where create_directory — the \
+             same signature — would have created one"
+        );
+    }
+
     /// Slices `source` to everything before its own `#[cfg(test)] mod
     /// tests { ... }` block. `include_str!` reads a whole file, this test
     /// module included, so an unscoped scan is self-referential: a needle
@@ -1494,19 +1687,33 @@ mod tests {
         // contain "open_note" as a substring, so the name-based check
         // above would miss it entirely — would still share this shape:
         // returning Result<NoteState, AppError> while taking neither a
-        // block_path nor a range. `open_note` and `reload_note` are the
-        // only two functions on this boundary that legitimately do; every
-        // other same-shaped function is one of the per-Block or per-range
-        // mutators, which always name a block_path or range parameter.
+        // block_path nor a range.
+        //
+        // Three functions on this boundary legitimately have it, and no
+        // fourth may be added without amending the contract. `open_note`
+        // and `reload_note` are the two the previous revision named.
+        // `create_note` is the third and is not an exception to the rule
+        // above but an instance of it: `contracts/ffi_api.rs` specifies that
+        // it creates the file *and opens it*, precisely so that the first
+        // `update_block` after a creation substitutes into a buffer that was
+        // established rather than into nothing. It is still not a second way
+        // to open an **existing** Note — it fails with `PathUnavailable` when
+        // the path is taken — which is what the rule protects. Every other
+        // same-shaped function is one of the per-Block or per-range mutators,
+        // which always name a block_path or range parameter.
         let mut opener_shaped_names = note_state_opening_signature_names(ffi_api_source);
         opener_shaped_names.sort();
         assert_eq!(
             opener_shaped_names,
-            vec!["open_note".to_string(), "reload_note".to_string()],
+            vec![
+                "create_note".to_string(),
+                "open_note".to_string(),
+                "reload_note".to_string()
+            ],
             "the only functions that may return Result<NoteState, AppError> \
              while taking neither a block_path (Vec<usize>) nor a range \
-             (BlockRange) are open_note and reload_note — any other name \
-             here is an undocumented additional entry point"
+             (BlockRange) are open_note, reload_note and create_note — any \
+             other name here is an undocumented additional entry point"
         );
 
         for (file, source) in [

@@ -15,6 +15,7 @@ import 'index/query.dart';
 import 'markdown/ast.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated_io.dart';
 import 'workspace/bootstrap.dart';
+import 'workspace/lifecycle.dart';
 import 'workspace/persist.dart';
 
 abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
@@ -59,13 +60,25 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   PlatformInt64 dco_decode_i_64(dynamic raw);
 
   @protected
+  IdRemap dco_decode_id_remap(dynamic raw);
+
+  @protected
   InlineElement dco_decode_inline_element(dynamic raw);
+
+  @protected
+  LifecycleEffects dco_decode_lifecycle_effects(dynamic raw);
 
   @protected
   LinkCompletion dco_decode_link_completion(dynamic raw);
 
   @protected
+  List<String> dco_decode_list_String(dynamic raw);
+
+  @protected
   List<AstNode> dco_decode_list_ast_node(dynamic raw);
+
+  @protected
+  List<IdRemap> dco_decode_list_id_remap(dynamic raw);
 
   @protected
   List<InlineElement> dco_decode_list_inline_element(dynamic raw);
@@ -111,6 +124,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<AstNode>? dco_decode_opt_list_ast_node(dynamic raw);
+
+  @protected
+  (NoteState, LifecycleEffects) dco_decode_record_note_state_lifecycle_effects(
+    dynamic raw,
+  );
 
   @protected
   TextRun dco_decode_text_run(dynamic raw);
@@ -167,13 +185,25 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   PlatformInt64 sse_decode_i_64(SseDeserializer deserializer);
 
   @protected
+  IdRemap sse_decode_id_remap(SseDeserializer deserializer);
+
+  @protected
   InlineElement sse_decode_inline_element(SseDeserializer deserializer);
+
+  @protected
+  LifecycleEffects sse_decode_lifecycle_effects(SseDeserializer deserializer);
 
   @protected
   LinkCompletion sse_decode_link_completion(SseDeserializer deserializer);
 
   @protected
+  List<String> sse_decode_list_String(SseDeserializer deserializer);
+
+  @protected
   List<AstNode> sse_decode_list_ast_node(SseDeserializer deserializer);
+
+  @protected
+  List<IdRemap> sse_decode_list_id_remap(SseDeserializer deserializer);
 
   @protected
   List<InlineElement> sse_decode_list_inline_element(
@@ -225,6 +255,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<AstNode>? sse_decode_opt_list_ast_node(SseDeserializer deserializer);
+
+  @protected
+  (NoteState, LifecycleEffects) sse_decode_record_note_state_lifecycle_effects(
+    SseDeserializer deserializer,
+  );
 
   @protected
   TextRun sse_decode_text_run(SseDeserializer deserializer);
@@ -293,7 +328,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_i_64(PlatformInt64 self, SseSerializer serializer);
 
   @protected
+  void sse_encode_id_remap(IdRemap self, SseSerializer serializer);
+
+  @protected
   void sse_encode_inline_element(InlineElement self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_lifecycle_effects(
+    LifecycleEffects self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_link_completion(
@@ -302,7 +346,13 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_list_String(List<String> self, SseSerializer serializer);
+
+  @protected
   void sse_encode_list_ast_node(List<AstNode> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_id_remap(List<IdRemap> self, SseSerializer serializer);
 
   @protected
   void sse_encode_list_inline_element(
@@ -376,6 +426,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_opt_list_ast_node(
     List<AstNode>? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_record_note_state_lifecycle_effects(
+    (NoteState, LifecycleEffects) self,
     SseSerializer serializer,
   );
 

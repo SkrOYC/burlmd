@@ -2,6 +2,7 @@ import 'package:burlmd/src/rust/api/auth.dart' as auth_ffi;
 import 'package:burlmd/src/rust/api/ffi_api.dart' as ffi;
 import 'package:burlmd/src/rust/draft.dart';
 import 'package:burlmd/src/rust/index/query.dart';
+import 'package:burlmd/src/rust/workspace/lifecycle.dart';
 import 'package:burlmd/src/rust/workspace/persist.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart'
@@ -10,6 +11,8 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart'
 export 'package:burlmd/src/rust/api/auth.dart' show OAuthFlowStart;
 export 'package:burlmd/src/rust/api/ffi_api.dart' show BlockRange;
 export 'package:burlmd/src/rust/index/query.dart' show LinkCompletion, TreeNode;
+export 'package:burlmd/src/rust/workspace/lifecycle.dart'
+    show IdRemap, LifecycleEffects;
 
 /// Thin, app-owned wrapper around the generated FRB free functions. This is
 /// the seam application code depends on instead of importing `ffi_api.dart`
@@ -23,9 +26,14 @@ export 'package:burlmd/src/rust/index/query.dart' show LinkCompletion, TreeNode;
 /// `updateBlock` are both gone, replaced by the contract's concept-id
 /// `open_note` and source-text `update_block`), and `saveNote` — which the
 /// contract deletes outright in favour of `flushNote` — is removed rather
-/// than repaired. The seven lifecycle wrappers (`createNote`, `renameNote`,
-/// ...) are `WSPC-D006`'s: this ticket does not depend on it, so wrapping
-/// functions that do not exist yet would leave unresolved identifiers here.
+/// than repaired.
+///
+/// `WSPC-D006` adds the seven lifecycle wrappers (`createNote`, `renameNote`,
+/// `moveNote`, `deleteNote`, `createDirectory`, `renameDirectory`,
+/// `deleteDirectory`) at the bottom, on the rule that a wrapper ships with the
+/// function it wraps: they could not land with the editing half above, which
+/// does not depend on `WSPC-D006` and would have left `ffi.createNote` and
+/// friends unresolved at its own `dart analyze` gate.
 class RustApi {
   const RustApi();
 
@@ -160,6 +168,61 @@ class RustApi {
   /// The Workspace tree for the sidebar (CAP-GRAPH-01): Directories before
   /// Notes at each level, each group sorted by name.
   Future<List<TreeNode>> workspaceTree() => ffi.workspaceTree();
+
+  // -- Note and Directory lifecycle (WSPC-D006) ---------------------------
+  //
+  // Because OKF identity is positional, `renameNote`, `moveNote` and
+  // `renameDirectory` change concept ids. Callers must not retain an id
+  // across one of these calls: the returned `NoteState` carries the new id,
+  // and `LifecycleEffects` names every *other* Note the operation touched.
+  // Both of its lists oblige the caller to reload the Note — `remapped`
+  // because the id it holds is dead, and `rewritten` because the bytes moved
+  // underneath an unchanged id, so an open Block still holds a Link carrying
+  // the old target.
+
+  /// Creates a Note in `directoryPath` (empty string for the bundle root)
+  /// with a conformant frontmatter block and **opens it** — the returned
+  /// state is the state of an open Note, so editing can begin immediately.
+  ///
+  /// The filename is the title verbatim plus `.md`, with no slugification. A
+  /// collision, or a title deriving to a reserved OKF filename, throws
+  /// `PathUnavailable`; the UI must surface that rather than retrying with a
+  /// disambiguated name.
+  Future<NoteState> createNote(String directoryPath, String title) =>
+      ffi.createNote(directoryPath: directoryPath, title: title);
+
+  /// Renames a Note, rewriting its frontmatter title, its filename and every
+  /// inbound Link, atomically (CAP-LIFE-02).
+  Future<(NoteState, LifecycleEffects)> renameNote(
+    String noteId,
+    String newTitle,
+  ) => ffi.renameNote(noteId: noteId, newTitle: newTitle);
+
+  /// Moves a Note to another Directory, rewriting every inbound Link
+  /// (CAP-LIFE-03). Changes the Note's concept id, as [renameNote] does.
+  Future<(NoteState, LifecycleEffects)> moveNote(
+    String noteId,
+    String newDirectoryPath,
+  ) => ffi.moveNote(noteId: noteId, newDirectoryPath: newDirectoryPath);
+
+  /// Deletes a Note and commits the deletion, so it stays recoverable from
+  /// local version history (CAP-LIFE-04).
+  Future<void> deleteNote(String noteId) => ffi.deleteNote(noteId: noteId);
+
+  /// Creates a Directory, including intermediate levels (CAP-LIFE-05).
+  Future<void> createDirectory(String path) => ffi.createDirectory(path: path);
+
+  /// Renames a Directory, moving its contents and rewriting inbound Links to
+  /// every Note beneath it (CAP-LIFE-06). The Notes holding rewritten Links
+  /// are not confined to the renamed subtree.
+  Future<LifecycleEffects> renameDirectory(String path, String newName) =>
+      ffi.renameDirectory(path: path, newName: newName);
+
+  /// Deletes a Directory and everything beneath it, in one commit
+  /// (CAP-LIFE-06), returning the concept ids of every Note removed so a
+  /// caller holding one open can close it.
+  Future<List<String>> deleteDirectory(String path) =>
+      ffi.deleteDirectory(path: path);
 
   /// Starts an OAuth PKCE flow (SYNC-C002): Core generates the PKCE
   /// verifier/challenge and `state`, and returns the full authorize URL for

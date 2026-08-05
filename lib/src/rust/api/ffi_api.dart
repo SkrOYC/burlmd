@@ -9,6 +9,7 @@ import '../frb_generated.dart';
 import '../index/query.dart';
 import '../markdown/ast.dart';
 import '../workspace/bootstrap.dart';
+import '../workspace/lifecycle.dart';
 import '../workspace/persist.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
@@ -124,6 +125,84 @@ Future<void> closeNote({required String noteId}) =>
 /// recovered work on startup (CAP-WS-03).
 Future<List<NoteMetadata>> pendingDrafts() =>
     RustLib.instance.api.crateApiFfiApiPendingDrafts();
+
+/// Creates a Note in `directory_path` (empty string for the bundle root) with
+/// an OKF-conformant frontmatter block, and **opens it**: the returned state is
+/// the state of an open Note, so the working source, span map and recorded
+/// revision are all established before this returns and `note_write_status`
+/// reports on it immediately.
+///
+/// The filename is the title **verbatim** plus `.md`
+/// (`data-models/okf-bundle.md`) — no slugification, because CAP-GRAPH-04's
+/// create-on-follow has to invert the derivation. A collision, or a title
+/// deriving to a reserved OKF filename, returns `PathUnavailable` rather than
+/// silently disambiguating.
+Future<NoteState> createNote({
+  required String directoryPath,
+  required String title,
+}) => RustLib.instance.api.crateApiFfiApiCreateNote(
+  directoryPath: directoryPath,
+  title: title,
+);
+
+/// Deletes a Note and commits the deletion, so it stays recoverable from local
+/// version history (CAP-LIFE-04). Clears the `drafts` row and the `notes_fts`
+/// row explicitly — neither is reached by the `notes` cascade, and the FTS row
+/// must go first or it is stranded permanently (`data-models/schema.sql`).
+Future<void> deleteNote({required String noteId}) =>
+    RustLib.instance.api.crateApiFfiApiDeleteNote(noteId: noteId);
+
+/// Renames a Note, rewriting its frontmatter `title`, its filename, and every
+/// inbound Link that targets it (CAP-LIFE-02).
+///
+/// This changes the Note's concept id: the returned state carries the new one
+/// and callers must not retain the old. The returned `LifecycleEffects` names
+/// every *other* Note whose bytes moved, which the caller must reload — an open
+/// one still holds an `InlineElement::Link` carrying the old `target_id`.
+Future<(NoteState, LifecycleEffects)> renameNote({
+  required String noteId,
+  required String newTitle,
+}) => RustLib.instance.api.crateApiFfiApiRenameNote(
+  noteId: noteId,
+  newTitle: newTitle,
+);
+
+/// Moves a Note to another Directory, rewriting every inbound Link
+/// (CAP-LIFE-03). Changes the Note's id, as `rename_note` does. Returns
+/// `PathUnavailable` when the destination already holds a Note of that
+/// filename, or when the destination path does not exist.
+Future<(NoteState, LifecycleEffects)> moveNote({
+  required String noteId,
+  required String newDirectoryPath,
+}) => RustLib.instance.api.crateApiFfiApiMoveNote(
+  noteId: noteId,
+  newDirectoryPath: newDirectoryPath,
+);
+
+/// Creates a Directory, including intermediate levels (CAP-LIFE-05). An empty
+/// Directory has no file to represent it, so it exists in the `directories`
+/// table until it holds a Note — and makes no commit, since Git tracks no
+/// empty directory.
+Future<void> createDirectory({required String path}) =>
+    RustLib.instance.api.crateApiFfiApiCreateDirectory(path: path);
+
+/// Renames a Directory, moving its contents and rewriting inbound Links to
+/// every Note beneath it (CAP-LIFE-06). The Notes holding rewritten Links are
+/// **not** confined to that subtree, which is why both halves of
+/// `LifecycleEffects` are populated here.
+Future<LifecycleEffects> renameDirectory({
+  required String path,
+  required String newName,
+}) => RustLib.instance.api.crateApiFfiApiRenameDirectory(
+  path: path,
+  newName: newName,
+);
+
+/// Deletes a Directory and everything beneath it, in one commit (CAP-LIFE-06).
+/// Returns the concept ids of every Note removed, so a caller with one of them
+/// open can close it rather than discovering it is gone on next access.
+Future<List<String>> deleteDirectory({required String path}) =>
+    RustLib.instance.api.crateApiFfiApiDeleteDirectory(path: path);
 
 /// The raw Markdown source of one Block, for populating the editable field
 /// when it takes focus (ADR-006 decision 2). Includes the Block's own
