@@ -214,15 +214,47 @@ pub fn init_repo(dest: &Path) -> Result<bool, AppError> {
 /// file reaching a commit needs the sweep to have missed it *and* a broad
 /// `commit_all` to run. The creation path is unaffected — there is no link to
 /// detach when there is no file.
+///
+/// # A `.gitignore` that cannot be read is declined too, not raised
+///
+/// Same policy, same reasoning, and it is a stronger requirement than it looks:
+/// this call sits under `init_repo`, which sits under
+/// [`crate::workspace::bootstrap::converge`], which every `open_workspace` runs.
+/// An error raised here therefore does not degrade the backstop, it makes the
+/// bundle **unopenable** — and the inputs that produce one all belong to bundles
+/// this application did not create. A `.gitignore` written in latin-1 (or any
+/// other non-UTF-8 encoding, which `git` itself is perfectly happy to match
+/// patterns from), a directory someone left at that name, a file whose mode
+/// denies this process: each used to surface as `IoError` out of a plain
+/// `read_to_string` and lock the user out of their own notes over a housekeeping
+/// file.
+///
+/// The bytes are therefore read as bytes and the extension declined whenever
+/// they cannot be read or are not UTF-8. Declining rather than appending blind
+/// matters for the non-UTF-8 case specifically: the "already present" test is a
+/// line comparison, so without decodable text this call cannot tell whether the
+/// patterns are there and would duplicate them on every open.
+///
+/// Write failures on the append path are still errors. By then the file has been
+/// read, the decision to extend it has been made, and a failure to publish is a
+/// real one — not a foreign bundle presenting bytes this application has no
+/// business insisting on.
 fn ensure_scratch_ignored(dest: &Path) -> Result<bool, AppError> {
     let path = dest.join(".gitignore");
     if std::fs::symlink_metadata(&path).is_ok_and(|metadata| metadata.is_symlink()) {
         return Ok(false);
     }
-    let existing = match std::fs::read_to_string(&path) {
-        Ok(contents) => Some(contents),
+    let existing = match std::fs::read(&path) {
+        Ok(bytes) => match String::from_utf8(bytes) {
+            Ok(contents) => Some(contents),
+            // Not text this call can reason about, so it cannot tell which
+            // patterns are already present and must not append blind.
+            Err(_) => return Ok(false),
+        },
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
-        Err(e) => return Err(AppError::IoError(format!("read {}: {e}", path.display()))),
+        // Unreadable for any other reason -- a directory at that name, a mode
+        // that denies this process, a device error. See above.
+        Err(_) => return Ok(false),
     };
 
     let present: Vec<&str> = existing

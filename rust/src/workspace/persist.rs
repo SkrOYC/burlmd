@@ -2013,6 +2013,16 @@ pub struct NoteWriteStatus {
 /// because no indexed title survives, `last_modified` is the draft's own
 /// `updated_at` (which is when the work happened), and `okf_conformant` is
 /// `false` rather than a guess about bytes nothing has parsed.
+///
+/// **`, d.note_id` as a tie-break**, the same one every other list-returning
+/// query in this crate carries and for the same reason. `updated_at` is
+/// second-granularity, and the case this call exists for — an application
+/// killed with several sessions open — produces ties by construction, leaving
+/// the remainder to SQLite's unspecified row order. Today the plan happens to
+/// walk the `(workspace_id, note_id)` primary key and so happens to come out
+/// sorted, but that is a property of a query plan, not of the query: a recovery
+/// list that reshuffles between two calls that saw no writes is not something to
+/// leave resting on one.
 pub fn pending_drafts(workspace: &Workspace) -> Result<Vec<NoteMetadata>, AppError> {
     workspace.with_db(|conn| {
         let mut stmt = conn.prepare(
@@ -2020,7 +2030,7 @@ pub fn pending_drafts(workspace: &Workspace) -> Result<Vec<NoteMetadata>, AppErr
              FROM drafts d \
              LEFT JOIN notes n ON n.workspace_id = d.workspace_id AND n.id = d.note_id \
              WHERE d.workspace_id = ?1 \
-             ORDER BY d.updated_at DESC",
+             ORDER BY d.updated_at DESC, d.note_id",
         )?;
         let rows = stmt.query_map([workspace.id()], |row| {
             let note_id: String = row.get(0)?;
@@ -4535,6 +4545,62 @@ mod tests {
             "nothing parsed these bytes, so conformance is not asserted"
         );
         assert!(pending[0].last_modified > 0, "the draft's own updated_at");
+    }
+
+    /// Drafts that share an `updated_at` come back in a stable order.
+    ///
+    /// `updated_at` is second-granularity, so a user who left several Notes
+    /// unflushed in the same second — or an application killed while several
+    /// sessions were open, which is the case this call exists for — has ties,
+    /// and `ORDER BY d.updated_at DESC` alone leaves the remainder to SQLite's
+    /// unspecified row order. That is a recovery list that reshuffles itself
+    /// between two consecutive calls that saw no writes. `, d.note_id` is the
+    /// same tie-break every other list-returning query in this crate carries,
+    /// for the same reason.
+    ///
+    /// A guard rather than a reproduction: without the tie-break this passes
+    /// anyway, because the current plan walks the `(workspace_id, note_id)`
+    /// primary key and hands the sorter rows already in id order. That is
+    /// exactly the accident being pinned — what this fails on is a future plan
+    /// change (an added index, different statistics) that quietly reorders a
+    /// list of the user's unflushed work.
+    #[test]
+    fn drafts_sharing_an_updated_at_are_ordered_deterministically() {
+        let f = fixture();
+        // Written and drafted in reverse order, so insertion order is the
+        // opposite of the order asserted below and cannot pass by accident.
+        for id in ["c", "b", "a"] {
+            f.write(&format!("{id}.md"), &note(id, "First."));
+        }
+        f.reindex();
+        let _sessions: Vec<NoteSession> = ["c", "b", "a"]
+            .iter()
+            .map(|id| {
+                let session = f.open(id);
+                session.update_block(&[0], "Unflushed.\n").unwrap();
+                session
+            })
+            .collect();
+
+        // Force the tie the clock only sometimes produces.
+        f.workspace
+            .with_db(|conn| {
+                conn.execute("UPDATE drafts SET updated_at = 1700000000", [])
+                    .map_err(AppError::from)
+            })
+            .unwrap();
+
+        let ids: Vec<String> = pending_drafts(&f.workspace)
+            .unwrap()
+            .into_iter()
+            .map(|m| m.id)
+            .collect();
+
+        assert_eq!(
+            ids,
+            vec!["a".to_string(), "b".to_string(), "c".to_string()],
+            "tied drafts must fall back to the note id, not to row order"
+        );
     }
 
     // -- tier 3 --------------------------------------------------------------

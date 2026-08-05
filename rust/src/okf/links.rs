@@ -157,17 +157,16 @@ fn resolve_path(containing_dir: &str, dest: &str) -> Option<String> {
 ///
 /// `None` when the destination is not one this bundle owns, and each case is
 /// the same judgement [`classify`] makes: it carries a URI scheme (not ours),
-/// it is already bundle-absolute (nothing to resolve), it is a fragment or
-/// query rather than a path (`#section` addresses this document), it **carries**
-/// a fragment (see below), it is empty, or it climbs above the bundle root
-/// (there is no path to report).
+/// it is already bundle-absolute (nothing to resolve), it **carries** a fragment
+/// or a query string anywhere in it rather than being a path (see below), it is
+/// empty, or it climbs above the bundle root (there is no path to report).
 ///
 /// This exists because a relative destination resolves against the directory of
 /// the Note holding it, so moving that Note between Directories repoints it --
 /// and that is as true of `![diagram](img/diagram.png)` as it is of a Link to
 /// another Note. See `workspace::links_rewrite::absolutize_relative_links`.
 ///
-/// # A fragment anywhere in the destination stops it here
+/// # A fragment or a query anywhere in the destination stops it here
 ///
 /// Not just a leading one. `Other.md#section` is **External** to [`classify`],
 /// which tests the destination exactly as written and finds it does not end in
@@ -184,11 +183,22 @@ fn resolve_path(containing_dir: &str, dest: &str) -> Option<String> {
 /// foreign-bundle expansion that teaches `classify` to split a fragment off
 /// before testing the extension should teach this the same split, in one change
 /// rather than two.
+///
+/// A query string is tested the same way, and for a while it was not: `#` was
+/// matched with `contains` and `?` only with `starts_with`, so `Other.md?x=1`
+/// resolved to `projects/Other.md?x=1` while `Other.md#section` did not, for two
+/// destinations [`classify`] reads identically. Worse, the resolution itself was
+/// wrong rather than merely inconsistent: [`resolve_path`] splits the whole
+/// destination on `/` and pops the stack on a literal `..`, and a query *value*
+/// can contain both, so `a.png?q=x/../y` resolved to `projects/y` — a move would
+/// have rewritten the user's Markdown to name a file with no relation to the one
+/// they wrote, the original filename gone. Reading `?` exactly as `#` is read
+/// leaves both to whatever splits fragments off, if anything ever does.
 pub fn resolve_bundle_path(dest: &str, containing_dir: &str) -> Option<String> {
     if dest.is_empty()
         || dest.starts_with('/')
         || dest.contains('#')
-        || dest.starts_with('?')
+        || dest.contains('?')
         || has_url_scheme(dest)
     {
         return None;
@@ -557,6 +567,46 @@ mod tests {
         assert_eq!(
             classify("Other.md#section", "projects"),
             LinkTarget::External("Other.md#section".to_string())
+        );
+    }
+
+    /// A query string is read exactly as a fragment is: anywhere in the
+    /// destination, not just leading, and the whole destination is declined.
+    ///
+    /// The defect this pins is the asymmetry between the two tests. `#` was
+    /// checked with `contains`, `?` only with `starts_with`, so a
+    /// query-bearing destination was half-recognized in the same way a
+    /// fragment-bearing one used to be — `classify` reads `Other.md?x=1` as
+    /// External (it does not end in `.md`), so no `links` edge exists for it
+    /// and no rename rewrites it, yet a move resolved it as a *filename*.
+    ///
+    /// The second case is why this is worse than an inconsistency:
+    /// `resolve_path` splits the whole destination on `/` and pops on a
+    /// literal `..`, and a query *value* can contain both. `a.png?q=x/../y`
+    /// therefore resolved to `projects/y` — a move would have rewritten the
+    /// user's Markdown to name a file that has nothing to do with the one they
+    /// wrote, having destroyed the filename in the process.
+    #[test]
+    fn a_query_string_anywhere_in_the_destination_stops_it_here() {
+        for dest in [
+            "?x=1",
+            "Other.md?x=1",
+            "img/diagram.png?w=100",
+            // Path traversal *inside* a query value: resolved as a path this
+            // popped `a.png?q=x` off the stack and reported `projects/y`.
+            "a.png?q=x/../y",
+        ] {
+            assert_eq!(
+                resolve_bundle_path(dest, "projects"),
+                None,
+                "{dest} carries a query string, so it is not a path this call may rewrite"
+            );
+        }
+        // And the reading it agrees with, the same one `classify` gives a
+        // fragment-bearing destination.
+        assert_eq!(
+            classify("Other.md?x=1", "projects"),
+            LinkTarget::External("Other.md?x=1".to_string())
         );
     }
 

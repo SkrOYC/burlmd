@@ -980,6 +980,51 @@ mod tests {
         assert_eq!(twice, extended, "a repeat open must change nothing");
     }
 
+    /// A `.gitignore` this application cannot *read* must not stop the user
+    /// reaching their Notes.
+    ///
+    /// The extension is a backstop and the function that writes it says so:
+    /// the scratch files it covers are swept on every bootstrap, and every
+    /// commit burlmd makes is pathspec-scoped, so the patterns only matter for
+    /// a file the sweep missed *and* a broad `commit_all` then picked up. The
+    /// symlink case already declines rather than failing, for exactly that
+    /// reason.
+    ///
+    /// Reading the file as a `String` did not: a foreign bundle whose
+    /// `.gitignore` holds arbitrary bytes (a latin-1 file, say) returned
+    /// `IoError("stream did not contain valid UTF-8")`, and that propagated
+    /// through `init_repo` -> `converge` -> `open_workspace`, so the bundle
+    /// could never be opened at all. The same held for a `.gitignore` that is
+    /// a directory, which reads as `IsADirectory`. Neither is a reason to
+    /// refuse someone their own notes.
+    #[test]
+    fn a_gitignore_this_application_cannot_read_does_not_stop_the_bundle_opening() {
+        let index_dir = tempdir().unwrap();
+        let conn = test_index(index_dir.path());
+
+        let latin1 = tempdir().unwrap();
+        std::fs::write(latin1.path().join("Note.md"), "# Note\n").unwrap();
+        // `0xFF` is not valid UTF-8 in any position.
+        std::fs::write(latin1.path().join(".gitignore"), b"caf\xe9/\n*.pdf\n").unwrap();
+        open_workspace_impl(&conn, latin1.path().to_string_lossy().to_string())
+            .expect("a bundle whose .gitignore is not UTF-8 must still open");
+        assert_eq!(
+            std::fs::read(latin1.path().join(".gitignore")).unwrap(),
+            b"caf\xe9/\n*.pdf\n",
+            "the user's own bytes must be left exactly as they were"
+        );
+
+        let as_dir = tempdir().unwrap();
+        std::fs::write(as_dir.path().join("Note.md"), "# Note\n").unwrap();
+        std::fs::create_dir(as_dir.path().join(".gitignore")).unwrap();
+        open_workspace_impl(&conn, as_dir.path().to_string_lossy().to_string())
+            .expect("a bundle whose .gitignore is a directory must still open");
+        assert!(
+            as_dir.path().join(".gitignore").is_dir(),
+            "the directory the user put there must be left alone"
+        );
+    }
+
     /// The `.gitignore` write is also **committed**, in a pathspec'd commit of
     /// its own, and only on the open that actually wrote it.
     ///
