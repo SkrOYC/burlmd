@@ -21,4 +21,4 @@ pub mod links;
 
 pub use concept_id::{concept_id_to_path, is_reserved_title, path_to_concept_id};
 pub use frontmatter::{read_frontmatter, Frontmatter};
-pub use links::{classify, serialize_link, LinkTarget};
+pub use links::{classify, resolve_bundle_path, serialize_destination, serialize_link, LinkTarget};

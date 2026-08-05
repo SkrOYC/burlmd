@@ -31,10 +31,12 @@
 //! as a number. The shape below measured 0.031ms.
 //!
 //! - A per-Workspace **lifecycle lock** ([`with_lifecycle_lock`]) serializes
-//!   whole `workspace::lifecycle` operations against each other. It is the one
-//!   lock no editing path ever takes, and it is coarse on purpose — see its own
-//!   documentation for the races it closes and why the other three could not
-//!   close them.
+//!   whole `workspace::lifecycle` operations against each other, and [`open_note`]
+//!   against all of them — an open decides whether a concept id exists and then
+//!   installs a session for it, which is the same check-then-act a deletion can
+//!   land inside. It is the one lock no *editing* path ever takes, and it is
+//!   coarse on purpose — see its own documentation for the races it closes and
+//!   why the other three could not close them.
 //! - A per-Note **state lock** guards the working source, the span map, the
 //!   AST, the edit sequence and the recorded revision. **No thread ever holds
 //!   it across I/O.** Both sides snapshot under it — an `Arc::clone`, which is
@@ -562,7 +564,45 @@ pub fn lookup(workspace_id: &str, note_id: &str) -> Result<Option<NoteSession>, 
 /// file instead of raising `RevisionMismatch` against nothing. `session_edited`
 /// and `unwritten` follow from `restored_from_draft` exactly as they do for
 /// the ordinary recovery, so the recreated file also reaches tier 3.
+///
+/// # Why an open takes the lifecycle lock
+///
+/// This is the one entry point outside `workspace::lifecycle` that decides
+/// whether a concept id exists and then acts on the answer, and it raced
+/// `delete_note` between the two. The deletion removes the file, clears the
+/// `notes` and `drafts` rows and *then* retires the session
+/// ([`discard_session`]); an open that read the file and the row before any of
+/// that, and reached its registry insert after all of it, installed a session
+/// for a Note that no longer exists in any store. What is left is an orphaned
+/// buffer holding the deleted content, reserving the name against
+/// `ensure_path_available`, and — because a restored draft arms the idle timer —
+/// able to write the file back out and index it. Neither the tier 2 write locks
+/// nor the registry lock can close that: the write locks cover sessions that
+/// already exist, and the registry lock is released before the read the decision
+/// rests on.
+///
+/// So the whole open runs under [`with_lifecycle_lock`], which is what makes the
+/// file and draft reads below the re-verification they have to be: they cannot
+/// have been invalidated by a concurrent lifecycle operation, because no such
+/// operation can be running. The order is unviolated — the lifecycle lock is the
+/// topmost of the four and this function takes only the state lock and the
+/// connection beneath it — and nothing here calls a `workspace::lifecycle` entry
+/// point, so there is no path back up. The cost is that opening a Note waits
+/// behind a rename or a delete in the same Workspace, which is a user-scale
+/// operation and not a keystroke: tiers 1 and 2 still take no lifecycle lock at
+/// all.
 pub fn open_note(
+    workspace: &Arc<Workspace>,
+    note_id: &str,
+) -> Result<(NoteSession, NoteState), AppError> {
+    with_lifecycle_lock(workspace, || open_note_serialized(workspace, note_id))
+}
+
+/// [`open_note`] for the one caller that already holds the lifecycle lock —
+/// `lifecycle::create_note`, which opens the Note it has just created. The lock
+/// is not reentrant, so taking it twice on one thread deadlocks rather than
+/// nesting.
+pub(super) fn open_note_serialized(
     workspace: &Arc<Workspace>,
     note_id: &str,
 ) -> Result<(NoteSession, NoteState), AppError> {
@@ -924,28 +964,83 @@ impl NoteSession {
     /// its predecessor already ends in the blank line the separator carried —
     /// and a delete at either end of the Note pads nothing, because there is no
     /// seam to keep apart.
+    ///
+    /// # The last Block takes the separator *before* it
+    ///
+    /// There is no separator after the final Block to consume, so deleting it
+    /// left the one that preceded it standing and the Note ended in a blank
+    /// line: `A\n\nB\n\nC\n` became `A\n\nB\n\n`. That disagrees with the rule
+    /// [`insert_block`](Self::insert_block)'s end-of-Note append keeps — a Note
+    /// ends in exactly one line ending — so the two mutators disagreed about the
+    /// shape of the same seam, and a delete-then-append round trip wrote a blank
+    /// line the user never typed into the file and into version history.
+    ///
+    /// So when nothing follows, the newline run *preceding* the Block is cut
+    /// back to a single line ending instead ([`cut_to_one_trailing_newline`]),
+    /// which is the same normalization read from the other side. It also settles
+    /// the container case symmetrically: the blank line that closes a list lives
+    /// inside the last item's span, so deleting the paragraph after the list
+    /// takes that blank line with it and the Note ends `- a\n- b\n` rather than
+    /// with the list's closing separator dangling.
     pub fn delete_block(&self, block_path: &[usize]) -> Result<NoteState, AppError> {
         self.structural_edit(|working, spans| {
             let span = block_span(spans, block_path)?;
-            let end = next_block_start(spans, &span).unwrap_or(span.end);
-            check_span(working, &(span.start..end))?;
-            let separator = separator_across(working, span.start, end);
-            splice::splice_source(working, span.start..end, &separator).map_err(splice_error)
+            let (start, end) = match next_block_start(spans, &span) {
+                Some(next) => (span.start, next),
+                None => (
+                    cut_to_one_trailing_newline(working.get(..span.start).unwrap_or_default()),
+                    span.end,
+                ),
+            };
+            check_span(working, &(start..end))?;
+            let separator = separator_across(working, start, end);
+            splice::splice_source(working, start..end, &separator).map_err(splice_error)
         })
     }
 
-    /// Splits a Block at a **source** offset — pressing Enter mid-Block. The
-    /// focused Block displays raw source under ADR-006, so the caret position
-    /// the UI reports is already a source offset.
+    /// Splits a Block at a **character** offset into its source — pressing
+    /// Enter mid-Block. The focused Block displays raw source under ADR-006, so
+    /// the caret position the UI reports is an offset into that source rather
+    /// than into rendered text; `contracts/ffi_api.rs` spells that offset in
+    /// characters, and this is the one place the two units can differ.
+    ///
+    /// The offset is therefore converted against the Block's own source before
+    /// anything indexes with it. Everything below this line — spans, splice
+    /// ranges, the whole of `markdown::spans` — stays in **bytes**, which is
+    /// what `SpanMap` records and what `String::replace_range` needs; only the
+    /// boundary converts. Taking the caller's number as a byte offset instead
+    /// silently split multibyte text in the wrong place: `Café x` at offset 5
+    /// landed before the space rather than before the `x`, because `é` is two
+    /// bytes, and every character past the first non-ASCII one in a Block drifts
+    /// by one more.
+    ///
+    /// An offset past the Block's last character is refused rather than clamped,
+    /// as it was when it was read as bytes — a caret the Block cannot hold names
+    /// no split point.
     pub fn split_block(&self, block_path: &[usize], offset: usize) -> Result<NoteState, AppError> {
         self.structural_edit(|working, spans| {
             let span = block_span(spans, block_path)?;
-            if offset > span.end - span.start {
+            let block_source = working.get(span.clone()).ok_or_else(|| {
+                AppError::ParseError(format!(
+                    "source range {}..{} is not addressable in this Note",
+                    span.start, span.end
+                ))
+            })?;
+            // `char_indices` yields one index per character and stops at the
+            // last one, so the Block's own length is chained on to make the
+            // end-of-Block caret — offset == the character count — addressable
+            // exactly as byte offset `span.end - span.start` used to be.
+            let Some(byte_offset) = block_source
+                .char_indices()
+                .map(|(at, _)| at)
+                .chain(std::iter::once(block_source.len()))
+                .nth(offset)
+            else {
                 return Err(AppError::ParseError(format!(
                     "split offset {offset} is past the end of block_path {block_path:?}"
                 )));
-            }
-            let at = span.start + offset;
+            };
+            let at = span.start + byte_offset;
             // The same seam consistency `insert_block` keeps, for the same
             // reason: a blank line spelled `\n\n` inside a CRLF-authored Note is
             // whitespace noise in a diff the user did not ask for.
@@ -1964,10 +2059,12 @@ fn lifecycle_locks() -> &'static Mutex<LifecycleLocks> {
 ///
 /// # Coarse on purpose
 ///
-/// One lock for every lifecycle entry point, held for the whole operation
-/// including its `git` commit. This is serialization, not fairness: there is no
-/// queue, no ordering guarantee between waiters, and no attempt to let
-/// operations on disjoint subtrees proceed together. That is the right trade
+/// One lock for every lifecycle entry point — and for [`open_note`], which is
+/// not one but performs the same check-then-act against the same three stores —
+/// held for the whole operation including its `git` commit. This is
+/// serialization, not fairness: there is no queue, no ordering guarantee
+/// between waiters, and no attempt to let operations on disjoint subtrees
+/// proceed together. That is the right trade
 /// because these operations are *user-scale* — a rename per click, not per
 /// keystroke — and because a finer scheme keyed on paths has to decide what
 /// "disjoint" means for an operation whose affected set (`plan_affected`) is
@@ -2060,6 +2157,12 @@ pub(super) fn with_lifecycle_lock<T>(
 /// unprotected — a session left keyed to the concept id the rename vacated,
 /// which is `architecture/risks.md` risk 8 from the direction file-level
 /// atomicity cannot see.
+///
+/// [`open_note`] now takes the lifecycle lock itself, and every caller of this
+/// function already holds it, so that particular racer can no longer occupy the
+/// window. The re-check below stays: it is what makes this function correct on
+/// its own terms rather than by an invariant established two frames up the
+/// stack, and the window is still open to anything else that installs a session.
 ///
 /// So after every session in the snapshot is locked, the registry is consulted
 /// again: any session that appeared since is folded into the set and the whole
@@ -2661,6 +2764,27 @@ fn separator_before(before: &str, required: usize) -> String {
     newline_style(before).repeat(required.saturating_sub(trailing_newlines(before)))
 }
 
+/// Where `text` ends once its trailing newline run is cut back to the single
+/// line ending a Note ends in, counted and spelled CRLF-aware like every other
+/// seam here ([`trailing_newlines`], [`newline_style`]).
+///
+/// `text.len()` when there is nothing to cut — one line ending or none at all,
+/// which is also the empty case: deleting the only Block of a Note leaves an
+/// empty file rather than a lone newline.
+fn cut_to_one_trailing_newline(text: &str) -> usize {
+    let bytes = text.as_bytes();
+    let mut end = text.len();
+    for _ in 1..trailing_newlines(text) {
+        // Each iteration removes one line ending, which is a `\n` and the `\r`
+        // in front of it when the Note is CRLF-authored.
+        end -= 1;
+        if end > 0 && bytes[end - 1] == b'\r' {
+            end -= 1;
+        }
+    }
+    end
+}
+
 /// The text that must replace `source[start..end]` for what precedes `start` to
 /// stay as separated from what follows `end` as the removed region kept them.
 ///
@@ -2892,6 +3016,18 @@ impl NoteSession {
 
     fn edit_seq(&self) -> i64 {
         self.lock_state().unwrap().edit_seq
+    }
+
+    /// Poisons this session's state lock, which is what a panic inside a
+    /// mutator that held it leaves behind. `pub(crate)` for `api::ffi_api`'s
+    /// test of `note_write_status`, which is the surface that has to tell a
+    /// broken session apart from a clean one; the lock is private state and
+    /// there is no other way to reach that branch.
+    pub(crate) fn poison_state_for_test(&self) {
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _guard = self.0.state.lock();
+            panic!("poisoning this session's state lock on purpose (test)");
+        }));
     }
 
     /// Drops this session from the registry without closing it — what an
@@ -3781,6 +3917,71 @@ mod tests {
         assert!(!source.contains('\r'), "a CR appeared in an LF Note");
     }
 
+    /// `split_block`'s offset is a **character** offset into the Block's
+    /// source, which is what `contracts/ffi_api.rs` specifies and what the Dart
+    /// wrapper documents.
+    ///
+    /// The regression this pins: the offset was used as a byte index
+    /// (`span.start + offset`), so every character after the first multibyte one
+    /// in a Block split one byte early per preceding non-ASCII byte. `Café x`
+    /// split at 5 — the caret before the `x` — put the break before the space
+    /// instead, silently moving a character the user did not select across the
+    /// new Block boundary. Only the boundary converts: spans and splice ranges
+    /// stay in bytes.
+    #[test]
+    fn splitting_a_multibyte_block_measures_the_offset_in_characters() {
+        let f = fixture();
+        f.write("a.md", "Café x\n");
+        let session = f.open("a");
+
+        // C-a-f-é-space is five characters, so offset 5 is the caret sitting
+        // immediately before the `x`.
+        session.split_block(&[0], 5).unwrap();
+
+        let source = session.working_source().unwrap();
+        assert_eq!(
+            *source, "Café \n\nx\n",
+            "the split landed at a byte offset rather than a character one"
+        );
+    }
+
+    /// The refusal is measured in characters too. `Café x\n` is seven characters
+    /// and eight bytes, so offset 7 is the end-of-Block caret and offset 8 names
+    /// no character at all — where the byte reading accepted 8 as "the end" and
+    /// refused only from 9.
+    #[test]
+    fn a_split_offset_past_the_last_character_is_refused() {
+        let f = fixture();
+        f.write("a.md", "Café x\n");
+        let session = f.open("a");
+
+        session
+            .split_block(&[0], 7)
+            .expect("the end-of-Block caret is a valid split point");
+
+        let g = fixture();
+        g.write("b.md", "Café x\n");
+        let refused = g.open("b").split_block(&[0], 8);
+        assert!(
+            matches!(refused, Err(AppError::ParseError(ref message))
+                if message.contains("past the end")),
+            "an offset past the Block's last character must be refused, got {refused:?}"
+        );
+    }
+
+    /// ASCII behaviour is unchanged, since for a Block with no multibyte
+    /// character the two units are the same number.
+    #[test]
+    fn splitting_an_ascii_block_is_unchanged_by_the_character_offset_rule() {
+        let f = fixture();
+        f.write("a.md", "Alpha beta\n");
+        let session = f.open("a");
+
+        session.split_block(&[0], 5).unwrap();
+
+        assert_eq!(*session.working_source().unwrap(), "Alpha\n\n beta\n");
+    }
+
     /// Deleting the last item of a list must not absorb the paragraph that
     /// follows the list into the item that survives.
     ///
@@ -3839,6 +4040,55 @@ mod tests {
         first.delete_block(&[0]).unwrap();
 
         assert_eq!(*first.working_source().unwrap(), "Beta\n");
+    }
+
+    /// Deleting the **last** Block takes the separator that preceded it, so the
+    /// Note still ends in exactly one line ending.
+    ///
+    /// The disagreement this pins: `insert_block`'s end-of-Note append emits a
+    /// single trailing newline, while a delete of the final Block consumed the
+    /// separator *after* it — of which there is none — and left
+    /// `A\n\nB\n\nC\n` as `A\n\nB\n\n`. Round-tripping the two therefore grew a
+    /// blank line at the end of the file that no edit put there.
+    #[test]
+    fn deleting_the_final_block_leaves_the_note_ending_in_one_newline() {
+        let f = fixture();
+        f.write("a.md", "A\n\nB\n\nC\n");
+        let session = f.open("a");
+
+        session.delete_block(&[2]).unwrap();
+
+        assert_eq!(*session.working_source().unwrap(), "A\n\nB\n");
+        assert_eq!(session.note_state().unwrap().ast.len(), 2);
+
+        // A CRLF Note keeps its own line endings through the same cut.
+        let g = fixture();
+        g.write("b.md", "A\r\n\r\nB\r\n");
+        let crlf = g.open("b");
+
+        crlf.delete_block(&[1]).unwrap();
+
+        assert_eq!(*crlf.working_source().unwrap(), "A\r\n");
+
+        // And the container case from the other side: the blank line that closes
+        // the list is the deleted paragraph's preceding separator.
+        let h = fixture();
+        h.write("c.md", "- a\n- b\n\nPara\n");
+        let list = h.open("c");
+
+        list.delete_block(&[1]).unwrap();
+
+        assert_eq!(*list.working_source().unwrap(), "- a\n- b\n");
+
+        // Deleting the only Block of a Note empties it rather than leaving a
+        // stray newline behind.
+        let i = fixture();
+        i.write("d.md", "Only.\n");
+        let only = i.open("d");
+
+        only.delete_block(&[0]).unwrap();
+
+        assert_eq!(*only.working_source().unwrap(), "");
     }
 
     /// `architecture/resilience.md`: an abrupt termination mid-write leaves the
@@ -4983,6 +5233,64 @@ mod tests {
             "the second open returned a different buffer"
         );
         assert!(Arc::ptr_eq(&first.0, &second.0));
+    }
+
+    /// An open cannot run inside a lifecycle operation, which is what stops it
+    /// installing a session for a Note a concurrent `delete_note` has already
+    /// retired.
+    ///
+    /// The race this closes: `delete_note` removes the file, clears both rows
+    /// and *then* calls `discard_session`, so an open that read the file and the
+    /// draft before the deletion started and reached its registry insert after
+    /// the discard left a live session — with the deleted content in its buffer
+    /// and its name reserved against `ensure_path_available` — for a Note that
+    /// exists in no store. Both halves now take the same Workspace-wide lock, so
+    /// the interleaving is unrepresentable rather than merely unlikely.
+    ///
+    /// Driven through the lock itself rather than through the deletion: holding
+    /// it is exactly the condition a lifecycle operation establishes, and the
+    /// assertion — the open makes no progress until it is released — is what
+    /// serialization *means* here. The sleep can only weaken the observation,
+    /// never fail it spuriously: a slower machine makes the "not yet" more
+    /// certain, and the join below is what proves the open is blocked rather
+    /// than broken.
+    #[test]
+    fn an_open_cannot_run_inside_a_lifecycle_operation() {
+        let f = fixture();
+        f.write("a.md", &note("A", "First."));
+
+        let opened = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let entered = Arc::new(std::sync::atomic::AtomicBool::new(false));
+
+        let waiter = with_lifecycle_lock(&f.workspace, || {
+            let workspace = Arc::clone(&f.workspace);
+            let opened_by_waiter = Arc::clone(&opened);
+            let entered_by_waiter = Arc::clone(&entered);
+            let waiter = std::thread::spawn(move || {
+                entered_by_waiter.store(true, Ordering::SeqCst);
+                open_note(&workspace, "a").expect("the Note is on disk");
+                opened_by_waiter.store(true, Ordering::SeqCst);
+            });
+
+            while !entered.load(Ordering::SeqCst) {
+                std::thread::yield_now();
+            }
+            std::thread::sleep(Duration::from_millis(100));
+            assert!(
+                !opened.load(Ordering::SeqCst),
+                "open_note completed while a lifecycle operation held the lock, so \
+                 a delete can still retire a session an open is about to install"
+            );
+            Ok(waiter)
+        })
+        .unwrap();
+
+        waiter.join().unwrap();
+        assert!(
+            opened.load(Ordering::SeqCst),
+            "the open never completed once the lock was released"
+        );
+        assert!(lookup(f.workspace.id(), "a").unwrap().is_some());
     }
 
     /// A Note opened *after* `with_write_locks` read the registry is still

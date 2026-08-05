@@ -194,8 +194,31 @@ pub fn init_repo(dest: &Path) -> Result<bool, AppError> {
 ///
 /// Returns `true` when the file was actually created or appended to, so that
 /// [`init_repo`]'s caller can commit it exactly once. See [`init_repo`].
+///
+/// # A symlinked `.gitignore` is left alone
+///
+/// Publishing by rename is what makes the append safe, and it is also what makes
+/// it wrong here: a rename replaces the *link* with a regular file, so a
+/// `.gitignore` the user symlinked into a dotfiles repository — the ordinary way
+/// a shared ignore file is kept — would be silently detached from its source,
+/// with the patterns still present but every future edit at the other end no
+/// longer arriving. Resolving the link and appending through it instead means
+/// writing into a file outside the bundle that the user never pointed this
+/// application at, which is worse.
+///
+/// So the extension is declined and `false` returned, leaving the user's
+/// arrangement exactly as they built it. What that gives up is only the
+/// *backstop*: the scratch files this pattern list covers are swept on every
+/// bootstrap ([`crate::workspace::bootstrap`]), and every commit this
+/// application makes is pathspec-scoped to the Notes it touched, so a scratch
+/// file reaching a commit needs the sweep to have missed it *and* a broad
+/// `commit_all` to run. The creation path is unaffected — there is no link to
+/// detach when there is no file.
 fn ensure_scratch_ignored(dest: &Path) -> Result<bool, AppError> {
     let path = dest.join(".gitignore");
+    if std::fs::symlink_metadata(&path).is_ok_and(|metadata| metadata.is_symlink()) {
+        return Ok(false);
+    }
     let existing = match std::fs::read_to_string(&path) {
         Ok(contents) => Some(contents),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
@@ -1093,6 +1116,47 @@ mod tests {
         assert!(
             leftovers.is_empty(),
             "the publishing rename left a temporary file behind: {leftovers:?}"
+        );
+    }
+
+    /// A `.gitignore` the user symlinked — into a dotfiles repository, say —
+    /// survives adoption as a symlink, and the file it points at is not written
+    /// either.
+    ///
+    /// The defect this pins: the append publishes by rename, and a rename over a
+    /// symlink replaces the *link* with a regular file. Adopting such a bundle
+    /// would have detached the user's shared ignore file from its source
+    /// silently, leaving the patterns in place but every later edit at the other
+    /// end no longer arriving. Declining costs only the backstop; see
+    /// `ensure_scratch_ignored`.
+    #[cfg(unix)]
+    #[test]
+    fn a_symlinked_gitignore_is_left_as_a_symlink_and_its_target_untouched() {
+        let dir = tempdir().unwrap();
+        let elsewhere = tempdir().unwrap();
+        let target = elsewhere.path().join("shared-gitignore");
+        std::fs::write(&target, "*.pdf\n").unwrap();
+        let link = dir.path().join(".gitignore");
+        std::os::unix::fs::symlink(&target, &link).unwrap();
+
+        assert!(
+            !super::init_repo(dir.path()).unwrap(),
+            "nothing was written, so this open must report nothing to commit"
+        );
+
+        assert!(
+            std::fs::symlink_metadata(&link).unwrap().is_symlink(),
+            "the publishing rename replaced the user's symlink with a regular file"
+        );
+        assert_eq!(
+            std::fs::read_link(&link).unwrap(),
+            target,
+            "the link now points somewhere else"
+        );
+        assert_eq!(
+            std::fs::read_to_string(&target).unwrap(),
+            "*.pdf\n",
+            "the file at the other end of the link was written through"
         );
     }
 

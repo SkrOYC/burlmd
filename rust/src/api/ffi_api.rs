@@ -150,11 +150,28 @@ pub async fn flush_note(note_id: String) -> Result<String, AppError> {
 
 /// Status of the write tier for one open Note (ADR-008). Never fails: a Note
 /// that is not open reports no error and no unwritten edits.
+///
+/// **Not open and not readable are different answers.** The default is what a
+/// Note nobody has opened reports, and reporting it for a session whose state
+/// lock is *poisoned* — a panic left a mutator part-way through, so what the
+/// buffer holds and whether it reached disk are both unknown — told the UI the
+/// Note was clean and its work safe, which is the one thing this poll exists to
+/// contradict. Only [`AppError::NotFound`], which is what `open_session` raises
+/// for a Note with no session, means "not open"; every other failure is carried
+/// out in `last_error`, alongside `has_unwritten_edits = true`, because nothing
+/// can establish that the buffer reached disk.
 #[frb(sync)]
 pub fn note_write_status(note_id: String) -> NoteWriteStatus {
-    open_session(&note_id)
-        .and_then(|session| session.write_status())
-        .unwrap_or_default()
+    let status = match open_session(&note_id) {
+        Err(AppError::NotFound(_)) => return NoteWriteStatus::default(),
+        Err(unreadable) => Err(unreadable),
+        Ok(session) => session.write_status(),
+    };
+    status.unwrap_or_else(|error| NoteWriteStatus {
+        last_written_at: None,
+        last_error: Some(error),
+        has_unwritten_edits: true,
+    })
 }
 
 /// Discards the buffered edits and re-reads the Note from disk, returning a
@@ -363,9 +380,11 @@ pub fn delete_block(note_id: String, block_path: Vec<usize>) -> Result<NoteState
     open_session(&note_id)?.delete_block(&block_path)
 }
 
-/// Splits a Block at a **source** offset -- pressing Enter mid-Block
-/// (CAP-EDIT-03). The focused Block displays raw source under ADR-006, so the
-/// caret position the UI reports is already a source offset.
+/// Splits a Block at a **character** offset into its source -- pressing Enter
+/// mid-Block (CAP-EDIT-03). The focused Block displays raw source under
+/// ADR-006, so the caret position the UI reports is an offset into the Block's
+/// source rather than into its rendered text; it is counted in characters, not
+/// bytes, so a Block containing multibyte text splits where the caller pointed.
 #[frb(sync)]
 pub fn split_block(
     note_id: String,
@@ -1525,6 +1544,45 @@ mod tests {
         assert!(
             !pending_after_close.iter().any(|note| note.id == "pending"),
             "closing a Note must flush and clear its draft row"
+        );
+    }
+
+    /// A session whose state lock is poisoned is reported as broken, not as
+    /// clean.
+    ///
+    /// The defect this pins: the whole poll collapsed onto `unwrap_or_default()`,
+    /// so a session that could not be read at all returned the same value as a
+    /// Note nobody had opened — no error, no unwritten edits, `last_written_at`
+    /// unset. The UI polls this to learn that tier 2 is in trouble, and for the
+    /// one state where the Core cannot say anything about the user's work it was
+    /// told everything was fine.
+    #[test]
+    fn wrapper_layer_note_write_status_reports_a_broken_session_rather_than_a_clean_one() {
+        let _guards = wrapper_guards();
+        let ws = wrapper_bootstrap();
+        wrapper_write_note(&ws.root, "broken.md", &note_source("Broken", "Alpha."));
+        block_on(open_note("broken".to_string())).unwrap();
+
+        let workspace = crate::workspace::persist::Workspace::active().unwrap();
+        let session = crate::workspace::persist::lookup(workspace.id(), "broken")
+            .unwrap()
+            .expect("the Note is open");
+        session.poison_state_for_test();
+
+        let status = note_write_status("broken".to_string());
+
+        assert!(
+            status.last_error.is_some(),
+            "a session that cannot be read must report why, not report clean"
+        );
+        assert!(
+            status.has_unwritten_edits,
+            "nothing can establish that a broken session's buffer reached disk"
+        );
+        assert_ne!(
+            status,
+            NoteWriteStatus::default(),
+            "a broken session must be distinguishable from a Note that is not open"
         );
     }
 

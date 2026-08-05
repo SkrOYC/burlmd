@@ -57,6 +57,13 @@ Future<WorkspaceInfo> openWorkspace({required String path}) =>
 /// Per `architecture/risks.md` risk 3 this is **not** the routine path for
 /// keeping the index current — `index::incremental::index_note` is. It exists
 /// for first open, post-merge reconciliation, and recovery.
+///
+/// **Two phases, and only the second holds the connection.** The walk reads and
+/// parses every Note in the Workspace; running it inside the `with_connection`
+/// closure held the process-wide mutex — the one a keystroke's own tier 1 draft
+/// write waits on — for the whole of it, which `SPK-WSPC-D001` §6.2.7 forbids.
+/// `scan_bundle` derives the rows with nothing held; `write_scanned_bundle` is
+/// SQL only.
 Future<int> reindexWorkspace() =>
     RustLib.instance.api.crateApiFfiApiReindexWorkspace();
 
@@ -98,6 +105,16 @@ Future<String> flushNote({required String noteId}) =>
 
 /// Status of the write tier for one open Note (ADR-008). Never fails: a Note
 /// that is not open reports no error and no unwritten edits.
+///
+/// **Not open and not readable are different answers.** The default is what a
+/// Note nobody has opened reports, and reporting it for a session whose state
+/// lock is *poisoned* — a panic left a mutator part-way through, so what the
+/// buffer holds and whether it reached disk are both unknown — told the UI the
+/// Note was clean and its work safe, which is the one thing this poll exists to
+/// contradict. Only [`AppError::NotFound`], which is what `open_session` raises
+/// for a Note with no session, means "not open"; every other failure is carried
+/// out in `last_error`, alongside `has_unwritten_edits = true`, because nothing
+/// can establish that the buffer reached disk.
 NoteWriteStatus noteWriteStatus({required String noteId}) =>
     RustLib.instance.api.crateApiFfiApiNoteWriteStatus(noteId: noteId);
 
@@ -267,9 +284,11 @@ NoteState deleteBlock({
   blockPath: blockPath,
 );
 
-/// Splits a Block at a **source** offset -- pressing Enter mid-Block
-/// (CAP-EDIT-03). The focused Block displays raw source under ADR-006, so the
-/// caret position the UI reports is already a source offset.
+/// Splits a Block at a **character** offset into its source -- pressing Enter
+/// mid-Block (CAP-EDIT-03). The focused Block displays raw source under
+/// ADR-006, so the caret position the UI reports is an offset into the Block's
+/// source rather than into its rendered text; it is counted in characters, not
+/// bytes, so a Block containing multibyte text splits where the caller pointed.
 NoteState splitBlock({
   required String noteId,
   required Uint64List blockPath,

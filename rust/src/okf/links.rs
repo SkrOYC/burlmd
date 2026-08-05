@@ -105,14 +105,40 @@ pub fn classify(dest: &str, containing_dir: &str) -> LinkTarget {
 /// leading `/` already stripped) against `containing_dir`, normalizing `.`
 /// and `..` segments the way a filesystem or URL resolver would. Returns
 /// `None` when a `..` has nothing left to pop -- see [`classify`] for why
-/// that case is reported as external rather than clamped.
+/// that case is reported as external rather than clamped -- and when the
+/// destination's own final segment is empty.
+///
+/// The empty final segment joins the `..`-overflow rule for the same reason.
+/// `/.md` and `sub/.md` are destinations whose filename is nothing but the
+/// extension, and stripping `.md` leaves a path that names a *directory*: the
+/// first resolved to `Internal("")` and the second to the id of the directory
+/// it sits in, neither of which any `notes.id` can equal, so both were
+/// permanent ghost Links pointing at a concept that does not exist and cannot
+/// be created. There is no concept id to report, which is exactly what
+/// `External` says.
 fn resolve_relative(containing_dir: &str, dest: &str) -> Option<String> {
     let dest_without_ext = dest.strip_suffix(".md").unwrap_or(dest);
+    if dest_without_ext
+        .rsplit('/')
+        .next()
+        .unwrap_or_default()
+        .is_empty()
+    {
+        return None;
+    }
+    resolve_path(containing_dir, dest_without_ext)
+}
+
+/// Normalizes `dest` against `containing_dir`, resolving `.` and `..` segments
+/// the way a filesystem or URL resolver would and returning a bundle-relative
+/// path with no leading `/`. `None` when a `..` has nothing left to pop, i.e.
+/// when the destination climbs above the bundle root.
+fn resolve_path(containing_dir: &str, dest: &str) -> Option<String> {
     let mut stack: Vec<&str> = containing_dir
         .split('/')
         .filter(|segment| !segment.is_empty())
         .collect();
-    for segment in dest_without_ext.split('/') {
+    for segment in dest.split('/') {
         match segment {
             "" | "." => {}
             ".." => {
@@ -122,6 +148,33 @@ fn resolve_relative(containing_dir: &str, dest: &str) -> Option<String> {
         }
     }
     Some(stack.join("/"))
+}
+
+/// The bundle-relative path a **non-Note** destination written relatively
+/// resolves to -- an attachment, a PDF, anything a bundle references beside its
+/// Notes -- normalized against `containing_dir` exactly as [`classify`]
+/// normalizes a Note destination.
+///
+/// `None` when the destination is not one this bundle owns, and each case is
+/// the same judgement [`classify`] makes: it carries a URI scheme (not ours),
+/// it is already bundle-absolute (nothing to resolve), it is a fragment or
+/// query rather than a path (`#section` addresses this document), it is empty,
+/// or it climbs above the bundle root (there is no path to report).
+///
+/// This exists because a relative destination resolves against the directory of
+/// the Note holding it, so moving that Note between Directories repoints it --
+/// and that is as true of `![diagram](img/diagram.png)` as it is of a Link to
+/// another Note. See `workspace::links_rewrite::absolutize_relative_links`.
+pub fn resolve_bundle_path(dest: &str, containing_dir: &str) -> Option<String> {
+    if dest.is_empty()
+        || dest.starts_with('/')
+        || dest.starts_with('#')
+        || dest.starts_with('?')
+        || has_url_scheme(dest)
+    {
+        return None;
+    }
+    resolve_path(containing_dir, dest).filter(|path| !path.is_empty())
 }
 
 /// True when `dest` opens with a URI scheme (RFC 3986 §3.1: a letter,
@@ -192,10 +245,21 @@ fn has_url_scheme(dest: &str) -> bool {
 /// than only escaping when a title happens to need it.
 pub fn serialize_link(text: &str, concept_id: &str) -> String {
     format!(
-        "[{}](</{}.md>)",
+        "[{}]({})",
         escape_link_text(text),
-        escape_destination(concept_id)
+        serialize_destination(&format!("/{concept_id}.md"))
     )
+}
+
+/// The destination text burlmd writes for the bundle-absolute `path`, angle
+/// brackets included and the escaping table applied: `</path>`.
+///
+/// The half of [`serialize_link`] that a destination which is **not** a Note
+/// needs -- an attachment carries no `.md` and is not a concept id, but it is
+/// wrapped and escaped by exactly the same rules, and having a second copy of
+/// them beside this one is how the two would drift.
+pub fn serialize_destination(path: &str) -> String {
+    format!("<{}>", escape_destination(path))
 }
 
 /// Backslash-escapes every literal `\`, `[`, `]`, `<`, `>` and `&` in
@@ -403,6 +467,65 @@ mod tests {
             classify("/a/../../too_far.md", "projects"),
             LinkTarget::External("/a/../../too_far.md".to_string())
         );
+    }
+
+    /// A destination whose filename is nothing but the extension names a
+    /// directory once `.md` is stripped, so there is no concept id to report and
+    /// it classifies external — the same verdict, for the same reason, as a
+    /// destination that climbs above the bundle root.
+    ///
+    /// The regression this pins: `/.md` classified as `Internal("")`, and
+    /// `sub/.md` as the id of the directory the Link was written in. Neither can
+    /// ever equal a `notes.id`, so both were ghost Links that no rename, no
+    /// create and no follow could ever resolve.
+    #[test]
+    fn a_destination_with_an_empty_final_segment_is_external() {
+        assert_eq!(
+            classify("/.md", ""),
+            LinkTarget::External("/.md".to_string())
+        );
+        assert_eq!(
+            classify("sub/.md", ""),
+            LinkTarget::External("sub/.md".to_string())
+        );
+        assert_eq!(
+            classify(".md", "projects"),
+            LinkTarget::External(".md".to_string())
+        );
+        assert_eq!(
+            classify("/projects/.md", "elsewhere"),
+            LinkTarget::External("/projects/.md".to_string())
+        );
+    }
+
+    /// The bundle-relative resolver for destinations that are not Notes, which a
+    /// move uses to keep a relatively-written attachment reference naming the
+    /// file it named before.
+    #[test]
+    fn a_relative_non_note_destination_resolves_against_the_containing_directory() {
+        assert_eq!(
+            resolve_bundle_path("img/diagram.png", "projects"),
+            Some("projects/img/diagram.png".to_string())
+        );
+        assert_eq!(
+            resolve_bundle_path("../shared/plan.pdf", "projects/sub"),
+            Some("projects/shared/plan.pdf".to_string())
+        );
+        // Not ours to resolve, each for the reason `classify` gives.
+        for dest in [
+            "https://example.com/a.png",
+            "mailto:someone@example.com",
+            "/already/absolute.png",
+            "#section",
+            "",
+            "../../above-the-root.png",
+        ] {
+            assert_eq!(
+                resolve_bundle_path(dest, "projects"),
+                None,
+                "{dest} is not a bundle-relative path this call may rewrite"
+            );
+        }
     }
 
     #[test]

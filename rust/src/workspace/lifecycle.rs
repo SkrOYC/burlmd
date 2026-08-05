@@ -247,7 +247,9 @@ fn create_note_serialized(
         return Err(commit_stage_failure(&subject, error, &[]));
     }
 
-    let (_, state) = persist::open_note(workspace, &new_id)?;
+    // The lock-free half of `persist::open_note`: this call is already inside
+    // `with_lifecycle_lock`, and that lock is not reentrant.
+    let (_, state) = persist::open_note_serialized(workspace, &new_id)?;
     Ok(state)
 }
 
@@ -3912,7 +3914,7 @@ mod tests {
         let f = fixture();
         f.write("Target.md", &note("Target", "target"));
         let body = format!(
-            "{} and [site](https://example.com/Target.md) and [img](diagram.png)",
+            "{} and [site](https://example.com/Target.md) and ![img](/diagram.png)",
             link("Target", "Target")
         );
         f.write("Note.md", &note("Note", &body));
@@ -3928,6 +3930,54 @@ mod tests {
             "nothing in this Note is relatively written, so nothing may change"
         );
         assert_eq!(f.link_targets("sub/Note"), vec!["Target".to_string()]);
+    }
+
+    /// The moved Note's **attachments** are relative destinations too, and they
+    /// break under a move for the identical reason its Links do.
+    ///
+    /// The regression this pins: `classify` reports every non-`.md` destination
+    /// external — it answers "is this a Note?", not "is this ours?" — and the
+    /// absolutizer skipped externals, so `![diagram](img/diagram.png)` kept its
+    /// bytes while the directory they resolve against changed. The image then
+    /// named `sub/img/diagram.png`, a file that does not exist, and the Note
+    /// arrived in its new Directory with a broken picture. Images were not
+    /// scanned at all, which is the shape most attachment references take.
+    #[test]
+    fn a_moved_notes_relative_attachments_still_name_the_same_files() {
+        let f = fixture();
+        f.write("img/diagram.png", "PNG");
+        f.write("plan.pdf", "PDF");
+        f.write(
+            "Note.md",
+            &note(
+                "Note",
+                "![diagram](img/diagram.png) and [the plan](plan.pdf) and \
+                 ![remote](https://example.com/d.png) and ![abs](/img/diagram.png)",
+            ),
+        );
+        f.reindex();
+        create_directory(&f.workspace, "sub").unwrap();
+
+        move_note(&f.workspace, "Note", "sub").unwrap();
+
+        let moved = f.read("sub/Note.md");
+        assert!(
+            moved.contains("![diagram](</img/diagram.png>)"),
+            "the relative image must still name the file it named before: {moved:?}"
+        );
+        assert!(
+            moved.contains("[the plan](</plan.pdf>)"),
+            "the relative non-Note Link must move with it: {moved:?}"
+        );
+        assert!(
+            moved.contains("![remote](https://example.com/d.png)"),
+            "a real external URL is not ours to touch: {moved:?}"
+        );
+        assert!(
+            moved.contains("![abs](/img/diagram.png)"),
+            "an already-absolute destination resolves identically from anywhere \
+             and must be copied through byte for byte: {moved:?}"
+        );
     }
 
     /// A rename does not move the Note, so the Directory its relative Links
