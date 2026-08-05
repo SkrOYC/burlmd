@@ -27,6 +27,12 @@
 //!   rewriting its neighbours is exactly the partial rewrite the STOP
 //!   condition forbids, so the operation fails instead and
 //!   [`super::lifecycle`] rolls back.
+//!
+//! A move has a second half, and it runs through the same three properties:
+//! the moved Note's **own outbound** Links can be written relatively (OKF
+//! §6.1), and a relative destination resolves against the Note's directory —
+//! which is the one thing a move changes. [`absolutize_relative_links`] is that
+//! half.
 
 use std::collections::BTreeMap;
 use std::ops::Range;
@@ -60,13 +66,67 @@ pub(super) fn rewrite_link_targets(
     if remap.is_empty() {
         return Ok(None);
     }
+    rewrite_destinations(source, |dest| match classify(dest, containing_dir) {
+        LinkTarget::Internal(id) => remap.get(&id).cloned(),
+        LinkTarget::External(_) => None,
+    })
+}
 
+/// Rewrites every internal Link in `source` whose destination is written
+/// **relatively** into the bundle-absolute form burlmd writes, leaving every
+/// already-absolute and every external destination byte-for-byte as it was.
+/// Returns `None` when the source holds no relatively-written internal Link.
+///
+/// `containing_dir` is the directory those destinations currently resolve
+/// against, i.e. where the Note is *before* it moves.
+///
+/// # Why a move has to do this
+///
+/// OKF §6.1 permits a relative destination and [`classify`] resolves it against
+/// the Note's own directory, so `[t](Target.md)` in a Note at the bundle root
+/// names `Target` and the identical bytes in a Note under `sub/` name
+/// `sub/Target`. Moving a Note between Directories therefore silently repoints
+/// every relatively-written Link it holds at a *different concept* — the file
+/// is genuinely wrong afterwards, not merely differently spelled, and
+/// `index::derive_note` indexes the wrong edge because it classifies against
+/// the new id's directory.
+///
+/// Rewriting them into the absolute form is what keeps the Links naming the
+/// concepts the author wrote them for. It is deliberately the *only* thing a
+/// move changes in those bytes: an absolute destination already resolves
+/// identically from anywhere, and an external one is not ours to touch.
+pub(super) fn absolutize_relative_links(
+    source: &str,
+    containing_dir: &str,
+) -> Result<Option<String>, AppError> {
+    rewrite_destinations(source, |dest| {
+        if dest.starts_with('/') {
+            return None;
+        }
+        match classify(dest, containing_dir) {
+            LinkTarget::Internal(id) => Some(id),
+            LinkTarget::External(_) => None,
+        }
+    })
+}
+
+/// The shared splice: find every Link `select` names a new concept id for, and
+/// replace its destination span with the serializer's own text.
+///
+/// `select` receives the destination exactly as `pulldown-cmark` resolved it —
+/// angle brackets stripped, escapes and entity references applied — and returns
+/// the concept id the destination should name afterwards, or `None` to leave
+/// the Link alone.
+fn rewrite_destinations(
+    source: &str,
+    select: impl FnMut(&str) -> Option<String>,
+) -> Result<Option<String>, AppError> {
     let mut rewrites: Vec<(Range<usize>, String)> = Vec::new();
-    for link in matching_links(source, containing_dir, remap) {
+    for link in matching_links(source, select) {
         let Some(destination) = destination_span(source, &link.span, link.text_end) else {
             return Err(AppError::ParseError(format!(
                 "the Link at bytes {}..{} targets {} but its destination is not written inline, \
-                 so this rename cannot rewrite it; rewriting the rest would leave the graph \
+                 so this operation cannot rewrite it; rewriting the rest would leave the graph \
                  partially updated (architecture/risks.md risk 8)",
                 link.span.start, link.span.end, link.new_target,
             )));
@@ -109,7 +169,10 @@ struct MatchedLink {
     new_target: String,
 }
 
-fn matching_links(source: &str, containing_dir: &str, remap: &Remap) -> Vec<MatchedLink> {
+fn matching_links(
+    source: &str,
+    mut select: impl FnMut(&str) -> Option<String>,
+) -> Vec<MatchedLink> {
     let mut matched = Vec::new();
     let mut open: Option<MatchedLink> = None;
     let mut open_matches = false;
@@ -117,10 +180,7 @@ fn matching_links(source: &str, containing_dir: &str, remap: &Remap) -> Vec<Matc
     for (event, range) in Parser::new_ext(source, parser_options()).into_offset_iter() {
         match event {
             Event::Start(Tag::Link { ref dest_url, .. }) => {
-                let new_target = match classify(dest_url, containing_dir) {
-                    LinkTarget::Internal(id) => remap.get(&id).cloned(),
-                    LinkTarget::External(_) => None,
-                };
+                let new_target = select(dest_url);
                 open_matches = new_target.is_some();
                 open = Some(MatchedLink {
                     text_end: range.start.saturating_add(1),
@@ -276,6 +336,53 @@ mod tests {
 
     fn rewrite(source: &str, pairs: &[(&str, &str)]) -> Option<String> {
         rewrite_link_targets(source, "", &remap(pairs)).unwrap()
+    }
+
+    /// The move case: a relatively-written internal destination is rewritten
+    /// into the absolute form, which is the only spelling that survives the
+    /// Note changing directory.
+    #[test]
+    fn a_relative_destination_is_absolutized_against_the_containing_directory() {
+        let out = absolutize_relative_links("[t](Target.md) and [u](../Up.md)\n", "a/b")
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(out, "[t](</a/b/Target.md>) and [u](</a/Up.md>)\n");
+    }
+
+    /// Everything that already resolves from anywhere, or that is not ours, is
+    /// left byte-for-byte alone — including a destination this crate would spell
+    /// differently if it were writing it fresh.
+    #[test]
+    fn absolutizing_leaves_absolute_and_external_destinations_untouched() {
+        let source = "[a](</x/Already.md>) [b](/bare/Absolute.md) \
+                      [c](https://example.com/Old.md) [d](image.png)\n";
+
+        assert!(absolutize_relative_links(source, "sub").unwrap().is_none());
+    }
+
+    /// A relative destination that climbs above the bundle root names no
+    /// concept in this bundle ([`classify`] reports it external), so there is
+    /// nothing to absolutize it to and it is left as written.
+    #[test]
+    fn a_relative_destination_escaping_the_bundle_root_is_left_alone() {
+        assert!(absolutize_relative_links("[a](../../far.md)", "sub")
+            .unwrap()
+            .is_none());
+    }
+
+    /// The STOP condition applies here too: a relative Link whose destination
+    /// lives in a reference definition cannot be absolutized, and leaving it
+    /// behind while absolutizing its neighbours is the partial rewrite this
+    /// module refuses to perform.
+    #[test]
+    fn absolutizing_a_reference_style_link_fails_rather_than_being_skipped() {
+        let result = absolutize_relative_links("[a][ref]\n\n[ref]: Target.md\n", "sub");
+
+        assert!(
+            matches!(result, Err(AppError::ParseError(_))),
+            "expected a refusal rather than a partial rewrite, got {result:?}"
+        );
     }
 
     /// The destination helper must stay in lockstep with the serializer that

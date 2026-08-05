@@ -238,6 +238,11 @@ pub fn create_note(
 /// write already inside its `atomic_write` would otherwise land its temporary
 /// file's rename onto the path *after* the deletion moved it aside, resurrecting
 /// the file against an index that has already forgotten it.
+///
+/// **A live `drafts` row is a third reason a concept id exists**, alongside a
+/// file on disk and a `notes` row, and this deletes an id that has only that —
+/// see [`delete_orphaned_draft`]. [`AppError::NotFound`] is reserved for an id
+/// that none of the three stores knows.
 pub fn delete_note(workspace: &Arc<Workspace>, note_id: &str) -> Result<(), AppError> {
     persist::with_write_locks(workspace, || delete_note_locked(workspace, note_id))
 }
@@ -246,9 +251,24 @@ fn delete_note_locked(workspace: &Arc<Workspace>, note_id: &str) -> Result<(), A
     let path = workspace.note_path(note_id)?;
     let title = indexed_title(workspace, note_id)?;
     if !path.exists() && title.is_none() {
-        return Err(AppError::NotFound(format!(
-            "no Note with concept id {note_id}"
-        )));
+        // A `drafts` row is the third reason a concept id exists, and on its own
+        // it is the only reason left: `open_note` will serve that row, and
+        // `ensure_path_available` refuses to let anything else take the name
+        // while it stands.
+        //
+        // Without this branch the guard that refusal raises — "open that Note to
+        // recover the draft (or delete it)" — could not be followed to its end.
+        // Every open reindexes, so the `notes` row for a Note whose file has
+        // gone is dropped; from then on the id had a live draft, no file and no
+        // index row, and this function answered `NotFound`. The name was
+        // unusable and the draft unclearable short of resurrecting the Note,
+        // flushing it to disk and deleting it again.
+        //
+        // Nothing is committed, because nothing is on disk to commit: the row
+        // and the session are cleared and that is the whole of the deletion.
+        // `clear_draft` runs in its own transaction for the reason every other
+        // index step here does — a failure must leave the row exactly as it was.
+        return delete_orphaned_draft(workspace, note_id);
     }
     // A Note is a file. Nothing stops a bundle from holding a *directory*
     // named `Archive.md` — a foreign tool's, or a user's — and without this
@@ -303,6 +323,34 @@ fn delete_note_locked(workspace: &Arc<Workspace>, note_id: &str) -> Result<(), A
     discarded
 }
 
+/// Clears a `drafts` row that is the only thing left of a concept id: no file,
+/// no index row, and so nothing for the filesystem or version history to do.
+///
+/// [`AppError::NotFound`] when there is no such row either, which is the case
+/// this branch was carved out of and the answer the caller still gets for an id
+/// that genuinely names nothing.
+fn delete_orphaned_draft(workspace: &Arc<Workspace>, note_id: &str) -> Result<(), AppError> {
+    let cleared = workspace.with_db(|conn| {
+        in_owned_transaction(conn, |tx| {
+            if !draft_exists(tx, workspace.id(), note_id)? {
+                return Ok(false);
+            }
+            clear_draft(tx, workspace.id(), note_id)?;
+            Ok(true)
+        })
+    })?;
+    if !cleared {
+        return Err(AppError::NotFound(format!(
+            "no Note with concept id {note_id}"
+        )));
+    }
+    // The session `open_note`'s recovery branch may have built over that row.
+    // Retired rather than left standing, for `delete_note_locked`'s reason: a
+    // session closed normally flushes its buffer, which would write the draft
+    // this call just cleared back out as a file.
+    persist::discard_session(workspace, note_id)
+}
+
 /// Renames a Note, rewriting its frontmatter `title`, its filename, and every
 /// inbound Link that targets it (CAP-LIFE-02).
 ///
@@ -342,6 +390,9 @@ pub fn rename_note(
         remap,
         invoked: Some(note_id.to_string()),
         retitled: Some((note_id.to_string(), new_title.to_string())),
+        // A rename does not move the Note, so every relative Link in it still
+        // resolves against the same Directory afterwards.
+        absolutize: None,
         directory_rename: None,
         message: format!(
             "Rename {} to {new_title}\n\n{}\n",
@@ -361,6 +412,26 @@ pub fn rename_note(
 /// not its title — but a **self-Link is still rewritten**, because a self-Link
 /// is an inbound Link like any other and a move that left it behind would point
 /// it at the id the move just vacated.
+///
+/// # The moved Note's own outbound Links are rewritten too, when it changes
+/// Directory
+///
+/// OKF §6.1 permits a relative Link destination and [`links_rewrite`] resolves
+/// one against the Note's own directory, so `[t](Target.md)` written at the
+/// bundle root names `Target` while the identical bytes under `sub/` name
+/// `sub/Target`. Carrying those bytes into another Directory unchanged
+/// therefore does not preserve the Note — it silently repoints every
+/// relatively-written Link in it at a *different concept*, and
+/// `index::derive_note` duly indexes the wrong edge, because it classifies
+/// against the new id's directory.
+///
+/// So a move that changes the containing Directory rewrites the moved Note's
+/// own relatively-written internal Links into the bundle-absolute form
+/// [`crate::okf::serialize_link`] produces, as part of the same planned,
+/// journalled, all-or-nothing sweep that rewrites its inbound ones. Absolute
+/// destinations already resolve identically from anywhere and are copied
+/// through byte for byte; external ones are not ours to touch. A [`rename_note`]
+/// stays in place, so it changes none of them.
 pub fn move_note(
     workspace: &Arc<Workspace>,
     note_id: &str,
@@ -395,6 +466,11 @@ pub fn move_note(
         remap,
         invoked: Some(note_id.to_string()),
         retitled: None,
+        // Only when the Directory actually changes: a "move" that lands a Note
+        // back where it already was resolves its relative Links exactly as
+        // before, and rewriting them would be this module editing bytes no
+        // operation made wrong.
+        absolutize: (containing_dir(note_id) != directory).then(|| note_id.to_string()),
         directory_rename: None,
         message: format!(
             "Move {} to {}\n\n{}\n",
@@ -513,6 +589,14 @@ pub fn rename_directory(
         // "beyond" what the caller named and belongs in `remapped`.
         invoked: None,
         retitled: None,
+        // Deliberately none. A Directory rename carries the whole subtree
+        // together, so a relative Link between two Notes inside it resolves to
+        // the same pair afterwards; only one that pointed *out* of the subtree
+        // shifts, and rewriting the subtree's bytes wholesale to cover that is a
+        // wider change than this operation is, on Notes the caller did not name.
+        // Recorded as the narrower open question it is rather than folded in
+        // here.
+        absolutize: None,
         directory_rename: Some(DirectoryRename {
             old: directory.clone(),
             new: new_directory.clone(),
@@ -532,6 +616,12 @@ pub fn rename_directory(
 /// everything beneath it" — so this does not refuse a populated Directory. What
 /// makes that safe is the commit: every removed Note is recoverable from local
 /// version history, exactly as a single [`delete_note`] is.
+///
+/// The returned list covers **every concept id the Directory held**, which is
+/// not the same as every `notes` row beneath it: an orphaned `drafts` row is a
+/// concept id with no file and no index row, and it is cleared and reported
+/// here for the reason [`delete_note`] clears one — otherwise it survives the
+/// deletion of the Directory it lived in and keeps its name reserved forever.
 pub fn delete_directory(workspace: &Arc<Workspace>, path: &str) -> Result<Vec<String>, AppError> {
     persist::with_write_locks(workspace, || delete_directory_locked(workspace, path))
 }
@@ -549,7 +639,19 @@ fn delete_directory_locked(
     let absolute = directory_absolute(workspace, &directory)?;
     let prefix = format!("{directory}/");
     let removed = workspace.with_db(|conn| note_ids_with_prefix(conn, workspace.id(), &prefix))?;
-    if !absolute.exists() && removed.is_empty() {
+    // `removed` is derived from `notes` rows, which is one store short: a
+    // `drafts` row carries no foreign key, is covered by no cascade, and
+    // routinely outlives both the file and the index row (see
+    // [`ensure_path_available`]). An orphaned one beneath this Directory would
+    // therefore survive its deletion, keeping its concept id permanently
+    // unavailable inside a Directory that no longer exists — the same dead end
+    // `delete_note` used to leave, reached one level up.
+    let orphaned_drafts: Vec<String> = workspace
+        .with_db(|conn| draft_ids_with_prefix(conn, workspace.id(), &prefix))?
+        .into_iter()
+        .filter(|id| !removed.contains(id))
+        .collect();
+    if !absolute.exists() && removed.is_empty() && orphaned_drafts.is_empty() {
         return Err(AppError::NotFound(format!(
             "no Directory at {directory} in this Workspace"
         )));
@@ -581,6 +683,9 @@ fn delete_directory_locked(
         in_owned_transaction(conn, |tx| {
             for note_id in &removed {
                 index::remove_note_rows(tx, workspace.id(), note_id)?;
+                clear_draft(tx, workspace.id(), note_id)?;
+            }
+            for note_id in &orphaned_drafts {
                 clear_draft(tx, workspace.id(), note_id)?;
             }
             tx.execute(
@@ -619,7 +724,7 @@ fn delete_directory_locked(
     // returned only if the commit itself succeeded — the commit error is the
     // more informative of the two.
     let mut discarded = Ok(());
-    for note_id in &removed {
+    for note_id in removed.iter().chain(&orphaned_drafts) {
         let outcome = persist::discard_session(workspace, note_id);
         if discarded.is_ok() {
             discarded = outcome;
@@ -629,6 +734,14 @@ fn delete_directory_locked(
         return Err(commit_stage_failure(&subject, error, &[]));
     }
     discarded?;
+    // The orphaned-draft ids are reported alongside the indexed ones, and for
+    // the reason this function returns a list at all: a caller may be holding
+    // one open — `open_note`'s recovery branch opens exactly such a Note from
+    // its draft row — and it has just been removed underneath it.
+    let mut removed = removed;
+    removed.extend(orphaned_drafts);
+    removed.sort();
+    removed.dedup();
     Ok(removed)
 }
 
@@ -648,6 +761,13 @@ struct Reidentify {
     /// `(note_id, new_title)` when the operation rewrites a frontmatter
     /// `title` — a `rename_note` and nothing else.
     retitled: Option<(String, String)>,
+    /// The Note whose **own outbound** Links must be rewritten from the
+    /// relative spelling OKF §6.1 permits into the bundle-absolute one, because
+    /// the operation changes the Directory those Links resolve against — a
+    /// [`move_note`] between two Directories, and nothing else. See that
+    /// function for why carrying the bytes unchanged is a wrong file rather
+    /// than a differently-spelled one.
+    absolutize: Option<String>,
     /// Present when one `rename` moves the whole subtree, rather than one
     /// rename per Note.
     directory_rename: Option<DirectoryRename>,
@@ -852,9 +972,20 @@ fn apply_reidentify_locked(
                 new_id: a.new_id.clone(),
             })
             .collect(),
+        // A rewrite counts wherever it landed, not only on disk. A Note open
+        // with buffered edits takes its rewrite in the session's working
+        // source, and one with an unflushed `drafts` row takes it in that row —
+        // in both cases the file may be untouched, and both used to be filtered
+        // out here. The caller reads this list to re-read the Notes whose bytes
+        // moved; omitting those two left an open editor holding an
+        // `InlineElement::Link` with the pre-rename `target_id`, which is the
+        // exact hazard the list's own documentation describes.
         rewritten: affected
             .iter()
-            .filter(|a| a.old_id == a.new_id && a.new_file.is_some())
+            .filter(|a| {
+                a.old_id == a.new_id
+                    && (a.new_file.is_some() || a.new_buffer.is_some() || a.new_draft.is_some())
+            })
             .filter(beyond_the_invoked)
             .map(|a| a.new_id.clone())
             .collect(),
@@ -917,8 +1048,12 @@ fn plan_affected(workspace: &Arc<Workspace>, plan: &Reidentify) -> Result<Vec<Af
             )));
         }
         let dir = containing_dir(&old_id).to_string();
+        // The one Note whose own relative Links this operation must absolutize,
+        // resolved against the Directory it is in **now** — which is the
+        // Directory those Links currently name from.
+        let absolutize = plan.absolutize.as_deref() == Some(old_id.as_str());
         let new_file = match &disk {
-            Some(source) => rewrite_note_text(source, &dir, &plan.remap, new_title)?,
+            Some(source) => rewrite_note_text(source, &dir, &plan.remap, new_title, absolutize)?,
             None => None,
         };
 
@@ -927,14 +1062,14 @@ fn plan_affected(workspace: &Arc<Workspace>, plan: &Reidentify) -> Result<Vec<Af
             .transpose()?;
         let held_by_a_session = buffer.is_some();
         let new_buffer = match buffer {
-            Some(source) => rewrite_note_text(&source, &dir, &plan.remap, new_title)?,
+            Some(source) => rewrite_note_text(&source, &dir, &plan.remap, new_title, absolutize)?,
             None => None,
         };
 
         let draft = workspace.with_db(|conn| read_draft_text(conn, workspace.id(), &old_id))?;
         let held_by_a_draft = draft.is_some();
         let new_draft = match draft {
-            Some(source) => rewrite_note_text(&source, &dir, &plan.remap, new_title)?,
+            Some(source) => rewrite_note_text(&source, &dir, &plan.remap, new_title, absolutize)?,
             None => None,
         };
 
@@ -994,23 +1129,36 @@ fn plan_affected(workspace: &Arc<Workspace>, plan: &Reidentify) -> Result<Vec<Af
     Ok(affected)
 }
 
-/// Applies both substitutions a re-identification can make to one Note's text:
-/// the frontmatter `title`, and every inbound Link whose target moved.
+/// Applies all three substitutions a re-identification can make to one Note's
+/// text: the frontmatter `title`, this Note's own relatively-written outbound
+/// Links when it is changing Directory, and every inbound Link whose target
+/// moved.
 ///
-/// Sequential rather than combined, because the title rewrite changes byte
-/// lengths and the Link scan must run against the text it will actually be
-/// spliced into.
+/// Sequential rather than combined, because each pass changes byte lengths and
+/// the next one's scan must run against the text it will actually be spliced
+/// into. The absolutize pass runs **before** the remap so that a relative
+/// *self*-Link is absolutized first and then follows the remap like any other
+/// inbound Link, rather than being remapped and then re-examined.
 fn rewrite_note_text(
     source: &str,
     containing_dir: &str,
     remap: &Remap,
     new_title: Option<&str>,
+    absolutize: bool,
 ) -> Result<Option<String>, AppError> {
     let retitled = new_title.and_then(|title| rewrite_frontmatter_title(source, title));
     let base = retitled.as_deref().unwrap_or(source);
+
+    let absolutized = if absolutize {
+        links_rewrite::absolutize_relative_links(base, containing_dir)?
+    } else {
+        None
+    };
+    let base = absolutized.as_deref().unwrap_or(base);
+
     match links_rewrite::rewrite_link_targets(base, containing_dir, remap)? {
         Some(rewritten) => Ok(Some(rewritten)),
-        None => Ok(retitled),
+        None => Ok(absolutized.or(retitled)),
     }
 }
 
@@ -1693,10 +1841,11 @@ struct HeldBy<'a> {
 ///   destination's row to make room for the renamed Note's own — destroying
 ///   unflushed work with no trash entry, no commit and no message.
 ///
-/// Refusing is what routes the user to the one operation that can actually
-/// resolve it: opening the id recovers the draft (or discards it), after which
-/// the name really is free. Substituting the draft silently, or deleting it to
-/// make room, are the two outcomes `architecture/risks.md` risk 8 is about.
+/// Refusing is what routes the user to the two operations that can actually
+/// resolve it: opening the id recovers the draft, and [`delete_note`] clears it
+/// outright, after either of which the name really is free. Substituting the
+/// draft silently, or deleting it to make room, are the two outcomes
+/// `architecture/risks.md` risk 8 is about.
 fn ensure_path_available(
     workspace: &Arc<Workspace>,
     new_id: &str,
@@ -1868,6 +2017,28 @@ fn normalize_directory(path: &str) -> Result<String, AppError> {
     if trimmed.is_empty() {
         return Ok(String::new());
     }
+    // An **empty interior segment** — `a//b` — is refused rather than repaired,
+    // on this function's own standing rule.
+    //
+    // The containment check below runs over `Path::components()`, which
+    // collapses a repeated separator, so `a//b` passed it while this function
+    // returned the raw string. Everything downstream then disagreed about which
+    // Directory that was: `create_dir_all` and `rename` write at the collapsed
+    // path, `join_id` built the concept id `a//b/T`, and `concept_id_to_path`
+    // turned that back into a path pointing at the file that really exists —
+    // so `create_note("a//b", "T")` wrote the file, indexed it under an id no
+    // reindex can ever produce, failed at the commit stage, and left the name
+    // permanently taken by a row nothing on disk backs.
+    //
+    // Trailing and leading separators are a different case and stay accepted:
+    // `trim_matches` above has already removed them, so `/a/b/` names `a/b`
+    // unambiguously rather than naming a segment that is not there.
+    if trimmed.split('/').any(str::is_empty) {
+        return Err(AppError::PathUnavailable(format!(
+            "{path} has an empty path segment, so it names one Directory on disk and a \
+             different concept id in the index"
+        )));
+    }
     let relative = Path::new(trimmed);
     let escapes = relative
         .components()
@@ -2032,6 +2203,33 @@ fn read_draft_text(
     )
     .optional()
     .map_err(AppError::from)
+}
+
+/// Every concept id under `prefix` carrying a `drafts` row — the `drafts` twin
+/// of [`note_ids_with_prefix`], and escaped and re-filtered for that function's
+/// reasons.
+///
+/// Separate from it rather than a join, because the two answers are
+/// deliberately different populations: `notes` rows describe what the index
+/// knows, and a `drafts` row can name a concept id the index has never held.
+fn draft_ids_with_prefix(
+    conn: &Connection,
+    workspace_id: &str,
+    prefix: &str,
+) -> Result<Vec<String>, AppError> {
+    let mut stmt = conn.prepare(
+        "SELECT note_id FROM drafts WHERE workspace_id = ?1 AND note_id LIKE ?2 ESCAPE '\\' \
+         ORDER BY note_id",
+    )?;
+    let pattern = format!("{}%", like_escape(prefix));
+    let rows = stmt.query_map(rusqlite::params![workspace_id, pattern], |row| {
+        row.get::<_, String>(0)
+    })?;
+    Ok(rows
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter()
+        .filter(|id| id.starts_with(prefix))
+        .collect())
 }
 
 /// Every Note carrying an unflushed `drafts` row. See the sweep's candidate
@@ -2225,30 +2423,22 @@ fn unix_now() -> i64 {
         .map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(0))
 }
 
+/// This module's entrance to the single metadata derivation, which lives in
+/// [`persist::derive_metadata`].
+///
+/// It used to be a second, independently-written copy of that function — same
+/// frontmatter read, same trim-and-fall-back-to-the-filename title rule, same
+/// five fields. Two copies of the rule that decides what a Note is *called* is
+/// one more than the codebase can keep in agreement, and nothing would have
+/// failed loudly if they drifted: the tree would simply have started labelling
+/// a Note differently depending on which path last touched it.
 fn metadata_from(
     note_id: &str,
     source: &str,
     spans: &crate::markdown::SpanMap,
     last_modified: i64,
 ) -> crate::draft::NoteMetadata {
-    let frontmatter = spans
-        .frontmatter()
-        .and_then(|span| source.get(span))
-        .map_or_else(Default::default, crate::okf::read_frontmatter);
-    let title = frontmatter
-        .title
-        .as_deref()
-        .map(str::trim)
-        .filter(|t| !t.is_empty())
-        .map_or_else(|| file_stem(note_id).to_string(), str::to_string);
-    crate::draft::NoteMetadata {
-        id: note_id.to_string(),
-        path: concept_id_to_path(note_id),
-        title,
-        last_modified,
-        snippet: None,
-        okf_conformant: frontmatter.is_conformant(),
-    }
+    persist::derive_metadata(note_id, source, spans, last_modified)
 }
 
 #[cfg(test)]
@@ -3163,6 +3353,42 @@ mod tests {
         );
     }
 
+    /// A rewrite that lands only in an open session's buffer, or only in a
+    /// `drafts` row, is still a rewrite and is still reported.
+    ///
+    /// The regression this pins: `rewritten` filtered on `new_file.is_some()`,
+    /// so both of those Notes were swept, rewritten and then omitted from the
+    /// list the caller reads to decide what to re-read. `LifecycleEffects`
+    /// documents exactly why that matters — nothing about such a Note *looks*
+    /// wrong, and an open one goes on holding an `InlineElement::Link` carrying
+    /// the pre-rename `target_id`, which create-on-follow will happily turn back
+    /// into the concept the rename removed.
+    #[test]
+    fn a_rewrite_that_never_reaches_disk_is_still_reported_as_rewritten() {
+        let f = fixture();
+        f.write("Old Name.md", &note("Old Name", "target"));
+        f.write("b.md", &note("b", "placeholder"));
+        f.write("c.md", &note("c", "placeholder"));
+        f.reindex();
+        let b = f.open("b");
+        b.update_block(&[0], &format!("see {}\n", link("Old Name", "Old Name")))
+            .unwrap();
+        f.put_draft(
+            "c",
+            &note("c", &format!("drafted {}", link("Old Name", "Old Name"))),
+        );
+        assert!(!f.read("b.md").contains("Old Name.md"));
+        assert!(!f.read("c.md").contains("Old Name.md"));
+
+        let (_, effects) = rename_note(&f.workspace, "Old Name", "New Name").unwrap();
+
+        assert_eq!(
+            effects.rewritten,
+            vec!["b".to_string(), "c".to_string()],
+            "a rewrite the caller is never told about is a Note the UI never re-reads"
+        );
+    }
+
     /// The same hole again, with the one detail that made the sweep drop the
     /// candidate anyway: **B's file is gone**.
     ///
@@ -3336,6 +3562,121 @@ mod tests {
             Err(AppError::PathUnavailable(_))
         ));
         assert!(f.exists("a.md"));
+    }
+
+    /// A relative sibling Link survives the move still naming the **original**
+    /// target, now spelled absolutely.
+    ///
+    /// The regression this pins: the moved Note's bytes were carried across
+    /// verbatim while the directory they resolve against changed underneath
+    /// them, so `[t](Target.md)` — `Target` at the bundle root — became
+    /// `sub/Target` on arrival. Under OKF §6.1 that is not a differently-spelled
+    /// Link, it is a Link to a different concept: the file is genuinely wrong
+    /// afterwards, and `index::derive_note` classifies against the new id's
+    /// directory so the wrong edge is what gets indexed.
+    #[test]
+    fn a_moved_notes_own_relative_links_still_name_the_same_concepts() {
+        let f = fixture();
+        f.write("Target.md", &note("Target", "target"));
+        f.write("Note.md", &note("Note", "see [t](Target.md) for context"));
+        f.reindex();
+        create_directory(&f.workspace, "sub").unwrap();
+        assert_eq!(f.link_targets("Note"), vec!["Target".to_string()]);
+
+        move_note(&f.workspace, "Note", "sub").unwrap();
+
+        let moved = f.read("sub/Note.md");
+        assert!(
+            moved.contains("[t](</Target.md>)"),
+            "the relative Link must be rewritten into the spelling that survives \
+             the move: {moved:?}"
+        );
+        assert_eq!(
+            f.link_targets("sub/Note"),
+            vec!["Target".to_string()],
+            "the moved Note's edge must still name the concept the author wrote it for"
+        );
+    }
+
+    /// The `../` spelling of the same hazard, moving between two Directories
+    /// rather than out of the root.
+    #[test]
+    fn a_dot_dot_relative_link_in_a_moved_note_is_rewritten_too() {
+        let f = fixture();
+        f.write("Target.md", &note("Target", "target"));
+        f.write("a/Note.md", &note("Note", "up to [t](../Target.md)"));
+        f.reindex();
+        create_directory(&f.workspace, "b/deep").unwrap();
+        assert_eq!(f.link_targets("a/Note"), vec!["Target".to_string()]);
+
+        move_note(&f.workspace, "a/Note", "b/deep").unwrap();
+
+        let moved = f.read("b/deep/Note.md");
+        assert!(moved.contains("[t](</Target.md>)"), "{moved:?}");
+        assert_eq!(f.link_targets("b/deep/Note"), vec!["Target".to_string()]);
+    }
+
+    /// Only the relatively-written destinations move. An absolute one already
+    /// resolves identically from anywhere and an external one is not ours, so
+    /// both are copied through byte for byte — a move is not a licence to
+    /// reformat the user's prose.
+    #[test]
+    fn a_move_leaves_absolute_and_external_links_byte_for_byte_alone() {
+        let f = fixture();
+        f.write("Target.md", &note("Target", "target"));
+        let body = format!(
+            "{} and [site](https://example.com/Target.md) and [img](diagram.png)",
+            link("Target", "Target")
+        );
+        f.write("Note.md", &note("Note", &body));
+        f.reindex();
+        create_directory(&f.workspace, "sub").unwrap();
+        let before = f.read("Note.md");
+
+        move_note(&f.workspace, "Note", "sub").unwrap();
+
+        assert_eq!(
+            f.read("sub/Note.md"),
+            before,
+            "nothing in this Note is relatively written, so nothing may change"
+        );
+        assert_eq!(f.link_targets("sub/Note"), vec!["Target".to_string()]);
+    }
+
+    /// A rename does not move the Note, so the Directory its relative Links
+    /// resolve against is unchanged and they are left exactly as the author
+    /// wrote them.
+    #[test]
+    fn a_rename_leaves_the_notes_own_relative_links_alone() {
+        let f = fixture();
+        f.write("Target.md", &note("Target", "target"));
+        f.write("Note.md", &note("Note", "see [t](Target.md)"));
+        f.reindex();
+
+        rename_note(&f.workspace, "Note", "Renamed").unwrap();
+
+        let renamed = f.read("Renamed.md");
+        assert!(
+            renamed.contains("[t](Target.md)"),
+            "a rename must not rewrite a Link it did not make wrong: {renamed:?}"
+        );
+        assert_eq!(f.link_targets("Renamed"), vec!["Target".to_string()]);
+    }
+
+    /// A move within the same Directory — the no-op case — changes nothing
+    /// those Links resolve against, so it changes none of their bytes either.
+    #[test]
+    fn a_move_that_does_not_change_directory_rewrites_nothing() {
+        let f = fixture();
+        f.write("a/Target.md", &note("Target", "target"));
+        f.write("a/Note.md", &note("Note", "see [t](Target.md)"));
+        f.reindex();
+        let before = f.read("a/Note.md");
+
+        move_note(&f.workspace, "a/Note", "a").unwrap();
+
+        assert_eq!(f.read("a/Note.md"), before);
+        assert_eq!(f.link_targets("a/Note"), vec!["a/Target".to_string()]);
     }
 
     // -- deletion ------------------------------------------------------------
@@ -3512,6 +3853,60 @@ mod tests {
             !f.root().join("a").exists(),
             "a refused create must not materialize the leading segment either"
         );
+    }
+
+    /// An **empty path segment** is refused at every entrance, and nothing is
+    /// created anywhere.
+    ///
+    /// The regression this pins: `normalize_directory` validated over
+    /// `Path::components()`, which collapses a repeated separator, and then
+    /// returned the *raw* string. So `a//b` passed the check and every consumer
+    /// afterwards disagreed about which Directory it named —
+    /// `create_note("a//b", "T")` wrote the file at the collapsed `a/b/T.md`,
+    /// indexed it under the concept id `a//b/T`, then failed at the commit stage
+    /// because `concept_id_to_path` sent `commit_paths` to a path holding no
+    /// file. The failure left the id in the index with nothing behind it, and
+    /// `ensure_path_available` consults the index, so the name was taken for
+    /// good.
+    #[test]
+    fn an_empty_path_segment_is_refused_and_nothing_is_created() {
+        let f = fixture();
+        f.write("kept.md", &note("kept", "body"));
+        f.reindex();
+
+        for path in ["a//b", "//a//b//", "a//", "//a/b"] {
+            let normalized = normalize_directory(path);
+            if !path.trim_matches('/').contains("//") {
+                // Leading and trailing separators are trimmed rather than
+                // refused: they name the same Directory unambiguously.
+                assert!(
+                    matches!(normalized.as_deref(), Ok("a" | "a/b")),
+                    "{path:?} names a Directory unambiguously, got {normalized:?}"
+                );
+                continue;
+            }
+            assert!(
+                matches!(normalized, Err(AppError::PathUnavailable(_))),
+                "{path:?} must be refused, got {normalized:?}"
+            );
+            for result in [
+                create_directory(&f.workspace, path),
+                create_note(&f.workspace, path, "T").map(|_| ()),
+                move_note(&f.workspace, "kept", path).map(|_| ()),
+                rename_directory(&f.workspace, path, "renamed").map(|_| ()),
+                delete_directory(&f.workspace, path).map(|_| ()),
+            ] {
+                assert!(
+                    matches!(result, Err(AppError::PathUnavailable(_))),
+                    "{path:?} must be refused, got {result:?}"
+                );
+            }
+        }
+
+        assert_eq!(f.note_ids(), vec!["kept".to_string()]);
+        assert_eq!(f.directory_ids(), Vec::<String>::new());
+        assert!(!f.exists("a"), "a refused path must materialize nothing");
+        assert!(f.exists("kept.md"));
     }
 
     /// Gherkin (CAP-LIFE-06): renaming a Directory moves its contents, remaps
@@ -4316,6 +4711,115 @@ mod tests {
             Some("---\ntitle: x\n---\n\nits own unflushed work\n"),
             "the draft did not follow the Directory rename"
         );
+    }
+
+    /// The end of the route the orphaned-draft refusal points the user at:
+    /// **deleting** the id releases it, and the name is then reusable.
+    ///
+    /// The regression this pins: the refusal says "open that Note to recover the
+    /// draft (or delete it)", and the second half of that sentence could not be
+    /// carried out. `delete_note` recognized two reasons a concept id exists —
+    /// a file on disk and a `notes` row — and an orphaned draft has neither, so
+    /// it answered `NotFound`. Opening the id does not clear it either: every
+    /// open reindexes, and a reindex drops the `notes` row of a Note whose file
+    /// has gone. The id was therefore permanently reserved by a row nothing
+    /// could remove short of resurrecting the Note, flushing it to disk and
+    /// deleting it again.
+    #[test]
+    fn an_orphaned_draft_can_be_deleted_and_its_concept_id_reused() {
+        let f = fixture();
+        f.write("Foo.md", &note("Foo", "on disk"));
+        f.reindex();
+        f.commit_baseline();
+        f.put_draft(
+            "Foo",
+            &note("Foo", "unflushed work from an earlier session"),
+        );
+
+        // The file vanishes underneath the draft, and the reindex every open
+        // performs drops the `notes` row — leaving the draft as the only trace.
+        std::fs::remove_file(f.root().join("Foo.md")).unwrap();
+        f.reindex();
+        assert!(f.note_ids().is_empty());
+        assert!(f.draft_row("Foo").is_some());
+        assert!(
+            matches!(
+                create_note(&f.workspace, "", "Foo"),
+                Err(AppError::PathUnavailable(_))
+            ),
+            "the draft must still be holding the name, or this test is vacuous"
+        );
+
+        delete_note(&f.workspace, "Foo").expect("an orphaned draft must be deletable");
+
+        assert!(f.draft_row("Foo").is_none(), "the draft row survived");
+        assert!(
+            !f.exists("Foo.md"),
+            "nothing was on disk, so nothing may be written"
+        );
+        assert!(f.trash_entries().is_empty());
+
+        let state = create_note(&f.workspace, "", "Foo")
+            .expect("the freed concept id must be available again");
+        assert_eq!(state.metadata.id, "Foo");
+        assert!(
+            !state.restored_from_draft,
+            "the deleted draft came back with the new Note"
+        );
+    }
+
+    /// An id that names nothing at all still answers `NotFound`: the draft row
+    /// is a third *existence* reason, not a licence to succeed over nothing.
+    #[test]
+    fn deleting_a_concept_id_that_names_nothing_is_still_not_found() {
+        let f = fixture();
+
+        assert!(matches!(
+            delete_note(&f.workspace, "Nowhere"),
+            Err(AppError::NotFound(_))
+        ));
+    }
+
+    /// A Directory delete clears the orphaned drafts beneath it too, and names
+    /// them in what it returns.
+    ///
+    /// Its removed-set is derived from `notes` rows alone, so an orphaned draft
+    /// under the subtree survived the deletion of the Directory it lived in —
+    /// reserving a concept id inside a Directory that no longer exists, with no
+    /// operation left that could reach it.
+    #[test]
+    fn deleting_a_directory_clears_the_orphaned_drafts_beneath_it() {
+        let f = fixture();
+        f.write("sub/Kept.md", &note("Kept", "on disk"));
+        f.write("Outside.md", &note("Outside", "not in the subtree"));
+        f.reindex();
+        f.commit_baseline();
+        f.put_draft(
+            "sub/Gone",
+            &note("Gone", "unflushed, no file, no index row"),
+        );
+        f.put_draft("Outside", &note("Outside", "must not be touched"));
+
+        let removed = delete_directory(&f.workspace, "sub").unwrap();
+
+        assert_eq!(
+            removed,
+            vec!["sub/Gone".to_string(), "sub/Kept".to_string()],
+            "every concept id the Directory held must be reported, so a caller \
+             holding one open can close it"
+        );
+        assert!(f.draft_row("sub/Gone").is_none(), "the orphan survived");
+        assert!(
+            f.draft_row("Outside").is_some(),
+            "a draft outside the subtree was cleared"
+        );
+        assert_eq!(f.note_ids(), vec!["Outside".to_string()]);
+
+        // And the id it was holding is genuinely free again.
+        create_directory(&f.workspace, "sub").unwrap();
+        let state = create_note(&f.workspace, "sub", "Gone")
+            .expect("the freed concept id must be available again");
+        assert!(!state.restored_from_draft);
     }
 
     /// A name deriving to a dot-prefixed filename is refused rather than

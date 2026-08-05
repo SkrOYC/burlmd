@@ -2415,7 +2415,16 @@ fn unix_now() -> i64 {
         .map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(0))
 }
 
-fn derive_metadata(
+/// The one derivation of a Note's display metadata from its source, shared with
+/// [`super::lifecycle`] rather than duplicated there.
+///
+/// Title derivation is load-bearing — it is what the tree, the palette and
+/// every completion label read — and it has a fallback (`title` absent, blank
+/// or whitespace-only ⇒ the filename) that two copies are free to disagree
+/// about silently. `pub(super)` so the sibling module calls this one instead of
+/// keeping its own; this is the copy with six call sites and the one every
+/// editing path already goes through.
+pub(super) fn derive_metadata(
     note_id: &str,
     source: &str,
     spans: &SpanMap,
