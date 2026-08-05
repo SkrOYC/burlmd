@@ -240,6 +240,25 @@ pub(crate) fn set_active_workspace_id(id: String) -> Result<(), AppError> {
     Ok(())
 }
 
+/// Resets [`ACTIVE_WORKSPACE`] to unset. Test-only, and deliberately not the
+/// production-path inverse of [`set_active_workspace_id`] — nothing in
+/// `contracts/ffi_api.rs` ever un-sets the active Workspace, so this exists
+/// solely so a test that set the cell can leave it exactly as it found it,
+/// the way `active_workspace_id_reports_the_id_a_bootstrap_call_established`
+/// already did inline before `WSPC-D008`'s wrapper-layer tests in
+/// `api::ffi_api` needed the same cleanup from a different module, where
+/// `ACTIVE_WORKSPACE` itself is not visible. Every caller must hold
+/// [`WORKSPACE_TEST_LOCK`] for as long as the reset matters, or a
+/// concurrently running test that just set the cell to its own id can have
+/// that id cleared out from under it.
+#[cfg(test)]
+pub(crate) fn clear_active_workspace_id_for_test() {
+    let mut guard = ACTIVE_WORKSPACE
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    *guard = None;
+}
+
 /// The active Workspace's id, or `AppError::NotFound` when no
 /// `open_or_create_local_workspace`/`open_workspace` call has succeeded yet
 /// in this process. Every Note-level FFI function is implicitly scoped to
@@ -278,6 +297,28 @@ pub(crate) fn active_workspace_id() -> Result<String, AppError> {
 /// across every module, are ever in flight at the same time.
 #[cfg(test)]
 pub(crate) static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// Serializes every test **in this crate** that touches [`ACTIVE_WORKSPACE`]
+/// or drives the real `#[frb]` wrapper functions in `api::ffi_api` that
+/// resolve against it (`workspace::persist::Workspace::active`, and
+/// therefore `open_note`/`pending_drafts`) — the same shape of hazard
+/// [`ENV_LOCK`] closes for environment variables, for the same reason: the
+/// cell is a single process-wide slot, not one per test, so two tests
+/// setting it concurrently race on which value the other observes.
+///
+/// This is a separate lock from `ENV_LOCK` rather than a broadened use of it,
+/// because a caller of `api::ffi_api`'s wrapper-layer tests also needs
+/// `BURLMD_DB_PATH` held stable for the *first* call to [`connection`] in the
+/// process — that first call is also the one and only place those tests
+/// touch the real OS Keychain via [`crate::security::keyring`], since
+/// [`open_encrypted_db`] has no test-key injection point the way
+/// [`open_encrypted_db_with_key`] does. A caller needing both locks takes
+/// `ENV_LOCK` first, then this one — the order [`api::ffi_api`]'s
+/// wrapper-layer tests use — and no code in this crate acquires them in the
+/// opposite order, so that order is not merely a convention but the only one
+/// ever exercised.
+#[cfg(test)]
+pub(crate) static WORKSPACE_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 /// RAII guard that saves an environment variable's original value on
 /// construction and restores it (or removes it, if it was originally unset)
@@ -481,6 +522,15 @@ mod tests {
     /// instead of going through `connection()`.
     #[test]
     fn active_workspace_id_reports_the_id_a_bootstrap_call_established() {
+        // `ACTIVE_WORKSPACE` is process-wide state shared by the whole test
+        // binary. `api::ffi_api`'s wrapper-layer tests (`WSPC-D008`) also set
+        // it now, through the real `#[frb]` functions, so this held lock is
+        // what keeps the assertion below — "no Workspace has been
+        // established yet" — from racing whichever of them runs first.
+        let _guard = WORKSPACE_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+
         assert!(
             active_workspace_id().is_err(),
             "no Workspace has been established yet in a process that hasn't called \
@@ -503,10 +553,9 @@ mod tests {
 
         assert_eq!(active_workspace_id().unwrap(), info.id);
 
-        // `ACTIVE_WORKSPACE` is process-wide state shared by the whole test
-        // binary; this is the only test that sets it today, but leave it as
-        // this test found it (unset) rather than relying on that staying
-        // true as more tests are added around it.
+        // Leave it as this test found it (unset) rather than relying on the
+        // lock alone to protect a later test that doesn't expect a stale
+        // value.
         *ACTIVE_WORKSPACE.lock().unwrap() = None;
     }
 

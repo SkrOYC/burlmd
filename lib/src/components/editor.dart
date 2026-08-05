@@ -88,14 +88,18 @@ class _EditableParagraphState extends ConsumerState<_EditableParagraph> {
   void didUpdateWidget(covariant _EditableParagraph oldWidget) {
     super.didUpdateWidget(oldWidget);
     // Flutter reuses this State for the block at the same list index across
-    // rebuilds, so if `activeNoteProvider` ever swaps in a different note
-    // (or a future insert_block/delete_block reindexes positions), this
-    // node's content can change out from under an already-mounted field.
-    // Resync only when the incoming text actually differs from what the
-    // field currently shows — on this field's own keystroke round-trip
-    // through updateBlock, the echoed-back node already matches, so this
-    // guard leaves the cursor alone; it only fires on a genuinely external
-    // change.
+    // rebuilds. `updateBlock` no longer writes this field's own keystrokes
+    // back into `activeNoteProvider`'s state (see the notifier's doc
+    // comment), so typing here never itself triggers a rebuild — but any
+    // *other* reason `activeNoteProvider`'s state changes (switching notes,
+    // a future insert_block/delete_block reindexing positions, a
+    // reload/commit) rebuilds `Editor` and hands every visible block a
+    // freshly decoded, structurally new `content` object, even for blocks
+    // whose text didn't actually change. Resync only when the incoming text
+    // actually differs from what the field currently shows, so an edit
+    // elsewhere in the note can't reset this field's cursor to the end of
+    // unrelated, unchanged text; it only overwrites the field on a
+    // genuinely external content change.
     final incomingText = _singleRunText(widget.content);
     if (incomingText != _controller.text) {
       _controller.text = incomingText;

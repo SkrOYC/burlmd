@@ -976,48 +976,559 @@ mod tests {
         assert_eq!(converted.end_offset, 9);
     }
 
-    /// TDD order 6 (surface conformance): `open_note` accepts a concept id,
-    /// there is exactly one open-a-Note entry point, and no exposed function
-    /// takes a `workspace_id` parameter.
+    // -- WSPC-D008 review finding #1: wrapper-layer coverage -----------------
+    //
+    // Every test above this point drives `NoteSession` directly through
+    // `Workspace::for_test`, which proves the *delegation targets* behave
+    // correctly but not that each `#[frb]` function in this file actually
+    // calls the one it claims to: `commit_block`, `delete_block`,
+    // `insert_block`, `merge_block_with_previous` and `split_block` all
+    // share the shape `(note_id: String, block_path: Vec<usize>) ->
+    // Result<NoteState, AppError>`, and `reload_note` shares its return type
+    // with `NoteSession::note_state` (though not `NoteSession::reload`'s own
+    // signature — both take `&self` and return `Result<NoteState, AppError>`).
+    // A one-line body swapped for a sibling's compiles, and every test above
+    // this line still passes, because none of them go through this file's
+    // own `open_session`-based wiring at all. The tests below do: each drives
+    // the real `#[frb]` function through a real bootstrap, a real
+    // `open_note`, and asserts the one effect that a swap with a
+    // same-shaped sibling would break.
+    //
+    // This is also the one place in this file that touches the process-wide
+    // `db::connection::ACTIVE_WORKSPACE`/`DB` singletons rather than an
+    // injected `Workspace` — `Workspace::active()`, which `open_note` and
+    // `pending_drafts` both call, is hardcoded to `DbHandle::Process` and has
+    // no test seam, so proving *those two* wrappers work at all requires the
+    // real singleton. That first touch also reaches the real OS Keychain via
+    // `open_encrypted_db` (`open_encrypted_db_with_key`'s test-key injection
+    // has no equivalent on that path) — `security::keyring`'s own tests and
+    // `api::auth`'s already establish that this works reliably inside this
+    // project's `devenv` shell, warmed up once per test binary by the `ctor`
+    // in `api::auth`'s test module. `db::connection::WORKSPACE_TEST_LOCK`
+    // (paired with `ENV_LOCK` while `BURLMD_DB_PATH` is set) is what keeps
+    // these tests, `db::connection`'s own
+    // `active_workspace_id_reports_the_id_a_bootstrap_call_established`, and
+    // any later addition from racing the one process-wide `ACTIVE_WORKSPACE`
+    // cell.
+
+    /// Runs a `#[frb] async fn` from this crate to completion, synchronously.
     ///
-    /// Verified by scanning this file's own source rather than by runtime
-    /// reflection: Rust has no introspection over a module's public function
-    /// signatures, and `#[frb]` erases to an ordinary `pub fn`/`pub async fn`
-    /// the compiler does not tag distinctly. An explicit assertion over the
-    /// `#[frb]` surface's own source text is the form `WSPC-D008`'s STOP
-    /// condition on this point names as the fallback when a compile-time
-    /// check is not practical.
+    /// Not a general-purpose executor — a proof of the claim every `async`
+    /// wrapper in this file already documents (see `search_notes`'s own
+    /// comment): the body never actually yields, so `async` only affects how
+    /// FRB dispatches the call across the boundary. This polls once with a
+    /// no-op waker and panics if the future is not immediately ready, rather
+    /// than silently blocking on an executor these tests have no need for.
+    fn block_on<F: std::future::Future>(future: F) -> F::Output {
+        let mut future = std::pin::pin!(future);
+        let waker = std::task::Waker::noop();
+        let mut cx = std::task::Context::from_waker(waker);
+        match future.as_mut().poll(&mut cx) {
+            std::task::Poll::Ready(value) => value,
+            std::task::Poll::Pending => panic!(
+                "a WSPC-D008 wrapper-layer test's future did not resolve on \
+                 its first poll; every #[frb] async fn in this crate is \
+                 documented to run to completion synchronously"
+            ),
+        }
+    }
+
+    struct WrapperWorkspace {
+        // Held for its `Drop` impl; never read directly.
+        #[allow(dead_code)]
+        dir: TempDir,
+        root: std::path::PathBuf,
+    }
+
+    /// Bootstraps a real local Workspace through the actual `#[frb]` entry
+    /// point — not `workspace::bootstrap`'s `_impl` function against an
+    /// injected connection — so it establishes the active Workspace exactly
+    /// as production does, through `db::connection::set_active_workspace_id`
+    /// against the real singleton. Callers must hold `ENV_LOCK` then
+    /// `WORKSPACE_TEST_LOCK` for their whole test body before calling this.
+    fn wrapper_bootstrap() -> WrapperWorkspace {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("bundle");
+        block_on(open_or_create_local_workspace(Some(
+            root.to_string_lossy().to_string(),
+        )))
+        .unwrap();
+        WrapperWorkspace { dir, root }
+    }
+
+    fn wrapper_write_note(root: &std::path::Path, relative: &str, contents: &str) {
+        let path = root.join(relative);
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+        std::fs::write(path, contents).unwrap();
+    }
+
+    /// Holds every lock a wrapper-layer test needs and, on drop, resets the
+    /// process-wide `ACTIVE_WORKSPACE` cell back to unset — `while still
+    /// holding WORKSPACE_TEST_LOCK`, since a struct's own `Drop::drop` runs
+    /// before its fields' do, and the lock guards are fields here. Without
+    /// this, the first wrapper-layer test to run leaves `ACTIVE_WORKSPACE`
+    /// set to its own Workspace id when it finishes (success *or* panic —
+    /// this runs during unwinding too), and
+    /// `db::connection::tests::active_workspace_id_reports_the_id_a_bootstrap_call_established`'s
+    /// opening assertion — "no Workspace has been established yet" — fails
+    /// against a value one of these tests left behind. The lock alone only
+    /// prevents two tests observing `ACTIVE_WORKSPACE` *at the same instant*;
+    /// it does not clear what a finished test leaves in it, which is the gap
+    /// this closes.
+    struct WrapperGuards {
+        _db_path: crate::db::connection::EnvVarGuard,
+        _db_dir: TempDir,
+        _workspace_lock: std::sync::MutexGuard<'static, ()>,
+        _env_lock: std::sync::MutexGuard<'static, ()>,
+    }
+
+    impl Drop for WrapperGuards {
+        fn drop(&mut self) {
+            crate::db::connection::clear_active_workspace_id_for_test();
+        }
+    }
+
+    /// Acquires the locks every wrapper-layer test needs and points
+    /// `BURLMD_DB_PATH` at a fresh temporary file — load-bearing only for
+    /// whichever test in the binary is first to touch the process-wide `DB`
+    /// singleton, since it is a `OnceLock` and every later touch reuses the
+    /// connection (and Keychain entry) the first one opened.
+    ///
+    /// Recovers from a poisoned lock rather than panicking on one: a prior
+    /// test failing while it held `ENV_LOCK`/`WORKSPACE_TEST_LOCK` is an
+    /// unrelated bug this test should not also report as its own failure —
+    /// `()` carries no invariant a poisoned lock could have left broken.
+    fn wrapper_guards() -> WrapperGuards {
+        let env_lock = crate::db::connection::ENV_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let workspace_lock = crate::db::connection::WORKSPACE_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let db_dir = tempfile::tempdir().unwrap();
+        let db_path = crate::db::connection::EnvVarGuard::set(
+            "BURLMD_DB_PATH",
+            db_dir.path().join("index.sqlite3").as_os_str(),
+        );
+        WrapperGuards {
+            _db_path: db_path,
+            _db_dir: db_dir,
+            _workspace_lock: workspace_lock,
+            _env_lock: env_lock,
+        }
+    }
+
+    /// Drives `open_note`, `get_block_source`, `update_block`,
+    /// `commit_block` and `note_write_status` through the real `#[frb]`
+    /// functions. The load-bearing assertion is on `commit_block`: it must
+    /// leave the edited Block *present*, with `update_block`'s own text —
+    /// which is exactly what a mis-wiring onto `delete_block` (identical
+    /// signature) would break, since that would remove the Block instead.
     #[test]
-    fn the_ffi_surface_has_one_concept_id_open_entry_point_and_no_function_takes_a_workspace_id() {
-        let source = include_str!("ffi_api.rs");
+    fn wrapper_layer_open_get_update_and_commit_go_through_the_real_session() {
+        let _guards = wrapper_guards();
+        let ws = wrapper_bootstrap();
+        wrapper_write_note(&ws.root, "flow.md", &note_source("Flow", "Alpha.\n\nBeta."));
 
-        // Every needle below is assembled from parts rather than written as
-        // one literal: this test is itself part of `source` (`include_str!`
-        // reads the whole file, this function included), so a literal needle
-        // spelling out the pattern it searches for would match its own line
-        // too and corrupt the count/contains checks. Splitting each pattern
-        // across a `format!` concatenation keeps it out of the file as a
-        // contiguous string while still producing the real pattern at
-        // runtime.
-        let fn_open_note = format!("{}{}", "fn open_", "note(");
-        let open_note_signature =
-            format!("{}{}{}", "pub async fn open_", "note(note_id", ": String)");
-        let workspace_id_param = format!("{}{}", "workspace_id", ": String");
+        let opened = block_on(open_note("flow".to_string())).unwrap();
+        assert_eq!(opened.ast.len(), 2, "open_note must parse both paragraphs");
+        assert_eq!(opened.metadata.title, "Flow");
 
+        let source = get_block_source("flow".to_string(), vec![0]).unwrap();
         assert_eq!(
-            source.matches(fn_open_note.as_str()).count(),
+            source, "Alpha.\n",
+            "get_block_source must return the raw Block source verbatim"
+        );
+
+        assert!(!note_write_status("flow".to_string()).has_unwritten_edits);
+        update_block("flow".to_string(), vec![0], "Alpha, revised.\n".to_string()).unwrap();
+        assert!(
+            note_write_status("flow".to_string()).has_unwritten_edits,
+            "update_block must write the draft row through the real session"
+        );
+
+        let committed = commit_block("flow".to_string(), vec![0]).unwrap();
+        assert_eq!(
+            committed.ast.len(),
+            2,
+            "commit_block must reparse in place — the edited Block must \
+             still be present, not removed, which is what a mis-wiring onto \
+             delete_block (an identical signature) would do instead"
+        );
+        assert_eq!(
+            get_block_source("flow".to_string(), vec![0]).unwrap(),
+            "Alpha, revised.\n",
+            "commit_block must reflect update_block's own edit, not discard it"
+        );
+    }
+
+    /// `insert_block`, `delete_block`, `split_block` and
+    /// `merge_block_with_previous` all share the signature `(note_id,
+    /// block_path) -> Result<NoteState, AppError>`, so only an observable
+    /// effect distinguishes a correct wiring from a mis-wiring onto a
+    /// sibling. Each assertion below is the one a swap within this group
+    /// would break.
+    #[test]
+    fn wrapper_layer_insert_delete_split_and_merge_have_distinct_observable_effects() {
+        let _guards = wrapper_guards();
+        let ws = wrapper_bootstrap();
+        wrapper_write_note(&ws.root, "flow.md", &note_source("Flow", "Alpha.\n\nBeta."));
+        block_on(open_note("flow".to_string())).unwrap();
+
+        // insert_block grows the Note by one Block, inserted before the
+        // Block at the given path — here, before "Beta.", into the blank-line
+        // gap the original "Alpha.\n\nBeta." already carries, so the result
+        // is three well-separated paragraphs rather than one run-on Block.
+        let inserted = insert_block("flow".to_string(), vec![1], "Gamma.".to_string()).unwrap();
+        assert_eq!(inserted.ast.len(), 3, "insert_block must add a Block");
+
+        // delete_block shrinks it back — the opposite of insert_block, and
+        // the one direction commit_block must never take. "Gamma." is now
+        // at [1], where insert_block just put it.
+        let deleted = delete_block("flow".to_string(), vec![1]).unwrap();
+        assert_eq!(
+            deleted.ast.len(),
+            2,
+            "delete_block must remove the Block at the given path"
+        );
+
+        // split_block also grows the Note by one, but by dividing an
+        // existing Block rather than appending a new one — the combined text
+        // of the two halves must still hold everything the original held.
+        let split = split_block("flow".to_string(), vec![1], 2).unwrap();
+        assert_eq!(
+            split.ast.len(),
+            3,
+            "split_block must produce one more Block"
+        );
+        let first_half = get_block_source("flow".to_string(), vec![1]).unwrap();
+        let second_half = get_block_source("flow".to_string(), vec![2]).unwrap();
+        assert_eq!(
+            format!("{first_half}{second_half}").replace('\n', ""),
+            "Beta.",
+            "split_block must not lose or duplicate the Block's text"
+        );
+
+        // merge_block_with_previous on the *first* Block has no predecessor
+        // regardless of what split_block just did to the Blocks after it, so
+        // it must be a no-op — the one case in this group that does not
+        // mutate at all.
+        let before = block_on(open_note("flow".to_string())).unwrap();
+        let merged = merge_block_with_previous("flow".to_string(), vec![0]).unwrap();
+        assert_eq!(
+            merged, before,
+            "merging the first Block with its predecessor must be a no-op"
+        );
+    }
+
+    /// Drives `copy_range_as_markdown`, `delete_range`, `replace_range` and
+    /// `flush_note` through the real `#[frb]` functions.
+    #[test]
+    fn wrapper_layer_range_operations_and_flush_go_through_the_real_session() {
+        let _guards = wrapper_guards();
+        let ws = wrapper_bootstrap();
+        wrapper_write_note(
+            &ws.root,
+            "ranges.md",
+            &note_source("Ranges", "First block.\n\nSecond block.\n\nThird block."),
+        );
+        let state = block_on(open_note("ranges".to_string())).unwrap();
+        assert_eq!(state.ast.len(), 3);
+
+        let last_len = crate::markdown::rendered_text(&state.ast[2])
+            .chars()
+            .count();
+        let whole = BlockRange {
+            start_path: vec![0],
+            start_offset: 0,
+            end_path: vec![2],
+            end_offset: last_len,
+        };
+        let copied = copy_range_as_markdown("ranges".to_string(), whole).unwrap();
+        assert!(copied.contains("First block."));
+        assert!(copied.contains("Second block."));
+        assert!(copied.contains("Third block."));
+
+        let second_and_third = BlockRange {
+            start_path: vec![1],
+            start_offset: 0,
+            end_path: vec![2],
+            end_offset: last_len,
+        };
+        let after_delete = delete_range("ranges".to_string(), second_and_third).unwrap();
+        assert_eq!(
+            after_delete.ast.len(),
             1,
-            "there must be exactly one open-a-Note entry point"
+            "delete_range must remove every Block the range spans"
+        );
+
+        let remaining_len = crate::markdown::rendered_text(&after_delete.ast[0])
+            .chars()
+            .count();
+        let whole_remaining = BlockRange {
+            start_path: vec![0],
+            start_offset: 0,
+            end_path: vec![0],
+            end_offset: remaining_len,
+        };
+        let after_replace = replace_range(
+            "ranges".to_string(),
+            whole_remaining,
+            "Replaced content.".to_string(),
+        )
+        .unwrap();
+        assert_eq!(after_replace.ast.len(), 1);
+        assert_eq!(
+            get_block_source("ranges".to_string(), vec![0]).unwrap(),
+            "Replaced content.\n",
+            "replace_range must substitute the replacement text"
+        );
+
+        let revision = block_on(flush_note("ranges".to_string())).unwrap();
+        assert!(!revision.is_empty());
+        let written = std::fs::read_to_string(ws.root.join("ranges.md")).unwrap();
+        assert!(
+            written.contains("Replaced content."),
+            "flush_note must write the working source to disk"
         );
         assert!(
-            source.contains(open_note_signature.as_str()),
+            !note_write_status("ranges".to_string()).has_unwritten_edits,
+            "flush_note must clear the unwritten-edits flag"
+        );
+    }
+
+    /// The RevisionMismatch escape hatch: `reload_note` must re-read the
+    /// file from disk, not merely return the session's current cached state.
+    /// `NoteSession::note_state` shares `reload`'s exact signature — `(&self)
+    /// -> Result<NoteState, AppError>` — and would pass every other test in
+    /// this file if `reload_note` were mis-wired onto it, since neither the
+    /// returned type nor the `Ok`/`Err` shape would differ from the correct
+    /// wiring on the *first* call. Only re-reading disk, and only re-reading
+    /// it after something else changed the file, tells the two apart.
+    #[test]
+    fn wrapper_layer_reload_note_recovers_from_a_revision_mismatch() {
+        let _guards = wrapper_guards();
+        let ws = wrapper_bootstrap();
+        wrapper_write_note(
+            &ws.root,
+            "reload.md",
+            &note_source("Reload", "Original content."),
+        );
+        block_on(open_note("reload".to_string())).unwrap();
+        block_on(flush_note("reload".to_string())).unwrap();
+
+        // Something other than this session changes the file on disk —
+        // exactly the case risk 6's OCC check exists to catch.
+        wrapper_write_note(
+            &ws.root,
+            "reload.md",
+            &note_source("Reload", "Externally changed content."),
+        );
+
+        let mismatch = block_on(flush_note("reload".to_string()));
+        assert!(
+            matches!(mismatch, Err(AppError::RevisionMismatch(_))),
+            "a write against a stale baseline must be refused, got {mismatch:?}"
+        );
+
+        let reloaded = block_on(reload_note("reload".to_string())).unwrap();
+        assert!(
+            !reloaded.restored_from_draft,
+            "a reload is not a restored draft"
+        );
+        assert_eq!(
+            get_block_source("reload".to_string(), vec![0]).unwrap(),
+            "Externally changed content.\n",
+            "reload_note must reflect what is actually on disk now, not the \
+             session's stale cached state — this is what a mis-wiring onto \
+             NoteSession::note_state would fail to do"
+        );
+
+        // The baseline must have moved with the reload, or every future
+        // write on this session repeats the same mismatch forever.
+        let flushed_again = block_on(flush_note("reload".to_string()));
+        assert!(
+            flushed_again.is_ok(),
+            "the write tier must succeed once the baseline matches disk \
+             again, got {flushed_again:?}"
+        );
+    }
+
+    /// `close_note` ends the session (a later status poll reports the
+    /// not-open default) and `pending_drafts` reports — then, once closed,
+    /// stops reporting — a Note carrying an unflushed draft.
+    #[test]
+    fn wrapper_layer_close_note_ends_the_session_and_pending_drafts_reports_unflushed_work() {
+        let _guards = wrapper_guards();
+        let ws = wrapper_bootstrap();
+        wrapper_write_note(&ws.root, "closer.md", &note_source("Closer", "Unedited."));
+        wrapper_write_note(&ws.root, "pending.md", &note_source("Pending", "Original."));
+        // `pending_drafts` joins `drafts` against `notes`, so each Note needs
+        // an indexed row before a draft on it is reachable through that join
+        // — bootstrap already indexed the (empty) bundle before these files
+        // existed.
+        block_on(reindex_workspace()).unwrap();
+        block_on(open_note("closer".to_string())).unwrap();
+        block_on(open_note("pending".to_string())).unwrap();
+        update_block(
+            "pending".to_string(),
+            vec![0],
+            "Edited, unflushed.\n".to_string(),
+        )
+        .unwrap();
+
+        let pending = block_on(pending_drafts()).unwrap();
+        assert!(
+            pending.iter().any(|note| note.id == "pending"),
+            "pending_drafts must report the Note carrying an unflushed draft"
+        );
+        assert!(
+            !pending.iter().any(|note| note.id == "closer"),
+            "pending_drafts must not report a Note with no unflushed edits"
+        );
+
+        block_on(close_note("closer".to_string())).unwrap();
+        let status_after_close = note_write_status("closer".to_string());
+        assert!(
+            !status_after_close.has_unwritten_edits && status_after_close.last_written_at.is_none(),
+            "note_write_status for a closed Note must report the not-open \
+             default, proving the session actually ended"
+        );
+
+        block_on(close_note("pending".to_string())).unwrap();
+        let pending_after_close = block_on(pending_drafts()).unwrap();
+        assert!(
+            !pending_after_close.iter().any(|note| note.id == "pending"),
+            "closing a Note must flush and clear its draft row"
+        );
+    }
+
+    /// Slices `source` to everything before its own `#[cfg(test)] mod
+    /// tests { ... }` block. `include_str!` reads a whole file, this test
+    /// module included, so an unscoped scan is self-referential: a needle
+    /// that spells out the pattern it looks for would match its own line
+    /// and inflate a count, and a backward signature-hunting walk could
+    /// wander into test helper functions that happen to share a return
+    /// type with production code. Every scan below runs over this
+    /// production-only slice instead, for every file it looks at.
+    fn production_source(source: &str) -> &str {
+        source
+            .split_once("\nmod tests {")
+            .map_or(source, |(before, _)| before)
+    }
+
+    /// Names every function in `source` whose signature both returns
+    /// `Result<NoteState, AppError>` and takes neither a `Vec<usize>`
+    /// (a `block_path`) nor a `BlockRange` (a `range`) parameter — the
+    /// shape shared by a whole-Note entry point (`open_note`,
+    /// `reload_note`) as opposed to one of the per-Block or per-range
+    /// mutators (`commit_block`, `insert_block`, `delete_block`,
+    /// `split_block`, `merge_block_with_previous`, `delete_range`,
+    /// `replace_range`), which all share the same return type but always
+    /// name one of those two parameter shapes.
+    fn note_state_opening_signature_names(source: &str) -> Vec<String> {
+        let lines: Vec<&str> = source.lines().collect();
+        let mut names = Vec::new();
+        for (i, line) in lines.iter().enumerate() {
+            if !line.contains("-> Result<NoteState, AppError>") {
+                continue;
+            }
+            let mut start = i;
+            while start > 0
+                && !lines[start].trim_start().starts_with("pub fn ")
+                && !lines[start].trim_start().starts_with("pub async fn ")
+            {
+                start -= 1;
+            }
+            let signature = lines[start..=i].join(" ");
+            if signature.contains("Vec<usize>") || signature.contains("BlockRange") {
+                continue;
+            }
+            let after_fn = signature
+                .split_once("pub async fn ")
+                .or_else(|| signature.split_once("pub fn "))
+                .map(|(_, rest)| rest)
+                .unwrap_or(&signature);
+            let name = after_fn.split('(').next().unwrap_or(after_fn).trim();
+            names.push(name.to_string());
+        }
+        names
+    }
+
+    /// TDD order 6 (surface conformance): `open_note` accepts a concept id,
+    /// it is the *only* open-a-Note entry point (whether a sibling reuses
+    /// the `open_note` name, like a reintroduced `open_note_by_id`, or
+    /// invents a new one), and no function anywhere FRB scans
+    /// (`rust_input: crate::api`, i.e. this file plus `api::auth` and
+    /// `api::simple`) takes an owned `workspace_id` parameter — the active
+    /// Workspace is always resolved Core-side.
+    ///
+    /// Verified by scanning each file's own production source rather than
+    /// by runtime reflection: Rust has no introspection over a module's
+    /// public function signatures, and `#[frb]` erases to an ordinary
+    /// `pub fn`/`pub async fn` the compiler does not tag distinctly. An
+    /// explicit assertion over the `#[frb]` surface's own source text is
+    /// the form `WSPC-D008`'s STOP condition on this point names as the
+    /// fallback when a compile-time check is not practical.
+    #[test]
+    fn the_ffi_surface_has_one_concept_id_open_entry_point_and_no_function_takes_a_workspace_id() {
+        let ffi_api_source = production_source(include_str!("ffi_api.rs"));
+        let auth_source = production_source(include_str!("auth.rs"));
+        let simple_source = production_source(include_str!("simple.rs"));
+
+        assert_eq!(
+            ffi_api_source.matches("fn open_note").count(),
+            1,
+            "there must be exactly one open-a-Note entry point, and no \
+             sibling named e.g. open_note_by_id or open_note_at_path"
+        );
+        assert!(
+            ffi_api_source.contains("pub async fn open_note(note_id: String)"),
             "open_note must take a concept id named note_id, not a path or a \
              workspace_id"
         );
-        assert!(
-            !source.contains(workspace_id_param.as_str()),
-            "no exposed function may take a workspace_id parameter — the \
-             active Workspace is always resolved Core-side"
+
+        // A second, differently-named entry point — one that doesn't even
+        // contain "open_note" as a substring, so the name-based check
+        // above would miss it entirely — would still share this shape:
+        // returning Result<NoteState, AppError> while taking neither a
+        // block_path nor a range. `open_note` and `reload_note` are the
+        // only two functions on this boundary that legitimately do; every
+        // other same-shaped function is one of the per-Block or per-range
+        // mutators, which always name a block_path or range parameter.
+        let mut opener_shaped_names = note_state_opening_signature_names(ffi_api_source);
+        opener_shaped_names.sort();
+        assert_eq!(
+            opener_shaped_names,
+            vec!["open_note".to_string(), "reload_note".to_string()],
+            "the only functions that may return Result<NoteState, AppError> \
+             while taking neither a block_path (Vec<usize>) nor a range \
+             (BlockRange) are open_note and reload_note — any other name \
+             here is an undocumented additional entry point"
         );
+
+        for (file, source) in [
+            ("ffi_api.rs", ffi_api_source),
+            ("auth.rs", auth_source),
+            ("simple.rs", simple_source),
+        ] {
+            for line in source.lines() {
+                let Some(at) = line.find("workspace_id:") else {
+                    continue;
+                };
+                let after = line[at + "workspace_id:".len()..].trim_start();
+                assert!(
+                    after.starts_with("&str"),
+                    "{file}: no exposed function may take a workspace_id \
+                     parameter in an owned/typed form (String, \
+                     Option<String>, ...) — the active Workspace is always \
+                     resolved Core-side. Only a private *_impl helper's \
+                     borrowed `&str` parameter is allowed. Offending line: \
+                     {line:?}"
+                );
+            }
+        }
     }
 }
