@@ -89,15 +89,44 @@ pub fn reindex_workspace_impl(conn: &Connection, workspace_id: &str) -> Result<u
     Ok(indexed)
 }
 
-/// Reads one Note off disk and derives its rows, or `None` when the file is
-/// gone.
+/// One Note's file, read but not yet interpreted.
 ///
-/// Bytes rather than `read_to_string`: a bundle burlmd did not write may hold
-/// a file that is not valid UTF-8, and CAP-PORT-03 asks for that to be
-/// tolerated rather than to abort the scan. The hash is taken over the raw
-/// bytes (so it matches what a writer computes), and the text handed to the
-/// parser is a lossy decode of them.
-pub fn read_note(root: &Path, concept_id: &str) -> Result<Option<super::IndexedNote>, AppError> {
+/// The split exists for the incremental path: everything needed to decide
+/// whether a Note's rows are still current is here, and none of the parsing
+/// is. Deriving first and comparing afterwards made the common case — an
+/// unchanged file, on a path that runs after every write — pay a full parse,
+/// span map and link walk to conclude that nothing had changed.
+#[derive(Debug, Clone)]
+pub struct RawNote {
+    pub bytes: Vec<u8>,
+    /// SHA-256 of `bytes`, hex-encoded. Both `notes.content_hash` and the OCC
+    /// token (ADR-007 decision 7).
+    pub content_hash: String,
+    pub last_modified: i64,
+}
+
+impl RawNote {
+    /// Decodes and derives every index row this Note contributes.
+    ///
+    /// Lossy rather than `read_to_string`: a bundle burlmd did not write may
+    /// hold a file that is not valid UTF-8, and CAP-PORT-03 asks for that to
+    /// be tolerated rather than to abort the scan. The hash is taken over the
+    /// raw bytes, so it matches what a writer computes over the bytes it just
+    /// wrote.
+    #[must_use]
+    pub fn derive(&self, concept_id: &str) -> super::IndexedNote {
+        let source = String::from_utf8_lossy(&self.bytes).into_owned();
+        derive_note(
+            concept_id,
+            &source,
+            self.content_hash.clone(),
+            self.last_modified,
+        )
+    }
+}
+
+/// Reads one Note's bytes and hashes them, or `None` when the file is gone.
+pub fn read_note_bytes(root: &Path, concept_id: &str) -> Result<Option<RawNote>, AppError> {
     let path = root.join(crate::okf::concept_id_to_path(concept_id));
     let bytes = match std::fs::read(&path) {
         Ok(bytes) => bytes,
@@ -110,9 +139,19 @@ pub fn read_note(root: &Path, concept_id: &str) -> Result<Option<super::IndexedN
         .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
         .map_or(0, |d| d.as_secs() as i64);
 
-    let hash = super::content_hash(&bytes);
-    let source = String::from_utf8_lossy(&bytes).into_owned();
-    Ok(Some(derive_note(concept_id, &source, hash, last_modified)))
+    let content_hash = super::content_hash(&bytes);
+    Ok(Some(RawNote {
+        bytes,
+        content_hash,
+        last_modified,
+    }))
+}
+
+/// Reads one Note off disk and derives its rows, or `None` when the file is
+/// gone. The rebuild's per-file step: it always derives, because a rebuild
+/// has already discarded the rows it would have compared against.
+pub fn read_note(root: &Path, concept_id: &str) -> Result<Option<super::IndexedNote>, AppError> {
+    Ok(read_note_bytes(root, concept_id)?.map(|raw| raw.derive(concept_id)))
 }
 
 /// Walks the bundle, collecting concept ids and directory paths.
@@ -354,6 +393,53 @@ mod tests {
         assert_eq!(f.raw_fts_matches("alpha"), 1);
     }
 
+    /// A rebuild clears and rewrites one Workspace's rows. It must not reach
+    /// another's — the index accumulates rows for every Workspace ever opened
+    /// (ADR-005 decision 7), and the deletes here are the one place a missing
+    /// `workspace_id` predicate would strand a *different* bundle's entire
+    /// full text rather than merely losing a row.
+    #[test]
+    fn rebuilding_one_workspace_leaves_anothers_rows_and_text_intact() {
+        let f = fixture();
+        f.write("a.md", &conformant("A", "first workspace prose"));
+
+        let other_root = f.dir.path().join("bundle-2");
+        std::fs::create_dir_all(&other_root).unwrap();
+        std::fs::write(
+            other_root.join("a.md"),
+            conformant("A", "antidisestablishmentarianism elsewhere"),
+        )
+        .unwrap();
+        f.conn
+            .execute(
+                "INSERT INTO workspaces (id, name, provider, remote_url, local_path) \
+                 VALUES ('ws-2', 'Second', 'local', NULL, ?1)",
+                [other_root.to_string_lossy().to_string()],
+            )
+            .unwrap();
+        reindex_workspace_impl(&f.conn, "ws-2").unwrap();
+        reindex_workspace_impl(&f.conn, &f.workspace_id).unwrap();
+
+        // Rebuild the first Workspace again, now that both are populated.
+        reindex_workspace_impl(&f.conn, &f.workspace_id).unwrap();
+
+        assert_eq!(
+            f.raw_fts_matches("antidisestablishmentarianism"),
+            1,
+            "the other Workspace's text must survive a rebuild of this one"
+        );
+        assert_eq!(
+            f.count("SELECT count(*) FROM notes WHERE workspace_id = 'ws-2'"),
+            1
+        );
+        assert_eq!(
+            f.count("SELECT count(*) FROM notes_fts"),
+            f.count("SELECT count(*) FROM fts_mapping"),
+            "every notes_fts row must still be reachable through the mapping"
+        );
+        assert_eq!(f.count("SELECT count(*) FROM notes_fts"), 2);
+    }
+
     /// Gherkin: after a full reindex, `ANALYZE` has been run — without it the
     /// planner reaches `notes` by building a second automatic index per query.
     #[test]
@@ -412,6 +498,19 @@ mod tests {
                 .iter()
                 .any(|step| step.contains("AUTOMATIC COVERING INDEX")),
             "an automatic covering index is O(N) transient work per query, got: {plan:#?}"
+        );
+        assert!(
+            plan.iter()
+                .any(|step| step.contains("SEARCH n USING INDEX sqlite_autoindex_notes_1")),
+            "notes must be reached through its own (workspace_id, id) primary key — the half \
+             ANALYZE is responsible for, got: {plan:#?}"
+        );
+        assert!(
+            !plan
+                .iter()
+                .any(|step| step.contains("USE TEMP B-TREE FOR ORDER BY")),
+            "FTS5 already returns rows in rank order; a sort here means the plan lost that, \
+             got: {plan:#?}"
         );
     }
 

@@ -96,14 +96,25 @@ pub fn open_note(path: String) -> Result<NoteState, AppError> {
     let mut ast = crate::markdown::parse_markdown(&content);
     // `InlineElement::Link.exists` is the one field the parser cannot fill:
     // it is whether `target_id` matches a `notes` row, which only the index
-    // knows (WSPC-D003 declares the field, WSPC-D005 resolves it). Skipped
-    // when no Workspace is active — this entry point still takes a filesystem
-    // path rather than a concept id (WSPC-D008 reconciles that), so it is
-    // reachable with no Workspace open at all, and a Link then keeps the
-    // parser's `false`, which is also what "no indexed Note matches" means.
+    // knows (WSPC-D003 declares the field, WSPC-D005 resolves it).
+    //
+    // Two cases leave every Link at the parser's `false`, and they are not the
+    // same case. The first is that no Workspace is open at all, so there is no
+    // index to ask. The second is that this entry point still takes a
+    // filesystem path rather than a concept id (WSPC-D008 reconciles that), so
+    // it can be handed a file that is not in the active Workspace's bundle —
+    // and a concept id is unique only *within* a bundle, so resolving that
+    // file's Links against this index would answer about a different Note that
+    // happens to share an id. `Welcome` exists in more or less every bundle.
+    // Both cases collapse to `false`, which is also what "no indexed Note
+    // matches" means, and the contract already requires the follow path to
+    // re-resolve rather than trust the flag.
     if let Ok(workspace_id) = crate::db::connection::active_workspace_id() {
         crate::db::connection::with_connection(|conn| {
-            crate::index::resolve_link_existence(conn, &workspace_id, &mut ast)
+            if crate::index::path_is_in_workspace(conn, &workspace_id, path_obj)? {
+                crate::index::resolve_link_existence(conn, &workspace_id, &mut ast)?;
+            }
+            Ok(())
         })?;
     }
 

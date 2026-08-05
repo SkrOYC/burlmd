@@ -344,6 +344,19 @@ pub fn remove_note_rows(
 /// in from inside its own transaction — and `unchecked_transaction` errors
 /// rather than nesting. Joining is both what that ticket needs and the
 /// stronger guarantee: the index rows commit with the rename or not at all.
+///
+/// **The joining caller owns the rollback.** When this function joins an open
+/// transaction it cannot undo anything on the error path — there is no
+/// savepoint to release and the caller's transaction is still open — so a
+/// caller that swallows an `Err` from an index call and then commits will
+/// commit a half-applied rewrite: the deletes have already run, the inserts
+/// have not. Any caller that opens its own transaction around these functions
+/// must roll it back on `Err`. Nothing here can enforce that, which is why it
+/// is stated rather than assumed.
+///
+/// When this function *owns* the transaction there is no such obligation: `f`
+/// returning `Err` drops the `Transaction` without committing, and rusqlite
+/// rolls it back.
 fn in_transaction<T>(
     conn: &Connection,
     f: impl FnOnce(&Connection) -> Result<T, AppError>,
@@ -357,16 +370,95 @@ fn in_transaction<T>(
     Ok(out)
 }
 
-/// Refreshes the planner's table statistics.
+/// Refreshes the planner's table statistics, reading every index in full.
 ///
 /// Required after every path that rebuilds or updates the index
 /// (`schema.sql` at `idx_fts_mapping_rowid`): without it the planner reaches
 /// `notes` by building an automatic covering index per query — measured there
 /// at 15.7ms versus 4.5ms over 20,000 Notes — which `idx_fts_mapping_rowid`
 /// alone does not fix.
+///
+/// `analysis_limit = 0` (SQLite's "no limit") is set explicitly rather than
+/// left to the default, because the setting is a property of the connection
+/// and this crate shares one process-wide: without it, whichever path called
+/// [`analyze_bounded`] first would silently downgrade every later full
+/// rebuild's statistics.
+///
+/// Unbounded is right *here* and only here. A rebuild already costs one parse
+/// per Note in the bundle, so an exact scan of the indexes is a rounding error
+/// on top of it, and the statistics it produces are the ones every subsequent
+/// query plans against.
 pub fn analyze(conn: &Connection) -> Result<(), AppError> {
-    conn.execute_batch("ANALYZE;")?;
+    conn.execute_batch("PRAGMA analysis_limit = 0; ANALYZE;")?;
     Ok(())
+}
+
+/// SQLite's own recommended approximate-analysis budget: the number of rows
+/// `ANALYZE` samples per index before it stops and extrapolates. 400 is the
+/// value SQLite's documentation names for exactly this use — keeping the cost
+/// of re-analysis bounded on a database that is analysed routinely.
+const INCREMENTAL_ANALYSIS_LIMIT: u32 = 400;
+
+/// [`analyze`], bounded *and* scoped, for the per-write path.
+///
+/// A bare `ANALYZE` reads every index in the database in full, so its cost
+/// grows with the whole Workspace while the work that triggered it was one
+/// Note. That is the wrong shape for a path ADR-008's tier 2 runs on a timer
+/// during editing: the more Notes a user has, the more every individual write
+/// costs, forever.
+///
+/// Bounding alone turned out not to fix it, which is why this is two changes
+/// rather than one. Measured over 1000 Notes of ~9KB each, in release, against
+/// a real SQLCipher file:
+///
+/// | statement                                   | cost   |
+/// |---------------------------------------------|--------|
+/// | `ANALYZE`                                   | 11.8ms |
+/// | `analysis_limit = 400; ANALYZE`             | 10.5ms |
+/// | `analysis_limit = 400; ANALYZE` these three | 0.27ms |
+///
+/// The limit barely moves a bare `ANALYZE` because most of that time is spent
+/// on FTS5's own shadow tables — `notes_fts_data` and friends hold the whole
+/// corpus — and their statistics are worth nothing to any query this
+/// application runs: a virtual table's cost comes from its `xBestIndex`, not
+/// from `sqlite_stat1`. Naming the three real tables the plans actually join
+/// through skips all of it.
+///
+/// `PRAGMA optimize` is the obvious alternative and is deliberately not used:
+/// it decides for itself whether to analyse anything, so "ANALYZE has been
+/// run" would stop being a property this path guarantees.
+///
+/// The bound makes the statistics approximate. That is what they are for: the
+/// planner needs to know `notes` is large and its primary key selective, not
+/// its exact row count. The full rebuild still runs the exact analysis, so any
+/// drift is corrected at the next reindex.
+pub fn analyze_bounded(conn: &Connection) -> Result<(), AppError> {
+    conn.execute_batch(&format!(
+        "PRAGMA analysis_limit = {INCREMENTAL_ANALYSIS_LIMIT}; \
+         ANALYZE notes; ANALYZE fts_mapping; ANALYZE links;"
+    ))?;
+    Ok(())
+}
+
+/// True when `path` on disk lies inside `workspace_id`'s bundle.
+///
+/// Both sides are canonicalized before comparison, for the same reason
+/// `workspace::bootstrap` canonicalizes before writing `local_path`:
+/// `/x/ws/a.md`, `/x/./ws/a.md` and a symlinked spelling of either are one
+/// file, and a prefix test on the raw strings answers `false` for two of them.
+/// A path that cannot be canonicalized — it was deleted between the read and
+/// this call, or a component is unreadable — is reported as outside, which is
+/// the conservative answer for every caller here.
+pub fn path_is_in_workspace(
+    conn: &Connection,
+    workspace_id: &str,
+    path: &std::path::Path,
+) -> Result<bool, AppError> {
+    let root = workspace_root(conn, workspace_id)?;
+    let (Ok(root), Ok(path)) = (std::fs::canonicalize(&root), std::fs::canonicalize(path)) else {
+        return Ok(false);
+    };
+    Ok(path.starts_with(&root))
 }
 
 /// True when `note_id` names a Note indexed in `workspace_id`.
@@ -404,6 +496,9 @@ pub fn resolve_link_existence(
     }
 
     let mut existing = HashSet::new();
+    // One primary-key lookup per distinct target. If a Note with hundreds of
+    // Links ever shows up on a profile, the collapse is a single
+    // `id IN (...)` over the same index — not a different data structure.
     for target in targets {
         if note_exists(conn, workspace_id, &target)? {
             existing.insert(target);
@@ -742,6 +837,109 @@ mod tests {
         );
         assert_eq!(f.count("SELECT count(*) FROM fts_mapping"), 0);
         assert_eq!(f.count("SELECT count(*) FROM notes"), 0);
+    }
+
+    /// `open_note` still takes a filesystem path, so it can be handed a file
+    /// outside the active Workspace's bundle. A concept id is unique only
+    /// within a bundle, so resolving that file's Links against this index
+    /// would answer about a Note it shares an id with rather than the one it
+    /// names — and `Welcome` is in more or less every bundle. The containment
+    /// check is what stops that, and this is the shape `api::ffi_api`'s
+    /// `open_note` applies.
+    #[test]
+    fn a_file_outside_the_bundle_does_not_resolve_against_a_colliding_concept_id() {
+        let f = fixture();
+        insert_note_rows(
+            &f.conn,
+            &f.workspace_id,
+            &derive("Welcome", &conformant("Welcome", "The indexed one.")),
+        )
+        .unwrap();
+
+        let inside = f.root().join("inside.md");
+        std::fs::write(&inside, "[Welcome](</Welcome.md>)\n").unwrap();
+        let outside_dir = tempfile::tempdir().unwrap();
+        let outside = outside_dir.path().join("elsewhere.md");
+        std::fs::write(&outside, "[Welcome](</Welcome.md>)\n").unwrap();
+
+        assert!(path_is_in_workspace(&f.conn, &f.workspace_id, &inside).unwrap());
+        assert!(!path_is_in_workspace(&f.conn, &f.workspace_id, &outside).unwrap());
+
+        // The same two files, resolved the way `open_note` resolves them.
+        assert_eq!(resolved_flags(&f, &inside), vec![true]);
+        assert_eq!(
+            resolved_flags(&f, &outside),
+            vec![false],
+            "a foreign file's Link must not resolve against this bundle's Welcome"
+        );
+    }
+
+    /// A path that no longer exists cannot be shown to be inside the bundle,
+    /// and is reported as outside rather than by string comparison against a
+    /// path nothing can confirm.
+    #[test]
+    fn a_path_that_cannot_be_canonicalized_is_reported_outside() {
+        let f = fixture();
+
+        let vanished = f.root().join("never-existed.md");
+
+        assert!(!path_is_in_workspace(&f.conn, &f.workspace_id, &vanished).unwrap());
+    }
+
+    /// `in_transaction` owning the transaction must leave nothing behind when
+    /// the work fails part-way — the deletes in a rewrite run before the
+    /// inserts, so a partial commit is a Note stripped of its rows.
+    #[test]
+    fn a_failure_inside_an_owned_transaction_persists_nothing() {
+        let f = fixture();
+        insert_note_rows(
+            &f.conn,
+            &f.workspace_id,
+            &derive("a", &conformant("A", "original body")),
+        )
+        .unwrap();
+
+        let result: Result<(), AppError> = in_transaction(&f.conn, |tx| {
+            remove_note_rows(tx, &f.workspace_id, "a")?;
+            Err(AppError::IoError("write failed part-way".to_string()))
+        });
+
+        assert!(result.is_err());
+        assert_eq!(f.count("SELECT count(*) FROM notes"), 1);
+        assert_eq!(f.count("SELECT count(*) FROM fts_mapping"), 1);
+        assert_eq!(f.raw_fts_matches("original"), 1);
+    }
+
+    /// The two `ANALYZE` paths differ only in their budget, and both set it
+    /// explicitly — the setting lives on the connection, and this crate shares
+    /// one process-wide.
+    #[test]
+    fn the_two_analyze_paths_set_their_own_analysis_limit() {
+        let f = fixture();
+
+        analyze_bounded(&f.conn).unwrap();
+        assert_eq!(
+            f.count("PRAGMA analysis_limit"),
+            i64::from(INCREMENTAL_ANALYSIS_LIMIT)
+        );
+
+        analyze(&f.conn).unwrap();
+        assert_eq!(
+            f.count("PRAGMA analysis_limit"),
+            0,
+            "0 is SQLite's no-limit"
+        );
+    }
+
+    /// Applies the resolution `api::ffi_api::open_note` applies: resolve only
+    /// when the file is inside the active Workspace's bundle.
+    fn resolved_flags(f: &Fixture, path: &std::path::Path) -> Vec<bool> {
+        let source = std::fs::read_to_string(path).unwrap();
+        let mut ast = crate::markdown::parse_markdown(&source);
+        if path_is_in_workspace(&f.conn, &f.workspace_id, path).unwrap() {
+            resolve_link_existence(&f.conn, &f.workspace_id, &mut ast).unwrap();
+        }
+        link_flags(&ast)
     }
 
     fn link_flags(nodes: &[AstNode]) -> Vec<bool> {
