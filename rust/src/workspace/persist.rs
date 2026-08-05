@@ -418,10 +418,54 @@ struct SessionState {
     session_edited: bool,
     /// Whether edits are buffered that no successful tier 2 write has covered.
     unwritten: bool,
+    /// Whether the bytes currently in `source` hold an **unresolved merge
+    /// conflict** that [`conflict_suggestions`] collapsed into `Suggestion`
+    /// nodes.
+    ///
+    /// Set and cleared by [`NoteSession::reload`] alone, because that is the
+    /// only call that installs a collapsed AST, and re-evaluated on every
+    /// reload rather than latched — the exit from a conflict is repairing the
+    /// file and reloading it.
+    ///
+    /// While it stands, `ast` and `spans` describe **different documents**: the
+    /// collapse replaces each conflict region's several raw Blocks with one
+    /// `Suggestion` node and renumbers everything after it, while the span map
+    /// is built from the raw source and still indexes the marker lines. Every
+    /// `block_path` the UI reads off that AST therefore addresses some other
+    /// Block of the file, so every call that takes one is refused until the
+    /// conflict is gone. See [`SessionState::refuse_while_conflicted`].
+    conflicted: bool,
     last_written_at: Option<i64>,
     last_error: Option<AppError>,
     closed: bool,
     metadata: NoteMetadata,
+}
+
+impl SessionState {
+    /// Refuses `what` while [`SessionState::conflicted`] stands.
+    ///
+    /// Called from inside the same critical section as the work it guards, so
+    /// that no mutator can pass the check against one state and then mutate
+    /// another.
+    ///
+    /// The refusal is a `ParseError` because that is what every other
+    /// unaddressable-`block_path` refusal on this surface already is
+    /// (`update_block`'s container-path rule, `block_source`'s missing Block),
+    /// and the caller's exit is the same in all three cases: this path names
+    /// nothing it can act on. What is different is the *remedy*, so the message
+    /// states it — the conflict is resolved in the file, and `reload` picks the
+    /// repaired bytes up.
+    fn refuse_while_conflicted(&self, note_id: &str, what: &str) -> Result<(), AppError> {
+        if !self.conflicted {
+            return Ok(());
+        }
+        Err(AppError::ParseError(format!(
+            "{note_id} holds an unresolved merge conflict, so {what} is refused: the \
+             Suggestion nodes the reload installed renumbered this Note's Blocks and the \
+             span map still indexes the raw markers, so no block_path addresses the same \
+             Block in both. Resolve the conflict in the file, then reload the Note."
+        )))
+    }
 }
 
 struct SessionInner {
@@ -581,6 +625,11 @@ pub fn open_note(
         // commit it.
         session_edited: restored_from_draft,
         unwritten: restored_from_draft,
+        // An open parses the source as it is, markers and all: the AST and the
+        // span map are built from the same bytes by the same call, so every
+        // `block_path` addresses the Block it names. Only `reload` collapses a
+        // conflict, so only `reload` can set this.
+        conflicted: false,
         last_written_at: None,
         last_error: None,
         closed: false,
@@ -656,8 +705,16 @@ impl NoteSession {
     }
 
     /// The raw Markdown source of one Block (ADR-006 decision 2).
+    ///
+    /// Refused while the Note holds an unresolved conflict. This reads rather
+    /// than writes, but it is addressed the same wrong way as the mutators are
+    /// — `[2]` names `Para B.` in the collapsed AST and the conflict's
+    /// `incoming` section in the span map — and handing back a Block the caller
+    /// did not ask for is how the wrong text reaches the editor in the first
+    /// place. [`SessionState::conflicted`] has the whole of it.
     pub fn block_source(&self, block_path: &[usize]) -> Result<String, AppError> {
         let state = self.lock_state()?;
+        state.refuse_while_conflicted(&self.0.note_id, "reading a Block's source")?;
         state
             .spans
             .block_source(&state.source, block_path)
@@ -690,6 +747,7 @@ impl NoteSession {
         let (snapshot, seq) = {
             let mut guard = self.lock_state()?;
             let state = &mut *guard;
+            state.refuse_while_conflicted(&self.0.note_id, "editing a Block")?;
             let span = state
                 .spans
                 .block(block_path)
@@ -753,6 +811,10 @@ impl NoteSession {
         loop {
             let (source, seq) = {
                 let state = self.lock_state()?;
+                // A reparse of a conflicted buffer would replace the collapsed
+                // AST with the raw one — silently un-resolving the Suggestion
+                // the user is looking at, and doing it on a blur.
+                state.refuse_while_conflicted(&self.0.note_id, "committing a Block")?;
                 (Arc::clone(&state.source), state.edit_seq)
             };
             let ParsedNote { mut ast, spans } =
@@ -930,8 +992,13 @@ impl NoteSession {
 
     /// The Markdown a multi-Block selection covers — a slice of the Note, never
     /// a reconstruction of one.
+    ///
+    /// Refused while the Note is conflicted for [`block_source`](Self::block_source)'s
+    /// reason: a `RenderedRange` is two `block_path`s, and neither addresses
+    /// the Block the caller selected.
     pub fn copy_range_as_markdown(&self, range: &RenderedRange) -> Result<String, AppError> {
         let state = self.lock_state()?;
+        state.refuse_while_conflicted(&self.0.note_id, "copying a range")?;
         Ok(splice::extract_range(&state.source, &state.spans, range)
             .map_err(splice_error)?
             .to_string())
@@ -952,6 +1019,7 @@ impl NoteSession {
         loop {
             let (source, spans, seq) = {
                 let state = self.lock_state()?;
+                state.refuse_while_conflicted(&self.0.note_id, "a structural edit")?;
                 (
                     Arc::clone(&state.source),
                     Arc::clone(&state.spans),
@@ -1380,10 +1448,9 @@ impl NoteSession {
 
         let dir = containing_dir(&self.0.note_id);
         let ParsedNote { ast, spans } = parse_note(&source, dir);
-        let mut ast = match conflict_suggestions(&source, dir) {
-            Some(resolved) => resolved,
-            None => ast,
-        };
+        let collapsed = conflict_suggestions(&source, dir);
+        let conflicted = collapsed.is_some();
+        let mut ast = collapsed.unwrap_or(ast);
         self.resolve_links(&mut ast)?;
         let metadata = derive_metadata(
             &self.0.note_id,
@@ -1416,6 +1483,11 @@ impl NoteSession {
         state.metadata = metadata;
         state.restored_from_draft = false;
         state.unwritten = false;
+        // Re-evaluated rather than latched, in both directions: a reload of a
+        // file the user (or the Sync Manager) has since repaired is the only
+        // exit from the refusals below, and a reload that reads *newly*
+        // conflicted bytes into a Note that was fine has to enter them.
+        state.conflicted = conflicted;
         state.last_error = None;
         drop(state);
         self.note_state()
@@ -1431,11 +1503,24 @@ impl NoteSession {
     /// through this tier, and one empty commit per Note visited would destroy
     /// the readable history the whole design exists to produce.
     ///
-    /// A refused flush aborts the close with the error and leaves the session,
-    /// the draft row and the file exactly as they were. Committing bytes this
-    /// application did not write, or clearing a row holding work that never
-    /// reached disk, are both worse than a close the UI has to follow with a
-    /// reload — which is the exit the contract routes every mismatch through.
+    /// A refused flush aborts the close with the error, before the commit and
+    /// before the draft-row clear: committing bytes this application did not
+    /// write, or clearing a row holding work that never reached disk, are both
+    /// worse than a close the UI has to follow with a reload — which is the
+    /// exit the contract routes every mismatch through.
+    ///
+    /// **The session is left closable, not untouched**, and the distinction
+    /// matters to whoever retries. A flush fails at one of three points, and
+    /// only the first leaves nothing behind: the OCC comparison
+    /// ([`write_locked`](Self::write_locked)) refuses before any byte moves,
+    /// but a failure in either SQL stage *after* it — the conditional draft
+    /// clear, the index update — happens with the bytes already published by
+    /// the atomic rename and the OCC baseline already advanced to match them.
+    /// So a refused close may well have written the file. What it never does is
+    /// commit, clear the row, or retire the session, which is what makes the
+    /// retry clean rather than merely possible: the second close re-enters with
+    /// a buffer the file already matches, so its flush writes nothing, passes,
+    /// and completes the SQL stages the first one did not reach.
     ///
     /// **Neither a refused commit nor a refused draft-row clear does**, and the
     /// asymmetry is the point: by the time either runs the flush has succeeded,
@@ -2151,6 +2236,14 @@ pub(super) fn carry_session_forward(
             awaiting_recreate: state.awaiting_recreate,
             session_edited: state.session_edited,
             unwritten: state.unwritten,
+            // Not carried across, because the AST installed below is a fresh
+            // `parse_note` of the moved bytes: it and its span map come from
+            // the same call over the same source, so nothing is renumbered and
+            // every `block_path` addresses the Block it names again. The
+            // markers survive as literal text until the next reload collapses
+            // them, which is exactly what an `open_note` over the same file
+            // would produce.
+            conflicted: false,
             last_written_at: state.last_written_at,
             last_error: state.last_error.clone(),
             closed: false,
@@ -2247,6 +2340,10 @@ impl NoteSession {
         state.ast = Arc::new(ast);
         state.metadata = metadata;
         state.revision = new_revision;
+        // Cleared for the reason the moved session's snapshot clears it: the
+        // AST and the span map above came from one `parse_note` over one
+        // source, so they address the same document again.
+        state.conflicted = false;
         Ok(())
     }
 }
@@ -2352,7 +2449,12 @@ fn decode_source(path: &Path, bytes: Vec<u8>) -> Result<String, AppError> {
 /// overwrite and rollback both route here. The mode is copied from the existing
 /// target when there is one, and left at the private creation mode when this
 /// write is creating the file.
-pub(super) fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), AppError> {
+///
+/// `pub(crate)` rather than `pub(super)` for one caller outside this module:
+/// `git::operations::ensure_scratch_ignored`, which extends the *user's* own
+/// `.gitignore` and was the last write into a bundle still going through a
+/// truncating `std::fs::write`. See that function for why it belongs here.
+pub(crate) fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), AppError> {
     static NEXT_TEMP: AtomicU64 = AtomicU64::new(0);
 
     assert_no_io_under_the_connection("an atomic write");
@@ -2670,9 +2772,30 @@ pub(super) fn derive_metadata(
 /// parser.
 ///
 /// The span map handed back alongside this AST is the one built from the whole
-/// source, so it does not address the Suggestion nodes. That is accepted rather
-/// than overlooked: a conflicted Note is not editable until the Suggestion is
-/// resolved, and Epic H owns that surface.
+/// source, so it does not address the Suggestion nodes — and it is worse than
+/// that: collapsing a conflict region's several raw Blocks into one node
+/// **renumbers** every Block after it, so the two structures describe different
+/// documents rather than merely disagreeing about one region. That is why
+/// [`SessionState::conflicted`] exists. Returning a collapsed AST is what sets
+/// it, and while it stands every call that takes a `block_path` is refused, so
+/// the mismatch is unreachable rather than merely documented. Epic H owns the
+/// resolution surface.
+///
+/// # An unterminated region is not a conflict
+///
+/// The scan is line-based and has no idea what a fenced code block is, so a
+/// Note that *documents* a merge conflict — `<<<<<<< HEAD` inside a fence,
+/// which is an ordinary thing to write — opens a region nothing closes. Every
+/// line after it accumulated into a section that was never emitted, and the
+/// tail of the Note disappeared from the AST outright.
+///
+/// So a scan that ends anywhere but [`Section::Plain`] reports `None`: the
+/// document is treated as **not conflicted**, parsed as the ordinary Markdown
+/// it is, and the fenced sample stays visible as text. That is the right answer
+/// for both populations this reaches. A prose Note about merge conflicts is not
+/// conflicted, and neither is a genuinely truncated merge file — Git's own
+/// output always closes what it opens, so a region with no `>>>>>>>` is not
+/// something this application should be materializing Suggestions from.
 fn conflict_suggestions(source: &str, containing_dir: &str) -> Option<Vec<AstNode>> {
     if !source.contains("<<<<<<< ") {
         return None;
@@ -2725,7 +2848,11 @@ fn conflict_suggestions(source: &str, containing_dir: &str) -> Option<Vec<AstNod
             (Section::Incoming, _) => incoming.push_str(line),
         }
     }
-    if !saw_conflict {
+    // Nothing is salvaged from a half-open region, and nothing is fabricated
+    // from one either: whatever `local`, `base` and `incoming` accumulated is
+    // dropped along with `nodes`, and the caller parses the source as ordinary
+    // Markdown instead. See this function's own documentation.
+    if !saw_conflict || !matches!(section, Section::Plain) {
         return None;
     }
     nodes.extend(parse_markdown_segment(&plain, containing_dir));
@@ -4908,5 +5035,184 @@ mod tests {
             "a session that appeared after the snapshot ran unlocked inside the \
              lifecycle operation, so an idle write could land in the middle of it"
         );
+    }
+
+    // -- a conflicted Note is not editable until it is resolved --------------
+
+    /// A merged file whose conflict is genuinely terminated, so
+    /// [`conflict_suggestions`] collapses it. Three Blocks in the AST it
+    /// produces — `Para A.`, the `Suggestion`, `Para B.` — against four in the
+    /// span map built from these same bytes, which is the whole of the hazard
+    /// below.
+    const CONFLICTED: &str = "---\ntype: Note\ntitle: Alpha\n---\n\nPara A.\n\n\
+                              <<<<<<< HEAD\nMine.\n=======\nTheirs.\n\
+                              >>>>>>> origin/main\n\nPara B.\n";
+
+    fn refuses_as_conflicted<T: std::fmt::Debug>(what: &str, result: Result<T, AppError>) {
+        match result {
+            // Named, not merely refused: the caller has to be able to tell this
+            // apart from an unaddressable `block_path`, because the remedy is
+            // completely different.
+            Err(AppError::ParseError(message)) => assert!(
+                message.starts_with("a holds an unresolved merge conflict"),
+                "{what}: the refusal must name the Note and the unresolved \
+                 conflict, got {message:?}"
+            ),
+            other => panic!("{what} must refuse while the conflict stands, got {other:?}"),
+        }
+    }
+
+    /// `reload` installs an AST the conflict collapse **renumbered** alongside
+    /// a span map built from the raw source, so every `block_path` the UI reads
+    /// off that AST addresses a different Block of the file: `[2]` is `Para B.`
+    /// in the AST and the conflict's `incoming` section in the map. Served,
+    /// `block_source` hands back the wrong text; taken, `update_block` splices
+    /// the user's typing over conflict machinery and tier 2 writes it to disk.
+    ///
+    /// The invariant the collapse always claimed — "a conflicted Note is not
+    /// editable until the Suggestion is resolved" — is therefore enforced
+    /// rather than merely documented.
+    #[test]
+    fn a_conflicted_note_refuses_every_call_that_addresses_a_block() {
+        let f = fixture();
+        f.write("a.md", &note("Alpha", "Para A."));
+        let session = f.open("a");
+        f.write("a.md", CONFLICTED);
+
+        let state = session.reload().unwrap();
+        assert!(
+            state
+                .ast
+                .iter()
+                .any(|node| matches!(node, AstNode::Suggestion { .. })),
+            "the fixture must actually conflict: {:?}",
+            state.ast
+        );
+
+        let range = RenderedRange::new(vec![0], 0, vec![2], 1);
+        refuses_as_conflicted("block_source", session.block_source(&[2]));
+        refuses_as_conflicted(
+            "update_block",
+            session.update_block(&[2], "typed over it\n"),
+        );
+        refuses_as_conflicted("commit_block", session.commit_block(&[2]));
+        refuses_as_conflicted(
+            "insert_block",
+            session.insert_block(&[2], "inserted".to_string()),
+        );
+        refuses_as_conflicted("delete_block", session.delete_block(&[2]));
+        refuses_as_conflicted("split_block", session.split_block(&[2], 1));
+        refuses_as_conflicted(
+            "merge_block_with_previous",
+            session.merge_block_with_previous(&[2]),
+        );
+        refuses_as_conflicted("delete_range", session.delete_range(&range));
+        refuses_as_conflicted("replace_range", session.replace_range(&range, "x"));
+        refuses_as_conflicted(
+            "copy_range_as_markdown",
+            session.copy_range_as_markdown(&range),
+        );
+
+        // Nothing was buffered and nothing reached disk.
+        assert_eq!(*session.working_source().unwrap(), CONFLICTED);
+        assert_eq!(f.read("a.md"), CONFLICTED);
+        // The read-only surface is untouched: this is a Note the user must be
+        // able to look at in order to resolve it.
+        assert!(!session.note_state().unwrap().ast.is_empty());
+        assert!(!session.write_status().unwrap().has_unwritten_edits);
+    }
+
+    /// The exit. The conflict is resolved outside this application — by the
+    /// user in another editor, or by the Sync Manager — and the reload that
+    /// picks those bytes up re-evaluates the flag rather than latching it, so
+    /// the Note becomes editable again with no reopen.
+    #[test]
+    fn a_reload_of_a_repaired_file_makes_the_note_editable_again() {
+        let f = fixture();
+        f.write("a.md", &note("Alpha", "Para A."));
+        let session = f.open("a");
+        f.write("a.md", CONFLICTED);
+        session.reload().unwrap();
+        assert!(session.update_block(&[2], "x\n").is_err());
+
+        f.write("a.md", &note("Alpha", "Para A.\n\nResolved.\n\nPara B."));
+        let state = session.reload().unwrap();
+
+        assert!(
+            !state
+                .ast
+                .iter()
+                .any(|node| matches!(node, AstNode::Suggestion { .. })),
+            "the repaired file still parsed as conflicted: {:?}",
+            state.ast
+        );
+        assert_eq!(session.block_source(&[2]).unwrap().trim(), "Para B.");
+        session.update_block(&[2], "Para B, edited.\n").unwrap();
+        session.flush().unwrap();
+        assert!(f.read("a.md").contains("Para B, edited."));
+    }
+
+    /// A conflicted session still **closes**, and closes clean: the buffer is
+    /// byte-identical to the file the reload read, so tier 2 writes nothing and
+    /// the conflicted bytes are the user's own merge state rather than anything
+    /// this application put there. Refusing the close instead would strand a
+    /// Note the user cannot navigate away from, which is the trap every other
+    /// path in this tier is shaped to avoid.
+    #[test]
+    fn closing_a_conflicted_session_writes_nothing_of_its_own() {
+        let f = fixture();
+        f.write("a.md", &note("Alpha", "Para A."));
+        let session = f.open("a");
+        session
+            .update_block(&[0], "Edited before the merge.\n")
+            .unwrap();
+        f.write("a.md", CONFLICTED);
+        session.reload().unwrap();
+
+        session.close().unwrap();
+
+        assert_eq!(
+            f.read("a.md"),
+            CONFLICTED,
+            "close rewrote a file it had no edits for"
+        );
+    }
+
+    /// A `<<<<<<<` line **inside a fenced code block** — a Note documenting how
+    /// to resolve a merge, which is an ordinary thing to write — opens a region
+    /// the line-based scan never sees closed. Everything after it used to be
+    /// swallowed into the unterminated section and dropped from the AST
+    /// outright, so the tail of the Note vanished on reload.
+    ///
+    /// A scan that ends outside `Plain` therefore reports **no conflict at
+    /// all**: an unterminated region is not one, and treating it as one would
+    /// also fabricate `Suggestion` nodes out of a code sample.
+    #[test]
+    fn an_unterminated_marker_is_not_a_conflict_and_keeps_the_notes_tail() {
+        let f = fixture();
+        f.write("a.md", &note("Alpha", "Intro."));
+        let session = f.open("a");
+        f.write(
+            "a.md",
+            "---\ntype: Note\ntitle: Alpha\n---\n\nIntro.\n\n\
+             ```\n<<<<<<< HEAD\n```\n\nTail paragraph.\n",
+        );
+
+        let state = session.reload().unwrap();
+
+        let rendered = format!("{:?}", state.ast);
+        assert!(
+            !state
+                .ast
+                .iter()
+                .any(|node| matches!(node, AstNode::Suggestion { .. })),
+            "a fenced marker is not a conflict: {rendered}"
+        );
+        assert!(
+            rendered.contains("Tail paragraph"),
+            "the tail after the unterminated marker was dropped: {rendered}"
+        );
+        // And the Note stays editable, because nothing renumbered its Blocks.
+        assert_eq!(session.block_source(&[0]).unwrap().trim(), "Intro.");
     }
 }

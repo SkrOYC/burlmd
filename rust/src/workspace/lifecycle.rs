@@ -1086,10 +1086,17 @@ fn apply_reidentify_locked(
 /// unreadable file, a Link with no addressable destination — are raised from
 /// here, where nothing has moved yet.
 fn plan_affected(workspace: &Arc<Workspace>, plan: &Reidentify) -> Result<Vec<Affected>, AppError> {
-    let mut candidates: BTreeSet<String> = plan.remap.keys().cloned().collect();
-    if let Some((note_id, _)) = &plan.retitled {
-        candidates.insert(note_id.clone());
-    }
+    // The operation's **own** ids: the ones it was asked to re-identify or
+    // retitle. Everything else in `candidates` below is swept in by this
+    // function on suspicion of holding a Link, and the two populations are
+    // resolved on different terms — see the loop.
+    let targets: BTreeSet<String> = plan
+        .remap
+        .keys()
+        .cloned()
+        .chain(plan.retitled.iter().map(|(note_id, _)| note_id.clone()))
+        .collect();
+    let mut candidates: BTreeSet<String> = targets.clone();
     for old_id in plan.remap.keys() {
         let sources = workspace.with_db(|conn| link_sources(conn, workspace.id(), old_id))?;
         candidates.extend(sources);
@@ -1121,8 +1128,39 @@ fn plan_affected(workspace: &Arc<Workspace>, plan: &Reidentify) -> Result<Vec<Af
             .get(&old_id)
             .cloned()
             .unwrap_or_else(|| old_id.clone());
-        let old_path = workspace.note_path(&old_id)?;
-        let new_path = workspace.note_path(&new_id)?;
+        // **A swept candidate that will not resolve is dropped; a target still
+        // refuses.**
+        //
+        // `note_path` is strict by design — it refuses a backslash, an interior
+        // NUL, anything that escapes the bundle, and a leaf or ancestor that is
+        // a symbolic link — and every one of those is the right answer for an id
+        // the *operation* names. But the candidate set above is deliberately
+        // much wider than the operation: it sweeps every id in `drafts` and
+        // every open session, because a Link this rename must remove can live
+        // in a row or a buffer that never reached disk.
+        //
+        // Propagating from a swept candidate made that width a liability. A
+        // `drafts` row is persistent state written by an older build, another
+        // tool, or a session whose file has since been replaced by a link, and
+        // the user has no call that clears one — so a single such row made
+        // *every* rename and *every* Directory move in the Workspace fail, over
+        // an id the operation was never asked about and cannot rewrite anyway.
+        //
+        // Dropping it costs exactly what the sweep would have gained from it:
+        // nothing. `note_path` refusing means there is no file to read and no
+        // path to write, so the candidate could only ever have contributed its
+        // draft row and its buffer — and those are unreachable through the same
+        // refusal (`open_note` calls `note_path` first), so no recovery can put
+        // the stale Link back on disk either. The strict answer is kept exactly
+        // where it is actionable: on the ids the caller named.
+        let resolved = workspace
+            .note_path(&old_id)
+            .and_then(|old_path| Ok((old_path, workspace.note_path(&new_id)?)));
+        let (old_path, new_path) = match resolved {
+            Ok(paths) => paths,
+            Err(error) if targets.contains(&old_id) => return Err(error),
+            Err(_) => continue,
+        };
         let new_title = plan
             .retitled
             .as_ref()
@@ -5545,5 +5583,67 @@ mod tests {
             let parsed = crate::okf::read_frontmatter(&out[block]);
             assert_eq!(parsed.title.as_deref(), Some(title), "{out:?}");
         }
+    }
+
+    /// `plan_affected`'s candidate set is deliberately wider than the operation
+    /// — it sweeps every drafted and every open concept id, because a Link the
+    /// rename must remove can live in a row or a buffer that never reached disk.
+    /// Resolving those candidates strictly made the width a liability: one
+    /// drafted id that `note_path` refuses, anywhere in the Workspace and
+    /// unrelated to anything being renamed, propagated out of the sweep and
+    /// aborted the whole operation.
+    ///
+    /// A `drafts` row can hold such an id perfectly legitimately — it is
+    /// persistent state written by an older build, another tool, or a session
+    /// whose file has since been replaced by a symbolic link — and there is no
+    /// call the user can make to clear it, so the Workspace would be permanently
+    /// unrenameable. So a swept candidate that will not resolve is dropped, and
+    /// only the operation's own targets keep the strict answer.
+    #[test]
+    fn an_unresolvable_drafted_id_elsewhere_does_not_block_an_unrelated_rename() {
+        let f = fixture();
+        f.write("Old Name.md", &note("Old Name", "target"));
+        f.write(
+            "b.md",
+            &note("b", &format!("see {}", link("Old", "Old Name"))),
+        );
+        f.reindex();
+        // A drafted concept id `Workspace::note_path` refuses outright: a
+        // backslash is a character no segment may carry, and nothing in the
+        // application will ever rewrite this row.
+        f.put_draft(
+            "stale\\foreign",
+            &note("stale", "orphaned by an older build"),
+        );
+
+        let (state, effects) = rename_note(&f.workspace, "Old Name", "New Name")
+            .expect("one unresolvable drafted id must not abort every rename in the Workspace");
+
+        assert_eq!(state.metadata.id, "New Name");
+        assert_eq!(effects.rewritten, vec!["b".to_string()]);
+        assert!(f.exists("New Name.md"));
+        assert!(f.read("b.md").contains("</New Name.md>"));
+        assert!(
+            f.draft_row("stale\\foreign").is_some(),
+            "the row is dropped from the sweep, not from the database"
+        );
+    }
+
+    /// The other half of the same rule: an operation's own **target** still
+    /// resolves strictly. Refusing to move a Note whose id names nothing
+    /// addressable is the whole point of the check, and skipping it here would
+    /// turn a refusal into a rename that silently did nothing.
+    #[test]
+    fn an_unresolvable_operation_target_is_still_refused() {
+        let f = fixture();
+        f.write("a.md", &note("a", "body"));
+        f.reindex();
+
+        let result = rename_note(&f.workspace, "stale\\foreign", "New Name");
+
+        assert!(
+            matches!(result, Err(AppError::PathUnavailable(_))),
+            "expected the target's own refusal, got {result:?}"
+        );
     }
 }

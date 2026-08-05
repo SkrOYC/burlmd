@@ -172,6 +172,26 @@ pub fn init_repo(dest: &Path) -> Result<bool, AppError> {
 /// carry patterns that matter to tools burlmd knows nothing about, and the only
 /// edit made here is appending the lines that are genuinely absent.
 ///
+/// # Why this publishes by rename
+///
+/// The append is composed in memory and then written through
+/// [`crate::workspace::persist::atomic_write`], not `std::fs::write`. This is
+/// the one write this application makes into a file the *user* owns — every
+/// other write into a bundle is a Note, and every one of those already goes
+/// through that call — and a truncating write is the one shape that can destroy
+/// the file it is extending: `std::fs::write` opens with `O_TRUNC`, so a kill
+/// (or a full disk) between the truncate and the write leaves the user's own
+/// `.gitignore` empty, having lost patterns burlmd never had any business
+/// touching. Publishing by rename means the previous contents stay addressable
+/// until the new ones are complete and `fsync`ed. `atomic_write` also carries
+/// the target's mode forward, which matters for the same reason it matters for
+/// a Note: the file the user ends up with is the temporary one, so without that
+/// step a restricted `.gitignore` would come back world-readable.
+///
+/// A `.gitignore` this call *creates* therefore lands at `atomic_write`'s
+/// private creation mode rather than at the umask, which is consistent with
+/// every Note this application creates rather than a special case.
+///
 /// Returns `true` when the file was actually created or appended to, so that
 /// [`init_repo`]'s caller can commit it exactly once. See [`init_repo`].
 fn ensure_scratch_ignored(dest: &Path) -> Result<bool, AppError> {
@@ -212,8 +232,7 @@ fn ensure_scratch_ignored(dest: &Path) -> Result<bool, AppError> {
         out.push_str(pattern);
         out.push('\n');
     }
-    std::fs::write(&path, out)
-        .map_err(|e| AppError::IoError(format!("write {}: {e}", path.display())))?;
+    crate::workspace::persist::atomic_write(&path, out.as_bytes())?;
     Ok(true)
 }
 
@@ -1015,6 +1034,65 @@ mod tests {
             paths,
             vec![".gitignore", "Kept.md"],
             "no scratch file may reach a commit"
+        );
+    }
+
+    /// The `.gitignore` append is the only write this application makes into a
+    /// file the **user** owns, and it was the only one not going through
+    /// `persist::atomic_write`: a `std::fs::write` truncates in place, so a kill
+    /// between the truncate and the write left the user's own `.gitignore`
+    /// empty — on the adoption path, where the file is theirs and may carry
+    /// patterns burlmd knows nothing about (this function's own documentation
+    /// promises it is "never rewritten or reordered").
+    ///
+    /// Asserted by **inode identity**, which is what tells the two shapes
+    /// apart: a truncating write keeps the target's inode, while publishing by
+    /// rename replaces it — so the previous contents are addressable until the
+    /// instant the new ones are complete and durable. The mode assertion is the
+    /// second half of routing through that call rather than a second concern:
+    /// `carry_permissions_forward` is what keeps a rename from silently
+    /// widening a file the user had restricted.
+    #[cfg(unix)]
+    #[test]
+    fn extending_the_users_gitignore_publishes_by_rename_rather_than_truncating_it() {
+        use std::os::unix::fs::{MetadataExt, PermissionsExt};
+
+        let dir = tempdir().unwrap();
+        let path = dir.path().join(".gitignore");
+        std::fs::write(&path, "*.pdf\ndrafts/\n").unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
+        let before = std::fs::metadata(&path).unwrap().ino();
+
+        assert!(
+            super::init_repo(dir.path()).unwrap(),
+            "the patterns were absent, so this open must report having written them"
+        );
+
+        let after = std::fs::metadata(&path).unwrap();
+        assert_ne!(
+            before,
+            after.ino(),
+            "the .gitignore was written in place, so a kill mid-write would empty it"
+        );
+        assert_eq!(
+            after.permissions().mode() & 0o777,
+            0o600,
+            "the rename replaced the mode the user chose"
+        );
+        let contents = std::fs::read_to_string(&path).unwrap();
+        assert!(
+            contents.starts_with("*.pdf\ndrafts/\n"),
+            "the user's own patterns must survive verbatim, got {contents:?}"
+        );
+
+        let leftovers: Vec<String> = std::fs::read_dir(dir.path())
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+            .filter(|name| name.ends_with(".tmp"))
+            .collect();
+        assert!(
+            leftovers.is_empty(),
+            "the publishing rename left a temporary file behind: {leftovers:?}"
         );
     }
 

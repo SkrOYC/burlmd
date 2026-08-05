@@ -610,6 +610,15 @@ When the tree is requested
 Then it returns nested entries with Directories before Notes at each level
 ```
 
+##### Epic Closeout Deviations & Justifications
+
+Every other file this epic touched is recorded against the ticket that touched it, either in its Scope list or in one of the per-ticket Deviations sections above. Two are not, because they were touched by the closeout reconciliation commit (`docs(constitution): Epic D reconciliation and closeout`) rather than by any ticket. They are recorded here so the epic's bookkeeping is checkable end to end rather than having two files nobody can trace to a decision.
+
+- **`README.md`** — the Status section still read "Phase 0 — tooling … no application code exists yet", and pointed the reader at `CORE-A001` in an epic file that had already moved to `completed/`. That was false on the day Epic A merged and had gone four epics stale by this one. Rewriting it is explicitly in the closeout brief's freshness pass — the same pass that reconciled `tech-spec/`, `architecture/` and `prd/` — and the README is the one document outside `.constitution/` that states project status, so leaving it wrong would have been the reconciliation stopping one file short of its own purpose. The rewrite states what the Core now covers and, deliberately, that none of it is reachable in the running application yet, so the file does not overstate the epic in the other direction.
+- **`rust/src/api/auth.rs`** — a doc comment on `store_tokens_in_keyring` cited `save_note_impl` in `simple.rs` as precedent for how non-`pub` free functions are left out of the generated bindings. `WSPC-D008` replaced `save_note` with `flush_note` and the M8 review's stale-doc-comment sweep caught the dangling reference; it now cites `find_notes_by_title_impl`, which exists. Comment text only: no signature, no body, no behavior. It is in this epic's blast radius rather than Epic C's because this epic is what invalidated the reference, and fixing a comment that names a symbol the reader cannot find is cheaper here than filing it against a closed epic.
+
+Neither file is in any ticket's Scope list, and neither should have been: both were made stale *by* the epic rather than needed *for* it, which is precisely the class of change a closeout reconciliation exists to absorb.
+
 ## Completion Notes & Deferred Follow-Ups
 
 All nine tickets (`WSPC-D001` … `WSPC-D009`) are implemented, independently reviewed and merged across 17 commits: one Spike commit, eight feature commits, and eight review-fix commits — one per feature milestone, since every milestone's review returned at least one finding worth fixing. The convention followed throughout was a single-pass full review per milestone with every P0 and P1 fixed before the next ticket began; P2s were either fixed in the same round or recorded here.

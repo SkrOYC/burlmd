@@ -190,9 +190,46 @@ fn open_workspace_with(index: &IndexHandle, path: String) -> Result<WorkspaceInf
 /// what is really one bundle, splitting its index across two id spaces —
 /// which ADR-005 decision 7 requires not happen (WSPC-D004 review
 /// finding #2).
+///
+/// # A root that is not valid UTF-8 is refused
+///
+/// This is the same rule `index::scan::walk_bundle` applies to an *entry* name,
+/// applied to the bundle root, and for the same reason: on Unix a path is
+/// bytes, `to_string_lossy` does not fail — it substitutes `U+FFFD` — and
+/// [`converge`] stores what it returns in `workspaces.local_path`. A mangled
+/// value there names no directory on this filesystem, and that column is the
+/// root every later path resolution in this application is joined onto, so one
+/// lossy conversion at bootstrap poisons every Note path derived from it for
+/// the life of the row.
+///
+/// It is also **strictly worse than the entry-name case, because it cannot
+/// self-repair.** A skipped entry is indexed by the next scan once its name is
+/// valid; a mangled root is matched by `converge`'s reuse-by-`local_path`
+/// lookup on the next open — the same directory canonicalizes to the same
+/// bytes and mangles to the same string — so the broken row is found, reused,
+/// and never rewritten. There is no later moment at which this gets better,
+/// which is why it is refused at the one moment it can be.
+///
+/// The path arrives as a `String` and is therefore valid UTF-8 as supplied; the
+/// case this catches is what `canonicalize` **resolves it to**, which a symlink
+/// or an `XDG_DATA_HOME` full of arbitrary bytes chooses rather than the
+/// caller. The bytes on disk are untouched — nothing is renamed, nothing is
+/// created — and a user who moves the bundle somewhere representable opens it
+/// normally.
 fn canonicalize_workspace_dir(dir: &Path) -> Result<PathBuf, AppError> {
-    std::fs::canonicalize(dir)
-        .map_err(|e| AppError::IoError(format!("resolve workspace path {}: {e}", dir.display())))
+    let canonical = std::fs::canonicalize(dir)
+        .map_err(|e| AppError::IoError(format!("resolve workspace path {}: {e}", dir.display())))?;
+    if canonical.to_str().is_none() {
+        return Err(AppError::IoError(format!(
+            "the workspace path {} resolves to {}, which is not valid UTF-8: recording it \
+             would store a mangled local_path that names no directory and that every later \
+             path resolution is joined onto. Move the bundle to a path this application can \
+             represent.",
+            dir.display(),
+            canonical.display()
+        )));
+    }
+    Ok(canonical)
 }
 
 /// The convergent bootstrap logic shared by both entry points
@@ -1236,5 +1273,57 @@ mod tests {
 
         let legacy_path = fake_home.path().join(".burlmd").join("index.sqlite3");
         assert_ne!(index_path, legacy_path);
+    }
+
+    /// A bundle root that resolves to a path which is not valid UTF-8 is
+    /// refused, for the reason `index::scan::walk_bundle` skips an *entry* so
+    /// named: `to_string_lossy` does not fail, it substitutes `U+FFFD`, and
+    /// what would go into `workspaces.local_path` is then a string naming no
+    /// directory on this filesystem.
+    ///
+    /// That column is the root every later path resolution is joined onto, so
+    /// the damage is not local to the row — and unlike a mangled *entry* name,
+    /// it can never self-repair: the next open canonicalizes to the same bytes,
+    /// mangles them the same way, and matches the same broken row by
+    /// `local_path`, so reuse is what keeps it alive. Refusing at the boundary
+    /// is the only exit.
+    ///
+    /// The path arrives here as a `String`, so it is valid UTF-8 by
+    /// construction — which is exactly why this is reached through a symlink:
+    /// `canonicalize` resolves it, and what it resolves *to* is bytes nobody at
+    /// the FFI boundary chose.
+    #[cfg(unix)]
+    #[test]
+    fn a_workspace_root_that_resolves_to_non_utf8_bytes_is_refused_and_writes_no_row() {
+        use std::os::unix::ffi::OsStrExt;
+
+        let index_dir = tempdir().unwrap();
+        let conn = test_index(index_dir.path());
+        let parent = tempdir().unwrap();
+        // `0x80` is a continuation byte with no lead, so this is a valid Unix
+        // path and not valid UTF-8 — the case `to_string_lossy` absorbs.
+        let real = parent.path().join(std::ffi::OsStr::from_bytes(b"ws-\x80"));
+        std::fs::create_dir(&real).unwrap();
+        assert!(real.to_str().is_none(), "the fixture must be non-UTF-8");
+        let link = parent.path().join("bundle");
+        std::os::unix::fs::symlink(&real, &link).unwrap();
+
+        let result = open_workspace_impl(&conn, link.to_string_lossy().to_string());
+
+        match result {
+            Err(AppError::IoError(message)) => assert!(
+                message.contains("UTF-8"),
+                "the refusal must say why, got {message:?}"
+            ),
+            other => panic!("a non-UTF-8 workspace root must be refused, got {other:?}"),
+        }
+        let count: i64 = conn
+            .query_row("SELECT count(*) FROM workspaces", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, 0, "no workspaces row may be written for it");
+        assert!(
+            !real.join(".git").exists(),
+            "a refused root must not be initialized as a repository"
+        );
     }
 }
