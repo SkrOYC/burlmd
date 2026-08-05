@@ -207,9 +207,12 @@ fn canonicalize_workspace_dir(dir: &Path) -> Result<PathBuf, AppError> {
 /// the rebuild derives rows from bytes it never writes back. The side effects
 /// on a foreign directory are exactly three, and none of them is content:
 /// `.git/`, a `.gitignore` extended with burlmd's own scratch patterns
-/// (`git::operations::init_repo`), and the removal of any `.burlmd-trash.*` or
-/// `.{stem}.{pid}.{n}.tmp` file a previous kill left behind
-/// ([`sweep_scratch_files`]) — which are burlmd's, not the bundle's.
+/// (`git::operations::init_repo`) plus the single commit that records it, and
+/// the removal of any `.burlmd-trash.*` or `.{stem}.{pid}.{n}.tmp` file a
+/// previous kill left behind ([`sweep_scratch_files`]) — which are burlmd's,
+/// not the bundle's. That commit is made only on the open that actually writes
+/// the file, so a repeat open of an already-converged bundle adds nothing to
+/// history.
 ///
 /// # Nothing here holds the connection across the filesystem
 ///
@@ -228,7 +231,43 @@ fn canonicalize_workspace_dir(dir: &Path) -> Result<PathBuf, AppError> {
 /// function just established, and bootstrap is a single-threaded moment at
 /// application start.
 fn converge(index: &IndexHandle, dir: &Path) -> Result<WorkspaceInfo, AppError> {
-    crate::git::operations::init_repo(dir)?;
+    let ignore_written = crate::git::operations::init_repo(dir)?;
+    // The one write bootstrap makes into the user's bundle, so it is also the
+    // one bootstrap has to record. `init_repo` creates or extends `.gitignore`
+    // and commits nothing, which left the file untracked (on a fresh bundle) or
+    // modified (on an adopted one) in every `git status` the user ever ran
+    // against their own bundle — a worktree burlmd dirtied on their behalf and
+    // never cleaned up. Worse, it was resolved at a time nobody chose: the next
+    // tier 3 close would not sweep it (that pathspec is one Note), but the next
+    // `commit_all` from a sync would, filing burlmd's housekeeping inside an
+    // unrelated commit.
+    //
+    // Committed **only when the file actually changed**, which is what keeps a
+    // repeat open from writing a second, empty-tree-identical commit — and what
+    // makes `open_workspace`'s "existing history is adopted unchanged" promise
+    // survive this: an adopted bundle that already carries the patterns is
+    // touched neither on disk nor in history. A foreign bundle that does not
+    // carry them gains exactly one commit, which is the trade this makes
+    // knowingly — one recorded housekeeping commit at a moment the user chose
+    // (they just opened the bundle) against a worktree burlmd dirtied and left.
+    //
+    // Propagated rather than bound and dropped like the scratch sweep below,
+    // and the asymmetry is deliberate: the sweep is best-effort tidying with
+    // `.gitignore` itself as its backstop, whereas a `commit_paths` that fails
+    // here means the repository cannot be committed into at all — which every
+    // tier 3 close in the session is about to discover the hard way, one Note's
+    // worth of work later. Reporting it at open is the earlier and cheaper of
+    // the two moments.
+    if ignore_written {
+        crate::git::operations::commit_paths(
+            dir,
+            "Ignore burlmd scratch files\n\n\
+             .burlmd-trash.* and .*.tmp are this application's own scratch files: a deleted \
+             Note's full content and a Note mid-write, both plaintext, both left behind only \
+             by a kill. Ignoring them keeps a whole-worktree commit from publishing either.\n",
+            &[".gitignore".to_string()],
+        )?;
+    }
     // Bound and dropped rather than propagated: a scratch entry that could not
     // be removed is untidy, is already `.gitignore`d, and will be swept again
     // at the next open — none of which is a reason to refuse the user their
@@ -814,6 +853,61 @@ mod tests {
         open_workspace_impl(&conn, adopted.path().to_string_lossy().to_string()).unwrap();
         let twice = std::fs::read_to_string(adopted.path().join(".gitignore")).unwrap();
         assert_eq!(twice, extended, "a repeat open must change nothing");
+    }
+
+    /// The `.gitignore` write is also **committed**, in a pathspec'd commit of
+    /// its own, and only on the open that actually wrote it.
+    ///
+    /// It is a file burlmd puts inside the user's bundle. Left uncommitted it is
+    /// untracked (fresh bundle) or modified (adopted one) in every `git status`
+    /// the user ever runs against their own notes, forever — a worktree this
+    /// application dirtied on their behalf and never cleaned up — and it is
+    /// resolved at a time nobody chose, by the next `commit_all` a sync makes,
+    /// filing burlmd's housekeeping inside an unrelated commit.
+    #[test]
+    fn bootstrap_commits_the_gitignore_it_writes_and_only_when_it_writes_one() {
+        let index_dir = tempdir().unwrap();
+        let conn = test_index(index_dir.path());
+        let bundle = tempdir().unwrap();
+
+        open_or_create_local_workspace_impl(
+            &conn,
+            Some(bundle.path().to_string_lossy().to_string()),
+        )
+        .unwrap();
+
+        assert_eq!(
+            git_out(bundle.path(), &["status", "--porcelain"]),
+            "",
+            "bootstrap left the bundle's worktree dirty with its own .gitignore"
+        );
+        assert!(
+            git_out(bundle.path(), &["ls-tree", "-r", "--name-only", "HEAD"])
+                .lines()
+                .any(|line| line == ".gitignore"),
+            "the .gitignore is not in HEAD"
+        );
+        let subjects = git_out(bundle.path(), &["log", "--format=%s"]);
+        assert_eq!(subjects, "Ignore burlmd scratch files", "{subjects:?}");
+
+        // A repeat open writes nothing, so it must commit nothing.
+        open_workspace_impl(&conn, bundle.path().to_string_lossy().to_string()).unwrap();
+        assert_eq!(
+            git_out(bundle.path(), &["log", "--format=%s"]),
+            subjects,
+            "a repeat open added a second commit for a file it did not touch"
+        );
+    }
+
+    fn git_out(dir: &Path, args: &[&str]) -> String {
+        let output = std::process::Command::new("git")
+            .args(args)
+            .current_dir(dir)
+            .env("GIT_CONFIG_GLOBAL", "/dev/null")
+            .env("GIT_CONFIG_SYSTEM", "/dev/null")
+            .output()
+            .expect("git CLI available in devenv shell");
+        String::from_utf8_lossy(&output.stdout).trim().to_string()
     }
 
     /// `flow-workspace-bootstrap.md`'s fourth post-condition: the bundle is

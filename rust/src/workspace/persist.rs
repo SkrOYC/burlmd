@@ -202,6 +202,15 @@ impl Workspace {
     /// disagreement is currently harmless — but it is the same shape as the
     /// defect that made translating-then-checking unsafe, and one rule shared by
     /// three functions is cheaper than three that have to be re-verified apart.
+    ///
+    /// An interior **NUL** is refused on the same terms and by the same three
+    /// functions. `validate_segment` already rejected it in a *name*, so a
+    /// `create_note` was refused cleanly while a `create_directory("a\0b")`
+    /// reached the filesystem and came back as a raw `IoError` about an invalid
+    /// argument — the same input, two unrelated-looking answers, and the leaked
+    /// one names an implementation detail rather than the rule it broke. It is
+    /// also the one character no `CString` can carry, so nothing downstream
+    /// could act on it even if it got through.
     pub(super) fn note_path(&self, note_id: &str) -> Result<PathBuf, AppError> {
         use std::path::Component;
 
@@ -209,6 +218,11 @@ impl Workspace {
             return Err(AppError::PathUnavailable(format!(
                 "concept id {note_id} does not name a file inside the Workspace: a concept id \
                  is `/`-separated and a backslash is a character no segment may carry"
+            )));
+        }
+        if note_id.contains('\0') {
+            return Err(AppError::PathUnavailable(format!(
+                "concept id {note_id:?} contains a NUL, which no path on this system can carry"
             )));
         }
 
@@ -231,6 +245,36 @@ impl Workspace {
             })?;
 
         let absolute = self.root.join(relative_path);
+
+        // The **leaf** gets the rule its ancestors already had, and it is the
+        // half that was missing rather than a belt-and-braces addition.
+        // [`Workspace::ensure_directory_contained`] walks the *directory*
+        // components above, so `Foo.md -> Real.md` planted inside the bundle
+        // passed every check here: the link resolves inside the Workspace, so
+        // the containment test below is satisfied, and the Note opens, reads
+        // and writes through it perfectly well. `index::scan::walk_bundle`
+        // skips symbolic links, so at the next reindex — which runs on every
+        // Workspace open — the row disappears while the file stays on disk and
+        // `lifecycle::ensure_path_available` consults the filesystem, leaving
+        // `Foo` permanently taken by a Note nothing in the application can see.
+        // That is precisely the ending the directory rule and the
+        // dot-prefixed-name rule both exist to prevent, reached through the one
+        // component neither of them looked at.
+        //
+        // `symlink_metadata` rather than `exists`, for that function's reason:
+        // a *broken* link is seen as present and refused here rather than
+        // mistaken for a name a create is free to take.
+        if let Ok(metadata) = std::fs::symlink_metadata(&absolute) {
+            if metadata.file_type().is_symlink() {
+                return Err(AppError::PathUnavailable(format!(
+                    "concept id {note_id} is a symbolic link, and the indexer skips those — a \
+                     Note read or written through one either lands outside the Workspace or \
+                     disappears from it at the next reindex while its file, and its name, stay \
+                     taken"
+                )));
+            }
+        }
+
         if absolute.exists() {
             let contained = match (
                 std::fs::canonicalize(&self.root),
@@ -1342,6 +1386,17 @@ impl NoteSession {
     /// reached disk, are both worse than a close the UI has to follow with a
     /// reload — which is the exit the contract routes every mismatch through.
     ///
+    /// **A refused commit does not**, and the asymmetry is the point: by then
+    /// the flush has succeeded, so the Note's bytes are on disk and its rows are
+    /// in the index. The close therefore runs to completion — draft cleared,
+    /// session deregistered, timer with nothing left to fire against — and the
+    /// commit-stage error is returned afterwards, saying so. This used to
+    /// propagate with `?` and strand the session in the registry with its timer
+    /// armed, leaving a Note that could not be closed and could not be navigated
+    /// away from over a Git-level failure that had nothing to do with the user's
+    /// work. Every one of tier 3's four siblings in `workspace::lifecycle`
+    /// already reconciled first and reported second.
+    ///
     /// **A file that has vanished is the one exception**, because it is the one
     /// case where refusing traps the user. Something outside this application
     /// deleted the Note; every subsequent flush and every reload will fail on
@@ -1370,15 +1425,35 @@ impl NoteSession {
             }
         }
 
+        // The commit stage's failure is **held**, not propagated, for the
+        // reason the four lifecycle operations already hold theirs
+        // ([`super::lifecycle::commit_stage_failure`]) — and here the cost of
+        // propagating was worse than an unrecorded commit. The flush above has
+        // already put the Note's bytes on disk and its rows in the index; a `?`
+        // here returned before the session was deregistered, its timer left
+        // armed and its `closed` flag unset, so the Note could not be closed,
+        // could not be navigated away from, and every retry took the same exit
+        // — over a Git failure (an unreadable object store, a `.git` a sync
+        // moved) that had nothing to do with the user's work, which was already
+        // safe.
+        //
+        // `commit_message` is inside this too: it reads `HEAD` through
+        // `path_in_head`, so whatever breaks the commit generally breaks the
+        // message first, and it is the same stage either way.
         let mut committed = false;
+        let mut commit_failure: Option<AppError> = None;
         if edited && !file_vanished {
-            let message = self.commit_message()?;
-            let commit = crate::git::operations::commit_paths(
-                self.0.workspace.root(),
-                &message,
-                std::slice::from_ref(&self.0.relative_path),
-            )?;
-            committed = commit.is_some();
+            let staged = self.commit_message().and_then(|message| {
+                crate::git::operations::commit_paths(
+                    self.0.workspace.root(),
+                    &message,
+                    std::slice::from_ref(&self.0.relative_path),
+                )
+            });
+            match staged {
+                Ok(commit) => committed = commit.is_some(),
+                Err(error) => commit_failure = Some(error),
+            }
         }
 
         // Bound to the sequence the write actually covered, for the same reason
@@ -1402,6 +1477,18 @@ impl NoteSession {
         // committed nothing notifies nothing.
         if committed {
             notify_sync_activity();
+        }
+
+        // Reported only now that the close itself is complete: the session is
+        // out of the registry, the idle timer has nothing left to fire against,
+        // and the Note is closable again. What the caller gets is the truth —
+        // the Note is written, only its history record is missing.
+        if let Some(error) = commit_failure {
+            return Err(super::lifecycle::commit_stage_failure(
+                &format!("closing {}", self.0.note_id),
+                error,
+                &[],
+            ));
         }
         Ok(())
     }
@@ -3519,6 +3606,61 @@ mod tests {
         );
         assert_eq!(f.commit_subjects().len(), 1);
         assert!(f.draft("a").is_some(), "the draft row was cleared anyway");
+    }
+
+    /// A close whose **commit** fails is the opposite case, and used to be
+    /// treated identically.
+    ///
+    /// By then the flush has succeeded: the bytes are on disk and the rows are
+    /// in the index. Propagating with `?` returned before the session was
+    /// deregistered and before `closed` was set, so the Note stayed in the
+    /// registry with its idle timer armed — unclosable, un-navigable-away-from,
+    /// and every retry taking the same exit, over a Git-level failure that had
+    /// nothing to do with the user's work. All four of tier 3's siblings in
+    /// `workspace::lifecycle` already reconciled first and reported second
+    /// through `commit_stage_failure`; this is the same treatment.
+    #[test]
+    fn a_close_whose_commit_fails_still_closes_the_note_and_says_so() {
+        let f = fixture();
+        f.write("a.md", &note("Alpha", "First."));
+        f.commit_baseline();
+        let session = f.open("a");
+        session.update_block(&[0], "Alpha edited.\n").unwrap();
+        // The commit stage, and only the commit stage: tier 2's atomic write
+        // and the index both work perfectly well without a repository.
+        std::fs::remove_dir_all(f.root().join(".git")).unwrap();
+
+        let result = session.close();
+
+        let message = match &result {
+            Err(error) => format!("{error:?}"),
+            Ok(()) => panic!("the commit failure must still be reported"),
+        };
+        assert!(
+            message.contains("the commit recording it in version history failed"),
+            "the error must name the stage that failed, and say the Note itself is \
+             written: {message}"
+        );
+        assert!(
+            message.contains("closing a"),
+            "the error must name what was being closed: {message}"
+        );
+
+        assert_eq!(
+            f.read("a.md"),
+            "---\ntype: Note\ntitle: Alpha\n---\n\nAlpha edited.\n",
+            "the flush had already succeeded; the Note's bytes must be on disk"
+        );
+        assert!(
+            lookup(f.workspace.id(), "a").unwrap().is_none(),
+            "the session is still registered, so the Note can never be closed"
+        );
+        assert!(f.draft("a").is_none(), "the draft row survived the close");
+
+        // And the Note is usable again rather than trapped.
+        let (reopened, state) = open_note(&f.workspace, "a").unwrap();
+        assert!(!state.restored_from_draft);
+        reopened.close().unwrap();
     }
 
     // -- the idle timer ------------------------------------------------------

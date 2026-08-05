@@ -13,6 +13,7 @@ export 'package:burlmd/src/rust/api/ffi_api.dart' show BlockRange;
 export 'package:burlmd/src/rust/index/query.dart' show LinkCompletion, TreeNode;
 export 'package:burlmd/src/rust/workspace/lifecycle.dart'
     show IdRemap, LifecycleEffects;
+export 'package:burlmd/src/rust/workspace/persist.dart' show NoteWriteStatus;
 
 /// Thin, app-owned wrapper around the generated FRB free functions. This is
 /// the seam application code depends on instead of importing `ffi_api.dart`

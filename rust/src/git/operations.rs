@@ -133,7 +133,17 @@ pub fn clone_repo(
 /// `.gitignore` carrying `workspace::SCRATCH_IGNORE_PATTERNS`. See
 /// [`ensure_scratch_ignored`] for why that has to happen on the adoption path
 /// too, and for how a user's existing file is extended rather than replaced.
-pub fn init_repo(dest: &Path) -> Result<(), AppError> {
+///
+/// Returns **whether that `.gitignore` was created or extended**, because the
+/// file is a write into the user's bundle that nothing here commits. Left
+/// uncommitted it is an untracked (or modified) path in every `git status` the
+/// user ever runs against their own bundle, forever, and it is resolved at a
+/// time nobody chose by whatever commits next — a tier 3 close sweeping it into
+/// a Note's commit, or a `commit_all` from a sync. The caller that owns the
+/// bundle-opening flow ([`crate::workspace::bootstrap`]) records it in one
+/// pathspec'd commit of its own, and only when this reports `true`: a repeat
+/// open writes nothing and must therefore commit nothing.
+pub fn init_repo(dest: &Path) -> Result<bool, AppError> {
     // Bootstrap's first phase, and one of the three that used to run inside a
     // `with_connection` closure — `SPK-WSPC-D001` §6.2.7's first standing rule.
     crate::db::connection::assert_no_io_under_the_connection("initializing a repository");
@@ -161,7 +171,10 @@ pub fn init_repo(dest: &Path) -> Result<(), AppError> {
 /// The existing file is never rewritten or reordered. It is the user's, may
 /// carry patterns that matter to tools burlmd knows nothing about, and the only
 /// edit made here is appending the lines that are genuinely absent.
-fn ensure_scratch_ignored(dest: &Path) -> Result<(), AppError> {
+///
+/// Returns `true` when the file was actually created or appended to, so that
+/// [`init_repo`]'s caller can commit it exactly once. See [`init_repo`].
+fn ensure_scratch_ignored(dest: &Path) -> Result<bool, AppError> {
     let path = dest.join(".gitignore");
     let existing = match std::fs::read_to_string(&path) {
         Ok(contents) => Some(contents),
@@ -181,7 +194,7 @@ fn ensure_scratch_ignored(dest: &Path) -> Result<(), AppError> {
         .filter(|pattern| !present.contains(pattern))
         .collect();
     if missing.is_empty() {
-        return Ok(());
+        return Ok(false);
     }
 
     let mut out = String::new();
@@ -200,7 +213,8 @@ fn ensure_scratch_ignored(dest: &Path) -> Result<(), AppError> {
         out.push('\n');
     }
     std::fs::write(&path, out)
-        .map_err(|e| AppError::IoError(format!("write {}: {e}", path.display())))
+        .map_err(|e| AppError::IoError(format!("write {}: {e}", path.display())))?;
+    Ok(true)
 }
 
 /// Snapshot every file currently in the working tree (excluding `.git` and anything matched

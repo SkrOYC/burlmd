@@ -455,7 +455,20 @@ pub fn rename_directory(
             "no Directory at {directory} in this Workspace"
         )));
     }
-    if new_directory != directory && new_absolute.exists() {
+    // The same escape [`ensure_path_available`] makes for a Note, and for the
+    // same reason: `Notes` -> `notes` finds *its own directory* at the
+    // destination on a case-insensitive filesystem, which macOS ships by
+    // default and `data-models/okf-bundle.md` records under "Case sensitivity
+    // follows the filesystem". A bare `exists()` therefore made a case-only
+    // rename of a Directory impossible on one of this project's two shipping
+    // platforms, while `rename_note` had allowed the Note equivalent all along.
+    // Same-file identity — not a case-insensitive string comparison — is what
+    // distinguishes it, so a genuine collision with a differently-cased sibling
+    // that really is a second directory is still refused.
+    if new_directory != directory
+        && new_absolute.exists()
+        && !is_same_file(&new_absolute, Some(&old_absolute))
+    {
         return Err(AppError::PathUnavailable(format!(
             "{new_directory} already exists in this Workspace"
         )));
@@ -637,6 +650,17 @@ struct Affected {
     new_id: String,
     old_path: PathBuf,
     new_path: PathBuf,
+    /// Whether `old_path` held a file when the operation was planned.
+    ///
+    /// `false` only for a Note that reached the sweep through its **draft row
+    /// or its open session** while its file was gone — the population
+    /// `persist::open_note`'s recovery branch produces. Everything about such a
+    /// candidate is in-memory or in the `drafts` table: nothing is written to
+    /// disk for it, nothing is staged for it, and no index row is derived from
+    /// it, because there are no bytes to derive one from and inventing an empty
+    /// one would blank the Note's title, text and edges (or conjure a row for a
+    /// Note the index never had).
+    on_disk: bool,
     /// Disk bytes after the operation, when they change.
     new_file: Option<String>,
     /// The working source of the Note's open session after the operation, when
@@ -680,8 +704,13 @@ fn apply_reidentify_locked(
     // Derived out here rather than inside the connection closure: deriving
     // reads and parses, and `SPK-WSPC-D001` §6.2.7 forbids file I/O under the
     // process-wide connection mutex a keystroke's own draft write waits on.
+    // Only the candidates that have a file. One that arrived through its draft
+    // row or its session with no file behind it has no bytes to derive rows
+    // from — see [`Affected::on_disk`] — and its stale rows are rebuilt from the
+    // bundle at the next reindex.
     let indexed: Result<Vec<index::IndexedNote>, AppError> = affected
         .iter()
+        .filter(|a| a.on_disk)
         .map(|a| {
             let source = final_source(a)?;
             Ok(index::derive_note(
@@ -727,7 +756,11 @@ fn apply_reidentify_locked(
         .collect();
 
     let mut pathspec: Vec<String> = Vec::new();
-    for a in &affected {
+    // A candidate with no file is skipped here too, and this one is not merely
+    // pointless: `commit_paths` reads a named path that is absent from disk as a
+    // *removal*, so staging the vanished file would record a deletion this
+    // operation did not perform, in a commit about a rename.
+    for a in affected.iter().filter(|a| a.on_disk) {
         pathspec.push(concept_id_to_path(&a.old_id));
         if a.old_id != a.new_id {
             pathspec.push(concept_id_to_path(&a.new_id));
@@ -857,45 +890,82 @@ fn plan_affected(workspace: &Arc<Workspace>, plan: &Reidentify) -> Result<Vec<Af
             .filter(|(id, _)| *id == old_id)
             .map(|(_, title)| title.as_str());
 
-        let Some(disk) = read_source(&old_path)? else {
-            // The index lists this Note as a Link source but its file is gone.
-            // Nothing to rewrite, and its rows are rebuilt from the bundle at
-            // the next reindex; refusing the rename over someone else's stale
-            // row would be the wrong direction of strictness.
-            if plan.remap.contains_key(&old_id) {
-                return Err(AppError::NotFound(format!(
-                    "no file on disk for concept id {old_id}"
-                )));
-            }
-            continue;
-        };
+        let disk = read_source(&old_path)?;
+        if disk.is_none() && plan.remap.contains_key(&old_id) {
+            // The Note being re-identified has no file to move.
+            return Err(AppError::NotFound(format!(
+                "no file on disk for concept id {old_id}"
+            )));
+        }
         let dir = containing_dir(&old_id).to_string();
-        let new_file = rewrite_note_text(&disk, &dir, &plan.remap, new_title)?;
+        let new_file = match &disk {
+            Some(source) => rewrite_note_text(source, &dir, &plan.remap, new_title)?,
+            None => None,
+        };
 
         let buffer = persist::lookup(workspace.id(), &old_id)?
             .map(|session| session.working_source())
             .transpose()?;
+        let held_by_a_session = buffer.is_some();
         let new_buffer = match buffer {
             Some(source) => rewrite_note_text(&source, &dir, &plan.remap, new_title)?,
             None => None,
         };
 
         let draft = workspace.with_db(|conn| read_draft_text(conn, workspace.id(), &old_id))?;
+        let held_by_a_draft = draft.is_some();
         let new_draft = match draft {
             Some(source) => rewrite_note_text(&source, &dir, &plan.remap, new_title)?,
             None => None,
         };
 
+        // A candidate with **no file on disk** is only dropped when nothing
+        // else holds it either.
+        //
+        // The candidate set is deliberately wider than the `links` table (see
+        // above), and the two populations it adds — a Note with an unflushed
+        // draft row, and a Note open with buffered edits — are exactly the ones
+        // that can outlive their own file. `open_note`'s recovery branch opens a
+        // Note whose file was deleted underneath it *from the draft row*, so a
+        // draft holding the only Link to the renamed concept is routinely a
+        // draft with no file behind it. Dropping it here on the strength of the
+        // missing file left that Link untouched, and the recovered session's
+        // first tier 2 write then put the dead link back on disk and into the
+        // index — the rename reverted from the one direction file-level
+        // atomicity cannot see (`architecture/risks.md` risk 8), which is the
+        // whole reason these two populations are swept at all.
+        //
+        // A candidate the `links` table alone produced, with no file, no draft
+        // and no session, still drops: nothing addressable holds it, and its
+        // rows are rebuilt from the bundle at the next reindex. Refusing the
+        // rename over someone else's stale row would be the wrong direction of
+        // strictness.
+        if disk.is_none() && !held_by_a_draft && !held_by_a_session {
+            continue;
+        }
+
         if new_file.is_none() && new_buffer.is_none() && new_draft.is_none() && old_id == new_id {
             continue;
         }
 
-        let revision = content_hash(new_file.as_deref().unwrap_or(&disk).as_bytes());
+        // `""` for a vanished file rather than a read: it is what
+        // `persist::open_note` hashes for an absent one (`ABSENT_FILE`), so the
+        // baseline this hands to `carry_session_forward` is the baseline the
+        // recovering session already holds and its next write still compares
+        // equal.
+        let revision = content_hash(
+            new_file
+                .as_deref()
+                .or(disk.as_deref())
+                .unwrap_or("")
+                .as_bytes(),
+        );
         affected.push(Affected {
             old_id,
             new_id,
             old_path,
             new_path,
+            on_disk: disk.is_some(),
             new_file,
             new_buffer,
             new_draft,
@@ -1064,6 +1134,15 @@ fn settled_state(workspace: &Arc<Workspace>, note_id: &str) -> Result<NoteState,
     let path = workspace.note_path(note_id)?;
     let bytes = std::fs::read(&path)
         .map_err(|e| AppError::IoError(format!("read {}: {e}", path.display())))?;
+    // Lossy is safe **here and nowhere else in this crate**: these are bytes
+    // this process just wrote through `write_files`, so a replacement character
+    // cannot appear, and `base_revision` below is hashed from the raw `bytes`
+    // rather than from `source`, so even if one did the OCC baseline would still
+    // describe the file exactly. Every other constructor of an editable state —
+    // `persist::open_note`, `NoteSession::reload` — decodes strictly through
+    // `persist::decode_source` instead, because there the bytes are foreign and
+    // a silent substitution would be written back over the user's file on the
+    // next tier 2 write. Do not copy this line into one of those.
     let source = String::from_utf8_lossy(&bytes).into_owned();
     let ParsedNote { mut ast, spans } = parse_note(&source, containing_dir(note_id));
     workspace.with_db(|conn| index::resolve_link_existence(conn, workspace.id(), &mut ast))?;
@@ -1282,7 +1361,16 @@ fn rolled_back(journal: &mut FileJournal, error: AppError) -> AppError {
 /// (the deferred `ANALYZE`, whose failure is not worth an error of its own).
 /// It is attached only when there is already an error to attach it to, which is
 /// the whole of the record this crate can keep without a logging framework.
-fn commit_stage_failure(subject: &str, error: AppError, best_effort: &[String]) -> AppError {
+///
+/// Shared with [`persist::NoteSession::close`], which is tier 3's own commit and
+/// reaches the same state by the same route: the flush has already put the
+/// bytes on disk and the rows in the index, so a failure to record that in
+/// history is a report to make, not an operation to abandon.
+pub(super) fn commit_stage_failure(
+    subject: &str,
+    error: AppError,
+    best_effort: &[String],
+) -> AppError {
     let trailer = if best_effort.is_empty() {
         String::new()
     } else {
@@ -1573,6 +1661,10 @@ fn ensure_path_available(
     Ok(())
 }
 
+/// Whether `candidate` and `held_by` are the same entry on disk rather than two
+/// entries with the same spelling — the test both [`ensure_path_available`] and
+/// [`rename_directory`] use to tell a case-only rename apart from a collision on
+/// a case-insensitive filesystem.
 fn is_same_file(candidate: &Path, held_by: Option<&Path>) -> bool {
     let Some(held) = held_by else {
         return false;
@@ -1623,6 +1715,20 @@ fn normalize_directory(path: &str) -> Result<String, AppError> {
         return Err(AppError::PathUnavailable(format!(
             "{path} does not name a Directory inside the Workspace: a Directory path is \
              `/`-separated and a backslash is a character no segment may carry"
+        )));
+    }
+    // Refused here as well as in [`validate_segment`] and
+    // [`persist::Workspace::note_path`], for the reason the backslash and the
+    // line-terminator rules are duplicated across the same three functions: one
+    // rule, three entrances. `validate_segment` already rejected a NUL in a
+    // *name*, so `create_note("a\0b")` came back as `PathUnavailable` while
+    // `create_directory("a\0b")` walked past this function and into
+    // `create_dir_all`, which returned a raw `IoError` about an invalid
+    // argument — the same input, two unrelated-looking answers, and the leaked
+    // one names an implementation detail instead of the rule it broke.
+    if path.contains('\0') {
+        return Err(AppError::PathUnavailable(format!(
+            "{path:?} contains a NUL, which no path on this system can carry"
         )));
     }
     // Refused here as well as in [`validate_segment`], and for that function's
@@ -1875,6 +1981,11 @@ fn read_source(path: &Path) -> Result<Option<String>, AppError> {
 /// from `""` would silently blank out a Note's title, its full text and its
 /// outbound edges while reporting success, which is a worse outcome than the
 /// rollback this returns into.
+///
+/// The one case where a missing file is *not* an error — a candidate that
+/// reached the sweep through its draft row or its session with nothing on disk
+/// behind it — never reaches here at all: [`Affected::on_disk`] is what filters
+/// it out, precisely so this function does not have to choose between the two.
 fn final_source(affected: &Affected) -> Result<String, AppError> {
     match &affected.new_file {
         Some(source) => Ok(source.clone()),
@@ -2881,6 +2992,106 @@ mod tests {
         );
     }
 
+    /// The same hole again, with the one detail that made the sweep drop the
+    /// candidate anyway: **B's file is gone**.
+    ///
+    /// That is not a contrived fixture, it is the population
+    /// `persist::open_note`'s recovery branch exists for — a Note deleted
+    /// underneath a live session, whose work survives only in its `drafts` row.
+    /// `plan_affected` seeded B from `drafts`, read its (absent) file, and
+    /// `continue`d on the strength of the missing bytes, so the Link the row
+    /// holds was never rewritten. Recovering that draft and letting it write
+    /// then put the dead concept id straight back on disk and into the index —
+    /// `architecture/risks.md` risk 8, reached through the exact path the
+    /// draft sweep was added to close.
+    #[test]
+    fn a_link_in_a_draft_whose_file_has_vanished_is_still_rewritten() {
+        let f = fixture();
+        f.write("Old Name.md", &note("Old Name", "target"));
+        f.write("b.md", &note("b", "nothing on disk points anywhere"));
+        f.reindex();
+        f.put_draft(
+            "b",
+            &note(
+                "b",
+                &format!("drafted prose {}", link("Old Name", "Old Name")),
+            ),
+        );
+        // Deleted by something outside this application, after the draft was
+        // written: the file is gone, the row is the only copy of the work.
+        std::fs::remove_file(f.root().join("b.md")).unwrap();
+
+        rename_note(&f.workspace, "Old Name", "New Name").unwrap();
+
+        let draft = f.draft_row("b").expect("the draft must survive the rename");
+        assert!(
+            draft.contains("</New Name.md>"),
+            "the draft of a Note whose file has vanished still holds the old Link, and \
+             `open_note` recovers exactly that row — the rename reverts on its first \
+             write: {draft:?}"
+        );
+
+        // End to end, through the recovery branch the fixture is about: the
+        // recovered session writes the file back, and what it writes is the
+        // rewritten Link rather than the dead one.
+        let (session, state) = persist::open_note(&f.workspace, "b").unwrap();
+        assert!(state.restored_from_draft);
+        session.flush().unwrap();
+        assert!(
+            f.read("b.md").contains("</New Name.md>"),
+            "{:?}",
+            f.read("b.md")
+        );
+        assert_eq!(f.link_targets("b"), vec!["New Name".to_string()]);
+        assert!(
+            f.backlink_sources("Old Name").is_empty(),
+            "the recovered session's write resurrected the edge the rename removed"
+        );
+    }
+
+    /// The session-buffer half of the same case: B is open over a file that
+    /// has since been deleted (`awaiting_recreate`), and the Link the rename
+    /// has to follow exists only in its working source.
+    #[test]
+    fn a_link_in_the_buffer_of_a_session_whose_file_has_vanished_is_still_rewritten() {
+        let f = fixture();
+        f.write("Old Name.md", &note("Old Name", "target"));
+        f.write("b.md", &note("b", "placeholder"));
+        f.reindex();
+        let b = f.open("b");
+        b.update_block(&[0], &format!("see {}\n", link("Old Name", "Old Name")))
+            .unwrap();
+        std::fs::remove_file(f.root().join("b.md")).unwrap();
+
+        rename_note(&f.workspace, "Old Name", "New Name").unwrap();
+
+        let buffered = b.working_source().unwrap();
+        assert!(
+            buffered.contains("</New Name.md>"),
+            "the buffer of a session over a vanished file still holds the old Link, and its \
+             next write recreates the concept the rename removed: {buffered:?}"
+        );
+    }
+
+    /// The other side of the same branch: a candidate the `links` table alone
+    /// produced, with no file, no draft and no session, is still dropped rather
+    /// than failing the rename. Its rows are somebody else's stale record and
+    /// the next reindex rebuilds them.
+    #[test]
+    fn a_stale_link_row_with_no_file_draft_or_session_does_not_fail_a_rename() {
+        let f = fixture();
+        f.write("Old Name.md", &note("Old Name", "target"));
+        f.write("b.md", &note("b", &link("Old Name", "Old Name")));
+        f.reindex();
+        assert_eq!(f.backlink_sources("Old Name"), vec!["b".to_string()]);
+        std::fs::remove_file(f.root().join("b.md")).unwrap();
+
+        rename_note(&f.workspace, "Old Name", "New Name").expect("a stale row must not refuse");
+
+        assert!(f.exists("New Name.md"));
+        assert!(f.draft_row("b").is_none(), "a draft row was invented");
+    }
+
     // -- move ----------------------------------------------------------------
 
     /// Gherkin: a moved Note's concept id reflects its new path and every
@@ -3221,6 +3432,58 @@ mod tests {
         );
         assert!(f.exists("a/one.md"));
         assert_eq!(f.note_ids(), vec!["a/one".to_string(), "b/two".to_string()]);
+    }
+
+    /// `rename_directory`'s occupied-destination check is same-**file**
+    /// identity, not path spelling, which is what makes `Notes` -> `notes`
+    /// possible at all.
+    ///
+    /// On a case-insensitive filesystem — macOS's default, and one of this
+    /// project's two shipping targets (`data-models/okf-bundle.md`, "Case
+    /// sensitivity follows the filesystem") — a case-only rename finds its own
+    /// directory sitting at the destination, so the bare `exists()` this used to
+    /// make refused it outright. `rename_note` had carried the escape for the
+    /// Note equivalent since `ensure_path_available` was written; the Directory
+    /// half simply never got it.
+    ///
+    /// **This is a test of [`is_same_file`] rather than of the rename**, and
+    /// deliberately so: the defect only manifests where two spellings name one
+    /// directory, ext4 gives every spelling its own inode, and neither a
+    /// symbolic link nor a hard link can stand in (a symlinked destination is
+    /// refused one step earlier by `directory_absolute`, and POSIX forbids hard
+    /// links to directories). So the predicate the escape is built on is pinned
+    /// directly: it says yes to one directory reached twice and no to two
+    /// directories, which is the whole of what `rename_directory` asks it. The
+    /// end-to-end behaviour is covered by
+    /// `renaming_a_directory_onto_an_occupied_name_is_refused` above, which must
+    /// keep refusing.
+    #[test]
+    fn the_same_file_escape_accepts_one_directory_and_refuses_two() {
+        let f = fixture();
+        std::fs::create_dir_all(f.root().join("Notes")).unwrap();
+        std::fs::create_dir_all(f.root().join("Other")).unwrap();
+        let notes = f.root().join("Notes");
+        let other = f.root().join("Other");
+
+        assert!(
+            is_same_file(&notes, Some(&notes)),
+            "a destination that IS the source directory must not read as occupied"
+        );
+        // Two spellings, one inode — what a case-only rename produces on a
+        // case-insensitive filesystem, reached here through the one indirection
+        // ext4 does offer.
+        assert!(
+            is_same_file(&f.root().join("./Notes"), Some(&notes)),
+            "the same directory reached by a second spelling must not read as occupied"
+        );
+        assert!(
+            !is_same_file(&other, Some(&notes)),
+            "a genuinely different directory must still read as occupied"
+        );
+        assert!(
+            !is_same_file(&notes, None),
+            "with nothing held, every existing destination is a collision"
+        );
     }
 
     /// The contract specifies a **recursive** delete — "and everything beneath
@@ -3788,6 +4051,97 @@ mod tests {
         assert!(!outside.join("One.md").exists());
         assert!(!f.root().join("Real/One.md").exists());
         assert_eq!(f.note_ids(), vec!["One".to_string()]);
+    }
+
+    /// The rule the directory tests above pin, applied to the component neither
+    /// of them looked at: the **leaf**.
+    ///
+    /// `Foo.md -> Real.md` planted inside the bundle passed every check
+    /// `note_path` made. Its ancestors are ordinary directories, so
+    /// `ensure_directory_contained` is satisfied; it resolves inside the
+    /// Workspace, so the containment test is satisfied; and the Note opens,
+    /// reads and writes through it perfectly well. Then
+    /// `index::scan::walk_bundle` skips symbolic links, so the next reindex —
+    /// which runs on every Workspace open — drops the row while the file stays
+    /// on disk and `ensure_path_available` consults the filesystem, leaving
+    /// `Foo` permanently taken by a Note nothing in the application can see.
+    /// That is exactly the ending the directory rule prevents, one component
+    /// further down.
+    #[cfg(unix)]
+    #[test]
+    fn a_note_that_is_a_symlink_is_refused_at_both_entrances() {
+        let f = fixture();
+        f.write("Real.md", &note("Real", "the file the link points at"));
+        let outside = f.dir.path().join("outside.md");
+        std::fs::write(&outside, note("outside", "not in the bundle")).unwrap();
+        std::os::unix::fs::symlink(f.root().join("Real.md"), f.root().join("Detour.md")).unwrap();
+        std::os::unix::fs::symlink(&outside, f.root().join("Escape.md")).unwrap();
+        // A broken link is refused too: `symlink_metadata` sees it as present
+        // where `exists()` reports it absent and a create would take the name.
+        std::os::unix::fs::symlink(f.root().join("Gone.md"), f.root().join("Dangling.md")).unwrap();
+        f.reindex();
+
+        for note_id in ["Detour", "Escape", "Dangling"] {
+            let refused = persist::open_note(&f.workspace, note_id).map(|_| ());
+            assert!(
+                matches!(refused, Err(AppError::PathUnavailable(_))),
+                "{note_id}: opening a Note through a symbolic link must be refused, got \
+                 {refused:?}"
+            );
+            let refused = create_note(&f.workspace, "", note_id);
+            assert!(
+                matches!(refused, Err(AppError::PathUnavailable(_))),
+                "{note_id}: creating over a symbolic link must be refused, got {refused:?}"
+            );
+        }
+
+        assert_eq!(
+            std::fs::read_to_string(&outside).unwrap(),
+            note("outside", "not in the bundle"),
+            "a file outside the bundle was written through the link"
+        );
+        assert!(f.read("Real.md").contains("the file the link points at"));
+        assert!(
+            !f.root().join("Gone.md").exists(),
+            "the dangling link's target was created through it"
+        );
+    }
+
+    /// A NUL is refused by all three of this Workspace's path-handling
+    /// functions, not two of them.
+    ///
+    /// `validate_segment` already rejected it in a *name*, so `create_note`
+    /// answered `PathUnavailable`. `normalize_directory` did not, so the same
+    /// input reached `create_dir_all` through `create_directory` and came back
+    /// as a raw `IoError` naming an invalid argument — one rule, two
+    /// unrelated-looking answers, and the leaked one describes an
+    /// implementation detail rather than what the caller did wrong.
+    #[test]
+    fn a_nul_in_a_path_is_refused_at_every_entrance() {
+        let f = fixture();
+
+        let refused = create_directory(&f.workspace, "a\0b");
+        assert!(
+            matches!(refused, Err(AppError::PathUnavailable(_))),
+            "a Directory path carrying a NUL must be refused, got {refused:?}"
+        );
+
+        let refused = create_note(&f.workspace, "", "a\0b");
+        assert!(
+            matches!(refused, Err(AppError::PathUnavailable(_))),
+            "a Note title carrying a NUL must be refused, got {refused:?}"
+        );
+
+        // The third entrance: a concept id straight off the UI, which reaches
+        // `note_path` without passing through either validator.
+        let refused = f.workspace.note_path("a\0b");
+        assert!(
+            matches!(refused, Err(AppError::PathUnavailable(_))),
+            "a concept id carrying a NUL must be refused, got {refused:?}"
+        );
+
+        assert!(f.note_ids().is_empty());
+        assert!(f.directory_ids().is_empty());
     }
 
     /// A title carrying a control character round-trips through the frontmatter
