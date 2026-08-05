@@ -52,6 +52,25 @@
 //! - **Sessions are carried forward last of all**, because they are in-memory
 //!   and cannot fail in a way that leaves the two stores inconsistent.
 //!
+//! # …and one operation at a time
+//!
+//! All of that is about *failure*, and on its own it says nothing about a
+//! second operation running alongside the first — which the prose above reads
+//! as though it did. It does not: the checks that make an operation safe
+//! ([`ensure_path_available`], [`ensure_directory_exists`],
+//! [`ensure_destinations_hold_no_foreign_draft`]) are all check-then-act against
+//! two stores that no transaction spans, so two callers can pass the same check
+//! before either acts on it. FRB 2.12's default executor dispatches every
+//! `#[frb] async fn` in `api::ffi_api` on a thread pool, so two lifecycle calls
+//! genuinely run at once.
+//!
+//! So **every entry point in this module runs under the Workspace's lifecycle
+//! lock** (`workspace::persist::with_lifecycle_lock`), taken above the tier 2
+//! write locks and held for the whole operation, commit included. It is coarse
+//! and deliberately so; no editing path takes it, so no keystroke and no idle
+//! write ever waits on a rename. That function documents the two concrete races
+//! it closes.
+//!
 //! Deletion inverts nothing, so it takes the same shape by a different route:
 //! the file is *renamed into a dot-prefixed trash entry inside the bundle*
 //! rather than unlinked, which makes "undo the filesystem step" a rename again.
@@ -136,6 +155,16 @@ pub struct LifecycleEffects {
 /// tree's shape. An empty `directory_path` is the bundle root and is
 /// unaffected.
 pub fn create_note(
+    workspace: &Arc<Workspace>,
+    directory_path: &str,
+    title: &str,
+) -> Result<NoteState, AppError> {
+    persist::with_lifecycle_lock(workspace, || {
+        create_note_serialized(workspace, directory_path, title)
+    })
+}
+
+fn create_note_serialized(
     workspace: &Arc<Workspace>,
     directory_path: &str,
     title: &str,
@@ -244,7 +273,9 @@ pub fn create_note(
 /// see [`delete_orphaned_draft`]. [`AppError::NotFound`] is reserved for an id
 /// that none of the three stores knows.
 pub fn delete_note(workspace: &Arc<Workspace>, note_id: &str) -> Result<(), AppError> {
-    persist::with_write_locks(workspace, || delete_note_locked(workspace, note_id))
+    persist::with_lifecycle_lock(workspace, || {
+        persist::with_write_locks(workspace, || delete_note_locked(workspace, note_id))
+    })
 }
 
 fn delete_note_locked(workspace: &Arc<Workspace>, note_id: &str) -> Result<(), AppError> {
@@ -363,6 +394,16 @@ pub fn rename_note(
     note_id: &str,
     new_title: &str,
 ) -> Result<(NoteState, LifecycleEffects), AppError> {
+    persist::with_lifecycle_lock(workspace, || {
+        rename_note_serialized(workspace, note_id, new_title)
+    })
+}
+
+fn rename_note_serialized(
+    workspace: &Arc<Workspace>,
+    note_id: &str,
+    new_title: &str,
+) -> Result<(NoteState, LifecycleEffects), AppError> {
     validate_title(new_title)?;
     let old_path = workspace.note_path(note_id)?;
     if !old_path.is_file() {
@@ -437,6 +478,16 @@ pub fn move_note(
     note_id: &str,
     new_directory_path: &str,
 ) -> Result<(NoteState, LifecycleEffects), AppError> {
+    persist::with_lifecycle_lock(workspace, || {
+        move_note_serialized(workspace, note_id, new_directory_path)
+    })
+}
+
+fn move_note_serialized(
+    workspace: &Arc<Workspace>,
+    note_id: &str,
+    new_directory_path: &str,
+) -> Result<(NoteState, LifecycleEffects), AppError> {
     let old_path = workspace.note_path(note_id)?;
     if !old_path.is_file() {
         return Err(AppError::NotFound(format!(
@@ -500,6 +551,10 @@ pub fn move_note(
 /// file manager. Git tracks no empty directory, which is why this makes no
 /// commit — the Directory enters version history with the first Note in it.
 pub fn create_directory(workspace: &Arc<Workspace>, path: &str) -> Result<(), AppError> {
+    persist::with_lifecycle_lock(workspace, || create_directory_serialized(workspace, path))
+}
+
+fn create_directory_serialized(workspace: &Arc<Workspace>, path: &str) -> Result<(), AppError> {
     let directory = normalize_directory(path)?;
     if directory.is_empty() {
         return Err(AppError::PathUnavailable(
@@ -528,6 +583,16 @@ pub fn create_directory(workspace: &Arc<Workspace>, path: &str) -> Result<(), Ap
 /// are **not confined to that subtree** — anything anywhere in the bundle may
 /// link into it, which is why [`LifecycleEffects`] carries both lists.
 pub fn rename_directory(
+    workspace: &Arc<Workspace>,
+    path: &str,
+    new_name: &str,
+) -> Result<LifecycleEffects, AppError> {
+    persist::with_lifecycle_lock(workspace, || {
+        rename_directory_serialized(workspace, path, new_name)
+    })
+}
+
+fn rename_directory_serialized(
     workspace: &Arc<Workspace>,
     path: &str,
     new_name: &str,
@@ -623,7 +688,9 @@ pub fn rename_directory(
 /// here for the reason [`delete_note`] clears one — otherwise it survives the
 /// deletion of the Directory it lived in and keeps its name reserved forever.
 pub fn delete_directory(workspace: &Arc<Workspace>, path: &str) -> Result<Vec<String>, AppError> {
-    persist::with_write_locks(workspace, || delete_directory_locked(workspace, path))
+    persist::with_lifecycle_lock(workspace, || {
+        persist::with_write_locks(workspace, || delete_directory_locked(workspace, path))
+    })
 }
 
 fn delete_directory_locked(
@@ -822,6 +889,28 @@ struct Affected {
 /// took beforehand, losing the user's work from the file *and* from the buffer
 /// in one step. `workspace::persist::with_write_locks` documents the ordering
 /// this relies on.
+///
+/// # What this lock does *not* do, and what does
+///
+/// It locks the sessions that are **open**, and a Workspace with nothing open
+/// has none — so it never serialized two lifecycle operations against each
+/// other, which is a separate hazard with the same shape one level up. Every
+/// entry point in this module therefore takes
+/// `workspace::persist::with_lifecycle_lock` **above** this call, and that is
+/// what makes the module header's "one operation that either completes or
+/// changes nothing" a statement about concurrent callers rather than only about
+/// failure: without it, two renames onto one destination both passed
+/// [`ensure_path_available`] before either wrote, and a `create_note` could land
+/// between this function's journal rename and its index transaction. Neither is
+/// hypothetical — every lifecycle function in `api::ffi_api` is an `#[frb] async
+/// fn`, and FRB 2.12's default executor handles each call on a different thread
+/// of its pool.
+///
+/// The two locks are not redundant. This one is about a *tier 2 writer* racing a
+/// lifecycle rewrite (a timer, a close), which the lifecycle lock cannot see
+/// because no editing path takes it; the lifecycle lock is about two lifecycle
+/// operations racing each other, which this one cannot see because it covers
+/// only Notes that happen to be open.
 fn apply_reidentify(
     workspace: &Arc<Workspace>,
     plan: &Reidentify,
@@ -1566,7 +1655,13 @@ pub(super) fn commit_stage_failure(
 /// added when the bundle has been left in a state the user has to act on, and
 /// that is more urgent than the affordance the original variant would have
 /// selected.
-fn restate(error: AppError, rewrite: impl FnOnce(&str) -> String) -> AppError {
+///
+/// Shared with [`persist::NoteSession::close`] for the reason
+/// [`commit_stage_failure`] is: tier 3 reaches the same "the operation happened
+/// and one of its records did not" state by the same route, and a second
+/// spelling of this rewrite would eventually disagree with this one about which
+/// variants survive it.
+pub(super) fn restate(error: AppError, rewrite: impl FnOnce(&str) -> String) -> AppError {
     match error {
         AppError::RevisionMismatch(revision) => AppError::RevisionMismatch(revision),
         AppError::PathUnavailable(m) => AppError::PathUnavailable(rewrite(&m)),
@@ -1661,9 +1756,25 @@ fn rewrite_frontmatter_title(source: &str, new_title: &str) -> Option<String> {
             // key (ADR-004 decision 3), so writing it into a block that already
             // exists is not the "create a block that was never there" case the
             // rule above forbids.
+            //
+            // The line ending is **derived from the block**, not written as a
+            // bare `\n`. The sibling branch above preserves whatever the file
+            // used, because it replaces the value inside a line and never
+            // touches its terminator; this branch emits a whole line, so it has
+            // to spell one — and spelling it LF-only put a lone `\n` into a
+            // CRLF-authored Note on every rename that added a title. The Note
+            // still parses (CommonMark accepts either) but `prd/constraints.md`
+            // Edit Fidelity is about the bytes, and a mixed-ending file shows
+            // the user a diff line for a seam they never touched. Same
+            // derivation, and the same single definition,
+            // `workspace::persist`'s own seams use.
             let (closing_start, _) = *lines.last()?;
+            let newline = persist::newline_style(source.get(span.start..closing_start)?);
             let mut out = source.to_string();
-            out.replace_range(closing_start..closing_start, &format!("{replacement}\n"));
+            out.replace_range(
+                closing_start..closing_start,
+                &format!("{replacement}{newline}"),
+            );
             Some(out)
         }
     }
@@ -2974,6 +3085,144 @@ mod tests {
             assert!(body.contains("</Standup Notes.md>"), "{source}: {body:?}");
             assert!(!body.contains("Meeting Notes.md"), "{source}: {body:?}");
         }
+    }
+
+    /// Two threads renaming two different Notes onto **the same destination**,
+    /// released together from a barrier and dispatched through the real entry
+    /// point: exactly one may win, and the loser must be refused rather than
+    /// clobbering the winner.
+    ///
+    /// This is the race the tier 2 write locks could not see. They cover the
+    /// Notes that are *open*, and nothing is open here — so before the
+    /// Workspace-level lifecycle lock the two operations ran fully interleaved,
+    /// and `ensure_path_available` is check-then-act against a filesystem and an
+    /// index that no transaction spans: both callers could ask whether `Target`
+    /// was free, both be told yes, and the second one's journal rename land on
+    /// top of the first one's result. Every lifecycle function in
+    /// `api::ffi_api` is an `#[frb] async fn` and FRB's default executor handles
+    /// each call on a different thread of its pool, so "two at once" is the
+    /// ordinary case rather than a contrived one.
+    ///
+    /// Repeated, because an interleaving is what is being excluded: one pass
+    /// proves nothing about a window it happened not to land in, and with the
+    /// lock in place every pass must produce the same single winner.
+    #[test]
+    fn two_renames_onto_one_destination_serialize_and_exactly_one_wins() {
+        for attempt in 0..12 {
+            let f = fixture();
+            f.write("One.md", &note("One", "the first note"));
+            f.write("Two.md", &note("Two", "the second note"));
+            f.reindex();
+
+            let barrier = Arc::new(std::sync::Barrier::new(2));
+            let mut threads = Vec::new();
+            for id in ["One", "Two"] {
+                let workspace = Arc::clone(&f.workspace);
+                let barrier = Arc::clone(&barrier);
+                threads.push(std::thread::spawn(move || {
+                    barrier.wait();
+                    rename_note(&workspace, id, "Target").map(|_| id)
+                }));
+            }
+            let outcomes: Vec<_> = threads
+                .into_iter()
+                .map(|t| t.join().expect("no lifecycle thread may panic"))
+                .collect();
+
+            let winners: Vec<&str> = outcomes
+                .iter()
+                .filter_map(|r| r.as_ref().ok())
+                .copied()
+                .collect();
+            assert_eq!(
+                winners.len(),
+                1,
+                "attempt {attempt}: exactly one rename onto `Target` may succeed, got {outcomes:?}"
+            );
+            for outcome in &outcomes {
+                if let Err(error) = outcome {
+                    assert!(
+                        matches!(error, AppError::PathUnavailable(_)),
+                        "attempt {attempt}: the loser must be refused for the reason it lost, \
+                         got {error:?}"
+                    );
+                }
+            }
+
+            // Both stores agree with each other and with the winner.
+            let winner = winners[0];
+            let loser = if winner == "One" { "Two" } else { "One" };
+            let mut expected = vec!["Target".to_string(), loser.to_string()];
+            expected.sort();
+            assert_eq!(f.note_ids(), expected, "attempt {attempt}");
+            assert!(f.exists("Target.md"), "attempt {attempt}");
+            assert!(f.exists(&format!("{loser}.md")), "attempt {attempt}");
+            assert!(
+                !f.exists(&format!("{winner}.md")),
+                "attempt {attempt}: the winner's old path survived its own rename"
+            );
+            assert!(
+                f.read("Target.md").contains(&format!(
+                    "the {} note",
+                    if winner == "One" { "first" } else { "second" }
+                )),
+                "attempt {attempt}: `Target.md` holds bytes from neither rename cleanly"
+            );
+            assert!(
+                f.trash_entries().is_empty(),
+                "attempt {attempt}: {:?}",
+                f.trash_entries()
+            );
+        }
+    }
+
+    /// A CRLF-authored Note whose frontmatter carries `type` but no `title`
+    /// gets its inserted title line spelled `\r\n` like every other line in the
+    /// file, and nothing else in the bytes moves.
+    ///
+    /// The sibling branch — a block that already has a `title` — preserves the
+    /// endings for free, because it replaces the value inside a line and never
+    /// touches its terminator. The insert branch writes a whole line and so has
+    /// to spell one, and it used to emit a bare `\n`: one mixed ending per
+    /// rename, in a file the user then sees a spurious diff line for
+    /// (`prd/constraints.md`, Edit Fidelity).
+    #[test]
+    fn a_rename_inserting_a_title_into_a_crlf_note_writes_a_crlf_line() {
+        let f = fixture();
+        // No `title` key, so the rename must add one; CRLF throughout.
+        f.write(
+            "Old Name.md",
+            "---\r\ntype: Note\r\n---\r\n\r\nBody stays put.\r\n",
+        );
+        f.reindex();
+
+        rename_note(&f.workspace, "Old Name", "New Name").unwrap();
+
+        let renamed = f.read("New Name.md");
+        assert_eq!(
+            renamed, "---\r\ntype: Note\r\ntitle: New Name\r\n---\r\n\r\nBody stays put.\r\n",
+            "the inserted title line must end CRLF and nothing else may move"
+        );
+        assert!(
+            !renamed.contains("\n\n") && !renamed.replace("\r\n", "").contains('\n'),
+            "a bare LF was introduced into a CRLF file: {renamed:?}"
+        );
+    }
+
+    /// The LF case, asserted alongside it so the derivation cannot be "fixed"
+    /// by hard-coding the other spelling.
+    #[test]
+    fn a_rename_inserting_a_title_into_an_lf_note_writes_an_lf_line() {
+        let f = fixture();
+        f.write("Old Name.md", "---\ntype: Note\n---\n\nBody stays put.\n");
+        f.reindex();
+
+        rename_note(&f.workspace, "Old Name", "New Name").unwrap();
+
+        assert_eq!(
+            f.read("New Name.md"),
+            "---\ntype: Note\ntitle: New Name\n---\n\nBody stays put.\n"
+        );
     }
 
     /// Gherkin: `LifecycleEffects.rewritten` names all three sources. Their own

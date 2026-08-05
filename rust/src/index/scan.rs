@@ -224,9 +224,42 @@ pub fn read_note(root: &Path, concept_id: &str) -> Result<Option<super::IndexedN
 ///   application's own version history rather than bundle content, and which
 ///   holds thousands of files in a Workspace with any history at all;
 /// - symbolic links, which is also what keeps this walk acyclic;
+/// - **anything whose file name is not valid UTF-8**, file or directory, and a
+///   directory so named is not descended into either. See below;
 /// - `index.md` and `log.md` (see [`RESERVED_FILENAMES`]);
 /// - every non-`.md` file. Attachments are not concepts and "are never
 ///   indexed as Notes" (`data-models/okf-bundle.md`, "Attachments").
+///
+/// # Why a non-UTF-8 name is a skip rather than a lossy conversion
+///
+/// A bundle is an ordinary directory a user or another tool can put anything
+/// in (CAP-WS-05), and on Unix a file name is bytes, not text. This walk used
+/// to run every name through `to_string_lossy`, which does not fail — it
+/// substitutes `U+FFFD` — and the result was a *mangled identifier* rather
+/// than a skipped entry:
+///
+/// - a `.md` file so named produced a concept id containing `U+FFFD`, which
+///   [`read_note`] then could not open, because `concept_id_to_path` joins the
+///   replacement character rather than the original bytes. The Note was
+///   silently dropped from the index by the read that follows the walk — no
+///   row, no error, no signal anywhere that the bundle held a file this
+///   application could not see.
+/// - a *directory* so named was worse, because nothing dropped it: a
+///   `directories` row was recorded under the mangled path, so the tree showed
+///   a Directory that no lifecycle call could address, and every Note beneath
+///   it inherited the mangled prefix and vanished the same way its parent's
+///   Notes did.
+///
+/// Skipping is stated as a rule so it behaves like the two rules above it:
+/// nothing is indexed, nothing is recorded, and nothing is descended into. The
+/// bytes on disk are untouched — this is what the *index* covers, not what the
+/// bundle may contain — and a user who renames the file into valid UTF-8 gets
+/// it indexed by the next scan. Note that this is narrower than
+/// `RawNote::derive`'s lossy decode of a Note's *contents*, which is
+/// deliberate: a mangled character inside a Note's text is a rendering
+/// imperfection in a Note that is otherwise addressable, while a mangled
+/// character in its **name** is an identity this application cannot resolve
+/// back to a file.
 pub fn walk_bundle(root: &Path) -> Result<BundleScan, AppError> {
     crate::db::connection::assert_no_io_under_the_connection("walking the bundle");
 
@@ -256,12 +289,18 @@ fn walk_dir(dir: &Path, prefix: &str, scan: &mut BundleScan) -> Result<(), AppEr
         if kind == crate::workspace::BundleEntry::Symlink {
             continue;
         }
-        let name = entry.file_name().to_string_lossy().into_owned();
+        // Not `to_string_lossy`: a name that is not valid UTF-8 is skipped
+        // outright, directory included, rather than mangled into an identifier
+        // that names no file. See this function's own documentation.
+        let file_name = entry.file_name();
+        let Some(name) = file_name.to_str() else {
+            continue;
+        };
         if name.starts_with('.') {
             continue;
         }
         let rel = if prefix.is_empty() {
-            name.clone()
+            name.to_string()
         } else {
             format!("{prefix}/{name}")
         };
@@ -269,7 +308,7 @@ fn walk_dir(dir: &Path, prefix: &str, scan: &mut BundleScan) -> Result<(), AppEr
         if kind == crate::workspace::BundleEntry::Directory {
             scan.directories.push(rel.clone());
             walk_dir(&entry.path(), &rel, scan)?;
-        } else if name.ends_with(".md") && !RESERVED_FILENAMES.contains(&name.as_str()) {
+        } else if name.ends_with(".md") && !RESERVED_FILENAMES.contains(&name) {
             scan.notes.push(crate::okf::path_to_concept_id(&rel));
         }
     }
@@ -384,6 +423,76 @@ mod tests {
             !super::super::note_exists(&f.conn, &f.workspace_id, &target_id).unwrap(),
             "the edge exists and is unresolved — a ghost Link, not a dropped one"
         );
+    }
+
+    /// A `.md` file whose **name** is not valid UTF-8 is skipped by the walk
+    /// rather than run through `to_string_lossy`.
+    ///
+    /// Lossy conversion did not drop it — it minted a concept id containing
+    /// `U+FFFD`, which the read that follows the walk could not open, so the
+    /// Note disappeared from the index with no row and no error. This asserts
+    /// the documented skip: the valid sibling is indexed, the invalid name
+    /// contributes nothing, and no mangled id is recorded anywhere.
+    #[cfg(unix)]
+    #[test]
+    fn a_note_whose_filename_is_not_valid_utf8_is_skipped_rather_than_mangled() {
+        use std::os::unix::ffi::OsStrExt;
+
+        let f = fixture();
+        f.write("Valid.md", &conformant("Valid", "Body."));
+        // `0xFF` is not a legal UTF-8 byte anywhere in a sequence.
+        let invalid = std::ffi::OsStr::from_bytes(b"Broken\xff.md");
+        std::fs::write(f.root().join(invalid), conformant("Broken", "Body.")).unwrap();
+
+        let scan = walk_bundle(&f.root()).unwrap();
+        assert_eq!(scan.notes, vec!["Valid".to_string()]);
+
+        let count = reindex_workspace_impl(&f.conn, &f.workspace_id).unwrap();
+        assert_eq!(count, 1);
+        assert_eq!(f.note_ids(), vec!["Valid"]);
+        assert_eq!(
+            f.count("SELECT count(*) FROM notes WHERE id LIKE '%\u{fffd}%'"),
+            0,
+            "a mangled concept id was recorded for a file nothing can open"
+        );
+    }
+
+    /// The same rule for a **directory**, where the lossy conversion was worse:
+    /// nothing dropped the row, so the tree offered a Directory no lifecycle
+    /// call could address, and its whole subtree inherited the mangled prefix.
+    #[cfg(unix)]
+    #[test]
+    fn a_directory_whose_name_is_not_valid_utf8_is_neither_recorded_nor_descended() {
+        use std::os::unix::ffi::OsStrExt;
+
+        let f = fixture();
+        f.mkdir("kept");
+        let invalid = f.root().join(std::ffi::OsStr::from_bytes(b"Broken\xffdir"));
+        std::fs::create_dir_all(&invalid).unwrap();
+        std::fs::write(invalid.join("inside.md"), conformant("Inside", "Body.")).unwrap();
+
+        let scan = walk_bundle(&f.root()).unwrap();
+        assert_eq!(scan.directories, vec!["kept".to_string()]);
+        assert!(
+            scan.notes.is_empty(),
+            "the subtree of a skipped directory must not be walked: {:?}",
+            scan.notes
+        );
+
+        reindex_workspace_impl(&f.conn, &f.workspace_id).unwrap();
+        let dirs: Vec<String> = {
+            let mut stmt = f
+                .conn
+                .prepare("SELECT path FROM directories WHERE workspace_id = ?1 ORDER BY path")
+                .unwrap();
+            let rows = stmt
+                .query_map([&f.workspace_id], |row| row.get(0))
+                .unwrap()
+                .collect::<Result<Vec<String>, _>>()
+                .unwrap();
+            rows
+        };
+        assert_eq!(dirs, vec!["kept".to_string()]);
     }
 
     /// Gherkin: an empty Directory in the bundle gets a Directory row.

@@ -23,13 +23,18 @@
 //! 4. **That commit notifies the sync scheduler**, giving Epic C's
 //!    `notify_activity()` its first caller.
 //!
-//! # The locks, and why there are three of them
+//! # The locks, and why there are four of them
 //!
 //! `SPK-WSPC-D001` §4.4 measured four shapes. Under one process-wide mutex a
 //! keystroke waits a p95 of 10.4ms (WAL) or 55.9ms (SQLite defaults) in front
 //! of buffer work that performs no I/O at all — the ADR-008 hazard reproduced
 //! as a number. The shape below measured 0.031ms.
 //!
+//! - A per-Workspace **lifecycle lock** ([`with_lifecycle_lock`]) serializes
+//!   whole `workspace::lifecycle` operations against each other. It is the one
+//!   lock no editing path ever takes, and it is coarse on purpose — see its own
+//!   documentation for the races it closes and why the other three could not
+//!   close them.
 //! - A per-Note **state lock** guards the working source, the span map, the
 //!   AST, the edit sequence and the recorded revision. **No thread ever holds
 //!   it across I/O.** Both sides snapshot under it — an `Arc::clone`, which is
@@ -47,12 +52,19 @@
 //! - The process-wide **connection mutex** is unchanged: one statement at a
 //!   time, as `db::connection` has always been.
 //!
-//! The only permitted acquisition order is **tier 2 write lock → state lock →
-//! connection**, and no two are held at once except the write lock over a
-//! snapshot. The keystroke path takes a suffix of that order (state, then
-//! connection), so no cycle exists and deadlock is unrepresentable rather than
-//! merely unobserved. The session registry lock is above all three and is
-//! never held while any of them is acquired.
+//! The only permitted acquisition order is **lifecycle lock → tier 2 write
+//! lock → state lock → connection**, and no two of the last three are held at
+//! once except the write lock over a snapshot. The keystroke path takes a
+//! suffix of that order (state, then connection), so no cycle exists and
+//! deadlock is unrepresentable rather than merely unobserved. The session
+//! registry lock is above all four and is never held while any of them is
+//! acquired.
+//!
+//! Nothing below the lifecycle lock ever reaches back up for it, which is what
+//! makes the order total rather than merely conventional: this module's timer,
+//! flush and close paths call into `workspace::lifecycle` for exactly two
+//! things, `commit_stage_failure` and `restate`, and both are pure functions
+//! over an `AppError` that take no lock at all.
 //!
 //! # Three standing review rules (`SPK-WSPC-D001` §6.2.7)
 //!
@@ -64,7 +76,7 @@ use std::collections::HashMap;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Condvar, Mutex, MutexGuard, OnceLock, Weak};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard, OnceLock, PoisonError, Weak};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use rusqlite::{Connection, OptionalExtension};
@@ -1385,6 +1397,22 @@ impl NoteSession {
         state.spans = Arc::new(spans);
         state.ast = Arc::new(ast);
         state.revision = revision;
+        // Cleared alongside the revision, because the two are one fact: the
+        // baseline above is the hash of **bytes that were read from a file**,
+        // so by the time it is recorded the file exists and this session is no
+        // longer owed one. A reload cannot succeed any other way — `read_file`
+        // is the first thing it does and `NotFound` is where it stops.
+        //
+        // Leaving it set had two consequences, one wasteful and one a trap.
+        // `write_locked` writes unconditionally while it stands, so every idle
+        // tick after a reload rewrote bytes identical to the ones on disk. And
+        // it makes a *second* external deletion unrepresentable as one: the
+        // absent file compares as `ABSENT_FILE` against a baseline taken from
+        // real content, so the write raises `RevisionMismatch` instead of
+        // `NotFound` — and `close` reads only `NotFound` as a vanished file, so
+        // the session became unclosable again, which is the exact state the
+        // recovery path exists to get the user *out* of.
+        state.awaiting_recreate = false;
         state.metadata = metadata;
         state.restored_from_draft = false;
         state.unwritten = false;
@@ -1409,16 +1437,26 @@ impl NoteSession {
     /// reached disk, are both worse than a close the UI has to follow with a
     /// reload — which is the exit the contract routes every mismatch through.
     ///
-    /// **A refused commit does not**, and the asymmetry is the point: by then
-    /// the flush has succeeded, so the Note's bytes are on disk and its rows are
-    /// in the index. The close therefore runs to completion — draft cleared,
-    /// session deregistered, timer with nothing left to fire against — and the
-    /// commit-stage error is returned afterwards, saying so. This used to
-    /// propagate with `?` and strand the session in the registry with its timer
-    /// armed, leaving a Note that could not be closed and could not be navigated
-    /// away from over a Git-level failure that had nothing to do with the user's
-    /// work. Every one of tier 3's four siblings in `workspace::lifecycle`
-    /// already reconciled first and reported second.
+    /// **Neither a refused commit nor a refused draft-row clear does**, and the
+    /// asymmetry is the point: by the time either runs the flush has succeeded,
+    /// so the Note's bytes are on disk and its rows are in the index. The close
+    /// therefore runs to completion — session deregistered, `closed` set, timer
+    /// with nothing left to fire against — and the stage error is returned
+    /// afterwards, saying which stage it was. Both used to propagate with `?`
+    /// and strand the session in the registry with its timer armed, leaving a
+    /// Note that could not be closed and could not be navigated away from over a
+    /// failure that had nothing to do with the user's work. Every one of tier
+    /// 3's four siblings in `workspace::lifecycle` already reconciled first and
+    /// reported second.
+    ///
+    /// The draft-row clear is the *cheaper* of the two to fail, which is why it
+    /// is folded into the commit-stage report rather than given precedence over
+    /// it: a `drafts` row that outlives the write covering it costs one spurious
+    /// "restored from draft" notice on the next open, and is cleared by that
+    /// open's own recovery path or by the next tier 2 write's conditional clear.
+    /// Nothing is lost by it — the row holds bytes identical to the file — so
+    /// when both stages fail the commit's error is the one returned, with the
+    /// draft failure attached to it.
     ///
     /// **A file that has vanished is the one exception**, because it is the one
     /// case where refusing traps the user. Something outside this application
@@ -1484,8 +1522,21 @@ impl NoteSession {
         // and this statement is work no write has covered, and clearing it
         // would destroy it. Nothing was written when the file vanished, so
         // nothing is cleared.
+        //
+        // **Held rather than propagated**, exactly as the commit stage above is
+        // and for a reason that is one stage stronger: by here the bytes are on
+        // disk *and* the commit may already have been made, so a `?` returned
+        // before `closed` was set, before the session left the registry and
+        // before the scheduler was notified — over a `drafts`-table failure that
+        // costs the user nothing at all. This is the same trap round 6 closed
+        // for the commit stage, one stage earlier, and it was reachable by the
+        // ordinary route: `with_db` fails for a full disk, a locked database, or
+        // a poisoned connection mutex just as readily here as anywhere else.
+        let mut draft_clear_failure: Option<AppError> = None;
         if let Some(flushed) = &written {
-            self.clear_draft_through(flushed.seq)?;
+            if let Err(error) = self.clear_draft_through(flushed.seq) {
+                draft_clear_failure = Some(error);
+            }
         }
 
         {
@@ -1505,13 +1556,23 @@ impl NoteSession {
         // Reported only now that the close itself is complete: the session is
         // out of the registry, the idle timer has nothing left to fire against,
         // and the Note is closable again. What the caller gets is the truth —
-        // the Note is written, only its history record is missing.
+        // the Note is written, only one record of it is missing.
+        //
+        // The commit failure wins when both fired, with the draft failure
+        // attached to it as the lesser of the two: an unrecorded commit is work
+        // the user must act on, while an uncleared `drafts` row repairs itself.
+        let subject = format!("closing {}", self.0.note_id);
         if let Some(error) = commit_failure {
+            let also: Vec<String> = draft_clear_failure
+                .iter()
+                .map(|e| format!("clearing the draft row for {}: {e:?}", self.0.note_id))
+                .collect();
             return Err(super::lifecycle::commit_stage_failure(
-                &format!("closing {}", self.0.note_id),
-                error,
-                &[],
+                &subject, error, &also,
             ));
+        }
+        if let Some(error) = draft_clear_failure {
+            return Err(draft_stage_failure(&subject, error));
         }
         Ok(())
     }
@@ -1526,6 +1587,31 @@ impl NoteSession {
         let verb = if existed { "Update" } else { "Create" };
         Ok(format!("{verb} {title}\n\n{}\n", self.0.relative_path))
     }
+}
+
+/// The error [`NoteSession::close`] returns when the **draft-row cleanup**
+/// failed after everything else had settled.
+///
+/// The sibling of [`super::lifecycle::commit_stage_failure`], and deliberately
+/// shaped like it: the close happened, so this reports which record of it is
+/// missing rather than pretending the operation failed. What distinguishes the
+/// two is the recovery advice, and it is the whole reason this has its own
+/// sentence — an unrecorded commit is something the user has to act on, while a
+/// surviving `drafts` row is self-repairing. It holds bytes identical to the
+/// file by construction (the clear only ever runs for the sequence a successful
+/// write covered), so the worst it produces is one spurious "restored from
+/// draft" notice, and the next open's recovery path or the next tier 2 write's
+/// conditional clear removes it.
+fn draft_stage_failure(subject: &str, error: AppError) -> AppError {
+    super::lifecycle::restate(error, |detail| {
+        format!(
+            "{subject}: the Note is closed and its work is safe — the bytes are on disk and \
+             the index has them — but clearing the draft row that recorded the unflushed \
+             edits failed, so the row stays behind: {detail}. Nothing is lost by it: the row \
+             holds what the file holds, and the next open (or the next successful write) \
+             clears it."
+        )
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -1738,6 +1824,113 @@ pub(super) fn open_note_ids(workspace_id: &str) -> Result<Vec<String>, AppError>
         .collect())
 }
 
+/// The per-Workspace lifecycle locks, keyed by Workspace id.
+///
+/// Keyed rather than a single process-wide `Mutex<()>` because two Workspaces
+/// share no bundle, no index rows and no concept-id namespace
+/// (`data-models/schema.sql` rule 1), so serializing across them would buy
+/// nothing and would make one Workspace's slow `git` commit block another's
+/// rename. The map only grows — one small entry per Workspace id this process
+/// has ever run a lifecycle operation for, which in production is one
+/// (ADR-005 decision 7 allows exactly one active Workspace) and in the test
+/// harness is one per fixture.
+///
+/// This lock is a peer of the session registry lock: taken, cloned out of and
+/// released before any lower lock is acquired.
+type LifecycleLocks = HashMap<String, Arc<Mutex<()>>>;
+
+fn lifecycle_locks() -> &'static Mutex<LifecycleLocks> {
+    static LOCKS: OnceLock<Mutex<LifecycleLocks>> = OnceLock::new();
+    LOCKS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// Runs `f` as the **only lifecycle operation in this Workspace**, which is
+/// what makes `workspace::lifecycle`'s headline property — one operation that
+/// either completes or changes nothing — a statement about concurrent callers
+/// and not only about failure.
+///
+/// # Why the tier 2 write locks were not enough
+///
+/// [`with_write_locks`] locks the tier 2 write lock of every Note that is
+/// *open*, and a Workspace with no Note open has none. Two lifecycle operations
+/// therefore ran fully interleaved on the common path. FRB 2.12's default
+/// handler is `SimpleHandler`/`SimpleExecutor`, whose own documentation reads
+/// "it creates an internal thread pool, and each call to a Rust function is
+/// handled by a different thread", and every lifecycle function in
+/// `api::ffi_api` is an `#[frb] async fn` dispatched through it — so two of them
+/// genuinely run at once, and a user double-clicking a rename or a shell
+/// dispatching a batch produces exactly that.
+///
+/// The two failures this closes, both of them checked-then-acted races that no
+/// per-Note lock can see:
+///
+/// - **Two renames onto one destination.** `ensure_path_available` asks the
+///   filesystem and the index whether the destination is free. Two operations
+///   asking before either has written both get "yes", and the second one's
+///   journal rename lands on top of the first's result — one Note silently
+///   replacing another, with the index rewritten to match whichever transaction
+///   committed last.
+/// - **A create landing inside a rename.** `apply_reidentify` moves the
+///   filesystem under its journal and *then* rewrites the index rows; a
+///   `create_note` that runs between those two steps writes a file and an index
+///   row at a path the rename is still mid-way through vacating, so the row the
+///   rename's transaction writes and the row the create wrote are two rows for
+///   one path, and the loser's file is orphaned.
+///
+/// # Coarse on purpose
+///
+/// One lock for every lifecycle entry point, held for the whole operation
+/// including its `git` commit. This is serialization, not fairness: there is no
+/// queue, no ordering guarantee between waiters, and no attempt to let
+/// operations on disjoint subtrees proceed together. That is the right trade
+/// because these operations are *user-scale* — a rename per click, not per
+/// keystroke — and because a finer scheme keyed on paths has to decide what
+/// "disjoint" means for an operation whose affected set (`plan_affected`) is
+/// computed from the index *after* the lock would have to be held. The cost is
+/// paid only by a second concurrent lifecycle call, and **no editing path takes
+/// this lock at all**: tier 1, tier 2 and tier 3 never reach it, so no keystroke
+/// and no idle write can ever wait on a rename's commit.
+///
+/// # Ordering
+///
+/// This is the **topmost** of the four locks in this module's order (lifecycle
+/// → tier 2 write → state → connection): it is acquired before
+/// [`with_write_locks`] and released after it, and nothing that runs beneath it
+/// reaches back for it. The debug assert below pins the one direction that
+/// would be easy to violate silently — taking it from inside a connection
+/// closure, which would invert the bottom of the order and put a whole `git`
+/// commit under the process-wide connection mutex a keystroke waits on.
+///
+/// A poisoned lifecycle lock is **recovered from rather than propagated**,
+/// which is the opposite of what this module does with every other poisoned
+/// mutex, and deliberately so: the others guard state that a panic may have left
+/// half-written, while this one guards `()`. There is no invariant to protect,
+/// so refusing every subsequent lifecycle operation in the process because one
+/// of them panicked would turn a single failure into a permanently unusable
+/// Workspace. The registry lock above it is still propagated, since a panic
+/// there really can leave the session map inconsistent.
+pub(super) fn with_lifecycle_lock<T>(
+    workspace: &Workspace,
+    f: impl FnOnce() -> Result<T, AppError>,
+) -> Result<T, AppError> {
+    debug_assert!(
+        !crate::db::connection::in_connection_closure(),
+        "a lifecycle operation was started inside a connection closure: the lifecycle lock \
+         is the topmost of this module's four locks and the connection is the bottom one, \
+         so this inverts the acquisition order and holds the process-wide connection mutex \
+         across a whole lifecycle operation, `git` commit included"
+    );
+
+    let lock = {
+        let mut locks = lifecycle_locks()
+            .lock()
+            .map_err(|_| AppError::DatabaseError("lifecycle lock registry poisoned".to_string()))?;
+        Arc::clone(locks.entry(workspace.id().to_string()).or_default())
+    };
+    let _guard = lock.lock().unwrap_or_else(PoisonError::into_inner);
+    f()
+}
+
 /// Runs `f` holding the **tier 2 write lock of every Note open in this
 /// Workspace**, so that no idle write can land inside a lifecycle operation.
 ///
@@ -1756,8 +1949,11 @@ pub(super) fn open_note_ids(workspace_id: &str) -> Result<Vec<String>, AppError>
 ///
 /// Acquired in **sorted concept-id order**, which is what stops two concurrent
 /// lifecycle operations over overlapping sets from deadlocking against each
-/// other. The order against the other locks is unchanged and is the one the
-/// module documentation states: write lock, then state, then connection.
+/// other — a property [`with_lifecycle_lock`] now makes moot for two lifecycle
+/// operations, and which still holds for a lifecycle operation racing anything
+/// else that takes these locks. The order against the other locks is unchanged
+/// and is the one the module documentation states: lifecycle lock, then write
+/// lock, then state, then connection.
 /// Acquiring the registry lock *while* holding a write lock (which
 /// [`carry_session_forward`] does, inside `f`) is permitted by that same rule —
 /// what it forbids is holding the registry lock while acquiring any of the
@@ -2336,7 +2532,13 @@ fn trailing_newlines(text: &str) -> usize {
 /// never touched, and a Windows-authored bundle grows one of those per edit.
 /// Deriving the spelling from the text the seam is being welded onto is what
 /// keeps the file internally consistent whichever convention it was written in.
-fn newline_style(text: &str) -> &'static str {
+///
+/// Visible to [`super::lifecycle`] because a rename inserts a line too — the
+/// frontmatter `title` a Note did not carry — and that insert has exactly this
+/// obligation. One definition rather than two, for `classify_entry`'s reason:
+/// a policy that has to hold everywhere and is spelled twice is one that will
+/// eventually hold in only one of the two places.
+pub(super) fn newline_style(text: &str) -> &'static str {
     match text.rfind('\n') {
         Some(at) if text[..at].ends_with('\r') => "\r\n",
         _ => "\n",
@@ -2628,6 +2830,51 @@ mod tests {
             self.workspace
                 .with_db(|conn| read_draft(conn, self.workspace.id(), note_id))
                 .unwrap()
+        }
+
+        /// Makes every `DELETE` on `drafts` after the first `allowed` of them
+        /// fail, for the whole life of this fixture's connection.
+        ///
+        /// A `RAISE(ABORT)` trigger — the injection every other failure test
+        /// here uses — cannot express this. `close` issues the identical
+        /// statement twice in a row (the flush's conditional clear, then its
+        /// own), the first deletes the row and the second therefore matches
+        /// nothing, so a row trigger fires on the stage that must succeed and
+        /// not on the stage under test. An authorizer runs while the statement
+        /// is being *prepared*, before any row is looked at, which is the only
+        /// hook that can tell the two apart.
+        fn deny_drafts_delete_after(&self, allowed: usize) {
+            let seen = Arc::new(AtomicUsize::new(0));
+            self.workspace
+                .with_db(|conn| {
+                    conn.authorizer(Some(move |context: rusqlite::hooks::AuthContext<'_>| {
+                        match context.action {
+                            rusqlite::hooks::AuthAction::Delete {
+                                table_name: "drafts",
+                            } => {
+                                if seen.fetch_add(1, Ordering::SeqCst) >= allowed {
+                                    rusqlite::hooks::Authorization::Deny
+                                } else {
+                                    rusqlite::hooks::Authorization::Allow
+                                }
+                            }
+                            _ => rusqlite::hooks::Authorization::Allow,
+                        }
+                    }))?;
+                    Ok(())
+                })
+                .unwrap();
+        }
+
+        /// Undoes [`Fixture::deny_drafts_delete_after`], so a test can go on to
+        /// show the Note is usable again rather than trapped.
+        fn allow_drafts_delete(&self) {
+            self.workspace
+                .with_db(|conn| {
+                    conn.authorizer(None::<fn(rusqlite::hooks::AuthContext<'_>) -> _>)?;
+                    Ok(())
+                })
+                .unwrap();
         }
 
         /// Runs `sql` against the index, so that a failure arising *after* the
@@ -3868,6 +4115,76 @@ mod tests {
         reopened.close().unwrap();
     }
 
+    /// The same trap, one stage earlier: a close whose **draft-row clear**
+    /// fails.
+    ///
+    /// It used to propagate with `?` from between the commit and the
+    /// deregistration, so the bytes were on disk, the commit had already been
+    /// made, and the session was *still* stranded in the registry with `closed`
+    /// unset and its timer armed — over a `drafts`-table failure that costs the
+    /// user nothing at all. The clear is bound to the sequence the flush
+    /// covered, so the row it fails to remove holds bytes identical to the file.
+    #[test]
+    fn a_close_whose_draft_clear_fails_still_closes_the_note_and_says_so() {
+        let f = fixture();
+        f.write("a.md", &note("Alpha", "First."));
+        f.commit_baseline();
+        let session = f.open("a");
+        session.update_block(&[0], "Alpha edited.\n").unwrap();
+
+        // Only the close's own clear, and not the flush's. The two issue the
+        // identical statement one after the other inside `close`, so no trigger
+        // can tell them apart — the first deletes the row and the second finds
+        // nothing left to fire on. An authorizer runs at *prepare* time, before
+        // any row is consulted, which is what makes "the second DELETE on
+        // `drafts` fails" expressible at all. It is a faithful stand-in for what
+        // production hits here: a full disk, a locked database, a page that will
+        // not read.
+        f.deny_drafts_delete_after(1);
+
+        let result = session.close();
+
+        let message = match &result {
+            Err(error) => format!("{error:?}"),
+            Ok(()) => panic!("the draft-clear failure must still be reported"),
+        };
+        assert!(
+            message.contains("clearing the draft row"),
+            "the error must name the stage that failed: {message}"
+        );
+        assert!(
+            message.contains("the Note is closed and its work is safe"),
+            "the error must say the user's work survived: {message}"
+        );
+        assert!(
+            message.contains("closing a"),
+            "the error must name what was being closed: {message}"
+        );
+
+        // Everything the close is for happened anyway.
+        assert_eq!(
+            f.read("a.md"),
+            "---\ntype: Note\ntitle: Alpha\n---\n\nAlpha edited.\n",
+            "the flush had already succeeded; the Note's bytes must be on disk"
+        );
+        assert_eq!(
+            f.commit_subjects(),
+            vec!["Update Alpha".to_string(), "baseline".to_string()],
+            "the commit stage ran before this one and must not be undone by it"
+        );
+        assert!(
+            lookup(f.workspace.id(), "a").unwrap().is_none(),
+            "the session is still registered, so the Note can never be closed"
+        );
+
+        // And the Note is usable again rather than trapped. (The flush's own
+        // clear had already emptied the row, so there is nothing to recover
+        // from — which is the point: the failing stage was redundant work.)
+        f.allow_drafts_delete();
+        let (reopened, _) = open_note(&f.workspace, "a").unwrap();
+        reopened.close().unwrap();
+    }
+
     // -- the idle timer ------------------------------------------------------
 
     /// Tier 2's routine trigger is a Core-owned timer, and tier 3 is not on a
@@ -4219,6 +4536,86 @@ mod tests {
         assert!(f.root().join("projects").is_dir());
         assert!(f.read("projects/a.md").contains("Only in the draft."));
         recovered.close().unwrap();
+    }
+
+    /// The state a recovered session is in **after a reload**: it is owed
+    /// nothing, because the reload read a file.
+    ///
+    /// `awaiting_recreate` says "this session opened over no file and so owes
+    /// the next tier 2 write a file rather than an overwrite". A reload cannot
+    /// succeed without a file, so by the time it re-records the baseline the
+    /// flag describes a state that has stopped being true — and it used not to
+    /// be cleared. The cheap consequence is here: while it stands,
+    /// `write_locked` writes unconditionally, so every idle tick rewrites bytes
+    /// byte-identical to the ones already on disk. The inode is what shows it,
+    /// since `atomic_write` renames a fresh temporary over the path.
+    #[cfg(unix)]
+    #[test]
+    fn an_idle_write_after_a_recovered_note_reloads_does_not_rewrite_unchanged_bytes() {
+        use std::os::unix::fs::MetadataExt as _;
+
+        let f = fixture();
+        let session = recovered_session_whose_file_came_back(&f);
+        session.reload().unwrap();
+
+        let before = std::fs::metadata(f.root().join("a.md")).unwrap().ino();
+        session.flush().unwrap();
+        let after = std::fs::metadata(f.root().join("a.md")).unwrap().ino();
+
+        assert_eq!(
+            before, after,
+            "a write of unchanged bytes replaced the file: the reloaded session is \
+             still marked as owing a recreate"
+        );
+    }
+
+    /// The costly consequence of the same flag: a **second** external deletion.
+    ///
+    /// With `awaiting_recreate` still set, the absent file compares as the empty
+    /// one against a baseline taken from real content, so tier 2 raises
+    /// `RevisionMismatch` rather than `NotFound` — and `close` reads only
+    /// `NotFound` as a vanished file. The session was therefore stranded in the
+    /// registry with its timer armed, which is precisely the unclosable state
+    /// the recovery path exists to get the user out of, reached a second time.
+    #[test]
+    fn a_second_external_deletion_after_a_reload_surfaces_not_found_and_closes() {
+        let f = fixture();
+        let session = recovered_session_whose_file_came_back(&f);
+        session.reload().unwrap();
+
+        std::fs::remove_file(f.root().join("a.md")).unwrap();
+
+        assert!(
+            matches!(session.flush(), Err(AppError::NotFound(_))),
+            "a file deleted after a reload is an external deletion like any other"
+        );
+        session
+            .close()
+            .expect("a vanished file must not trap the session a second time");
+        assert!(
+            lookup(f.workspace.id(), "a").unwrap().is_none(),
+            "the session is still registered, so the Note can never be closed"
+        );
+    }
+
+    /// The shared setup for the two tests above: a Note deleted underneath an
+    /// unflushed session, recovered from its `drafts` row, and then met by a
+    /// file that has **come back** — a sync landing, a restore from the trash.
+    /// The returned session is the recovered one, still flagged
+    /// `awaiting_recreate` and not yet reloaded.
+    fn recovered_session_whose_file_came_back(f: &Fixture) -> NoteSession {
+        f.write("a.md", &note("A", "First."));
+        f.commit_baseline();
+        let session = f.open("a");
+        session
+            .update_block(&[0], "Work that only exists in the draft.\n")
+            .unwrap();
+        std::fs::remove_file(f.root().join("a.md")).unwrap();
+        session.close().unwrap();
+
+        let (recovered, _) = open_note(&f.workspace, "a").unwrap();
+        f.write("a.md", &note("A", "Returned from somewhere else."));
+        recovered
     }
 
     /// A Note whose file is gone and whose draft row is gone with it is simply

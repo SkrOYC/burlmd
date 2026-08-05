@@ -56,4 +56,15 @@ unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frb_expand)'] }
 # this closes.
 ctor = "1.0.10"
 proptest = "1.11.0"
+# The same `rusqlite` the library depends on, with `hooks` added **for tests
+# only**: `workspace::persist`'s close-stage failure test denies the second
+# `DELETE` on `drafts` through an authorizer, which runs while a statement is
+# being prepared. A `RAISE(ABORT)` trigger — the injection every other failure
+# test in this crate uses — cannot express that case, because `close` issues the
+# identical statement twice and the first one consumes the row the trigger would
+# fire on. Declared here rather than on the library dependency so a shipped
+# build carries none of it: with the 2021 edition's resolver, features a
+# dev-dependency enables are not unified into a build that excludes
+# dev-dependencies.
+rusqlite = { version = "0.40.1", default-features = false, features = ["hooks"] }
 tempfile = "3.27.0"
