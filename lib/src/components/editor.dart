@@ -116,22 +116,13 @@ class _EditableParagraphState extends ConsumerState<_EditableParagraph> {
     style: _paragraphStyle(widget.content),
     decoration: const InputDecoration(border: InputBorder.none),
     onChanged: (text) {
-      final newNode = AstNode.paragraph(
-        content: [
-          InlineElement.text(
-            TextRun(
-              content: text,
-              bold: false,
-              italic: false,
-              strikethrough: false,
-              code: false,
-            ),
-          ),
-        ],
-      );
-      ref
-          .read(activeNoteProvider.notifier)
-          .updateBlock(widget.blockPath, newNode);
+      // The Block's raw source text, not a reconstructed AstNode — WSPC-D008
+      // replaces the AST-based `update_block` with the contract's
+      // source-text version (ADR-007 decision 4). This still loses the
+      // original run's formatting on every keystroke (bold/italic/etc. are
+      // not reconstructed as Markdown delimiters here); raw-on-focus editing
+      // that fixes that is EDIT-F002's, five tickets after this one.
+      ref.read(activeNoteProvider.notifier).updateBlock(widget.blockPath, text);
     },
   );
 }

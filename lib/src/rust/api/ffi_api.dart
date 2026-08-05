@@ -12,7 +12,8 @@ import '../workspace/bootstrap.dart';
 import '../workspace/persist.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `fts5_phrase_query`, `open_note_in_active_workspace`, `open_session`, `save_note_impl`, `search_notes_impl`
+// These functions are ignored because they are not marked as `pub`: `fts5_phrase_query`, `open_session`, `search_notes_impl`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `from`
 
 /// Opens the local Workspace, creating and initializing it if absent
 /// (ADR-005 decision 1): creates the directory, initializes a Git repository
@@ -58,23 +59,30 @@ Future<WorkspaceInfo> openWorkspace({required String path}) =>
 Future<int> reindexWorkspace() =>
     RustLib.instance.api.crateApiFfiApiReindexWorkspace();
 
-/// Opens a Note and establishes its editing session.
+/// Opens a Note by concept id, restoring an unflushed draft if one exists
+/// (ADR-008 tier 1's crash recovery).
 ///
-/// Still keyed by filesystem path rather than by concept id — `WSPC-D008`
-/// replaces this signature with the contract's `open_note(note_id)`. What it
-/// does *within* the active Workspace is already the contract's behaviour: it
-/// registers the session ADR-008's tiers operate on, so the working source,
-/// the span map and the recorded revision all exist before the first edit, and
-/// an unflushed `drafts` row is restored in preference to disk.
+/// Replaces the previous `open_note(path)` entry point and the
+/// `open_note_by_id(note_id)` the pre-v1.1.0 contract also named but never
+/// implemented: under ADR-004 a Note's identity is unambiguous, so there is
+/// exactly one open-a-Note entry point, and it is this one — a concept id,
+/// never a filesystem path and never a `workspace_id` (the active Workspace
+/// is always whichever `open_or_create_local_workspace`/`open_workspace` most
+/// recently established).
 ///
-/// A path outside the active Workspace — or a call before any Workspace has
-/// been opened — falls back to reading the file directly. That path registers
-/// no session and therefore has no write tier: the Workspace is what supplies
-/// the bundle root, the encrypted index the draft row lives in, and the
-/// repository tier 3 commits into, and none of the three exists for a file
-/// somewhere else on the disk.
-NoteState openNote({required String path}) =>
-    RustLib.instance.api.crateApiFfiApiOpenNote(path: path);
+/// `workspace::persist::open_note` is what this delegates to, and it already
+/// carries the two obligations that mattered here: it rejects a concept id
+/// that escapes the Workspace root (a lexical `../` check plus a
+/// canonicalized containment check for a path that exists), and it parses
+/// with the Note's real bundle-relative containing directory rather than an
+/// empty one, so a Link inside a nested Note resolves against its own
+/// directory instead of the bundle root.
+///
+/// `async` per the contract, though the body below runs to completion
+/// synchronously with no `.await` — see `search_notes`'s comment on the same
+/// point.
+Future<NoteState> openNote({required String noteId}) =>
+    RustLib.instance.api.crateApiFfiApiOpenNote(noteId: noteId);
 
 /// Forces ADR-008 tier 2 immediately: writes the Note's working source to its
 /// file atomically and returns the new `base_revision`.
@@ -117,18 +125,120 @@ Future<void> closeNote({required String noteId}) =>
 Future<List<NoteMetadata>> pendingDrafts() =>
     RustLib.instance.api.crateApiFfiApiPendingDrafts();
 
-/// Applies a keystroke-level edit to the currently open note's in-memory
-/// AST and returns the updated `NoteState`. `block_path` is an index path
-/// into the AST tree (see `draft::set_node_at_path`); it does not persist
-/// the change to disk or the DB — that happens via `save_note`.
-NoteState updateBlock({
+/// The raw Markdown source of one Block, for populating the editable field
+/// when it takes focus (ADR-006 decision 2). Includes the Block's own
+/// delimiters and its terminating newline — whatever this hands the UI must
+/// come back to `update_block` unmodified in the untouched portion, or the
+/// next `commit_block` reparses a working source missing the separator that
+/// kept this Block distinct from its neighbor, and the two silently merge.
+String getBlockSource({
   required String noteId,
   required Uint64List blockPath,
-  required AstNode newNode,
+}) => RustLib.instance.api.crateApiFfiApiGetBlockSource(
+  noteId: noteId,
+  blockPath: blockPath,
+);
+
+/// The per-keystroke call (ADR-007 decision 4, ADR-008 tier 1): substitutes
+/// `new_source` into the Note's working source over the focused Block's
+/// span, adjusts the span map arithmetically, and writes the draft row. Does
+/// **not** parse and returns nothing — the reparse belongs to `commit_block`,
+/// which is what keeps this call cheap enough to stay off the frame-budget
+/// critical path.
+void updateBlock({
+  required String noteId,
+  required Uint64List blockPath,
+  required String newSource,
 }) => RustLib.instance.api.crateApiFfiApiUpdateBlock(
   noteId: noteId,
   blockPath: blockPath,
-  newNode: newNode,
+  newSource: newSource,
+);
+
+/// Reparses the Note's working source and rebuilds the span map when the
+/// focused Block loses focus (ADR-007 decision 1). Performs no splice —
+/// `update_block` already substituted the text this reparses, so splicing it
+/// again here would duplicate it (ADR-008 decision 2's failure mode). Writes
+/// no draft row either, for the matching reason: `update_block` already wrote
+/// whatever this reparses, and tier 2 clears the row on a successful write.
+NoteState commitBlock({
+  required String noteId,
+  required Uint64List blockPath,
+}) => RustLib.instance.api.crateApiFfiApiCommitBlock(
+  noteId: noteId,
+  blockPath: blockPath,
+);
+
+/// Inserts a new Block at `block_path`, shifting subsequent Blocks down.
+NoteState insertBlock({
+  required String noteId,
+  required Uint64List blockPath,
+  required String source,
+}) => RustLib.instance.api.crateApiFfiApiInsertBlock(
+  noteId: noteId,
+  blockPath: blockPath,
+  source: source,
+);
+
+NoteState deleteBlock({
+  required String noteId,
+  required Uint64List blockPath,
+}) => RustLib.instance.api.crateApiFfiApiDeleteBlock(
+  noteId: noteId,
+  blockPath: blockPath,
+);
+
+/// Splits a Block at a **source** offset -- pressing Enter mid-Block
+/// (CAP-EDIT-03). The focused Block displays raw source under ADR-006, so the
+/// caret position the UI reports is already a source offset.
+NoteState splitBlock({
+  required String noteId,
+  required Uint64List blockPath,
+  required BigInt offset,
+}) => RustLib.instance.api.crateApiFfiApiSplitBlock(
+  noteId: noteId,
+  blockPath: blockPath,
+  offset: offset,
+);
+
+/// Merges a Block into its predecessor -- Backspace at offset 0
+/// (CAP-EDIT-03). A no-op on the first Block.
+NoteState mergeBlockWithPrevious({
+  required String noteId,
+  required Uint64List blockPath,
+}) => RustLib.instance.api.crateApiFfiApiMergeBlockWithPrevious(
+  noteId: noteId,
+  blockPath: blockPath,
+);
+
+/// Markdown for a multi-Block selection (CAP-EDIT-04), executed Core-side
+/// because the Core owns both the AST and the source text; reproducing it in
+/// Dart would mean a second serializer.
+String copyRangeAsMarkdown({
+  required String noteId,
+  required BlockRange range,
+}) => RustLib.instance.api.crateApiFfiApiCopyRangeAsMarkdown(
+  noteId: noteId,
+  range: range,
+);
+
+NoteState deleteRange({required String noteId, required BlockRange range}) =>
+    RustLib.instance.api.crateApiFfiApiDeleteRange(
+      noteId: noteId,
+      range: range,
+    );
+
+/// Replaces a multi-Block selection with text -- typing over a selection that
+/// crosses Blocks. The caller must re-derive caret position from the
+/// returned state rather than reusing anything passed in.
+NoteState replaceRange({
+  required String noteId,
+  required BlockRange range,
+  required String replacement,
+}) => RustLib.instance.api.crateApiFfiApiReplaceRange(
+  noteId: noteId,
+  range: range,
+  replacement: replacement,
 );
 
 Future<List<NoteMetadata>> searchNotes({
@@ -166,8 +276,37 @@ Future<List<NoteMetadata>> backlinks({required String noteId}) =>
 Future<List<TreeNode>> workspaceTree() =>
     RustLib.instance.api.crateApiFfiApiWorkspaceTree();
 
-void saveNote({required String noteId, required String expectedBaseRevision}) =>
-    RustLib.instance.api.crateApiFfiApiSaveNote(
-      noteId: noteId,
-      expectedBaseRevision: expectedBaseRevision,
-    );
+/// A selection spanning one or more Blocks, expressed as character offsets
+/// into each Block's **rendered** text (ADR-006 decision 3). See
+/// `contracts/ffi_api.rs` for the per-`AstNode`-variant definition of
+/// "rendered text" these offsets are into.
+class BlockRange {
+  final Uint64List startPath;
+  final BigInt startOffset;
+  final Uint64List endPath;
+  final BigInt endOffset;
+
+  const BlockRange({
+    required this.startPath,
+    required this.startOffset,
+    required this.endPath,
+    required this.endOffset,
+  });
+
+  @override
+  int get hashCode =>
+      startPath.hashCode ^
+      startOffset.hashCode ^
+      endPath.hashCode ^
+      endOffset.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BlockRange &&
+          runtimeType == other.runtimeType &&
+          startPath == other.startPath &&
+          startOffset == other.startOffset &&
+          endPath == other.endPath &&
+          endOffset == other.endOffset;
+}

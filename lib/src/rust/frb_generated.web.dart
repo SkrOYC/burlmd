@@ -37,13 +37,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   AstNode dco_decode_ast_node(dynamic raw);
 
   @protected
+  BlockRange dco_decode_block_range(dynamic raw);
+
+  @protected
   bool dco_decode_bool(dynamic raw);
 
   @protected
   AppError dco_decode_box_autoadd_app_error(dynamic raw);
 
   @protected
-  AstNode dco_decode_box_autoadd_ast_node(dynamic raw);
+  BlockRange dco_decode_box_autoadd_block_range(dynamic raw);
 
   @protected
   bool dco_decode_box_autoadd_bool(dynamic raw);
@@ -142,13 +145,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   AstNode sse_decode_ast_node(SseDeserializer deserializer);
 
   @protected
+  BlockRange sse_decode_block_range(SseDeserializer deserializer);
+
+  @protected
   bool sse_decode_bool(SseDeserializer deserializer);
 
   @protected
   AppError sse_decode_box_autoadd_app_error(SseDeserializer deserializer);
 
   @protected
-  AstNode sse_decode_box_autoadd_ast_node(SseDeserializer deserializer);
+  BlockRange sse_decode_box_autoadd_block_range(SseDeserializer deserializer);
 
   @protected
   bool sse_decode_box_autoadd_bool(SseDeserializer deserializer);
@@ -256,6 +262,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_ast_node(AstNode self, SseSerializer serializer);
 
   @protected
+  void sse_encode_block_range(BlockRange self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bool(bool self, SseSerializer serializer);
 
   @protected
@@ -265,7 +274,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
-  void sse_encode_box_autoadd_ast_node(AstNode self, SseSerializer serializer);
+  void sse_encode_box_autoadd_block_range(
+    BlockRange self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_box_autoadd_bool(bool self, SseSerializer serializer);

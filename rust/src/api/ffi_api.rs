@@ -6,9 +6,9 @@ use flutter_rust_bridge::frb;
 // having to depend back on this module for its own output types. `AppError`
 // is re-exported the same way, from a shared leaf module, so `db` and
 // `security` can report failures without depending upward on `api`.
-// `NoteMetadata`/`NoteState` are re-exported from `draft`, which also owns
-// the active-note cache and `set_node_at_path` — this module's own job is
-// just the thin `#[frb]` wrappers below, not the draft-state domain logic.
+// `NoteMetadata`/`NoteState` are re-exported from `draft` — this module's own
+// job is just the thin `#[frb]` wrappers below, not the draft-state domain
+// logic.
 pub use crate::draft::{NoteMetadata, NoteState};
 pub use crate::error::AppError;
 pub use crate::markdown::{AstNode, InlineElement, TextRun};
@@ -91,146 +91,33 @@ pub async fn reindex_workspace() -> Result<u32, AppError> {
     })
 }
 
-/// Opens a Note and establishes its editing session.
+/// Opens a Note by concept id, restoring an unflushed draft if one exists
+/// (ADR-008 tier 1's crash recovery).
 ///
-/// Still keyed by filesystem path rather than by concept id — `WSPC-D008`
-/// replaces this signature with the contract's `open_note(note_id)`. What it
-/// does *within* the active Workspace is already the contract's behaviour: it
-/// registers the session ADR-008's tiers operate on, so the working source,
-/// the span map and the recorded revision all exist before the first edit, and
-/// an unflushed `drafts` row is restored in preference to disk.
+/// Replaces the previous `open_note(path)` entry point and the
+/// `open_note_by_id(note_id)` the pre-v1.1.0 contract also named but never
+/// implemented: under ADR-004 a Note's identity is unambiguous, so there is
+/// exactly one open-a-Note entry point, and it is this one — a concept id,
+/// never a filesystem path and never a `workspace_id` (the active Workspace
+/// is always whichever `open_or_create_local_workspace`/`open_workspace` most
+/// recently established).
 ///
-/// A path outside the active Workspace — or a call before any Workspace has
-/// been opened — falls back to reading the file directly. That path registers
-/// no session and therefore has no write tier: the Workspace is what supplies
-/// the bundle root, the encrypted index the draft row lives in, and the
-/// repository tier 3 commits into, and none of the three exists for a file
-/// somewhere else on the disk.
-#[frb(sync)]
-pub fn open_note(path: String) -> Result<NoteState, AppError> {
-    if let Some(state) = open_note_in_active_workspace(&path)? {
-        return Ok(state);
-    }
-
-    let content = std::fs::read_to_string(&path).map_err(|e| AppError::IoError(e.to_string()))?;
-
-    let path_obj = std::path::Path::new(&path);
-    let title = path_obj
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("Untitled")
-        .to_string();
-
-    let mut ast = crate::markdown::parse_markdown(&content);
-    // `InlineElement::Link.exists` is the one field the parser cannot fill:
-    // it is whether `target_id` matches a `notes` row, which only the index
-    // knows (WSPC-D003 declares the field, WSPC-D005 resolves it).
-    //
-    // Two cases leave every Link at the parser's `false`, and they are not the
-    // same case. The first is that no Workspace is open at all, so there is no
-    // index to ask. The second is that this entry point still takes a
-    // filesystem path rather than a concept id (WSPC-D008 reconciles that), so
-    // it can be handed a file that is not in the active Workspace's bundle —
-    // and a concept id is unique only *within* a bundle, so resolving that
-    // file's Links against this index would answer about a different Note that
-    // happens to share an id. `Welcome` exists in more or less every bundle.
-    // Both cases collapse to `false`, which is also what "no indexed Note
-    // matches" means, and the contract already requires the follow path to
-    // re-resolve rather than trust the flag.
-    if let Ok(workspace_id) = crate::db::connection::active_workspace_id() {
-        crate::db::connection::with_connection(|conn| {
-            if crate::index::path_is_in_workspace(conn, &workspace_id, path_obj)? {
-                crate::index::resolve_link_existence(conn, &workspace_id, &mut ast)?;
-            }
-            Ok(())
-        })?;
-    }
-
-    let last_modified = std::fs::metadata(&path)
-        .and_then(|m| m.modified())
-        .ok()
-        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0);
-
-    let metadata = NoteMetadata {
-        // Still the filesystem path rather than the OKF concept id
-        // `data-models/schema.sql` defines `notes.id` as: this entry point
-        // takes a path, and `WSPC-D008` is the ticket that reconciles the two
-        // (it replaces this function with the contract's
-        // `open_note(note_id)`). What is no longer a placeholder is
-        // `base_revision` below.
-        id: path.clone(),
-        path: path.clone(),
-        title,
-        last_modified,
-        snippet: None,
-        // OKF §11's first two conformance conditions, read from the file's own
-        // frontmatter rather than assumed: a Workspace this application did
-        // not write may hold a Note with none (CAP-WS-05, CAP-PORT-03).
-        okf_conformant: crate::okf::read_frontmatter(&content).is_conformant(),
-    };
-
-    let state = NoteState {
-        ast,
-        metadata,
-        // The content hash of the bytes on disk (ADR-007 decision 7), which is
-        // the OCC token `workspace::persist` compares before every tier 2
-        // write — no longer the `"head"` placeholder that could never match
-        // anything. It is not an input: no function on this boundary takes it
-        // back.
-        base_revision: crate::index::content_hash(content.as_bytes()),
-        // This path reads the file directly rather than through a session, so
-        // no `drafts` row was consulted and nothing was restored. Tier 1
-        // recovery arrives with the session-based `open_note` in `WSPC-D008`;
-        // `pending_drafts` below already reports the rows.
-        restored_from_draft: false,
-    };
-    *crate::draft::active_note_cache()? = Some(state.clone());
-    Ok(state)
-}
-
-/// Opens `path` through `workspace::persist` when it names a file inside the
-/// active Workspace, or `None` when it does not — including when no Workspace
-/// is open at all.
+/// `workspace::persist::open_note` is what this delegates to, and it already
+/// carries the two obligations that mattered here: it rejects a concept id
+/// that escapes the Workspace root (a lexical `../` check plus a
+/// canonicalized containment check for a path that exists), and it parses
+/// with the Note's real bundle-relative containing directory rather than an
+/// empty one, so a Link inside a nested Note resolves against its own
+/// directory instead of the bundle root.
 ///
-/// The concept id is the bundle-relative path with `.md` removed (ADR-004), so
-/// it is derived here rather than taken as a parameter; a concept id is unique
-/// only within its bundle, which is exactly why this returns `None` rather
-/// than guessing for a file outside one.
-/// The returned state's `metadata.id` is the **concept id** and its
-/// `metadata.path` the bundle-relative path, as the contract specifies — not
-/// the absolute filesystem path the fallback branch below still reports. The
-/// two branches disagree on that, and deliberately: an id is what every other
-/// call in the persistence surface takes, and a file outside any bundle has no
-/// concept id to give.
-///
-/// The state is mirrored into `draft::active_note_cache` as well, because the
-/// legacy AST-based `update_block` below reads the note out of that cache and
-/// matches on `metadata.id`. Without the mirror, the ordinary Dart sequence —
-/// `openNote(path)` then `updateBlock(state.metadata.id, ...)`, which is what
-/// `note_providers.dart` does — would fail with "no open note with id". The
-/// mirror is a bridge, not a design: the cache and the session are two copies
-/// of the same buffer, and `WSPC-D008` removes the first when it replaces
-/// `update_block` with the contract's source-text version, which writes through
-/// the session and its draft row.
-fn open_note_in_active_workspace(path: &str) -> Result<Option<NoteState>, AppError> {
-    let Ok(workspace) = crate::workspace::persist::Workspace::active() else {
-        return Ok(None);
-    };
-    let (Ok(root), Ok(absolute)) = (
-        std::fs::canonicalize(workspace.root()),
-        std::fs::canonicalize(path),
-    ) else {
-        return Ok(None);
-    };
-    let Ok(relative) = absolute.strip_prefix(&root) else {
-        return Ok(None);
-    };
-    let note_id = crate::okf::path_to_concept_id(&relative.to_string_lossy());
+/// `async` per the contract, though the body below runs to completion
+/// synchronously with no `.await` — see `search_notes`'s comment on the same
+/// point.
+#[frb]
+pub async fn open_note(note_id: String) -> Result<NoteState, AppError> {
+    let workspace = crate::workspace::persist::Workspace::active()?;
     let (_, state) = crate::workspace::persist::open_note(&workspace, &note_id)?;
-    *crate::draft::active_note_cache()? = Some(state.clone());
-    Ok(Some(state))
+    Ok(state)
 }
 
 /// Forces ADR-008 tier 2 immediately: writes the Note's working source to its
@@ -297,23 +184,142 @@ fn open_session(note_id: &str) -> Result<crate::workspace::persist::NoteSession,
         .ok_or_else(|| AppError::NotFound(format!("no open Note with id {note_id}")))
 }
 
-/// Applies a keystroke-level edit to the currently open note's in-memory
-/// AST and returns the updated `NoteState`. `block_path` is an index path
-/// into the AST tree (see `draft::set_node_at_path`); it does not persist
-/// the change to disk or the DB — that happens via `save_note`.
+// ---------------------------------------------------------------------------
+// Editing (ADR-006, ADR-007)
+//
+// `update_block` is the per-keystroke call and the only one that does not
+// parse: it substitutes text, adjusts spans arithmetically, writes the draft
+// row, and returns nothing. Every other mutator below reparses the working
+// source, rebuilds the span map, and returns the whole new state.
+// `commit_block` is the one exception in both directions: it reparses but
+// writes nothing, because `update_block` already put the text it reparses
+// into both the working source and the draft row. See `contracts/ffi_api.rs`'s
+// Editing section header for the reasoning in full.
+// ---------------------------------------------------------------------------
+
+/// The raw Markdown source of one Block, for populating the editable field
+/// when it takes focus (ADR-006 decision 2). Includes the Block's own
+/// delimiters and its terminating newline — whatever this hands the UI must
+/// come back to `update_block` unmodified in the untouched portion, or the
+/// next `commit_block` reparses a working source missing the separator that
+/// kept this Block distinct from its neighbor, and the two silently merge.
+#[frb(sync)]
+pub fn get_block_source(note_id: String, block_path: Vec<usize>) -> Result<String, AppError> {
+    open_session(&note_id)?.block_source(&block_path)
+}
+
+/// The per-keystroke call (ADR-007 decision 4, ADR-008 tier 1): substitutes
+/// `new_source` into the Note's working source over the focused Block's
+/// span, adjusts the span map arithmetically, and writes the draft row. Does
+/// **not** parse and returns nothing — the reparse belongs to `commit_block`,
+/// which is what keeps this call cheap enough to stay off the frame-budget
+/// critical path.
 #[frb(sync)]
 pub fn update_block(
     note_id: String,
     block_path: Vec<usize>,
-    new_node: AstNode,
+    new_source: String,
+) -> Result<(), AppError> {
+    open_session(&note_id)?.update_block(&block_path, &new_source)
+}
+
+/// Reparses the Note's working source and rebuilds the span map when the
+/// focused Block loses focus (ADR-007 decision 1). Performs no splice —
+/// `update_block` already substituted the text this reparses, so splicing it
+/// again here would duplicate it (ADR-008 decision 2's failure mode). Writes
+/// no draft row either, for the matching reason: `update_block` already wrote
+/// whatever this reparses, and tier 2 clears the row on a successful write.
+#[frb(sync)]
+pub fn commit_block(note_id: String, block_path: Vec<usize>) -> Result<NoteState, AppError> {
+    open_session(&note_id)?.commit_block(&block_path)
+}
+
+/// Inserts a new Block at `block_path`, shifting subsequent Blocks down.
+#[frb(sync)]
+pub fn insert_block(
+    note_id: String,
+    block_path: Vec<usize>,
+    source: String,
 ) -> Result<NoteState, AppError> {
-    let mut cache = crate::draft::active_note_cache()?;
-    let state = cache
-        .as_mut()
-        .filter(|s| s.metadata.id == note_id)
-        .ok_or_else(|| AppError::IoError(format!("no open note with id {note_id}")))?;
-    crate::draft::set_node_at_path(&mut state.ast, &block_path, new_node)?;
-    Ok(state.clone())
+    open_session(&note_id)?.insert_block(&block_path, source)
+}
+
+#[frb(sync)]
+pub fn delete_block(note_id: String, block_path: Vec<usize>) -> Result<NoteState, AppError> {
+    open_session(&note_id)?.delete_block(&block_path)
+}
+
+/// Splits a Block at a **source** offset -- pressing Enter mid-Block
+/// (CAP-EDIT-03). The focused Block displays raw source under ADR-006, so the
+/// caret position the UI reports is already a source offset.
+#[frb(sync)]
+pub fn split_block(
+    note_id: String,
+    block_path: Vec<usize>,
+    offset: usize,
+) -> Result<NoteState, AppError> {
+    open_session(&note_id)?.split_block(&block_path, offset)
+}
+
+/// Merges a Block into its predecessor -- Backspace at offset 0
+/// (CAP-EDIT-03). A no-op on the first Block.
+#[frb(sync)]
+pub fn merge_block_with_previous(
+    note_id: String,
+    block_path: Vec<usize>,
+) -> Result<NoteState, AppError> {
+    open_session(&note_id)?.merge_block_with_previous(&block_path)
+}
+
+/// A selection spanning one or more Blocks, expressed as character offsets
+/// into each Block's **rendered** text (ADR-006 decision 3). See
+/// `contracts/ffi_api.rs` for the per-`AstNode`-variant definition of
+/// "rendered text" these offsets are into.
+#[frb]
+pub struct BlockRange {
+    pub start_path: Vec<usize>,
+    pub start_offset: usize,
+    pub end_path: Vec<usize>,
+    pub end_offset: usize,
+}
+
+/// A pure change of ownership. `BlockRange` is `markdown::spans::RenderedRange`'s
+/// FFI-boundary twin and the two carry the same four fields for exactly that
+/// reason — see that type's own documentation.
+impl From<BlockRange> for crate::markdown::RenderedRange {
+    fn from(range: BlockRange) -> Self {
+        crate::markdown::RenderedRange::new(
+            range.start_path,
+            range.start_offset,
+            range.end_path,
+            range.end_offset,
+        )
+    }
+}
+
+/// Markdown for a multi-Block selection (CAP-EDIT-04), executed Core-side
+/// because the Core owns both the AST and the source text; reproducing it in
+/// Dart would mean a second serializer.
+#[frb(sync)]
+pub fn copy_range_as_markdown(note_id: String, range: BlockRange) -> Result<String, AppError> {
+    open_session(&note_id)?.copy_range_as_markdown(&range.into())
+}
+
+#[frb(sync)]
+pub fn delete_range(note_id: String, range: BlockRange) -> Result<NoteState, AppError> {
+    open_session(&note_id)?.delete_range(&range.into())
+}
+
+/// Replaces a multi-Block selection with text -- typing over a selection that
+/// crosses Blocks. The caller must re-derive caret position from the
+/// returned state rather than reusing anything passed in.
+#[frb(sync)]
+pub fn replace_range(
+    note_id: String,
+    range: BlockRange,
+    replacement: String,
+) -> Result<NoteState, AppError> {
+    open_session(&note_id)?.replace_range(&range.into(), &replacement)
 }
 
 /// FTS5's bare `MATCH` syntax is a full query language (boolean operators,
@@ -477,87 +483,20 @@ pub async fn workspace_tree() -> Result<Vec<TreeNode>, AppError> {
     })
 }
 
-/// Optimistic-concurrency-controlled save: rejects with `AppError::GitConflict`
-/// if `notes.last_modified` has drifted from `expected_base_revision` since the
-/// caller last read the note (e.g. a background sync updated it concurrently).
-///
-/// Serializing the in-memory AST back to Markdown and writing it to the
-/// workspace's on-disk file is intentionally out of scope here — no Markdown
-/// serializer exists anywhere in this crate yet, and that write path overlaps
-/// the Git-aware sync work tracked separately. This function only updates the
-/// DB-level revision bookkeeping that write-through will eventually gate on.
-///
-/// `expected_base_revision` is compared against the DB's own
-/// `notes.last_modified` (stringified) — not yet the same token `open_note`
-/// currently hands back as `NoteState.base_revision` (a hardcoded
-/// placeholder). See the comment on that field for why the two aren't wired
-/// together yet.
-///
-/// Scoped to `workspace_id` (WSPC-D004 review finding #4), matching
-/// `search_notes_impl`: `notes` moved onto the composite `(workspace_id, id)`
-/// primary key, so `WHERE id = ?` alone was a cross-Workspace hazard on both
-/// the read and the write — a `note_id` that happens to collide across two
-/// Workspaces (a real possibility, since a concept id is unique only within
-/// its own bundle) would read or overwrite the wrong Workspace's row — and
-/// independently a full scan of `notes` on every save, since only
-/// `(workspace_id, id)` and `(workspace_id, path)` are indexed.
-fn save_note_impl(
-    conn: &rusqlite::Connection,
-    workspace_id: &str,
-    note_id: &str,
-    expected_base_revision: &str,
-    now: i64,
-) -> Result<(), AppError> {
-    let current: i64 = conn
-        .query_row(
-            "SELECT last_modified FROM notes WHERE workspace_id = ?1 AND id = ?2",
-            rusqlite::params![workspace_id, note_id],
-            |row| row.get(0),
-        )
-        .map_err(|e| match e {
-            rusqlite::Error::QueryReturnedNoRows => {
-                AppError::IoError(format!("no note found with id {note_id}"))
-            }
-            e => AppError::from(e),
-        })?;
-
-    if current.to_string() != expected_base_revision {
-        return Err(AppError::GitConflict);
-    }
-
-    conn.execute(
-        "UPDATE notes SET last_modified = ?1 WHERE workspace_id = ?2 AND id = ?3",
-        rusqlite::params![now, workspace_id, note_id],
-    )?;
-    Ok(())
-}
-
-#[frb(sync)]
-pub fn save_note(note_id: String, expected_base_revision: String) -> Result<(), AppError> {
-    let workspace_id = crate::db::connection::active_workspace_id()?;
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0);
-    crate::db::connection::with_connection(|conn| {
-        save_note_impl(conn, &workspace_id, &note_id, &expected_base_revision, now)
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use rusqlite::Connection;
 
     use super::*;
 
-    // These exercise `search_notes_impl`/`save_note_impl` directly against an
-    // in-memory, unencrypted connection rather than through the `search_notes`/
-    // `save_note` FFI wrappers and the process-wide `db::connection::connection()`
-    // singleton: the singleton is lazily initialized once per test binary, so
-    // routing through it here would make tests order-dependent on which one
-    // opens (and fixes the path of) the shared connection first. Encryption
-    // itself is already covered by `db::connection`'s own tests; these tests
-    // are only responsible for the SQL logic.
+    // These exercise `search_notes_impl` directly against an in-memory,
+    // unencrypted connection rather than through the `search_notes` FFI
+    // wrapper and the process-wide `db::connection::connection()` singleton:
+    // the singleton is lazily initialized once per test binary, so routing
+    // through it here would make tests order-dependent on which one opens
+    // (and fixes the path of) the shared connection first. Encryption itself
+    // is already covered by `db::connection`'s own tests; these tests are
+    // only responsible for the SQL logic.
     fn seeded_db() -> Connection {
         let conn = Connection::open_in_memory().unwrap();
         crate::db::connection::init_schema(&conn).unwrap();
@@ -776,53 +715,309 @@ mod tests {
         assert_eq!(results[0].title, "Grocery List");
     }
 
-    #[test]
-    fn save_note_updates_last_modified_when_revision_matches() {
-        let conn = seeded_db();
-        seed_note(&conn, "note-1", "Grocery List", "Buy milk and bread", 1000);
+    // -- WSPC-D008: the editing FFI surface ---------------------------------
+    //
+    // Every function under test here — `get_block_source`, `update_block`,
+    // `commit_block`, `split_block`, `merge_block_with_previous`,
+    // `copy_range_as_markdown` — is a thin delegation onto `NoteSession`, so
+    // these tests exercise the session directly through the same
+    // `Workspace::for_test` seam `workspace::persist`'s own tests use, rather
+    // than through the real `#[frb]` wrapper. Going through the wrapper would
+    // mean routing through `db::connection::active_workspace_id`, which is
+    // process-wide singleton state shared with `db::connection`'s own tests
+    // (see that module's `active_workspace_id_reports_the_id_a_bootstrap_call_established`);
+    // nothing here should race that. `open_session`'s delegation itself —
+    // "call this one-line function with these arguments" — is checked by the
+    // compiler at the `#[frb]` boundary: a wrong argument order or a wrong
+    // return type does not compile.
+    use std::sync::atomic::{AtomicU32, Ordering as AtomicOrdering};
+    use std::time::Duration;
 
-        save_note_impl(&conn, "ws", "note-1", "1000", 2000).unwrap();
+    use tempfile::TempDir;
 
-        let last_modified: i64 = conn
-            .query_row(
-                "SELECT last_modified FROM notes WHERE id = 'note-1'",
-                [],
-                |r| r.get(0),
-            )
-            .unwrap();
-        assert_eq!(last_modified, 2000);
+    use crate::workspace::persist::{self, NoteSession, Workspace};
+
+    struct EditingFixture {
+        // Held for its `Drop` impl, which removes the temp directory; never
+        // read directly.
+        #[allow(dead_code)]
+        dir: TempDir,
+        workspace: std::sync::Arc<Workspace>,
     }
 
-    #[test]
-    fn save_note_rejects_a_stale_revision_with_git_conflict() {
-        let conn = seeded_db();
-        seed_note(&conn, "note-1", "Grocery List", "Buy milk and bread", 1000);
+    impl EditingFixture {
+        fn root(&self) -> std::path::PathBuf {
+            self.dir.path().join("bundle")
+        }
 
-        let result = save_note_impl(&conn, "ws", "note-1", "999", 2000);
+        fn write(&self, relative: &str, contents: &str) {
+            let path = self.root().join(relative);
+            if let Some(parent) = path.parent() {
+                std::fs::create_dir_all(parent).unwrap();
+            }
+            std::fs::write(path, contents).unwrap();
+        }
 
-        assert_eq!(result, Err(AppError::GitConflict));
-        // The row must be untouched by a rejected save.
-        let last_modified: i64 = conn
-            .query_row(
-                "SELECT last_modified FROM notes WHERE id = 'note-1'",
-                [],
-                |r| r.get(0),
-            )
-            .unwrap();
-        assert_eq!(last_modified, 1000);
+        fn open(&self, note_id: &str) -> NoteSession {
+            persist::open_note(&self.workspace, note_id).unwrap().0
+        }
     }
 
-    #[test]
-    fn save_note_reports_a_clear_error_for_an_unknown_note_id() {
-        let conn = seeded_db();
+    fn editing_fixture() -> EditingFixture {
+        static NEXT_WORKSPACE: AtomicU32 = AtomicU32::new(0);
 
-        let result = save_note_impl(&conn, "ws", "does-not-exist", "1000", 2000);
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("bundle");
+        std::fs::create_dir_all(&root).unwrap();
+        crate::git::operations::init_repo(&root).unwrap();
+
+        let key = [0x7bu8; 32]; // throwaway, never the real Keychain entry
+        let conn = crate::db::connection::open_encrypted_db_with_key(
+            &dir.path().join("index.sqlite3"),
+            &key,
+        )
+        .unwrap();
+        crate::db::connection::init_schema(&conn).unwrap();
+
+        let workspace_id = format!(
+            "ffi-editing-ws-{}",
+            NEXT_WORKSPACE.fetch_add(1, AtomicOrdering::SeqCst)
+        );
+        conn.execute(
+            "INSERT INTO workspaces (id, name, provider, remote_url, local_path) \
+             VALUES (?1, 'Test Workspace', 'local', NULL, ?2)",
+            rusqlite::params![workspace_id, root.to_string_lossy()],
+        )
+        .unwrap();
+
+        // An interval no test here waits out: every scenario fires the tiers
+        // (or none at all) explicitly.
+        let workspace = Workspace::for_test(conn, workspace_id, root, Duration::from_secs(3600));
+        EditingFixture { dir, workspace }
+    }
+
+    fn note_source(title: &str, body: &str) -> String {
+        format!("---\ntype: Note\ntitle: {title}\n---\n\n{body}\n")
+    }
+
+    /// TDD order 1: `get_block_source` returns the raw Block source
+    /// *including its terminating newline*, and feeding that text back into
+    /// `update_block` unmodified must round-trip through `commit_block`
+    /// without the two paragraphs silently merging — the D007 warning that
+    /// whatever `get_block_source` hands back must come back verbatim.
+    #[test]
+    fn block_source_includes_the_terminating_newline_and_round_trips_without_merging() {
+        let f = editing_fixture();
+        f.write(
+            "a.md",
+            &note_source("A", "First paragraph.\n\nSecond paragraph."),
+        );
+        let session = f.open("a");
+
+        let source = session.block_source(&[0]).unwrap();
+        assert!(
+            source.ends_with('\n'),
+            "a Block's own source must include its terminating newline, got {source:?}"
+        );
+        assert_eq!(source, "First paragraph.\n");
+
+        session.update_block(&[0], &source).unwrap();
+        let state = session.commit_block(&[0]).unwrap();
 
         assert_eq!(
-            result,
-            Err(AppError::IoError(
-                "no note found with id does-not-exist".to_string()
-            ))
+            state.ast.len(),
+            2,
+            "feeding get_block_source's own text back into update_block \
+             verbatim must not merge the two paragraphs into one"
+        );
+    }
+
+    /// TDD order 2: `update_block` writes the draft row but performs no
+    /// parse — the AST held by the session (and the type system: `Result<(),
+    /// AppError>` carries none back) is untouched until `commit_block` runs.
+    #[test]
+    fn update_block_writes_the_draft_row_and_does_not_reparse() {
+        let f = editing_fixture();
+        f.write("a.md", &note_source("A", "Original text."));
+        let session = f.open("a");
+        let before = session.note_state().unwrap();
+        assert!(!session.write_status().unwrap().has_unwritten_edits);
+
+        session
+            .update_block(&[0], "Rewritten, longer text.\n")
+            .unwrap();
+
+        assert!(
+            session.write_status().unwrap().has_unwritten_edits,
+            "update_block must write the draft row"
+        );
+        let after = session.note_state().unwrap();
+        assert_eq!(
+            after.ast, before.ast,
+            "update_block must not reparse or rebuild the AST — that is \
+             commit_block's job"
+        );
+        assert_eq!(
+            after.base_revision, before.base_revision,
+            "update_block must not touch the file on disk"
+        );
+    }
+
+    /// TDD order 3: `commit_block` reparses the working source `update_block`
+    /// already substituted into, and performs no second substitution — the
+    /// typed text appears exactly once.
+    #[test]
+    fn commit_block_reparses_without_a_second_substitution() {
+        let f = editing_fixture();
+        f.write("a.md", &note_source("A", "plain text"));
+        let session = f.open("a");
+
+        session.update_block(&[0], "- now a list\n").unwrap();
+        let state = session.commit_block(&[0]).unwrap();
+
+        assert!(
+            matches!(state.ast[0], AstNode::List { .. }),
+            "commit_block must reparse: the structural shape change only \
+             appears after it, got {:?}",
+            state.ast[0]
+        );
+        let source = session.working_source().unwrap();
+        assert_eq!(
+            source.matches("now a list").count(),
+            1,
+            "commit_block must not splice update_block's text in a second time"
+        );
+    }
+
+    /// TDD order 4 (first half): splitting a Block at an offset produces two
+    /// Blocks whose combined text reproduces the original — split introduces
+    /// exactly one new separating newline, which is stripped from both sides
+    /// before comparing so the check is about content, not formatting.
+    #[test]
+    fn splitting_a_block_produces_two_blocks_whose_combined_source_equals_the_original() {
+        let f = editing_fixture();
+        f.write("a.md", &note_source("A", "helloworld"));
+        let session = f.open("a");
+        let original = session.block_source(&[0]).unwrap();
+
+        let state = session.split_block(&[0], 5).unwrap();
+
+        assert_eq!(state.ast.len(), 2, "a split must produce two Blocks");
+        let first = session.block_source(&[0]).unwrap();
+        let second = session.block_source(&[1]).unwrap();
+        assert_eq!(
+            format!("{first}{second}").replace('\n', ""),
+            original.replace('\n', ""),
+            "splitting must not lose or duplicate any of the original \
+             Block's text"
+        );
+    }
+
+    /// TDD order 4 (second half): merging the first Block with its
+    /// (nonexistent) predecessor is a no-op and returns the unchanged state.
+    #[test]
+    fn merging_the_first_block_with_its_predecessor_is_a_no_op() {
+        let f = editing_fixture();
+        f.write("a.md", &note_source("A", "first\n\nsecond"));
+        let session = f.open("a");
+        let before = session.note_state().unwrap();
+
+        let after = session.merge_block_with_previous(&[0]).unwrap();
+
+        assert_eq!(
+            after, before,
+            "there is no predecessor of the first Block, so this must be a \
+             no-op returning the unchanged state"
+        );
+    }
+
+    /// TDD order 5: a selection spanning three Blocks, copied as Markdown,
+    /// reproduces the selected content across all three.
+    #[test]
+    fn copying_a_range_across_three_blocks_reproduces_all_three() {
+        let f = editing_fixture();
+        f.write(
+            "a.md",
+            &note_source("A", "first block\n\nsecond block\n\nthird block"),
+        );
+        let session = f.open("a");
+        let state = session.note_state().unwrap();
+        assert_eq!(state.ast.len(), 3);
+
+        let end_offset = crate::markdown::rendered_text(&state.ast[2])
+            .chars()
+            .count();
+        let range = crate::markdown::RenderedRange::new(vec![0], 0, vec![2], end_offset);
+
+        let copied = session.copy_range_as_markdown(&range).unwrap();
+
+        assert!(copied.contains("first block"));
+        assert!(copied.contains("second block"));
+        assert!(copied.contains("third block"));
+    }
+
+    /// `BlockRange` (the FFI-boundary type) converts to `RenderedRange` (the
+    /// Core-side type `copy_range_as_markdown`/`delete_range`/`replace_range`
+    /// actually resolve against) by pure field mapping — no reinterpretation.
+    #[test]
+    fn block_range_converts_to_rendered_range_by_pure_field_mapping() {
+        let range = BlockRange {
+            start_path: vec![0],
+            start_offset: 3,
+            end_path: vec![1, 2],
+            end_offset: 9,
+        };
+
+        let converted: crate::markdown::RenderedRange = range.into();
+
+        assert_eq!(converted.start_path, vec![0]);
+        assert_eq!(converted.start_offset, 3);
+        assert_eq!(converted.end_path, vec![1, 2]);
+        assert_eq!(converted.end_offset, 9);
+    }
+
+    /// TDD order 6 (surface conformance): `open_note` accepts a concept id,
+    /// there is exactly one open-a-Note entry point, and no exposed function
+    /// takes a `workspace_id` parameter.
+    ///
+    /// Verified by scanning this file's own source rather than by runtime
+    /// reflection: Rust has no introspection over a module's public function
+    /// signatures, and `#[frb]` erases to an ordinary `pub fn`/`pub async fn`
+    /// the compiler does not tag distinctly. An explicit assertion over the
+    /// `#[frb]` surface's own source text is the form `WSPC-D008`'s STOP
+    /// condition on this point names as the fallback when a compile-time
+    /// check is not practical.
+    #[test]
+    fn the_ffi_surface_has_one_concept_id_open_entry_point_and_no_function_takes_a_workspace_id() {
+        let source = include_str!("ffi_api.rs");
+
+        // Every needle below is assembled from parts rather than written as
+        // one literal: this test is itself part of `source` (`include_str!`
+        // reads the whole file, this function included), so a literal needle
+        // spelling out the pattern it searches for would match its own line
+        // too and corrupt the count/contains checks. Splitting each pattern
+        // across a `format!` concatenation keeps it out of the file as a
+        // contiguous string while still producing the real pattern at
+        // runtime.
+        let fn_open_note = format!("{}{}", "fn open_", "note(");
+        let open_note_signature =
+            format!("{}{}{}", "pub async fn open_", "note(note_id", ": String)");
+        let workspace_id_param = format!("{}{}", "workspace_id", ": String");
+
+        assert_eq!(
+            source.matches(fn_open_note.as_str()).count(),
+            1,
+            "there must be exactly one open-a-Note entry point"
+        );
+        assert!(
+            source.contains(open_note_signature.as_str()),
+            "open_note must take a concept id named note_id, not a path or a \
+             workspace_id"
+        );
+        assert!(
+            !source.contains(workspace_id_param.as_str()),
+            "no exposed function may take a workspace_id parameter — the \
+             active Workspace is always resolved Core-side"
         );
     }
 }

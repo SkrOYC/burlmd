@@ -1,6 +1,5 @@
 import 'package:burlmd/src/providers/rust_api_provider.dart';
 import 'package:burlmd/src/rust/draft.dart';
-import 'package:burlmd/src/rust/markdown/ast.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// Holds the currently open note's state. UI widgets must stay stateless
@@ -10,16 +9,25 @@ class NoteController extends Notifier<NoteState?> {
   @override
   NoteState? build() => null;
 
-  void open(String path) {
-    state = ref.read(rustApiProvider).openNote(path);
+  /// Opens the Note addressed by `noteId`, its OKF concept id — not a
+  /// filesystem path. `open_note` is `async` at the FFI boundary now
+  /// (`WSPC-D008`), so this awaits it rather than assigning synchronously.
+  Future<void> open(String noteId) async {
+    state = await ref.read(rustApiProvider).openNote(noteId);
   }
 
-  void updateBlock(List<int> blockPath, AstNode newNode) {
+  /// The per-keystroke call (ADR-007 decision 4): buffers `source` — the
+  /// Block's raw Markdown text, not an `AstNode` — into the Note's working
+  /// source and writes the draft row. `update_block` no longer parses or
+  /// returns a `NoteState`, so this does not reassign `state`; reflecting an
+  /// edit back into the rendered AST on blur is `commit_block`'s job, which
+  /// is `EDIT-F002` territory rather than this ticket's.
+  void updateBlock(List<int> blockPath, String source) {
     final current = state;
     if (current == null) return;
-    state = ref
+    ref
         .read(rustApiProvider)
-        .updateBlock(current.metadata.id, blockPath, newNode);
+        .updateBlock(current.metadata.id, blockPath, source);
   }
 }
 

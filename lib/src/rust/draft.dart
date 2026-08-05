@@ -7,14 +7,22 @@ import 'frb_generated.dart';
 import 'markdown/ast.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-/// The Core Engine's active-draft-state domain: the currently open note's
-/// metadata/AST, and the in-memory cache + path-addressed mutation logic
-/// `update_block` needs to apply keystroke-level edits without a disk or DB
-/// round trip. Owned by this module rather than `api::ffi_api` per
-/// `architecture/containers.md`'s Core Engine responsibility ("manages the
-/// active draft state of open notes"), which is a distinct concern from the
-/// FFI bridge — `api::ffi_api` re-exports these types and calls into this
-/// module's functions, keeping its own `#[frb]` functions as thin wrappers.
+/// The Core Engine's active-draft-state domain: `NoteState`/`NoteMetadata`,
+/// the shapes every open-Note call crosses the FFI boundary with. Owned by
+/// this module rather than `api::ffi_api` per `architecture/containers.md`'s
+/// Core Engine responsibility ("manages the active draft state of open
+/// notes"), which is a distinct concern from the FFI bridge —
+/// `api::ffi_api` re-exports these types, keeping its own `#[frb]` functions
+/// as thin wrappers over `workspace::persist::NoteSession`, which is where
+/// the actual per-Note state and its keystroke-level mutation logic live
+/// (ADR-008's tiers). This module carried both the cache and a
+/// `set_node_at_path` AST mutator through Epic B and into `WSPC-D007`, back
+/// when `update_block` mutated an in-memory AST directly; `WSPC-D008`
+/// replaces that call with the contract's source-text version, which writes
+/// through the session and its draft row instead, and removes both — a
+/// single-slot cache keyed by nothing was never going to survive more than
+/// one open Note at a time, which `workspace::persist`'s session registry
+/// already does not share.
 class NoteMetadata {
   /// OKF concept id: the bundle-relative path with `.md` removed.
   ///
