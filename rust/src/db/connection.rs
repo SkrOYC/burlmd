@@ -213,11 +213,69 @@ pub fn with_connection<T>(
     f(&conn)
 }
 
-/// Serializes every test in this crate that mutates process-global
-/// `HOME` / `XDG_DATA_HOME` / `BURLMD_DB_PATH` environment variables — shared
-/// with `workspace::bootstrap`'s tests, which resolve a sibling path under
-/// the same env vars. Without this, `cargo test`'s default parallel runner
-/// would let two such tests race on the same process environment.
+/// The id of the Workspace established by the most recent successful
+/// `open_or_create_local_workspace` or `open_workspace` call in this
+/// process (ADR-005 decision 7: "Exactly one Workspace is active at a time,
+/// and the Core owns which one" — no function in `contracts/ffi_api.rs`
+/// takes a `workspace_id`; every call is implicitly scoped to this one).
+/// Deliberately kept next to [`DB`] rather than in `api::ffi_api` or
+/// `workspace`: it is process-wide singleton state of exactly the same
+/// shape, set once bootstrap succeeds and read by every later Note-level
+/// query — `search_notes`/`save_note` today (WSPC-D004 review finding #4),
+/// and every query `WSPC-D005`/`WSPC-D006`/`WSPC-D009` add.
+static ACTIVE_WORKSPACE: Mutex<Option<String>> = Mutex::new(None);
+
+/// Records `id` as the active Workspace. Called by
+/// `api::ffi_api::open_or_create_local_workspace` and
+/// `api::ffi_api::open_workspace` after a successful bootstrap — not by
+/// `workspace::bootstrap`'s own `_impl` functions, which are exercised
+/// directly against an injected `Connection` in hermetic tests and must
+/// never touch this process-wide cell (doing so would leak one test's
+/// active Workspace into another's).
+pub(crate) fn set_active_workspace_id(id: String) -> Result<(), AppError> {
+    let mut guard = ACTIVE_WORKSPACE
+        .lock()
+        .map_err(|_| AppError::DatabaseError("active workspace lock poisoned".to_string()))?;
+    *guard = Some(id);
+    Ok(())
+}
+
+/// The active Workspace's id, or `AppError::NotFound` when no
+/// `open_or_create_local_workspace`/`open_workspace` call has succeeded yet
+/// in this process. Every Note-level FFI function is implicitly scoped to
+/// this id (ADR-005 decision 7); see [`set_active_workspace_id`].
+pub(crate) fn active_workspace_id() -> Result<String, AppError> {
+    let guard = ACTIVE_WORKSPACE
+        .lock()
+        .map_err(|_| AppError::DatabaseError("active workspace lock poisoned".to_string()))?;
+    guard
+        .clone()
+        .ok_or_else(|| AppError::NotFound("no Workspace is open".to_string()))
+}
+
+/// Serializes every test **in this crate** that mutates process-global
+/// environment state via `std::env::set_var`/`remove_var` (or, in
+/// `workspace::bootstrap`'s relative-path tests, `std::env::set_current_dir`)
+/// — not only `HOME`/`XDG_DATA_HOME`/`BURLMD_DB_PATH` here and in
+/// `workspace::bootstrap`'s tests, but also `git::operations`'s
+/// `GIT_CONFIG_*` env-injection tests. It has to be the *one* lock, not one
+/// per module: `std::env::set_var` mutates a single process-wide table, and
+/// concurrent `set_var` calls to *different* keys from different threads can
+/// still race at the libc level (`setenv` may reallocate the shared
+/// `environ` array), so a per-module lock would only prevent same-key races,
+/// not this one. WSPC-D004 review finding #5.
+///
+/// What this lock does **not** claim: it does not serialize against the
+/// many tests elsewhere in this crate that spawn a real child process (a
+/// `git` CLI invocation via `Command::output()`) without holding it. Making
+/// every such test acquire this lock would serialize most of the test
+/// binary for no correctness benefit, because none of those tests mutate
+/// env vars or depend on inherited ambient ones — every `Command` this crate
+/// builds sets the environment variables it cares about explicitly via
+/// `Command::env`, never by reading process env at spawn time. This lock's
+/// real guarantee is narrower and is the one that matters: no two of *this
+/// crate's own* `std::env::set_var`/`remove_var`/`set_current_dir` calls,
+/// across every module, are ever in flight at the same time.
 #[cfg(test)]
 pub(crate) static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
@@ -237,8 +295,11 @@ impl EnvVarGuard {
     pub(crate) fn set(key: &'static str, value: &std::ffi::OsStr) -> Self {
         let original = std::env::var(key).ok();
         // SAFETY: every caller holds `ENV_LOCK` for the guard's whole
-        // lifetime, so no other thread in this test binary observes or
-        // mutates process env concurrently with this call.
+        // lifetime, and every `set_var`/`remove_var` call anywhere in this
+        // crate's test suite goes through the same lock (see `ENV_LOCK`'s
+        // own doc comment for the precise scope of that guarantee), so this
+        // call can never race another mutation of process env from within
+        // this crate's own tests.
         unsafe {
             std::env::set_var(key, value);
         }
@@ -408,6 +469,45 @@ mod tests {
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .unwrap();
         assert_eq!(version, 7, "a non-zero user_version must not be reset");
+    }
+
+    /// WSPC-D004 review finding #3: after a bootstrap call succeeds,
+    /// [`active_workspace_id`] must report the id of the row that call
+    /// established. `set_active_workspace_id` is exercised directly here
+    /// (mirroring what `api::ffi_api`'s bootstrap wrappers do on success)
+    /// rather than through the real `#[frb]` entry points, which would pull
+    /// in the process-wide `DB` singleton and the OS Keychain — the same
+    /// reason `workspace::bootstrap`'s own tests inject a `Connection`
+    /// instead of going through `connection()`.
+    #[test]
+    fn active_workspace_id_reports_the_id_a_bootstrap_call_established() {
+        assert!(
+            active_workspace_id().is_err(),
+            "no Workspace has been established yet in a process that hasn't called \
+             set_active_workspace_id"
+        );
+
+        let index_dir = tempfile::tempdir().unwrap();
+        let key = [0x55u8; 32];
+        let conn =
+            open_encrypted_db_with_key(&index_dir.path().join("index.sqlite3"), &key).unwrap();
+        init_schema(&conn).unwrap();
+        let workspace_dir = tempfile::tempdir().unwrap();
+        let info = crate::workspace::bootstrap::open_or_create_local_workspace_impl(
+            &conn,
+            Some(workspace_dir.path().to_string_lossy().to_string()),
+        )
+        .unwrap();
+
+        set_active_workspace_id(info.id.clone()).unwrap();
+
+        assert_eq!(active_workspace_id().unwrap(), info.id);
+
+        // `ACTIVE_WORKSPACE` is process-wide state shared by the whole test
+        // binary; this is the only test that sets it today, but leave it as
+        // this test found it (unset) rather than relying on that staying
+        // true as more tests are added around it.
+        *ACTIVE_WORKSPACE.lock().unwrap() = None;
     }
 
     /// WSPC-D004: with `XDG_DATA_HOME` unset, the default index path falls

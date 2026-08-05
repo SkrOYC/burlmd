@@ -30,24 +30,34 @@ pub use crate::workspace::WorkspaceInfo;
 /// that makes the Local-First Mandate in `prd/constraints.md` literally true
 /// (CAP-WS-01). `path` is `None` to use the default location specified in
 /// `guidelines.md`.
+///
+/// Establishes the active Workspace on success (ADR-005 decision 7,
+/// WSPC-D004 review finding #3): every later Note-level call is implicitly
+/// scoped to whichever Workspace was most recently opened by this function
+/// or [`open_workspace`], via `db::connection::active_workspace_id`.
 #[frb]
 pub async fn open_or_create_local_workspace(
     path: Option<String>,
 ) -> Result<WorkspaceInfo, AppError> {
-    crate::db::connection::with_connection(|conn| {
+    let info = crate::db::connection::with_connection(|conn| {
         crate::workspace::bootstrap::open_or_create_local_workspace_impl(conn, path)
-    })
+    })?;
+    crate::db::connection::set_active_workspace_id(info.id.clone())?;
+    Ok(info)
 }
 
 /// Opens an existing Workspace directory that this application did not
 /// create, including one populated by another tool (CAP-WS-05). Converges on
 /// the same post-conditions as [`open_or_create_local_workspace`] — see
-/// `workspace::bootstrap`'s module documentation and ADR-005 decision 8.
+/// `workspace::bootstrap`'s module documentation and ADR-005 decision 8,
+/// including establishing the active Workspace on success.
 #[frb]
 pub async fn open_workspace(path: String) -> Result<WorkspaceInfo, AppError> {
-    crate::db::connection::with_connection(|conn| {
+    let info = crate::db::connection::with_connection(|conn| {
         crate::workspace::bootstrap::open_workspace_impl(conn, path)
-    })
+    })?;
+    crate::db::connection::set_active_workspace_id(info.id.clone())?;
+    Ok(info)
 }
 
 #[frb(sync)]
@@ -148,8 +158,19 @@ fn fts5_phrase_query(query: &str) -> String {
 
 /// Full-text search over all indexed notes, ordered by FTS5 relevance
 /// (bm25, best match first). `notes_fts` only carries `(title, content)`;
-/// `fts_mapping` is the note_id <-> fts_rowid join table maintained
-/// alongside it, used here to recover the owning `notes` row per hit.
+/// `fts_mapping` is the `(workspace_id, note_id)` <-> `fts_rowid` join table
+/// maintained alongside it, used here to recover the owning `notes` row per
+/// hit.
+///
+/// Scoped to `workspace_id` (WSPC-D004 review finding #4): `WSPC-D004`
+/// brought `notes` and `fts_mapping` onto the composite `(workspace_id, id)`
+/// key `data-models/schema.sql` specifies, so joining `fts_mapping` to
+/// `notes` on `note_id` alone — and filtering by nothing at all — became a
+/// cross-Workspace hazard the moment a second Workspace's rows exist in the
+/// same index (ADR-005 decision 7: the index accumulates rows for every
+/// Workspace ever opened, CAP-WS-05). It was also, independently, a full
+/// scan of `fts_mapping` on every search rather than a lookup through its
+/// primary key.
 ///
 /// Capped at the top 50 matches, with no pagination cursor and no signal to
 /// the caller when a query matches more than that (see the matching note on
@@ -159,6 +180,7 @@ fn fts5_phrase_query(query: &str) -> String {
 fn search_notes_impl(
     conn: &rusqlite::Connection,
     query: &str,
+    workspace_id: &str,
 ) -> Result<Vec<NoteMetadata>, AppError> {
     let fts_query = fts5_phrase_query(query);
     if fts_query.is_empty() {
@@ -170,13 +192,14 @@ fn search_notes_impl(
                 snippet(notes_fts, 1, '', '', '…', 8) AS snippet \
          FROM notes_fts \
          JOIN fts_mapping ON fts_mapping.fts_rowid = notes_fts.rowid \
-         JOIN notes n ON n.id = fts_mapping.note_id \
-         WHERE notes_fts MATCH ?1 \
+         JOIN notes n ON n.workspace_id = fts_mapping.workspace_id \
+                      AND n.id = fts_mapping.note_id \
+         WHERE notes_fts MATCH ?1 AND fts_mapping.workspace_id = ?2 \
          ORDER BY rank \
          LIMIT 50",
     )?;
 
-    let rows = stmt.query_map([fts_query], |row| {
+    let rows = stmt.query_map(rusqlite::params![fts_query, workspace_id], |row| {
         Ok(NoteMetadata {
             id: row.get(0)?,
             workspace_id: row.get(1)?,
@@ -198,7 +221,8 @@ fn search_notes_impl(
 // boundary, not this function's own execution.
 #[frb]
 pub async fn search_notes(query: String) -> Result<Vec<NoteMetadata>, AppError> {
-    crate::db::connection::with_connection(|conn| search_notes_impl(conn, &query))
+    let workspace_id = crate::db::connection::active_workspace_id()?;
+    crate::db::connection::with_connection(|conn| search_notes_impl(conn, &query, &workspace_id))
 }
 
 /// Optimistic-concurrency-controlled save: rejects with `AppError::GitConflict`
@@ -216,16 +240,26 @@ pub async fn search_notes(query: String) -> Result<Vec<NoteMetadata>, AppError> 
 /// currently hands back as `NoteState.base_revision` (a hardcoded
 /// placeholder). See the comment on that field for why the two aren't wired
 /// together yet.
+///
+/// Scoped to `workspace_id` (WSPC-D004 review finding #4), matching
+/// `search_notes_impl`: `notes` moved onto the composite `(workspace_id, id)`
+/// primary key, so `WHERE id = ?` alone was a cross-Workspace hazard on both
+/// the read and the write — a `note_id` that happens to collide across two
+/// Workspaces (a real possibility, since a concept id is unique only within
+/// its own bundle) would read or overwrite the wrong Workspace's row — and
+/// independently a full scan of `notes` on every save, since only
+/// `(workspace_id, id)` and `(workspace_id, path)` are indexed.
 fn save_note_impl(
     conn: &rusqlite::Connection,
+    workspace_id: &str,
     note_id: &str,
     expected_base_revision: &str,
     now: i64,
 ) -> Result<(), AppError> {
     let current: i64 = conn
         .query_row(
-            "SELECT last_modified FROM notes WHERE id = ?1",
-            [note_id],
+            "SELECT last_modified FROM notes WHERE workspace_id = ?1 AND id = ?2",
+            rusqlite::params![workspace_id, note_id],
             |row| row.get(0),
         )
         .map_err(|e| match e {
@@ -240,20 +274,21 @@ fn save_note_impl(
     }
 
     conn.execute(
-        "UPDATE notes SET last_modified = ?1 WHERE id = ?2",
-        rusqlite::params![now, note_id],
+        "UPDATE notes SET last_modified = ?1 WHERE workspace_id = ?2 AND id = ?3",
+        rusqlite::params![now, workspace_id, note_id],
     )?;
     Ok(())
 }
 
 #[frb(sync)]
 pub fn save_note(note_id: String, expected_base_revision: String) -> Result<(), AppError> {
+    let workspace_id = crate::db::connection::active_workspace_id()?;
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs() as i64)
         .unwrap_or(0);
     crate::db::connection::with_connection(|conn| {
-        save_note_impl(conn, &note_id, &expected_base_revision, now)
+        save_note_impl(conn, &workspace_id, &note_id, &expected_base_revision, now)
     })
 }
 
@@ -327,7 +362,7 @@ mod tests {
             2000,
         );
 
-        let results = search_notes_impl(&conn, "milk").unwrap();
+        let results = search_notes_impl(&conn, "milk", "ws").unwrap();
 
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].id, "note-1");
@@ -342,7 +377,7 @@ mod tests {
         let conn = seeded_db();
         seed_note(&conn, "note-1", "Grocery List", "Buy milk and bread", 1000);
 
-        let results = search_notes_impl(&conn, "spaceship").unwrap();
+        let results = search_notes_impl(&conn, "spaceship", "ws").unwrap();
 
         assert!(results.is_empty());
     }
@@ -358,7 +393,7 @@ mod tests {
         // unterminated string) — none of them should ever surface as an
         // AppError to a user just typing an ordinary search.
         for query in ["note-1", "budget:2024", "hello (world", "\"unbalanced"] {
-            search_notes_impl(&conn, query).unwrap();
+            search_notes_impl(&conn, query, "ws").unwrap();
         }
     }
 
@@ -375,7 +410,7 @@ mod tests {
         );
         seed_note(&conn, "note-3", "Missing a term", "Buy milk only", 3000);
 
-        let results = search_notes_impl(&conn, "milk bread").unwrap();
+        let results = search_notes_impl(&conn, "milk bread", "ws").unwrap();
 
         // A multi-word query is an implicit AND across per-token quoted
         // phrases (not one exact-phrase match), so word order shouldn't
@@ -390,8 +425,56 @@ mod tests {
         let conn = seeded_db();
         seed_note(&conn, "note-1", "Grocery List", "Buy milk and bread", 1000);
 
-        assert!(search_notes_impl(&conn, "").unwrap().is_empty());
-        assert!(search_notes_impl(&conn, "   ").unwrap().is_empty());
+        assert!(search_notes_impl(&conn, "", "ws").unwrap().is_empty());
+        assert!(search_notes_impl(&conn, "   ", "ws").unwrap().is_empty());
+    }
+
+    /// WSPC-D004 review finding #4: `notes`/`fts_mapping` moved onto a
+    /// composite `(workspace_id, id)` key, so a search unscoped by
+    /// `workspace_id` could return — or, worse, silently prefer — a hit from
+    /// a Workspace other than the active one the moment two Workspaces'
+    /// rows coexist in the index (ADR-005 decision 7). Two Workspaces here
+    /// deliberately reuse the same `note_id` ("note-1"), which is exactly
+    /// the collision a concept id being unique only within its own bundle
+    /// permits.
+    #[test]
+    fn search_notes_does_not_return_a_match_from_a_different_workspace() {
+        let conn = seeded_db();
+        conn.execute(
+            "INSERT INTO workspaces (id, name, provider, remote_url, local_path) \
+             VALUES ('other-ws', 'Other Workspace', 'local', NULL, '/tmp/other-ws')",
+            [],
+        )
+        .unwrap();
+        seed_note(&conn, "note-1", "Grocery List", "Buy milk and bread", 1000);
+        conn.execute(
+            "INSERT INTO notes (id, workspace_id, path, title, last_modified, content_hash) \
+             VALUES ('note-1', 'other-ws', 'note-1.md', 'Also Milk', 1000, 'hash-other')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO notes_fts (title, content) VALUES ('Also Milk', 'Buy milk too')",
+            [],
+        )
+        .unwrap();
+        let other_fts_rowid = conn.last_insert_rowid();
+        conn.execute(
+            "INSERT INTO fts_mapping (workspace_id, note_id, fts_rowid) \
+             VALUES ('other-ws', 'note-1', ?1)",
+            [other_fts_rowid],
+        )
+        .unwrap();
+
+        let results = search_notes_impl(&conn, "milk", "ws").unwrap();
+
+        assert_eq!(
+            results.len(),
+            1,
+            "only the active Workspace's match may be returned"
+        );
+        assert_eq!(results[0].workspace_id, "ws");
+        assert_eq!(results[0].title, "Grocery List");
     }
 
     #[test]
@@ -399,7 +482,7 @@ mod tests {
         let conn = seeded_db();
         seed_note(&conn, "note-1", "Grocery List", "Buy milk and bread", 1000);
 
-        save_note_impl(&conn, "note-1", "1000", 2000).unwrap();
+        save_note_impl(&conn, "ws", "note-1", "1000", 2000).unwrap();
 
         let last_modified: i64 = conn
             .query_row(
@@ -416,7 +499,7 @@ mod tests {
         let conn = seeded_db();
         seed_note(&conn, "note-1", "Grocery List", "Buy milk and bread", 1000);
 
-        let result = save_note_impl(&conn, "note-1", "999", 2000);
+        let result = save_note_impl(&conn, "ws", "note-1", "999", 2000);
 
         assert_eq!(result, Err(AppError::GitConflict));
         // The row must be untouched by a rejected save.
@@ -434,7 +517,7 @@ mod tests {
     fn save_note_reports_a_clear_error_for_an_unknown_note_id() {
         let conn = seeded_db();
 
-        let result = save_note_impl(&conn, "does-not-exist", "1000", 2000);
+        let result = save_note_impl(&conn, "ws", "does-not-exist", "1000", 2000);
 
         assert_eq!(
             result,

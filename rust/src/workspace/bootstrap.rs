@@ -14,6 +14,14 @@
 //! oversight: `WSPC-D004`'s STOP conditions forbid all three, and
 //! `flow-workspace-bootstrap.md` contains no such step.
 //!
+//! This module deliberately does **not** scan the bundle into `notes`,
+//! `links`, `directories`, etc. `flow-workspace-bootstrap.md`'s "Three
+//! bootstrap paths, one post-condition" names "bundle indexed" alongside
+//! the post-conditions this module does establish — that one is
+//! `WSPC-D005`'s obligation, which depends on this ticket rather than the
+//! reverse; the schema is applied and ready for it, but population happens
+//! later.
+//!
 //! `#[frb]` async wrappers live in `api::ffi_api`, matching the pattern
 //! `draft.rs` already establishes for `NoteState`/`NoteMetadata`: this module
 //! owns the domain logic and is exercised directly in tests against an
@@ -60,7 +68,9 @@ pub fn default_workspace_dir() -> Result<PathBuf, AppError> {
 /// Opens the local Workspace at `path` (or the default location from
 /// [`default_workspace_dir`] when `path` is `None`), creating and
 /// initializing it if absent (ADR-005 decision 1). The domain entry point
-/// behind `api::ffi_api::open_or_create_local_workspace`.
+/// behind `api::ffi_api::open_or_create_local_workspace`. Unlike
+/// [`open_workspace_impl`], this is the one entry point that creates `dir`
+/// when it doesn't exist yet.
 pub(crate) fn open_or_create_local_workspace_impl(
     conn: &Connection,
     path: Option<String>,
@@ -69,27 +79,61 @@ pub(crate) fn open_or_create_local_workspace_impl(
         Some(p) => PathBuf::from(p),
         None => default_workspace_dir()?,
     };
-    converge(conn, &dir)
+    std::fs::create_dir_all(&dir).map_err(|e| AppError::IoError(e.to_string()))?;
+    let canonical = canonicalize_workspace_dir(&dir)?;
+    converge(conn, &canonical)
 }
 
 /// Opens an existing Workspace directory the application did not create,
 /// including one populated by another tool (CAP-WS-05). The domain entry
 /// point behind `api::ffi_api::open_workspace`.
+///
+/// Unlike [`open_or_create_local_workspace_impl`], this does **not** create
+/// `dir` — the ticket description is explicit that `open_workspace` "does
+/// not create the directory" (only `open_or_create_local_workspace` does),
+/// and silently creating an empty directory at a caller-supplied path that
+/// doesn't exist (a typo, an unmounted volume, a stale recent-Workspace
+/// entry) would shadow the real bundle with a fresh empty one instead of
+/// reporting the mistake (WSPC-D004 review finding #1).
 pub(crate) fn open_workspace_impl(
     conn: &Connection,
     path: String,
 ) -> Result<WorkspaceInfo, AppError> {
-    converge(conn, Path::new(&path))
+    let dir = PathBuf::from(&path);
+    if !dir.is_dir() {
+        return Err(AppError::NotFound(format!(
+            "workspace directory does not exist: {path}"
+        )));
+    }
+    let canonical = canonicalize_workspace_dir(&dir)?;
+    converge(conn, &canonical)
+}
+
+/// Resolves `dir` to its canonical, absolute form (symlinks followed,
+/// `.`/`..` and trailing slashes normalized). Both entry points above call
+/// this *after* confirming `dir` exists (creating it first, in
+/// [`open_or_create_local_workspace_impl`]'s case) and *before* `converge`
+/// reads or writes `workspaces.local_path` — that column has no `UNIQUE`
+/// constraint, so [`converge`]'s reuse-by-`local_path` lookup is only
+/// correct if every caller agrees on one spelling of the same directory.
+/// Without this, `/x/ws`, `/x/ws/`, a relative spelling, and a
+/// symlink-indirected path would each mint a separate `workspaces` row for
+/// what is really one bundle, splitting its index across two id spaces —
+/// which ADR-005 decision 7 requires not happen (WSPC-D004 review
+/// finding #2).
+fn canonicalize_workspace_dir(dir: &Path) -> Result<PathBuf, AppError> {
+    std::fs::canonicalize(dir)
+        .map_err(|e| AppError::IoError(format!("resolve workspace path {}: {e}", dir.display())))
 }
 
 /// The convergent bootstrap logic shared by both entry points
-/// (`flow-workspace-bootstrap.md`, ADR-005 decision 8): creates `dir` if
-/// absent, initializes a Git repository in it or adopts existing history
-/// unchanged, and writes (or reuses) the `workspaces` row. No Note under
-/// `dir` is read, written, or otherwise modified — the only side effect
-/// on a foreign directory besides the `workspaces` row is `.git/` itself.
+/// (`flow-workspace-bootstrap.md`, ADR-005 decision 8): initializes a Git
+/// repository in `dir` or adopts existing history unchanged, and writes (or
+/// reuses) the `workspaces` row. No Note under `dir` is read, written, or
+/// otherwise modified — the only side effect on a foreign directory besides
+/// the `workspaces` row is `.git/` itself. `dir` must already exist and be
+/// canonicalized — both callers above guarantee this before calling in.
 fn converge(conn: &Connection, dir: &Path) -> Result<WorkspaceInfo, AppError> {
-    std::fs::create_dir_all(dir).map_err(|e| AppError::IoError(e.to_string()))?;
     crate::git::operations::init_repo(dir)?;
 
     let local_path = dir.to_string_lossy().to_string();
@@ -193,7 +237,14 @@ mod tests {
         assert!(workspace_dir.join(".git").is_dir());
         assert_eq!(info.provider, "local");
         assert_eq!(info.remote_url, None);
-        assert_eq!(info.local_path, workspace_dir.to_string_lossy());
+        // Canonicalized (WSPC-D004 review finding #2), so compared against a
+        // canonicalized expectation rather than the raw tempdir path — the
+        // two coincide unless a path component is a symlink, which this
+        // assertion should not assume either way.
+        assert_eq!(
+            PathBuf::from(&info.local_path),
+            std::fs::canonicalize(&workspace_dir).unwrap()
+        );
         assert!(!info.id.is_empty());
 
         let row: (String, Option<String>) = conn
@@ -250,10 +301,11 @@ mod tests {
             "no Note in an adopted directory may be modified"
         );
 
+        let canonical_path = std::fs::canonicalize(foreign_dir.path()).unwrap();
         let row_count: i64 = conn
             .query_row(
                 "SELECT count(*) FROM workspaces WHERE local_path = ?1",
-                [foreign_dir.path().to_string_lossy()],
+                [canonical_path.to_string_lossy()],
                 |r| r.get(0),
             )
             .unwrap();
@@ -307,6 +359,98 @@ mod tests {
             commit,
             "pre-existing history must not be disturbed by adoption"
         );
+    }
+
+    /// WSPC-D004 review finding #1: `open_workspace` must not create the
+    /// directory it's pointed at — a typo, an unmounted volume, or a stale
+    /// recent-Workspace entry must be reported rather than silently
+    /// producing a fresh empty Workspace that shadows the real bundle.
+    #[test]
+    fn open_workspace_errors_and_creates_nothing_when_the_directory_is_absent() {
+        let index_dir = tempdir().unwrap();
+        let conn = test_index(index_dir.path());
+        let parent = tempdir().unwrap();
+        let missing = parent.path().join("does-not-exist");
+        assert!(!missing.exists());
+
+        let result = open_workspace_impl(&conn, missing.to_string_lossy().to_string());
+
+        assert!(
+            matches!(result, Err(AppError::NotFound(_))),
+            "expected NotFound, got {result:?}"
+        );
+        assert!(
+            !missing.exists(),
+            "open_workspace must not create the directory it failed to find"
+        );
+        let count: i64 = conn
+            .query_row("SELECT count(*) FROM workspaces", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(
+            count, 0,
+            "no Workspace row may be written for a missing directory"
+        );
+    }
+
+    /// WSPC-D004 review finding #2: `local_path` has no `UNIQUE` constraint,
+    /// so the reuse-on-repeat-open behavior depends entirely on every caller
+    /// agreeing on one spelling of the same directory. A trailing slash must
+    /// not be enough to mint a second row for the same bundle.
+    #[test]
+    fn a_trailing_slash_spelling_of_the_same_directory_reuses_the_same_row() {
+        let index_dir = tempdir().unwrap();
+        let conn = test_index(index_dir.path());
+        let workspace_dir = tempdir().unwrap();
+        let bare = workspace_dir.path().to_string_lossy().to_string();
+        let with_trailing_slash = format!("{bare}/");
+
+        let first = open_or_create_local_workspace_impl(&conn, Some(bare)).unwrap();
+        let second = open_or_create_local_workspace_impl(&conn, Some(with_trailing_slash)).unwrap();
+
+        assert_eq!(
+            first.id, second.id,
+            "a trailing-slash spelling of the same directory must reuse the row"
+        );
+        let count: i64 = conn
+            .query_row("SELECT count(*) FROM workspaces", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, 1);
+    }
+
+    /// WSPC-D004 review finding #2, the other spelling: a relative path to
+    /// the same directory must also reuse the row rather than minting a
+    /// second one that splits the bundle's index across two Workspace ids
+    /// (ADR-005 decision 7). Mutates the process's current directory, so
+    /// this holds `ENV_LOCK` for its whole duration — the same process-wide
+    /// mutable state `EnvVarGuard`'s callers serialize on, per
+    /// `db::connection::ENV_LOCK`'s doc comment.
+    #[test]
+    fn a_relative_spelling_of_the_same_directory_reuses_the_same_row() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let index_dir = tempdir().unwrap();
+        let conn = test_index(index_dir.path());
+        let workspace_parent = tempdir().unwrap();
+        let workspace_dir = workspace_parent.path().join("ws");
+        std::fs::create_dir_all(&workspace_dir).unwrap();
+
+        let original_cwd = std::env::current_dir().unwrap();
+        std::env::set_current_dir(workspace_parent.path()).unwrap();
+        let first = open_or_create_local_workspace_impl(
+            &conn,
+            Some(workspace_dir.to_string_lossy().to_string()),
+        )
+        .unwrap();
+        let second = open_or_create_local_workspace_impl(&conn, Some("ws".to_string())).unwrap();
+        std::env::set_current_dir(original_cwd).unwrap();
+
+        assert_eq!(
+            first.id, second.id,
+            "a relative spelling of the same directory must reuse the row"
+        );
+        let count: i64 = conn
+            .query_row("SELECT count(*) FROM workspaces", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, 1);
     }
 
     /// Gherkin: Given any connection opened against the encrypted index,

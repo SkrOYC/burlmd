@@ -1101,21 +1101,37 @@ mod tests {
         assert!(names.contains(&"from_b.md".to_string()));
     }
 
-    /// Serializes the handful of tests below that mutate process-global `GIT_CONFIG_*`
-    /// environment variables, since `cargo test`'s default parallel runner would otherwise let
-    /// two such tests race on the same process environment.
-    static GIT_CONFIG_ENV_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
-
+    /// WSPC-D004 review finding #5: these two tests used to serialize against each other only,
+    /// via a `GIT_CONFIG_ENV_MUTEX` local to this file. That was too narrow — `std::env::set_var`
+    /// / `remove_var` mutate one process-wide table, and `db::connection`'s `EnvVarGuard` (used by
+    /// `db::connection`'s and `workspace::bootstrap`'s tests to override `HOME`/`XDG_DATA_HOME`/
+    /// `BURLMD_DB_PATH`) mutates the same table for different keys. Concurrent `set_var` calls to
+    /// *different* keys from different threads can still race at the libc level (`setenv` may
+    /// reallocate the shared `environ` array), so every test in this crate that mutates process
+    /// env now goes through the one shared `crate::db::connection::ENV_LOCK`.
+    ///
+    /// What this lock does **not** do, stated plainly rather than overclaimed: it does not
+    /// serialize against the many other tests in this file that spawn a real `git` child process
+    /// via `Command::output()` (a `fork`+`exec`, which reads the parent's `environ` at spawn
+    /// time) without holding it. Making every such test acquire this lock would serialize nearly
+    /// the whole module for no correctness benefit, because none of those tests mutate env vars
+    /// or depend on inherited ambient ones — `git_command` always sets every variable it cares
+    /// about explicitly via `Command::env`, never by reading process env at spawn time. The two
+    /// tests below are the only ones in this crate that call `std::env::set_var`/`remove_var`
+    /// while also inspecting a `Command` built concurrently with other threads, so closing the
+    /// race between *those* calls and each other (and against `db::connection`'s/
+    /// `workspace::bootstrap`'s own env mutations) is what this lock actually guarantees.
+    ///
     /// Regression test for the `GIT_CONFIG_COUNT` clobbering bug: `apply_credentials` used to
     /// unconditionally write `GIT_CONFIG_COUNT=1`/`GIT_CONFIG_KEY_0`/`GIT_CONFIG_VALUE_0`,
     /// discarding (or mis-indexing) any config-injection entries this process's own environment
     /// already carried. It must instead append after whatever is already there.
     #[test]
     fn apply_credentials_appends_after_an_existing_injected_config_entry() {
-        let _guard = GIT_CONFIG_ENV_MUTEX.lock().unwrap();
-        // SAFETY: serialized against every other test in this file that touches process env via
-        // `GIT_CONFIG_ENV_MUTEX`, and no other thread in this test binary sets these particular
-        // vars, so this is not racing a concurrent read/write of the same keys.
+        let _guard = crate::db::connection::ENV_LOCK.lock().unwrap();
+        // SAFETY: serialized against every other test in this crate that mutates process env via
+        // the shared `crate::db::connection::ENV_LOCK` (see the module-level comment above this
+        // test for the precise scope of that guarantee).
         unsafe {
             std::env::set_var("GIT_CONFIG_COUNT", "1");
             std::env::set_var("GIT_CONFIG_KEY_0", "some.preexisting");
@@ -1163,9 +1179,9 @@ mod tests {
     /// must fall back to starting at index 0 (the pre-fix behavior), not error or skip.
     #[test]
     fn apply_credentials_starts_at_index_zero_with_no_preexisting_config() {
-        let _guard = GIT_CONFIG_ENV_MUTEX.lock().unwrap();
-        // SAFETY: serialized via `GIT_CONFIG_ENV_MUTEX`; ensures a clean slate regardless of
-        // what an earlier test in this process left behind.
+        let _guard = crate::db::connection::ENV_LOCK.lock().unwrap();
+        // SAFETY: serialized via the shared `crate::db::connection::ENV_LOCK`; ensures a clean
+        // slate regardless of what an earlier test in this process left behind.
         unsafe {
             std::env::remove_var("GIT_CONFIG_COUNT");
         }

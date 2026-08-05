@@ -23,13 +23,19 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 /// that makes the Local-First Mandate in `prd/constraints.md` literally true
 /// (CAP-WS-01). `path` is `None` to use the default location specified in
 /// `guidelines.md`.
+///
+/// Establishes the active Workspace on success (ADR-005 decision 7,
+/// WSPC-D004 review finding #3): every later Note-level call is implicitly
+/// scoped to whichever Workspace was most recently opened by this function
+/// or [`open_workspace`], via `db::connection::active_workspace_id`.
 Future<WorkspaceInfo> openOrCreateLocalWorkspace({String? path}) =>
     RustLib.instance.api.crateApiFfiApiOpenOrCreateLocalWorkspace(path: path);
 
 /// Opens an existing Workspace directory that this application did not
 /// create, including one populated by another tool (CAP-WS-05). Converges on
 /// the same post-conditions as [`open_or_create_local_workspace`] — see
-/// `workspace::bootstrap`'s module documentation and ADR-005 decision 8.
+/// `workspace::bootstrap`'s module documentation and ADR-005 decision 8,
+/// including establishing the active Workspace on success.
 Future<WorkspaceInfo> openWorkspace({required String path}) =>
     RustLib.instance.api.crateApiFfiApiOpenWorkspace(path: path);
 
