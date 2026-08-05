@@ -161,7 +161,24 @@ fn split_parent(id: &str) -> (String, String) {
 }
 
 /// The Directory tree for the sidebar (CAP-GRAPH-01): Directories before
-/// Notes at each level, each group sorted by name.
+/// Notes at each level, each group sorted case-insensitively by name — the
+/// contract only says "sorted by name", and byte order would put `Zebra`
+/// before `apple` in a user-facing sidebar, which is not the reading a
+/// sighted user expects — with a deterministic tie-break
+/// (`directories.path` / `notes.id`) for siblings that share a name. Titles
+/// are unique only per `(workspace_id, path)`, not per Directory, so a name
+/// alone does not total-order two Notes that happen to share a title; without
+/// the tie-break, ties fall back to SQLite's unspecified return order, which
+/// can flip after a reindex or `VACUUM` and surfaces as rows swapping in a
+/// tree widget's keyed reconciliation.
+///
+/// Renders from `directories` and `notes` alone, joined in
+/// [`build_tree_level`] purely by the parent-path relation [`split_parent`]
+/// derives — there is no recursive SQL query here. That makes
+/// `incremental::ensure_directories`'s invariant load-bearing: every
+/// ancestor directory of an indexed Note must carry its own row, or that
+/// Note's whole subtree silently vanishes from the tree with no error,
+/// because nothing here walks up from a Note to synthesize a missing parent.
 pub fn workspace_tree_impl(
     conn: &Connection,
     workspace_id: &str,
@@ -206,7 +223,15 @@ fn build_tree_level(
 
     if let Some(dirs) = dirs_by_parent.get(parent) {
         let mut dirs = dirs.clone();
-        dirs.sort_by(|a, b| a.0.cmp(&b.0));
+        // Case-insensitive by name, tie-broken by the Directory's own
+        // (unique) path: `directories.id`/`.path` is unique per Workspace, so
+        // this total-orders even two Directories that happen to share a
+        // display name after lowercasing.
+        dirs.sort_by(|a, b| {
+            a.0.to_lowercase()
+                .cmp(&b.0.to_lowercase())
+                .then_with(|| a.1.cmp(&b.1))
+        });
         for (name, path) in dirs {
             let children = build_tree_level(&path, dirs_by_parent, notes_by_parent);
             out.push(TreeNode::Directory {
@@ -219,7 +244,16 @@ fn build_tree_level(
 
     if let Some(notes) = notes_by_parent.get(parent) {
         let mut notes = notes.clone();
-        notes.sort_by(|a, b| a.2.cmp(&b.2));
+        // Case-insensitive by title, tie-broken by concept id. Titles are
+        // unique only per `(workspace_id, path)` (`schema.sql`), not per
+        // Directory, so two Notes can share a title verbatim — the id is
+        // what keeps the order deterministic across calls instead of falling
+        // back to SQLite's unspecified order for the tie.
+        notes.sort_by(|a, b| {
+            a.2.to_lowercase()
+                .cmp(&b.2.to_lowercase())
+                .then_with(|| a.0.cmp(&b.0))
+        });
         for (id, path, title) in notes {
             out.push(TreeNode::Note { id, title, path });
         }
@@ -257,10 +291,20 @@ mod tests {
 
     /// Gherkin: a matching Note whose title contains a space — the ordinary
     /// case, not an edge one — round-trips through a real parse: the
-    /// completion's insert text, parsed as Markdown via `markdown::parse_note`,
-    /// yields a Link whose target is that Note. Proves the wrapping is real
-    /// CommonMark the Core produced, not merely a string this module asserts
-    /// about in isolation.
+    /// completion's insert text yields a Link whose target is that Note.
+    ///
+    /// Parsed via [`links_from_source`], which runs the completion text
+    /// through the exact same traversal `index::scan` uses in production
+    /// (`derive_note`), not a hand-rolled AST walk that could silently drift
+    /// from it. The `containing_dir` half of that traversal — derived from
+    /// the concept id passed in, here `"somewhere/else/unrelated"`, nowhere
+    /// near where `projects/Meeting Notes` actually lives — is deliberately
+    /// wrong: `okf::links::classify` only ever consults `containing_dir` for
+    /// a *relative* destination, so a link that still resolves correctly
+    /// under a wrong one could not have been relative. That is what proves
+    /// `insert_text` is the bundle-absolute form and not merely consistent
+    /// with root-relative parsing, which a `containing_dir` of `""` cannot
+    /// distinguish.
     #[test]
     fn completion_insert_text_parses_back_to_a_link_targeting_the_note() {
         let f = fixture();
@@ -274,46 +318,48 @@ mod tests {
         assert_eq!(completions.len(), 1);
 
         let source = format!("See {} for details.\n", completions[0].insert_text);
-        let parsed = crate::markdown::parse_note(&source, "");
-        let links = collect_link_targets(&parsed.ast);
+        let links = links_from_source("somewhere/else/unrelated", &source);
 
         assert_eq!(links, vec!["projects/Meeting Notes".to_string()]);
     }
 
-    fn collect_link_targets(nodes: &[crate::markdown::AstNode]) -> Vec<String> {
-        use crate::markdown::{AstNode, InlineElement};
+    /// Gherkin (pinning `okf::links`' escaping — WSPC-D002 — through this
+    /// path, which `EDIT-F006` depends on): a title containing `[`, `]` and
+    /// `&`, none of which are optional to escape in the text position
+    /// (`serialize_link`'s doc comment), still round-trips through
+    /// `link_completions` to a Link targeting the right Note.
+    #[test]
+    fn completion_insert_text_for_a_bracket_and_ampersand_title_round_trips() {
+        let f = fixture();
+        let title = "Plan [Draft] & Notes";
+        f.write(&format!("{title}.md"), &conformant(title, "Body."));
+        reindex_workspace_impl(&f.conn, &f.workspace_id).unwrap();
 
-        fn walk_inline(content: &[InlineElement], out: &mut Vec<String>) {
-            for element in content {
-                match element {
-                    InlineElement::Link {
-                        target_id, content, ..
-                    } => {
-                        out.push(target_id.clone());
-                        walk_inline(content, out);
-                    }
-                    InlineElement::ExternalLink { content, .. } => walk_inline(content, out),
-                    InlineElement::Text(_) => {}
-                }
-            }
-        }
-        fn walk(nodes: &[AstNode], out: &mut Vec<String>) {
-            for node in nodes {
-                match node {
-                    AstNode::Heading { content, .. } | AstNode::Paragraph { content } => {
-                        walk_inline(content, out);
-                    }
-                    AstNode::List { items, .. } => walk(items, out),
-                    AstNode::ListItem { content, .. } | AstNode::Blockquote { nodes: content } => {
-                        walk(content, out);
-                    }
-                    _ => {}
-                }
-            }
-        }
-        let mut out = Vec::new();
-        walk(nodes, &mut out);
-        out
+        let completions = link_completions_impl(&f.conn, &f.workspace_id, "Plan", 10).unwrap();
+        assert_eq!(completions.len(), 1);
+
+        let source = format!("See {} for details.\n", completions[0].insert_text);
+        let links = links_from_source("elsewhere/unrelated", &source);
+
+        assert_eq!(links, vec![title.to_string()]);
+    }
+
+    /// Parses `source` and returns the target concept id of every Link found
+    /// in it, via `index::derive_note` — the same derivation
+    /// `index::scan`/`index::incremental` run over every Note on disk — so
+    /// this test helper cannot drift from the production Link-extraction
+    /// path the way a second, hand-written AST walk could. `concept_id`
+    /// supplies the containing directory `derive_note` resolves relative
+    /// destinations against (unused here, since every Link under test is the
+    /// bundle-absolute form `serialize_link` writes).
+    fn links_from_source(concept_id: &str, source: &str) -> Vec<String> {
+        let note = crate::index::derive_note(
+            concept_id,
+            source,
+            crate::index::content_hash(source.as_bytes()),
+            0,
+        );
+        note.links.into_iter().map(|link| link.target_id).collect()
     }
 
     /// Gherkin: three Notes link to a target Note; backlinks for that Note
@@ -338,6 +384,35 @@ mod tests {
             std::collections::HashSet::from(["a", "b", "c"]),
             "all three source Notes must be returned"
         );
+    }
+
+    /// Two Links from the same Note to the same target are one graph edge,
+    /// not two (`links` primary key is `(workspace_id, source_id,
+    /// target_id)`, and `insert_note_rows` writes it `INSERT OR IGNORE`) —
+    /// pinned here against a future refactor that joins `links` without
+    /// deduplicating, which would report the same source Note once per Link
+    /// instead of once per edge.
+    #[test]
+    fn a_note_linking_twice_to_the_same_target_yields_one_backlink() {
+        let f = fixture();
+        f.write("target.md", &conformant("Target", "The target."));
+        f.write(
+            "a.md",
+            &conformant(
+                "A",
+                "See [Target](</target.md>) and again [Target](</target.md>).",
+            ),
+        );
+        reindex_workspace_impl(&f.conn, &f.workspace_id).unwrap();
+
+        let results = backlinks_impl(&f.conn, &f.workspace_id, "target").unwrap();
+
+        assert_eq!(
+            results.len(),
+            1,
+            "two Links to the same target from one Note is one edge, not two"
+        );
+        assert_eq!(results[0].id, "a");
     }
 
     /// A Note with no inbound Links reports no backlinks.
@@ -459,6 +534,71 @@ mod tests {
         };
         assert_eq!(burlmd_id, "projects/burlmd");
         assert_eq!(burlmd_path, "projects/burlmd.md");
+    }
+
+    /// Case-insensitive ordering is a deliberate reading of the contract's
+    /// "sorted by name": byte order would put every capitalized entry ahead
+    /// of every lowercase one, which is not what a sighted user expects from
+    /// a sidebar.
+    #[test]
+    fn workspace_tree_orders_siblings_case_insensitively() {
+        let f = fixture();
+        f.write("Zebra.md", &conformant("Zebra", "Body."));
+        f.write("apple.md", &conformant("apple", "Body."));
+        f.mkdir("Zoo");
+        f.mkdir("aardvark");
+        reindex_workspace_impl(&f.conn, &f.workspace_id).unwrap();
+
+        let tree = workspace_tree_impl(&f.conn, &f.workspace_id).unwrap();
+
+        let names: Vec<&str> = tree
+            .iter()
+            .map(|node| match node {
+                TreeNode::Directory { name, .. } => name.as_str(),
+                TreeNode::Note { title, .. } => title.as_str(),
+            })
+            .collect();
+
+        // Directories case-insensitively ("aardvark" before "Zoo"), then
+        // Notes case-insensitively ("apple" before "Zebra") — byte order
+        // would put both capitalized entries first in their group instead.
+        assert_eq!(names, vec!["aardvark", "Zoo", "apple", "Zebra"]);
+    }
+
+    /// Titles are unique only per `(workspace_id, path)`, not per Directory,
+    /// so two Notes sharing a title must still total-order deterministically
+    /// — by concept id — and that order must not depend on which call it is,
+    /// unlike SQLite's unspecified order for a tie, which can flip after a
+    /// reindex or `VACUUM`.
+    #[test]
+    fn workspace_tree_breaks_same_title_ties_deterministically_and_stably() {
+        let f = fixture();
+        f.write("b-note.md", &conformant("Same Title", "Body B."));
+        f.write("a-note.md", &conformant("Same Title", "Body A."));
+        reindex_workspace_impl(&f.conn, &f.workspace_id).unwrap();
+
+        let first = workspace_tree_impl(&f.conn, &f.workspace_id).unwrap();
+        let second = workspace_tree_impl(&f.conn, &f.workspace_id).unwrap();
+
+        let ids = |tree: &[TreeNode]| -> Vec<String> {
+            tree.iter()
+                .map(|node| match node {
+                    TreeNode::Note { id, .. } => id.clone(),
+                    TreeNode::Directory { path, .. } => path.clone(),
+                })
+                .collect()
+        };
+
+        assert_eq!(
+            ids(&first),
+            vec!["a-note".to_string(), "b-note".to_string()],
+            "tied titles break on concept id, not on SQLite's unspecified row order"
+        );
+        assert_eq!(
+            ids(&first),
+            ids(&second),
+            "the order must be stable across repeated calls"
+        );
     }
 
     /// Gherkin (find_notes_by_title, exercised through link_completions since
