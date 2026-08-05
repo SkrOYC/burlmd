@@ -4,6 +4,7 @@ mod draft;
 mod error;
 mod frb_generated;
 pub mod git;
+pub mod index;
 pub mod markdown;
 pub mod okf;
 pub mod security;

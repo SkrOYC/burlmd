@@ -60,6 +60,28 @@ pub async fn open_workspace(path: String) -> Result<WorkspaceInfo, AppError> {
     Ok(info)
 }
 
+/// Full rebuild of `notes`, `notes_fts`, `fts_mapping`, `links` and
+/// `directories` for the active Workspace from the bundle on disk. Returns
+/// the number of Notes indexed.
+///
+/// The index is derived state and is always discardable
+/// (`data-models/schema.sql`). This closes Epic C deferred item 3:
+/// `SyncDeps::default().reindex` in `rust/src/sync/scheduler.rs` is a
+/// documented no-op because no re-index function existed anywhere in the
+/// crate; one exists now, and wiring the scheduler's hook to it is the only
+/// remaining step (deferred there by that ticket's scope, not by this one).
+///
+/// Per `architecture/risks.md` risk 3 this is **not** the routine path for
+/// keeping the index current — `index::incremental::index_note` is. It exists
+/// for first open, post-merge reconciliation, and recovery.
+#[frb]
+pub async fn reindex_workspace() -> Result<u32, AppError> {
+    let workspace_id = crate::db::connection::active_workspace_id()?;
+    crate::db::connection::with_connection(|conn| {
+        crate::index::scan::reindex_workspace_impl(conn, &workspace_id)
+    })
+}
+
 #[frb(sync)]
 pub fn open_note(path: String) -> Result<NoteState, AppError> {
     let content = std::fs::read_to_string(&path).map_err(|e| AppError::IoError(e.to_string()))?;
@@ -71,7 +93,19 @@ pub fn open_note(path: String) -> Result<NoteState, AppError> {
         .unwrap_or("Untitled")
         .to_string();
 
-    let ast = crate::markdown::parse_markdown(&content);
+    let mut ast = crate::markdown::parse_markdown(&content);
+    // `InlineElement::Link.exists` is the one field the parser cannot fill:
+    // it is whether `target_id` matches a `notes` row, which only the index
+    // knows (WSPC-D003 declares the field, WSPC-D005 resolves it). Skipped
+    // when no Workspace is active — this entry point still takes a filesystem
+    // path rather than a concept id (WSPC-D008 reconciles that), so it is
+    // reachable with no Workspace open at all, and a Link then keeps the
+    // parser's `false`, which is also what "no indexed Note matches" means.
+    if let Ok(workspace_id) = crate::db::connection::active_workspace_id() {
+        crate::db::connection::with_connection(|conn| {
+            crate::index::resolve_link_existence(conn, &workspace_id, &mut ast)
+        })?;
+    }
 
     let last_modified = std::fs::metadata(&path)
         .and_then(|m| m.modified())
@@ -156,6 +190,40 @@ fn fts5_phrase_query(query: &str) -> String {
         .join(" ")
 }
 
+/// The search query itself, factored out of [`search_notes_impl`] so that
+/// `index::scan`'s query-plan test asserts against the statement production
+/// actually runs. WSPC-D005 carries a criterion on this plan — it must drive
+/// from `notes_fts`, reach `fts_mapping` through `idx_fts_mapping_rowid`, and
+/// contain no AUTOMATIC COVERING INDEX step — and a test holding its own copy
+/// of the SQL would keep passing after the real query drifted away from it.
+///
+/// Parameters: `?1` is the FTS5 `MATCH` expression (see
+/// [`fts5_phrase_query`]), `?2` the Workspace id.
+///
+/// Both joins are `CROSS JOIN`, which in SQLite is not a different join —
+/// it is the documented way to pin the outer table and stop the planner
+/// reordering. It is load-bearing here, and measured: with plain `JOIN`, a
+/// Workspace of 10 or 200 Notes plans as `SCAN notes` → `SEARCH fts_mapping`
+/// → `SCAN notes_fts VIRTUAL TABLE`, i.e. it re-runs the full-text match once
+/// per Note — the catastrophic plan `data-models/schema.sql` distinguishes
+/// from the merely-wasteful automatic-covering-index one. It happens to pick
+/// the right order at 1000 Notes, which is exactly why WSPC-D005's criterion
+/// is stated against the plan rather than a timing: the corpus size at which
+/// the timing test runs is the size at which the defect hides. Pinned, the
+/// plan is `SCAN notes_fts` → `SEARCH fts_mapping USING idx_fts_mapping_rowid`
+/// → `SEARCH n USING sqlite_autoindex_notes_1`, at every corpus size, with and
+/// without table statistics, and the `ORDER BY rank` temp b-tree disappears
+/// with it because FTS5 already returns rows in rank order.
+pub(crate) const SEARCH_NOTES_SQL: &str = "SELECT n.id, n.workspace_id, n.path, n.title, \
+            n.last_modified, snippet(notes_fts, 1, '', '', '…', 8) AS snippet \
+     FROM notes_fts \
+     CROSS JOIN fts_mapping ON fts_mapping.fts_rowid = notes_fts.rowid \
+     CROSS JOIN notes n ON n.workspace_id = fts_mapping.workspace_id \
+                        AND n.id = fts_mapping.note_id \
+     WHERE notes_fts MATCH ?1 AND fts_mapping.workspace_id = ?2 \
+     ORDER BY rank \
+     LIMIT 50";
+
 /// Full-text search over all indexed notes, ordered by FTS5 relevance
 /// (bm25, best match first). `notes_fts` only carries `(title, content)`;
 /// `fts_mapping` is the `(workspace_id, note_id)` <-> `fts_rowid` join table
@@ -187,17 +255,7 @@ fn search_notes_impl(
         return Ok(Vec::new());
     }
 
-    let mut stmt = conn.prepare(
-        "SELECT n.id, n.workspace_id, n.path, n.title, n.last_modified, \
-                snippet(notes_fts, 1, '', '', '…', 8) AS snippet \
-         FROM notes_fts \
-         JOIN fts_mapping ON fts_mapping.fts_rowid = notes_fts.rowid \
-         JOIN notes n ON n.workspace_id = fts_mapping.workspace_id \
-                      AND n.id = fts_mapping.note_id \
-         WHERE notes_fts MATCH ?1 AND fts_mapping.workspace_id = ?2 \
-         ORDER BY rank \
-         LIMIT 50",
-    )?;
+    let mut stmt = conn.prepare(SEARCH_NOTES_SQL)?;
 
     let rows = stmt.query_map(rusqlite::params![fts_query, workspace_id], |row| {
         Ok(NoteMetadata {

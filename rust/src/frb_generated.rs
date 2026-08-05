@@ -38,7 +38,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.12.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -907389824;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1600268678;
 
 // Section: executor
 
@@ -249,6 +249,41 @@ fn wire__crate__api__ffi_api__open_workspace_impl(
                 transform_result_sse::<_, crate::error::AppError>(
                     (move || async move {
                         let output_ok = crate::api::ffi_api::open_workspace(api_path).await?;
+                        Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
+fn wire__crate__api__ffi_api__reindex_workspace_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "reindex_workspace",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, crate::error::AppError>(
+                    (move || async move {
+                        let output_ok = crate::api::ffi_api::reindex_workspace().await?;
                         Ok(output_ok)
                     })()
                     .await,
@@ -723,6 +758,13 @@ impl SseDecode for crate::markdown::ast::TextRun {
     }
 }
 
+impl SseDecode for u32 {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        deserializer.cursor.read_u32::<NativeEndian>().unwrap()
+    }
+}
+
 impl SseDecode for u8 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -785,7 +827,8 @@ fn pde_ffi_dispatcher_primary_impl(
             data_len,
         ),
         6 => wire__crate__api__ffi_api__open_workspace_impl(port, ptr, rust_vec_len, data_len),
-        8 => wire__crate__api__ffi_api__search_notes_impl(port, ptr, rust_vec_len, data_len),
+        7 => wire__crate__api__ffi_api__reindex_workspace_impl(port, ptr, rust_vec_len, data_len),
+        9 => wire__crate__api__ffi_api__search_notes_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -800,8 +843,8 @@ fn pde_ffi_dispatcher_sync_impl(
     match func_id {
         2 => wire__crate__api__auth__begin_oauth_flow_impl(ptr, rust_vec_len, data_len),
         4 => wire__crate__api__ffi_api__open_note_impl(ptr, rust_vec_len, data_len),
-        7 => wire__crate__api__ffi_api__save_note_impl(ptr, rust_vec_len, data_len),
-        9 => wire__crate__api__ffi_api__update_block_impl(ptr, rust_vec_len, data_len),
+        8 => wire__crate__api__ffi_api__save_note_impl(ptr, rust_vec_len, data_len),
+        10 => wire__crate__api__ffi_api__update_block_impl(ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -1358,6 +1401,13 @@ impl SseEncode for crate::markdown::ast::TextRun {
         <bool>::sse_encode(self.italic, serializer);
         <bool>::sse_encode(self.strikethrough, serializer);
         <bool>::sse_encode(self.code, serializer);
+    }
+}
+
+impl SseEncode for u32 {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        serializer.cursor.write_u32::<NativeEndian>(self).unwrap();
     }
 }
 

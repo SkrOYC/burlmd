@@ -39,6 +39,23 @@ Future<WorkspaceInfo> openOrCreateLocalWorkspace({String? path}) =>
 Future<WorkspaceInfo> openWorkspace({required String path}) =>
     RustLib.instance.api.crateApiFfiApiOpenWorkspace(path: path);
 
+/// Full rebuild of `notes`, `notes_fts`, `fts_mapping`, `links` and
+/// `directories` for the active Workspace from the bundle on disk. Returns
+/// the number of Notes indexed.
+///
+/// The index is derived state and is always discardable
+/// (`data-models/schema.sql`). This closes Epic C deferred item 3:
+/// `SyncDeps::default().reindex` in `rust/src/sync/scheduler.rs` is a
+/// documented no-op because no re-index function existed anywhere in the
+/// crate; one exists now, and wiring the scheduler's hook to it is the only
+/// remaining step (deferred there by that ticket's scope, not by this one).
+///
+/// Per `architecture/risks.md` risk 3 this is **not** the routine path for
+/// keeping the index current — `index::incremental::index_note` is. It exists
+/// for first open, post-merge reconciliation, and recovery.
+Future<int> reindexWorkspace() =>
+    RustLib.instance.api.crateApiFfiApiReindexWorkspace();
+
 NoteState openNote({required String path}) =>
     RustLib.instance.api.crateApiFfiApiOpenNote(path: path);
 
