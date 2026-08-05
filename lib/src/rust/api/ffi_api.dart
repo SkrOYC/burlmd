@@ -320,13 +320,21 @@ NoteState replaceRange({
   replacement: replacement,
 );
 
+/// Full-text search within the active Workspace (CAP-FIND-01), bm25-ranked.
+///
+/// `limit` is SQL `LIMIT`, so **`limit == 0` returns no results** — it is not
+/// read as "unlimited". `contracts/ffi_api.rs` introduces the parameter purely
+/// to replace a hardcoded cap of 50 that "silently truncated with no signal to
+/// the caller" and asserts no lower bound, so zero is a coherent request
+/// answered literally rather than an error or an implicit "all rows".
 Future<List<NoteMetadata>> searchNotes({
   required String query,
   required int limit,
 }) =>
     RustLib.instance.api.crateApiFfiApiSearchNotes(query: query, limit: limit);
 
-/// Title-prefix jump (CAP-FIND-02).
+/// Title-prefix jump (CAP-FIND-02). `limit` carries [`search_notes`]'
+/// semantics, including `0` returning no results.
 Future<List<NoteMetadata>> findNotesByTitle({
   required String query,
   required int limit,
@@ -337,7 +345,8 @@ Future<List<NoteMetadata>> findNotesByTitle({
 
 /// Candidates for the completion triggered by `[[` (CAP-GRAPH-02). The
 /// trigger is a UI affordance; what gets inserted is `LinkCompletion::insert_text`,
-/// built Core-side.
+/// built Core-side. `limit` carries [`search_notes`]' semantics, including `0`
+/// returning no candidates.
 Future<List<LinkCompletion>> linkCompletions({
   required String query,
   required int limit,

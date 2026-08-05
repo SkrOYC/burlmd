@@ -226,7 +226,33 @@ pub fn with_connection<T>(
 /// `backlinks`/`workspace_tree` directly; the Note and Directory lifecycle
 /// operations indirectly, via `workspace::persist::Workspace::active`
 /// (WSPC-D004 review finding #4, extended by WSPC-D005/D006/D009).
-static ACTIVE_WORKSPACE: Mutex<Option<String>> = Mutex::new(None);
+static ACTIVE_WORKSPACE: Mutex<Option<ActiveWorkspace>> = Mutex::new(None);
+
+/// The active Workspace's id, plus its bundle root once something has had to
+/// resolve it.
+///
+/// The root is cached here rather than re-queried because
+/// `workspace::persist::Workspace::active` runs on **every** Note-level FFI
+/// call — every open, every lifecycle operation, every status poll — and each
+/// one was taking the process-wide connection mutex to read one `local_path`
+/// that cannot change while a Workspace is open. That is the mutex a
+/// keystroke's own tier 1 draft write waits on (`SPK-WSPC-D001` §6.2), so the
+/// round trip was contention bought for a constant.
+///
+/// `local_path` is written once, by `workspace::bootstrap::converge`, and
+/// nothing ever updates it for an existing row — so the only event that can
+/// invalidate this is the active Workspace *changing*, which is exactly what
+/// [`set_active_workspace_id`] clears it on.
+struct ActiveWorkspace {
+    id: String,
+    root: Option<PathBuf>,
+}
+
+fn lock_active() -> Result<std::sync::MutexGuard<'static, Option<ActiveWorkspace>>, AppError> {
+    ACTIVE_WORKSPACE
+        .lock()
+        .map_err(|_| AppError::DatabaseError("active workspace lock poisoned".to_string()))
+}
 
 /// Records `id` as the active Workspace. Called by
 /// `api::ffi_api::open_or_create_local_workspace` and
@@ -235,11 +261,12 @@ static ACTIVE_WORKSPACE: Mutex<Option<String>> = Mutex::new(None);
 /// directly against an injected `Connection` in hermetic tests and must
 /// never touch this process-wide cell (doing so would leak one test's
 /// active Workspace into another's).
+///
+/// Discards any cached bundle root: a different Workspace has a different one,
+/// and re-establishing the *same* id costs one query to refill.
 pub(crate) fn set_active_workspace_id(id: String) -> Result<(), AppError> {
-    let mut guard = ACTIVE_WORKSPACE
-        .lock()
-        .map_err(|_| AppError::DatabaseError("active workspace lock poisoned".to_string()))?;
-    *guard = Some(id);
+    let mut guard = lock_active()?;
+    *guard = Some(ActiveWorkspace { id, root: None });
     Ok(())
 }
 
@@ -267,12 +294,42 @@ pub(crate) fn clear_active_workspace_id_for_test() {
 /// in this process. Every Note-level FFI function is implicitly scoped to
 /// this id (ADR-005 decision 7); see [`set_active_workspace_id`].
 pub(crate) fn active_workspace_id() -> Result<String, AppError> {
-    let guard = ACTIVE_WORKSPACE
-        .lock()
-        .map_err(|_| AppError::DatabaseError("active workspace lock poisoned".to_string()))?;
+    let guard = lock_active()?;
     guard
-        .clone()
+        .as_ref()
+        .map(|active| active.id.clone())
         .ok_or_else(|| AppError::NotFound("no Workspace is open".to_string()))
+}
+
+/// The active Workspace's id **and** its bundle root, resolving the root
+/// through the index only the first time it is asked for.
+///
+/// The connection is deliberately acquired with this module's own lock
+/// *released*, and the result is stored only if the active Workspace is still
+/// the one that was resolved: holding the two at once would introduce a second
+/// acquisition order over the process-wide connection mutex, for a cache fill
+/// that is happy to be redone.
+pub(crate) fn active_workspace() -> Result<(String, PathBuf), AppError> {
+    let id = {
+        let guard = lock_active()?;
+        let active = guard
+            .as_ref()
+            .ok_or_else(|| AppError::NotFound("no Workspace is open".to_string()))?;
+        if let Some(root) = &active.root {
+            return Ok((active.id.clone(), root.clone()));
+        }
+        active.id.clone()
+    };
+
+    let root = with_connection(|conn| crate::index::workspace_root(conn, &id))?;
+
+    let mut guard = lock_active()?;
+    if let Some(active) = guard.as_mut() {
+        if active.id == id {
+            active.root = Some(root.clone());
+        }
+    }
+    Ok((id, root))
 }
 
 /// Serializes every test **in this crate** that mutates process-global

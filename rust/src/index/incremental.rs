@@ -99,17 +99,40 @@ pub fn write_note_rows(
     workspace_id: &str,
     note: &crate::index::IndexedNote,
 ) -> Result<IndexOutcome, AppError> {
+    let outcome = write_note_rows_deferring_analyze(conn, workspace_id, note)?;
+
+    // Only on a real rewrite, and bounded: see `analyze_bounded`. Running
+    // either after a no-op would put that cost on every keystroke-adjacent
+    // write for statistics that cannot have changed.
+    analyze_bounded(conn)?;
+    Ok(outcome)
+}
+
+/// [`write_note_rows`] **without** the re-analysis, for a caller rewriting a
+/// batch of Notes in one operation.
+///
+/// The statistics `analyze_bounded` refreshes describe the shape of three
+/// tables, not the rows any single Note owns, so running it once per Note in a
+/// batch pays the same bounded scan of `notes`, `fts_mapping` and `links` N
+/// times to reach an answer only the last one could give. A Directory rename
+/// over a large subtree is the case that makes it visible: every Note beneath
+/// it is rewritten in one transaction, and the re-analysis was landing inside
+/// that transaction once per Note. The batch caller — `workspace::lifecycle`'s
+/// `apply_reidentify` — analyzes once, after its transaction commits.
+///
+/// The singular path keeps its own [`analyze_bounded`], where one write is the
+/// whole operation and there is nothing to hoist it above.
+pub fn write_note_rows_deferring_analyze(
+    conn: &Connection,
+    workspace_id: &str,
+    note: &crate::index::IndexedNote,
+) -> Result<IndexOutcome, AppError> {
     let concept_id = note.concept_id.as_str();
     in_transaction(conn, |tx| {
         remove_note_rows(tx, workspace_id, concept_id)?;
         ensure_directories(tx, workspace_id, concept_id)?;
         insert_note_rows(tx, workspace_id, note)
     })?;
-
-    // Only on a real rewrite, and bounded: see `analyze_bounded`. Running
-    // either after a no-op would put that cost on every keystroke-adjacent
-    // write for statistics that cannot have changed.
-    analyze_bounded(conn)?;
     Ok(IndexOutcome::Updated)
 }
 

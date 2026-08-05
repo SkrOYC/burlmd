@@ -539,6 +539,13 @@ fn search_notes_impl(
 // with no `.await` inside it, so this doesn't yield to an executor — the
 // `async` marker only affects how FRB dispatches the call across the
 // boundary, not this function's own execution.
+/// Full-text search within the active Workspace (CAP-FIND-01), bm25-ranked.
+///
+/// `limit` is SQL `LIMIT`, so **`limit == 0` returns no results** — it is not
+/// read as "unlimited". `contracts/ffi_api.rs` introduces the parameter purely
+/// to replace a hardcoded cap of 50 that "silently truncated with no signal to
+/// the caller" and asserts no lower bound, so zero is a coherent request
+/// answered literally rather than an error or an implicit "all rows".
 #[frb]
 pub async fn search_notes(query: String, limit: u32) -> Result<Vec<NoteMetadata>, AppError> {
     let workspace_id = crate::db::connection::active_workspace_id()?;
@@ -547,7 +554,8 @@ pub async fn search_notes(query: String, limit: u32) -> Result<Vec<NoteMetadata>
     })
 }
 
-/// Title-prefix jump (CAP-FIND-02).
+/// Title-prefix jump (CAP-FIND-02). `limit` carries [`search_notes`]'
+/// semantics, including `0` returning no results.
 #[frb]
 pub async fn find_notes_by_title(query: String, limit: u32) -> Result<Vec<NoteMetadata>, AppError> {
     let workspace_id = crate::db::connection::active_workspace_id()?;
@@ -558,7 +566,8 @@ pub async fn find_notes_by_title(query: String, limit: u32) -> Result<Vec<NoteMe
 
 /// Candidates for the completion triggered by `[[` (CAP-GRAPH-02). The
 /// trigger is a UI affordance; what gets inserted is `LinkCompletion::insert_text`,
-/// built Core-side.
+/// built Core-side. `limit` carries [`search_notes`]' semantics, including `0`
+/// returning no candidates.
 #[frb]
 pub async fn link_completions(query: String, limit: u32) -> Result<Vec<LinkCompletion>, AppError> {
     let workspace_id = crate::db::connection::active_workspace_id()?;

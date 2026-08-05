@@ -616,6 +616,13 @@ fn apply_reidentify_locked(
         return Err(error);
     }
 
+    // Once for the whole batch, and outside the transaction that rewrote it —
+    // see `write_note_rows_deferring_analyze`. Not fatal on its own: the rows
+    // are correct either way and stale statistics cost a worse query plan, not
+    // a wrong answer, but there is no reason to swallow the error when the
+    // caller can act on it.
+    workspace.with_db(index::analyze_bounded)?;
+
     let mut pathspec: Vec<String> = Vec::new();
     for a in &affected {
         pathspec.push(concept_id_to_path(&a.old_id));
@@ -859,8 +866,13 @@ fn rewrite_index(
             index::remove_note_rows(tx, workspace_id, &a.old_id)?;
         }
     }
+    // Deferring the re-analysis: this loop is a batch, and `analyze_bounded`
+    // refreshes statistics about three whole tables rather than about the rows
+    // any one Note owns. Running it per Note paid the same bounded scan N times
+    // — inside this transaction — for an answer only the last iteration could
+    // give. `apply_reidentify_locked` runs it once, after the commit.
     for note in indexed {
-        index::incremental::write_note_rows(tx, workspace_id, note)?;
+        index::incremental::write_note_rows_deferring_analyze(tx, workspace_id, note)?;
     }
 
     if let Some(rename) = &plan.directory_rename {
@@ -1011,8 +1023,13 @@ impl FileJournal {
         let name = path
             .file_name()
             .map_or_else(|| "note".to_string(), |n| n.to_string_lossy().into_owned());
+        // The prefix is `workspace::TRASH_PREFIX` rather than a literal because
+        // two other places have to recognize what this writes: the `.gitignore`
+        // `git::operations::init_repo` installs, and the sweep
+        // `workspace::bootstrap` runs at open for entries a kill left parked.
         let trash = parent.join(format!(
-            ".burlmd-trash.{name}.{}.{}",
+            "{}{name}.{}.{}",
+            super::TRASH_PREFIX,
             std::process::id(),
             NEXT.fetch_add(1, Ordering::Relaxed)
         ));
@@ -1292,7 +1309,31 @@ fn is_same_file(candidate: &Path, held_by: Option<&Path>) -> bool {
 /// Normalizes a Directory path to the bundle-relative, `/`-separated, no
 /// leading slash form `directories.path` stores, rejecting anything that walks
 /// out of the bundle.
+///
+/// A backslash **anywhere** in the input is refused outright, and the order
+/// matters: this used to run the containment check first and translate `\` to
+/// `/` afterwards, which on Unix is a traversal hole rather than a nicety.
+/// `..\..\etc` is a single `Component::Normal` there — one filename that
+/// happens to contain backslashes — so it passed the check, and the
+/// translation then turned it into `../../etc` for `root().join(..)` to walk
+/// out of the bundle with. `create_directory` made directories outside it and
+/// `delete_directory` recursively removed one, because the journal is settled
+/// before the commit error propagates.
+///
+/// Rejecting is chosen over translating-then-checking on purpose. It is what
+/// [`validate_segment`] already does for a Note or Directory *name*, so the
+/// two halves of the same path now agree; and a foreign bundle holding a
+/// directory whose name genuinely contains a backslash — legal on every Unix
+/// filesystem — cannot be addressed through this API either way, since any
+/// translation would rewrite the name into a path. Refusing says so instead of
+/// silently addressing a different directory.
 fn normalize_directory(path: &str) -> Result<String, AppError> {
+    if path.contains('\\') {
+        return Err(AppError::PathUnavailable(format!(
+            "{path} does not name a Directory inside the Workspace: a Directory path is \
+             `/`-separated and a backslash is a character no segment may carry"
+        )));
+    }
     let trimmed = path.trim_matches('/');
     if trimmed.is_empty() {
         return Ok(String::new());
@@ -1306,7 +1347,7 @@ fn normalize_directory(path: &str) -> Result<String, AppError> {
             "{path} does not name a Directory inside the Workspace"
         )));
     }
-    Ok(trimmed.replace('\\', "/"))
+    Ok(trimmed.to_string())
 }
 
 fn ensure_directory_exists(workspace: &Arc<Workspace>, directory: &str) -> Result<(), AppError> {
@@ -2579,6 +2620,70 @@ mod tests {
             vec!["a".to_string(), "a/b".to_string(), "a/b/c".to_string()]
         );
         assert!(f.root().join("a/b/c").is_dir());
+    }
+
+    /// A backslash in a Directory path is refused by every operation that takes
+    /// one, and nothing is created, renamed or deleted.
+    ///
+    /// The regression this pins: the containment check ran *before* the `\` to
+    /// `/` translation, so on Unix `..\..\etc` was one `Component::Normal`,
+    /// passed, and only then became `../../etc` for `root().join(..)` — which
+    /// walks out of the bundle. `create_directory` made directories outside it;
+    /// `delete_directory` recursively removed one, because its journal is
+    /// settled before the commit error propagates.
+    #[test]
+    fn a_backslash_in_a_directory_path_is_refused_by_every_operation() {
+        let f = fixture();
+        // A sibling of the bundle, reachable by `..` from inside it. Nothing
+        // below may touch it.
+        let outside = f.dir.path().join("outside");
+        std::fs::create_dir_all(outside.join("nested")).unwrap();
+        std::fs::write(outside.join("nested/secret.md"), "not ours\n").unwrap();
+        f.write("kept.md", &note("kept", "body"));
+        f.reindex();
+
+        // `..\..\outside` traverses out of the bundle once translated;
+        // `a\b` is the benign spelling of the same defect. Both are refused.
+        for path in ["..\\..\\outside", "..\\..\\outside\\nested", "a\\b"] {
+            for result in [
+                create_directory(&f.workspace, path),
+                rename_directory(&f.workspace, path, "renamed").map(|_| ()),
+                delete_directory(&f.workspace, path).map(|_| ()),
+                create_note(&f.workspace, path, "New Note").map(|_| ()),
+                move_note(&f.workspace, "kept", path).map(|_| ()),
+            ] {
+                assert!(
+                    matches!(result, Err(AppError::PathUnavailable(_))),
+                    "{path:?} must be refused, got {result:?}"
+                );
+            }
+        }
+
+        assert!(
+            outside.join("nested/secret.md").is_file(),
+            "a directory outside the bundle must not be deleted"
+        );
+        assert!(
+            !f.dir.path().join("renamed").exists(),
+            "nothing outside the bundle may be renamed"
+        );
+        let beside: Vec<String> = std::fs::read_dir(f.dir.path())
+            .unwrap()
+            .filter_map(|e| e.ok().map(|e| e.file_name().to_string_lossy().into_owned()))
+            .filter(|name| name != "bundle" && name != "outside")
+            .filter(|name| !name.starts_with("index.sqlite3"))
+            .collect();
+        assert!(
+            beside.is_empty(),
+            "nothing may be created beside the bundle, found {beside:?}"
+        );
+        assert_eq!(f.directory_ids(), Vec::<String>::new());
+        assert_eq!(f.note_ids(), vec!["kept".to_string()]);
+        assert!(f.exists("kept.md"));
+        assert!(
+            !f.root().join("a").exists(),
+            "a refused create must not materialize the leading segment either"
+        );
     }
 
     /// Gherkin (CAP-LIFE-06): renaming a Directory moves its contents, remaps

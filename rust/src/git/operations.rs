@@ -128,13 +128,75 @@ pub fn clone_repo(
 /// uses. `gix::init` itself would otherwise fail outright the moment `.git` exists
 /// (`gix_discover::repository::Path`'s `DirectoryExists` error) — there is no idempotent
 /// "init or open" call on `gix`'s own surface to delegate this to.
+///
+/// Either way — initialized here or adopted — the bundle is left with a
+/// `.gitignore` carrying `workspace::SCRATCH_IGNORE_PATTERNS`. See
+/// [`ensure_scratch_ignored`] for why that has to happen on the adoption path
+/// too, and for how a user's existing file is extended rather than replaced.
 pub fn init_repo(dest: &Path) -> Result<(), AppError> {
     if gix::open(dest).is_ok() {
-        return Ok(());
+        return ensure_scratch_ignored(dest);
     }
 
     gix::init(dest).map_err(|e| AppError::IoError(format!("init repo: {e}")))?;
-    Ok(())
+    ensure_scratch_ignored(dest)
+}
+
+/// Makes sure `dest/.gitignore` excludes burlmd's own scratch files, creating
+/// the file when there is none and **appending only the missing patterns** when
+/// there is one.
+///
+/// Applied on adoption as well as on init, because the hazard is a property of
+/// the bundle rather than of who created it: `commit_all` snapshots the whole
+/// worktree, so a `.burlmd-trash.*` entry or an `.{name}.tmp` left behind by a
+/// `SIGKILL` — the two cases where no `Drop` and no rename get to run — is
+/// plaintext that the next broad commit records and a connected Remote then
+/// publishes. A bundle adopted from another tool is exactly as exposed to that
+/// as one this application created.
+///
+/// The existing file is never rewritten or reordered. It is the user's, may
+/// carry patterns that matter to tools burlmd knows nothing about, and the only
+/// edit made here is appending the lines that are genuinely absent.
+fn ensure_scratch_ignored(dest: &Path) -> Result<(), AppError> {
+    let path = dest.join(".gitignore");
+    let existing = match std::fs::read_to_string(&path) {
+        Ok(contents) => Some(contents),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
+        Err(e) => return Err(AppError::IoError(format!("read {}: {e}", path.display()))),
+    };
+
+    let present: Vec<&str> = existing
+        .as_deref()
+        .unwrap_or_default()
+        .lines()
+        .map(str::trim)
+        .collect();
+    let missing: Vec<&str> = crate::workspace::SCRATCH_IGNORE_PATTERNS
+        .iter()
+        .copied()
+        .filter(|pattern| !present.contains(pattern))
+        .collect();
+    if missing.is_empty() {
+        return Ok(());
+    }
+
+    let mut out = String::new();
+    if let Some(contents) = &existing {
+        out.push_str(contents);
+        if !contents.is_empty() && !contents.ends_with('\n') {
+            out.push('\n');
+        }
+        if !contents.is_empty() {
+            out.push('\n');
+        }
+    }
+    out.push_str("# burlmd scratch files: never bundle content, and plaintext.\n");
+    for pattern in missing {
+        out.push_str(pattern);
+        out.push('\n');
+    }
+    std::fs::write(&path, out)
+        .map_err(|e| AppError::IoError(format!("write {}: {e}", path.display())))
 }
 
 /// Snapshot every file currently in the working tree (excluding `.git` and anything matched
@@ -714,6 +776,48 @@ mod tests {
 
         assert!(dest.is_dir());
         assert!(dest.join(".git").is_dir());
+    }
+
+    /// The point of the `.gitignore` `init_repo` writes: `commit_all` is a
+    /// **whole-worktree** snapshot, so a scratch file left inside the bundle by
+    /// a `SIGKILL` — a `.burlmd-trash.*` entry holding a deleted Note's entire
+    /// content, or an `.{name}.tmp` holding a Note mid-write — would otherwise
+    /// be committed as plaintext by the next commit, and pushed by the next
+    /// sync. Asserted against a real commit rather than against the file's
+    /// text, since what matters is `gix`'s reading of the patterns rather than
+    /// their spelling.
+    #[test]
+    fn scratch_files_a_kill_left_behind_are_never_committed() {
+        let dir = tempdir().unwrap();
+        super::init_repo(dir.path()).unwrap();
+        std::fs::create_dir_all(dir.path().join("projects")).unwrap();
+        std::fs::write(dir.path().join("Kept.md"), b"a real Note\n").unwrap();
+        std::fs::write(
+            dir.path().join(".burlmd-trash.Deleted.md.4242.0"),
+            b"the whole content of a deleted Note\n",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.path().join("projects/.Nested.md.4242.0.tmp"),
+            b"a Note as it was mid-write\n",
+        )
+        .unwrap();
+
+        commit_all(dir.path(), "snapshot", "Test User", "test@example.com").unwrap();
+
+        let tracked = StdCommand::new("git")
+            .args(["ls-tree", "-r", "--name-only", "HEAD"])
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+        let tracked = String::from_utf8_lossy(&tracked.stdout);
+        let mut paths: Vec<&str> = tracked.lines().collect();
+        paths.sort_unstable();
+        assert_eq!(
+            paths,
+            vec![".gitignore", "Kept.md"],
+            "no scratch file may reach a commit"
+        );
     }
 
     /// WSPC-D004 / ADR-005 decision 8: a directory of files this application did not create,

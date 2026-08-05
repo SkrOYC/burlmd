@@ -112,9 +112,15 @@ enum DbHandle {
 impl Workspace {
     /// The Workspace every FFI call is implicitly scoped to (ADR-005
     /// decision 7).
+    ///
+    /// The bundle root is cached beside the active-Workspace cell rather than
+    /// re-read here, because this runs on every Note-level FFI call and the
+    /// query it replaced took the process-wide connection mutex — the one a
+    /// keystroke's own tier 1 draft write waits on — to read a `local_path`
+    /// that cannot change while a Workspace is open. See
+    /// `db::connection::active_workspace`.
     pub fn active() -> Result<Arc<Workspace>, AppError> {
-        let id = crate::db::connection::active_workspace_id()?;
-        let root = crate::db::connection::with_connection(|conn| index::workspace_root(conn, &id))?;
+        let (id, root) = crate::db::connection::active_workspace()?;
         Ok(Arc::new(Workspace {
             id,
             root,
@@ -389,7 +395,7 @@ pub fn open_note(
         }
     })?;
     let revision = content_hash(&bytes);
-    let disk_source = String::from_utf8_lossy(&bytes).into_owned();
+    let disk_source = decode_source(&absolute_path, bytes)?;
     let last_modified = file_mtime(&absolute_path);
 
     let draft = workspace.with_db(|conn| read_draft(conn, workspace.id(), note_id))?;
@@ -872,11 +878,33 @@ impl NoteSession {
             atomic_write(&self.0.absolute_path, source.as_bytes())?;
         }
 
+        // The baseline is re-recorded **here**, the instant the bytes are on
+        // disk, and not after the two steps below.
+        //
+        // Both of those steps are independently recoverable — a draft row that
+        // outlives its write costs one spurious "restored from draft" notice,
+        // and a stale `notes` row is repaired by the next write or a reindex —
+        // but a database error in either used to abort before the baseline
+        // moved, leaving the recorded revision describing bytes the file no
+        // longer has. The next tick then compared a fresh disk hash against
+        // that stale baseline and raised `RevisionMismatch`, whose only exit is
+        // `reload` — and reload discards the buffer. A recoverable index error
+        // was being converted into a prompt that destroys the user's unwritten
+        // work, which is exactly the direction `SPK-WSPC-D001` §6.2.6 forbids.
+        //
+        // Taken and released on its own, rather than by hoisting the whole
+        // state update up here: the two calls below acquire the connection, and
+        // the module's acquisition order forbids holding the state lock across
+        // that.
+        {
+            let mut state = self.lock_state()?;
+            state.revision = new_revision.clone();
+        }
+
         self.clear_draft_through(seq)?;
         self.index_written_source(source, &new_revision)?;
 
         let mut state = self.lock_state()?;
-        state.revision = new_revision.clone();
         state.metadata.last_modified = unix_now();
         state.last_written_at = Some(unix_now());
         state.last_error = None;
@@ -1046,7 +1074,7 @@ impl NoteSession {
 
         let bytes = self.read_file()?;
         let revision = content_hash(&bytes);
-        let source = String::from_utf8_lossy(&bytes).into_owned();
+        let source = decode_source(&self.0.absolute_path, bytes)?;
         let dir = containing_dir(&self.0.note_id);
         let ParsedNote { ast, spans } = parse_note(&source, dir);
         let mut ast = match conflict_suggestions(&source, dir) {
@@ -1305,27 +1333,54 @@ pub struct NoteWriteStatus {
 
 /// Notes with an unflushed draft, for surfacing recovered work on startup
 /// (CAP-WS-03).
+///
+/// **`LEFT JOIN`, not `JOIN`**, and the difference is the whole point of the
+/// surface. `close`'s documentation promises that a Note deleted out from under
+/// an open session keeps its draft row "in the encrypted index, and
+/// `pending_drafts` reports it" — but the row's `notes` partner is gone by then,
+/// and a full rebuild (`index::scan`'s `DELETE FROM notes`) removes it for good
+/// on the very next open. An inner join makes that draft invisible to the one
+/// call that reports it: the user's unwritten work is still on disk in the
+/// index, and nothing can ever tell them so. The `drafts` table carries no
+/// foreign key precisely so the row can outlive its Note; the reporting query
+/// has to be written the same way.
+///
+/// The synthesized metadata for that case is deliberately modest — the id and
+/// its derived path are facts, the title falls back to the id's filename stem
+/// because no indexed title survives, `last_modified` is the draft's own
+/// `updated_at` (which is when the work happened), and `okf_conformant` is
+/// `false` rather than a guess about bytes nothing has parsed.
 pub fn pending_drafts(workspace: &Workspace) -> Result<Vec<NoteMetadata>, AppError> {
     workspace.with_db(|conn| {
         let mut stmt = conn.prepare(
-            "SELECT n.id, n.path, n.title, n.last_modified, n.okf_conformant \
+            "SELECT d.note_id, d.updated_at, n.path, n.title, n.last_modified, n.okf_conformant \
              FROM drafts d \
-             JOIN notes n ON n.workspace_id = d.workspace_id AND n.id = d.note_id \
+             LEFT JOIN notes n ON n.workspace_id = d.workspace_id AND n.id = d.note_id \
              WHERE d.workspace_id = ?1 \
              ORDER BY d.updated_at DESC",
         )?;
         let rows = stmt.query_map([workspace.id()], |row| {
+            let note_id: String = row.get(0)?;
+            let draft_updated_at: i64 = row.get(1)?;
+            let path: Option<String> = row.get(2)?;
             Ok(NoteMetadata {
-                id: row.get(0)?,
-                path: row.get(1)?,
-                title: row.get(2)?,
-                last_modified: row.get(3)?,
+                path: path.unwrap_or_else(|| concept_id_to_path(&note_id)),
+                title: row
+                    .get::<_, Option<String>>(3)?
+                    .unwrap_or_else(|| file_stem(&note_id).to_string()),
+                last_modified: row.get::<_, Option<i64>>(4)?.unwrap_or(draft_updated_at),
+                okf_conformant: row.get::<_, Option<bool>>(5)?.unwrap_or(false),
+                id: note_id,
                 snippet: None,
-                okf_conformant: row.get(4)?,
             })
         })?;
         rows.collect::<Result<Vec<_>, _>>().map_err(AppError::from)
     })
+}
+
+/// The filename stem of a concept id — its last `/`-separated segment.
+fn file_stem(concept_id: &str) -> &str {
+    concept_id.rsplit_once('/').map_or(concept_id, |(_, s)| s)
 }
 
 // ---------------------------------------------------------------------------
@@ -1596,6 +1651,32 @@ fn read_draft(
     .map_err(AppError::from)
 }
 
+/// The bytes of a Note that is about to become an **editable** working source,
+/// decoded strictly.
+///
+/// Lossy decoding is the wrong tool on this path, and the reason is that a
+/// session's working source is written back. `from_utf8_lossy` replaces every
+/// invalid byte with U+FFFD, so the first idle write after any edit would
+/// rewrite the whole file with the replacement characters *and* re-record that
+/// mangled text as the OCC baseline — destroying bytes the user never touched,
+/// silently, in a file this application was only asked to edit one Block of.
+/// That is precisely what `prd/constraints.md`'s Edit Fidelity and CAP-PORT-03
+/// forbid, and refusing is the same call `lifecycle::read_source` already makes
+/// for the same reason on the Link-rewrite path.
+///
+/// `index::scan::RawNote::derive` stays lossy on purpose and is not an
+/// inconsistency: indexing is read-only, so a Note that cannot be edited is
+/// still discovered, searchable and visible in the tree rather than absent
+/// from the Workspace altogether.
+fn decode_source(path: &Path, bytes: Vec<u8>) -> Result<String, AppError> {
+    String::from_utf8(bytes).map_err(|_| {
+        AppError::ParseError(format!(
+            "{} is not valid UTF-8, so it cannot be edited without corrupting it",
+            path.display()
+        ))
+    })
+}
+
 /// Writes `bytes` to `path` so that an abrupt termination mid-write leaves the
 /// previous state intact (`architecture/resilience.md`).
 ///
@@ -1626,6 +1707,10 @@ pub(super) fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), AppError> {
     let stem = path
         .file_name()
         .map_or_else(|| "note".to_string(), |n| n.to_string_lossy().into_owned());
+    // Dot-prefixed and `.tmp`-suffixed, which is what `super::is_scratch_name`
+    // and the `.gitignore` `git::operations::init_repo` installs both key on: a
+    // kill between the create and the rename leaves this file behind holding a
+    // Note mid-write, and it must be neither committed nor mistaken for content.
     let temp = directory.join(format!(
         ".{stem}.{}.{}.tmp",
         std::process::id(),
@@ -1922,6 +2007,19 @@ mod tests {
             self.workspace
                 .with_db(|conn| read_draft(conn, self.workspace.id(), note_id))
                 .unwrap()
+        }
+
+        /// Runs `sql` against the index, so that a failure arising *after* the
+        /// filesystem phase can be driven deterministically rather than waited
+        /// for. Used to install and drop `RAISE(ABORT)` triggers, the same
+        /// injection `workspace::lifecycle`'s tests use.
+        fn inject_failure(&self, sql: &str) {
+            self.workspace
+                .with_db(|conn| {
+                    conn.execute_batch(sql)?;
+                    Ok(())
+                })
+                .unwrap();
         }
 
         /// A baseline commit, so a test that inspects history is comparing
@@ -2335,6 +2433,108 @@ mod tests {
         assert_eq!(f.read("a.md"), *session.working_source().unwrap());
     }
 
+    /// A database failure *after* the bytes are on disk must not strand the OCC
+    /// baseline behind the file.
+    ///
+    /// The regression this pins: `state.revision` was assigned after
+    /// `clear_draft_through` and `index_written_source`, so an error in either
+    /// aborted with the file already rewritten and the baseline still
+    /// describing the previous bytes. The next tick compared a fresh disk hash
+    /// against that stale baseline and raised `RevisionMismatch` — whose only
+    /// exit is `reload`, which discards the buffer. A recoverable index error
+    /// became a prompt that destroys the user's unwritten work.
+    #[test]
+    fn a_database_failure_after_the_write_still_records_the_new_baseline() {
+        let f = fixture();
+        f.write("a.md", &note("A", "First."));
+        let session = f.open("a");
+        session.update_block(&[0], "Second.\n").unwrap();
+
+        // Fails the draft clear that follows the atomic write. `write_draft`
+        // upserts rather than deleting, so this fires for the clear alone.
+        f.inject_failure(
+            "CREATE TRIGGER injected_draft_clear BEFORE DELETE ON drafts \
+             BEGIN SELECT RAISE(ABORT, 'injected index failure'); END;",
+        );
+
+        let refused = session.flush();
+
+        assert!(
+            refused.is_err(),
+            "the injected failure must surface, got {refused:?}"
+        );
+        assert_eq!(
+            f.read("a.md"),
+            *session.working_source().unwrap(),
+            "the bytes reached disk before the failure"
+        );
+
+        f.inject_failure("DROP TRIGGER injected_draft_clear;");
+        session.update_block(&[0], "Third.\n").unwrap();
+
+        let next = session.flush();
+
+        assert!(
+            !matches!(next, Err(AppError::RevisionMismatch(_))),
+            "the next write must not raise RevisionMismatch against bytes this \
+             session itself wrote, got {next:?}"
+        );
+        next.expect("the next write must succeed");
+        assert_eq!(f.read("a.md"), *session.working_source().unwrap());
+    }
+
+    /// A Note whose bytes are not valid UTF-8 is refused rather than decoded
+    /// lossily, on both paths that build a working source — and its bytes are
+    /// left exactly as they were.
+    ///
+    /// The regression this pins: both paths used `from_utf8_lossy`, while the
+    /// OCC revision hashes the raw bytes. Every invalid byte became U+FFFD in
+    /// the buffer, so the first idle write after any edit rewrote the whole
+    /// file with the replacement characters and re-recorded that mangled text
+    /// as the baseline — destroying bytes the user never touched, in a file
+    /// this application was asked to edit one Block of (`prd/constraints.md`
+    /// Edit Fidelity, CAP-PORT-03).
+    #[test]
+    fn a_note_that_is_not_valid_utf8_is_refused_rather_than_decoded_lossily() {
+        let f = fixture();
+        // A conformant Note carrying one byte no UTF-8 sequence can contain.
+        let mut bytes = note("A", "First.").into_bytes();
+        bytes.extend_from_slice(b"latin-1 caf\xe9\n");
+        std::fs::create_dir_all(f.root()).unwrap();
+        std::fs::write(f.root().join("a.md"), &bytes).unwrap();
+
+        let opened = open_note(&f.workspace, "a").map(|(_, state)| state);
+
+        assert!(
+            matches!(opened, Err(AppError::ParseError(_))),
+            "opening a non-UTF-8 Note must error cleanly, got {opened:?}"
+        );
+        assert_eq!(
+            std::fs::read(f.root().join("a.md")).unwrap(),
+            bytes,
+            "a refused open must leave the file's bytes untouched"
+        );
+
+        // The same on `reload`, which is the other path that turns disk bytes
+        // into an editable working source. The session is opened while the file
+        // is valid, then the invalid bytes arrive from outside.
+        f.write("b.md", &note("B", "First."));
+        let session = f.open("b");
+        std::fs::write(f.root().join("b.md"), &bytes).unwrap();
+
+        let reloaded = session.reload();
+
+        assert!(
+            matches!(reloaded, Err(AppError::ParseError(_))),
+            "reloading non-UTF-8 bytes must error cleanly, got {reloaded:?}"
+        );
+        assert_eq!(
+            std::fs::read(f.root().join("b.md")).unwrap(),
+            bytes,
+            "a refused reload must leave the file's bytes untouched"
+        );
+    }
+
     /// `architecture/resilience.md`: an abrupt termination mid-write leaves the
     /// previous state intact. The write goes to a uniquely named temporary file
     /// in the target's own directory and arrives by rename.
@@ -2468,6 +2668,67 @@ mod tests {
         assert_eq!(pending[0].id, "a");
         assert_eq!(pending[0].title, "Alpha");
         assert!(pending[0].okf_conformant);
+    }
+
+    /// A draft row whose Note has been deleted from disk and cleared from
+    /// `notes` by the next full rebuild is still reported.
+    ///
+    /// This is `close`'s own promise for the one case it calls the harshest:
+    /// something outside this application deleted the file, so the session is
+    /// retired without a commit and **the draft row is left in place**, because
+    /// the row is now the only copy of the user's unwritten work. The inner
+    /// join this query used made that row invisible to the only call that
+    /// reports it — silently, and permanently from the next open onward, since
+    /// `index::scan`'s rebuild is what removes the `notes` partner.
+    #[test]
+    fn a_draft_orphaned_by_a_rebuild_is_still_reported() {
+        let f = fixture();
+        f.write("a.md", &note("Alpha", "First."));
+        f.write("b.md", &note("Beta", "First."));
+        f.workspace
+            .with_db(|conn| {
+                crate::index::scan::reindex_workspace_impl(conn, f.workspace.id())?;
+                Ok(())
+            })
+            .unwrap();
+        let session = f.open("a");
+        session.update_block(&[0], "Unflushed.\n").unwrap();
+
+        // Something outside the application deletes the file. `close` retires
+        // the session without a commit and keeps the draft row.
+        std::fs::remove_file(f.root().join("a.md")).unwrap();
+        session.close().unwrap();
+        assert!(
+            f.draft("a").is_some(),
+            "the draft row is the only copy left"
+        );
+
+        // The next open rebuilds the index, which drops the orphaned `notes`
+        // row the draft used to join against.
+        f.workspace
+            .with_db(|conn| {
+                crate::index::scan::reindex_workspace_impl(conn, f.workspace.id())?;
+                Ok(())
+            })
+            .unwrap();
+
+        let pending = pending_drafts(&f.workspace).unwrap();
+
+        assert_eq!(
+            pending.iter().map(|m| m.id.as_str()).collect::<Vec<_>>(),
+            vec!["a"],
+            "a draft that outlived its Note must still be reported"
+        );
+        assert_eq!(pending[0].path, "a.md");
+        assert_eq!(
+            pending[0].title, "a",
+            "the id's stem, no indexed title left"
+        );
+        assert!(
+            !pending[0].okf_conformant,
+            "nothing parsed these bytes, so conformance is not asserted"
+        );
+        assert!(pending[0].last_modified > 0, "the draft's own updated_at");
     }
 
     // -- tier 3 --------------------------------------------------------------

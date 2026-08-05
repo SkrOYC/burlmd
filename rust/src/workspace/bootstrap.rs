@@ -14,13 +14,15 @@
 //! oversight: `WSPC-D004`'s STOP conditions forbid all three, and
 //! `flow-workspace-bootstrap.md` contains no such step.
 //!
-//! This module deliberately does **not** scan the bundle into `notes`,
-//! `links`, `directories`, etc. `flow-workspace-bootstrap.md`'s "Three
-//! bootstrap paths, one post-condition" names "bundle indexed" alongside
-//! the post-conditions this module does establish — that one is
-//! `WSPC-D005`'s obligation, which depends on this ticket rather than the
-//! reverse; the schema is applied and ready for it, but population happens
-//! later.
+//! `flow-workspace-bootstrap.md` names a fourth post-condition alongside
+//! those three — "bundle indexed" — and [`converge`] establishes it too, by
+//! calling `index::scan::reindex_workspace_impl` once the `workspaces` row
+//! exists. `WSPC-D004` deferred that to `WSPC-D005` because no rebuild
+//! existed yet; one does, and leaving the call unwired made the
+//! post-condition false on every path *and* left `WSPC-D006`'s rename
+//! rewriting no Links at all in a bundle that had never been scanned (it
+//! seeds its affected set from the `links` table). See [`converge`] for why
+//! it runs on the reuse branch as well, and why it is synchronous.
 //!
 //! `#[frb]` async wrappers live in `api::ffi_api`, matching the pattern
 //! `draft.rs` already establishes for `NoteState`/`NoteMetadata`: this module
@@ -129,12 +131,21 @@ fn canonicalize_workspace_dir(dir: &Path) -> Result<PathBuf, AppError> {
 /// The convergent bootstrap logic shared by both entry points
 /// (`flow-workspace-bootstrap.md`, ADR-005 decision 8): initializes a Git
 /// repository in `dir` or adopts existing history unchanged, and writes (or
-/// reuses) the `workspaces` row. No Note under `dir` is read, written, or
-/// otherwise modified — the only side effect on a foreign directory besides
-/// the `workspaces` row is `.git/` itself. `dir` must already exist and be
-/// canonicalized — both callers above guarantee this before calling in.
+/// reuses) the `workspaces` row, then indexes the bundle. `dir` must already
+/// exist and be canonicalized — both callers above guarantee this before
+/// calling in.
+///
+/// **No Note under `dir` is written or otherwise modified.** Notes are now
+/// *read*, because indexing them is what the fourth post-condition means, but
+/// the rebuild derives rows from bytes it never writes back. The side effects
+/// on a foreign directory are exactly three, and none of them is content:
+/// `.git/`, a `.gitignore` extended with burlmd's own scratch patterns
+/// (`git::operations::init_repo`), and the removal of any `.burlmd-trash.*` or
+/// `.{name}.tmp` file a previous kill left behind
+/// ([`sweep_scratch_files`]) — which are burlmd's, not the bundle's.
 fn converge(conn: &Connection, dir: &Path) -> Result<WorkspaceInfo, AppError> {
     crate::git::operations::init_repo(dir)?;
+    sweep_scratch_files(dir);
 
     let local_path = dir.to_string_lossy().to_string();
 
@@ -154,29 +165,104 @@ fn converge(conn: &Connection, dir: &Path) -> Result<WorkspaceInfo, AppError> {
         )
         .optional()?;
 
-    if let Some(info) = existing {
+    let info = match existing {
         // Reused, not recreated: no second row and — since root key
         // generation happens once per process, in `db::connection`'s own
         // singleton init, entirely upstream of this function — no second
         // key either.
-        return Ok(info);
+        Some(info) => info,
+        None => {
+            let id = mint_workspace_id()?;
+            let name = workspace_name(dir);
+            conn.execute(
+                "INSERT INTO workspaces (id, name, provider, remote_url, local_path) \
+                 VALUES (?1, ?2, 'local', NULL, ?3)",
+                rusqlite::params![id, name, local_path],
+            )?;
+            WorkspaceInfo {
+                id,
+                name,
+                provider: "local".to_string(),
+                remote_url: None,
+                local_path,
+            }
+        }
+    };
+
+    // The third post-condition: "bundle indexed". Runs after the `workspaces`
+    // row exists, because the rebuild resolves the bundle root through it, and
+    // on **both** branches — a reused row says nothing about whether the files
+    // under it still match the index, since another tool (or another checkout)
+    // may have moved underneath it while the application was not running.
+    //
+    // Not merely a missing post-condition, either. `WSPC-D006`'s rename seeds
+    // its affected set from the `links` table, so in a bundle that was never
+    // indexed a rename finds no inbound edges and rewrites nothing, leaving
+    // every Link in the Workspace pointing at the concept the rename removed —
+    // `architecture/risks.md` risk 8, reached by simply never having scanned.
+    //
+    // Synchronous, deliberately. `flow-workspace-bootstrap.md` describes
+    // indexing a large Workspace in the background with the tree filling in as
+    // it goes; that is a recorded latent gap and building it here would be a
+    // scope this bootstrap does not own. On an empty new bundle — the ordinary
+    // first-run path — the rebuild walks nothing and costs one transaction.
+    crate::index::scan::reindex_workspace_impl(conn, &info.id)?;
+
+    Ok(info)
+}
+
+/// Removes every `.burlmd-trash.*` entry and every `.{name}.tmp` file left
+/// anywhere under `dir`.
+///
+/// **Unconditionally, with no age threshold**, and that is the safe reading
+/// rather than the lazy one: both families are created and removed inside a
+/// single operation that holds a lock for its whole length, so neither is ever
+/// legitimate at the moment a Workspace is being opened. One that is still
+/// here got here because a `SIGKILL`, a crash or a power loss stopped the
+/// cleanup — `Drop` does not run for any of them — and what it holds is
+/// plaintext: a trash entry is the entire content of a Note that was deleted,
+/// a temporary file is a Note as it was mid-write. `.gitignore` (written by
+/// `git::operations::init_repo`) stops the next whole-worktree commit from
+/// publishing them; this is what stops them sitting in the bundle at all.
+///
+/// The one case an age threshold would narrow is a re-open of the Workspace
+/// that is *already* active, racing an idle write inside its own
+/// `atomic_write`. It is stated rather than defended against because the
+/// outcome is benign in the direction that matters: the sweep removes the
+/// temporary file, the write's `rename` then fails, and tier 2 records the
+/// error on the session and **keeps the draft row**, which is where the
+/// unwritten work lives. Nothing is lost, and the next idle firing writes it.
+///
+/// Errors are swallowed deliberately. This is housekeeping on a path whose
+/// real job is opening a Workspace, and a scratch file that cannot be removed —
+/// a read-only directory, a file another process holds — is not a reason to
+/// refuse the user their Notes. `.gitignore` is the backstop that makes it
+/// merely untidy rather than a disclosure.
+///
+/// `.git/` is skipped for the same reason `index::scan::walk_bundle` skips it:
+/// it is the application's own version history, holds thousands of files, and
+/// contains no bundle content.
+fn sweep_scratch_files(dir: &Path) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if name == ".git" {
+            continue;
+        }
+        let path = entry.path();
+        let is_dir = entry.file_type().is_ok_and(|t| t.is_dir());
+        if super::is_scratch_name(&name) {
+            let _ = if is_dir {
+                std::fs::remove_dir_all(&path)
+            } else {
+                std::fs::remove_file(&path)
+            };
+        } else if is_dir {
+            sweep_scratch_files(&path);
+        }
     }
-
-    let id = mint_workspace_id()?;
-    let name = workspace_name(dir);
-    conn.execute(
-        "INSERT INTO workspaces (id, name, provider, remote_url, local_path) \
-         VALUES (?1, ?2, 'local', NULL, ?3)",
-        rusqlite::params![id, name, local_path],
-    )?;
-
-    Ok(WorkspaceInfo {
-        id,
-        name,
-        provider: "local".to_string(),
-        remote_url: None,
-        local_path,
-    })
 }
 
 fn workspace_name(dir: &Path) -> String {
@@ -310,6 +396,220 @@ mod tests {
             )
             .unwrap();
         assert_eq!(row_count, 1);
+    }
+
+    /// A `SIGKILL` leaves a `.burlmd-trash.*` entry (the full content of a
+    /// deleted Note) or an `.{name}.tmp` (a Note mid-write) sitting untracked
+    /// inside the bundle, because no `Drop` runs. `commit_all` snapshots the
+    /// whole worktree, so the next commit would publish either as plaintext.
+    /// Opening the Workspace sweeps both.
+    #[test]
+    fn opening_a_workspace_sweeps_scratch_files_a_kill_left_behind() {
+        let index_dir = tempdir().unwrap();
+        let conn = test_index(index_dir.path());
+        let dir = tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("projects")).unwrap();
+        std::fs::write(dir.path().join("Kept.md"), "---\ntitle: Kept\n---\n").unwrap();
+        std::fs::write(
+            dir.path().join(".burlmd-trash.Deleted.md.4242.0"),
+            "the whole content of a deleted Note\n",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.path().join("projects/.burlmd-trash.Nested.md.4242.1"),
+            "and another, one level down\n",
+        )
+        .unwrap();
+        std::fs::create_dir_all(dir.path().join(".burlmd-trash.a directory.4242.2")).unwrap();
+        std::fs::write(
+            dir.path()
+                .join(".burlmd-trash.a directory.4242.2/inside.md"),
+            "a whole deleted Directory\n",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.path().join("projects/.burlmd.md.4242.0.tmp"),
+            "a Note as it was mid-write\n",
+        )
+        .unwrap();
+        // A dot-file that is not ours must survive.
+        std::fs::write(dir.path().join(".editorconfig"), "root = true\n").unwrap();
+
+        open_workspace_impl(&conn, dir.path().to_string_lossy().to_string()).unwrap();
+
+        assert!(!dir.path().join(".burlmd-trash.Deleted.md.4242.0").exists());
+        assert!(!dir
+            .path()
+            .join("projects/.burlmd-trash.Nested.md.4242.1")
+            .exists());
+        assert!(!dir.path().join(".burlmd-trash.a directory.4242.2").exists());
+        assert!(!dir.path().join("projects/.burlmd.md.4242.0.tmp").exists());
+        assert!(dir.path().join("Kept.md").is_file(), "a Note must survive");
+        assert!(
+            dir.path().join(".editorconfig").is_file(),
+            "a dot-file that is not burlmd's must survive"
+        );
+    }
+
+    /// The other half: `.gitignore` is the backstop for a scratch file created
+    /// *after* the sweep and killed before its own cleanup. It must be written
+    /// when the repository is initialized and extended — not clobbered — when
+    /// an existing bundle is adopted.
+    #[test]
+    fn bootstrap_writes_the_scratch_gitignore_and_appends_to_an_existing_one() {
+        let index_dir = tempdir().unwrap();
+        let conn = test_index(index_dir.path());
+
+        let fresh = tempdir().unwrap();
+        open_or_create_local_workspace_impl(
+            &conn,
+            Some(fresh.path().to_string_lossy().to_string()),
+        )
+        .unwrap();
+        let written = std::fs::read_to_string(fresh.path().join(".gitignore")).unwrap();
+        for pattern in crate::workspace::SCRATCH_IGNORE_PATTERNS {
+            assert!(
+                written.lines().any(|line| line.trim() == pattern),
+                "{pattern} missing from a freshly initialized bundle's .gitignore: {written:?}"
+            );
+        }
+
+        let adopted = tempdir().unwrap();
+        std::fs::write(adopted.path().join(".gitignore"), "*.pdf\ndrafts/\n").unwrap();
+        open_workspace_impl(&conn, adopted.path().to_string_lossy().to_string()).unwrap();
+        let extended = std::fs::read_to_string(adopted.path().join(".gitignore")).unwrap();
+        assert!(
+            extended.starts_with("*.pdf\ndrafts/\n"),
+            "the user's own patterns must survive verbatim, got {extended:?}"
+        );
+        for pattern in crate::workspace::SCRATCH_IGNORE_PATTERNS {
+            assert!(
+                extended.lines().any(|line| line.trim() == pattern),
+                "{pattern} missing after adoption: {extended:?}"
+            );
+        }
+
+        // Idempotent: a second open must not append the patterns again.
+        open_workspace_impl(&conn, adopted.path().to_string_lossy().to_string()).unwrap();
+        let twice = std::fs::read_to_string(adopted.path().join(".gitignore")).unwrap();
+        assert_eq!(twice, extended, "a repeat open must change nothing");
+    }
+
+    /// `flow-workspace-bootstrap.md`'s fourth post-condition: the bundle is
+    /// indexed. Adopting a foreign bundle must populate `notes`, `directories`
+    /// and `links` — the tree, search and the graph all read from those, and a
+    /// `WSPC-D006` rename seeds its affected set from `links`, so an unindexed
+    /// bundle renames a Note and leaves every inbound Link pointing at the
+    /// concept the rename removed (`architecture/risks.md` risk 8).
+    #[test]
+    fn open_workspace_indexes_the_bundle_it_adopts() {
+        let index_dir = tempdir().unwrap();
+        let conn = test_index(index_dir.path());
+        let foreign_dir = tempdir().unwrap();
+        std::fs::create_dir_all(foreign_dir.path().join("projects")).unwrap();
+        std::fs::write(
+            foreign_dir.path().join("Welcome.md"),
+            "---\ntype: Note\ntitle: Welcome\n---\n\nSee [Burlmd](</projects/burlmd.md>).\n",
+        )
+        .unwrap();
+        std::fs::write(
+            foreign_dir.path().join("projects/burlmd.md"),
+            "---\ntype: Note\ntitle: Burlmd\n---\n\nA distinctive antidisestablishmentarian body.\n",
+        )
+        .unwrap();
+
+        let info = open_workspace_impl(&conn, foreign_dir.path().to_string_lossy().to_string())
+            .expect("adopting a foreign directory should succeed");
+
+        let note_ids: Vec<String> = {
+            let mut stmt = conn
+                .prepare("SELECT id FROM notes WHERE workspace_id = ?1 ORDER BY id")
+                .unwrap();
+            let rows = stmt
+                .query_map([&info.id], |row| row.get::<_, String>(0))
+                .unwrap()
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap();
+            rows
+        };
+        assert_eq!(
+            note_ids,
+            vec!["Welcome".to_string(), "projects/burlmd".to_string()],
+            "every Note in an adopted bundle must be indexed"
+        );
+
+        let directories: i64 = conn
+            .query_row(
+                "SELECT count(*) FROM directories WHERE workspace_id = ?1 AND id = 'projects'",
+                [&info.id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(directories, 1, "the tree renders from `directories`");
+
+        let (source, target): (String, String) = conn
+            .query_row(
+                "SELECT source_id, target_id FROM links WHERE workspace_id = ?1",
+                [&info.id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(
+            (source.as_str(), target.as_str()),
+            ("Welcome", "projects/burlmd")
+        );
+
+        let searchable: i64 = conn
+            .query_row(
+                "SELECT count(*) FROM notes_fts WHERE notes_fts MATCH ?1",
+                ["antidisestablishmentarian"],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(searchable, 1, "an adopted bundle must be searchable");
+    }
+
+    /// The other entry point converges on the same post-condition, including
+    /// on a **reopen**: a reused `workspaces` row says nothing about whether
+    /// the files under it still match the index, since another tool may have
+    /// changed them while the application was not running.
+    #[test]
+    fn a_reopen_reindexes_changes_another_tool_made_while_the_app_was_closed() {
+        let index_dir = tempdir().unwrap();
+        let conn = test_index(index_dir.path());
+        let workspace_dir = tempdir().unwrap();
+        let path = workspace_dir.path().to_string_lossy().to_string();
+        std::fs::write(
+            workspace_dir.path().join("First.md"),
+            "---\ntype: Note\ntitle: First\n---\n\nBody.\n",
+        )
+        .unwrap();
+
+        let first = open_or_create_local_workspace_impl(&conn, Some(path.clone())).unwrap();
+
+        // Something else edits the bundle between the two opens.
+        std::fs::remove_file(workspace_dir.path().join("First.md")).unwrap();
+        std::fs::write(
+            workspace_dir.path().join("Second.md"),
+            "---\ntype: Note\ntitle: Second\n---\n\nBody.\n",
+        )
+        .unwrap();
+
+        let second = open_or_create_local_workspace_impl(&conn, Some(path)).unwrap();
+
+        assert_eq!(first.id, second.id);
+        let note_ids: Vec<String> = {
+            let mut stmt = conn
+                .prepare("SELECT id FROM notes WHERE workspace_id = ?1 ORDER BY id")
+                .unwrap();
+            let rows = stmt
+                .query_map([&second.id], |row| row.get::<_, String>(0))
+                .unwrap()
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap();
+            rows
+        };
+        assert_eq!(note_ids, vec!["Second".to_string()]);
     }
 
     /// Gherkin: Given that directory contains no version history, When it is

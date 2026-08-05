@@ -87,6 +87,13 @@ fn note_metadata_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<NoteMetad
 
 /// Title-prefix jump (CAP-FIND-02): every Note in `workspace_id` whose title
 /// starts with `query`, ordered alphabetically, capped at `limit`.
+///
+/// `limit` is bound straight to SQL `LIMIT`, so **`0` returns no rows** rather
+/// than every row. Left as SQLite's own semantics rather than clamped or
+/// refused: `contracts/ffi_api.rs` introduces `limit` only to replace a
+/// hardcoded cap of 50 that "silently truncated with no signal to the caller"
+/// and states no lower bound, so a caller asking for zero results is asking a
+/// coherent question and gets the literal answer.
 pub fn find_notes_by_title_impl(
     conn: &Connection,
     workspace_id: &str,
@@ -113,6 +120,9 @@ pub fn find_notes_by_title_impl(
 /// the matched Note's own title and concept id, via `okf::serialize_link` —
 /// the same function `data-models/okf-bundle.md` names as the sole writer of
 /// this form.
+///
+/// `limit` carries [`find_notes_by_title_impl`]'s semantics unchanged,
+/// including `0` returning no candidates.
 pub fn link_completions_impl(
     conn: &Connection,
     workspace_id: &str,
