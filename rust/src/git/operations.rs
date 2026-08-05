@@ -115,6 +115,28 @@ pub fn clone_repo(
     Ok(())
 }
 
+/// Initializes a Git repository in `dest` (ADR-005 decision 2: `init`, not `clone`), creating
+/// `dest` itself if it does not yet exist. A no-op when `dest` already contains a repository —
+/// reached when `open_workspace` adopts a directory the user pointed at that already has
+/// history, or when `open_or_create_local_workspace`/`open_workspace` runs a second time
+/// against the same Workspace directory (ADR-005 decision 8, `flow-workspace-bootstrap.md`):
+/// existing history is adopted unchanged rather than re-initialized, which is what makes this
+/// safe to call unconditionally on every bootstrap path.
+///
+/// Checked via `gix::open` first rather than a bare `.git`-directory existence check, since
+/// that is the same definition of "already a repository" every other function in this module
+/// uses. `gix::init` itself would otherwise fail outright the moment `.git` exists
+/// (`gix_discover::repository::Path`'s `DirectoryExists` error) — there is no idempotent
+/// "init or open" call on `gix`'s own surface to delegate this to.
+pub fn init_repo(dest: &Path) -> Result<(), AppError> {
+    if gix::open(dest).is_ok() {
+        return Ok(());
+    }
+
+    gix::init(dest).map_err(|e| AppError::IoError(format!("init repo: {e}")))?;
+    Ok(())
+}
+
 /// Snapshot every file currently in the working tree (excluding `.git` and anything matched
 /// by `.gitignore`) into a new tree object and create a commit on top of the current `HEAD`,
 /// moving the branch ref forward.
@@ -542,6 +564,67 @@ mod tests {
     use crate::test_support::{git, init_bare, init_repo};
     use std::process::Command as StdCommand;
     use tempfile::tempdir;
+
+    /// WSPC-D004: `init_repo` creates a directory that does not exist yet and initializes a
+    /// Git repository in it (ADR-005 decision 2/decision 1, "creates the directory when
+    /// absent, initializes a version-controlled repository in place").
+    #[test]
+    fn init_repo_creates_the_directory_and_a_repository_when_neither_exists() {
+        let parent = tempdir().unwrap();
+        let dest = parent.path().join("workspace");
+        assert!(!dest.exists());
+
+        super::init_repo(&dest).expect("init_repo should succeed against a nonexistent directory");
+
+        assert!(dest.is_dir());
+        assert!(dest.join(".git").is_dir());
+    }
+
+    /// WSPC-D004 / ADR-005 decision 8: a directory of files this application did not create,
+    /// with no version history, gets a repository initialized in it rather than being left
+    /// unable to accumulate any (`close_note`'s tier 3 commit would otherwise have nothing to
+    /// commit into).
+    #[test]
+    fn init_repo_initializes_in_a_nonempty_directory_with_no_history() {
+        let dir = tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("existing.md"),
+            b"a note this app did not write\n",
+        )
+        .unwrap();
+
+        super::init_repo(dir.path()).expect("init_repo should succeed against a foreign directory");
+
+        assert!(dir.path().join(".git").is_dir());
+        // The file the user already had must be left completely untouched.
+        let contents = std::fs::read_to_string(dir.path().join("existing.md")).unwrap();
+        assert_eq!(contents, "a note this app did not write\n");
+    }
+
+    /// WSPC-D004 / ADR-005 decision 8: when the directory already has version history,
+    /// `init_repo` must adopt it unchanged rather than re-initializing (which would either
+    /// error against an existing `.git`, or — worse, if it silently succeeded — discard it).
+    #[test]
+    fn init_repo_is_a_noop_and_adopts_history_when_a_repository_already_exists() {
+        let dir = tempdir().unwrap();
+        super::init_repo(dir.path()).unwrap();
+        std::fs::write(dir.path().join("a.md"), b"a\n").unwrap();
+        let first_commit =
+            commit_all(dir.path(), "first", "Test User", "test@example.com").unwrap();
+
+        super::init_repo(dir.path()).expect("a second init_repo call must not fail");
+
+        let head = StdCommand::new("git")
+            .args(["rev-parse", "HEAD"])
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+        assert_eq!(
+            String::from_utf8_lossy(&head.stdout).trim(),
+            first_commit,
+            "existing history must be adopted unchanged, not reinitialized"
+        );
+    }
 
     /// Gherkin: Given a local directory with changes, When the commit function is called,
     /// Then a Git commit is created in the local `.git` index.

@@ -12,6 +12,43 @@ use flutter_rust_bridge::frb;
 pub use crate::draft::{NoteMetadata, NoteState};
 pub use crate::error::AppError;
 pub use crate::markdown::{AstNode, InlineElement, TextRun};
+// `WorkspaceInfo` is owned by the `workspace` domain module for the same
+// reason the types above are owned by `draft`/`markdown`: `workspace::bootstrap`
+// is where the bootstrap logic actually lives (tested directly against an
+// injected `Connection`), and this module's own job is the thin `#[frb]`
+// wrappers below.
+pub use crate::workspace::WorkspaceInfo;
+
+/// Opens the local Workspace, creating and initializing it if absent
+/// (ADR-005 decision 1): creates the directory, initializes a Git repository
+/// in place, and writes a `workspaces` row with `provider = "local"`. Root
+/// key generation and opening the encrypted index both happen as a side
+/// effect of `db::connection::connection()` below, on first use in this
+/// process — see `security::keyring::get_or_create_root_key`.
+///
+/// Requires no credential, no provider, and no network — this is the call
+/// that makes the Local-First Mandate in `prd/constraints.md` literally true
+/// (CAP-WS-01). `path` is `None` to use the default location specified in
+/// `guidelines.md`.
+#[frb]
+pub async fn open_or_create_local_workspace(
+    path: Option<String>,
+) -> Result<WorkspaceInfo, AppError> {
+    crate::db::connection::with_connection(|conn| {
+        crate::workspace::bootstrap::open_or_create_local_workspace_impl(conn, path)
+    })
+}
+
+/// Opens an existing Workspace directory that this application did not
+/// create, including one populated by another tool (CAP-WS-05). Converges on
+/// the same post-conditions as [`open_or_create_local_workspace`] — see
+/// `workspace::bootstrap`'s module documentation and ADR-005 decision 8.
+#[frb]
+pub async fn open_workspace(path: String) -> Result<WorkspaceInfo, AppError> {
+    crate::db::connection::with_connection(|conn| {
+        crate::workspace::bootstrap::open_workspace_impl(conn, path)
+    })
+}
 
 #[frb(sync)]
 pub fn open_note(path: String) -> Result<NoteState, AppError> {
@@ -246,11 +283,23 @@ mod tests {
         conn
     }
 
+    // WSPC-D004 brought `db/schema.sql` in line with `data-models/schema.sql`:
+    // `notes.content_hash` and `fts_mapping.workspace_id` are both now
+    // `NOT NULL`, where the pre-existing fixture below inserted into neither.
+    // A throwaway, deterministic-per-call hash stands in for the real
+    // content hash `WSPC-D005`'s indexer will compute; nothing in this
+    // module's own tests inspects its value.
     fn seed_note(conn: &Connection, id: &str, title: &str, content: &str, last_modified: i64) {
         conn.execute(
-            "INSERT INTO notes (id, workspace_id, path, title, last_modified) \
-             VALUES (?1, 'ws', ?2, ?3, ?4)",
-            rusqlite::params![id, format!("{id}.md"), title, last_modified],
+            "INSERT INTO notes (id, workspace_id, path, title, last_modified, content_hash) \
+             VALUES (?1, 'ws', ?2, ?3, ?4, ?5)",
+            rusqlite::params![
+                id,
+                format!("{id}.md"),
+                title,
+                last_modified,
+                format!("hash-{id}")
+            ],
         )
         .unwrap();
         conn.execute(
@@ -260,7 +309,7 @@ mod tests {
         .unwrap();
         let fts_rowid = conn.last_insert_rowid();
         conn.execute(
-            "INSERT INTO fts_mapping (note_id, fts_rowid) VALUES (?1, ?2)",
+            "INSERT INTO fts_mapping (workspace_id, note_id, fts_rowid) VALUES ('ws', ?1, ?2)",
             rusqlite::params![id, fts_rowid],
         )
         .unwrap();

@@ -7,9 +7,31 @@ import '../draft.dart';
 import '../error.dart';
 import '../frb_generated.dart';
 import '../markdown/ast.dart';
+import '../workspace/bootstrap.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 // These functions are ignored because they are not marked as `pub`: `fts5_phrase_query`, `save_note_impl`, `search_notes_impl`
+
+/// Opens the local Workspace, creating and initializing it if absent
+/// (ADR-005 decision 1): creates the directory, initializes a Git repository
+/// in place, and writes a `workspaces` row with `provider = "local"`. Root
+/// key generation and opening the encrypted index both happen as a side
+/// effect of `db::connection::connection()` below, on first use in this
+/// process — see `security::keyring::get_or_create_root_key`.
+///
+/// Requires no credential, no provider, and no network — this is the call
+/// that makes the Local-First Mandate in `prd/constraints.md` literally true
+/// (CAP-WS-01). `path` is `None` to use the default location specified in
+/// `guidelines.md`.
+Future<WorkspaceInfo> openOrCreateLocalWorkspace({String? path}) =>
+    RustLib.instance.api.crateApiFfiApiOpenOrCreateLocalWorkspace(path: path);
+
+/// Opens an existing Workspace directory that this application did not
+/// create, including one populated by another tool (CAP-WS-05). Converges on
+/// the same post-conditions as [`open_or_create_local_workspace`] — see
+/// `workspace::bootstrap`'s module documentation and ADR-005 decision 8.
+Future<WorkspaceInfo> openWorkspace({required String path}) =>
+    RustLib.instance.api.crateApiFfiApiOpenWorkspace(path: path);
 
 NoteState openNote({required String path}) =>
     RustLib.instance.api.crateApiFfiApiOpenNote(path: path);

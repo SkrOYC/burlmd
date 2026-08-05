@@ -14,6 +14,7 @@ import 'frb_generated.io.dart'
     if (dart.library.js_interop) 'frb_generated.web.dart';
 import 'markdown/ast.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
+import 'workspace/bootstrap.dart';
 
 /// Main entrypoint of the Rust API
 class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
@@ -70,7 +71,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.12.0';
 
   @override
-  int get rustContentHash => -674186166;
+  int get rustContentHash => -907389824;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -96,6 +97,12 @@ abstract class RustLibApi extends BaseApi {
   Future<void> crateApiSimpleInitApp();
 
   NoteState crateApiFfiApiOpenNote({required String path});
+
+  Future<WorkspaceInfo> crateApiFfiApiOpenOrCreateLocalWorkspace({
+    String? path,
+  });
+
+  Future<WorkspaceInfo> crateApiFfiApiOpenWorkspace({required String path});
 
   void crateApiFfiApiSaveNote({
     required String noteId,
@@ -236,6 +243,67 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "open_note", argNames: ["path"]);
 
   @override
+  Future<WorkspaceInfo> crateApiFfiApiOpenOrCreateLocalWorkspace({
+    String? path,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_opt_String(path, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 5,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_workspace_info,
+          decodeErrorData: sse_decode_app_error,
+        ),
+        constMeta: kCrateApiFfiApiOpenOrCreateLocalWorkspaceConstMeta,
+        argValues: [path],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiFfiApiOpenOrCreateLocalWorkspaceConstMeta =>
+      const TaskConstMeta(
+        debugName: "open_or_create_local_workspace",
+        argNames: ["path"],
+      );
+
+  @override
+  Future<WorkspaceInfo> crateApiFfiApiOpenWorkspace({required String path}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(path, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 6,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_workspace_info,
+          decodeErrorData: sse_decode_app_error,
+        ),
+        constMeta: kCrateApiFfiApiOpenWorkspaceConstMeta,
+        argValues: [path],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiFfiApiOpenWorkspaceConstMeta =>
+      const TaskConstMeta(debugName: "open_workspace", argNames: ["path"]);
+
+  @override
   void crateApiFfiApiSaveNote({
     required String noteId,
     required String expectedBaseRevision,
@@ -246,7 +314,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(noteId, serializer);
           sse_encode_String(expectedBaseRevision, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 5)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 7)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
@@ -276,7 +344,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 6,
+            funcId: 8,
             port: port_,
           );
         },
@@ -307,7 +375,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           sse_encode_String(noteId, serializer);
           sse_encode_list_prim_usize_strict(blockPath, serializer);
           sse_encode_box_autoadd_ast_node(newNode, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 7)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 9)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_note_state,
@@ -587,6 +655,21 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   BigInt dco_decode_usize(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dcoDecodeU64(raw);
+  }
+
+  @protected
+  WorkspaceInfo dco_decode_workspace_info(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 5)
+      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
+    return WorkspaceInfo(
+      id: dco_decode_String(arr[0]),
+      name: dco_decode_String(arr[1]),
+      provider: dco_decode_String(arr[2]),
+      remoteUrl: dco_decode_opt_String(arr[3]),
+      localPath: dco_decode_String(arr[4]),
+    );
   }
 
   @protected
@@ -914,6 +997,23 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  WorkspaceInfo sse_decode_workspace_info(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_id = sse_decode_String(deserializer);
+    var var_name = sse_decode_String(deserializer);
+    var var_provider = sse_decode_String(deserializer);
+    var var_remoteUrl = sse_decode_opt_String(deserializer);
+    var var_localPath = sse_decode_String(deserializer);
+    return WorkspaceInfo(
+      id: var_id,
+      name: var_name,
+      provider: var_provider,
+      remoteUrl: var_remoteUrl,
+      localPath: var_localPath,
+    );
+  }
+
+  @protected
   int sse_decode_i_32(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return deserializer.buffer.getInt32();
@@ -1205,6 +1305,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   void sse_encode_usize(BigInt self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     serializer.buffer.putBigUint64(self);
+  }
+
+  @protected
+  void sse_encode_workspace_info(WorkspaceInfo self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.id, serializer);
+    sse_encode_String(self.name, serializer);
+    sse_encode_String(self.provider, serializer);
+    sse_encode_opt_String(self.remoteUrl, serializer);
+    sse_encode_String(self.localPath, serializer);
   }
 
   @protected
