@@ -52,9 +52,12 @@ pub use crate::index::query::{LinkCompletion, TreeNode};
 pub async fn open_or_create_local_workspace(
     path: Option<String>,
 ) -> Result<WorkspaceInfo, AppError> {
-    let info = crate::db::connection::with_connection(|conn| {
-        crate::workspace::bootstrap::open_or_create_local_workspace_impl(conn, path)
-    })?;
+    // No `with_connection` wrapper here on purpose: bootstrap initializes a
+    // repository, sweeps the bundle and reads every Note in it, and holding the
+    // process-wide connection mutex across all three is what `SPK-WSPC-D001`
+    // §6.2.7 forbids. The bootstrap acquires the connection itself, for its
+    // statements only.
+    let info = crate::workspace::bootstrap::open_or_create_local_workspace(path)?;
     crate::db::connection::set_active_workspace_id(info.id.clone())?;
     Ok(info)
 }
@@ -66,9 +69,9 @@ pub async fn open_or_create_local_workspace(
 /// including establishing the active Workspace on success.
 #[frb]
 pub async fn open_workspace(path: String) -> Result<WorkspaceInfo, AppError> {
-    let info = crate::db::connection::with_connection(|conn| {
-        crate::workspace::bootstrap::open_workspace_impl(conn, path)
-    })?;
+    // See [`open_or_create_local_workspace`] on why the connection is not held
+    // across this call.
+    let info = crate::workspace::bootstrap::open_workspace(path)?;
     crate::db::connection::set_active_workspace_id(info.id.clone())?;
     Ok(info)
 }
@@ -87,11 +90,19 @@ pub async fn open_workspace(path: String) -> Result<WorkspaceInfo, AppError> {
 /// Per `architecture/risks.md` risk 3 this is **not** the routine path for
 /// keeping the index current — `index::incremental::index_note` is. It exists
 /// for first open, post-merge reconciliation, and recovery.
+///
+/// **Two phases, and only the second holds the connection.** The walk reads and
+/// parses every Note in the Workspace; running it inside the `with_connection`
+/// closure held the process-wide mutex — the one a keystroke's own tier 1 draft
+/// write waits on — for the whole of it, which `SPK-WSPC-D001` §6.2.7 forbids.
+/// `scan_bundle` derives the rows with nothing held; `write_scanned_bundle` is
+/// SQL only.
 #[frb]
 pub async fn reindex_workspace() -> Result<u32, AppError> {
-    let workspace_id = crate::db::connection::active_workspace_id()?;
+    let (workspace_id, root) = crate::db::connection::active_workspace()?;
+    let scanned = crate::index::scan::scan_bundle(&root)?;
     crate::db::connection::with_connection(|conn| {
-        crate::index::scan::reindex_workspace_impl(conn, &workspace_id)
+        crate::index::scan::write_scanned_bundle(conn, &workspace_id, &scanned)
     })
 }
 

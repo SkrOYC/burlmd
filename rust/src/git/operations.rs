@@ -134,6 +134,10 @@ pub fn clone_repo(
 /// [`ensure_scratch_ignored`] for why that has to happen on the adoption path
 /// too, and for how a user's existing file is extended rather than replaced.
 pub fn init_repo(dest: &Path) -> Result<(), AppError> {
+    // Bootstrap's first phase, and one of the three that used to run inside a
+    // `with_connection` closure — `SPK-WSPC-D001` §6.2.7's first standing rule.
+    crate::db::connection::assert_no_io_under_the_connection("initializing a repository");
+
     if gix::open(dest).is_ok() {
         return ensure_scratch_ignored(dest);
     }

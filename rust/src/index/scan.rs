@@ -37,17 +37,68 @@ pub struct BundleScan {
     pub directories: Vec<String>,
 }
 
-/// Rebuilds `notes`, `notes_fts`, `fts_mapping`, `links` and `directories`
-/// for `workspace_id` from its bundle on disk, and returns the number of
-/// Notes indexed.
+/// One whole bundle, read off disk and derived into index rows, with **no
+/// connection held**.
 ///
-/// The whole rebuild is one transaction, so a failure part-way through leaves
-/// the previous index intact rather than a half-cleared one. `ANALYZE` runs
-/// once it commits — see [`analyze`].
-pub fn reindex_workspace_impl(conn: &Connection, workspace_id: &str) -> Result<u32, AppError> {
-    let root = workspace_root(conn, workspace_id)?;
-    let scan = walk_bundle(&root)?;
+/// This is the first half of the two-phase rebuild — see [`scan_bundle`] for
+/// why the rebuild has two halves at all. It is a plain value precisely so that
+/// the expensive half can be handed across the connection boundary rather than
+/// performed on the far side of it.
+pub struct ScannedBundle {
+    /// Bundle-relative directory paths, excluding the root.
+    pub directories: Vec<String>,
+    /// Every Note that still existed when it was read, already derived.
+    pub notes: Vec<super::IndexedNote>,
+}
 
+/// **Phase one**: walks the bundle, reads every Note, and derives every row —
+/// all of it O(bundle) file I/O and parsing, and **none of it under the
+/// connection**.
+///
+/// The split exists because the previous shape put exactly this work inside a
+/// `with_connection` closure: a full rebuild reads and parses every file in the
+/// Workspace, and it ran holding the process-wide connection mutex — the one a
+/// keystroke's own tier 1 draft write waits on. `SPK-WSPC-D001` §6.2.7 forbids
+/// it in as many words ("no closure passed to `with_connection` may perform
+/// file I/O"), and this is the largest violation of it the crate had: a
+/// thousand-Note bundle held the mutex for the whole walk, on every Workspace
+/// open and on every `reindex_workspace` call.
+///
+/// The shape mirrors `workspace::persist::NoteSession::index_written_source`,
+/// which made the same split one Note at a time for the same reason.
+///
+/// A Note that vanishes between the walk and the read is skipped rather than
+/// raised: it no longer exists, so there is nothing to index and no reason to
+/// fail a whole rebuild over it.
+pub fn scan_bundle(root: &Path) -> Result<ScannedBundle, AppError> {
+    crate::db::connection::assert_no_io_under_the_connection("a full bundle scan");
+
+    let scan = walk_bundle(root)?;
+    let mut notes = Vec::with_capacity(scan.notes.len());
+    for concept_id in &scan.notes {
+        if let Some(note) = read_note(root, concept_id)? {
+            notes.push(note);
+        }
+    }
+    Ok(ScannedBundle {
+        directories: scan.directories,
+        notes,
+    })
+}
+
+/// **Phase two**: replaces `workspace_id`'s `notes`, `notes_fts`,
+/// `fts_mapping`, `links` and `directories` rows with what [`scan_bundle`]
+/// derived, and returns the number of Notes indexed.
+///
+/// SQL only — no file is opened, stat-ed or parsed here, which is the whole
+/// point of the split. The rebuild is one transaction, so a failure part-way
+/// through leaves the previous index intact rather than a half-cleared one.
+/// `ANALYZE` runs once it commits — see [`analyze`].
+pub fn write_scanned_bundle(
+    conn: &Connection,
+    workspace_id: &str,
+    scanned: &ScannedBundle,
+) -> Result<u32, AppError> {
     let indexed = in_transaction(conn, |tx| {
         // Ordering obligation (`schema.sql` at `fts_mapping`): the Workspace's
         // full-text rows go first, through the mapping, because deleting
@@ -66,20 +117,14 @@ pub fn reindex_workspace_impl(conn: &Connection, workspace_id: &str) -> Result<u
             let mut stmt = tx.prepare(
                 "INSERT OR IGNORE INTO directories (id, workspace_id, path) VALUES (?1, ?2, ?1)",
             )?;
-            for dir in &scan.directories {
+            for dir in &scanned.directories {
                 stmt.execute(rusqlite::params![dir, workspace_id])?;
             }
         }
 
         let mut indexed: u32 = 0;
-        for concept_id in &scan.notes {
-            let Some(note) = read_note(&root, concept_id)? else {
-                // The file vanished between the walk and the read. Nothing to
-                // index, and no reason to fail the whole rebuild over a Note
-                // that no longer exists.
-                continue;
-            };
-            insert_note_rows(tx, workspace_id, &note)?;
+        for note in &scanned.notes {
+            insert_note_rows(tx, workspace_id, note)?;
             indexed += 1;
         }
         Ok(indexed)
@@ -87,6 +132,22 @@ pub fn reindex_workspace_impl(conn: &Connection, workspace_id: &str) -> Result<u
 
     analyze(conn)?;
     Ok(indexed)
+}
+
+/// Both phases, resolving the bundle root through the index first.
+///
+/// **Not the production path.** Every caller that reaches the process-wide
+/// connection — `workspace::bootstrap::converge` and
+/// `api::ffi_api::reindex_workspace` — calls [`scan_bundle`] and
+/// [`write_scanned_bundle`] separately, so that the walk happens with no
+/// connection held. This convenience exists for hermetic tests, which own their
+/// injected `Connection` outright and contend with nothing; calling it while a
+/// connection *is* held trips [`scan_bundle`]'s own debug assert, which is what
+/// keeps that distinction from eroding.
+pub fn reindex_workspace_impl(conn: &Connection, workspace_id: &str) -> Result<u32, AppError> {
+    let root = workspace_root(conn, workspace_id)?;
+    let scanned = scan_bundle(&root)?;
+    write_scanned_bundle(conn, workspace_id, &scanned)
 }
 
 /// One Note's file, read but not yet interpreted.
@@ -127,6 +188,8 @@ impl RawNote {
 
 /// Reads one Note's bytes and hashes them, or `None` when the file is gone.
 pub fn read_note_bytes(root: &Path, concept_id: &str) -> Result<Option<RawNote>, AppError> {
+    crate::db::connection::assert_no_io_under_the_connection("reading a Note for indexing");
+
     let path = root.join(crate::okf::concept_id_to_path(concept_id));
     let bytes = match std::fs::read(&path) {
         Ok(bytes) => bytes,
@@ -165,6 +228,8 @@ pub fn read_note(root: &Path, concept_id: &str) -> Result<Option<super::IndexedN
 /// - every non-`.md` file. Attachments are not concepts and "are never
 ///   indexed as Notes" (`data-models/okf-bundle.md`, "Attachments").
 pub fn walk_bundle(root: &Path) -> Result<BundleScan, AppError> {
+    crate::db::connection::assert_no_io_under_the_connection("walking the bundle");
+
     let mut scan = BundleScan::default();
     walk_dir(root, "", &mut scan)?;
     scan.notes.sort();

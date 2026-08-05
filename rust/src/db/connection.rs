@@ -203,6 +203,20 @@ pub fn connection() -> Result<&'static Mutex<Connection>, AppError> {
 /// Acquires the process-wide connection and runs `f` against it, so each
 /// FFI function needing the DB doesn't repeat the "get the singleton, lock
 /// it, map a poisoned-lock error" preamble.
+///
+/// **No `f` may perform file I/O** (`SPK-WSPC-D001` §6.2.7). The mutex taken
+/// here is process-wide and is the one a keystroke's own tier 1 draft write
+/// waits on, so anything slow inside a closure is latency charged to typing.
+/// The rule is enforced rather than merely written down: the scope entered
+/// below is what [`assert_no_io_under_the_connection`] reads.
+///
+/// The guard lives *here*, at the acquisition, rather than only in
+/// `workspace::persist::Workspace::with_db`. That is where it started, and the
+/// consequence was that it covered exactly the module that already obeyed the
+/// rule: every other caller in the crate — `api::ffi_api`'s wrappers,
+/// `workspace::bootstrap::converge`, the full reindex — reached the same mutex
+/// through this function without ever entering the scope, so a bundle walk
+/// under the connection was invisible to the assert that exists to catch it.
 pub fn with_connection<T>(
     f: impl FnOnce(&Connection) -> Result<T, AppError>,
 ) -> Result<T, AppError> {
@@ -210,7 +224,59 @@ pub fn with_connection<T>(
     let conn = db
         .lock()
         .map_err(|_| AppError::DatabaseError("db mutex poisoned".to_string()))?;
+    let _scope = ConnectionScope::enter();
     f(&conn)
+}
+
+// ---------------------------------------------------------------------------
+// The rule that no connection closure performs file I/O, enforced
+// ---------------------------------------------------------------------------
+
+thread_local! {
+    /// Whether this thread is currently holding a connection — the
+    /// process-wide one through [`with_connection`], or a test's injected one
+    /// through `workspace::persist::Workspace::with_db`.
+    static IN_CONNECTION_CLOSURE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Marks the calling thread as holding the connection for as long as it lives.
+///
+/// Restores the previous value rather than clearing, so a nested acquisition —
+/// which the rule does not forbid — does not report the outer one as finished
+/// when the inner one ends.
+pub(crate) struct ConnectionScope(bool);
+
+impl ConnectionScope {
+    pub(crate) fn enter() -> Self {
+        ConnectionScope(IN_CONNECTION_CLOSURE.with(|flag| flag.replace(true)))
+    }
+}
+
+impl Drop for ConnectionScope {
+    fn drop(&mut self) {
+        IN_CONNECTION_CLOSURE.with(|flag| flag.set(self.0));
+    }
+}
+
+pub(crate) fn in_connection_closure() -> bool {
+    IN_CONNECTION_CLOSURE.with(std::cell::Cell::get)
+}
+
+/// Panics in debug builds when `what` is being done while the connection is
+/// held.
+///
+/// `SPK-WSPC-D001` §6.2.7's three standing review rules are the ones "a tier 2
+/// implementation would break first", and the first of them — no file I/O
+/// inside a connection closure — is invisible at the call site once the I/O is
+/// two functions away. This turns it into a test failure rather than a review
+/// finding. Debug only, so a shipped build pays nothing for it.
+pub(crate) fn assert_no_io_under_the_connection(what: &str) {
+    debug_assert!(
+        !in_connection_closure(),
+        "{what} ran inside a connection closure: the process-wide connection \
+         mutex would be held across file I/O, which is what a keystroke's own \
+         tier 1 write then waits on (SPK-WSPC-D001 §6.2.7)"
+    );
 }
 
 /// The id of the Workspace established by the most recent successful
@@ -617,6 +683,57 @@ mod tests {
         // lock alone to protect a later test that doesn't expect a stale
         // value.
         *ACTIVE_WORKSPACE.lock().unwrap() = None;
+    }
+
+    /// `SPK-WSPC-D001` §6.2.7's first standing rule, enforced at the
+    /// acquisition every caller in the crate actually goes through.
+    ///
+    /// The regression this pins: the guard was entered only by
+    /// `workspace::persist::Workspace::with_db`, so it covered exactly the one
+    /// module that already obeyed the rule. `api::ffi_api`'s wrappers,
+    /// `workspace::bootstrap::converge` and the full reindex all reached this
+    /// same process-wide mutex through [`with_connection`] without entering the
+    /// scope — and `converge` held it across a repository init, a recursive
+    /// scratch sweep and a read-and-parse of every Note in the bundle, entirely
+    /// invisibly to the assert whose whole purpose is to catch that.
+    ///
+    /// `catch_unwind` rather than `#[should_panic]`: the locks this test needs
+    /// are held for its whole body, and unwinding out of it would poison them
+    /// for every other test in the binary that takes them with `unwrap`.
+    #[cfg(debug_assertions)]
+    #[test]
+    fn file_io_inside_a_with_connection_closure_is_a_hard_error() {
+        let _env_lock = ENV_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let db_dir = tempfile::tempdir().unwrap();
+        let _db_path = EnvVarGuard::set(
+            "BURLMD_DB_PATH",
+            db_dir.path().join("index.sqlite3").as_os_str(),
+        );
+
+        let previous_hook = std::panic::take_hook();
+        std::panic::set_hook(Box::new(|_| {}));
+        let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            with_connection(|_conn| {
+                assert_no_io_under_the_connection("a probe standing in for a bundle walk");
+                Ok(())
+            })
+        }));
+        std::panic::set_hook(previous_hook);
+
+        let payload = outcome.expect_err(
+            "the guard must fire for file I/O performed inside a with_connection closure",
+        );
+        let message = payload
+            .downcast_ref::<String>()
+            .cloned()
+            .or_else(|| payload.downcast_ref::<&str>().map(|s| (*s).to_string()))
+            .unwrap_or_default();
+        assert!(
+            message.contains("ran inside a connection closure"),
+            "expected the connection-scope guard, got {message:?}"
+        );
     }
 
     /// WSPC-D004: with `XDG_DATA_HOME` unset, the default index path falls

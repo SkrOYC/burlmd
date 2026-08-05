@@ -113,9 +113,10 @@ pub struct LifecycleEffects {
 // ---------------------------------------------------------------------------
 
 /// Creates a Note in `directory_path` (empty for the bundle root) with an
-/// OKF-conformant frontmatter block, indexes it, and **opens it** — the
-/// returned state is the state of an open Note, so the working source, span map
-/// and recorded revision are all established before this returns.
+/// OKF-conformant frontmatter block, indexes it, **commits it**, and **opens
+/// it** — the returned state is the state of an open Note, so the working
+/// source, span map and recorded revision are all established before this
+/// returns.
 ///
 /// The filename is the title verbatim plus `.md`
 /// (`data-models/okf-bundle.md`), because CAP-GRAPH-04's create-on-follow has
@@ -182,6 +183,37 @@ pub fn create_note(
         //   failed would discard a real result over a recoverable one.
         let _ = std::fs::remove_file(&new_path);
         return Err(error);
+    }
+
+    // The Note enters version history **here**, not at the first close.
+    //
+    // Tier 3's gate is `session_edited`, which is false for a Note nobody has
+    // typed into — so without this a Note that was created and navigated away
+    // from, or one whose idle write landed just before a crash, was a file in
+    // the bundle that no commit covered. `delete_note` then made the promise
+    // CAP-LIFE-04 states ("recoverable from local version history") without
+    // being able to keep it: `commit_paths` removes a path `HEAD` never held,
+    // sees an unchanged tree, and commits nothing, so the deleted content
+    // existed in no commit anywhere. Its three lifecycle siblings — rename,
+    // move and delete — all commit; this one was the exception.
+    //
+    // No duplicate Create follows: `NoteSession::commit_message` asks
+    // `path_in_head`, which now answers yes, so the session's own close commits
+    // an Update.
+    let relative = concept_id_to_path(&new_id);
+    let subject = format!("Create {title}");
+    let committed = crate::git::operations::commit_paths(
+        workspace.root(),
+        &format!("{subject}\n\n{relative}\n"),
+        std::slice::from_ref(&relative),
+    );
+    if let Err(error) = committed {
+        // The established stage-failure shape: the file is written and the
+        // index agrees, so this is "the operation happened and version history
+        // does not record it" rather than "the create failed". Nothing is rolled
+        // back for the same reason `delete_note` rolls nothing back at this
+        // point — the two stores have already settled.
+        return Err(commit_stage_failure(&subject, error, &[]));
     }
 
     let (_, state) = persist::open_note(workspace, &new_id)?;
@@ -1866,7 +1898,7 @@ fn collect_files(root: &Path, dir: &Path, out: &mut Vec<String>) {
     };
     for entry in entries.flatten() {
         let name = entry.file_name().to_string_lossy().into_owned();
-        if name == ".git" || super::is_scratch_name(&name) {
+        if name == ".git" || super::is_ignored_scratch_name(&name) {
             continue;
         }
         let path = entry.path();
@@ -1977,11 +2009,13 @@ mod tests {
             self.root().join(relative).exists()
         }
 
-        /// Builds the index from the bundle, the way first open does.
+        /// Builds the index from the bundle, the way first open does — in the
+        /// two phases bootstrap uses, with the walk outside the connection.
         fn reindex(&self) {
+            let scanned = crate::index::scan::scan_bundle(&self.root()).unwrap();
             self.workspace
                 .with_db(|conn| {
-                    crate::index::scan::reindex_workspace_impl(conn, self.workspace.id())
+                    crate::index::scan::write_scanned_bundle(conn, self.workspace.id(), &scanned)
                 })
                 .unwrap();
         }
@@ -2278,6 +2312,80 @@ mod tests {
 
         let session = persist::lookup(f.workspace.id(), "Fresh").unwrap();
         assert!(session.is_some(), "create_note must register a session");
+    }
+
+    /// A created Note enters version history at creation, like every other
+    /// lifecycle operation.
+    ///
+    /// The regression this pins: `create_note` made no commit and tier 3's gate
+    /// (`session_edited`) stays false for a fresh Note nobody has typed into, so
+    /// a Note created and navigated away from — or one whose idle write landed
+    /// before a crash — sat in the bundle as an untracked file that no commit
+    /// covered. That is the window `architecture/resilience.md` closes for every
+    /// other operation here: rename, move and delete all commit.
+    #[test]
+    fn a_created_note_is_in_version_history_before_anything_is_typed_into_it() {
+        let f = fixture();
+        f.commit_baseline();
+
+        create_note(&f.workspace, "", "Fresh").unwrap();
+
+        assert_eq!(
+            f.git(&["show", "HEAD:Fresh.md"]),
+            conformant_frontmatter("Fresh").trim_end(),
+            "the created file must be in HEAD's tree"
+        );
+        assert_eq!(f.git(&["log", "--format=%s", "-1"]), "Create Fresh");
+    }
+
+    /// Delete's promise — "recoverable from local version history" — is only
+    /// true if the content it deletes was ever committed. Without the create
+    /// commit, deleting an untouched fresh Note committed nothing at all
+    /// (`commit_paths` returns `None` when the tree is unchanged, and removing a
+    /// path `HEAD` never held changes nothing), so the Note's content existed in
+    /// no commit anywhere and the deletion was unrecoverable.
+    #[test]
+    fn deleting_a_never_typed_note_still_leaves_it_recoverable_from_history() {
+        let f = fixture();
+        f.commit_baseline();
+        create_note(&f.workspace, "", "Fresh").unwrap();
+        persist::discard_session(&f.workspace, "Fresh").unwrap();
+
+        delete_note(&f.workspace, "Fresh").unwrap();
+
+        assert!(!f.exists("Fresh.md"));
+        assert_eq!(f.git(&["log", "--format=%s", "-1"]), "Delete Fresh");
+        assert_eq!(
+            f.git(&["show", "HEAD~1:Fresh.md"]),
+            conformant_frontmatter("Fresh").trim_end(),
+            "the deleted content must still be recoverable one commit back"
+        );
+    }
+
+    /// The create commit does not duplicate itself when the session that
+    /// follows it is edited and closed: `commit_message` asks `path_in_head`,
+    /// which now answers yes, so tier 3 records an Update rather than a second
+    /// Create.
+    #[test]
+    fn creating_typing_and_closing_records_a_create_and_exactly_one_update() {
+        let f = fixture();
+        f.commit_baseline();
+
+        create_note(&f.workspace, "", "Fresh").unwrap();
+        let session = persist::lookup(f.workspace.id(), "Fresh").unwrap().unwrap();
+        session
+            .insert_block(&[0], "Typed after creation.".to_string())
+            .unwrap();
+        session.close().unwrap();
+
+        let subjects = f.git(&["log", "--format=%s"]);
+        let subjects: Vec<&str> = subjects.lines().collect();
+        assert_eq!(
+            subjects,
+            vec!["Update Fresh", "Create Fresh", "baseline"],
+            "expected exactly one Create and one Update"
+        );
+        assert!(f.read("Fresh.md").contains("Typed after creation."));
     }
 
     // -- collisions and reserved names (STOP 2) ------------------------------

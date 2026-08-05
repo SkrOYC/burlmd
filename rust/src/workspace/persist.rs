@@ -69,6 +69,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use rusqlite::{Connection, OptionalExtension};
 
+use crate::db::connection::assert_no_io_under_the_connection;
 use crate::draft::{NoteMetadata, NoteState};
 use crate::error::AppError;
 use crate::index::{self, content_hash};
@@ -143,13 +144,19 @@ impl Workspace {
     /// the acquisition order in the module documentation, and **no `f` may
     /// perform file I/O** (`SPK-WSPC-D001` §6.2.7): the connection is
     /// process-wide, so anything slow inside a closure is time a keystroke's
-    /// own tier 1 write spends waiting. The rule is enforced rather than
-    /// merely written down — see [`in_connection_closure`].
+    /// own tier 1 write spends waiting. The rule is enforced rather than merely
+    /// written down — see
+    /// [`crate::db::connection::assert_no_io_under_the_connection`].
+    ///
+    /// The scope is entered by [`crate::db::connection::with_connection`]
+    /// itself, so the production arm below needs nothing here. The test arm
+    /// enters it explicitly: an injected connection is not process-wide and so
+    /// costs a keystroke nothing, but every hermetic test in this crate runs
+    /// against one, and a rule only the untested arm enforces is not enforced.
     pub(super) fn with_db<T>(
         &self,
         f: impl FnOnce(&Connection) -> Result<T, AppError>,
     ) -> Result<T, AppError> {
-        let _scope = ConnectionScope::enter();
         match &self.db {
             DbHandle::Process => crate::db::connection::with_connection(f),
             #[cfg(test)]
@@ -157,6 +164,7 @@ impl Workspace {
                 let conn = mutex
                     .lock()
                     .map_err(|_| AppError::DatabaseError("test db mutex poisoned".to_string()))?;
+                let _scope = crate::db::connection::ConnectionScope::enter();
                 f(&conn)
             }
         }
@@ -312,52 +320,6 @@ impl Workspace {
             idle_interval,
         })
     }
-}
-
-// ---------------------------------------------------------------------------
-// The rule that no connection closure performs file I/O, enforced
-// ---------------------------------------------------------------------------
-
-thread_local! {
-    /// Whether this thread is currently inside a [`Workspace::with_db`]
-    /// closure, and therefore holding the process-wide connection mutex.
-    static IN_CONNECTION_CLOSURE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
-}
-
-/// Marks the calling thread as holding the connection for as long as it lives.
-struct ConnectionScope(bool);
-
-impl ConnectionScope {
-    fn enter() -> Self {
-        ConnectionScope(IN_CONNECTION_CLOSURE.with(|flag| flag.replace(true)))
-    }
-}
-
-impl Drop for ConnectionScope {
-    fn drop(&mut self) {
-        IN_CONNECTION_CLOSURE.with(|flag| flag.set(self.0));
-    }
-}
-
-fn in_connection_closure() -> bool {
-    IN_CONNECTION_CLOSURE.with(std::cell::Cell::get)
-}
-
-/// Panics in debug builds when `what` is being done while the connection is
-/// held.
-///
-/// `SPK-WSPC-D001` §6.2.7's three standing review rules are the ones "a tier 2
-/// implementation would break first", and the first of them — no file I/O
-/// inside a connection closure — is invisible at the call site once the I/O is
-/// two functions away. This turns it into a test failure rather than a review
-/// finding. Debug only, so a shipped build pays nothing for it.
-fn assert_no_io_under_the_connection(what: &str) {
-    debug_assert!(
-        !in_connection_closure(),
-        "{what} ran inside a connection closure: the process-wide connection \
-         mutex would be held across file I/O, which is what a keystroke's own \
-         tier 1 write then waits on (SPK-WSPC-D001 §6.2.7)"
-    );
 }
 
 // ---------------------------------------------------------------------------
@@ -777,23 +739,37 @@ impl NoteSession {
     /// container and starts a paragraph after it. That is the promise the name
     /// makes — a *Block*, genuinely separate — rather than a new sibling item,
     /// which would need a call that knows what marker to repeat.
+    ///
+    /// The **trailing** side is asymmetric on purpose. Mid-Note there is a
+    /// following Block to stay separated from, so the full blank line is
+    /// emitted; at the end of the Note there is nothing after the insertion, so
+    /// the append is terminated with a single `\n` and the file does not gain a
+    /// trailing blank line it never had.
     pub fn insert_block(
         &self,
         block_path: &[usize],
         source: String,
     ) -> Result<NoteState, AppError> {
         self.structural_edit(|working, spans| {
-            let at = spans
-                .block(block_path)
-                .map_or(working.len(), |b| b.source.start);
+            let target = spans.block(block_path);
+            // A path addressing nothing is the end-of-Note append, and it is the
+            // one case with no *following* Block to stay separated from. The
+            // separator that matters there is the one already emitted before the
+            // text; padding the full blank line after it as well left the file
+            // ending in one, which is a change to bytes the user did not edit on
+            // every append.
+            let required_after = if target.is_some() {
+                BLOCK_SEPARATOR_NEWLINES
+            } else {
+                1
+            };
+            let at = target.map_or(working.len(), |b| b.source.start);
             let before = working
                 .get(..at)
                 .ok_or_else(|| AppError::ParseError(format!("offset {at} is not addressable")))?;
             let mut text = separator_before(before, BLOCK_SEPARATOR_NEWLINES);
             text.push_str(&source);
-            text.push_str(
-                &"\n".repeat(BLOCK_SEPARATOR_NEWLINES.saturating_sub(trailing_newlines(&source))),
-            );
+            text.push_str(&"\n".repeat(required_after.saturating_sub(trailing_newlines(&source))));
             splice::splice_source(working, at..at, &text).map_err(splice_error)
         })
     }
@@ -1267,9 +1243,10 @@ impl NoteSession {
 
     // -- Reload --------------------------------------------------------------
 
-    /// Discards the buffered edits and re-reads the Note from disk: deletes the
-    /// draft row, reparses the file's current bytes, and rebuilds the working
-    /// source, the span map and the revision baseline from them.
+    /// Discards the buffered edits and re-reads the Note from disk: reparses
+    /// the file's current bytes, deletes the draft row once those bytes are in
+    /// hand, and rebuilds the working source, the span map and the revision
+    /// baseline from them.
     ///
     /// This is the other half of `RevisionMismatch`, and without it that error
     /// has no exit — `open_note` restores the draft in preference to disk, so a
@@ -1298,6 +1275,20 @@ impl NoteSession {
     pub fn reload(&self) -> Result<NoteState, AppError> {
         let _write_guard = self.lock_writes()?;
 
+        // **The row is deleted only once the bytes that are to replace it are
+        // in hand**, and the order below is the whole of that guarantee: read,
+        // hash, decode, and only then clear. Clearing first destroyed the
+        // draft on exactly the two failures a reload is most likely to hit —
+        // a file something outside this application deleted, and one that has
+        // gone invalid underneath the session — and both of those are the
+        // cases where the row *is* the user's work. `close` keeps the row for
+        // a vanished file so `pending_drafts` can report it and `open_note`
+        // can recover it; a reload attempted on the way to that recovery must
+        // not be the call that throws it away.
+        let bytes = self.read_file()?;
+        let revision = content_hash(&bytes);
+        let source = decode_source(&self.0.absolute_path, bytes)?;
+
         let workspace_id = self.0.workspace.id().to_string();
         let note_id = self.0.note_id.clone();
         self.0.workspace.with_db(|conn| {
@@ -1308,9 +1299,6 @@ impl NoteSession {
             Ok(())
         })?;
 
-        let bytes = self.read_file()?;
-        let revision = content_hash(&bytes);
-        let source = decode_source(&self.0.absolute_path, bytes)?;
         let dir = containing_dir(&self.0.note_id);
         let ParsedNote { ast, spans } = parse_note(&source, dir);
         let mut ast = match conflict_suggestions(&source, dir) {
@@ -1947,14 +1935,20 @@ fn decode_source(path: &Path, bytes: Vec<u8>) -> Result<String, AppError> {
 /// row lives in (`SPK-WSPC-D001` §6.3), and tier 1's purpose is to survive an
 /// application crash, which this handles unconditionally.
 ///
+/// **The temporary file is private from the instant it exists** and only then
+/// takes the target's mode. It holds the Note's full plaintext for the whole of
+/// the write and the `fsync`, so creating it at the process umask left every
+/// Note in the Workspace world-readable for that window — see
+/// [`create_private_temp`].
+///
 /// **The target's permissions survive the rename.** Publishing by rename means
-/// the file the user ends up with is the *temporary* one, created at the
-/// process umask — 0644 in the ordinary case. Without the step below, the first
-/// idle write over a Note the user had restricted to 0600 relaxed it to
-/// world-readable, silently and with nothing in the UI to say so; the same held
-/// for `lifecycle`'s journal, whose overwrite and rollback both route here. The
-/// mode is copied from the existing target when there is one, and left at the
-/// umask default when this write is creating the file.
+/// the file the user ends up with is the *temporary* one. Without
+/// [`carry_permissions_forward`] below, the first idle write over a Note the
+/// user had restricted to 0600 relaxed it to world-readable, silently and with
+/// nothing in the UI to say so; the same held for `lifecycle`'s journal, whose
+/// overwrite and rollback both route here. The mode is copied from the existing
+/// target when there is one, and left at the private creation mode when this
+/// write is creating the file.
 pub(super) fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), AppError> {
     static NEXT_TEMP: AtomicU64 = AtomicU64::new(0);
 
@@ -1977,7 +1971,7 @@ pub(super) fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), AppError> {
     ));
 
     let write = || -> std::io::Result<()> {
-        let mut file = std::fs::File::create(&temp)?;
+        let mut file = create_private_temp(&temp)?;
         file.write_all(bytes)?;
         // Before the rename, so the rename publishes bytes that are already
         // durable rather than a name pointing at an empty file.
@@ -1997,6 +1991,45 @@ pub(super) fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), AppError> {
         return Err(io_error(path, &e));
     }
     Ok(())
+}
+
+/// Creates the temporary file **already private**, rather than at the process
+/// umask and narrowed afterwards.
+///
+/// The mode is not merely the file's end state: between the create and
+/// [`carry_permissions_forward`] the file holds the Note's full plaintext, and
+/// at the ordinary umask that is 0644 — world-readable, on a multi-user machine,
+/// for the whole of a write plus an `fsync`. Every Note goes through this
+/// window, including one the user had deliberately restricted to 0600, whose
+/// mode was correct before the write and correct after it and open in between.
+/// `O_CREAT | O_EXCL` with mode 0600 closes it at the syscall: there is no
+/// instant at which the file exists at a wider mode.
+///
+/// [`carry_permissions_forward`] still runs afterwards and may *widen* this,
+/// which is the intended order — an ordinary Note's own 0644 is the mode the
+/// user is entitled to keep, and it is applied to a file whose bytes are
+/// already written and durable.
+///
+/// `create_new` rather than `create`: the name carries this process's pid and a
+/// per-write counter, so an existing one is a collision that should surface
+/// rather than a file to truncate and inherit the mode of.
+#[cfg(unix)]
+fn create_private_temp(temp: &Path) -> std::io::Result<std::fs::File> {
+    use std::os::unix::fs::OpenOptionsExt;
+
+    std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .open(temp)
+}
+
+/// See the `unix` twin above. Windows has no mode bits to set at creation, and
+/// `tech-spec/stack.md` ships desktop Linux and macOS, so this is the whole of
+/// the second implementation rather than a placeholder for one.
+#[cfg(not(unix))]
+fn create_private_temp(temp: &Path) -> std::io::Result<std::fs::File> {
+    std::fs::File::create(temp)
 }
 
 /// Copies `target`'s permission bits onto `temp`, so that the rename that
@@ -2341,6 +2374,19 @@ mod tests {
             open_note(&self.workspace, note_id).unwrap().0
         }
 
+        /// A full rebuild, in the two phases production uses: the walk runs
+        /// with no connection held, and only the row write goes under it.
+        /// Calling `reindex_workspace_impl` inside a `with_db` closure instead
+        /// trips the debug guard, which is the point of the split.
+        fn reindex(&self) {
+            let scanned = crate::index::scan::scan_bundle(&self.root()).unwrap();
+            self.workspace
+                .with_db(|conn| {
+                    crate::index::scan::write_scanned_bundle(conn, self.workspace.id(), &scanned)
+                })
+                .unwrap();
+        }
+
         fn draft(&self, note_id: &str) -> Option<DraftRow> {
             self.workspace
                 .with_db(|conn| read_draft(conn, self.workspace.id(), note_id))
@@ -2563,6 +2609,39 @@ mod tests {
             "a tier 2 write widened the Note's mode to {mode:o}"
         );
         assert!(f.read("private.md").contains("secret and then some"));
+    }
+
+    /// The same rule one step earlier, on the window the end-state test above
+    /// cannot see: the temporary file must never exist at a wider mode, not even
+    /// for the duration of the write.
+    ///
+    /// The regression this pins: the temporary was created with
+    /// `File::create` — the process umask, 0644 in the ordinary case — and
+    /// narrowed only after the content was written and `fsync`ed. Every Note in
+    /// the Workspace, including one deliberately restricted to 0600, was
+    /// therefore readable by any user on the machine for the whole of each idle
+    /// write, in a file whose eventual mode was correct. Probing that window
+    /// from outside is a race; asserting the creation mode is not.
+    #[cfg(unix)]
+    #[test]
+    fn the_temporary_file_a_write_publishes_from_is_private_from_creation() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = tempfile::tempdir().unwrap();
+        let temp = dir.path().join(".Private.md.4242.0.tmp");
+
+        let file = create_private_temp(&temp).expect("the temporary must be creatable");
+
+        let mode = file.metadata().unwrap().permissions().mode() & 0o777;
+        assert_eq!(
+            mode, 0o600,
+            "the temporary was created at {mode:o}, exposing the Note's plaintext"
+        );
+        assert!(
+            create_private_temp(&temp).is_err(),
+            "the name carries a pid and a counter, so an existing one is a \
+             collision to surface rather than a file to truncate"
+        );
     }
 
     /// A 100 KiB Note, one Block edit, measured rather than assumed:
@@ -2993,6 +3072,17 @@ mod tests {
                 "New block.",
                 "{ending:?} did not produce the inserted Block"
             );
+            // The Block structure above is the contract; this is the byte-level
+            // half of it. An end-of-Note append has nothing after it to stay
+            // separated from, so the full separator was padding the file with a
+            // trailing blank line it never had — a change to bytes the user did
+            // not edit, on every append, in a project whose Edit Fidelity
+            // constraint is exactly that.
+            assert!(
+                session.working_source().unwrap().ends_with("New block.\n"),
+                "{ending:?} left a trailing blank line: {:?}",
+                session.working_source().unwrap()
+            );
         }
     }
 
@@ -3203,12 +3293,7 @@ mod tests {
         let f = fixture();
         f.write("a.md", &note("Alpha", "First."));
         f.write("b.md", &note("Beta", "First."));
-        f.workspace
-            .with_db(|conn| {
-                crate::index::scan::reindex_workspace_impl(conn, f.workspace.id())?;
-                Ok(())
-            })
-            .unwrap();
+        f.reindex();
         let session = f.open("a");
         session.update_block(&[0], "Unflushed.\n").unwrap();
 
@@ -3235,12 +3320,7 @@ mod tests {
         let f = fixture();
         f.write("a.md", &note("Alpha", "First."));
         f.write("b.md", &note("Beta", "First."));
-        f.workspace
-            .with_db(|conn| {
-                crate::index::scan::reindex_workspace_impl(conn, f.workspace.id())?;
-                Ok(())
-            })
-            .unwrap();
+        f.reindex();
         let session = f.open("a");
         session.update_block(&[0], "Unflushed.\n").unwrap();
 
@@ -3255,12 +3335,7 @@ mod tests {
 
         // The next open rebuilds the index, which drops the orphaned `notes`
         // row the draft used to join against.
-        f.workspace
-            .with_db(|conn| {
-                crate::index::scan::reindex_workspace_impl(conn, f.workspace.id())?;
-                Ok(())
-            })
-            .unwrap();
+        f.reindex();
 
         let pending = pending_drafts(&f.workspace).unwrap();
 
@@ -3826,6 +3901,71 @@ mod tests {
         std::fs::remove_file(f.root().join("a.md")).unwrap();
 
         assert!(matches!(session.reload(), Err(AppError::NotFound(_))));
+    }
+
+    /// A reload that fails must leave the `drafts` row exactly where it found
+    /// it, because a failing reload is precisely when that row is the only copy
+    /// of the user's work.
+    ///
+    /// The regression this pins: `reload` deleted the row *first* and only then
+    /// read the file, so a Note something outside this application had deleted
+    /// answered `NotFound` having already destroyed the unflushed buffer on its
+    /// way there. That is the exact row `close` goes out of its way to keep for
+    /// a vanished file, that `pending_drafts` reports, and that `open_note`'s
+    /// recovery branch reopens — a reload attempted anywhere along that path
+    /// emptied it.
+    #[test]
+    fn a_reload_of_a_vanished_file_leaves_the_draft_row_recoverable() {
+        let f = fixture();
+        f.write("a.md", &note("A", "First."));
+        let session = f.open("a");
+        session.update_block(&[0], "Unwritten work.\n").unwrap();
+        assert!(f.draft("a").is_some(), "tier 1 wrote the row");
+        std::fs::remove_file(f.root().join("a.md")).unwrap();
+
+        assert!(matches!(session.reload(), Err(AppError::NotFound(_))));
+
+        let row = f
+            .draft("a")
+            .expect("a failed reload must not delete the draft row");
+        assert!(
+            row.raw_markdown.contains("Unwritten work."),
+            "the row must still hold the buffer, got {:?}",
+            row.raw_markdown
+        );
+
+        // And the round-4 recovery path really can act on it: the session is
+        // dropped from the registry the way a crash would leave it, and the
+        // reopen restores the row rather than answering `NotFound`.
+        session.forget();
+        let (_, state) = open_note(&f.workspace, "a").expect("the row must be reopenable");
+        assert!(state.restored_from_draft);
+        assert!(session
+            .working_source()
+            .unwrap()
+            .contains("Unwritten work."));
+    }
+
+    /// The same obligation on the other refusing branch: a file that has gone
+    /// invalid underneath the session. The decode is what refuses, and it must
+    /// refuse before the row is cleared rather than after.
+    #[test]
+    fn a_reload_of_a_file_that_went_invalid_leaves_the_draft_row_intact() {
+        let f = fixture();
+        f.write("a.md", &note("A", "First."));
+        let session = f.open("a");
+        session.update_block(&[0], "Unwritten work.\n").unwrap();
+
+        let mut bytes = note("A", "First.").into_bytes();
+        bytes.extend_from_slice(b"latin-1 caf\xe9\n");
+        std::fs::write(f.root().join("a.md"), &bytes).unwrap();
+
+        assert!(matches!(session.reload(), Err(AppError::ParseError(_))));
+
+        let row = f
+            .draft("a")
+            .expect("a refused decode must not delete the draft row");
+        assert!(row.raw_markdown.contains("Unwritten work."));
     }
 
     /// A session that brings a foreign file into conformance, or corrects its

@@ -40,9 +40,55 @@ pub(crate) const TRASH_PREFIX: &str = ".burlmd-trash.";
 /// every dot-prefixed entry, so nothing this matches was ever a Note.
 pub(crate) const SCRATCH_IGNORE_PATTERNS: [&str; 2] = [".burlmd-trash.*", ".*.tmp"];
 
-/// True when `name` is one of burlmd's own scratch files rather than bundle
-/// content — see [`SCRATCH_IGNORE_PATTERNS`] for what makes these two families
-/// special and why they are swept at open.
-pub(crate) fn is_scratch_name(name: &str) -> bool {
+/// True when `name` is covered by [`SCRATCH_IGNORE_PATTERNS`], and therefore
+/// **untracked by construction** — which is the only thing a caller staging
+/// paths for a commit needs to know about it.
+///
+/// Deliberately as broad as the patterns themselves, including the foreign
+/// `.anything.tmp` they also cover. Ignoring a file this application did not
+/// write costs nothing; *staging* one that Git is configured to ignore is what
+/// the patterns exist to prevent, so the predicate that decides what to stage
+/// has to match the patterns rather than burlmd's narrower own shapes.
+///
+/// [`is_burlmd_scratch_name`] is the other half of this pair and is the one to
+/// use before **removing** anything.
+pub(crate) fn is_ignored_scratch_name(name: &str) -> bool {
     name.starts_with(TRASH_PREFIX) || (name.starts_with('.') && name.ends_with(".tmp"))
+}
+
+/// True when `name` is one of burlmd's own scratch files — a `FileJournal`
+/// trash entry or an [`persist::atomic_write`] temporary — rather than bundle
+/// content, judged strictly enough to *delete* what it matches.
+///
+/// This is narrower than [`is_ignored_scratch_name`] on purpose, and the
+/// asymmetry is the point. `bootstrap::sweep_scratch_files` removes what this
+/// matches, recursively for a directory, from a bundle that may well be another
+/// tool's (CAP-WS-05) — so a predicate reading "any dot-prefixed `.tmp`" made
+/// opening a foreign Workspace delete `.vim.tmp`, `.cache.tmp`, or a whole
+/// `.build.tmp/` tree that burlmd never created. `converge`'s own documentation
+/// says the sweep removes files that are "burlmd's, not the bundle's"; this is
+/// what makes that true.
+///
+/// The temporary form is `.{stem}.{pid}.{n}.tmp` ([`persist::atomic_write`]),
+/// so both trailing components must be numeric and a stem must precede them.
+/// The trash form needs no such test: [`TRASH_PREFIX`] is distinctive on its
+/// own.
+pub(crate) fn is_burlmd_scratch_name(name: &str) -> bool {
+    if name.starts_with(TRASH_PREFIX) {
+        return true;
+    }
+    let Some(rest) = name.strip_prefix('.').and_then(|n| n.strip_suffix(".tmp")) else {
+        return false;
+    };
+    let Some((rest, counter)) = rest.rsplit_once('.') else {
+        return false;
+    };
+    let Some((stem, pid)) = rest.rsplit_once('.') else {
+        return false;
+    };
+    !stem.is_empty() && is_decimal(pid) && is_decimal(counter)
+}
+
+fn is_decimal(text: &str) -> bool {
+    !text.is_empty() && text.bytes().all(|b| b.is_ascii_digit())
 }

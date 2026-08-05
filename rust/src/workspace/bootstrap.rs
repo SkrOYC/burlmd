@@ -15,14 +15,15 @@
 //! `flow-workspace-bootstrap.md` contains no such step.
 //!
 //! `flow-workspace-bootstrap.md` names a fourth post-condition alongside
-//! those three — "bundle indexed" — and [`converge`] establishes it too, by
-//! calling `index::scan::reindex_workspace_impl` once the `workspaces` row
-//! exists. `WSPC-D004` deferred that to `WSPC-D005` because no rebuild
-//! existed yet; one does, and leaving the call unwired made the
-//! post-condition false on every path *and* left `WSPC-D006`'s rename
+//! those three — "bundle indexed" — and [`converge`] establishes it too, in
+//! `index::scan`'s two phases: `scan_bundle` off the connection, then
+//! `write_scanned_bundle` under it. `WSPC-D004` deferred that to `WSPC-D005`
+//! because no rebuild existed yet; one does, and leaving the call unwired made
+//! the post-condition false on every path *and* left `WSPC-D006`'s rename
 //! rewriting no Links at all in a bundle that had never been scanned (it
 //! seeds its affected set from the `links` table). See [`converge`] for why
-//! it runs on the reuse branch as well, and why it is synchronous.
+//! it runs on the reuse branch as well, why it is synchronous, and why nothing
+//! here holds the connection across the filesystem.
 //!
 //! `#[frb]` async wrappers live in `api::ffi_api`, matching the pattern
 //! `draft.rs` already establishes for `NoteState`/`NoteMetadata`: this module
@@ -67,14 +68,70 @@ pub fn default_workspace_dir() -> Result<PathBuf, AppError> {
         .join("workspace"))
 }
 
+/// Where this bootstrap's **SQL** runs, and — far more to the point — where it
+/// does *not*.
+///
+/// [`converge`] performs three O(bundle) filesystem phases (a repository init,
+/// the scratch sweep, and a full read-and-derive scan of every Note) around a
+/// handful of statements. Taking a `&Connection` made all of it run inside the
+/// caller's `with_connection` closure, holding the process-wide mutex — the one
+/// a keystroke's tier 1 draft write waits on — across the lot. This handle is
+/// what lets the filesystem phases run *outside* the mutex while the statements
+/// still reach the right connection, without the hermetic tests losing their
+/// injected one.
+///
+/// The two variants mirror `workspace::persist::Workspace`'s `DbHandle`
+/// exactly, including that the injected arm enters the connection scope: a test
+/// connection contends with nothing, but every hermetic test in this crate runs
+/// against one, and a rule enforced only on the arm no test takes is not
+/// enforced.
+pub(crate) enum IndexHandle<'a> {
+    /// `db::connection`'s process-wide `Mutex<Connection>`.
+    Process,
+    /// An injected connection — hermetic tests only, which is why this is
+    /// `dead_code`-exempt rather than `#[cfg(test)]`: keeping the variant
+    /// compiled in both profiles means [`IndexHandle::with`] has one shape to
+    /// read rather than two.
+    #[cfg_attr(not(test), allow(dead_code))]
+    Injected(&'a Connection),
+}
+
+impl IndexHandle<'_> {
+    fn with<T>(&self, f: impl FnOnce(&Connection) -> Result<T, AppError>) -> Result<T, AppError> {
+        match self {
+            IndexHandle::Process => crate::db::connection::with_connection(f),
+            IndexHandle::Injected(conn) => {
+                let _scope = crate::db::connection::ConnectionScope::enter();
+                f(conn)
+            }
+        }
+    }
+}
+
 /// Opens the local Workspace at `path` (or the default location from
 /// [`default_workspace_dir`] when `path` is `None`), creating and
 /// initializing it if absent (ADR-005 decision 1). The domain entry point
 /// behind `api::ffi_api::open_or_create_local_workspace`. Unlike
-/// [`open_workspace_impl`], this is the one entry point that creates `dir`
+/// [`open_workspace`], this is the one entry point that creates `dir`
 /// when it doesn't exist yet.
+pub(crate) fn open_or_create_local_workspace(
+    path: Option<String>,
+) -> Result<WorkspaceInfo, AppError> {
+    open_or_create_local_workspace_with(&IndexHandle::Process, path)
+}
+
+/// [`open_or_create_local_workspace`] against an injected connection, for
+/// hermetic tests.
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn open_or_create_local_workspace_impl(
     conn: &Connection,
+    path: Option<String>,
+) -> Result<WorkspaceInfo, AppError> {
+    open_or_create_local_workspace_with(&IndexHandle::Injected(conn), path)
+}
+
+fn open_or_create_local_workspace_with(
+    index: &IndexHandle,
     path: Option<String>,
 ) -> Result<WorkspaceInfo, AppError> {
     let dir = match path {
@@ -83,24 +140,34 @@ pub(crate) fn open_or_create_local_workspace_impl(
     };
     std::fs::create_dir_all(&dir).map_err(|e| AppError::IoError(e.to_string()))?;
     let canonical = canonicalize_workspace_dir(&dir)?;
-    converge(conn, &canonical)
+    converge(index, &canonical)
 }
 
 /// Opens an existing Workspace directory the application did not create,
 /// including one populated by another tool (CAP-WS-05). The domain entry
 /// point behind `api::ffi_api::open_workspace`.
 ///
-/// Unlike [`open_or_create_local_workspace_impl`], this does **not** create
+/// Unlike [`open_or_create_local_workspace`], this does **not** create
 /// `dir` — the ticket description is explicit that `open_workspace` "does
 /// not create the directory" (only `open_or_create_local_workspace` does),
 /// and silently creating an empty directory at a caller-supplied path that
 /// doesn't exist (a typo, an unmounted volume, a stale recent-Workspace
 /// entry) would shadow the real bundle with a fresh empty one instead of
 /// reporting the mistake (WSPC-D004 review finding #1).
+pub(crate) fn open_workspace(path: String) -> Result<WorkspaceInfo, AppError> {
+    open_workspace_with(&IndexHandle::Process, path)
+}
+
+/// [`open_workspace`] against an injected connection, for hermetic tests.
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn open_workspace_impl(
     conn: &Connection,
     path: String,
 ) -> Result<WorkspaceInfo, AppError> {
+    open_workspace_with(&IndexHandle::Injected(conn), path)
+}
+
+fn open_workspace_with(index: &IndexHandle, path: String) -> Result<WorkspaceInfo, AppError> {
     let dir = PathBuf::from(&path);
     if !dir.is_dir() {
         return Err(AppError::NotFound(format!(
@@ -108,7 +175,7 @@ pub(crate) fn open_workspace_impl(
         )));
     }
     let canonical = canonicalize_workspace_dir(&dir)?;
-    converge(conn, &canonical)
+    converge(index, &canonical)
 }
 
 /// Resolves `dir` to its canonical, absolute form (symlinks followed,
@@ -141,9 +208,26 @@ fn canonicalize_workspace_dir(dir: &Path) -> Result<PathBuf, AppError> {
 /// on a foreign directory are exactly three, and none of them is content:
 /// `.git/`, a `.gitignore` extended with burlmd's own scratch patterns
 /// (`git::operations::init_repo`), and the removal of any `.burlmd-trash.*` or
-/// `.{name}.tmp` file a previous kill left behind
+/// `.{stem}.{pid}.{n}.tmp` file a previous kill left behind
 /// ([`sweep_scratch_files`]) — which are burlmd's, not the bundle's.
-fn converge(conn: &Connection, dir: &Path) -> Result<WorkspaceInfo, AppError> {
+///
+/// # Nothing here holds the connection across the filesystem
+///
+/// Three of the four phases below are O(bundle) file I/O: the repository init,
+/// the scratch sweep (which recurses the whole tree), and the full scan (which
+/// reads and parses every Note in the Workspace). All three used to run inside
+/// the caller's `with_connection` closure, because this function took a
+/// `&Connection` and the caller was obliged to hold one to call it — so opening
+/// a Workspace held the process-wide connection mutex for the length of a whole
+/// bundle walk, which is exactly what `SPK-WSPC-D001` §6.2.7 forbids and what a
+/// keystroke's own tier 1 draft write would then have queued behind.
+///
+/// So the connection is reached through an [`IndexHandle`] and acquired twice,
+/// briefly, for statements only. Two acquisitions rather than one is the
+/// accepted cost: nothing between them can invalidate the `workspaces` row this
+/// function just established, and bootstrap is a single-threaded moment at
+/// application start.
+fn converge(index: &IndexHandle, dir: &Path) -> Result<WorkspaceInfo, AppError> {
     crate::git::operations::init_repo(dir)?;
     // Bound and dropped rather than propagated: a scratch entry that could not
     // be removed is untidy, is already `.gitignore`d, and will be swept again
@@ -152,53 +236,59 @@ fn converge(conn: &Connection, dir: &Path) -> Result<WorkspaceInfo, AppError> {
     // value this call can be tested on rather than an error nobody sees.
     let _swept = sweep_scratch_files(dir);
 
+    // The read half of the fourth post-condition, taken **before** any
+    // connection is acquired and after the sweep, so the rows derived below
+    // describe the bundle as it now is.
+    let scanned = crate::index::scan::scan_bundle(dir)?;
+
     let local_path = dir.to_string_lossy().to_string();
+    let info = index.with(|conn| {
+        let existing = conn
+            .query_row(
+                "SELECT id, name, provider, remote_url FROM workspaces WHERE local_path = ?1",
+                [&local_path],
+                |row| {
+                    Ok(WorkspaceInfo {
+                        id: row.get(0)?,
+                        name: row.get(1)?,
+                        provider: row.get(2)?,
+                        remote_url: row.get(3)?,
+                        local_path: local_path.clone(),
+                    })
+                },
+            )
+            .optional()?;
 
-    let existing = conn
-        .query_row(
-            "SELECT id, name, provider, remote_url FROM workspaces WHERE local_path = ?1",
-            [&local_path],
-            |row| {
+        match existing {
+            // Reused, not recreated: no second row and — since root key
+            // generation happens once per process, in `db::connection`'s own
+            // singleton init, entirely upstream of this function — no second
+            // key either.
+            Some(info) => Ok(info),
+            None => {
+                let id = mint_workspace_id()?;
+                let name = workspace_name(dir);
+                conn.execute(
+                    "INSERT INTO workspaces (id, name, provider, remote_url, local_path) \
+                     VALUES (?1, ?2, 'local', NULL, ?3)",
+                    rusqlite::params![id, name, local_path],
+                )?;
                 Ok(WorkspaceInfo {
-                    id: row.get(0)?,
-                    name: row.get(1)?,
-                    provider: row.get(2)?,
-                    remote_url: row.get(3)?,
-                    local_path: local_path.clone(),
+                    id,
+                    name,
+                    provider: "local".to_string(),
+                    remote_url: None,
+                    local_path,
                 })
-            },
-        )
-        .optional()?;
-
-    let info = match existing {
-        // Reused, not recreated: no second row and — since root key
-        // generation happens once per process, in `db::connection`'s own
-        // singleton init, entirely upstream of this function — no second
-        // key either.
-        Some(info) => info,
-        None => {
-            let id = mint_workspace_id()?;
-            let name = workspace_name(dir);
-            conn.execute(
-                "INSERT INTO workspaces (id, name, provider, remote_url, local_path) \
-                 VALUES (?1, ?2, 'local', NULL, ?3)",
-                rusqlite::params![id, name, local_path],
-            )?;
-            WorkspaceInfo {
-                id,
-                name,
-                provider: "local".to_string(),
-                remote_url: None,
-                local_path,
             }
         }
-    };
+    })?;
 
-    // The third post-condition: "bundle indexed". Runs after the `workspaces`
-    // row exists, because the rebuild resolves the bundle root through it, and
-    // on **both** branches — a reused row says nothing about whether the files
-    // under it still match the index, since another tool (or another checkout)
-    // may have moved underneath it while the application was not running.
+    // The write half of the fourth post-condition: "bundle indexed". Runs on
+    // **both** branches above — a reused row says nothing about whether the
+    // files under it still match the index, since another tool (or another
+    // checkout) may have moved underneath it while the application was not
+    // running.
     //
     // Not merely a missing post-condition, either. `WSPC-D006`'s rename seeds
     // its affected set from the `links` table, so in a bundle that was never
@@ -210,14 +300,27 @@ fn converge(conn: &Connection, dir: &Path) -> Result<WorkspaceInfo, AppError> {
     // indexing a large Workspace in the background with the tree filling in as
     // it goes; that is a recorded latent gap and building it here would be a
     // scope this bootstrap does not own. On an empty new bundle — the ordinary
-    // first-run path — the rebuild walks nothing and costs one transaction.
-    crate::index::scan::reindex_workspace_impl(conn, &info.id)?;
+    // first-run path — the scan above walked nothing and this costs one
+    // transaction.
+    index.with(|conn| crate::index::scan::write_scanned_bundle(conn, &info.id, &scanned))?;
 
     Ok(info)
 }
 
-/// Removes every `.burlmd-trash.*` entry and every `.{name}.tmp` file left
-/// anywhere under `dir`.
+/// Removes every `.burlmd-trash.*` entry and every `.{stem}.{pid}.{n}.tmp` file
+/// left anywhere under `dir`.
+///
+/// **Only burlmd's own two shapes**, judged by
+/// [`super::is_burlmd_scratch_name`] rather than by the broader
+/// [`super::SCRATCH_IGNORE_PATTERNS`]. The distinction is not cosmetic: this
+/// runs on every open, including the open of a directory another tool populated
+/// (CAP-WS-05), and it removes what it matches — recursively, for a directory.
+/// A predicate reading "any dot-prefixed `.tmp`" therefore deleted another
+/// tool's `.foo.tmp`, and every file under its `.bar.tmp/`, as a side effect of
+/// adopting the bundle. [`converge`] states that what this sweep removes is
+/// "burlmd's, not the bundle's"; the narrow predicate is what makes that
+/// sentence true. The `.gitignore` patterns stay broad, because ignoring a file
+/// burlmd did not write costs nothing.
 ///
 /// **Unconditionally, with no age threshold**, and that is the safe reading
 /// rather than the lazy one: both families are created and removed inside a
@@ -256,6 +359,10 @@ fn converge(conn: &Connection, dir: &Path) -> Result<WorkspaceInfo, AppError> {
 /// it is the application's own version history, holds thousands of files, and
 /// contains no bundle content.
 fn sweep_scratch_files(dir: &Path) -> ScratchSweep {
+    // Recurses the whole bundle, so it belongs outside the connection for the
+    // same reason the scan does (`SPK-WSPC-D001` §6.2.7).
+    crate::db::connection::assert_no_io_under_the_connection("the scratch sweep");
+
     let mut outcome = ScratchSweep::default();
     let entries = match std::fs::read_dir(dir) {
         Ok(entries) => entries,
@@ -278,7 +385,7 @@ fn sweep_scratch_files(dir: &Path) -> ScratchSweep {
         }
         let path = entry.path();
         let is_dir = entry.file_type().is_ok_and(|t| t.is_dir());
-        if super::is_scratch_name(&name) {
+        if super::is_burlmd_scratch_name(&name) {
             let removed = if is_dir {
                 std::fs::remove_dir_all(&path)
             } else {
@@ -508,6 +615,104 @@ mod tests {
         assert!(
             dir.path().join(".editorconfig").is_file(),
             "a dot-file that is not burlmd's must survive"
+        );
+    }
+
+    /// The sweep removes burlmd's scratch files and **only** burlmd's.
+    ///
+    /// The regression this pins: the predicate matched any dot-prefixed name
+    /// ending in `.tmp`, so adopting a foreign bundle (CAP-WS-05) deleted
+    /// another tool's `.foo.tmp` — and, because a matching *directory* is
+    /// removed with `remove_dir_all`, everything inside its `.bar.tmp/` as well.
+    /// `converge` says in as many words that what this removes is "burlmd's, not
+    /// the bundle's", and that was false for every shape but its own.
+    #[test]
+    fn the_sweep_leaves_a_foreign_tools_dot_tmp_files_and_directories_alone() {
+        let dir = tempdir().unwrap();
+        // Not burlmd's: no `{pid}.{n}` before the suffix.
+        std::fs::write(dir.path().join(".foo.tmp"), "another tool's scratch\n").unwrap();
+        std::fs::create_dir_all(dir.path().join(".bar.tmp")).unwrap();
+        std::fs::write(dir.path().join(".bar.tmp/held.txt"), "and its contents\n").unwrap();
+        // Nor is a name that has only one numeric component, or a non-numeric
+        // one where the pid belongs.
+        std::fs::write(dir.path().join(".Note.md.7.tmp"), "one component\n").unwrap();
+        std::fs::write(dir.path().join(".Note.md.pid.0.tmp"), "not a pid\n").unwrap();
+        // burlmd's own, in both families.
+        std::fs::write(dir.path().join(".Note.md.4242.0.tmp"), "mid-write\n").unwrap();
+        std::fs::write(dir.path().join(".burlmd-trash.Gone.md.4242.0"), "gone\n").unwrap();
+
+        let swept = sweep_scratch_files(dir.path());
+
+        assert_eq!(swept.removed, 2, "only burlmd's two entries may be removed");
+        assert_eq!(swept.failed, 0);
+        assert!(!dir.path().join(".Note.md.4242.0.tmp").exists());
+        assert!(!dir.path().join(".burlmd-trash.Gone.md.4242.0").exists());
+        assert!(
+            dir.path().join(".foo.tmp").is_file(),
+            "a foreign .tmp file must survive"
+        );
+        assert!(
+            dir.path().join(".bar.tmp/held.txt").is_file(),
+            "a foreign .tmp directory and its contents must survive"
+        );
+        assert!(dir.path().join(".Note.md.7.tmp").is_file());
+        assert!(dir.path().join(".Note.md.pid.0.tmp").is_file());
+    }
+
+    /// Bootstrap's three filesystem phases run with **no connection held**, and
+    /// the guard says so rather than the prose alone.
+    ///
+    /// The regression this pins: [`converge`] took a `&Connection`, so its
+    /// caller was obliged to hold one — and a repository init, a recursive
+    /// scratch sweep and a read-and-parse of every Note in the bundle all ran
+    /// inside `with_connection`, holding the process-wide mutex a keystroke's
+    /// own tier 1 draft write waits on for the length of a whole bundle walk
+    /// (`SPK-WSPC-D001` §6.2.7). A whole successful bootstrap here is the
+    /// assertion: each of the three phases now asserts it is unguarded, so any
+    /// of them slipping back under the connection is a panic, not a review
+    /// finding.
+    ///
+    /// The second half proves the guard is live rather than vacuous, by doing
+    /// the forbidden thing on purpose.
+    #[cfg(debug_assertions)]
+    #[test]
+    fn bootstrap_never_walks_the_bundle_with_the_connection_held() {
+        let index_dir = tempdir().unwrap();
+        let conn = test_index(index_dir.path());
+        let dir = tempdir().unwrap();
+        std::fs::write(dir.path().join("Walked.md"), "---\ntitle: Walked\n---\n").unwrap();
+        std::fs::write(dir.path().join(".burlmd.md.4242.0.tmp"), "swept\n").unwrap();
+
+        // Each phase asserts internally; reaching the end means none fired.
+        let info = open_workspace_impl(&conn, dir.path().to_string_lossy().to_string()).unwrap();
+        assert_eq!(
+            conn.query_row(
+                "SELECT count(*) FROM notes WHERE workspace_id = ?1",
+                [&info.id],
+                |r| r.get::<_, i64>(0)
+            )
+            .unwrap(),
+            1,
+            "the bundle must still be indexed by the split rebuild"
+        );
+
+        let previous_hook = std::panic::take_hook();
+        std::panic::set_hook(Box::new(|_| {}));
+        let forbidden = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            IndexHandle::Injected(&conn)
+                .with(|_conn| crate::index::scan::scan_bundle(dir.path()).map(|_| ()))
+        }));
+        std::panic::set_hook(previous_hook);
+
+        let payload = forbidden.expect_err("scanning under the connection must be a hard error");
+        let message = payload
+            .downcast_ref::<String>()
+            .cloned()
+            .or_else(|| payload.downcast_ref::<&str>().map(|s| (*s).to_string()))
+            .unwrap_or_default();
+        assert!(
+            message.contains("ran inside a connection closure"),
+            "expected the connection-scope guard, got {message:?}"
         );
     }
 
