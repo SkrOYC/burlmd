@@ -948,11 +948,11 @@ return externalLink(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( TextRun field0)?  text,TResult Function( String targetTitle,  String? resolvedNoteId,  List<InlineElement> content)?  link,TResult Function( String url,  List<InlineElement> content)?  externalLink,required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( TextRun field0)?  text,TResult Function( String targetId,  bool exists,  List<InlineElement> content)?  link,TResult Function( String url,  List<InlineElement> content)?  externalLink,required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case InlineElement_Text() when text != null:
 return text(_that.field0);case InlineElement_Link() when link != null:
-return link(_that.targetTitle,_that.resolvedNoteId,_that.content);case InlineElement_ExternalLink() when externalLink != null:
+return link(_that.targetId,_that.exists,_that.content);case InlineElement_ExternalLink() when externalLink != null:
 return externalLink(_that.url,_that.content);case _:
   return orElse();
 
@@ -971,11 +971,11 @@ return externalLink(_that.url,_that.content);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( TextRun field0)  text,required TResult Function( String targetTitle,  String? resolvedNoteId,  List<InlineElement> content)  link,required TResult Function( String url,  List<InlineElement> content)  externalLink,}) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( TextRun field0)  text,required TResult Function( String targetId,  bool exists,  List<InlineElement> content)  link,required TResult Function( String url,  List<InlineElement> content)  externalLink,}) {final _that = this;
 switch (_that) {
 case InlineElement_Text():
 return text(_that.field0);case InlineElement_Link():
-return link(_that.targetTitle,_that.resolvedNoteId,_that.content);case InlineElement_ExternalLink():
+return link(_that.targetId,_that.exists,_that.content);case InlineElement_ExternalLink():
 return externalLink(_that.url,_that.content);}
 }
 /// A variant of `when` that fallback to returning `null`
@@ -990,11 +990,11 @@ return externalLink(_that.url,_that.content);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( TextRun field0)?  text,TResult? Function( String targetTitle,  String? resolvedNoteId,  List<InlineElement> content)?  link,TResult? Function( String url,  List<InlineElement> content)?  externalLink,}) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( TextRun field0)?  text,TResult? Function( String targetId,  bool exists,  List<InlineElement> content)?  link,TResult? Function( String url,  List<InlineElement> content)?  externalLink,}) {final _that = this;
 switch (_that) {
 case InlineElement_Text() when text != null:
 return text(_that.field0);case InlineElement_Link() when link != null:
-return link(_that.targetTitle,_that.resolvedNoteId,_that.content);case InlineElement_ExternalLink() when externalLink != null:
+return link(_that.targetId,_that.exists,_that.content);case InlineElement_ExternalLink() when externalLink != null:
 return externalLink(_that.url,_that.content);case _:
   return null;
 
@@ -1073,11 +1073,27 @@ as TextRun,
 
 
 class InlineElement_Link extends InlineElement {
-  const InlineElement_Link({required this.targetTitle, this.resolvedNoteId, required final  List<InlineElement> content}): _content = content,super._();
+  const InlineElement_Link({required this.targetId, required this.exists, required final  List<InlineElement> content}): _content = content,super._();
   
 
- final  String targetTitle;
- final  String? resolvedNoteId;
+/// The target's OKF concept id, as `okf::links::classify` derived it
+/// from the parsed destination. Always present, even when nothing
+/// matches it.
+ final  String targetId;
+/// False for a ghost Link — a Link to a Note not yet created, which
+/// OKF §6.1 requires consumers to tolerate and which CAP-GRAPH-04
+/// makes a feature.
+///
+/// Resolving this requires the index, not the parser: it is whether
+/// `target_id` matches a `notes` row. `WSPC-D003` declares the field
+/// and sits upstream of the indexer, so it leaves the field `false`
+/// and `WSPC-D005` populates it.
+///
+/// **Advisory, and only as fresh as the state it came from.** Creating
+/// or deleting a Note flips it for every inbound Link in every other
+/// Note, so the follow path must re-resolve against the index rather
+/// than trust the flag; what it is *for* is rendering.
+ final  bool exists;
  final  List<InlineElement> _content;
  List<InlineElement> get content {
   if (_content is EqualUnmodifiableListView) return _content;
@@ -1096,16 +1112,16 @@ $InlineElement_LinkCopyWith<InlineElement_Link> get copyWith => _$InlineElement_
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is InlineElement_Link&&(identical(other.targetTitle, targetTitle) || other.targetTitle == targetTitle)&&(identical(other.resolvedNoteId, resolvedNoteId) || other.resolvedNoteId == resolvedNoteId)&&const DeepCollectionEquality().equals(other._content, _content));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is InlineElement_Link&&(identical(other.targetId, targetId) || other.targetId == targetId)&&(identical(other.exists, exists) || other.exists == exists)&&const DeepCollectionEquality().equals(other._content, _content));
 }
 
 
 @override
-int get hashCode => Object.hash(runtimeType,targetTitle,resolvedNoteId,const DeepCollectionEquality().hash(_content));
+int get hashCode => Object.hash(runtimeType,targetId,exists,const DeepCollectionEquality().hash(_content));
 
 @override
 String toString() {
-  return 'InlineElement.link(targetTitle: $targetTitle, resolvedNoteId: $resolvedNoteId, content: $content)';
+  return 'InlineElement.link(targetId: $targetId, exists: $exists, content: $content)';
 }
 
 
@@ -1116,7 +1132,7 @@ abstract mixin class $InlineElement_LinkCopyWith<$Res> implements $InlineElement
   factory $InlineElement_LinkCopyWith(InlineElement_Link value, $Res Function(InlineElement_Link) _then) = _$InlineElement_LinkCopyWithImpl;
 @useResult
 $Res call({
- String targetTitle, String? resolvedNoteId, List<InlineElement> content
+ String targetId, bool exists, List<InlineElement> content
 });
 
 
@@ -1133,11 +1149,11 @@ class _$InlineElement_LinkCopyWithImpl<$Res>
 
 /// Create a copy of InlineElement
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') $Res call({Object? targetTitle = null,Object? resolvedNoteId = freezed,Object? content = null,}) {
+@pragma('vm:prefer-inline') $Res call({Object? targetId = null,Object? exists = null,Object? content = null,}) {
   return _then(InlineElement_Link(
-targetTitle: null == targetTitle ? _self.targetTitle : targetTitle // ignore: cast_nullable_to_non_nullable
-as String,resolvedNoteId: freezed == resolvedNoteId ? _self.resolvedNoteId : resolvedNoteId // ignore: cast_nullable_to_non_nullable
-as String?,content: null == content ? _self._content : content // ignore: cast_nullable_to_non_nullable
+targetId: null == targetId ? _self.targetId : targetId // ignore: cast_nullable_to_non_nullable
+as String,exists: null == exists ? _self.exists : exists // ignore: cast_nullable_to_non_nullable
+as bool,content: null == content ? _self._content : content // ignore: cast_nullable_to_non_nullable
 as List<InlineElement>,
   ));
 }

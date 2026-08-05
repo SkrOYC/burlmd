@@ -461,13 +461,13 @@ impl SseDecode for crate::markdown::ast::InlineElement {
                 return crate::markdown::ast::InlineElement::Text(var_field0);
             }
             1 => {
-                let mut var_targetTitle = <String>::sse_decode(deserializer);
-                let mut var_resolvedNoteId = <Option<String>>::sse_decode(deserializer);
+                let mut var_targetId = <String>::sse_decode(deserializer);
+                let mut var_exists = <bool>::sse_decode(deserializer);
                 let mut var_content =
                     <Vec<crate::markdown::ast::InlineElement>>::sse_decode(deserializer);
                 return crate::markdown::ast::InlineElement::Link {
-                    target_title: var_targetTitle,
-                    resolved_note_id: var_resolvedNoteId,
+                    target_id: var_targetId,
+                    exists: var_exists,
                     content: var_content,
                 };
             }
@@ -834,13 +834,13 @@ impl flutter_rust_bridge::IntoDart for crate::markdown::ast::InlineElement {
                 [0.into_dart(), field0.into_into_dart().into_dart()].into_dart()
             }
             crate::markdown::ast::InlineElement::Link {
-                target_title,
-                resolved_note_id,
+                target_id,
+                exists,
                 content,
             } => [
                 1.into_dart(),
-                target_title.into_into_dart().into_dart(),
-                resolved_note_id.into_into_dart().into_dart(),
+                target_id.into_into_dart().into_dart(),
+                exists.into_into_dart().into_dart(),
                 content.into_into_dart().into_dart(),
             ]
             .into_dart(),
@@ -1097,13 +1097,13 @@ impl SseEncode for crate::markdown::ast::InlineElement {
                 <crate::markdown::ast::TextRun>::sse_encode(field0, serializer);
             }
             crate::markdown::ast::InlineElement::Link {
-                target_title,
-                resolved_note_id,
+                target_id,
+                exists,
                 content,
             } => {
                 <i32>::sse_encode(1, serializer);
-                <String>::sse_encode(target_title, serializer);
-                <Option<String>>::sse_encode(resolved_note_id, serializer);
+                <String>::sse_encode(target_id, serializer);
+                <bool>::sse_encode(exists, serializer);
                 <Vec<crate::markdown::ast::InlineElement>>::sse_encode(content, serializer);
             }
             crate::markdown::ast::InlineElement::ExternalLink { url, content } => {

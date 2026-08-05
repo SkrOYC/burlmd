@@ -452,8 +452,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         return InlineElement_Text(dco_decode_box_autoadd_text_run(raw[1]));
       case 1:
         return InlineElement_Link(
-          targetTitle: dco_decode_String(raw[1]),
-          resolvedNoteId: dco_decode_opt_String(raw[2]),
+          targetId: dco_decode_String(raw[1]),
+          exists: dco_decode_bool(raw[2]),
           content: dco_decode_list_inline_element(raw[3]),
         );
       case 2:
@@ -730,12 +730,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         var var_field0 = sse_decode_box_autoadd_text_run(deserializer);
         return InlineElement_Text(var_field0);
       case 1:
-        var var_targetTitle = sse_decode_String(deserializer);
-        var var_resolvedNoteId = sse_decode_opt_String(deserializer);
+        var var_targetId = sse_decode_String(deserializer);
+        var var_exists = sse_decode_bool(deserializer);
         var var_content = sse_decode_list_inline_element(deserializer);
         return InlineElement_Link(
-          targetTitle: var_targetTitle,
-          resolvedNoteId: var_resolvedNoteId,
+          targetId: var_targetId,
+          exists: var_exists,
           content: var_content,
         );
       case 2:
@@ -1049,13 +1049,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_i_32(0, serializer);
         sse_encode_box_autoadd_text_run(field0, serializer);
       case InlineElement_Link(
-        targetTitle: final targetTitle,
-        resolvedNoteId: final resolvedNoteId,
+        targetId: final targetId,
+        exists: final exists,
         content: final content,
       ):
         sse_encode_i_32(1, serializer);
-        sse_encode_String(targetTitle, serializer);
-        sse_encode_opt_String(resolvedNoteId, serializer);
+        sse_encode_String(targetId, serializer);
+        sse_encode_bool(exists, serializer);
         sse_encode_list_inline_element(content, serializer);
       case InlineElement_ExternalLink(url: final url, content: final content):
         sse_encode_i_32(2, serializer);
