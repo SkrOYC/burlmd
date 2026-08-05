@@ -505,6 +505,7 @@ pub fn rename_directory(
             (id.clone(), format!("{new_directory}/{rest}"))
         })
         .collect();
+    ensure_destinations_hold_no_foreign_draft(workspace, &remap)?;
 
     let plan = Reidentify {
         remap,
@@ -1746,6 +1747,55 @@ fn is_same_file(candidate: &Path, held_by: Option<&Path>) -> bool {
     ) {
         (Ok(a), Ok(b)) => a == b,
         _ => false,
+    }
+}
+
+/// The `drafts` half of [`ensure_path_available`], applied to every destination
+/// a [`rename_directory`] would move a Note onto.
+///
+/// A Directory rename is the one re-identification that never runs
+/// [`ensure_path_available`] per Note: it checks its *own* destination — that
+/// `new_directory` does not already exist on disk — and lets the single
+/// filesystem `rename` carry the whole subtree. That check is enough for the
+/// filesystem, because a directory that does not exist can hold no file, and it
+/// is enough for the index, because a `notes` row without a file is stale rather
+/// than authoritative. It is **not** enough for `drafts`, which is keyed by
+/// concept id and has no path at all: a row can sit at `New/x` with nothing on
+/// disk anywhere near it, and `rewrite_index`'s `UPDATE OR REPLACE drafts` would
+/// then drop it to make room for `Old/x`'s own row — unflushed work destroyed by
+/// a rename of a Directory the user never associated with it.
+///
+/// So the destinations are checked here instead, before anything moves, and the
+/// refusal names the first colliding id so the user can open it and recover.
+///
+/// A contained Note's **own** draft is never a collision: it lives at the
+/// source id and is re-keyed onto the destination by the same statement, which
+/// is the behavior `renaming_a_note_with_an_unflushed_draft_rekeys_and_rewrites_the_row`
+/// pins. The `new_id != old_id` guard states that exemption rather than relying
+/// on it: no destination under `new_directory` can currently also be a source
+/// under `directory` — [`rename_directory`] returns early when the two are equal
+/// and cannot nest one inside the other — but the rule is the one that is
+/// correct rather than the one that happens to be unreachable.
+fn ensure_destinations_hold_no_foreign_draft(
+    workspace: &Arc<Workspace>,
+    remap: &Remap,
+) -> Result<(), AppError> {
+    // `Remap` iterates in sorted key order, so "the first colliding id" is a
+    // stable answer rather than whichever row the map happened to yield.
+    let colliding = workspace.with_db(|conn| {
+        for (old_id, new_id) in remap {
+            if new_id != old_id && draft_exists(conn, workspace.id(), new_id)? {
+                return Ok(Some(new_id.clone()));
+            }
+        }
+        Ok(None)
+    })?;
+    match colliding {
+        None => Ok(()),
+        Some(new_id) => Err(AppError::PathUnavailable(format!(
+            "{new_id} still holds unflushed work from an earlier session: open that Note to \
+             recover the draft (or delete it) before moving a Note onto its concept id"
+        ))),
     }
 }
 
@@ -4195,6 +4245,76 @@ mod tests {
         assert!(
             f.draft_row("B").is_some(),
             "the draft did not follow the rename"
+        );
+    }
+
+    /// A Directory rename that would move a Note onto a concept id holding an
+    /// orphaned draft is refused, and nothing moves.
+    ///
+    /// The regression this pins: `rename_directory` is the one re-identification
+    /// that never calls `ensure_path_available` per Note — it checks that its own
+    /// destination directory is absent from disk and lets a single filesystem
+    /// `rename` carry the subtree. An absent directory can hold no file, so that
+    /// covers the filesystem; it does not cover `drafts`, which is keyed by
+    /// concept id and has no path. A row at `New/x` with nothing on disk anywhere
+    /// near it was therefore dropped by `rewrite_index`'s `UPDATE OR REPLACE
+    /// drafts` to make room for `Old/x`'s own row, destroying unflushed work
+    /// through a rename of a Directory the user never associated with it.
+    #[test]
+    fn a_directory_rename_onto_an_orphaned_draft_is_refused_and_moves_nothing() {
+        let f = fixture();
+        f.write("Old/x.md", &note("x", "on disk under Old"));
+        f.reindex();
+        f.commit_baseline();
+        let stranded = "---\ntitle: x\n---\n\nsomebody else's unflushed work\n";
+        f.put_draft("New/x", stranded);
+
+        let refused = rename_directory(&f.workspace, "Old", "New");
+
+        assert!(
+            matches!(refused, Err(AppError::PathUnavailable(_))),
+            "renaming a Directory onto an orphaned draft must be refused, got {refused:?}"
+        );
+        assert!(
+            format!("{refused:?}").contains("New/x"),
+            "the refusal must name the recoverable draft: {refused:?}"
+        );
+        assert_eq!(
+            f.draft_row("New/x").as_deref(),
+            Some(stranded),
+            "the draft the refusal exists to protect was destroyed"
+        );
+        assert!(f.exists("Old/x.md"), "the Directory moved anyway");
+        assert!(!f.exists("New/x.md"));
+        assert_eq!(f.note_ids(), vec!["Old/x".to_string()]);
+        assert_eq!(f.directory_ids(), vec!["Old".to_string()]);
+        assert_eq!(
+            f.git(&["status", "--porcelain"]),
+            "",
+            "a refused call must leave the worktree exactly as it found it"
+        );
+    }
+
+    /// The exemption that keeps the check above from being a regression: a
+    /// contained Note's **own** unflushed draft travels with it, exactly as it
+    /// does through `rename_note`.
+    #[test]
+    fn a_directory_rename_still_carries_a_contained_notes_own_draft() {
+        let f = fixture();
+        f.write("Old/x.md", &note("x", "on disk under Old"));
+        f.reindex();
+        f.commit_baseline();
+        f.put_draft("Old/x", "---\ntitle: x\n---\n\nits own unflushed work\n");
+
+        rename_directory(&f.workspace, "Old", "New")
+            .expect("a contained Note's own draft is not a collision");
+
+        assert_eq!(f.note_ids(), vec!["New/x".to_string()]);
+        assert!(f.draft_row("Old/x").is_none(), "the draft was left behind");
+        assert_eq!(
+            f.draft_row("New/x").as_deref(),
+            Some("---\ntitle: x\n---\n\nits own unflushed work\n"),
+            "the draft did not follow the Directory rename"
         );
     }
 
