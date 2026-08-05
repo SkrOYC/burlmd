@@ -811,9 +811,21 @@ impl NoteSession {
             let before = working
                 .get(..at)
                 .ok_or_else(|| AppError::ParseError(format!("offset {at} is not addressable")))?;
+            // Both seams get the Note's own line ending, not an unconditional
+            // `\n`. `before` is the authority when it holds a line ending at
+            // all; the whole working source is the fallback for the one case
+            // where it does not — an insertion at the very first Block, where
+            // `before` is the frontmatter-less head of the file or empty.
+            let newline = if before.contains('\n') {
+                newline_style(before)
+            } else {
+                newline_style(working)
+            };
             let mut text = separator_before(before, BLOCK_SEPARATOR_NEWLINES);
             text.push_str(&source);
-            text.push_str(&"\n".repeat(required_after.saturating_sub(trailing_newlines(&source))));
+            text.push_str(
+                &newline.repeat(required_after.saturating_sub(trailing_newlines(&source))),
+            );
             splice::splice_source(working, at..at, &text).map_err(splice_error)
         })
     }
@@ -860,7 +872,18 @@ impl NoteSession {
                 )));
             }
             let at = span.start + offset;
-            splice::splice_source(working, at..at, "\n\n").map_err(splice_error)
+            // The same seam consistency `insert_block` keeps, for the same
+            // reason: a blank line spelled `\n\n` inside a CRLF-authored Note is
+            // whitespace noise in a diff the user did not ask for.
+            let before = working
+                .get(..at)
+                .ok_or_else(|| AppError::ParseError(format!("offset {at} is not addressable")))?;
+            let newline = if before.contains('\n') {
+                newline_style(before)
+            } else {
+                newline_style(working)
+            };
+            splice::splice_source(working, at..at, &newline.repeat(2)).map_err(splice_error)
         })
     }
 
@@ -1740,6 +1763,43 @@ pub(super) fn open_note_ids(workspace_id: &str) -> Result<Vec<String>, AppError>
 /// what it forbids is holding the registry lock while acquiring any of the
 /// three, and nothing in this module does that.
 ///
+/// # The snapshot is re-checked once the locks are held
+///
+/// The registry is read to *pick* the sessions and released again before the
+/// first `Mutex` is taken, because the lock order forbids holding it while
+/// acquiring a write lock (see above) — and that leaves a window. FRB 2.12's
+/// default handler is `SimpleHandler`/`SimpleExecutor`, whose own documentation
+/// reads "it creates an internal thread pool, and each call to a Rust function
+/// is handled by a different thread"; every `#[frb] async fn` in
+/// `api::ffi_api` — `open_note` included — is dispatched through it, so two of
+/// them genuinely run at once. An `open_note` landing inside that window
+/// installed a session this call never locked, and `plan_affected`'s own
+/// `open_note_ids` snapshot (taken after the locks, from the same registry)
+/// could then either miss it or, worse, include it while its buffer was
+/// unprotected — a session left keyed to the concept id the rename vacated,
+/// which is `architecture/risks.md` risk 8 from the direction file-level
+/// atomicity cannot see.
+///
+/// So after every session in the snapshot is locked, the registry is consulted
+/// again: any session that appeared since is folded into the set and the whole
+/// acquisition is **retried from the start** rather than tacked onto the end.
+/// Retrying is what preserves the sorted order — appending a newcomer whose id
+/// sorts before something already held would break exactly the invariant that
+/// keeps two concurrent lifecycle operations from deadlocking. The set only ever
+/// grows, so each retry makes progress and the loop terminates; the bound below
+/// exists so that a pathological open storm fails loudly instead of spinning.
+///
+/// The invariant this establishes is therefore: **when `f` begins, every session
+/// open in this Workspace is write-locked by this call.** It does not extend
+/// *through* `f` — a Note opened while the operation is running is not locked,
+/// and cannot be, since holding the registry lock for that span is what the lock
+/// order forbids. That newcomer is largely covered anyway, because
+/// [`carry_session_forward`] resolves each affected id through the registry at
+/// the moment it runs rather than through the earlier snapshot; what it cannot
+/// reach is a session opened between the re-check and `write_files`, whose
+/// buffer holds the pre-rewrite bytes of a Note the operation did not
+/// re-identify. The next reload or reindex settles that one.
+///
 /// One window this deliberately does not close: `update_block` never takes this
 /// lock, by design, so that no keystroke can wait on file I/O. A keystroke
 /// landing inside a lifecycle operation therefore still races it. That is
@@ -1749,16 +1809,76 @@ pub(super) fn with_write_locks<T>(
     workspace: &Workspace,
     f: impl FnOnce() -> Result<T, AppError>,
 ) -> Result<T, AppError> {
-    let mut sessions: Vec<NoteSession> = {
-        let registry = registry()?;
-        registry
-            .iter()
-            .filter(|((id, _), _)| id == workspace.id())
-            .map(|(_, session)| session.clone())
-            .collect()
-    };
-    sessions.sort_by(|a, b| a.note_id().cmp(b.note_id()));
-    lock_each_write(&sessions, f)
+    with_write_locks_hooked(workspace, || {}, f)
+}
+
+/// How many times [`with_write_locks`] will fold in newly-appeared sessions and
+/// re-acquire before giving up. Each retry needs one more Note to have been
+/// opened in the microseconds between a snapshot and the locks it names, so this
+/// is far beyond what a user with a handful of tabs can produce.
+const LOCK_SNAPSHOT_ATTEMPTS: usize = 64;
+
+/// [`with_write_locks`] with a seam for the test that drives its re-check.
+///
+/// `after_snapshot` runs immediately after each registry snapshot is taken and
+/// before any lock derived from it is acquired — which is precisely the window a
+/// concurrent `open_note` occupies. It is `|| {}` everywhere but that one test,
+/// and monomorphizes away.
+fn with_write_locks_hooked<T>(
+    workspace: &Workspace,
+    after_snapshot: impl Fn(),
+    f: impl FnOnce() -> Result<T, AppError>,
+) -> Result<T, AppError> {
+    let mut locked = sessions_not_among(&[], workspace)?;
+    locked.sort_by(|a, b| a.note_id().cmp(b.note_id()));
+    let mut f = Some(f);
+
+    for _ in 0..LOCK_SNAPSHOT_ATTEMPTS {
+        after_snapshot();
+        let outcome = lock_each_write(&locked, || {
+            let appeared = sessions_not_among(&locked, workspace)?;
+            if !appeared.is_empty() {
+                return Ok(Err(appeared));
+            }
+            let run = f
+                .take()
+                .expect("the body runs once: this branch returns out of the retry loop");
+            run().map(Ok)
+        })?;
+        match outcome {
+            Ok(value) => return Ok(value),
+            Err(appeared) => {
+                locked.extend(appeared);
+                locked.sort_by(|a, b| a.note_id().cmp(b.note_id()));
+            }
+        }
+    }
+
+    Err(AppError::DatabaseError(format!(
+        "gave up acquiring the tier 2 write locks after {LOCK_SNAPSHOT_ATTEMPTS} attempts: Notes \
+         kept being opened in this Workspace faster than the locks covering them could be taken"
+    )))
+}
+
+/// Every session open in `workspace` that is not already in `held`, compared by
+/// **identity** rather than by concept id: `carry_session_forward` retires a
+/// session and installs a rebuilt one under the same key, and holding the
+/// retired object's lock protects nothing.
+fn sessions_not_among(
+    held: &[NoteSession],
+    workspace: &Workspace,
+) -> Result<Vec<NoteSession>, AppError> {
+    let registry = registry()?;
+    Ok(registry
+        .iter()
+        .filter(|((id, _), _)| id == workspace.id())
+        .map(|(_, session)| session.clone())
+        .filter(|candidate| {
+            !held
+                .iter()
+                .any(|session| Arc::ptr_eq(&session.0, &candidate.0))
+        })
+        .collect())
 }
 
 fn lock_each_write<T>(
@@ -2204,8 +2324,29 @@ fn trailing_newlines(text: &str) -> usize {
         .count()
 }
 
+/// How the text ending at this boundary spells a line ending: `"\r\n"` when the
+/// last one in `text` is a CRLF pair, `"\n"` otherwise (including when there is
+/// none at all).
+///
+/// Every seam this module emits is measured CRLF-aware by [`trailing_newlines`]
+/// and used to be *written* LF-only, which put a bare `\n` into a
+/// CRLF-authored Note on every insert and every delete. The Note still parses —
+/// CommonMark accepts either — but `prd/constraints.md`'s Edit Fidelity is about
+/// the bytes: a mixed-ending file shows the user a diff line for a seam they
+/// never touched, and a Windows-authored bundle grows one of those per edit.
+/// Deriving the spelling from the text the seam is being welded onto is what
+/// keeps the file internally consistent whichever convention it was written in.
+fn newline_style(text: &str) -> &'static str {
+    match text.rfind('\n') {
+        Some(at) if text[..at].ends_with('\r') => "\r\n",
+        _ => "\n",
+    }
+}
+
 /// The newlines that must be emitted at the end of `before` for text appended
 /// to it to start `required` newlines' worth of separation later.
+///
+/// Spelled the way `before` spells its own line endings ([`newline_style`]).
 ///
 /// Empty when `before` is empty — the start of the Note is already a Block
 /// boundary and padding it would open the file with a blank line.
@@ -2213,7 +2354,7 @@ fn separator_before(before: &str, required: usize) -> String {
     if before.is_empty() {
         return String::new();
     }
-    "\n".repeat(required.saturating_sub(trailing_newlines(before)))
+    newline_style(before).repeat(required.saturating_sub(trailing_newlines(before)))
 }
 
 /// The text that must replace `source[start..end]` for what precedes `start` to
@@ -3200,6 +3341,61 @@ mod tests {
             "- a\n\nMiddle.\n\n- b\n\nPara\n",
             "an insert inside a list ran into the item above it"
         );
+    }
+
+    /// Every seam a structural edit welds into a CRLF-authored Note is spelled
+    /// `\r\n`, so the file stays byte-consistent with itself.
+    ///
+    /// The regression this pins: `separator_before` and `insert_block` measured
+    /// the newline run CRLF-aware (`trailing_newlines` counts a pair as one) and
+    /// then emitted `"\n"` unconditionally. A Windows-authored Note therefore
+    /// gained a bare `\n` at every insert, split and delete — Blocks the user
+    /// never touched showing up as whitespace changes in their diff, one more
+    /// per edit, in a project whose Edit Fidelity constraint
+    /// (`prd/constraints.md`) is exactly that.
+    #[test]
+    fn a_structural_edit_on_a_crlf_note_emits_crlf_seams() {
+        let f = fixture();
+        f.write("a.md", "Alpha\r\n\r\nBeta\r\n");
+        let session = f.open("a");
+
+        session.insert_block(&[1], "Middle.".to_string()).unwrap();
+
+        let source = session.working_source().unwrap();
+        assert_eq!(*source, "Alpha\r\n\r\nMiddle.\r\n\r\nBeta\r\n");
+        assert!(
+            !source.replace("\r\n", "").contains('\n'),
+            "a bare LF was welded into a CRLF Note: {source:?}"
+        );
+
+        // The end-of-Note append is the other seam `insert_block` emits.
+        session.insert_block(&[9], "Tail.".to_string()).unwrap();
+        let source = session.working_source().unwrap();
+        assert_eq!(*source, "Alpha\r\n\r\nMiddle.\r\n\r\nBeta\r\n\r\nTail.\r\n");
+
+        // And the seam a split opens mid-Block.
+        let g = fixture();
+        g.write("b.md", "Alpha beta\r\n");
+        let split = g.open("b");
+        split.split_block(&[0], 5).unwrap();
+        assert_eq!(*split.working_source().unwrap(), "Alpha\r\n\r\n beta\r\n");
+    }
+
+    /// The LF half of the same rule: a Note written with Unix line endings is
+    /// unaffected, which is what makes the CRLF change a fidelity fix rather
+    /// than a new convention.
+    #[test]
+    fn a_structural_edit_on_an_lf_note_still_emits_lf_seams() {
+        let f = fixture();
+        f.write("a.md", "Alpha\n\nBeta\n");
+        let session = f.open("a");
+
+        session.insert_block(&[1], "Middle.".to_string()).unwrap();
+        session.insert_block(&[9], "Tail.".to_string()).unwrap();
+
+        let source = session.working_source().unwrap();
+        assert_eq!(*source, "Alpha\n\nMiddle.\n\nBeta\n\nTail.\n");
+        assert!(!source.contains('\r'), "a CR appeared in an LF Note");
     }
 
     /// Deleting the last item of a list must not absorb the paragraph that
@@ -4254,5 +4450,57 @@ mod tests {
             "the second open returned a different buffer"
         );
         assert!(Arc::ptr_eq(&first.0, &second.0));
+    }
+
+    /// A Note opened *after* `with_write_locks` read the registry is still
+    /// covered by the locks the lifecycle operation runs under.
+    ///
+    /// The window is real rather than theoretical: FRB 2.12's default handler
+    /// documents itself as "an internal thread pool, and each call to a Rust
+    /// function is handled by a different thread", and every `#[frb] async fn`
+    /// in `api::ffi_api` — `open_note` among them — is dispatched through it. The
+    /// registry lock cannot be held across the acquisition (the lock order
+    /// forbids it, and `carry_session_forward` takes the registry lock *inside*
+    /// the write locks), so the snapshot has to be re-checked afterwards
+    /// instead. The hook below opens the second Note in exactly that window; the
+    /// assertion is that the body still runs with its write lock held.
+    ///
+    /// `try_lock` is the observation because it is taken from the thread that
+    /// holds the lock: `Mutex::try_lock` reports `WouldBlock` for an
+    /// already-locked mutex whoever locked it, whereas `lock` from the same
+    /// thread would deadlock.
+    #[test]
+    fn a_session_opened_after_the_lock_snapshot_is_still_locked_by_the_operation() {
+        let f = fixture();
+        f.write("first.md", &note("First", "one"));
+        f.write("second.md", &note("Second", "two"));
+        let _first = f.open("first");
+
+        let opened_late = std::cell::Cell::new(false);
+        let held_inside = std::cell::Cell::new(None);
+
+        with_write_locks_hooked(
+            &f.workspace,
+            || {
+                if !opened_late.replace(true) {
+                    f.open("second");
+                }
+            },
+            || {
+                let late = lookup(f.workspace.id(), "second")?
+                    .expect("the late open registered a session");
+                held_inside.set(Some(late.0.write_lock.try_lock().is_err()));
+                Ok(())
+            },
+        )
+        .unwrap();
+
+        assert!(opened_late.get(), "the hook never ran");
+        assert_eq!(
+            held_inside.get(),
+            Some(true),
+            "a session that appeared after the snapshot ran unlocked inside the \
+             lifecycle operation, so an idle write could land in the middle of it"
+        );
     }
 }

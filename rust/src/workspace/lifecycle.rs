@@ -148,6 +148,8 @@ pub fn create_note(
     ensure_directory_exists(workspace, &directory)?;
     let new_id = join_id(&directory, title);
     let new_path = workspace.note_path(&new_id)?;
+    // No `held`: a create is moving away from nothing, so every occupant of the
+    // destination — file, index row or orphaned draft — is somebody else's.
     ensure_path_available(workspace, &new_id, &new_path, None)?;
 
     let source = conformant_frontmatter(title);
@@ -322,7 +324,15 @@ pub fn rename_note(
     }
     let new_id = join_id(containing_dir(note_id), new_title);
     let new_path = workspace.note_path(&new_id)?;
-    ensure_path_available(workspace, &new_id, &new_path, Some(&old_path))?;
+    ensure_path_available(
+        workspace,
+        &new_id,
+        &new_path,
+        Some(HeldBy {
+            id: note_id,
+            path: &old_path,
+        }),
+    )?;
 
     let mut remap = Remap::new();
     if new_id != note_id {
@@ -367,7 +377,15 @@ pub fn move_note(
 
     let new_id = join_id(&directory, file_stem(note_id));
     let new_path = workspace.note_path(&new_id)?;
-    ensure_path_available(workspace, &new_id, &new_path, Some(&old_path))?;
+    ensure_path_available(
+        workspace,
+        &new_id,
+        &new_path,
+        Some(HeldBy {
+            id: note_id,
+            path: &old_path,
+        }),
+    )?;
 
     let mut remap = Remap::new();
     if new_id != note_id {
@@ -1629,7 +1647,20 @@ fn validate_segment(segment: &str) -> Result<(), AppError> {
     Ok(())
 }
 
-/// Both halves of the availability check the contract requires.
+/// The Note an operation is moving *away from*, when there is one: both the
+/// concept id it currently answers to and the file it currently occupies.
+///
+/// Carried as a pair because [`ensure_path_available`] has to recognize the
+/// destination as the caller's own in two different stores — the filesystem,
+/// where a case-only rename finds its own file waiting, and `drafts`, which is
+/// keyed by concept id and has no path at all.
+#[derive(Clone, Copy)]
+struct HeldBy<'a> {
+    id: &'a str,
+    path: &'a Path,
+}
+
+/// All three halves of the availability check the contract requires.
 ///
 /// The filesystem is consulted **as well as** the index, and it is the half
 /// that is easy to omit: `notes.id` is a case-sensitive `TEXT` key while
@@ -1637,25 +1668,62 @@ fn validate_segment(segment: &str) -> Result<(), AppError> {
 /// one file there and an index-only check would report the second as free
 /// (`data-models/okf-bundle.md`, "Case sensitivity follows the filesystem").
 ///
-/// `held_by` is the path the operation is moving *from*, when there is one: a
+/// `held` is the Note the operation is moving *from*, when there is one: a
 /// rename that only changes case finds its own file at the destination on a
 /// case-insensitive filesystem, and that is not a collision.
+///
+/// # `drafts` is the third store, and an orphaned row there takes the name
+///
+/// A `drafts` row carries no foreign key, is not covered by any cascade, and
+/// routinely outlives both of the other two: [`persist::open_note`]'s recovery
+/// branch exists precisely so that unflushed work whose file vanished can still
+/// be reached, and a reindex that no longer finds the file drops the `notes` row
+/// while leaving the draft standing. So "nothing on disk and nothing in the
+/// index" does **not** mean the concept id is free.
+///
+/// Omitting this store made both directions of the mistake:
+///
+/// - `create_note` at such an id wrote a fresh conformant file, and then handed
+///   the caller `open_note`'s answer — which prefers the draft row — so the
+///   editor opened somebody else's abandoned work under the new Note's name, and
+///   the first idle write flushed that work over the file just created.
+/// - `rename_note`/`move_note` onto such an id passed the check and reached
+///   `rewrite_index`, whose `UPDATE OR REPLACE drafts` then dropped the
+///   destination's row to make room for the renamed Note's own — destroying
+///   unflushed work with no trash entry, no commit and no message.
+///
+/// Refusing is what routes the user to the one operation that can actually
+/// resolve it: opening the id recovers the draft (or discards it), after which
+/// the name really is free. Substituting the draft silently, or deleting it to
+/// make room, are the two outcomes `architecture/risks.md` risk 8 is about.
 fn ensure_path_available(
     workspace: &Arc<Workspace>,
     new_id: &str,
     new_path: &Path,
-    held_by: Option<&Path>,
+    held: Option<HeldBy<'_>>,
 ) -> Result<(), AppError> {
+    let held_by = held.map(|h| h.path);
     if new_path.exists() && !is_same_file(new_path, held_by) {
         return Err(AppError::PathUnavailable(format!(
             "{} is already taken in this Workspace",
             concept_id_to_path(new_id)
         )));
     }
-    let taken = workspace.with_db(|conn| index::note_exists(conn, workspace.id(), new_id))?;
+    let (taken, drafted) = workspace.with_db(|conn| {
+        Ok((
+            index::note_exists(conn, workspace.id(), new_id)?,
+            draft_exists(conn, workspace.id(), new_id)?,
+        ))
+    })?;
     if taken && held_by.is_none_or(|held| held != new_path) {
         return Err(AppError::PathUnavailable(format!(
             "a Note with concept id {new_id} already exists in this Workspace"
+        )));
+    }
+    if drafted && held.is_none_or(|h| h.id != new_id) {
+        return Err(AppError::PathUnavailable(format!(
+            "{new_id} still holds unflushed work from an earlier session: open that Note to \
+             recover the draft (or delete it) before taking the name"
         )));
     }
     Ok(())
@@ -1888,6 +1956,20 @@ fn clear_draft(conn: &Connection, workspace_id: &str, note_id: &str) -> Result<(
     Ok(())
 }
 
+/// Whether a `drafts` row exists for `note_id`, without reading its
+/// `raw_markdown`. [`ensure_path_available`] only needs the existence, and the
+/// column it deliberately does not select is a whole Note's text.
+fn draft_exists(conn: &Connection, workspace_id: &str, note_id: &str) -> Result<bool, AppError> {
+    let found = conn
+        .query_row(
+            "SELECT 1 FROM drafts WHERE workspace_id = ?1 AND note_id = ?2",
+            rusqlite::params![workspace_id, note_id],
+            |_| Ok(()),
+        )
+        .optional()?;
+    Ok(found.is_some())
+}
+
 fn read_draft_text(
     conn: &Connection,
     workspace_id: &str,
@@ -1925,16 +2007,36 @@ fn link_sources(
     rows.collect::<Result<Vec<_>, _>>().map_err(AppError::from)
 }
 
+/// Every Note id under `prefix` — the contents of one Directory subtree, which
+/// is what a Directory rename remaps and what a Directory delete removes.
+///
+/// `LIKE … ESCAPE '\'` over [`like_escape`], matching the `directories` query
+/// `delete_directory` runs in the same transaction: a Directory name is
+/// free-form user text and may legitimately contain `%` or `_`, and escaping
+/// them is what stops SQLite reading them as wildcards. This used to read
+/// **every** `notes` row in the Workspace across the FFI-facing connection and
+/// filter in Rust, which is O(bundle) work per rename for an answer that is
+/// almost always a handful of rows.
+///
+/// The `starts_with` filter is kept, and is not redundant: SQLite's `LIKE` is
+/// case-insensitive for ASCII unless `PRAGMA case_sensitive_like` is on, and
+/// this connection does not set it (`db::connection`), whereas `notes.id` is a
+/// case-sensitive key — on a case-sensitive filesystem `Ideas/` and `ideas/`
+/// are two distinct Directories. So `LIKE` narrows the rows SQLite returns and
+/// Rust makes the match exact, which is the same answer this function has always
+/// given.
 fn note_ids_with_prefix(
     conn: &Connection,
     workspace_id: &str,
     prefix: &str,
 ) -> Result<Vec<String>, AppError> {
-    // Filtered in Rust rather than with `LIKE`: a Directory name is free-form
-    // user text and may legitimately contain `%` or `_`, which `LIKE` would
-    // read as wildcards.
-    let mut stmt = conn.prepare("SELECT id FROM notes WHERE workspace_id = ?1 ORDER BY id")?;
-    let rows = stmt.query_map([workspace_id], |row| row.get::<_, String>(0))?;
+    let mut stmt = conn.prepare(
+        "SELECT id FROM notes WHERE workspace_id = ?1 AND id LIKE ?2 ESCAPE '\\' ORDER BY id",
+    )?;
+    let pattern = format!("{}%", like_escape(prefix));
+    let rows = stmt.query_map(rusqlite::params![workspace_id, pattern], |row| {
+        row.get::<_, String>(0)
+    })?;
     Ok(rows
         .collect::<Result<Vec<_>, _>>()?
         .into_iter()
@@ -2003,6 +2105,18 @@ fn final_source(affected: &Affected) -> Result<String, AppError> {
 /// that cannot be read is skipped rather than raised — this runs after the
 /// filesystem and the index already agree, and the only cost of missing a file
 /// here is the dirty worktree this is closing, not a wrong commit.
+///
+/// **A symlink is never followed and never named.** The kind of every entry
+/// comes from [`workspace::classify_entry`](super::classify_entry), which is
+/// where that policy lives and why it is shared with the other two walkers; the
+/// consequence here is that a link inside the renamed subtree contributes
+/// nothing to the pathspec. Naming it would hand `commit_paths` a path whose
+/// `is_file()` follows the link, so the bytes on the far end — a file the user
+/// never put in this bundle — would be read and written into bundle history,
+/// and a link to an ancestor would recurse until `ELOOP`, staging every file it
+/// passed once per level. An entry whose kind cannot be read at all is treated
+/// as a leaf and skipped, on the same best-effort terms as an unreadable
+/// directory.
 fn collect_files(root: &Path, dir: &Path, out: &mut Vec<String>) {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return;
@@ -2012,11 +2126,18 @@ fn collect_files(root: &Path, dir: &Path, out: &mut Vec<String>) {
         if name == ".git" || super::is_ignored_scratch_name(&name) {
             continue;
         }
+        let Ok(file_type) = entry.file_type() else {
+            continue;
+        };
         let path = entry.path();
-        if path.is_dir() {
-            collect_files(root, &path, out);
-        } else if let Ok(relative) = path.strip_prefix(root) {
-            out.push(relative.to_string_lossy().into_owned());
+        match super::classify_entry(&file_type) {
+            super::BundleEntry::Directory => collect_files(root, &path, out),
+            super::BundleEntry::File => {
+                if let Ok(relative) = path.strip_prefix(root) {
+                    out.push(relative.to_string_lossy().into_owned());
+                }
+            }
+            super::BundleEntry::Symlink => {}
         }
     }
 }
@@ -3846,6 +3967,234 @@ mod tests {
             f.git(&["rev-list", "--count", "HEAD"]),
             "1",
             "a refused call recorded a commit"
+        );
+    }
+
+    /// A symlink inside a renamed Directory contributes nothing to the commit —
+    /// neither itself nor, above all, the bytes on the far end of it.
+    ///
+    /// The regression this pins: `collect_files` decided what to descend into
+    /// with `Path::is_dir()`, which **follows** the link, and named everything
+    /// else it found as a file. A link to a file therefore reached
+    /// `commit_paths`, whose `is_file()` follows it too — so the target's bytes
+    /// were read and written into bundle history under the link's name. The
+    /// target need not be in the bundle, or anywhere near it: a bundle is an
+    /// ordinary directory a user can put anything in
+    /// (`data-models/okf-bundle.md`), and this staged a file from outside it
+    /// into a repository that, once a Remote is attached, is pushed.
+    #[cfg(unix)]
+    #[test]
+    fn a_symlink_in_a_renamed_directory_stages_neither_itself_nor_its_target() {
+        let f = fixture();
+        f.write("projects/One.md", &note("One", "words"));
+        // Deliberately outside the bundle: `f.dir` is the temporary directory,
+        // `f.root()` is the bundle inside it.
+        let outside = f.dir.path().join("id_rsa");
+        std::fs::write(&outside, "PRIVATE KEY MATERIAL\n").unwrap();
+        std::os::unix::fs::symlink(&outside, f.root().join("projects/id_rsa")).unwrap();
+        f.reindex();
+        f.commit_baseline();
+
+        rename_directory(&f.workspace, "projects", "work").unwrap();
+
+        let tracked = f.git(&["ls-tree", "-r", "--name-only", "HEAD"]);
+        let mut paths: Vec<&str> = tracked.lines().collect();
+        paths.sort_unstable();
+        assert_eq!(
+            paths,
+            vec![".gitignore", "work/One.md"],
+            "the link, or what it points at, reached the commit"
+        );
+        assert!(
+            !f.git(&["log", "--all", "-p"])
+                .contains("PRIVATE KEY MATERIAL"),
+            "a file from outside the bundle was staged through a symlink"
+        );
+        assert_eq!(
+            std::fs::read_to_string(&outside).unwrap(),
+            "PRIVATE KEY MATERIAL\n",
+            "the target itself must be left completely alone"
+        );
+    }
+
+    /// A link pointing at the directory that contains it does not send the
+    /// walker round again.
+    ///
+    /// The regression this pins: following the link made `collect_files` recurse
+    /// into the renamed Directory through itself, once per level, until the
+    /// kernel refused the path with `ELOOP` — by which point the pathspec named
+    /// the same Note forty times over, each under a longer phantom prefix.
+    #[cfg(unix)]
+    #[test]
+    fn a_self_referential_symlink_does_not_send_the_rename_walker_round_again() {
+        let f = fixture();
+        f.write("projects/One.md", &note("One", "words"));
+        // Relative, so it still resolves to its own parent after the rename
+        // moves the whole directory.
+        std::os::unix::fs::symlink(".", f.root().join("projects/self")).unwrap();
+        f.reindex();
+        f.commit_baseline();
+
+        rename_directory(&f.workspace, "projects", "work").unwrap();
+
+        let tracked = f.git(&["ls-tree", "-r", "--name-only", "HEAD"]);
+        let mut paths: Vec<&str> = tracked.lines().collect();
+        paths.sort_unstable();
+        assert_eq!(
+            paths,
+            vec![".gitignore", "work/One.md"],
+            "the walk followed the link into itself: {tracked}"
+        );
+    }
+
+    /// A Directory whose name contains SQL's `LIKE` wildcards still selects
+    /// exactly its own Notes.
+    ///
+    /// `note_ids_with_prefix` narrows with `LIKE … ESCAPE '\'` rather than
+    /// reading every `notes` row in the Workspace. A Directory name is free-form
+    /// user text, so `%` and `_` in one are literal characters and must be
+    /// escaped — unescaped, `a%b/%` also matches `axxb/Two`, and the rename
+    /// would sweep a Note out of a Directory nobody named.
+    #[test]
+    fn a_directory_named_with_like_wildcards_moves_only_its_own_notes() {
+        let f = fixture();
+        f.write("a%b/One.md", &note("One", "inside the named Directory"));
+        f.write("axxb/Two.md", &note("Two", "a decoy `%` would match"));
+        f.write("c_d/Three.md", &note("Three", "inside the other one"));
+        f.write("cXd/Four.md", &note("Four", "a decoy `_` would match"));
+        f.reindex();
+        f.commit_baseline();
+
+        rename_directory(&f.workspace, "a%b", "moved").unwrap();
+        rename_directory(&f.workspace, "c_d", "shifted").unwrap();
+
+        assert_eq!(
+            f.note_ids(),
+            vec![
+                "axxb/Two".to_string(),
+                "cXd/Four".to_string(),
+                "moved/One".to_string(),
+                "shifted/Three".to_string(),
+            ]
+        );
+        assert!(f.exists("axxb/Two.md") && f.exists("cXd/Four.md"));
+    }
+
+    /// Creating a Note at a concept id that holds an **orphaned draft row** is
+    /// refused, and the draft is left where the user can still reach it.
+    ///
+    /// The regression this pins: `ensure_path_available` consulted the
+    /// filesystem and the index but not `drafts`, and a draft row survives both
+    /// — `open_note`'s recovery branch exists for exactly that state. So the
+    /// create succeeded, wrote a fresh conformant file, and then returned
+    /// `open_note`'s answer, which prefers the draft row: the editor opened
+    /// somebody else's abandoned work under the new Note's title, and the first
+    /// idle write flushed that work over the file just created.
+    #[test]
+    fn creating_a_note_over_an_orphaned_draft_is_refused_rather_than_resurrecting_it() {
+        let f = fixture();
+        let stranded = "---\ntitle: Foo\n---\n\nunflushed work from a previous session\n";
+        f.put_draft("Foo", stranded);
+
+        let refused = create_note(&f.workspace, "", "Foo");
+
+        assert!(
+            matches!(refused, Err(AppError::PathUnavailable(_))),
+            "creating over an orphaned draft must be refused, got {refused:?}"
+        );
+        assert!(
+            !f.exists("Foo.md"),
+            "a file was created at a concept id holding somebody else's work"
+        );
+        assert!(f.note_ids().is_empty(), "an index row was written");
+        assert_eq!(
+            f.draft_row("Foo").as_deref(),
+            Some(stranded),
+            "the draft the refusal exists to protect was destroyed"
+        );
+
+        // The route the refusal points the user at: opening the id recovers the
+        // work, after which the name is theirs to reuse.
+        let (_, state) = persist::open_note(&f.workspace, "Foo").unwrap();
+        assert!(
+            state.restored_from_draft,
+            "the recoverable draft must still be recoverable"
+        );
+    }
+
+    /// A rename or a move onto a concept id holding an orphaned draft is refused
+    /// on the same terms, and neither draft is touched.
+    ///
+    /// The regression this pins: the destination passed the availability check,
+    /// so the operation reached `rewrite_index`, whose `UPDATE OR REPLACE drafts`
+    /// re-keys the renamed Note's own row onto the destination — dropping the row
+    /// already sitting there to make room. Unflushed work, deleted, with no trash
+    /// entry, no commit and no message.
+    #[test]
+    fn renaming_or_moving_onto_an_orphaned_draft_destroys_neither_draft() {
+        let f = fixture();
+        f.write("A.md", &note("A", "on disk"));
+        f.reindex();
+        f.commit_baseline();
+        create_directory(&f.workspace, "Archive").unwrap();
+        let own = "---\ntitle: A\n---\n\nA's own unflushed work\n";
+        let stranded = "---\ntitle: B\n---\n\nsomebody else's unflushed work\n";
+        let elsewhere = "---\ntitle: A\n---\n\nunflushed work under Archive\n";
+        f.put_draft("A", own);
+        f.put_draft("B", stranded);
+        f.put_draft("Archive/A", elsewhere);
+
+        let refused = rename_note(&f.workspace, "A", "B");
+
+        assert!(
+            matches!(refused, Err(AppError::PathUnavailable(_))),
+            "renaming onto an orphaned draft must be refused, got {refused:?}"
+        );
+
+        let refused = move_note(&f.workspace, "A", "Archive");
+
+        assert!(
+            matches!(refused, Err(AppError::PathUnavailable(_))),
+            "moving onto an orphaned draft must be refused, got {refused:?}"
+        );
+
+        assert_eq!(
+            f.draft_row("A").as_deref(),
+            Some(own),
+            "the moved Note's own draft"
+        );
+        assert_eq!(
+            f.draft_row("B").as_deref(),
+            Some(stranded),
+            "the rename destination's draft was replaced out of existence"
+        );
+        assert_eq!(
+            f.draft_row("Archive/A").as_deref(),
+            Some(elsewhere),
+            "the move destination's draft was replaced out of existence"
+        );
+        assert!(f.exists("A.md"), "the file moved anyway");
+        assert_eq!(f.note_ids(), vec!["A".to_string()]);
+    }
+
+    /// A rename that only changes case still finds its **own** draft row at the
+    /// destination, and that is not a collision — the same escape the filesystem
+    /// half of `ensure_path_available` already made.
+    #[test]
+    fn a_notes_own_draft_never_blocks_its_own_rename() {
+        let f = fixture();
+        f.write("A.md", &note("A", "on disk"));
+        f.reindex();
+        f.commit_baseline();
+        f.put_draft("A", "---\ntitle: A\n---\n\nunflushed\n");
+
+        rename_note(&f.workspace, "A", "B").expect("a Note's own draft is not a collision");
+
+        assert_eq!(f.note_ids(), vec!["B".to_string()]);
+        assert!(f.draft_row("A").is_none());
+        assert!(
+            f.draft_row("B").is_some(),
+            "the draft did not follow the rename"
         );
     }
 

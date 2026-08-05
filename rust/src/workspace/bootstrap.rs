@@ -423,7 +423,14 @@ fn sweep_scratch_files(dir: &Path) -> ScratchSweep {
             continue;
         }
         let path = entry.path();
-        let is_dir = entry.file_type().is_ok_and(|t| t.is_dir());
+        // `workspace::classify_entry` rather than a local `is_dir()`, so that
+        // this sweep and the two other walks over a bundle share one definition
+        // of what a link is. The behavior here is unchanged: a link is not a
+        // directory, so it is unlinked (never `remove_dir_all`'d through) when
+        // its own name is one of ours, and never recursed into otherwise.
+        let is_dir = entry
+            .file_type()
+            .is_ok_and(|t| super::classify_entry(&t) == super::BundleEntry::Directory);
         if super::is_burlmd_scratch_name(&name) {
             let removed = if is_dir {
                 std::fs::remove_dir_all(&path)

@@ -246,7 +246,14 @@ fn walk_dir(dir: &Path, prefix: &str, scan: &mut BundleScan) -> Result<(), AppEr
         let file_type = entry
             .file_type()
             .map_err(|e| AppError::IoError(e.to_string()))?;
-        if file_type.is_symlink() {
+        // The kind comes from `workspace::classify_entry` rather than from a
+        // local `is_symlink()`/`is_dir()` pair, so that this walk and the two
+        // others over a bundle cannot drift apart on what a link is. What this
+        // walk does with one is unchanged and is its own decision: a link is
+        // skipped outright, neither indexed as a Note nor descended into, which
+        // is also what keeps this walk acyclic.
+        let kind = crate::workspace::classify_entry(&file_type);
+        if kind == crate::workspace::BundleEntry::Symlink {
             continue;
         }
         let name = entry.file_name().to_string_lossy().into_owned();
@@ -259,7 +266,7 @@ fn walk_dir(dir: &Path, prefix: &str, scan: &mut BundleScan) -> Result<(), AppEr
             format!("{prefix}/{name}")
         };
 
-        if file_type.is_dir() {
+        if kind == crate::workspace::BundleEntry::Directory {
             scan.directories.push(rel.clone());
             walk_dir(&entry.path(), &rel, scan)?;
         } else if name.ends_with(".md") && !RESERVED_FILENAMES.contains(&name.as_str()) {

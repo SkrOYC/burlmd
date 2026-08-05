@@ -386,6 +386,7 @@ pub fn commit_paths(
         .edit_tree(parent_tree_id)
         .map_err(|e| AppError::IoError(format!("start tree edit: {e}")))?;
 
+    let mut staged: Vec<StagedPath> = Vec::with_capacity(relative_paths.len());
     for relative in relative_paths {
         let absolute = repo_path.join(relative);
         if absolute.is_file() {
@@ -394,13 +395,22 @@ pub fn commit_paths(
             let blob_id = repo
                 .write_blob(bytes)
                 .map_err(|e| AppError::IoError(format!("write blob: {e}")))?;
+            let kind = blob_kind(&absolute);
             editor
-                .upsert(relative.as_str(), blob_kind(&absolute), blob_id.detach())
+                .upsert(relative.as_str(), kind, blob_id.detach())
                 .map_err(|e| AppError::IoError(format!("stage {relative}: {e}")))?;
+            staged.push(StagedPath {
+                relative: relative.clone(),
+                blob: Some((blob_id.detach(), kind)),
+            });
         } else {
             editor
                 .remove(relative.as_str())
                 .map_err(|e| AppError::IoError(format!("unstage {relative}: {e}")))?;
+            staged.push(StagedPath {
+                relative: relative.clone(),
+                blob: None,
+            });
         }
     }
 
@@ -438,15 +448,156 @@ pub fn commit_paths(
     // Same obligation as `commit_all`: `commit_as` moves the ref without
     // touching `.git/index`, so a later `git status`/`git merge` (the CLI
     // shell-outs push and pull use) would otherwise see phantom uncommitted
-    // changes for the paths just committed.
-    let mut index_file = repo
-        .index_from_tree(&tree_id)
-        .map_err(|e| AppError::IoError(format!("build index from tree: {e}")))?;
-    index_file
-        .write(gix::index::write::Options::default())
-        .map_err(|e| AppError::IoError(format!("write index: {e}")))?;
+    // changes for the paths just committed. Unlike `commit_all`, only the named
+    // paths' entries move — see [`refresh_index_entries`].
+    refresh_index_entries(&repo, &tree_id, &staged)?;
 
     Ok(Some(commit_id.detach().to_string()))
+}
+
+/// What one named path became in the tree [`commit_paths`] just wrote: the blob
+/// it staged, with the mode it staged it under, or `None` when the path was gone
+/// from disk and the commit therefore recorded a deletion.
+struct StagedPath {
+    relative: String,
+    blob: Option<(gix::ObjectId, gix::object::tree::EntryKind)>,
+}
+
+/// Brings `.git/index` into line with a [`commit_paths`] commit by moving
+/// **only the entries for the paths that commit named**, leaving every other
+/// entry — and therefore everything the user has staged — exactly as it was.
+///
+/// # Why this is not `index_from_tree(...).write()`
+///
+/// It used to be, and that call does not update an index: it *replaces* one.
+/// The rebuilt index is the committed tree and nothing else, so every entry the
+/// user had staged and not yet committed was silently discarded — `git add A.md`
+/// followed by burlmd closing a session over `B.md` left `A.md`'s staged
+/// version gone from the index with no message, and `git diff --cached` empty.
+/// That runs on **every** `close_note` and again at `converge`, and it is worst
+/// exactly where it is least expected: an adopted repository (ADR-005 decision
+/// 8) whose owner uses Git normally alongside burlmd. A bundle is the user's
+/// directory and their repository; this application commits into it, and it has
+/// no business rearranging their staging area to do so.
+///
+/// `commit_all` keeps the wholesale rebuild, and the asymmetry is deliberate:
+/// it is `git add -A && git commit`, which stages the entire worktree anyway, so
+/// there is nothing of the user's left for it to preserve.
+///
+/// # What each named path does to the index
+///
+/// - A path the commit **removed** takes its index entry with it, at every
+///   stage, along with every entry beneath it — `commit_paths` reads a directory
+///   path as a subtree removal (that is how `delete_directory` and
+///   `rename_directory`'s old half are committed), and the index is flat, so the
+///   subtree has to be swept by prefix here.
+/// - A path the commit **staged** gets its entry's object id and mode set to
+///   what was committed, and its conflict stages (1/2/3) dropped: committing a
+///   path resolves it, which is what `git add` does too.
+/// - A staged path with no entry yet is appended and the entries re-sorted,
+///   since `dangerously_push_entry` breaks the ordering every later lookup by
+///   path relies on.
+///
+/// The stat data is left zeroed rather than `lstat`ed, which is precisely what
+/// `index_from_tree` produced for every entry before this and therefore is not a
+/// change in behavior. Git reads a zero `sd_size` as "never stat'ed" and falls
+/// back to comparing content (`read-cache.c`'s `ie_modified`), so the path reads
+/// as clean when it matches and dirty when it does not. Recording a stat taken
+/// *after* the bytes were read would be the unsafe direction: a write landing in
+/// between would leave the index asserting the worktree is clean when it is not.
+///
+/// The tree-cache extension is dropped, on `gix_index::File::write`'s own
+/// instruction: it is serialized as-is and is not invalidated against the
+/// entries, so leaving a stale one behind would let a later `git commit` capture
+/// outdated subtree content.
+fn refresh_index_entries(
+    repo: &gix::Repository,
+    tree_id: &gix::ObjectId,
+    staged: &[StagedPath],
+) -> Result<(), AppError> {
+    use gix::index::entry::{Flags, Mode, Stage, Stat};
+
+    // No index file at all — a repository initialized and never staged into.
+    // There is nothing of the user's to preserve, so seeding it from the tree
+    // just committed is both correct and the only thing available.
+    if !repo.index_path().exists() {
+        let mut built = repo
+            .index_from_tree(tree_id)
+            .map_err(|e| AppError::IoError(format!("build index from tree: {e}")))?;
+        built
+            .write(gix::index::write::Options::default())
+            .map_err(|e| AppError::IoError(format!("write index: {e}")))?;
+        return Ok(());
+    }
+
+    let mut index = repo
+        .open_index()
+        .map_err(|e| AppError::IoError(format!("open index: {e}")))?;
+
+    let removed: Vec<&[u8]> = staged
+        .iter()
+        .filter(|s| s.blob.is_none())
+        .map(|s| s.relative.as_bytes())
+        .collect();
+    let updated: Vec<&[u8]> = staged
+        .iter()
+        .filter(|s| s.blob.is_some())
+        .map(|s| s.relative.as_bytes())
+        .collect();
+    index.remove_entries(|_, path, entry| {
+        let path: &[u8] = path;
+        removed.iter().any(|r| is_at_or_under(path, r))
+            || (entry.stage() != Stage::Unconflicted && updated.contains(&path))
+    });
+
+    let mut appended = false;
+    for entry in staged {
+        let Some((blob_id, kind)) = entry.blob else {
+            continue;
+        };
+        let mode = if kind == gix::object::tree::EntryKind::BlobExecutable {
+            Mode::FILE_EXECUTABLE
+        } else {
+            Mode::FILE
+        };
+        let path = gix::bstr::BStr::new(entry.relative.as_bytes());
+        match index.entry_mut_by_path_and_stage(path, Stage::Unconflicted) {
+            Some(existing) => {
+                existing.id = blob_id;
+                existing.mode = mode;
+                existing.stat = Stat::default();
+                existing.flags = Flags::empty();
+            }
+            None => {
+                index.dangerously_push_entry(Stat::default(), blob_id, Flags::empty(), mode, path);
+                appended = true;
+            }
+        }
+    }
+    if appended {
+        index.sort_entries();
+    }
+    index.remove_tree();
+
+    index
+        .write(gix::index::write::Options::default())
+        .map_err(|e| AppError::IoError(format!("write index: {e}")))?;
+    Ok(())
+}
+
+/// Whether the index entry at `path` is the removed path `removed` itself or
+/// lives beneath it. `commit_paths` names a Directory as one path and reads it
+/// as a subtree removal; index entries are flat file paths, so the subtree has
+/// to be recognized by prefix — and by a prefix that ends at a `/` boundary, so
+/// that removing `Notes` does not also unstage `Notes-archive/a.md`.
+fn is_at_or_under(path: &[u8], removed: &[u8]) -> bool {
+    if path == removed {
+        return true;
+    }
+    path.len() > removed.len()
+        && path.starts_with(removed)
+        && !removed.is_empty()
+        && path[removed.len()] == b'/'
 }
 
 /// The tree entry kind for a regular file on disk: `100755` when it carries
@@ -945,6 +1096,112 @@ mod tests {
             String::from_utf8_lossy(&committed_b.stdout),
             "b first\n",
             "the other Note's working-tree change was swept in"
+        );
+    }
+
+    /// A tier 3 commit updates the index entries for the paths it committed and
+    /// **nothing else** — the user's own staging area survives it untouched.
+    ///
+    /// The regression this pins: the index was brought up to date with
+    /// `index_from_tree(&tree_id).write()`, which does not update an index but
+    /// replaces one. Everything the user had staged and not yet committed was
+    /// discarded, silently, on every `close_note` and again at `converge` — so
+    /// `git add A.md` followed by burlmd closing a session over an unrelated
+    /// `B.md` left `git diff --cached` empty and A.md's staged version gone. A
+    /// bundle is the user's own repository (ADR-005 decision 8 adopts existing
+    /// ones); this application has no business rearranging their staging area to
+    /// commit into it.
+    #[test]
+    fn commit_paths_leaves_the_users_own_staged_changes_alone() {
+        let dir = tempdir().unwrap();
+        init_repo(dir.path());
+        std::fs::write(dir.path().join("a.md"), b"a first\n").unwrap();
+        std::fs::write(dir.path().join("b.md"), b"b first\n").unwrap();
+        commit_all(dir.path(), "baseline", "Test User", "test@example.com").unwrap();
+
+        // The user stages a change of their own and has not committed it yet.
+        std::fs::write(dir.path().join("a.md"), b"a staged by the user\n").unwrap();
+        git(dir.path(), &["add", "a.md"]);
+
+        // burlmd closes a session over an entirely different Note.
+        std::fs::write(dir.path().join("b.md"), b"b second\n").unwrap();
+        commit_paths(dir.path(), "just b", &["b.md".to_string()])
+            .unwrap()
+            .expect("a changed path must produce a commit");
+
+        let staged = StdCommand::new("git")
+            .args(["diff", "--cached", "--name-only"])
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+        assert_eq!(
+            String::from_utf8_lossy(&staged.stdout).trim(),
+            "a.md",
+            "the user's staged change was wiped out of the index"
+        );
+        let staged_bytes = StdCommand::new("git")
+            .args(["show", ":a.md"])
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+        assert_eq!(
+            String::from_utf8_lossy(&staged_bytes.stdout),
+            "a staged by the user\n",
+            "the staged version must be exactly what the user staged"
+        );
+        // The committed path itself still has to read as clean, which is the
+        // whole reason the index is touched at all.
+        let status = StdCommand::new("git")
+            .args(["status", "--porcelain"])
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+        assert_eq!(
+            String::from_utf8_lossy(&status.stdout).trim(),
+            "M  a.md",
+            "the committed path must be clean and only the user's own change staged"
+        );
+    }
+
+    /// The other half of the same obligation: a commit that *removes* a
+    /// Directory has to take every index entry beneath it, not just an entry
+    /// spelled exactly like the Directory (the index is flat, and holds none).
+    #[test]
+    fn commit_paths_unstages_the_whole_subtree_a_directory_removal_committed() {
+        let dir = tempdir().unwrap();
+        init_repo(dir.path());
+        std::fs::create_dir_all(dir.path().join("doomed")).unwrap();
+        std::fs::write(dir.path().join("doomed/a.md"), b"a\n").unwrap();
+        std::fs::write(dir.path().join("doomed-kept.md"), b"kept\n").unwrap();
+        commit_all(dir.path(), "baseline", "Test User", "test@example.com").unwrap();
+
+        std::fs::remove_dir_all(dir.path().join("doomed")).unwrap();
+        commit_paths(dir.path(), "delete the directory", &["doomed".to_string()])
+            .unwrap()
+            .expect("a removal is a change");
+
+        let status = StdCommand::new("git")
+            .args(["status", "--porcelain"])
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+        assert_eq!(
+            String::from_utf8_lossy(&status.stdout).trim(),
+            "",
+            "the removed subtree's index entries were left behind"
+        );
+        let tracked = StdCommand::new("git")
+            .args(["ls-files"])
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+        let listing = String::from_utf8_lossy(&tracked.stdout);
+        let mut paths: Vec<&str> = listing.lines().collect();
+        paths.sort_unstable();
+        assert_eq!(
+            paths,
+            vec!["doomed-kept.md"],
+            "a sibling sharing the removed Directory's name prefix was unstaged too"
         );
     }
 

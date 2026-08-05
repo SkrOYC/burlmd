@@ -92,3 +92,58 @@ pub(crate) fn is_burlmd_scratch_name(name: &str) -> bool {
 fn is_decimal(text: &str) -> bool {
     !text.is_empty() && text.bytes().all(|b| b.is_ascii_digit())
 }
+
+/// What one directory entry is, as far as **every** walker over a bundle is
+/// concerned. See [`classify_entry`] for why there is only one of these.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum BundleEntry {
+    /// A real directory on this filesystem, and therefore the only thing a
+    /// walker may descend into.
+    Directory,
+    /// A regular file — or anything else that is neither a directory nor a
+    /// link, which for a walker's purposes is the same thing: a leaf.
+    File,
+    /// A symbolic link, of any target kind. Never followed, never descended
+    /// into, and never resolved to the thing it points at.
+    Symlink,
+}
+
+/// Classifies one directory entry for the three walkers this crate runs over a
+/// bundle: [`lifecycle::collect_files`](lifecycle), which names a renamed
+/// Directory's contents for a commit; `index::scan::walk_dir`, which finds the
+/// Notes to index; and [`bootstrap::sweep_scratch_files`](bootstrap), which
+/// removes this application's own leftovers.
+///
+/// # Why one definition rather than three predicates
+///
+/// All three used to decide "is this a directory?" for themselves, and they
+/// arrived at three different answers. `collect_files` asked `Path::is_dir()`,
+/// which **follows** the link: a symlink inside a renamed subtree therefore had
+/// its *target's* contents named in the pathspec, so `commit_paths` read the
+/// bytes on the far end of the link — anywhere on the filesystem, outside the
+/// bundle entirely — and staged them into the bundle's history. A link pointing
+/// at its own ancestor recursed until the kernel returned `ELOOP`, staging the
+/// same files once per level on the way. Neither is a hypothetical: a bundle is
+/// an ordinary directory a user can put anything in
+/// (`data-models/okf-bundle.md`).
+///
+/// The other two happened to be right, and that is precisely the problem — three
+/// separate spellings of a policy that has to hold everywhere is three chances
+/// to get it wrong again. So the policy is stated once, here: **`file_type`
+/// comes from [`std::fs::DirEntry::file_type`], which does not follow links, and
+/// a link is a leaf.** Passing a `Metadata`-derived `FileType` would defeat it,
+/// because `std::fs::metadata` resolves the link before reporting the kind.
+///
+/// What each caller *does* with a [`BundleEntry::Symlink`] is still its own
+/// decision — the scratch sweep unlinks one whose name matches, the scan ignores
+/// it, `collect_files` leaves it out of the pathspec — and only the "never
+/// follow it" half is shared.
+pub(crate) fn classify_entry(file_type: &std::fs::FileType) -> BundleEntry {
+    if file_type.is_symlink() {
+        BundleEntry::Symlink
+    } else if file_type.is_dir() {
+        BundleEntry::Directory
+    } else {
+        BundleEntry::File
+    }
+}
