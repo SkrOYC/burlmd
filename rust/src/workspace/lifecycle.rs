@@ -203,6 +203,19 @@ fn delete_note_locked(workspace: &Arc<Workspace>, note_id: &str) -> Result<(), A
             "no Note with concept id {note_id}"
         )));
     }
+    // A Note is a file. Nothing stops a bundle from holding a *directory*
+    // named `Archive.md` — a foreign tool's, or a user's — and without this
+    // the journal's trash-and-discard would remove it and everything beneath
+    // it recursively, as a Note deletion, having committed a pathspec that
+    // names every file under it as gone. `rename_directory` makes the mirror
+    // check for the mirror reason; both report `NotFound`, because what the
+    // caller named is not a thing this operation can act on.
+    if path.exists() && !path.is_file() {
+        return Err(AppError::NotFound(format!(
+            "no Note with concept id {note_id}: {} is not a file",
+            concept_id_to_path(note_id)
+        )));
+    }
 
     let mut journal = FileJournal::default();
     journal.trash(&path)?;
@@ -250,7 +263,7 @@ pub fn rename_note(
 ) -> Result<(NoteState, LifecycleEffects), AppError> {
     validate_title(new_title)?;
     let old_path = workspace.note_path(note_id)?;
-    if !old_path.exists() {
+    if !old_path.is_file() {
         return Err(AppError::NotFound(format!(
             "no file on disk for concept id {note_id}"
         )));
@@ -292,7 +305,7 @@ pub fn move_note(
     new_directory_path: &str,
 ) -> Result<(NoteState, LifecycleEffects), AppError> {
     let old_path = workspace.note_path(note_id)?;
-    if !old_path.exists() {
+    if !old_path.is_file() {
         return Err(AppError::NotFound(format!(
             "no file on disk for concept id {note_id}"
         )));
@@ -455,6 +468,23 @@ fn delete_directory_locked(
     if !absolute.exists() && removed.is_empty() {
         return Err(AppError::NotFound(format!(
             "no Directory at {directory} in this Workspace"
+        )));
+    }
+    // The same guard `rename_directory` already makes, and for a sharper
+    // reason. Pointed at a *file*, this trashed it, committed the deletion and
+    // returned `Ok([])` — because `removed` is the Notes *under* the prefix and
+    // a file has none — leaving the deleted Note's `notes` row and, worse, its
+    // `notes_fts` text in the encrypted index with the `fts_mapping` row still
+    // pointing at it. That is the stranded-encrypted-text hazard
+    // `data-models/schema.sql` names, and it persists for the rest of the
+    // session: nothing rebuilds the index until the next open.
+    //
+    // `exists()` rather than `is_dir()` outright, because a Directory whose
+    // on-disk folder has vanished while its `notes` rows survive is a state this
+    // call legitimately cleans up.
+    if absolute.exists() && !absolute.is_dir() {
+        return Err(AppError::NotFound(format!(
+            "no Directory at {directory} in this Workspace: it is a file"
         )));
     }
 
@@ -629,6 +659,23 @@ fn apply_reidentify_locked(
         if a.old_id != a.new_id {
             pathspec.push(concept_id_to_path(&a.new_id));
         }
+    }
+    // A Directory rename moves the whole directory with one `rename`, so the
+    // Notes are not the only thing that moved: a bundle legitimately holds
+    // files that are not Notes (an attachment, a foreign tool's `index.md`,
+    // anything else an author put there), and every one of them is a rename
+    // Git can see but was never told to record. Committing the Note paths alone
+    // left the worktree permanently dirty — which is precisely the problem
+    // `delete_directory` fixed for itself by committing the Directory rather
+    // than the list of Notes.
+    //
+    // The two ends are named differently, because `commit_paths` reads a
+    // directory path as a *removal* — which is exactly what `delete_directory`
+    // needs of it. The old location is therefore one entry, and the new one is
+    // named a file at a time.
+    if let Some(rename) = &plan.directory_rename {
+        pathspec.push(rename.old.clone());
+        collect_files(workspace.root(), &rename.new_absolute, &mut pathspec);
     }
     // The commit result is held rather than propagated with `?`, so that the
     // journal is settled either way: the bundle and the index are already
@@ -1184,6 +1231,18 @@ fn rewrite_frontmatter_title(source: &str, new_title: &str) -> Option<String> {
 /// The allowlist matters because a title is free-form user text under the
 /// verbatim derivation rule, and YAML reads a bare `no`, `2024` or `a: b` as a
 /// boolean, an integer and a nested mapping respectively.
+///
+/// Inside the quotes, every character in the `Cc` category is escaped as well
+/// as the four that already were. YAML 1.2 §5.7 forbids a raw C0 or C1 control
+/// in a double-quoted scalar, and this crate is not the only reader of the
+/// bytes it writes: a bundle is a portable artifact under OKF, so a block that
+/// only happens to parse is not the bar. Measured against the pinned `saphyr`
+/// 0.0.11, a raw `\u{7}` from a terminal paste or a `\u{b}` from a spreadsheet
+/// cell round-trips today and only `\u{0}` — already refused upstream by
+/// [`validate_segment`] — does not, so this is the spelling being made correct
+/// rather than a parse being repaired. `\uXXXX` is chosen over YAML's shorter
+/// `\xXX` because it is the one form that covers the whole category, C1
+/// controls included.
 fn yaml_scalar(value: &str) -> String {
     let plain = value
         .chars()
@@ -1212,6 +1271,7 @@ fn yaml_scalar(value: &str) -> String {
             '\n' => out.push_str("\\n"),
             '\r' => out.push_str("\\r"),
             '\t' => out.push_str("\\t"),
+            _ if c.is_control() => out.push_str(&format!("\\u{:04X}", c as u32)),
             _ => out.push(c),
         }
     }
@@ -1244,9 +1304,22 @@ fn validate_segment(segment: &str) -> Result<(), AppError> {
             "a Note or Directory name cannot be empty".to_string(),
         ));
     }
-    if segment == "." || segment == ".." {
+    // A leading `.` covers `.` and `..` — which name a directory rather than a
+    // file inside the Workspace — and every other dot-prefixed name, which is
+    // worse than it looks. `index::scan::walk_bundle` skips dot-prefixed
+    // entries, deliberately: that is what makes a trash entry or a half-written
+    // `.name.pid.n.tmp` invisible to the indexer rather than a phantom Note. So
+    // a Note called `.hidden` would be created, indexed and opened, and then
+    // silently dropped from the index by the next reindex — which now runs on
+    // every Workspace open — leaving the file orphaned on disk and its name
+    // permanently taken, since `ensure_path_available` consults the filesystem
+    // as well as the index. Refusing is this function's own stance
+    // (`data-models/okf-bundle.md`, "Reserved filenames"): a name that cannot
+    // be derived correctly is rejected rather than silently disambiguated.
+    if segment.starts_with('.') {
         return Err(AppError::PathUnavailable(format!(
-            "{segment} does not name a file inside the Workspace"
+            "{segment} derives a dot-prefixed filename, which the indexer skips, so the Note \
+             would vanish from the Workspace while its file stayed on disk"
         )));
     }
     if segment.contains('/') || segment.contains('\\') || segment.contains('\0') {
@@ -1327,6 +1400,14 @@ fn is_same_file(candidate: &Path, held_by: Option<&Path>) -> bool {
 /// filesystem — cannot be addressed through this API either way, since any
 /// translation would rewrite the name into a path. Refusing says so instead of
 /// silently addressing a different directory.
+///
+/// A **dot-prefixed segment** is refused on the same terms, and for the reason
+/// [`validate_segment`] gives: `index::scan::walk_bundle` skips those entries,
+/// so a Directory under one is invisible to the indexer and the next reindex
+/// drops its row, while the on-disk directory — and any Note written into it —
+/// stays. It is also what keeps the trash entries and the tier 2 temporary
+/// files, both dot-prefixed by construction, from being addressable through
+/// this API at all.
 fn normalize_directory(path: &str) -> Result<String, AppError> {
     if path.contains('\\') {
         return Err(AppError::PathUnavailable(format!(
@@ -1345,6 +1426,12 @@ fn normalize_directory(path: &str) -> Result<String, AppError> {
     if escapes {
         return Err(AppError::PathUnavailable(format!(
             "{path} does not name a Directory inside the Workspace"
+        )));
+    }
+    if trimmed.split('/').any(|segment| segment.starts_with('.')) {
+        return Err(AppError::PathUnavailable(format!(
+            "{path} names a dot-prefixed Directory, which the indexer skips, so it would \
+             vanish from the Workspace while its contents stayed on disk"
         )));
     }
     Ok(trimmed.to_string())
@@ -1537,6 +1624,33 @@ fn final_source(affected: &Affected) -> Result<String, AppError> {
         Some(source) => Ok(source.clone()),
         None => std::fs::read_to_string(&affected.new_path)
             .map_err(|e| AppError::IoError(format!("read {}: {e}", affected.new_path.display()))),
+    }
+}
+
+/// Appends every file beneath `dir` to `out`, bundle-relative, so a Directory
+/// rename can name its new location one entry at a time.
+///
+/// burlmd's own scratch files are skipped, and `.git` with them: both are
+/// ignored rather than tracked (`workspace::SCRATCH_IGNORE_PATTERNS`), so
+/// staging one is precisely what those patterns exist to prevent. A directory
+/// that cannot be read is skipped rather than raised — this runs after the
+/// filesystem and the index already agree, and the only cost of missing a file
+/// here is the dirty worktree this is closing, not a wrong commit.
+fn collect_files(root: &Path, dir: &Path, out: &mut Vec<String>) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if name == ".git" || super::is_scratch_name(&name) {
+            continue;
+        }
+        let path = entry.path();
+        if path.is_dir() {
+            collect_files(root, &path, out);
+        } else if let Ok(relative) = path.strip_prefix(root) {
+            out.push(relative.to_string_lossy().into_owned());
+        }
     }
 }
 
@@ -2883,6 +2997,188 @@ mod tests {
         assert!(f
             .git(&["show", "HEAD~1:doomed/diagram.png"])
             .contains("not a Note at all"));
+    }
+
+    /// The mirror of the same rule for a Directory *rename*: the filesystem
+    /// step renames the whole directory, so a pathspec built from the affected
+    /// Notes alone leaves every non-Note file under it as a rename Git can see
+    /// and was never told to record.
+    #[test]
+    fn renaming_a_directory_commits_the_non_note_files_it_moved_too() {
+        let f = fixture();
+        f.write("projects/One.md", &note("One", "words"));
+        f.write("projects/diagram.png", "an attachment, not a Note\n");
+        f.reindex();
+        f.commit_baseline();
+
+        rename_directory(&f.workspace, "projects", "work").unwrap();
+
+        assert_eq!(
+            f.git(&["status", "--porcelain"]),
+            "",
+            "the non-Note files under the Directory moved on disk but were not \
+             committed, leaving the worktree permanently dirty"
+        );
+        assert!(f.exists("work/diagram.png"));
+        assert!(f
+            .git(&["show", "HEAD:work/diagram.png"])
+            .contains("an attachment, not a Note"));
+    }
+
+    /// `rename_directory` refuses a path whose type it does not handle. Its two
+    /// mirrors did not, and each destroys something the caller did not name.
+    ///
+    /// The regressions this pins:
+    ///
+    /// - `delete_directory` pointed at a **file** trashed it, committed the
+    ///   deletion and returned `Ok([])` — `removed` lists the Notes *under* the
+    ///   prefix, and a file has none — leaving the Note's `notes` row and its
+    ///   `notes_fts` text stranded in the encrypted index for the rest of the
+    ///   session. `data-models/schema.sql` names that hazard specifically.
+    /// - `delete_note` pointed at a **directory** named `*.md` — legal, and
+    ///   what a foreign tool or a user may well have put there — reached
+    ///   `remove_dir_all` through the journal's trash-then-discard and took the
+    ///   whole subtree with it.
+    #[test]
+    fn a_lifecycle_call_refuses_a_path_of_the_wrong_type() {
+        let f = fixture();
+        f.write("One.md", &note("One", "distinctive searchable words"));
+        f.write("Archive.md/inside.md", &note("inside", "nested and kept"));
+        f.reindex();
+        f.commit_baseline();
+        let before = f.note_ids();
+        assert_eq!(f.raw_fts_matches("distinctive"), 1);
+
+        let refused = delete_directory(&f.workspace, "One.md");
+
+        assert!(
+            matches!(refused, Err(AppError::NotFound(_))),
+            "deleting a file as a Directory must be refused, got {refused:?}"
+        );
+        assert!(f.exists("One.md"), "the file was trashed anyway");
+        assert_eq!(f.note_ids(), before, "the index moved");
+        assert_eq!(
+            f.raw_fts_matches("distinctive"),
+            1,
+            "the Note's full text was stranded in the encrypted index"
+        );
+
+        let refused = delete_note(&f.workspace, "Archive");
+
+        assert!(
+            matches!(refused, Err(AppError::NotFound(_))),
+            "deleting a directory as a Note must be refused, got {refused:?}"
+        );
+        assert!(
+            f.exists("Archive.md/inside.md"),
+            "the directory was removed recursively as if it were a Note"
+        );
+        assert_eq!(f.note_ids(), before, "the index moved");
+        assert!(f.trash_entries().is_empty(), "a trash entry was parked");
+        assert_eq!(
+            f.git(&["status", "--porcelain"]),
+            "",
+            "a refused call must leave the worktree exactly as it found it"
+        );
+        assert_eq!(
+            f.git(&["rev-list", "--count", "HEAD"]),
+            "1",
+            "a refused call recorded a commit"
+        );
+    }
+
+    /// A name deriving to a dot-prefixed filename is refused rather than
+    /// created and then silently dropped.
+    ///
+    /// `validate_title` permitted a leading `.`, but `index::scan::walk_bundle`
+    /// skips dot-prefixed entries — deliberately, so a trash entry or a
+    /// half-written `.name.pid.n.tmp` is invisible to the indexer rather than a
+    /// phantom Note. A `.hidden` Note was therefore created, indexed and
+    /// opened, and then dropped from the index by the next reindex, which now
+    /// runs on every Workspace open. The file stayed on disk, orphaned, with
+    /// its name permanently taken: `ensure_path_available` consults the
+    /// filesystem as well as the index, so the second attempt at the same title
+    /// is refused as a collision with a Note nothing can see.
+    #[test]
+    fn a_leading_dot_in_a_name_is_refused_rather_than_created_and_dropped() {
+        let f = fixture();
+
+        let refused = create_note(&f.workspace, "", ".hidden");
+
+        assert!(
+            matches!(refused, Err(AppError::PathUnavailable(_))),
+            "a dot-prefixed title must be refused, got {refused:?}"
+        );
+        assert!(!f.exists(".hidden.md"), "the file was created anyway");
+        assert!(f.note_ids().is_empty(), "the Note was indexed anyway");
+
+        // The same rule wherever a segment is validated: a rename onto one, a
+        // Directory name, and a Directory path.
+        f.write("One.md", &note("One", "body"));
+        f.reindex();
+        for result in [
+            rename_note(&f.workspace, "One", ".hidden").map(|_| ()),
+            create_directory(&f.workspace, ".hidden"),
+            create_note(&f.workspace, ".hidden", "New Note").map(|_| ()),
+        ] {
+            assert!(
+                matches!(result, Err(AppError::PathUnavailable(_))),
+                "got {result:?}"
+            );
+        }
+        assert!(
+            !f.exists(".hidden"),
+            "a refused call materialized a directory"
+        );
+        assert_eq!(f.note_ids(), vec!["One".to_string()]);
+        assert_eq!(f.directory_ids(), Vec::<String>::new());
+    }
+
+    /// A title carrying a control character round-trips through the frontmatter
+    /// block it is written into, and the bytes written for it are the escaped
+    /// form YAML 1.2 §5.7 requires rather than a raw control.
+    ///
+    /// The second half is the point. A raw C0 control inside a double-quoted
+    /// scalar is invalid YAML that the pinned `saphyr` 0.0.11 happens to
+    /// tolerate — only `\u{0}` is refused, and [`validate_segment`] rejects that
+    /// upstream — so this is not a parse being repaired. A bundle is a portable
+    /// artifact under OKF and burlmd is not the only reader of what it writes,
+    /// which is what makes "only happens to parse here" the wrong bar.
+    #[test]
+    fn a_title_with_a_control_character_round_trips_as_conformant() {
+        let f = fixture();
+        f.write("One.md", &note("One", "body"));
+        f.reindex();
+        // A bell and a start-of-heading: two characters a paste out of a
+        // terminal or a spreadsheet cell really does carry. Neither is
+        // whitespace, so `metadata_from`'s `trim` is not what is under test.
+        let awkward = "Bell\u{7} and start of heading\u{1} inside";
+
+        let (state, _) = rename_note(&f.workspace, "One", awkward).unwrap();
+
+        assert_eq!(state.metadata.title, awkward);
+        let written = f.read(&concept_id_to_path(&state.metadata.id));
+        assert!(
+            state.metadata.okf_conformant,
+            "the rewritten frontmatter no longer parses: {written:?}"
+        );
+        assert!(
+            written.contains("title: \"Bell\\u0007 and start of heading\\u0001 inside\""),
+            "the control characters were written raw into a double-quoted \
+             scalar, which YAML 1.2 §5.7 forbids: {written:?}"
+        );
+        let reread = crate::okf::read_frontmatter(&written);
+        assert!(reread.is_conformant());
+        assert_eq!(reread.title.as_deref(), Some(awkward));
+
+        // And on the create path, which writes the block rather than rewriting
+        // one value inside it.
+        let created = create_note(&f.workspace, "", "Tab\u{1}stop").unwrap();
+        assert!(created.metadata.okf_conformant);
+        assert_eq!(created.metadata.title, "Tab\u{1}stop");
+        assert!(f
+            .read("Tab\u{1}stop.md")
+            .contains("title: \"Tab\\u0001stop\""));
     }
 
     /// The `Renamed` and `Overwrote` inverse arms, driven by the one failure

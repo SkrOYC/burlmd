@@ -177,8 +177,26 @@ impl Workspace {
     /// planted inside the bundle would still resolve outside it, so a Note that
     /// does exist is additionally checked against the canonicalized root, which
     /// is the same containment test `index::path_is_in_workspace` applies.
+    ///
+    /// A backslash **anywhere** in the concept id is refused before any of
+    /// that, so that all three path-handling functions in this Workspace agree
+    /// on what a segment may carry: `lifecycle::validate_segment` rejects it in
+    /// a name and `lifecycle::normalize_directory` rejects it in a Directory
+    /// path, the latter after it turned out to be a traversal hole rather than
+    /// a nicety. On Unix `..\..\etc` is one `Component::Normal` and so passes
+    /// the check below; nothing here translates it afterwards, which is why the
+    /// disagreement is currently harmless — but it is the same shape as the
+    /// defect that made translating-then-checking unsafe, and one rule shared by
+    /// three functions is cheaper than three that have to be re-verified apart.
     pub(super) fn note_path(&self, note_id: &str) -> Result<PathBuf, AppError> {
         use std::path::Component;
+
+        if note_id.contains('\\') {
+            return Err(AppError::PathUnavailable(format!(
+                "concept id {note_id} does not name a file inside the Workspace: a concept id \
+                 is `/`-separated and a backslash is a character no segment may carry"
+            )));
+        }
 
         let relative = concept_id_to_path(note_id);
         let relative_path = Path::new(&relative);
@@ -377,6 +395,14 @@ pub fn lookup(workspace_id: &str, note_id: &str) -> Result<Option<NoteSession>, 
 /// whichever of the two is authoritative, while the recorded revision stays the
 /// hash of what is **on disk**, because that is what tier 2 compares against
 /// before overwriting it.
+///
+/// Which is also why the disk bytes are decoded **on the no-draft branch
+/// only**. The strict decode is an obligation of the bytes that become the
+/// working source (see [`decode_source`]), and a draft row's text is already a
+/// `String`; running the decode first would make a file that went invalid
+/// underneath a session — a foreign tool writing Latin-1 over it, a truncated
+/// sync — refuse the one call that can hand the user their unflushed work back.
+/// The revision is a hash of the raw bytes and needs no decode at all.
 pub fn open_note(
     workspace: &Arc<Workspace>,
     note_id: &str,
@@ -395,14 +421,13 @@ pub fn open_note(
         }
     })?;
     let revision = content_hash(&bytes);
-    let disk_source = decode_source(&absolute_path, bytes)?;
     let last_modified = file_mtime(&absolute_path);
 
     let draft = workspace.with_db(|conn| read_draft(conn, workspace.id(), note_id))?;
     let restored_from_draft = draft.is_some();
     let (source, edit_seq) = match draft {
         Some(row) => (row.raw_markdown, row.edit_seq),
-        None => (disk_source, 0),
+        None => (decode_source(&absolute_path, bytes)?, 0),
     };
 
     let ParsedNote { mut ast, spans } = parse_note(&source, containing_dir(note_id));
@@ -619,6 +644,22 @@ impl NoteSession {
 
     /// Inserts a new Block before the one at `block_path`, or at the end of the
     /// Note when the path addresses nothing.
+    ///
+    /// **Both** seams are normalized, not just the trailing one. Appending a
+    /// separator to the inserted text is only sufficient where the insertion
+    /// point already sits on a blank-line boundary, and the end-of-Note case —
+    /// which is what a path addressing nothing means — is precisely where it
+    /// does not: an ordinary Note ends in a single `\n`, so `…Para two.\n` plus
+    /// `New block` is one paragraph with a lazy continuation line, and a Note
+    /// saved without a trailing newline glues the two together outright. Only a
+    /// source that already ended in a blank line behaved.
+    ///
+    /// A path that addresses a Block inside a container (a list item, a
+    /// blockquote's paragraph) is the same case one level down, and is resolved
+    /// the same way: the new Block is separated by a blank line, which ends the
+    /// container and starts a paragraph after it. That is the promise the name
+    /// makes — a *Block*, genuinely separate — rather than a new sibling item,
+    /// which would need a call that knows what marker to repeat.
     pub fn insert_block(
         &self,
         block_path: &[usize],
@@ -628,19 +669,45 @@ impl NoteSession {
             let at = spans
                 .block(block_path)
                 .map_or(working.len(), |b| b.source.start);
-            let mut text = source.clone();
-            text.push_str("\n\n");
+            let before = working
+                .get(..at)
+                .ok_or_else(|| AppError::ParseError(format!("offset {at} is not addressable")))?;
+            let mut text = separator_before(before, BLOCK_SEPARATOR_NEWLINES);
+            text.push_str(&source);
+            text.push_str(
+                &"\n".repeat(BLOCK_SEPARATOR_NEWLINES.saturating_sub(trailing_newlines(&source))),
+            );
             splice::splice_source(working, at..at, &text).map_err(splice_error)
         })
     }
 
     /// Deletes a Block, taking the separator that followed it with it so the
     /// remaining Blocks stay separated by exactly one blank line.
+    ///
+    /// "The separator that followed it" is `span.end..next_block_start`, and
+    /// [`SpanMap::blocks`] is flat: the Block that begins next in the source is
+    /// not necessarily a sibling. Deleting the **last item of a list** removes
+    /// up to the paragraph that follows the whole list, and the blank line in
+    /// between is the one that closes the container — it lives inside the last
+    /// item's own span, since a list item's span runs to the end of the blank
+    /// line that terminates it. Taking it absorbed the following paragraph into
+    /// the surviving item (`- a\n- b\n\nPara\n` became `- a\nPara\n`), which is
+    /// a Block the user did not edit changing meaning.
+    ///
+    /// So the seam is normalized rather than assumed: whatever newline run
+    /// separated the deleted region from what follows it is what must still
+    /// separate them afterwards, and any of it the preceding text does not
+    /// already supply is put back. An ordinary paragraph delete is unaffected —
+    /// its predecessor already ends in the blank line the separator carried —
+    /// and a delete at either end of the Note pads nothing, because there is no
+    /// seam to keep apart.
     pub fn delete_block(&self, block_path: &[usize]) -> Result<NoteState, AppError> {
         self.structural_edit(|working, spans| {
             let span = block_span(spans, block_path)?;
             let end = next_block_start(spans, &span).unwrap_or(span.end);
-            splice::splice_source(working, span.start..end, "").map_err(splice_error)
+            check_span(working, &(span.start..end))?;
+            let separator = separator_across(working, span.start, end);
+            splice::splice_source(working, span.start..end, &separator).map_err(splice_error)
         })
     }
 
@@ -1778,6 +1845,56 @@ fn block_span(spans: &SpanMap, path: &[usize]) -> Result<std::ops::Range<usize>,
         .ok_or_else(|| AppError::ParseError(format!("no Block at block_path {path:?}")))
 }
 
+/// How many newlines a Block must be followed by for the next one to be a
+/// separate Block: a blank line, which is two.
+const BLOCK_SEPARATOR_NEWLINES: usize = 2;
+
+/// How many newlines terminate `text`, counting a `\r\n` pair as one.
+///
+/// This is the unit both seam helpers measure in, because "is there a blank
+/// line here" is a question about the newline run at a boundary and nothing
+/// else — a leaf Block's span runs to the newline that terminates it, and a
+/// container's last child absorbs the blank line that closes the container.
+fn trailing_newlines(text: &str) -> usize {
+    text.bytes()
+        .rev()
+        .filter(|byte| *byte != b'\r')
+        .take_while(|byte| *byte == b'\n')
+        .count()
+}
+
+/// The newlines that must be emitted at the end of `before` for text appended
+/// to it to start `required` newlines' worth of separation later.
+///
+/// Empty when `before` is empty — the start of the Note is already a Block
+/// boundary and padding it would open the file with a blank line.
+fn separator_before(before: &str, required: usize) -> String {
+    if before.is_empty() {
+        return String::new();
+    }
+    "\n".repeat(required.saturating_sub(trailing_newlines(before)))
+}
+
+/// The text that must replace `source[start..end]` for what precedes `start` to
+/// stay as separated from what follows `end` as the removed region kept them.
+///
+/// Empty on either edge of the Note: with nothing on one side there is no seam,
+/// and padding one would leave a leading or trailing blank line that the delete
+/// was not asked for.
+fn separator_across(source: &str, start: usize, end: usize) -> String {
+    let (Some(before), Some(removed), Some(after)) = (
+        source.get(..start),
+        source.get(start..end),
+        source.get(end..),
+    ) else {
+        return String::new();
+    };
+    if before.is_empty() || after.is_empty() {
+        return String::new();
+    }
+    separator_before(before, trailing_newlines(removed))
+}
+
 /// The start of the first Block beginning at or after `span.end`, which is
 /// where the separator following a Block ends.
 fn next_block_start(spans: &SpanMap, span: &std::ops::Range<usize>) -> Option<usize> {
@@ -2535,6 +2652,183 @@ mod tests {
         );
     }
 
+    /// A file that goes invalid underneath a session must not make that
+    /// session's unflushed work unreachable.
+    ///
+    /// The regression this pins: `open_note` decoded the disk bytes strictly
+    /// *before* it looked for a draft row, so a foreign tool writing Latin-1
+    /// over a Note — or a truncated sync — refused the one call that restores
+    /// tier 1's work. The decode is an obligation of bytes that become the
+    /// working source, and on this branch they do not: the draft's text is the
+    /// working source and the raw bytes are only hashed for the OCC baseline.
+    #[test]
+    fn a_draft_is_restored_even_when_the_file_on_disk_went_invalid() {
+        let f = fixture();
+        let valid = note("A", "First.");
+        f.write("a.md", &valid);
+
+        let session = f.open("a");
+        session.update_block(&[0], "Unflushed work.\n").unwrap();
+        let unflushed = session.working_source().unwrap().to_string();
+        // The registry entry, and nothing else, goes away: what a kill leaves
+        // behind is the draft row on its own.
+        session.forget();
+
+        let mut bytes = valid.into_bytes();
+        bytes.extend_from_slice(b"latin-1 caf\xe9\n");
+        std::fs::write(f.root().join("a.md"), &bytes).unwrap();
+
+        let (restored, state) = open_note(&f.workspace, "a")
+            .expect("an unflushed draft must be reachable through a file gone invalid");
+
+        assert!(
+            state.restored_from_draft,
+            "the open must report that it restored the draft"
+        );
+        assert_eq!(
+            *restored.working_source().unwrap(),
+            unflushed,
+            "the restored buffer must be the draft, not the disk bytes"
+        );
+        // And with no draft to restore, the same file is still refused rather
+        // than decoded lossily — see the test above, whose Note has no row.
+    }
+
+    /// Appending a Block at the end of a Note must produce a Block, whatever
+    /// the source happened to end with.
+    ///
+    /// The regression this pins: the insert separator was appended to the new
+    /// text only, which assumes the insertion point already sits on a
+    /// blank-line boundary. At the end of an ordinary Note it does not — a Note
+    /// ends in one `\n` — so `Para two.` and `New block` parsed as a single
+    /// paragraph, the new text arriving as a lazy continuation line of the Block
+    /// above it. Only a source that already ended in a blank line behaved, which
+    /// is the least common of the three.
+    #[test]
+    fn appending_a_block_separates_it_whatever_the_source_ended_with() {
+        for ending in [
+            "Para one.\n\nPara two.\n",
+            "Para one.\n\nPara two.",
+            "Para one.\n\nPara two.\n\n",
+        ] {
+            let f = fixture();
+            f.write("a.md", ending);
+            let session = f.open("a");
+            assert_eq!(session.note_state().unwrap().ast.len(), 2);
+
+            // A path addressing nothing is the end-of-Note append.
+            let state = session
+                .insert_block(&[9], "New block.".to_string())
+                .unwrap();
+
+            assert_eq!(
+                state.ast.len(),
+                3,
+                "{ending:?} did not gain a Block: {:?}",
+                session.working_source().unwrap()
+            );
+            assert_eq!(
+                session.block_source(&[1]).unwrap().trim_end(),
+                "Para two.",
+                "{ending:?} let the append run into the Block above it"
+            );
+            assert_eq!(
+                session.block_source(&[2]).unwrap().trim_end(),
+                "New block.",
+                "{ending:?} did not produce the inserted Block"
+            );
+        }
+    }
+
+    /// A mid-Note insert lands before the Block it names and is separated from
+    /// the one above it, including where that one is a list item whose own span
+    /// ends in a single newline.
+    #[test]
+    fn a_mid_note_insert_is_separated_from_the_block_above_it() {
+        let f = fixture();
+        f.write("a.md", "Alpha\n\nBeta\n");
+        let session = f.open("a");
+
+        session.insert_block(&[1], "Middle.".to_string()).unwrap();
+
+        assert_eq!(
+            *session.working_source().unwrap(),
+            "Alpha\n\nMiddle.\n\nBeta\n"
+        );
+
+        let g = fixture();
+        g.write("b.md", "- a\n- b\n\nPara\n");
+        let list = g.open("b");
+
+        list.insert_block(&[0, 1], "Middle.".to_string()).unwrap();
+
+        assert_eq!(
+            *list.working_source().unwrap(),
+            "- a\n\nMiddle.\n\n- b\n\nPara\n",
+            "an insert inside a list ran into the item above it"
+        );
+    }
+
+    /// Deleting the last item of a list must not absorb the paragraph that
+    /// follows the list into the item that survives.
+    ///
+    /// The regression this pins: `delete_block` removed
+    /// `span.start..next_block_start`, and [`SpanMap::blocks`] is flat, so the
+    /// "next" Block after the last list item is the paragraph *after the whole
+    /// list*. The blank line in between closes the container and lives inside
+    /// the last item's own span, so taking it turned `- a\n- b\n\nPara\n` into
+    /// `- a\nPara\n` — one list item reading "a Para".
+    #[test]
+    fn deleting_the_last_item_of_a_list_leaves_the_next_paragraph_its_own_block() {
+        let f = fixture();
+        f.write("a.md", "- a\n- b\n\nPara\n");
+        let session = f.open("a");
+
+        session.delete_block(&[0, 1]).unwrap();
+
+        assert_eq!(*session.working_source().unwrap(), "- a\n\nPara\n");
+        let state = session.note_state().unwrap();
+        assert_eq!(
+            state.ast.len(),
+            2,
+            "the list and the paragraph are no longer two Blocks"
+        );
+        assert_eq!(session.block_source(&[1]).unwrap(), "Para\n");
+    }
+
+    /// The other half of the same rule: an ordinary paragraph delete still
+    /// takes its separator with it, and a delete in the middle of a list still
+    /// leaves the list contiguous.
+    #[test]
+    fn an_ordinary_delete_still_collapses_the_separator_that_followed_it() {
+        let f = fixture();
+        f.write("a.md", "Alpha\n\nBeta\n\nGamma\n");
+        let session = f.open("a");
+
+        session.delete_block(&[1]).unwrap();
+
+        assert_eq!(*session.working_source().unwrap(), "Alpha\n\nGamma\n");
+        assert_eq!(session.note_state().unwrap().ast.len(), 2);
+
+        let g = fixture();
+        g.write("b.md", "- a\n- b\n- c\n\nPara\n");
+        let list = g.open("b");
+
+        list.delete_block(&[0, 1]).unwrap();
+
+        assert_eq!(*list.working_source().unwrap(), "- a\n- c\n\nPara\n");
+        assert_eq!(list.note_state().unwrap().ast.len(), 2);
+
+        // The first Block of a Note has no seam above it to keep open.
+        let h = fixture();
+        h.write("c.md", "Alpha\n\nBeta\n");
+        let first = h.open("c");
+
+        first.delete_block(&[0]).unwrap();
+
+        assert_eq!(*first.working_source().unwrap(), "Beta\n");
+    }
+
     /// `architecture/resilience.md`: an abrupt termination mid-write leaves the
     /// previous state intact. The write goes to a uniquely named temporary file
     /// in the target's own directory and arrives by rename.
@@ -3217,6 +3511,14 @@ mod tests {
             "../../etc/passwd",
             "/etc/passwd",
             "a/../../outside",
+            // A backslash is refused here for the same reason
+            // `lifecycle::normalize_directory` refuses it in a Directory path
+            // and `lifecycle::validate_segment` in a name: on Unix `..\..\x` is
+            // one `Component::Normal`, so the containment check below cannot see
+            // it, and three path-handling functions that disagree about what a
+            // segment may carry is the shape the round-1 traversal defect had.
+            "..\\..\\outside",
+            "a\\b",
         ] {
             let refused = open_note(&f.workspace, escaping).map(|(_, state)| state);
             assert!(

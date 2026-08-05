@@ -66,34 +66,46 @@ pub enum LinkTarget {
 /// rather than being tolerated as merely "not a link".
 ///
 /// An internal target's concept id is the resolved path with the leading
-/// `/` (for an absolute destination) and trailing `.md` removed, with `.`
-/// and `..` segments normalized against `containing_dir` for a relative
-/// one. A relative destination that climbs above the bundle root -- more
-/// `..` segments than `containing_dir` has components -- classifies as
-/// external: `notes.id` is bundle-relative by construction
-/// (`data-models/okf-bundle.md`, "Identity"), so there is no concept id to
-/// report, and clamping the climb at the root would silently point the
-/// link at whatever unrelated Note happens to live there instead of
-/// reporting that the destination does not resolve.
+/// `/` (for an absolute destination) and trailing `.md` removed, and with
+/// `.` and `..` segments normalized -- against `containing_dir` for a
+/// relative destination, and against the bundle root for an absolute one. A
+/// destination that climbs above the bundle root -- more `..` segments than
+/// there are components to pop -- classifies as external: `notes.id` is
+/// bundle-relative by construction (`data-models/okf-bundle.md`,
+/// "Identity"), so there is no concept id to report, and clamping the climb
+/// at the root would silently point the link at whatever unrelated Note
+/// happens to live there instead of reporting that the destination does not
+/// resolve.
+///
+/// The two spellings of the same destination therefore agree. They did not
+/// before: the absolute branch stripped the leading `/` and the `.md` and
+/// reported what was left verbatim, so `/a/../b.md` classified as
+/// `Internal("a/../b")` -- an id no `notes.id` can ever equal, and so a
+/// permanent ghost Link -- while `a/../b.md` read from the bundle root
+/// normalized to `Internal("b")` and resolved. Nothing forbids a foreign
+/// bundle from writing the absolute form with a `..` in it, and OKF §6.1
+/// requires it to resolve.
 pub fn classify(dest: &str, containing_dir: &str) -> LinkTarget {
     if has_url_scheme(dest) || !dest.ends_with(".md") {
         return LinkTarget::External(dest.to_string());
     }
-    if let Some(absolute) = dest.strip_prefix('/') {
-        let concept_id = absolute.strip_suffix(".md").unwrap_or(absolute);
-        return LinkTarget::Internal(concept_id.to_string());
-    }
-    match resolve_relative(containing_dir, dest) {
+    // An absolute destination resolves from the bundle root, which is the
+    // same normalization with an empty base rather than a second one.
+    let (base, relative) = match dest.strip_prefix('/') {
+        Some(absolute) => ("", absolute),
+        None => (containing_dir, dest),
+    };
+    match resolve_relative(base, relative) {
         Some(concept_id) => LinkTarget::Internal(concept_id),
         None => LinkTarget::External(dest.to_string()),
     }
 }
 
-/// Resolves a relative destination (already confirmed to have no leading
-/// `/` and to end in `.md`) against `containing_dir`, normalizing `.` and
-/// `..` segments the way a filesystem or URL resolver would. Returns `None`
-/// when a `..` has nothing left to pop -- see [`classify`] for why that
-/// case is reported as external rather than clamped.
+/// Resolves a destination (already confirmed to end in `.md`, and with any
+/// leading `/` already stripped) against `containing_dir`, normalizing `.`
+/// and `..` segments the way a filesystem or URL resolver would. Returns
+/// `None` when a `..` has nothing left to pop -- see [`classify`] for why
+/// that case is reported as external rather than clamped.
 fn resolve_relative(containing_dir: &str, dest: &str) -> Option<String> {
     let dest_without_ext = dest.strip_suffix(".md").unwrap_or(dest);
     let mut stack: Vec<&str> = containing_dir
@@ -344,6 +356,53 @@ mod tests {
 
         let target = classify("../../too_far.md", "projects");
         assert_eq!(target, LinkTarget::External("../../too_far.md".to_string()));
+    }
+
+    /// The absolute and relative spellings of one destination must classify
+    /// the same way, since they name the same file.
+    ///
+    /// The regression this pins: the absolute branch stripped the leading
+    /// `/` and the `.md` and reported the rest verbatim, so `/a/../b.md`
+    /// became `Internal("a/../b")` — an id no `notes.id` can ever equal, and
+    /// therefore a Link that is permanently a ghost — while the identical
+    /// `a/../b.md` read from the bundle root normalized to `Internal("b")`
+    /// and resolved.
+    #[test]
+    fn an_absolute_destination_normalizes_exactly_as_the_relative_spelling_does() {
+        for (absolute, relative) in [
+            ("/a/../b.md", "a/../b.md"),
+            ("/./b.md", "./b.md"),
+            (
+                "/projects/sub/../architecture.md",
+                "projects/sub/../architecture.md",
+            ),
+            ("/a//b.md", "a//b.md"),
+        ] {
+            assert_eq!(
+                classify(absolute, "unrelated/deep"),
+                classify(relative, ""),
+                "{absolute} and {relative} name the same file"
+            );
+        }
+        assert_eq!(
+            classify("/a/../b.md", ""),
+            LinkTarget::Internal("b".to_string())
+        );
+    }
+
+    /// The climbs-above-root rule applies to the absolute spelling too: there
+    /// is nothing above the bundle root to pop, so the destination names no
+    /// concept in this bundle and is reported as external rather than clamped.
+    #[test]
+    fn an_absolute_destination_climbing_above_the_bundle_root_is_external() {
+        assert_eq!(
+            classify("/../escaped.md", ""),
+            LinkTarget::External("/../escaped.md".to_string())
+        );
+        assert_eq!(
+            classify("/a/../../too_far.md", "projects"),
+            LinkTarget::External("/a/../../too_far.md".to_string())
+        );
     }
 
     #[test]
