@@ -290,6 +290,50 @@ pub fn insert_note_rows(
     Ok(())
 }
 
+/// Records a `directories` row for `directory` and for every ancestor of it
+/// that has none yet. A no-op for the bundle root, spelled `""`.
+///
+/// The tree renders from `directories` alone, so an ancestor missing there is a
+/// whole subtree the sidebar cannot reach until the next full rebuild. Two
+/// callers need that guarantee and reach it from opposite directions:
+/// `index::incremental` writing a Note that is the first thing ever placed in
+/// its Directory, and `workspace::lifecycle` creating or renaming a Directory
+/// outright. Both used to carry their own copy of this loop — one keyed on a
+/// concept id and one on a directory path, identical below the first line — and
+/// this is the one that survived, in the module that owns every other write to
+/// this table.
+///
+/// `INSERT OR IGNORE`, so recording a Directory that already exists is free and
+/// the callers do not have to check first.
+pub fn record_directories(
+    conn: &Connection,
+    workspace_id: &str,
+    directory: &str,
+) -> Result<(), AppError> {
+    if directory.is_empty() {
+        return Ok(());
+    }
+    let mut stmt = conn.prepare(
+        "INSERT OR IGNORE INTO directories (id, workspace_id, path) VALUES (?1, ?2, ?1)",
+    )?;
+    let mut ancestor = String::new();
+    for segment in directory.split('/').filter(|s| !s.is_empty()) {
+        if !ancestor.is_empty() {
+            ancestor.push('/');
+        }
+        ancestor.push_str(segment);
+        stmt.execute(rusqlite::params![ancestor, workspace_id])?;
+    }
+    Ok(())
+}
+
+/// The Directory a concept id lives in: everything before its last `/`, and
+/// `""` for a Note at the bundle root. Pairs with [`record_directories`], which
+/// reads `""` as "nothing to record".
+pub fn containing_directory(concept_id: &str) -> &str {
+    concept_id.rsplit_once('/').map_or("", |(dir, _)| dir)
+}
+
 /// Deletes one Note's `notes_fts` row through `fts_mapping`, and nothing else.
 ///
 /// Always called before the `notes` row it belongs to is deleted — see this

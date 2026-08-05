@@ -267,120 +267,185 @@ fn canonicalize_workspace_dir(dir: &Path) -> Result<PathBuf, AppError> {
 /// accepted cost: nothing between them can invalidate the `workspaces` row this
 /// function just established, and bootstrap is a single-threaded moment at
 /// application start.
+///
+/// # Everything after the row is resolved runs under the lifecycle lock
+///
+/// The `workspaces` row is resolved first, with nothing held, precisely so that
+/// its id can key `workspace::persist::with_lifecycle_lock_id` around the rest.
+/// Three things needed that lock, and none of them is hypothetical: FRB 2.12's
+/// default handler dispatches every `#[frb] async fn` on its own thread, and
+/// `open_workspace` is one of them, so a bootstrap genuinely runs alongside
+/// whatever the previously-open Workspace is still doing.
+///
+/// - **The scan and the write are one unit.** This is the same defect the
+///   `reindex_workspace` fix closed (`api::ffi_api::reindex_workspace`), one
+///   function over: `scan_bundle` walks the whole bundle off the connection and
+///   `write_scanned_bundle` replaces the Workspace's rows from that snapshot, so
+///   a `rename_note` completing in the O(bundle) window between them has already
+///   moved the file and rewritten its rows — and the write phase then reinstates
+///   the old concept id, drops the new one, and leaves the index naming a file
+///   that no longer exists.
+/// - **The sweep must not race a deletion's rollback.** See
+///   [`sweep_scratch_files`]: a `.burlmd-trash.*` entry is a live rollback
+///   record for an in-flight `delete_note`, not only debris a kill left behind.
+/// - **The `.gitignore` commit is a commit**, and commits into the same
+///   repository serialize with the lifecycle operations that make them, which is
+///   what keeps `commit_paths`'s `HEAD` compare-and-swap from having to refuse
+///   this one.
+///
+/// The repository init and the directory canonicalization stay outside, where
+/// they cost nothing to leave: neither reads nor writes anything a lifecycle
+/// operation touches, and a repository has to exist before there is anything to
+/// commit into.
+///
+/// The order holds. This is the topmost of `workspace::persist`'s four locks,
+/// and the only lock taken *beneath* it here is the connection, the bottom one.
+/// The row resolution above takes and releases the connection before this is
+/// acquired, so nothing lower is ever held at the moment it is taken.
 fn converge(index: &IndexHandle, dir: &Path) -> Result<WorkspaceInfo, AppError> {
     let ignore_written = crate::git::operations::init_repo(dir)?;
-    // The one write bootstrap makes into the user's bundle, so it is also the
-    // one bootstrap has to record. `init_repo` creates or extends `.gitignore`
-    // and commits nothing, which left the file untracked (on a fresh bundle) or
-    // modified (on an adopted one) in every `git status` the user ever ran
-    // against their own bundle — a worktree burlmd dirtied on their behalf and
-    // never cleaned up. Worse, it was resolved at a time nobody chose: the next
-    // tier 3 close would not sweep it (that pathspec is one Note), but the next
-    // `commit_all` from a sync would, filing burlmd's housekeeping inside an
-    // unrelated commit.
-    //
-    // Committed **only when the file actually changed**, which is what keeps a
-    // repeat open from writing a second, empty-tree-identical commit — and what
-    // makes `open_workspace`'s "existing history is adopted unchanged" promise
-    // survive this: an adopted bundle that already carries the patterns is
-    // touched neither on disk nor in history. A foreign bundle that does not
-    // carry them gains exactly one commit, which is the trade this makes
-    // knowingly — one recorded housekeeping commit at a moment the user chose
-    // (they just opened the bundle) against a worktree burlmd dirtied and left.
-    //
-    // Propagated rather than bound and dropped like the scratch sweep below,
-    // and the asymmetry is deliberate: the sweep is best-effort tidying with
-    // `.gitignore` itself as its backstop, whereas a `commit_paths` that fails
-    // here means the repository cannot be committed into at all — which every
-    // tier 3 close in the session is about to discover the hard way, one Note's
-    // worth of work later. Reporting it at open is the earlier and cheaper of
-    // the two moments.
-    if ignore_written {
-        crate::git::operations::commit_paths(
-            dir,
-            "Ignore burlmd scratch files\n\n\
-             .burlmd-trash.* and .*.tmp are this application's own scratch files: a deleted \
-             Note's full content and a Note mid-write, both plaintext, both left behind only \
-             by a kill. Ignoring them keeps a whole-worktree commit from publishing either.\n",
-            &[".gitignore".to_string()],
-        )?;
-    }
-    // Bound and dropped rather than propagated: a scratch entry that could not
-    // be removed is untidy, is already `.gitignore`d, and will be swept again
-    // at the next open — none of which is a reason to refuse the user their
-    // Notes. `ScratchSweep` exists so that "how much was left behind" is a
-    // value this call can be tested on rather than an error nobody sees.
-    let _swept = sweep_scratch_files(dir);
-
-    // The read half of the fourth post-condition, taken **before** any
-    // connection is acquired and after the sweep, so the rows derived below
-    // describe the bundle as it now is.
-    let scanned = crate::index::scan::scan_bundle(dir)?;
 
     let local_path = dir.to_string_lossy().to_string();
-    let info = index.with(|conn| {
-        let existing = conn
-            .query_row(
-                "SELECT id, name, provider, remote_url FROM workspaces WHERE local_path = ?1",
-                [&local_path],
-                |row| {
-                    Ok(WorkspaceInfo {
-                        id: row.get(0)?,
-                        name: row.get(1)?,
-                        provider: row.get(2)?,
-                        remote_url: row.get(3)?,
-                        local_path: local_path.clone(),
-                    })
-                },
-            )
-            .optional()?;
+    let info = index.with(|conn| resolve_workspace_row(conn, dir, local_path))?;
 
-        match existing {
-            // Reused, not recreated: no second row and — since root key
-            // generation happens once per process, in `db::connection`'s own
-            // singleton init, entirely upstream of this function — no second
-            // key either.
-            Some(info) => Ok(info),
-            None => {
-                let id = mint_workspace_id()?;
-                let name = workspace_name(dir);
-                conn.execute(
-                    "INSERT INTO workspaces (id, name, provider, remote_url, local_path) \
-                     VALUES (?1, ?2, 'local', NULL, ?3)",
-                    rusqlite::params![id, name, local_path],
-                )?;
-                Ok(WorkspaceInfo {
-                    id,
-                    name,
-                    provider: "local".to_string(),
-                    remote_url: None,
-                    local_path,
-                })
-            }
+    crate::workspace::persist::with_lifecycle_lock_id(&info.id, || {
+        // The one write bootstrap makes into the user's bundle, so it is also
+        // the one bootstrap has to record. `init_repo` creates or extends
+        // `.gitignore` and commits nothing, which left the file untracked (on a
+        // fresh bundle) or modified (on an adopted one) in every `git status`
+        // the user ever ran against their own bundle — a worktree burlmd
+        // dirtied on their behalf and never cleaned up. Worse, it was resolved
+        // at a time nobody chose: the next tier 3 close would not sweep it
+        // (that pathspec is one Note), but the next `commit_all` from a sync
+        // would, filing burlmd's housekeeping inside an unrelated commit.
+        //
+        // Committed **only when the file actually changed**, which is what
+        // keeps a repeat open from writing a second, empty-tree-identical
+        // commit — and what makes `open_workspace`'s "existing history is
+        // adopted unchanged" promise survive this: an adopted bundle that
+        // already carries the patterns is touched neither on disk nor in
+        // history. A foreign bundle that does not carry them gains exactly one
+        // commit, which is the trade this makes knowingly — one recorded
+        // housekeeping commit at a moment the user chose (they just opened the
+        // bundle) against a worktree burlmd dirtied and left.
+        //
+        // **The commit is not narrowed to a clean `.gitignore`.** `commit_paths`
+        // commits what is on disk at the named path, so if the user had their
+        // own uncommitted `.gitignore` edits when the bundle was opened, this
+        // records those edits alongside burlmd's appended patterns, in a commit
+        // whose message describes only the latter. Declining when the file
+        // differs from `HEAD` was considered and not taken: it would leave the
+        // scratch patterns permanently uncommitted for exactly the users who
+        // keep a working `.gitignore` in flight, so the file stays dirty in
+        // every `git status` — the condition this commit exists to end — and is
+        // then swept into whatever commits next anyway, which is the worse of
+        // the two outcomes and the one the user did not see coming. What
+        // actually happens here is bounded and visible: one commit, one path,
+        // the user's own line-for-line content, made at a moment they chose,
+        // and `git reset HEAD^` puts it back.
+        //
+        // Propagated rather than bound and dropped like the scratch sweep
+        // below, and the asymmetry is deliberate: the sweep is best-effort
+        // tidying with `.gitignore` itself as its backstop, whereas a
+        // `commit_paths` that fails here means the repository cannot be
+        // committed into at all — which every tier 3 close in the session is
+        // about to discover the hard way, one Note's worth of work later.
+        // Reporting it at open is the earlier and cheaper of the two moments.
+        if ignore_written {
+            crate::git::operations::commit_paths(
+                dir,
+                "Ignore burlmd scratch files\n\n\
+                 .burlmd-trash.* and .*.tmp are this application's own scratch files: a deleted \
+                 Note's full content and a Note mid-write, both plaintext, both left behind only \
+                 by a kill. Ignoring them keeps a whole-worktree commit from publishing either.\n",
+                &[".gitignore".to_string()],
+            )?;
         }
+        // Bound and dropped rather than propagated: a scratch entry that could
+        // not be removed is untidy, is already `.gitignore`d, and will be swept
+        // again at the next open — none of which is a reason to refuse the user
+        // their Notes. `ScratchSweep` exists so that "how much was left behind"
+        // is a value this call can be tested on rather than an error nobody
+        // sees.
+        let _swept = sweep_scratch_files(dir);
+
+        // The read half of the fourth post-condition, taken with **no
+        // connection held** and after the sweep, so the rows derived below
+        // describe the bundle as it now is.
+        let scanned = crate::index::scan::scan_bundle(dir)?;
+
+        // The write half of the fourth post-condition: "bundle indexed". Runs
+        // whether or not the row above was reused — a reused row says nothing
+        // about whether the files under it still match the index, since another
+        // tool (or another checkout) may have moved underneath it while the
+        // application was not running.
+        //
+        // Not merely a missing post-condition, either. `WSPC-D006`'s rename
+        // seeds its affected set from the `links` table, so in a bundle that was
+        // never indexed a rename finds no inbound edges and rewrites nothing,
+        // leaving every Link in the Workspace pointing at the concept the rename
+        // removed — `architecture/risks.md` risk 8, reached by simply never
+        // having scanned.
+        //
+        // Synchronous, deliberately. `flow-workspace-bootstrap.md` describes
+        // indexing a large Workspace in the background with the tree filling in
+        // as it goes; that is a recorded latent gap and building it here would
+        // be a scope this bootstrap does not own. On an empty new bundle — the
+        // ordinary first-run path — the scan above walked nothing and this costs
+        // one transaction.
+        index.with(|conn| crate::index::scan::write_scanned_bundle(conn, &info.id, &scanned))
     })?;
 
-    // The write half of the fourth post-condition: "bundle indexed". Runs on
-    // **both** branches above — a reused row says nothing about whether the
-    // files under it still match the index, since another tool (or another
-    // checkout) may have moved underneath it while the application was not
-    // running.
-    //
-    // Not merely a missing post-condition, either. `WSPC-D006`'s rename seeds
-    // its affected set from the `links` table, so in a bundle that was never
-    // indexed a rename finds no inbound edges and rewrites nothing, leaving
-    // every Link in the Workspace pointing at the concept the rename removed —
-    // `architecture/risks.md` risk 8, reached by simply never having scanned.
-    //
-    // Synchronous, deliberately. `flow-workspace-bootstrap.md` describes
-    // indexing a large Workspace in the background with the tree filling in as
-    // it goes; that is a recorded latent gap and building it here would be a
-    // scope this bootstrap does not own. On an empty new bundle — the ordinary
-    // first-run path — the scan above walked nothing and this costs one
-    // transaction.
-    index.with(|conn| crate::index::scan::write_scanned_bundle(conn, &info.id, &scanned))?;
-
     Ok(info)
+}
+
+/// Reads the `workspaces` row for `local_path`, or writes one when there is
+/// none. SQL only — the phase [`converge`] runs with the connection held, and
+/// the reason it runs *before* the lifecycle lock rather than under it: the id
+/// it resolves is what keys that lock.
+fn resolve_workspace_row(
+    conn: &Connection,
+    dir: &Path,
+    local_path: String,
+) -> Result<WorkspaceInfo, AppError> {
+    let existing = conn
+        .query_row(
+            "SELECT id, name, provider, remote_url FROM workspaces WHERE local_path = ?1",
+            [&local_path],
+            |row| {
+                Ok(WorkspaceInfo {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    provider: row.get(2)?,
+                    remote_url: row.get(3)?,
+                    local_path: local_path.clone(),
+                })
+            },
+        )
+        .optional()?;
+
+    match existing {
+        // Reused, not recreated: no second row and — since root key generation
+        // happens once per process, in `db::connection`'s own singleton init,
+        // entirely upstream of this function — no second key either.
+        Some(info) => Ok(info),
+        None => {
+            let id = mint_workspace_id()?;
+            let name = workspace_name(dir);
+            conn.execute(
+                "INSERT INTO workspaces (id, name, provider, remote_url, local_path) \
+                 VALUES (?1, ?2, 'local', NULL, ?3)",
+                rusqlite::params![id, name, local_path],
+            )?;
+            Ok(WorkspaceInfo {
+                id,
+                name,
+                provider: "local".to_string(),
+                remote_url: None,
+                local_path,
+            })
+        }
+    }
 }
 
 /// Removes every `.burlmd-trash.*` entry and every `.{stem}.{pid}.{n}.tmp` file
@@ -416,6 +481,22 @@ fn converge(index: &IndexHandle, dir: &Path) -> Result<WorkspaceInfo, AppError> 
 /// temporary file, the write's `rename` then fails, and tier 2 records the
 /// error on the session and **keeps the draft row**, which is where the
 /// unwritten work lives. Nothing is lost, and the next idle firing writes it.
+///
+/// # Why this runs under the lifecycle lock
+///
+/// The other race is not benign, and it is why [`converge`] holds the lifecycle
+/// lock across this call. A `.burlmd-trash.*` entry is not only debris a kill
+/// left behind: it is the **live rollback record** of an in-flight
+/// `delete_note`. `workspace::lifecycle`'s `FileJournal::trash` renames the Note
+/// aside rather than removing it, precisely so that a failure later in the
+/// operation can rename it back, and `FileJournal::commit` is what finally
+/// unlinks it once the deletion has succeeded. A sweep landing in that window
+/// removes the only copy of the Note's content, and the rollback that would have
+/// restored it finds nothing — turning a recoverable failure into permanent data
+/// loss, on a path whose whole guarantee is that a lifecycle operation either
+/// completes or changes nothing. Under the lock the two cannot overlap: a
+/// deletion in flight has already excluded this open, and this sweep only ever
+/// sees entries no operation still owns.
 ///
 /// Failures do not abort the open, and that stays deliberate. This is
 /// housekeeping on a path whose real job is opening a Workspace, and a scratch
@@ -941,6 +1022,86 @@ mod tests {
             subjects,
             "a repeat open added a second commit for a file it did not touch"
         );
+    }
+
+    /// A bootstrap cannot run inside a lifecycle operation: everything after
+    /// the `workspaces` row is resolved waits for the lifecycle lock.
+    ///
+    /// The two defects this closes, both invisible to any per-Note lock:
+    ///
+    /// - **`scan_bundle` → `write_scanned_bundle` straddled an O(bundle)
+    ///   window.** A `rename_note` completing inside it has already moved the
+    ///   file and rewritten its rows; the write phase then replays a snapshot
+    ///   taken before the move, reinstating the old concept id and leaving the
+    ///   index naming a file that no longer exists. Exactly the defect the
+    ///   `reindex_workspace` fix closed, one function over.
+    /// - **The scratch sweep removed a live rollback record.** A
+    ///   `.burlmd-trash.*` entry is what `FileJournal::rollback` renames back
+    ///   when a `delete_note` fails part-way; sweeping it mid-deletion turns a
+    ///   recoverable failure into a lost Note.
+    ///
+    /// Driven through the lock itself rather than through a rename, for the
+    /// reason `persist`'s own serialization tests give: holding it is precisely
+    /// the condition a lifecycle operation establishes, and "makes no progress
+    /// until it is released" is what serialization *means* here. The sleep can
+    /// only weaken the observation, never fail it spuriously — a slower machine
+    /// makes the "not yet" more certain — and the join is what proves the
+    /// bootstrap is blocked rather than broken.
+    ///
+    /// The waiting thread opens its **own** connection to the same on-disk
+    /// index, since a `rusqlite::Connection` is not `Sync`. That is also closer
+    /// to what production does, where both callers reach the one process-wide
+    /// connection rather than sharing a borrow.
+    #[test]
+    fn a_bootstrap_cannot_run_inside_a_lifecycle_operation() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::Arc;
+
+        let index_dir = tempdir().unwrap();
+        let conn = test_index(index_dir.path());
+        let bundle = tempdir().unwrap();
+        let path = bundle.path().to_string_lossy().to_string();
+
+        // The first open establishes the row whose id keys the lock.
+        let info = open_workspace_impl(&conn, path.clone()).unwrap();
+
+        let entered = Arc::new(AtomicBool::new(false));
+        let converged = Arc::new(AtomicBool::new(false));
+        let index_path = index_dir.path().join("index.sqlite3");
+
+        let waiter = crate::workspace::persist::with_lifecycle_lock_id(&info.id, || {
+            let entered_by_waiter = Arc::clone(&entered);
+            let converged_by_waiter = Arc::clone(&converged);
+            let waiter = std::thread::spawn(move || {
+                let own_conn = open_encrypted_db_with_key(&index_path, &[0x77u8; 32]).unwrap();
+                entered_by_waiter.store(true, Ordering::SeqCst);
+                open_workspace_impl(&own_conn, path).expect("the bundle is on disk");
+                converged_by_waiter.store(true, Ordering::SeqCst);
+            });
+
+            while !entered.load(Ordering::SeqCst) {
+                std::thread::yield_now();
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            assert!(
+                !converged.load(Ordering::SeqCst),
+                "a bootstrap completed while a lifecycle operation held the lock, so its \
+                 scan-then-write can still replay a stale snapshot over a rename's rows, and \
+                 its sweep can still remove a deletion's rollback record"
+            );
+            Ok(waiter)
+        })
+        .unwrap();
+
+        waiter.join().unwrap();
+        assert!(
+            converged.load(Ordering::SeqCst),
+            "the bootstrap never completed once the lock was released"
+        );
+        let count: i64 = conn
+            .query_row("SELECT count(*) FROM workspaces", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, 1, "the second open must reuse the same row");
     }
 
     fn git_out(dir: &Path, args: &[&str]) -> String {

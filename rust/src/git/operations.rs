@@ -413,17 +413,63 @@ pub const COMMIT_AUTHOR_EMAIL: &str = "noreply@burlmd.invalid";
 /// tidiness. Opening a Note to read it and navigating away calls `close_note`,
 /// which is the *most common* path through tier 3; committing unconditionally
 /// would put one empty commit in history per Note visited.
+///
+/// # One `HEAD` snapshot, read once
+///
+/// The parent tree and the parent commit id come from the **same** read of
+/// `HEAD`, and that is a correctness requirement rather than tidiness. They used
+/// to be two reads — the tree at the top, the id just before `commit_as` — and a
+/// commit landing between them produced a commit that `gix` **accepts**: the
+/// reference update's compare-and-swap is `MustExistAndMatch(first parent)`
+/// (`gix::Repository::commit_as`), so a *fresh* parent satisfies it while the
+/// tree beneath it is still the stale one this call started from. Every path the
+/// intervening commit changed and this one did not name is then silently
+/// reverted to its pre-commit content, in a commit that reports success.
+///
+/// Reading `HEAD` once closes it by making the CAS mean what it looks like it
+/// means: the parent handed to `commit_as` is the commit whose tree this one was
+/// derived from, so an intervening commit fails the CAS and the operation
+/// **errors** instead. Tier 3's callers already treat a failed commit stage as a
+/// reportable outcome (`workspace::lifecycle`'s commit-stage reporting, and
+/// `bootstrap::converge` propagates it), which is the correct answer to "the
+/// bundle moved underneath this operation": retryable, and visible.
 pub fn commit_paths(
     repo_path: &Path,
     message: &str,
     relative_paths: &[String],
 ) -> Result<Option<String>, AppError> {
+    commit_paths_hooked(repo_path, message, relative_paths, || {})
+}
+
+/// [`commit_paths`] with a seam for the test that drives the torn `HEAD` window.
+///
+/// `after_snapshot` runs after this call has read `HEAD` and built its tree, and
+/// before the commit that names that snapshot as its parent is written — which
+/// is precisely the window a concurrent commit occupies. It is `|| {}`
+/// everywhere but that one test, and monomorphizes away.
+fn commit_paths_hooked(
+    repo_path: &Path,
+    message: &str,
+    relative_paths: &[String],
+    after_snapshot: impl FnOnce(),
+) -> Result<Option<String>, AppError> {
     let repo = gix::open(repo_path).map_err(|e| AppError::IoError(format!("open repo: {e}")))?;
 
-    let parent_tree_id = repo
-        .head_tree_id_or_empty()
-        .map_err(|e| AppError::IoError(format!("read HEAD tree: {e}")))?
-        .detach();
+    // The single `HEAD` snapshot everything below is derived from: the parent
+    // tree, the emptiness check, and the parent this commit claims. `None` is an
+    // unborn `HEAD`, which takes the empty tree and no parent — and therefore
+    // `MustNotExist` as its CAS, so a first commit racing this one fails just as
+    // loudly.
+    let head_id: Option<gix::ObjectId> = repo.head_id().ok().map(gix::Id::detach);
+    let parent_tree_id = match head_id {
+        Some(head) => repo
+            .find_commit(head)
+            .map_err(|e| AppError::IoError(format!("read HEAD commit: {e}")))?
+            .tree_id()
+            .map_err(|e| AppError::IoError(format!("read HEAD tree: {e}")))?
+            .detach(),
+        None => gix::ObjectId::empty_tree(repo.object_hash()),
+    };
     let mut editor = repo
         .edit_tree(parent_tree_id)
         .map_err(|e| AppError::IoError(format!("start tree edit: {e}")))?;
@@ -464,10 +510,10 @@ pub fn commit_paths(
         return Ok(None);
     }
 
-    let parents: Vec<gix::ObjectId> = match repo.head_id() {
-        Ok(id) => vec![id.detach()],
-        Err(_) => Vec::new(),
-    };
+    after_snapshot();
+
+    // The snapshot above, not a second read: see `commit_paths`.
+    let parents: Vec<gix::ObjectId> = head_id.into_iter().collect();
 
     let signature = gix::actor::Signature {
         name: COMMIT_AUTHOR_NAME.into(),
@@ -536,6 +582,18 @@ struct StagedPath {
 /// - A path the commit **staged** gets its entry's object id and mode set to
 ///   what was committed, and its conflict stages (1/2/3) dropped: committing a
 ///   path resolves it, which is what `git add` does too.
+/// - A staged path's **flags are narrowed, not cleared**. Only
+///   `INTENT_TO_ADD` is removed, because that is the one flag committing the
+///   path genuinely retires — `git add --intent-to-add` marks an entry whose
+///   content is not in the object database yet, and after this it is. Every
+///   other flag on that entry was set by the user with `git update-index`:
+///   `ASSUME_VALID` (`--assume-unchanged`) and `SKIP_WORKTREE`
+///   (`--skip-worktree`) are deliberate instructions to Git about how to treat
+///   *their* file, and they survive `git commit` in Git itself. Resetting the
+///   whole word to `Flags::empty()` silently revoked both, on every
+///   `close_note`, in a repository the user also uses normally (ADR-005
+///   decision 8) — the same class of overreach as the wholesale index rebuild
+///   above, one field down.
 /// - A staged path with no entry yet is appended and the entries re-sorted,
 ///   since `dangerously_push_entry` breaks the ordering every later lookup by
 ///   path relies on.
@@ -608,7 +666,9 @@ fn refresh_index_entries(
                 existing.id = blob_id;
                 existing.mode = mode;
                 existing.stat = Stat::default();
-                existing.flags = Flags::empty();
+                // Only intent-to-add is cleared — see this function's
+                // documentation on why the rest are the user's.
+                existing.flags -= Flags::INTENT_TO_ADD;
             }
             None => {
                 index.dangerously_push_entry(Stat::default(), blob_id, Flags::empty(), mode, path);
@@ -904,16 +964,41 @@ fn git_command(workdir: &Path) -> Command {
 /// process is therefore a conscious, accepted bound of authenticating via `git`'s CLI env
 /// mechanism at all, not something this function can close.
 fn apply_credentials(cmd: &mut Command, credentials: Option<&GitCredentials>) {
+    // The `Command` inherits this process's own environment, which may already carry an
+    // injected `GIT_CONFIG_COUNT`/`GIT_CONFIG_KEY_n`/`GIT_CONFIG_VALUE_n` sequence (e.g.
+    // from a wrapper this binary itself was launched under). Unconditionally starting our
+    // own entry at index 0 with `GIT_CONFIG_COUNT=1` would silently discard or mis-index
+    // whatever was already there; append after it instead.
+    apply_credentials_after(cmd, credentials, existing_git_config_count());
+}
+
+/// [`apply_credentials`] with the inherited entry count **passed in** rather than read from
+/// the process environment.
+///
+/// The split exists for the two tests that cover the appending behavior, and it is a real
+/// bug fix rather than a testing convenience. Those tests used to establish their fixture by
+/// `std::env::set_var`ing `GIT_CONFIG_COUNT`/`GIT_CONFIG_KEY_0`/`GIT_CONFIG_VALUE_0` into the
+/// *process* environment, holding `db::connection::ENV_LOCK` — a lock that, as the comment
+/// above them said in as many words, deliberately does not cover the many other tests in this
+/// crate that spawn a real `git` child. But `git` reads that sequence out of the environment
+/// it inherits at `fork`/`exec`, and the three variables cannot be set atomically: any `git`
+/// spawned in the window after `GIT_CONFIG_COUNT=1` and before `GIT_CONFIG_VALUE_0` exists
+/// dies with `error: missing config value for GIT_CONFIG_VALUE_0`. That is a `git init` in
+/// another test thread failing for reasons that have nothing to do with what it is testing,
+/// which is exactly the intermittent failure this crate had been carrying as "a rare flake".
+///
+/// Reading the count once, at the one place that needs it, means the tests can pass the
+/// fixture as an argument and mutate nothing process-wide.
+fn apply_credentials_after(
+    cmd: &mut Command,
+    credentials: Option<&GitCredentials>,
+    inherited_entries: usize,
+) {
     if let Some(creds) = credentials {
         let user_pass = Zeroizing::new(format!("{}:{}", creds.username, creds.token.as_str()));
         let basic = Zeroizing::new(BASE64_STANDARD.encode(user_pass.as_bytes()));
         let header_value = Zeroizing::new(format!("Authorization: Basic {}", basic.as_str()));
-        // The `Command` inherits this process's own environment, which may already carry an
-        // injected `GIT_CONFIG_COUNT`/`GIT_CONFIG_KEY_n`/`GIT_CONFIG_VALUE_n` sequence (e.g.
-        // from a wrapper this binary itself was launched under). Unconditionally starting our
-        // own entry at index 0 with `GIT_CONFIG_COUNT=1` would silently discard or mis-index
-        // whatever was already there; append after it instead.
-        let index = existing_git_config_count();
+        let index = inherited_entries;
         cmd.env("GIT_CONFIG_COUNT", (index + 1).to_string());
         cmd.env(format!("GIT_CONFIG_KEY_{index}"), "http.extraheader");
         cmd.env(format!("GIT_CONFIG_VALUE_{index}"), header_value.as_str());
@@ -1305,6 +1390,84 @@ mod tests {
         );
     }
 
+    /// The same obligation one field further in: the index **flags** the user
+    /// set on a path with `git update-index` survive a burlmd commit over it.
+    ///
+    /// The regression this pins: the entry's whole flag word was reset to
+    /// `Flags::empty()`, which silently revoked `--assume-unchanged`
+    /// (`ASSUME_VALID`) and `--skip-worktree` (`SKIP_WORKTREE`) on any path a
+    /// tier 3 commit named. Both are deliberate instructions the user gave Git
+    /// about how to treat their own file — `--skip-worktree` in particular is
+    /// how a tracked local config is kept out of every diff — and both survive
+    /// `git commit` in Git itself. A bundle is the user's repository (ADR-005
+    /// decision 8 adopts existing ones), so revoking them on every `close_note`
+    /// is the same overreach as rebuilding their staging area, one field down.
+    ///
+    /// Only `INTENT_TO_ADD` is cleared, and that one really is retired by
+    /// committing: it marks an entry whose content is not in the object database
+    /// yet, and after the commit it is.
+    #[test]
+    fn commit_paths_preserves_the_index_flags_the_user_set_with_update_index() {
+        use gix::index::entry::Flags;
+
+        let dir = tempdir().unwrap();
+        init_repo(dir.path());
+        std::fs::write(dir.path().join("assumed.md"), b"assumed first\n").unwrap();
+        std::fs::write(dir.path().join("skipped.md"), b"skipped first\n").unwrap();
+        commit_all(dir.path(), "baseline", "Test User", "test@example.com").unwrap();
+
+        git(
+            dir.path(),
+            &["update-index", "--assume-unchanged", "assumed.md"],
+        );
+        git(
+            dir.path(),
+            &["update-index", "--skip-worktree", "skipped.md"],
+        );
+
+        std::fs::write(dir.path().join("assumed.md"), b"assumed second\n").unwrap();
+        std::fs::write(dir.path().join("skipped.md"), b"skipped second\n").unwrap();
+        commit_paths(
+            dir.path(),
+            "close a session over both",
+            &["assumed.md".to_string(), "skipped.md".to_string()],
+        )
+        .unwrap()
+        .expect("both paths changed");
+
+        // Asserted through `git` itself, which is the reader that has to agree:
+        // `ls-files -v` prints `h` for assume-unchanged and `S` for
+        // skip-worktree, and `H` for an ordinary entry.
+        let listed = StdCommand::new("git")
+            .args(["ls-files", "-v"])
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+        let listed = String::from_utf8_lossy(&listed.stdout);
+        let mut lines: Vec<&str> = listed.lines().collect();
+        lines.sort_unstable();
+        assert_eq!(
+            lines,
+            vec!["S skipped.md", "h assumed.md"],
+            "the flags the user set with `git update-index` were revoked by a commit"
+        );
+
+        // And in the index this crate reads back, so the bits are really there
+        // rather than merely printed.
+        let repo = gix::open(dir.path()).unwrap();
+        let index = repo.open_index().unwrap();
+        let flags = |path: &str| {
+            index
+                .entry_by_path(gix::bstr::BStr::new(path.as_bytes()))
+                .expect("the committed path must still have an entry")
+                .flags
+        };
+        assert!(flags("assumed.md").contains(Flags::ASSUME_VALID));
+        assert!(flags("skipped.md").contains(Flags::SKIP_WORKTREE));
+        assert!(!flags("assumed.md").contains(Flags::INTENT_TO_ADD));
+        assert!(!flags("skipped.md").contains(Flags::INTENT_TO_ADD));
+    }
+
     /// The other half of the same obligation: a commit that *removes* a
     /// Directory has to take every index entry beneath it, not just an entry
     /// spelled exactly like the Directory (the index is flat, and holds none).
@@ -1366,6 +1529,102 @@ mod tests {
             .output()
             .unwrap();
         assert_eq!(String::from_utf8_lossy(&head.stdout).trim(), baseline);
+    }
+
+    /// A commit landing between this call's `HEAD` snapshot and its own write
+    /// must make the write **fail**, not silently revert it.
+    ///
+    /// The defect this pins: the parent tree was read at the top of
+    /// `commit_paths` and the parent commit id near the bottom, so a commit
+    /// landing between the two produced a commit `gix` **accepts** — the
+    /// reference update's compare-and-swap is `MustExistAndMatch(first parent)`,
+    /// and the parent was re-read fresh, so it matched — carrying a tree derived
+    /// from the *stale* snapshot. Every path the intervening commit touched and
+    /// this one did not name was reverted to its pre-commit content, in a commit
+    /// that reported success and that nothing downstream had any reason to
+    /// question. Two lifecycle operations racing, or a lifecycle commit racing a
+    /// sync's `commit_all`, is enough to reach it.
+    ///
+    /// Deterministic rather than timing-dependent: the intervening commit is
+    /// driven *through* the window by the seam
+    /// [`commit_paths_hooked`] exists for, so the interleaving is the one the
+    /// test names rather than one a scheduler might produce.
+    ///
+    /// The second half is the other obligation — the failure is a refusal, not a
+    /// dead end. Once the window is closed the same commit retries and lands,
+    /// with the intervening commit's work intact underneath it.
+    #[test]
+    fn a_commit_landing_inside_the_head_window_is_refused_rather_than_reverting_it() {
+        let dir = tempdir().unwrap();
+        init_repo(dir.path());
+        std::fs::write(dir.path().join("a.md"), b"a first\n").unwrap();
+        std::fs::write(dir.path().join("b.md"), b"b first\n").unwrap();
+        commit_all(dir.path(), "baseline", "Test User", "test@example.com").unwrap();
+        let baseline = head_of(dir.path());
+
+        // burlmd's commit, closing a session over `a.md`.
+        std::fs::write(dir.path().join("a.md"), b"a second\n").unwrap();
+
+        let landed = std::cell::Cell::new(None);
+        let result = super::commit_paths_hooked(
+            dir.path(),
+            "close the session over a",
+            &["a.md".to_string()],
+            || {
+                // Somebody else's commit, entirely inside the window.
+                std::fs::write(dir.path().join("b.md"), b"b second\n").unwrap();
+                git(dir.path(), &["add", "b.md"]);
+                git(dir.path(), &["commit", "-q", "-m", "someone else's commit"]);
+                landed.set(Some(head_of(dir.path())));
+            },
+        );
+
+        let landed = landed.into_inner().expect("the window hook must have run");
+        assert_ne!(landed, baseline, "the fixture's own commit did not land");
+        assert!(
+            result.is_err(),
+            "a commit derived from a stale HEAD was accepted: {result:?}"
+        );
+        assert_eq!(
+            head_of(dir.path()),
+            landed,
+            "the branch moved despite the compare-and-swap"
+        );
+        assert_eq!(
+            git_show(dir.path(), "HEAD:b.md"),
+            "b second\n",
+            "the intervening commit's work was reverted by a commit that reported success"
+        );
+
+        // Retryable: with the window closed, the same commit lands and keeps the
+        // other one's work.
+        commit_paths(
+            dir.path(),
+            "close the session over a",
+            &["a.md".to_string()],
+        )
+        .unwrap()
+        .expect("the retry must commit");
+        assert_eq!(git_show(dir.path(), "HEAD:a.md"), "a second\n");
+        assert_eq!(git_show(dir.path(), "HEAD:b.md"), "b second\n");
+    }
+
+    fn head_of(dir: &Path) -> String {
+        let output = StdCommand::new("git")
+            .args(["rev-parse", "HEAD"])
+            .current_dir(dir)
+            .output()
+            .unwrap();
+        String::from_utf8_lossy(&output.stdout).trim().to_string()
+    }
+
+    fn git_show(dir: &Path, spec: &str) -> String {
+        let output = StdCommand::new("git")
+            .args(["show", spec])
+            .current_dir(dir)
+            .output()
+            .unwrap();
+        String::from_utf8_lossy(&output.stdout).into_owned()
     }
 
     /// A named path that is gone from disk commits as a deletion, which is what
@@ -1960,56 +2219,37 @@ mod tests {
         assert!(names.contains(&"from_b.md".to_string()));
     }
 
-    /// WSPC-D004 review finding #5: these two tests used to serialize against each other only,
-    /// via a `GIT_CONFIG_ENV_MUTEX` local to this file. That was too narrow — `std::env::set_var`
-    /// / `remove_var` mutate one process-wide table, and `db::connection`'s `EnvVarGuard` (used by
-    /// `db::connection`'s and `workspace::bootstrap`'s tests to override `HOME`/`XDG_DATA_HOME`/
-    /// `BURLMD_DB_PATH`) mutates the same table for different keys. Concurrent `set_var` calls to
-    /// *different* keys from different threads can still race at the libc level (`setenv` may
-    /// reallocate the shared `environ` array), so every test in this crate that mutates process
-    /// env now goes through the one shared `crate::db::connection::ENV_LOCK`.
-    ///
-    /// What this lock does **not** do, stated plainly rather than overclaimed: it does not
-    /// serialize against the many other tests in this file that spawn a real `git` child process
-    /// via `Command::output()` (a `fork`+`exec`, which reads the parent's `environ` at spawn
-    /// time) without holding it. Making every such test acquire this lock would serialize nearly
-    /// the whole module for no correctness benefit, because none of those tests mutate env vars
-    /// or depend on inherited ambient ones — `git_command` always sets every variable it cares
-    /// about explicitly via `Command::env`, never by reading process env at spawn time. The two
-    /// tests below are the only ones in this crate that call `std::env::set_var`/`remove_var`
-    /// while also inspecting a `Command` built concurrently with other threads, so closing the
-    /// race between *those* calls and each other (and against `db::connection`'s/
-    /// `workspace::bootstrap`'s own env mutations) is what this lock actually guarantees.
-    ///
     /// Regression test for the `GIT_CONFIG_COUNT` clobbering bug: `apply_credentials` used to
     /// unconditionally write `GIT_CONFIG_COUNT=1`/`GIT_CONFIG_KEY_0`/`GIT_CONFIG_VALUE_0`,
     /// discarding (or mis-indexing) any config-injection entries this process's own environment
     /// already carried. It must instead append after whatever is already there.
+    ///
+    /// # Why the inherited count is an argument and not `std::env::set_var`
+    ///
+    /// This test and the one below it used to build their fixture by writing those three
+    /// variables into the *process* environment under `db::connection::ENV_LOCK`, and that is
+    /// what made this crate's test suite intermittently fail somewhere else entirely.
+    /// `ENV_LOCK` is not held by the many tests here that spawn a real `git` child, by design
+    /// — but `git` reads `GIT_CONFIG_COUNT` and friends out of the environment it inherits at
+    /// `fork`/`exec`, and three `set_var` calls are not one atomic step. A `git init` in
+    /// another test thread landing after `GIT_CONFIG_COUNT=1` and before `GIT_CONFIG_VALUE_0`
+    /// exists dies with `error: missing config value for GIT_CONFIG_VALUE_0`, taking an
+    /// unrelated test with it. The comment that used to live here asserted the opposite —
+    /// "none of those tests ... depend on inherited ambient ones" — which was true of
+    /// `git_command`'s own variables and false of this one, since nothing clears
+    /// `GIT_CONFIG_*` for a spawned child.
+    ///
+    /// So the fixture is passed in ([`apply_credentials_after`]) and nothing process-wide is
+    /// touched. No `ENV_LOCK`, no `unsafe`, and no other test can observe this one running.
     #[test]
     fn apply_credentials_appends_after_an_existing_injected_config_entry() {
-        let _guard = crate::db::connection::ENV_LOCK.lock().unwrap();
-        // SAFETY: serialized against every other test in this crate that mutates process env via
-        // the shared `crate::db::connection::ENV_LOCK` (see the module-level comment above this
-        // test for the precise scope of that guarantee).
-        unsafe {
-            std::env::set_var("GIT_CONFIG_COUNT", "1");
-            std::env::set_var("GIT_CONFIG_KEY_0", "some.preexisting");
-            std::env::set_var("GIT_CONFIG_VALUE_0", "preexisting-value");
-        }
-
         let mut cmd = Command::new("git");
         let credentials = GitCredentials {
             username: "x-access-token".to_string(),
             token: Zeroizing::new("tok".to_string()),
         };
-        apply_credentials(&mut cmd, Some(&credentials));
-
-        // SAFETY: see the comment on the `set_var` calls above; same guard, same scope.
-        unsafe {
-            std::env::remove_var("GIT_CONFIG_COUNT");
-            std::env::remove_var("GIT_CONFIG_KEY_0");
-            std::env::remove_var("GIT_CONFIG_VALUE_0");
-        }
+        // One entry already injected into the environment this `git` would inherit.
+        apply_credentials_after(&mut cmd, Some(&credentials), 1);
 
         let envs: std::collections::HashMap<_, _> = cmd.get_envs().collect();
         assert_eq!(
@@ -2035,22 +2275,17 @@ mod tests {
     }
 
     /// With no `GIT_CONFIG_COUNT` set in the process environment at all, `apply_credentials`
-    /// must fall back to starting at index 0 (the pre-fix behavior), not error or skip.
+    /// must fall back to starting at index 0 (the pre-fix behavior), not error or skip. That
+    /// absence is what [`existing_git_config_count`] reports as `0`, and it is passed in here
+    /// for the reason the test above states.
     #[test]
     fn apply_credentials_starts_at_index_zero_with_no_preexisting_config() {
-        let _guard = crate::db::connection::ENV_LOCK.lock().unwrap();
-        // SAFETY: serialized via the shared `crate::db::connection::ENV_LOCK`; ensures a clean
-        // slate regardless of what an earlier test in this process left behind.
-        unsafe {
-            std::env::remove_var("GIT_CONFIG_COUNT");
-        }
-
         let mut cmd = Command::new("git");
         let credentials = GitCredentials {
             username: "x-access-token".to_string(),
             token: Zeroizing::new("tok".to_string()),
         };
-        apply_credentials(&mut cmd, Some(&credentials));
+        apply_credentials_after(&mut cmd, Some(&credentials), 0);
 
         let envs: std::collections::HashMap<_, _> = cmd.get_envs().collect();
         assert_eq!(

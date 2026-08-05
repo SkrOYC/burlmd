@@ -193,7 +193,7 @@ fn create_note_serialized(
     let written = workspace.with_db(|conn| {
         in_owned_transaction(conn, |tx| {
             index::incremental::write_note_rows(tx, workspace.id(), &indexed)?;
-            record_directories(tx, workspace.id(), &directory)
+            index::record_directories(tx, workspace.id(), &directory)
         })
     });
     if let Err(error) = written {
@@ -573,7 +573,7 @@ fn create_directory_serialized(workspace: &Arc<Workspace>, path: &str) -> Result
         .map_err(|e| AppError::IoError(format!("create {}: {e}", absolute.display())))?;
     workspace.with_db(|conn| {
         in_owned_transaction(conn, |tx| {
-            record_directories(tx, workspace.id(), &directory)
+            index::record_directories(tx, workspace.id(), &directory)
         })
     })
 }
@@ -1418,7 +1418,7 @@ fn rekey_directories(
             rusqlite::params![moved, workspace_id],
         )?;
     }
-    record_directories(tx, workspace_id, &new_directory)
+    index::record_directories(tx, workspace_id, &new_directory)
 }
 
 /// The state a caller gets back after a re-identification: the open session's,
@@ -2345,28 +2345,6 @@ fn in_owned_transaction<T>(
             Err(error)
         }
     }
-}
-
-fn record_directories(
-    conn: &Connection,
-    workspace_id: &str,
-    directory: &str,
-) -> Result<(), AppError> {
-    if directory.is_empty() {
-        return Ok(());
-    }
-    let mut stmt = conn.prepare(
-        "INSERT OR IGNORE INTO directories (id, workspace_id, path) VALUES (?1, ?2, ?1)",
-    )?;
-    let mut ancestor = String::new();
-    for segment in directory.split('/').filter(|s| !s.is_empty()) {
-        if !ancestor.is_empty() {
-            ancestor.push('/');
-        }
-        ancestor.push_str(segment);
-        stmt.execute(rusqlite::params![ancestor, workspace_id])?;
-    }
-    Ok(())
 }
 
 fn clear_draft(conn: &Connection, workspace_id: &str, note_id: &str) -> Result<(), AppError> {

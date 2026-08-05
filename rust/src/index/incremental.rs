@@ -14,7 +14,10 @@ use rusqlite::{Connection, OptionalExtension};
 
 use crate::error::AppError;
 
-use super::{analyze_bounded, in_transaction, insert_note_rows, remove_note_rows, workspace_root};
+use super::{
+    analyze_bounded, containing_directory, in_transaction, insert_note_rows, record_directories,
+    remove_note_rows, workspace_root,
+};
 
 /// Whether [`index_note`] had anything to do.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -130,39 +133,14 @@ pub fn write_note_rows_deferring_analyze(
     let concept_id = note.concept_id.as_str();
     in_transaction(conn, |tx| {
         remove_note_rows(tx, workspace_id, concept_id)?;
-        ensure_directories(tx, workspace_id, concept_id)?;
+        // A Note can be the first thing ever written into a Directory
+        // (`create_note` into a Directory created in the same session), and the
+        // tree renders from `directories` alone — an ancestor missing there is a
+        // Note the sidebar cannot reach without a full rebuild.
+        record_directories(tx, workspace_id, containing_directory(concept_id))?;
         insert_note_rows(tx, workspace_id, note)
     })?;
     Ok(IndexOutcome::Updated)
-}
-
-/// Records a `directories` row for every ancestor directory of `concept_id`
-/// that has none yet.
-///
-/// A Note can be the first thing ever written into a Directory (`create_note`
-/// into a Directory created in the same session), and the tree renders from
-/// `directories` alone — an ancestor missing there is a Note the sidebar
-/// cannot reach without a full rebuild.
-fn ensure_directories(
-    conn: &Connection,
-    workspace_id: &str,
-    concept_id: &str,
-) -> Result<(), AppError> {
-    let Some((dir, _)) = concept_id.rsplit_once('/') else {
-        return Ok(());
-    };
-    let mut stmt = conn.prepare(
-        "INSERT OR IGNORE INTO directories (id, workspace_id, path) VALUES (?1, ?2, ?1)",
-    )?;
-    let mut ancestor = String::new();
-    for segment in dir.split('/').filter(|s| !s.is_empty()) {
-        if !ancestor.is_empty() {
-            ancestor.push('/');
-        }
-        ancestor.push_str(segment);
-        stmt.execute(rusqlite::params![ancestor, workspace_id])?;
-    }
-    Ok(())
 }
 
 #[cfg(test)]

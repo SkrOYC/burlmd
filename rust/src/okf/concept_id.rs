@@ -46,6 +46,17 @@ pub fn concept_id_to_path(concept_id: &str) -> String {
 /// against the verbatim stem -- the filename derivation this guards is
 /// itself verbatim, plus `.md`, with no case folding, so the reservation is
 /// exact-match rather than case-insensitive.
+///
+/// That `.md`-stripping routing **widens** the rule, and deliberately: a title
+/// spelled literally `index.md` is rejected even though
+/// [`concept_id_to_path`] would derive it to `index.md.md`, which collides with
+/// nothing OKF reserves. The over-strictness is the cheaper mistake in both
+/// directions -- a user who wanted a Note called `index.md` loses a spelling
+/// they can trivially vary, while accepting it would leave `is_reserved_title`
+/// unable to answer for a caller holding a *filename*, which is the form
+/// `index::scan` and every path-shaped check work in. One predicate that reads
+/// both forms and refuses both beats two that disagree about which one they
+/// were given.
 pub fn is_reserved_title(title: &str) -> bool {
     RESERVED_TITLES.contains(&path_to_concept_id(title).as_str())
 }

@@ -2158,6 +2158,23 @@ pub(crate) fn with_lifecycle_lock<T>(
     workspace: &Workspace,
     f: impl FnOnce() -> Result<T, AppError>,
 ) -> Result<T, AppError> {
+    with_lifecycle_lock_id(workspace.id(), f)
+}
+
+/// [`with_lifecycle_lock`] keyed on a Workspace **id** rather than on a
+/// [`Workspace`].
+///
+/// The lock is registered per Workspace id and guards `()`, so the id is all it
+/// ever needed. The distinction exists for `workspace::bootstrap::converge`,
+/// which has to take this lock at a point where no `Workspace` value exists yet:
+/// it is the code that establishes the `workspaces` row a `Workspace` is built
+/// from, and `Workspace::active` reads the active-Workspace cell that bootstrap
+/// has not set at that point either. Every other caller has a `Workspace` in
+/// hand and goes through [`with_lifecycle_lock`].
+pub(crate) fn with_lifecycle_lock_id<T>(
+    workspace_id: &str,
+    f: impl FnOnce() -> Result<T, AppError>,
+) -> Result<T, AppError> {
     debug_assert!(
         !crate::db::connection::in_connection_closure(),
         "a lifecycle operation was started inside a connection closure: the lifecycle lock \
@@ -2170,7 +2187,7 @@ pub(crate) fn with_lifecycle_lock<T>(
         let mut locks = lifecycle_locks()
             .lock()
             .map_err(|_| AppError::DatabaseError("lifecycle lock registry poisoned".to_string()))?;
-        Arc::clone(locks.entry(workspace.id().to_string()).or_default())
+        Arc::clone(locks.entry(workspace_id.to_string()).or_default())
     };
     let _guard = lock.lock().unwrap_or_else(PoisonError::into_inner);
     f()
