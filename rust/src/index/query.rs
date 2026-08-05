@@ -152,6 +152,15 @@ pub fn link_completions_impl(
 }
 
 /// Notes linking *to* `note_id` (CAP-GRAPH-05), served by `idx_links_target`.
+///
+/// Ordered on the same rule as [`workspace_tree_impl`] and
+/// [`find_notes_by_title_impl`], for the same two reasons: `COLLATE NOCASE`
+/// because plain `ORDER BY n.title` is byte order and puts `Zebra` ahead of
+/// `apple` in a panel a user reads, and `, n.id` as a tie-break because titles
+/// are unique only per `(workspace_id, path)` (`schema.sql`), so two source
+/// Notes sharing one leaves the remainder to SQLite's unspecified row order —
+/// which changes after a reindex or a `VACUUM` and surfaces as rows swapping
+/// under a keyed list widget.
 pub fn backlinks_impl(
     conn: &Connection,
     workspace_id: &str,
@@ -162,7 +171,7 @@ pub fn backlinks_impl(
          FROM links l \
          CROSS JOIN notes n ON n.workspace_id = l.workspace_id AND n.id = l.source_id \
          WHERE l.workspace_id = ?1 AND l.target_id = ?2 \
-         ORDER BY n.title",
+         ORDER BY n.title COLLATE NOCASE, n.id",
     )?;
     let rows = stmt.query_map(
         rusqlite::params![workspace_id, note_id],
@@ -434,6 +443,57 @@ mod tests {
             "two Links to the same target from one Note is one edge, not two"
         );
         assert_eq!(results[0].id, "a");
+    }
+
+    /// The same ordering rule this query's siblings apply, for the same two
+    /// reasons. `ORDER BY n.title` alone is byte order, which puts every
+    /// capitalized title ahead of every lowercase one — `Zebra` before
+    /// `apple` — in a panel the user reads; and titles are unique only per
+    /// `(workspace_id, path)` (`schema.sql`), so two source Notes can share
+    /// one verbatim and the remainder falls to SQLite's unspecified row
+    /// order, which flips after a reindex or a `VACUUM` and surfaces as rows
+    /// swapping under a keyed list widget.
+    #[test]
+    fn backlinks_order_case_insensitively_with_a_deterministic_tie_break() {
+        let f = fixture();
+        f.write("target.md", &conformant("Target", "The target."));
+        for (path, title) in [
+            ("z.md", "Alpha Zebra"),
+            ("a.md", "alpha apple"),
+            ("m.md", "Alpha Middle"),
+            // Two source Notes sharing a title verbatim, which is
+            // representable because titles are unique only per path.
+            ("dir/tie.md", "Alpha Same"),
+            ("tie.md", "Alpha Same"),
+        ] {
+            f.write(path, &conformant(title, "See [Target](</target.md>)."));
+        }
+        reindex_workspace_impl(&f.conn, &f.workspace_id).unwrap();
+
+        let results = backlinks_impl(&f.conn, &f.workspace_id, "target").unwrap();
+
+        let titles: Vec<&str> = results.iter().map(|n| n.title.as_str()).collect();
+        assert_eq!(
+            titles,
+            vec![
+                "alpha apple",
+                "Alpha Middle",
+                "Alpha Same",
+                "Alpha Same",
+                "Alpha Zebra"
+            ],
+            "backlink titles must sort case-insensitively, not in byte order"
+        );
+        let tied: Vec<&str> = results
+            .iter()
+            .filter(|n| n.title == "Alpha Same")
+            .map(|n| n.id.as_str())
+            .collect();
+        assert_eq!(
+            tied,
+            vec!["dir/tie", "tie"],
+            "tied titles must break on concept id, not on SQLite's unspecified row order"
+        );
     }
 
     /// A Note with no inbound Links reports no backlinks.

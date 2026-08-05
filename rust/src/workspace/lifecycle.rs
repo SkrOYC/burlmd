@@ -121,6 +121,19 @@ pub struct LifecycleEffects {
 /// (`data-models/okf-bundle.md`), because CAP-GRAPH-04's create-on-follow has
 /// to invert the derivation. A collision or a reserved filename returns
 /// [`AppError::PathUnavailable`] and creates nothing.
+///
+/// **`directory_path` must already name a Directory**, and an unknown one
+/// returns [`AppError::PathUnavailable`] rather than being created. The
+/// contract is silent on the question and the two functions that take a
+/// Directory disagreed about it: [`move_note`] refuses an unknown
+/// destination, while this one used to `create_dir_all` the whole hierarchy.
+/// The typo case is what settles it — one mistyped level in `SHEL-E005`'s
+/// field silently produced a new Directory and filed the Note out of sight
+/// inside it, with nothing to undo and no signal that anything unusual had
+/// happened. Creating the Directory first, through [`create_directory`], is
+/// the explicit route and the one that leaves the user in control of the
+/// tree's shape. An empty `directory_path` is the bundle root and is
+/// unaffected.
 pub fn create_note(
     workspace: &Arc<Workspace>,
     directory_path: &str,
@@ -128,15 +141,15 @@ pub fn create_note(
 ) -> Result<NoteState, AppError> {
     validate_title(title)?;
     let directory = normalize_directory(directory_path)?;
+    // The same call `move_note` makes, so both entry points onto a Directory
+    // answer an unknown one identically — and so both go through the symlink
+    // containment check it performs on the way.
+    ensure_directory_exists(workspace, &directory)?;
     let new_id = join_id(&directory, title);
     let new_path = workspace.note_path(&new_id)?;
     ensure_path_available(workspace, &new_id, &new_path, None)?;
 
     let source = conformant_frontmatter(title);
-    if let Some(parent) = new_path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| AppError::IoError(format!("create {}: {e}", parent.display())))?;
-    }
     persist::atomic_write(&new_path, source.as_bytes())?;
 
     let indexed = index::derive_note(
@@ -156,11 +169,11 @@ pub fn create_note(
         // left standing deliberately, because both are benign and repairing
         // either would cost more than it buys:
         //
-        // - Any directory `create_dir_all` had to materialize stays. An empty
-        //   directory is not a Note, holds no user content, is invisible to
-        //   `walk_bundle`'s Note scan, and Git does not track it; removing it
-        //   would mean distinguishing the levels this call created from ones
-        //   that already existed, to undo something nothing can observe.
+        // - An on-disk folder `ensure_directory_exists` had to materialize for
+        //   a Directory the index already knew about stays. It is not a level
+        //   this call invented — the Directory existed before it ran — and an
+        //   empty folder holds no user content, is invisible to
+        //   `walk_bundle`'s Note scan, and is not tracked by Git.
         // - Nothing rolls back if `open_note` below fails *after* the index
         //   transaction committed. That leaves the Note fully created and
         //   correctly indexed but not open, which is a state the user can act
@@ -1473,6 +1486,26 @@ fn validate_segment(segment: &str) -> Result<(), AppError> {
              verbatim rather than slugifying (data-models/okf-bundle.md)"
         )));
     }
+    // A line terminator is legal in a Unix filename and still underivable
+    // here, because the filename is not the end of the derivation: every
+    // inbound Link to this Note is written by `okf::serialize_link` as an
+    // angle-bracket destination, and CommonMark forbids a line ending inside
+    // one. `[T](</Two\nLines.md>)` therefore yields no `Link` event at all —
+    // no edge in the parser, no row in `links`, no backlink — and
+    // `rename_note`'s inbound sweep reports success over link text it left
+    // pointing nowhere, which is `architecture/risks.md` risk 8 reached
+    // through the create path rather than through a rewrite. Refused rather
+    // than escaped, on this function's standing rule: a name that cannot be
+    // derived correctly is rejected, never silently disambiguated. A tab is
+    // deliberately not in this set — it round-trips through the same
+    // destination form unharmed.
+    if segment.contains('\n') || segment.contains('\r') {
+        return Err(AppError::PathUnavailable(format!(
+            "{segment:?} contains a line terminator, which no Link to this Note could \
+             carry: the destination form is angle-bracketed and CommonMark forbids a line \
+             ending inside one, so every inbound Link would silently stop being a Link"
+        )));
+    }
     Ok(())
 }
 
@@ -1558,6 +1591,21 @@ fn normalize_directory(path: &str) -> Result<String, AppError> {
         return Err(AppError::PathUnavailable(format!(
             "{path} does not name a Directory inside the Workspace: a Directory path is \
              `/`-separated and a backslash is a character no segment may carry"
+        )));
+    }
+    // Refused here as well as in [`validate_segment`], and for that function's
+    // reason: a Directory whose name carries a line terminator puts it into
+    // the concept id of every Note beneath it, and so into the
+    // angle-bracketed destination of every Link to one — where CommonMark
+    // forbids it, silently costing each of those Links its `Link` event, its
+    // edge and its backlink. Both halves of a path agree about what a segment
+    // may carry, which is the same reason the backslash check above is
+    // duplicated between the two.
+    if path.contains('\n') || path.contains('\r') {
+        return Err(AppError::PathUnavailable(format!(
+            "{path:?} contains a line terminator, which no Link to a Note beneath it could \
+             carry: the destination form is angle-bracketed and CommonMark forbids a line \
+             ending inside one"
         )));
     }
     let trimmed = path.trim_matches('/');
@@ -3475,6 +3523,88 @@ mod tests {
         );
         assert_eq!(f.note_ids(), vec!["One".to_string()]);
         assert_eq!(f.directory_ids(), Vec::<String>::new());
+    }
+
+    /// A name carrying a line terminator derives a filename the Link syntax
+    /// cannot address, which is risk 8 arriving through the front door rather
+    /// than through a rewrite.
+    ///
+    /// `okf::serialize_link` writes the destination inside angle brackets, and
+    /// CommonMark forbids a line ending inside one — so the text
+    /// `[T](</Two\nLines.md>)` yields no `Link` event at all. The parser
+    /// produces no edge, the index records no backlink, and `rename_note`
+    /// reports success over link text it silently left pointing nowhere. A
+    /// tab is deliberately still allowed: it round-trips through the same
+    /// destination form.
+    #[test]
+    fn a_line_terminator_in_a_name_is_refused_and_nothing_is_created() {
+        let f = fixture();
+
+        for name in ["Two\nLines", "Carriage\rReturn", "Trailing\n", "\rLeading"] {
+            let created = create_note(&f.workspace, "", name).map(|_| ());
+            assert!(
+                matches!(created, Err(AppError::PathUnavailable(_))),
+                "create_note({name:?}) must be refused, got {created:?}"
+            );
+            let directory = create_directory(&f.workspace, name);
+            assert!(
+                matches!(directory, Err(AppError::PathUnavailable(_))),
+                "create_directory({name:?}) must be refused, got {directory:?}"
+            );
+            // The same rule wherever a Directory path is normalized rather
+            // than a single name validated.
+            let nested = create_directory(&f.workspace, &format!("outer/{name}"));
+            assert!(
+                matches!(nested, Err(AppError::PathUnavailable(_))),
+                "create_directory(outer/{name:?}) must be refused, got {nested:?}"
+            );
+            assert!(!f.exists(&format!("{name}.md")), "the file was created");
+            assert!(!f.exists(name), "the directory was created");
+        }
+
+        assert!(f.note_ids().is_empty(), "a Note was indexed anyway");
+        assert_eq!(f.directory_ids(), Vec::<String>::new());
+        assert!(!f.exists("outer"), "an intermediate level was materialized");
+
+        // A tab is not a line terminator and stays derivable, since it
+        // round-trips through an angle-bracket destination.
+        create_note(&f.workspace, "", "Tab\tstop").unwrap();
+        assert!(f.exists("Tab\tstop.md"));
+    }
+
+    /// `create_note` and `move_note` name the same thing — a Directory to put
+    /// a Note in — and must answer an unknown one the same way. `move_note`
+    /// returns `PathUnavailable`; `create_note` used to `create_dir_all` the
+    /// whole hierarchy, so one typo in `SHEL-E005`'s field silently created a
+    /// Directory and filed the Note out of sight in it. Creating the
+    /// Directory first, explicitly, is the route that still works.
+    #[test]
+    fn create_note_requires_an_existing_directory_rather_than_materializing_one() {
+        let f = fixture();
+        create_directory(&f.workspace, "projects").unwrap();
+
+        // The explicit route, and the bundle root, both still work.
+        create_note(&f.workspace, "projects", "Kept").unwrap();
+        create_note(&f.workspace, "", "At the root").unwrap();
+
+        for typo in ["porjects", "projects/deeper", "a/b/c"] {
+            let refused = create_note(&f.workspace, typo, "Typo").map(|_| ());
+            assert!(
+                matches!(refused, Err(AppError::PathUnavailable(_))),
+                "create_note({typo:?}, ..) must be refused, got {refused:?}"
+            );
+            assert!(
+                !f.root().join(typo).exists(),
+                "{typo:?} was materialized by a refused create"
+            );
+            assert!(!f.exists(&format!("{typo}/Typo.md")));
+        }
+
+        assert_eq!(f.directory_ids(), vec!["projects".to_string()]);
+        assert_eq!(
+            f.note_ids(),
+            vec!["At the root".to_string(), "projects/Kept".to_string()]
+        );
     }
 
     /// A Directory that is really a symlink is refused as a place to create a

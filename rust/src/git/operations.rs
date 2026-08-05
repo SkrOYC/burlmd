@@ -265,11 +265,7 @@ pub fn commit_all(
             .write_blob(bytes)
             .map_err(|e| AppError::IoError(format!("write blob: {e}")))?;
         editor
-            .upsert(
-                rela_path.as_str(),
-                gix::object::tree::EntryKind::Blob,
-                blob_id.detach(),
-            )
+            .upsert(rela_path.as_str(), blob_kind(file), blob_id.detach())
             .map_err(|e| AppError::IoError(format!("stage {}: {e}", relative.display())))?;
     }
 
@@ -381,11 +377,7 @@ pub fn commit_paths(
                 .write_blob(bytes)
                 .map_err(|e| AppError::IoError(format!("write blob: {e}")))?;
             editor
-                .upsert(
-                    relative.as_str(),
-                    gix::object::tree::EntryKind::Blob,
-                    blob_id.detach(),
-                )
+                .upsert(relative.as_str(), blob_kind(&absolute), blob_id.detach())
                 .map_err(|e| AppError::IoError(format!("stage {relative}: {e}")))?;
         } else {
             editor
@@ -437,6 +429,43 @@ pub fn commit_paths(
         .map_err(|e| AppError::IoError(format!("write index: {e}")))?;
 
     Ok(Some(commit_id.detach().to_string()))
+}
+
+/// The tree entry kind for a regular file on disk: `100755` when it carries
+/// the executable bit, `100644` otherwise.
+///
+/// Staging everything as `Blob` flattened the mode of every file in the
+/// bundle, which undoes on the very next commit what
+/// `persist::atomic_write`'s permission carry-forward preserves on disk — and
+/// unlike a working-tree mode, the flattened one travels: a clone or a
+/// checkout of that history hands back a script that no longer runs. A bundle
+/// is an ordinary directory a user can put anything in
+/// (`data-models/okf-bundle.md`), so this is not hypothetical even though
+/// burlmd itself writes only Notes.
+///
+/// Unix only, and unconditionally so for the reason
+/// [`persist::atomic_write`](crate::workspace::persist)'s permission
+/// carry-forward gives: burlmd ships to desktop Linux and macOS
+/// (`tech-spec/stack.md`), and Windows has no bit to read. A metadata call
+/// that fails is not an error here — the bytes were already read successfully
+/// — so it falls back to the ordinary mode.
+#[cfg(unix)]
+fn blob_kind(absolute: &Path) -> gix::object::tree::EntryKind {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let executable = std::fs::metadata(absolute)
+        .map(|metadata| metadata.permissions().mode() & 0o111 != 0)
+        .unwrap_or(false);
+    if executable {
+        gix::object::tree::EntryKind::BlobExecutable
+    } else {
+        gix::object::tree::EntryKind::Blob
+    }
+}
+
+#[cfg(not(unix))]
+fn blob_kind(_absolute: &Path) -> gix::object::tree::EntryKind {
+    gix::object::tree::EntryKind::Blob
 }
 
 /// Whether `relative_path` is present in the commit `HEAD` points at — what
@@ -943,6 +972,56 @@ mod tests {
             .output()
             .unwrap();
         assert_eq!(String::from_utf8_lossy(&tree.stdout).trim(), "b.md");
+    }
+
+    /// A bundle may hold files this application did not write, and round 3
+    /// made tier 2 carry the mode of the ones it does forward across its
+    /// publishing rename. Committing every path as `100644` undid that at the
+    /// next commit: the mode is part of what the tree records, so a checkout
+    /// of that history — or a clone of it on another machine — hands back a
+    /// script that no longer runs.
+    #[cfg(unix)]
+    #[test]
+    fn commit_paths_records_the_executable_bit_rather_than_flattening_it() {
+        use std::os::unix::fs::PermissionsExt as _;
+
+        let dir = tempdir().unwrap();
+        init_repo(dir.path());
+        let script = dir.path().join("hook.sh");
+        std::fs::write(&script, b"#!/bin/sh\necho hello\n").unwrap();
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+        std::fs::write(dir.path().join("a.md"), b"a\n").unwrap();
+
+        commit_paths(
+            dir.path(),
+            "add a script and a Note",
+            &["hook.sh".to_string(), "a.md".to_string()],
+        )
+        .unwrap()
+        .expect("two new paths are a change");
+
+        let tree = StdCommand::new("git")
+            .args(["ls-tree", "HEAD"])
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+        let listing = String::from_utf8_lossy(&tree.stdout);
+        let modes: Vec<(&str, &str)> = listing
+            .lines()
+            .filter_map(|line| {
+                let (mode, rest) = line.split_once(' ')?;
+                let name = rest.rsplit_once('\t')?.1;
+                Some((name, mode))
+            })
+            .collect();
+        assert!(
+            modes.contains(&("hook.sh", "100755")),
+            "an executable file must commit as 100755: {listing:?}"
+        );
+        assert!(
+            modes.contains(&("a.md", "100644")),
+            "an ordinary Note must still commit as 100644: {listing:?}"
+        );
     }
 
     /// ADR-008's consequences fix this identity, and it is deliberately not the

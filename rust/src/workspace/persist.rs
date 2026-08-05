@@ -385,6 +385,16 @@ struct SessionState {
     revision: String,
     /// Whether the working source came from a `drafts` row rather than disk.
     restored_from_draft: bool,
+    /// Whether this session opened over a Note with **no file behind it**, and
+    /// so owes the next tier 2 write a file rather than an overwrite.
+    ///
+    /// Set only by [`open_note`]'s recovery branch, and cleared by the first
+    /// successful write. It is what lets [`NoteSession::write_locked`] tell
+    /// two identical-looking `NotFound`s apart: a file deleted underneath a
+    /// live session, which must surface so `close` can retire it and keep the
+    /// draft row; and a file this session already knows is absent, whose
+    /// absence is the state it recorded its OCC baseline against.
+    awaiting_recreate: bool,
     /// Whether this session has changed the Note at all. Tier 3's gate: a Note
     /// opened and closed unread makes no commit.
     session_edited: bool,
@@ -471,6 +481,25 @@ pub fn lookup(workspace_id: &str, note_id: &str) -> Result<Option<NoteSession>, 
 /// underneath a session — a foreign tool writing Latin-1 over it, a truncated
 /// sync — refuse the one call that can hand the user their unflushed work back.
 /// The revision is a hash of the raw bytes and needs no decode at all.
+///
+/// # A Note with no file
+///
+/// A missing file is `NotFound` **only when there is no draft row either**,
+/// and the draft is consulted before that verdict is reached rather than
+/// after. [`NoteSession::close`] promises that a Note deleted out from under
+/// an open session keeps its row, and [`pending_drafts`] goes out of its way
+/// to keep reporting it once the `notes` row is gone — but this function read
+/// the file first, so the one call that could act on that report answered
+/// `NotFound` for every Note it listed. The work was preserved and
+/// unreachable, which is the promise's letter without its point.
+///
+/// So the row is opened as the working source with **no bytes behind it**,
+/// and the recorded revision is the hash of that absent state — which is what
+/// [`NoteSession::write_locked`]'s disk check reads for a file that is not
+/// there, so the first tier 2 write passes the OCC comparison and creates the
+/// file instead of raising `RevisionMismatch` against nothing. `session_edited`
+/// and `unwritten` follow from `restored_from_draft` exactly as they do for
+/// the ordinary recovery, so the recreated file also reaches tier 3.
 pub fn open_note(
     workspace: &Arc<Workspace>,
     note_id: &str,
@@ -481,21 +510,40 @@ pub fn open_note(
     }
 
     let absolute_path = workspace.note_path(note_id)?;
-    let bytes = std::fs::read(&absolute_path).map_err(|e| {
-        if e.kind() == std::io::ErrorKind::NotFound {
-            AppError::NotFound(format!("no file on disk for concept id {note_id}"))
-        } else {
-            AppError::IoError(format!("read {}: {e}", absolute_path.display()))
+    let on_disk = match std::fs::read(&absolute_path) {
+        Ok(bytes) => Some(bytes),
+        // Not an error yet: whether this is a Note that does not exist or one
+        // whose file was deleted out from under unflushed work is a question
+        // only the `drafts` row below can answer.
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
+        Err(e) => {
+            return Err(AppError::IoError(format!(
+                "read {}: {e}",
+                absolute_path.display()
+            )))
         }
-    })?;
-    let revision = content_hash(&bytes);
-    let last_modified = file_mtime(&absolute_path);
+    };
 
     let draft = workspace.with_db(|conn| read_draft(conn, workspace.id(), note_id))?;
     let restored_from_draft = draft.is_some();
-    let (source, edit_seq) = match draft {
-        Some(row) => (row.raw_markdown, row.edit_seq),
-        None => (decode_source(&absolute_path, bytes)?, 0),
+    let awaiting_recreate = on_disk.is_none();
+    let revision = content_hash(on_disk.as_deref().unwrap_or(ABSENT_FILE));
+    let last_modified = match (&on_disk, &draft) {
+        (Some(_), _) => file_mtime(&absolute_path),
+        // Nothing to `stat`, so the draft's own `updated_at` — when the work
+        // actually happened — is the honest answer, and the same one
+        // `pending_drafts` synthesizes for this row.
+        (None, Some(row)) => row.updated_at,
+        (None, None) => 0,
+    };
+    let (source, edit_seq) = match (draft, on_disk) {
+        (Some(row), _) => (row.raw_markdown, row.edit_seq),
+        (None, Some(bytes)) => (decode_source(&absolute_path, bytes)?, 0),
+        (None, None) => {
+            return Err(AppError::NotFound(format!(
+                "no file on disk for concept id {note_id}"
+            )))
+        }
     };
 
     let ParsedNote { mut ast, spans } = parse_note(&source, containing_dir(note_id));
@@ -509,6 +557,7 @@ pub fn open_note(
         edit_seq,
         revision,
         restored_from_draft,
+        awaiting_recreate,
         // A restored draft is by definition work that never reached disk, so
         // this session inherits both the obligation to write it and the one to
         // commit it.
@@ -998,18 +1047,41 @@ impl NoteSession {
     /// Without one lock spanning all of it, two tier 2 writers — the idle timer
     /// and a `close_note` — both read the same revision, both pass, and the
     /// second silently discards the first.
+    ///
+    /// **A session that opened over no file at all creates one here**, which
+    /// is the only case where a missing file is not this function's error to
+    /// raise. [`SessionState::awaiting_recreate`] is what distinguishes it
+    /// from a file deleted underneath a live session: the latter still reports
+    /// `NotFound`, because `close` reads that as the deletion it is and keeps
+    /// the draft row. For the former the absent file *is* the state the
+    /// baseline was recorded against, so it compares as the empty one and the
+    /// write goes ahead — unconditionally, since a recovered draft that
+    /// happens to be empty hashes equal to the absent file and would otherwise
+    /// leave nothing on disk at all.
     fn write_locked(&self, source: &str, seq: i64, revision: &str) -> Result<String, AppError> {
-        let on_disk = self.read_file()?;
+        let awaiting_recreate = self.lock_state()?.awaiting_recreate;
+        let on_disk = match self.read_file() {
+            Ok(bytes) => bytes,
+            Err(AppError::NotFound(_)) if awaiting_recreate => ABSENT_FILE.to_vec(),
+            Err(error) => return Err(error),
+        };
         let disk_revision = content_hash(&on_disk);
         if disk_revision != revision {
             // The file changed underneath the draft. The file is left exactly
             // as it is, and the current revision travels with the error so the
-            // caller can offer a reload rather than guess.
+            // caller can offer a reload rather than guess. A recreating
+            // session reaches this when the file *came back* between the open
+            // and this write — a sync, a restore from the trash — and the
+            // exit is the same one: the user is offered the reload rather than
+            // having the returned bytes overwritten by a draft.
             return Err(AppError::RevisionMismatch(disk_revision));
         }
 
         let new_revision = content_hash(source.as_bytes());
-        if new_revision != disk_revision {
+        if new_revision != disk_revision || awaiting_recreate {
+            if awaiting_recreate {
+                self.ensure_containing_directory()?;
+            }
             atomic_write(&self.0.absolute_path, source.as_bytes())?;
         }
 
@@ -1034,6 +1106,10 @@ impl NoteSession {
         {
             let mut state = self.lock_state()?;
             state.revision = new_revision.clone();
+            // The file exists again, so any *later* disappearance is an
+            // external deletion like any other and must surface as one rather
+            // than being silently undone by the next write.
+            state.awaiting_recreate = false;
         }
 
         self.clear_draft_through(seq)?;
@@ -1053,13 +1129,38 @@ impl NoteSession {
         Ok(new_revision)
     }
 
+    /// Recreates the directory that was removed along with the Note's file.
+    ///
+    /// Only reached on [`write_locked`](Self::write_locked)'s recreate path,
+    /// and only for a level that is genuinely gone: deleting a Note in a file
+    /// manager often means deleting the folder it was in, and without this the
+    /// recovered session's every write fails with an `IoError` that `close`
+    /// does not treat as a vanished file — leaving the session unclosable,
+    /// which is the exact trap the recovery path exists to open. It creates
+    /// nothing that was not already the Note's own containing directory, so
+    /// `create_note`'s rule that a Directory must exist before a Note goes
+    /// into it is not weakened here.
+    fn ensure_containing_directory(&self) -> Result<(), AppError> {
+        assert_no_io_under_the_connection("recreating a Note's directory");
+        let Some(parent) = self.0.absolute_path.parent() else {
+            return Ok(());
+        };
+        if parent.is_dir() {
+            return Ok(());
+        }
+        std::fs::create_dir_all(parent)
+            .map_err(|e| AppError::IoError(format!("create {}: {e}", parent.display())))
+    }
+
     /// The Note's bytes as they are on disk right now.
     ///
     /// A file that is gone reports `NotFound` rather than a generic I/O error,
     /// because the two have different exits: `NotFound` here means the file was
     /// deleted by something outside this application — another tool, or the
     /// user in a file manager — and `close` treats it as such rather than
-    /// leaving the session unclosable.
+    /// leaving the session unclosable. The one caller that means something
+    /// else by an absent file — [`NoteSession::write_locked`] recreating one —
+    /// says so at its own call site rather than by weakening this one.
     fn read_file(&self) -> Result<Vec<u8>, AppError> {
         assert_no_io_under_the_connection("reading a Note's file");
         std::fs::read(&self.0.absolute_path).map_err(|e| {
@@ -1656,6 +1757,7 @@ pub(super) fn carry_session_forward(
             edit_seq: state.edit_seq,
             revision: state.revision.clone(),
             restored_from_draft: state.restored_from_draft,
+            awaiting_recreate: state.awaiting_recreate,
             session_edited: state.session_edited,
             unwritten: state.unwritten,
             last_written_at: state.last_written_at,
@@ -1762,9 +1864,20 @@ impl NoteSession {
 // Helpers
 // ---------------------------------------------------------------------------
 
+/// The bytes a Note that is **not on disk** is compared against.
+///
+/// Named rather than written as `&[]` at its two use sites, because the two
+/// have to agree: [`open_note`]'s recovery branch records the hash of this as
+/// the OCC baseline, and [`NoteSession::write_locked`] substitutes it for the
+/// read that would have produced one. The comparison passing is what lets the
+/// first write create the file rather than raise `RevisionMismatch` against a
+/// file that is not there.
+const ABSENT_FILE: &[u8] = &[];
+
 struct DraftRow {
     raw_markdown: String,
     edit_seq: i64,
+    updated_at: i64,
 }
 
 fn read_draft(
@@ -1773,12 +1886,14 @@ fn read_draft(
     note_id: &str,
 ) -> Result<Option<DraftRow>, AppError> {
     conn.query_row(
-        "SELECT raw_markdown, edit_seq FROM drafts WHERE workspace_id = ?1 AND note_id = ?2",
+        "SELECT raw_markdown, edit_seq, updated_at FROM drafts \
+         WHERE workspace_id = ?1 AND note_id = ?2",
         rusqlite::params![workspace_id, note_id],
         |row| {
             Ok(DraftRow {
                 raw_markdown: row.get(0)?,
                 edit_seq: row.get(1)?,
+                updated_at: row.get(2)?,
             })
         },
     )
@@ -3579,8 +3694,122 @@ mod tests {
             .raw_markdown
             .contains("Work that only exists in the draft."));
         // The session is gone, so a later open recovers from the row rather
-        // than addressing a session whose file is not there.
+        // than addressing a session whose file is not there. What that open
+        // then does is the test below.
         assert!(lookup(f.workspace.id(), "a").unwrap().is_none());
+    }
+
+    /// The other half of the promise above, and the half that was missing:
+    /// keeping the row is only recovery if something can open it again.
+    ///
+    /// `open_note` read the file before it consulted `drafts`, so every click
+    /// on the Note `pending_drafts` was still listing returned `NotFound` and
+    /// the kept work had no route back into the editor at all — the row simply
+    /// sat there until a reindex removed the `notes` row that named it.
+    #[test]
+    fn a_vanished_notes_draft_is_recovered_by_reopening_it() {
+        let f = fixture();
+        f.write("a.md", &note("A", "First."));
+        f.commit_baseline();
+        let session = f.open("a");
+        session
+            .update_block(&[0], "Work that only exists in the draft.\n")
+            .unwrap();
+
+        std::fs::remove_file(f.root().join("a.md")).unwrap();
+        session
+            .close()
+            .expect("a vanished file must not trap the session");
+
+        // The surface that tells the user the work survived still names it...
+        let pending = pending_drafts(&f.workspace).unwrap();
+        assert_eq!(
+            pending.iter().map(|m| m.id.as_str()).collect::<Vec<_>>(),
+            vec!["a"]
+        );
+
+        // ...and opening what it names now hands the work back rather than
+        // reporting the file it no longer has.
+        let (recovered, state) =
+            open_note(&f.workspace, "a").expect("the Note pending_drafts reports must be openable");
+        assert!(
+            state.restored_from_draft,
+            "the recovered buffer must be flagged as restored, for SHEL-E007's notice"
+        );
+        assert!(recovered
+            .working_source()
+            .unwrap()
+            .contains("Work that only exists in the draft."));
+        assert!(
+            !f.root().join("a.md").exists(),
+            "opening must not write; tier 2 is what puts bytes on disk"
+        );
+
+        // The first tier 2 write recreates the file, rather than failing the
+        // OCC check against a file that is not there.
+        recovered.flush().unwrap();
+        assert!(f
+            .read("a.md")
+            .contains("Work that only exists in the draft."));
+        assert!(
+            f.draft("a").is_none(),
+            "the row must be cleared by the write that covered it"
+        );
+
+        // And from there the session is ordinary: another edit writes, and the
+        // close commits the recreated file.
+        recovered
+            .update_block(&[0], "Typed after the recovery.\n")
+            .unwrap();
+        recovered.flush().unwrap();
+        assert!(f.read("a.md").contains("Typed after the recovery."));
+        recovered.close().unwrap();
+        assert!(f.draft("a").is_none());
+        assert_eq!(
+            f.commit_subjects(),
+            vec!["Update A".to_string(), "baseline".to_string()],
+            "the recreated file must reach history on close"
+        );
+        assert!(f
+            .git(&["show", "HEAD:a.md"])
+            .contains("Typed after the recovery."));
+    }
+
+    /// Deleting a Note in a file manager often means deleting the folder it
+    /// was in. The recreate path has to put that level back, or every write
+    /// the recovered session makes fails with an `IoError` — which `close`
+    /// does not read as a vanished file, so the session becomes unclosable and
+    /// the trap simply moves one level up.
+    #[test]
+    fn a_recovered_draft_recreates_the_directory_that_went_with_its_file() {
+        let f = fixture();
+        f.write("projects/a.md", &note("A", "First."));
+        f.commit_baseline();
+        let session = f.open("projects/a");
+        session.update_block(&[0], "Only in the draft.\n").unwrap();
+
+        std::fs::remove_dir_all(f.root().join("projects")).unwrap();
+        session.close().unwrap();
+
+        let (recovered, _) = open_note(&f.workspace, "projects/a").unwrap();
+        recovered.flush().unwrap();
+
+        assert!(f.root().join("projects").is_dir());
+        assert!(f.read("projects/a.md").contains("Only in the draft."));
+        recovered.close().unwrap();
+    }
+
+    /// A Note whose file is gone and whose draft row is gone with it is simply
+    /// not there, and still says so.
+    #[test]
+    fn a_vanished_file_with_no_draft_still_reports_not_found() {
+        let f = fixture();
+        f.write("a.md", &note("A", "First."));
+        let session = f.open("a");
+        session.close().unwrap();
+        std::fs::remove_file(f.root().join("a.md")).unwrap();
+
+        assert!(f.draft("a").is_none());
         assert!(matches!(
             open_note(&f.workspace, "a"),
             Err(AppError::NotFound(_))
