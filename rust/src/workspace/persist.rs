@@ -842,11 +842,24 @@ impl NoteSession {
     /// describing a buffer that no longer exists.
     ///
     /// This is also where the Note's metadata is re-derived, because it is the
-    /// call that reparses what the user typed. A session that edits the
-    /// frontmatter Block — adding the `type` key that brings a foreign file
-    /// into conformance (CAP-PORT-03), or correcting the title — would
-    /// otherwise keep reporting `okf_conformant = false` for the rest of the
-    /// session and commit under the Note's old title.
+    /// call that reparses what the user typed. `metadata`, `source` and `spans`
+    /// are one triple installed together: the title and `okf_conformant` are
+    /// read off the frontmatter *span*, so carrying a value forward across a
+    /// reparse it was not computed from is stale by construction.
+    ///
+    /// That is not merely hygienic. The frontmatter block carries no
+    /// `block_path` at all (ADR-007 decision 5 — it is a span, not an
+    /// `AstNode`), so no FFI call can name it and no session can edit an
+    /// existing one in place. What a session *can* do is edit the head of the
+    /// file: a Note with no frontmatter has its first Block starting at byte 0,
+    /// so `insert_block(&[0], "---\ntype: Note\n…\n---")` makes a frontmatter
+    /// span exist where the stored metadata was derived when none did. That is
+    /// CAP-PORT-03's bring-a-foreign-file-into-conformance move, it is only
+    /// expressible this way precisely because there is no frontmatter path, and
+    /// `reparsing_refreshes_the_title_and_the_conformance_flag` pins it.
+    /// Without the re-derivation the session would keep reporting
+    /// `okf_conformant = false` and commit under the filename-derived title for
+    /// the rest of its life.
     pub fn commit_block(&self, _block_path: &[usize]) -> Result<NoteState, AppError> {
         loop {
             let (source, seq) = {
@@ -944,30 +957,45 @@ impl NoteSession {
         })
     }
 
-    /// Deletes a Block, taking the separator that followed it with it so the
-    /// remaining Blocks stay separated by exactly one blank line.
+    /// Deletes a Block, taking the newline run that immediately followed it
+    /// with it so the remaining Blocks stay separated by exactly one blank
+    /// line.
     ///
-    /// "The separator that followed it" is `span.end..next_block_start`, and
-    /// [`SpanMap::blocks`] is flat: the Block that begins next in the source is
-    /// not necessarily a sibling. Deleting the **last item of a list** removes
-    /// up to the paragraph that follows the whole list, and the blank line in
-    /// between is the one that closes the container — it lives inside the last
-    /// item's own span, since a list item's span runs to the end of the blank
-    /// line that terminates it. Taking it absorbed the following paragraph into
-    /// the surviving item (`- a\n- b\n\nPara\n` became `- a\nPara\n`), which is
-    /// a Block the user did not edit changing meaning.
+    /// # The delete stops at the newline run, not at the next Block
     ///
-    /// So the seam is normalized rather than assumed: whatever newline run
-    /// separated the deleted region from what follows it is what must still
-    /// separate them afterwards, and any of it the preceding text does not
-    /// already supply is put back. An ordinary paragraph delete is unaffected —
-    /// its predecessor already ends in the blank line the separator carried —
-    /// and a delete at either end of the Note pads nothing, because there is no
-    /// seam to keep apart.
+    /// The removed region is `span.start..span.end` plus the newline run
+    /// starting at `span.end` ([`newline_run_len`]) — deliberately **not**
+    /// `span.start..next_block_start`, which is what this used to remove.
+    /// `markdown::parser` documents a class of bytes that are preserved but
+    /// carry no span at all — a raw HTML block, inline HTML, a link reference
+    /// definition — and the gap between two registered Blocks is precisely
+    /// where those live. Deleting up to the next registered Block therefore
+    /// deleted them: `Alpha\n\n<div>…</div>\n\nBeta\n` lost the whole `<div>`
+    /// when the user deleted `Alpha`, and a `[ref]: /target.md` definition went
+    /// the same way, silently breaking every reference Link that used it. That
+    /// is the exact opposite of the guarantee `parser` states — "no edit can
+    /// corrupt them and they survive every save byte-identically" — and it
+    /// happened on the most routine edit there is.
+    ///
+    /// # The seam is still normalized
+    ///
+    /// Whatever newline run separated the deleted region from what follows it
+    /// is what must still separate them afterwards, and any of it the preceding
+    /// text does not already supply is put back ([`separator_across`]). This is
+    /// what keeps the container case honest: `SpanMap::blocks` is flat, so the
+    /// "next" Block after the last item of a list is the paragraph *after the
+    /// whole list*, and the blank line between them closes the container and
+    /// lives inside the last item's own span. Deleting that item removes its
+    /// closing blank line with it, and the normalization puts one back, so
+    /// `- a\n- b\n\nPara\n` becomes `- a\n\nPara\n` rather than the run-on
+    /// `- a\nPara\n`. An ordinary paragraph delete is unaffected — its
+    /// predecessor already ends in the blank line the run carried — and a
+    /// delete at either end of the Note pads nothing, because there is no seam
+    /// to keep apart.
     ///
     /// # The last Block takes the separator *before* it
     ///
-    /// There is no separator after the final Block to consume, so deleting it
+    /// There is no newline run after the final Block to consume, so deleting it
     /// left the one that preceded it standing and the Note ended in a blank
     /// line: `A\n\nB\n\nC\n` became `A\n\nB\n\n`. That disagrees with the rule
     /// [`insert_block`](Self::insert_block)'s end-of-Note append keeps — a Note
@@ -975,22 +1003,24 @@ impl NoteSession {
     /// shape of the same seam, and a delete-then-append round trip wrote a blank
     /// line the user never typed into the file and into version history.
     ///
-    /// So when nothing follows, the newline run *preceding* the Block is cut
-    /// back to a single line ending instead ([`cut_to_one_trailing_newline`]),
-    /// which is the same normalization read from the other side. It also settles
-    /// the container case symmetrically: the blank line that closes a list lives
-    /// inside the last item's span, so deleting the paragraph after the list
-    /// takes that blank line with it and the Note ends `- a\n- b\n` rather than
-    /// with the list's closing separator dangling.
+    /// So when nothing at all remains after the run, the newline run
+    /// *preceding* the Block is cut back to a single line ending instead
+    /// ([`cut_to_one_trailing_newline`]), which is the same normalization read
+    /// from the other side. "Nothing remains" is read off the source rather
+    /// than off the span map, since an unaddressable region following the last
+    /// registered Block is still text that has to stay separated from it.
     pub fn delete_block(&self, block_path: &[usize]) -> Result<NoteState, AppError> {
         self.structural_edit(|working, spans| {
             let span = block_span(spans, block_path)?;
-            let (start, end) = match next_block_start(spans, &span) {
-                Some(next) => (span.start, next),
-                None => (
+            let after = working.get(span.end..).unwrap_or_default();
+            let run_end = span.end + newline_run_len(after);
+            let (start, end) = if working.get(run_end..).unwrap_or_default().is_empty() {
+                (
                     cut_to_one_trailing_newline(working.get(..span.start).unwrap_or_default()),
                     span.end,
-                ),
+                )
+            } else {
+                (span.start, run_end)
             };
             check_span(working, &(start..end))?;
             let separator = separator_across(working, start, end);
@@ -1058,12 +1088,43 @@ impl NoteSession {
 
     /// Merges a Block into its predecessor — Backspace at offset 0. A no-op on
     /// the first Block.
+    ///
+    /// The merge deletes `previous_block_end..span.start`, which for two
+    /// adjacent Blocks is nothing but the blank line between them. It is not
+    /// always only that: the same gap [`delete_block`](Self::delete_block)
+    /// stopped reaching into is where `markdown::parser`'s preserved-but-
+    /// unaddressable regions live, so a Block whose predecessor is separated
+    /// from it by a raw HTML block or a link reference definition has that
+    /// region *inside* the gap, and merging absorbed it without a trace.
+    ///
+    /// Refused rather than fixed, because there is no correct answer to fix it
+    /// to: the user pressed Backspace at the start of a Block believing it is
+    /// adjacent to the one above, and the editor cannot show them what sits in
+    /// between (rendering raw HTML in place is `EPIC-F`'s raw-mode work). Both
+    /// silent alternatives are wrong — dropping the region destroys bytes
+    /// nothing asked to touch, and hopping over it joins two Blocks that are
+    /// not neighbours. The error names the content so the message is actionable
+    /// rather than a bare refusal.
     pub fn merge_block_with_previous(&self, block_path: &[usize]) -> Result<NoteState, AppError> {
         self.structural_edit(|working, spans| {
             let span = block_span(spans, block_path)?;
             let Some(previous_end) = previous_block_end(spans, &span) else {
                 return Ok(working.to_string());
             };
+            let gap = working.get(previous_end..span.start).ok_or_else(|| {
+                AppError::ParseError(format!(
+                    "source range {}..{} is not addressable in this Note",
+                    previous_end, span.start
+                ))
+            })?;
+            if !gap.trim().is_empty() {
+                return Err(AppError::ParseError(format!(
+                    "block_path {block_path:?} cannot be merged with the Block before it: \
+                     the two are separated by content this editor does not render and \
+                     cannot address, and the merge would delete it — {}",
+                    elided(gap, 60)
+                )));
+            }
             splice::splice_source(working, previous_end..span.start, "").map_err(splice_error)
         })
     }
@@ -1133,8 +1194,10 @@ impl NoteSession {
                     continue;
                 }
                 // Re-derived for the same reason `commit_block` re-derives it:
-                // these mutators reparse, and a structural edit can be the one
-                // that rewrites the frontmatter Block.
+                // metadata is read off the frontmatter span, and these
+                // mutators install a new span map — including for an edit at
+                // the head of a frontmatter-less Note, where `insert_block`
+                // and the range operations both splice at byte 0.
                 state.metadata = derive_metadata(
                     &self.0.note_id,
                     &new_source,
@@ -2091,7 +2154,7 @@ fn lifecycle_locks() -> &'static Mutex<LifecycleLocks> {
 /// of them panicked would turn a single failure into a permanently unusable
 /// Workspace. The registry lock above it is still propagated, since a panic
 /// there really can leave the session map inconsistent.
-pub(super) fn with_lifecycle_lock<T>(
+pub(crate) fn with_lifecycle_lock<T>(
     workspace: &Workspace,
     f: impl FnOnce() -> Result<T, AppError>,
 ) -> Result<T, AppError> {
@@ -2805,14 +2868,32 @@ fn separator_across(source: &str, start: usize, end: usize) -> String {
     separator_before(before, trailing_newlines(removed))
 }
 
-/// The start of the first Block beginning at or after `span.end`, which is
-/// where the separator following a Block ends.
-fn next_block_start(spans: &SpanMap, span: &std::ops::Range<usize>) -> Option<usize> {
-    spans
-        .blocks()
-        .filter(|block| block.source.start >= span.end)
-        .map(|block| block.source.start)
-        .min()
+/// The **byte length** of the newline run `text` opens with, counting `\r` and
+/// `\n` alike so a CRLF pair contributes two.
+///
+/// The counterpart of [`trailing_newlines`], read from the other end and in the
+/// other unit: that one answers "is there a blank line here", which is a count
+/// of line endings, while this one answers "where does the run stop", which is
+/// an index a splice range needs. Both bytes are ASCII, so the result is always
+/// a character boundary.
+fn newline_run_len(text: &str) -> usize {
+    text.bytes()
+        .take_while(|byte| matches!(byte, b'\n' | b'\r'))
+        .count()
+}
+
+/// `text` collapsed onto one line and cut to `limit` characters, for quoting
+/// invisible content back to a caller in an error message.
+///
+/// Bounded because the content being quoted is a region the editor cannot show
+/// — a raw HTML block can be the size of an embedded SVG, and an error is a
+/// sentence rather than a dump of it.
+fn elided(text: &str, limit: usize) -> String {
+    let one_line = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    match one_line.char_indices().nth(limit) {
+        Some((at, _)) => format!("{}…", &one_line[..at]),
+        None => one_line,
+    }
 }
 
 /// The end of the last Block ending at or before `span.start`.
@@ -2921,7 +3002,15 @@ pub(super) fn derive_metadata(
 /// output always closes what it opens, so a region with no `>>>>>>>` is not
 /// something this application should be materializing Suggestions from.
 fn conflict_suggestions(source: &str, containing_dir: &str) -> Option<Vec<AstNode>> {
-    if !source.contains("<<<<<<< ") {
+    // Spelled exactly as the scan below spells it: `<<<<<<<` at the start of a
+    // line, with no trailing space required. The early exit used to demand one
+    // while the scan did not, so an unlabeled marker — which `git` itself
+    // writes when the conflicting side has no name to put there — short-
+    // circuited as unconflicted and rendered as literal text in an editable
+    // Note. The direction was safe, but one predicate spelled two ways is an
+    // invitation to reconcile them the other way round, which un-sets
+    // `conflicted` on a real conflict.
+    if !source.starts_with("<<<<<<<") && !source.contains("\n<<<<<<<") {
         return None;
     }
 
@@ -4089,6 +4178,115 @@ mod tests {
         only.delete_block(&[0]).unwrap();
 
         assert_eq!(*only.working_source().unwrap(), "");
+    }
+
+    /// A delete must not take the bytes between it and the next registered
+    /// Block, because that gap is exactly where `markdown::parser`'s
+    /// preserved-but-unaddressable regions live.
+    ///
+    /// The regression this pins: `delete_block` removed
+    /// `span.start..next_block_start`, and a raw HTML block, a link reference
+    /// definition and inline HTML produce no `AstNode` and therefore no span —
+    /// so deleting the paragraph *before* one of them deleted the region too.
+    /// `parser`'s module documentation states the opposite as a guarantee ("no
+    /// edit can corrupt them and they survive every save byte-identically"),
+    /// and `prd/constraints.md`'s Edit Fidelity is what that guarantee serves.
+    #[test]
+    fn deleting_a_block_leaves_the_unaddressable_region_after_it_byte_identical() {
+        // A raw HTML block between two paragraphs: deleting the first must
+        // leave the HTML exactly as authored.
+        let f = fixture();
+        f.write("a.md", "Alpha\n\n<div>\n  raw\n</div>\n\nBeta\n");
+        let session = f.open("a");
+
+        session.delete_block(&[0]).unwrap();
+
+        assert_eq!(
+            *session.working_source().unwrap(),
+            "<div>\n  raw\n</div>\n\nBeta\n"
+        );
+
+        // A link reference definition, which `pulldown-cmark` consumes without
+        // emitting any event at all — the region with no span of any kind.
+        let g = fixture();
+        g.write("b.md", "Alpha\n\n[ref]: /target.md\n\nBeta\n");
+        let refs = g.open("b");
+
+        refs.delete_block(&[0]).unwrap();
+
+        assert_eq!(
+            *refs.working_source().unwrap(),
+            "[ref]: /target.md\n\nBeta\n"
+        );
+
+        // And the same in the middle of a Note, where the delete does have a
+        // seam on both sides to normalize.
+        let h = fixture();
+        h.write("c.md", "Alpha\n\nBeta\n\n<div>raw</div>\n\nGamma\n");
+        let middle = h.open("c");
+
+        middle.delete_block(&[1]).unwrap();
+
+        assert_eq!(
+            *middle.working_source().unwrap(),
+            "Alpha\n\n<div>raw</div>\n\nGamma\n"
+        );
+    }
+
+    /// The same rule read from the other side: a merge whose gap holds
+    /// unaddressable content is refused rather than silently absorbing it.
+    #[test]
+    fn merging_across_an_unaddressable_region_is_refused_and_names_it() {
+        let f = fixture();
+        f.write("a.md", "Alpha\n\n<div>raw</div>\n\nBeta\n");
+        let session = f.open("a");
+
+        let refused = session.merge_block_with_previous(&[1]);
+
+        assert!(
+            matches!(refused, Err(AppError::ParseError(ref message))
+                if message.contains("<div>raw</div>")),
+            "a merge that would delete an invisible region must be refused and \
+             name what it would have deleted, got {refused:?}"
+        );
+        assert_eq!(
+            *session.working_source().unwrap(),
+            "Alpha\n\n<div>raw</div>\n\nBeta\n",
+            "the refused merge must have changed nothing"
+        );
+
+        // A link reference definition is the same case.
+        let g = fixture();
+        g.write("b.md", "Alpha\n\n[ref]: /target.md\n\nBeta\n");
+        let refs = g.open("b");
+
+        assert!(matches!(
+            refs.merge_block_with_previous(&[1]),
+            Err(AppError::ParseError(_))
+        ));
+    }
+
+    /// The ordinary merge — a gap that is nothing but the blank line between
+    /// two adjacent Blocks — is unchanged by the refusal above.
+    #[test]
+    fn an_ordinary_merge_still_joins_two_adjacent_blocks() {
+        let f = fixture();
+        f.write("a.md", "Alpha\n\nBeta\n");
+        let session = f.open("a");
+
+        session.merge_block_with_previous(&[1]).unwrap();
+
+        assert_eq!(*session.working_source().unwrap(), "Alpha\nBeta\n");
+
+        // Merging the first Block is still a no-op with no predecessor to
+        // refuse against.
+        let g = fixture();
+        g.write("b.md", "Alpha\n\nBeta\n");
+        let first = g.open("b");
+
+        first.merge_block_with_previous(&[0]).unwrap();
+
+        assert_eq!(*first.working_source().unwrap(), "Alpha\n\nBeta\n");
     }
 
     /// `architecture/resilience.md`: an abrupt termination mid-write leaves the
@@ -5522,5 +5720,47 @@ mod tests {
         );
         // And the Note stays editable, because nothing renumbered its Blocks.
         assert_eq!(session.block_source(&[0]).unwrap().trim(), "Intro.");
+    }
+
+    /// The early exit and the scan agree on how a marker is spelled, so an
+    /// **unlabeled** `<<<<<<<` is a conflict to both of them.
+    ///
+    /// The disagreement this pins: the early exit tested `contains("<<<<<<< ")`
+    /// — with a trailing space — while the scan matched `starts_with("<<<<<<<")`
+    /// without one, so a region opened by a bare `<<<<<<<` short-circuited as
+    /// unconflicted and its markers rendered as literal text in an editable
+    /// Note. The direction is safe, but two spellings of one predicate is an
+    /// invitation to "fix" whichever one is read second, and the wrong choice
+    /// there un-sets `conflicted` on a real conflict.
+    #[test]
+    fn an_unlabeled_conflict_marker_is_still_a_conflict() {
+        let f = fixture();
+        f.write("a.md", &note("Alpha", "First."));
+        let session = f.open("a");
+        f.write(
+            "a.md",
+            "---\ntype: Note\ntitle: Alpha\n---\n\nBefore.\n\n\
+             <<<<<<<\nMine.\n=======\nTheirs.\n>>>>>>>\n\nAfter.\n",
+        );
+
+        let state = session.reload().unwrap();
+
+        assert!(
+            state
+                .ast
+                .iter()
+                .any(|node| matches!(node, AstNode::Suggestion { .. })),
+            "an unlabeled marker opens a genuine conflict region: {:?}",
+            state.ast
+        );
+        assert!(
+            !format!("{:?}", state.ast).contains("<<<<<<<"),
+            "the markers survived as literal text"
+        );
+        // A Note with no marker at all still takes the early exit unchanged.
+        let g = fixture();
+        g.write("b.md", &note("Beta", "Ordinary prose about nothing."));
+        let clean = g.open("b");
+        assert!(!format!("{:?}", clean.reload().unwrap().ast).contains("Suggestion"));
     }
 }

@@ -97,12 +97,35 @@ pub async fn open_workspace(path: String) -> Result<WorkspaceInfo, AppError> {
 /// write waits on — for the whole of it, which `SPK-WSPC-D001` §6.2.7 forbids.
 /// `scan_bundle` derives the rows with nothing held; `write_scanned_bundle` is
 /// SQL only.
+///
+/// **Both phases run under the lifecycle lock**, because splitting them opened
+/// an O(bundle) window between the snapshot and the write. A `rename_note`
+/// completing inside it has already moved the file and rewritten its rows, but
+/// the scan in flight was taken before the move — so the write phase reinstates
+/// the old concept id, drops the new one, and leaves the index naming a file
+/// that no longer exists. `write_scanned_bundle` is one transaction, so the two
+/// never interleave *mid-write*; what needed serializing is scan-against-write,
+/// which is what a lock spanning both gives.
+///
+/// The order holds: this is the topmost of `workspace::persist`'s four locks,
+/// and the only other lock either phase takes is the connection, which is the
+/// bottom one — `scan_bundle` walks the filesystem with nothing held at all
+/// (`index::scan`'s own documentation on why it must not run inside a
+/// connection closure), and `write_scanned_bundle` takes the connection
+/// beneath this. Nothing here reaches back up.
+///
+/// The lock is **not reentrant**, so the ticket that finally wires
+/// `SyncDeps::reindex` to this must dispatch it from the scheduler rather than
+/// from inside a lifecycle operation. Nothing does today: `bootstrap::converge`
+/// runs its own scan-and-rebuild and does not route through here.
 #[frb]
 pub async fn reindex_workspace() -> Result<u32, AppError> {
-    let (workspace_id, root) = crate::db::connection::active_workspace()?;
-    let scanned = crate::index::scan::scan_bundle(&root)?;
-    crate::db::connection::with_connection(|conn| {
-        crate::index::scan::write_scanned_bundle(conn, &workspace_id, &scanned)
+    let workspace = crate::workspace::persist::Workspace::active()?;
+    crate::workspace::persist::with_lifecycle_lock(&workspace, || {
+        let scanned = crate::index::scan::scan_bundle(workspace.root())?;
+        crate::db::connection::with_connection(|conn| {
+            crate::index::scan::write_scanned_bundle(conn, workspace.id(), &scanned)
+        })
     })
 }
 
@@ -1544,6 +1567,70 @@ mod tests {
         assert!(
             !pending_after_close.iter().any(|note| note.id == "pending"),
             "closing a Note must flush and clear its draft row"
+        );
+    }
+
+    /// A full rebuild cannot run inside a lifecycle operation, which is what
+    /// stops it reinstating the rows a concurrent rename has just retired.
+    ///
+    /// The race this closes: `reindex_workspace` walks and parses the whole
+    /// bundle with nothing held, then writes the derived rows. A `rename_note`
+    /// that completes inside that O(bundle) window has already moved the file
+    /// and rewritten its index rows — but the snapshot in flight was taken
+    /// before the move, so the write phase puts the *old* concept id back and
+    /// drops the new one. The index then names a file that no longer exists and
+    /// omits the one that does, until something reindexes again.
+    ///
+    /// Driven through the lock itself for the reason
+    /// `workspace::persist`'s `an_open_cannot_run_inside_a_lifecycle_operation`
+    /// gives: holding it is exactly the condition a lifecycle operation
+    /// establishes, and "makes no progress until it is released" is what
+    /// serialization means here. The sleep can only weaken the observation,
+    /// never fail it spuriously.
+    #[test]
+    fn wrapper_layer_reindex_cannot_run_inside_a_lifecycle_operation() {
+        use std::sync::atomic::AtomicBool;
+        use std::sync::Arc;
+
+        let _guards = wrapper_guards();
+        let ws = wrapper_bootstrap();
+        wrapper_write_note(&ws.root, "indexed.md", &note_source("Indexed", "Alpha."));
+
+        let workspace = crate::workspace::persist::Workspace::active().unwrap();
+        let reindexed = Arc::new(AtomicBool::new(false));
+        let entered = Arc::new(AtomicBool::new(false));
+
+        let waiter = crate::workspace::persist::with_lifecycle_lock(&workspace, || {
+            let reindexed_by_waiter = Arc::clone(&reindexed);
+            let entered_by_waiter = Arc::clone(&entered);
+            let waiter = std::thread::spawn(move || {
+                entered_by_waiter.store(true, AtomicOrdering::SeqCst);
+                block_on(reindex_workspace()).expect("the bundle is on disk");
+                reindexed_by_waiter.store(true, AtomicOrdering::SeqCst);
+            });
+
+            while !entered.load(AtomicOrdering::SeqCst) {
+                std::thread::yield_now();
+            }
+            std::thread::sleep(Duration::from_millis(100));
+            assert!(
+                !reindexed.load(AtomicOrdering::SeqCst),
+                "reindex_workspace completed while a lifecycle operation held \
+                 the lock, so a rename finishing inside its scan window can \
+                 still have its rows overwritten from the stale snapshot"
+            );
+            Ok(waiter)
+        })
+        .unwrap();
+
+        waiter.join().unwrap();
+        assert!(
+            reindexed.load(AtomicOrdering::SeqCst),
+            "the rebuild never completed once the lock was released"
+        );
+        assert!(
+            !block_on(workspace_tree()).unwrap().is_empty(),
+            "the rebuild must have written the rows it walked"
         );
     }
 

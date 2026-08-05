@@ -1754,6 +1754,25 @@ fn conformant_frontmatter(title: &str) -> String {
 /// no frontmatter at all is left alone rather than given one: `okf-bundle.md`
 /// makes bringing a foreign file into conformance an explicit user action, and
 /// its title derives from the filename the rename just changed anyway.
+///
+/// # Finding the key is a YAML question, not a byte-prefix one
+///
+/// The line was located with `line.starts_with("title:")`, which is one of
+/// several spellings YAML 1.2 gives the same key. `title : Old` (§7.4.2 permits
+/// space before the indicator) and `"title": Old` / `'title': Old` (§7.3.1
+/// quoted keys) all read as `title` and all missed the prefix — so the no-key
+/// branch below appended a *second* `title:` line. §3.2.1.1 forbids duplicate
+/// keys, so the block then either fails to load in a strict consumer or, in a
+/// lenient one, resolves to whichever of the two it reaches first, which is the
+/// **old** title. The rename reported success and the Note kept its previous
+/// name everywhere except its filename.
+///
+/// So the key is identified the way YAML defines it: the text before the line's
+/// first `:`, trimmed, with one layer of quoting removed. Only column 0 counts
+/// — an indented `title:` belongs to some other key's nested mapping, not to
+/// this one. The key text is then **re-emitted as authored** rather than
+/// normalized to `title:`, which is what keeps decision 5's promise that
+/// nothing outside the value changes.
 fn rewrite_frontmatter_title(source: &str, new_title: &str) -> Option<String> {
     let span = parse_note(source, "").spans.frontmatter()?;
     let block = source.get(span.clone())?;
@@ -1765,14 +1784,18 @@ fn rewrite_frontmatter_title(source: &str, new_title: &str) -> Option<String> {
         offset += line.len();
     }
 
-    let key = lines
-        .iter()
-        .position(|(_, line)| line.starts_with("title:") || line.trim_end() == "title");
+    let key = lines.iter().position(|(_, line)| is_title_key(line));
 
-    let replacement = format!("title: {}", yaml_scalar(new_title));
     match key {
         Some(index) => {
             let (start, line) = lines[index];
+            // The key exactly as the author spelled it — `title`, `title `,
+            // `"title"` — so replacing the value does not also rewrite the key.
+            let replacement = format!(
+                "{}: {}",
+                line.split_once(':').map_or(line, |(key, _)| key),
+                yaml_scalar(new_title)
+            );
             let mut end = start + line.len();
             // A block scalar (`title: |`) continues onto the more-indented
             // lines that follow it; they belong to the value being replaced.
@@ -1813,11 +1836,37 @@ fn rewrite_frontmatter_title(source: &str, new_title: &str) -> Option<String> {
             let mut out = source.to_string();
             out.replace_range(
                 closing_start..closing_start,
-                &format!("{replacement}{newline}"),
+                &format!("title: {}{newline}", yaml_scalar(new_title)),
             );
             Some(out)
         }
     }
+}
+
+/// True when `line` is a top-level `title` mapping key, whichever of YAML 1.2's
+/// spellings it uses.
+///
+/// The key is the text before the line's first `:`, trimmed of the spacing
+/// §7.4.2 allows around the indicator, with one layer of §7.3.1 quoting
+/// removed. Column 0 is required: a `title:` reached by indentation is a key
+/// inside some other key's nested mapping and rewriting it would change a value
+/// this function has no business touching. A line with no `:` at all is
+/// compared whole, which keeps the bare `title` case the byte-prefix version
+/// also handled.
+fn is_title_key(line: &str) -> bool {
+    if line.starts_with([' ', '\t']) {
+        return false;
+    }
+    let key = line.split_once(':').map_or(line, |(key, _)| key).trim();
+    let unquoted = key
+        .strip_prefix('"')
+        .and_then(|rest| rest.strip_suffix('"'))
+        .or_else(|| {
+            key.strip_prefix('\'')
+                .and_then(|rest| rest.strip_suffix('\''))
+        })
+        .unwrap_or(key);
+    unquoted == "title"
 }
 
 /// `value` as a YAML scalar that round-trips back through `read_frontmatter` as
@@ -5591,6 +5640,47 @@ mod tests {
         let out = rewrite_frontmatter_title(source, "New").unwrap();
 
         assert_eq!(out, "---\ntype: Note\ntitle: New\n---\n\nBody\n");
+    }
+
+    /// A `title` key spelled any of the ways YAML 1.2 allows is still the
+    /// `title` key, and must be rewritten in place rather than duplicated.
+    ///
+    /// The regression this pins: the key was found by `line.starts_with(
+    /// "title:")`, which is one of several legal spellings. `title : Old` (a
+    /// space before the colon, YAML 1.2 §7.4.2) and `"title": Old` (a
+    /// double-quoted key, §7.3.1) both missed, so the no-key branch appended a
+    /// second `title:` line — and YAML 1.2 §3.2.1.1 forbids duplicate keys, so
+    /// a strict consumer errors on the block outright while a lenient one is
+    /// free to keep the *old* title. Either way the rename appeared to succeed
+    /// and the Note kept its previous name everywhere but the filename.
+    #[test]
+    fn a_title_key_spelled_legally_but_unusually_is_rewritten_rather_than_duplicated() {
+        for source in [
+            "---\ntype: Note\ntitle : Old\n---\n\nBody\n",
+            "---\ntype: Note\n\"title\": Old\n---\n\nBody\n",
+            "---\ntype: Note\n'title':   Old\n---\n\nBody\n",
+            "---\ntype: Note\ntitle:Old\n---\n\nBody\n",
+        ] {
+            let out = rewrite_frontmatter_title(source, "New").unwrap();
+
+            let block = parse_note(&out, "").spans.frontmatter().unwrap();
+            let text = &out[block];
+            assert_eq!(
+                text.lines().filter(|l| l.contains("title")).count(),
+                1,
+                "a second title key was appended instead of the existing one \
+                 being rewritten: {out:?}"
+            );
+            assert_eq!(
+                crate::okf::read_frontmatter(text).title.as_deref(),
+                Some("New"),
+                "{out:?}"
+            );
+            assert!(
+                out.contains("type: Note"),
+                "the unmanaged keys must survive: {out:?}"
+            );
+        }
     }
 
     /// A file with no frontmatter is left exactly as its author wrote it:

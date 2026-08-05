@@ -761,6 +761,19 @@ pub fn merge_block_with_previous(
 /// Blocks, which the user sees rendered, while a split happens in the focused
 /// Block, which the user sees as raw source.
 ///
+/// **A range covers everything between its two endpoints, including bytes the
+/// UI never showed.** A range resolves to two source offsets and the Core
+/// slices *between* them, so a selection whose endpoints straddle one of the
+/// preserved-but-unaddressable regions — a raw HTML block, a link reference
+/// definition, inline HTML; the class `rust/src/markdown/parser.rs` documents —
+/// includes that region by construction. `copy_range_as_markdown` therefore
+/// yields it, and `delete_range`/`replace_range` therefore destroy it. This is
+/// the intended behaviour and the difference from the single-Block mutators,
+/// which step over those regions rather than into them: a range is an explicit
+/// span the user dragged, not a Block the Core picked. `EDIT-F004` builds the
+/// selection UI knowing it, and should decide there whether a selection
+/// crossing invisible content warrants a confirmation.
+///
 /// **Open: the drag-outward anchor.** ADR-006 accepts that a selection may
 /// begin inside the focused Block and extend past it, and for that one
 /// endpoint the "unfocused, therefore rendered" justification does not hold —
