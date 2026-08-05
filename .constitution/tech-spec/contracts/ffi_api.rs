@@ -956,6 +956,22 @@ pub async fn search_notes(query: String, limit: u32) -> Result<Vec<NoteMetadata>
 }
 
 /// Title-prefix jump (CAP-FIND-02).
+///
+/// **Prefix, not substring, and this is a deliberate Stage 3 narrowing of the
+/// capability.** CAP-FIND-02 says a user jumps to a Note "by typing part of
+/// its title"; this contract and `WSPC-D009`'s implementation both match a
+/// leading prefix only, so typing `lait` does not reach `Café au lait`.
+/// Prefix is the behaviour of the palettes this affordance is modelled on, and
+/// it is the form that *can* be made index-backed later: `title LIKE 'q%'` is
+/// the shape SQLite's LIKE optimization can serve from an index on
+/// `notes(title)`, whereas a leading wildcard never is. Neither is index-backed
+/// today -- `schema.sql` declares no index on `notes(title)`, so the shipped
+/// query scans the Workspace's rows, which is sound at current Note counts and
+/// is the cost `EPIC-E`'s palette ticket should measure before it goes on the
+/// per-keystroke path. Widening to substring match is a PRD/Stage-3 change
+/// rather than an implementation detail, since it needs its own index strategy
+/// (an FTS or trigram surface), so revisit it there if the narrowing turns out
+/// to be the wrong reading of "part of its title".
 #[frb]
 pub async fn find_notes_by_title(query: String, limit: u32) -> Result<Vec<NoteMetadata>, AppError> {
     unimplemented!()

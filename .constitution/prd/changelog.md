@@ -1,5 +1,9 @@
 # Stage 1: Product Requirements Changelog
 
+## v1.1.1
+Reviewed for downstream delta following Epic D execution (WSPC-D001–D009); no layer-specific changes required. Epic D is Core-side only, so no capability's user-visible statement changed and no capability was added, reworded or descoped.
+- One narrowing was made downstream and is recorded here as a pointer rather than a PRD edit, so it is not mistaken for drift on the next pass: CAP-FIND-02 says a user jumps to a Note "by typing part of its title", while the Stage 3 contract and `WSPC-D009`'s implementation both match a **leading prefix only**. That is a deliberate Stage 3 reading, documented at `find_notes_by_title` in `tech-spec/contracts/ffi_api.rs`. Widening it to substring match would be a change to this layer and would need its own index strategy; if the narrowing is the wrong reading, the correction belongs here first.
+
 ## v1.1.0
 Evolution pass driven by a pre-Tasks interview, which surfaced that the previous PRD described a different product for a different person than the one actually being built. Minor bump: new capabilities and materially expanded scope, no structural rewrite of the stage.
 

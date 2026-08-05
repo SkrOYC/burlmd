@@ -35,16 +35,26 @@ The repository follows the default `flutter_rust_bridge` template structure to m
 │   │   ├── error.rs         # Shared AppError, so db/security don't depend on api
 │   │   ├── git/             # gix integration
 │   │   ├── index/           # Bundle -> SQLite indexer: notes, notes_fts,
-│   │   │                      fts_mapping, links, directories; full and
-│   │   │                      incremental. Owns reindex_workspace.
-│   │   ├── markdown/        # AST parsing logic; owns the span map (ADR-007)
-│   │   ├── okf/             # OKF v0.2 bundle domain: frontmatter read/validate,
-│   │   │                      concept-id <-> path, link target resolution,
-│   │   │                      reserved-filename rules
+│   │   │                      fts_mapping, links, directories. `scan` (full
+│   │   │                      walk, owns reindex_workspace), `incremental`
+│   │   │                      (single-Note reindex, content_hash
+│   │   │                      short-circuit), `query` (read paths: search,
+│   │   │                      backlinks, tree, title prefix).
+│   │   ├── markdown/        # AST parsing logic; owns the span map (ADR-007).
+│   │   │                      `parser`/`ast` (parse to Block tree), `spans`
+│   │   │                      (span map + its invariants), `splice`
+│   │   │                      (span-preserving source edits)
+│   │   ├── okf/             # OKF v0.2 bundle domain: `frontmatter` (read and
+│   │   │                      validate), `concept_id` (concept-id <-> path,
+│   │   │                      reserved-filename rules), `links` (target
+│   │   │                      resolution and serialization)
 │   │   ├── security/        # OS Keychain root-key integration
 │   │   ├── sync/            # Debounced background sync scheduler
-│   │   ├── workspace/       # Workspace lifecycle: init/open, note & directory
-│   │   │                      CRUD, atomic write, the ADR-008 tiers
+│   │   ├── workspace/       # `bootstrap` (init/open, Git repo adoption),
+│   │   │                      `lifecycle` (note & directory create/rename/
+│   │   │                      move/delete, atomic write), `links_rewrite`
+│   │   │                      (inbound-Link source rewriting on rename),
+│   │   │                      `persist` (the ADR-008 tiers and their locks)
 │   │   └── test_support.rs  # #[cfg(test)]-only fixtures shared across unit test modules
 ├── pubspec.yaml             # Dart dependencies
 └── flutter_rust_bridge.yaml # FRB configuration
@@ -109,20 +119,24 @@ This is deliberately *not* a visible directory in the user's home. The bundle is
 
 The encrypted index does not live inside the bundle. It is derived state (`data-models/schema.sql`), and placing it in the bundle would put an encrypted binary blob inside a Git repository whose entire premise is human-readable plaintext, producing a large opaque diff on every write. It belongs alongside the Workspace, not within it: it resolves to `$XDG_DATA_HOME/burlmd/index.sqlite3` — a *sibling* of the bundle root inside the shared `burlmd/` parent, not a file within the bundle and not an ancestor of it — with the same fallbacks as the Workspace path above, and `BURLMD_DB_PATH` continuing to override it for tests.
 
-This is a change from what the code does today. `rust/src/db/connection.rs` resolves `$HOME/.burlmd/index.sqlite3`, a placeholder written in Epic B before any Workspace path existed and never reconciled with one. `WSPC-D004` moves it. Because that ticket also rewrites the index schema, an index file left at the old path by a development build is not migrated and not read — it is stale derived state under a path this specification no longer names, and the bundle it was derived from can rebuild it.
+`WSPC-D004` moved the code to this path. `rust/src/db/connection.rs` previously resolved `$HOME/.burlmd/index.sqlite3`, a placeholder written in Epic B before any Workspace path existed and never reconciled with one; it now resolves the path above, with a test asserting the legacy location is neither read nor created. Because that ticket also rewrote the index schema, an index file left at the old path by a development build is not migrated and not read — it is stale derived state under a path this specification no longer names, and the bundle it was derived from can rebuild it.
 
 The *mechanical* rules above — `cargo fmt`, `cargo clippy`, `dart format`,
 `dart analyze`, `nixfmt` — are enforced as pre-commit hooks installed on entry
 to the devenv shell. All of them exclude `.constitution/`, so editing the spec's
-FFI contract does not trigger a build gate. The four *language* hooks
-additionally no-op until their manifests exist; `nixfmt` has no manifest to wait
-on and runs today.
+FFI contract does not trigger a build gate. The four *language* hooks each guard
+on their manifest, but `rust/Cargo.toml` and `pubspec.yaml` both exist as of
+Epic A, so all five hooks run on every applicable commit today.
 
-Once real Rust code exists, `cargo clippy --workspace --all-targets` on every
-`.rs` commit will be a multi-minute gate — `bundled-sqlcipher` compiles the
-SQLCipher amalgamation from source, and `--all-targets` additionally builds tests
-and benches. Consider moving clippy to the `pre-push` stage at that point,
-leaving `cargo fmt` on `pre-commit`.
+`cargo clippy --workspace --all-targets` on every `.rs` commit is therefore a
+live gate now. Against a warm `target/` it costs ~20s (measured at Epic D's
+close, on a tree where the dev-profile dependencies were already built). The
+multi-minute case is a cold or invalidated `target/` — `bundled-sqlcipher`
+compiles the SQLCipher amalgamation from source, and `--all-targets`
+additionally builds tests and benches, so a toolchain or feature bump pays for
+all of it inside the commit. The standing suggestion is unchanged and still not
+acted on: consider moving clippy to the `pre-push` stage, leaving `cargo fmt` on
+`pre-commit`.
 
 Nothing enforces the rest, and no CI runs today. The testing standard, the Rust
 async-avoidance rule and the Dart widget-statelessness rule are review

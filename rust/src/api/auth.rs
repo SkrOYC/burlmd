@@ -442,8 +442,8 @@ fn fetch_github_account_id(
 /// the same trap `GitHubOAuthEndpoints`'s doc comment describes for
 /// well-known std trait impls; a bare function has no such risk, since
 /// non-`pub` free functions are correctly left out of the generated
-/// bindings (see the `ffi_api.rs`/`simple.rs` precedent: `search_notes_impl`,
-/// `save_note_impl`, etc.).
+/// bindings (see the `ffi_api.rs` precedent: `search_notes_impl`,
+/// `find_notes_by_title_impl`, etc.).
 fn store_tokens_in_keyring(service: &str, tokens: &OAuthTokens) -> Result<(), AppError> {
     set_or_delete(
         service,

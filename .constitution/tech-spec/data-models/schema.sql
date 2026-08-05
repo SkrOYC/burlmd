@@ -24,15 +24,15 @@ PRAGMA foreign_keys = ON;
 -- baseline rather than a migration away from it. The first migration written
 -- after this project has real users should branch on this value.
 --
--- This statement is therefore NOT part of the batch `init_schema` replays on
--- every open. `connection.rs` runs `execute_batch(SCHEMA)` unconditionally, so
--- an unconditional `PRAGMA user_version = 1` would silently reset a migrated
--- database back to the baseline on its next open -- turning the one value a
--- future migration branches on into a constant. The Core reads
--- `PRAGMA user_version` first and sets it only when it reads 0, i.e. on a
--- freshly created file. It is written here because this file is the schema
--- contract and the version belongs with it, not because it is replayable.
-PRAGMA user_version = 1;
+-- Deliberately NOT set here. `db::connection::init_schema` replays this whole
+-- batch via `execute_batch` on every open (every statement above and below is
+-- idempotent via `CREATE ... IF NOT EXISTS`), so a literal `PRAGMA user_version
+-- = 1;` in this file would silently reset a migrated database back to the
+-- baseline on every subsequent open -- turning the one value a future
+-- migration branches on into a constant. Instead, `init_schema` reads `PRAGMA
+-- user_version` first and writes it to 1 only when it reads 0, i.e. on a
+-- freshly created file. `WSPC-D004` carries a criterion for this: an index
+-- whose `user_version` reads something other than 0 must be left as it was.
 
 -- Foreign key enforcement is per CONNECTION and is not stored in the database
 -- file: SQLite defaults it OFF, so every connection the application opens must
@@ -41,8 +41,10 @@ PRAGMA user_version = 1;
 -- rename possible at all -- and with the pragma off they do not error, they
 -- simply do not fire, leaving orphaned `links` and `fts_mapping` rows behind
 -- with nothing to signal it. `guidelines.md` states this as a connection-open
--- obligation, and `WSPC-D004` carries a criterion for it, because
--- `open_encrypted_db_with_key` is reachable without `init_schema` today.
+-- obligation, and `WSPC-D004` carries a criterion for it: `db::connection`
+-- issues this pragma directly on every freshly opened connection (not only
+-- when this batch happens to run), because `open_encrypted_db_with_key` is
+-- reachable without `init_schema`.
 
 -- A Workspace. Local by default (ADR-005): `provider` is 'local' and
 -- `remote_url` is NULL until the user explicitly connects one (CAP-SYNC-01),
@@ -210,6 +212,18 @@ CREATE TABLE IF NOT EXISTS drafts (
     note_id TEXT NOT NULL,
     raw_markdown TEXT NOT NULL,    -- Full current source text of the Note
     updated_at INTEGER NOT NULL,
+    -- The Core's per-Note edit sequence at the moment this row was written,
+    -- and the reason tier 2's clear is safe. `SPK-WSPC-D001` §6.2.6: a tier 1
+    -- write releases the state lock before its 8-23ms encrypted row write, so
+    -- a timer that snapshotted at sequence N, wrote the file, and then
+    -- compared an *in-memory* counter still reading N would clear a row the
+    -- keystroke is about to write -- and the keystroke would then write row(N)
+    -- into a table the timer believed it had emptied. The counter to compare
+    -- is the row's, not the buffer's, so the clear is
+    -- `DELETE FROM drafts WHERE ... AND edit_seq <= ?`, evaluated atomically
+    -- against the row itself. `<=` rather than `=` because a row lagging the
+    -- snapshot is also redundant once the newer bytes are on disk.
+    edit_seq INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (workspace_id, note_id)
     -- Deliberately no foreign key to notes, for the RENAME case only: a
     -- draft must survive its Note's concept id changing, and adding a FK here

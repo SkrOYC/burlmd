@@ -221,8 +221,11 @@ pub fn with_connection<T>(
 /// Deliberately kept next to [`DB`] rather than in `api::ffi_api` or
 /// `workspace`: it is process-wide singleton state of exactly the same
 /// shape, set once bootstrap succeeds and read by every later Note-level
-/// query — `search_notes`/`save_note` today (WSPC-D004 review finding #4),
-/// and every query `WSPC-D005`/`WSPC-D006`/`WSPC-D009` add.
+/// query: `reindex_workspace`, every open session lookup, and the discovery
+/// and graph reads `search_notes`/`find_notes_by_title`/`link_completions`/
+/// `backlinks`/`workspace_tree` directly; the Note and Directory lifecycle
+/// operations indirectly, via `workspace::persist::Workspace::active`
+/// (WSPC-D004 review finding #4, extended by WSPC-D005/D006/D009).
 static ACTIVE_WORKSPACE: Mutex<Option<String>> = Mutex::new(None);
 
 /// Records `id` as the active Workspace. Called by
