@@ -137,7 +137,13 @@ class _EditableParagraphState extends ConsumerState<_EditableParagraph> {
       // and hands the delimiters back verbatim, is what closes it. Fixing it
       // here would mean threading the Note's id into this widget and
       // re-deriving the field's text and its resync comparison from the Core,
-      // which is that ticket's work rather than a line of it.
+      // which is that ticket's work rather than a line of it. And the deferred
+      // surface is wider than "unstyled": `updateBlock` is `#[frb(sync)]` and
+      // therefore throws synchronously on every refusal the Core can raise — an
+      // unaddressable or container `block_path`, a conflicted Note, a failed
+      // draft write — and neither this callback nor `NoteController.updateBlock`
+      // catches or reports one, so until EDIT-F002 wires an error path those
+      // failures are invisible to the user rather than merely unstyled.
       ref.read(activeNoteProvider.notifier).updateBlock(widget.blockPath, text);
     },
   );

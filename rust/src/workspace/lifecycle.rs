@@ -431,6 +431,7 @@ fn rename_note_serialized(
     }
     let plan = Reidentify {
         remap,
+        file_less: BTreeSet::new(),
         invoked: Some(note_id.to_string()),
         retitled: Some((note_id.to_string(), new_title.to_string())),
         // A rename does not move the Note, so every relative Link in it still
@@ -517,6 +518,7 @@ fn move_note_serialized(
     }
     let plan = Reidentify {
         remap,
+        file_less: BTreeSet::new(),
         invoked: Some(note_id.to_string()),
         retitled: None,
         // Only when the Directory actually changes: a "move" that lands a Note
@@ -641,17 +643,41 @@ fn rename_directory_serialized(
     let prefix = format!("{directory}/");
     let contained =
         workspace.with_db(|conn| note_ids_with_prefix(conn, workspace.id(), &prefix))?;
+    // The same one-store-short problem `delete_directory` fixed for itself, in
+    // the operation that *moves* the subtree rather than removes it. `contained`
+    // is derived from `notes` rows; a `drafts` row carries no foreign key, is
+    // covered by no cascade, and routinely names a concept id the index has
+    // never held — `open_note`'s recovery branch opens exactly such a Note.
+    //
+    // Left out of the remap, an orphaned draft beneath `Old/` stayed keyed to
+    // `Old/x` after the Directory became `New/`: `pending_drafts` reported
+    // unflushed work at a dead concept id, opening it was the only route to
+    // that work, and recovering it recreated the Directory this operation had
+    // just removed. Folded in, it is re-keyed by `rewrite_index`'s `UPDATE …
+    // drafts` and rewritten by the same draft machinery that already carries a
+    // contained Note's own draft across.
+    let orphaned_drafts: Vec<String> = workspace
+        .with_db(|conn| draft_ids_with_prefix(conn, workspace.id(), &prefix))?
+        .into_iter()
+        .filter(|id| !contained.contains(id))
+        .collect();
     let remap: Remap = contained
         .iter()
+        .chain(&orphaned_drafts)
         .map(|id| {
             let rest = id.strip_prefix(&prefix).unwrap_or(id);
             (id.clone(), format!("{new_directory}/{rest}"))
         })
         .collect();
+    // Unaffected by the drafts folded in above, and deliberately so: this guard
+    // is about the **destination**, and a draft at `Old/x` re-keying to `New/x`
+    // is its own. Only a *second*, foreign draft already sitting at `New/x`
+    // trips it — the collision the refusal exists for.
     ensure_destinations_hold_no_foreign_draft(workspace, &remap)?;
 
     let plan = Reidentify {
         remap,
+        file_less: orphaned_drafts.into_iter().collect(),
         // A Directory is not a Note, so every Note the rename moved is
         // "beyond" what the caller named and belongs in `remapped`.
         invoked: None,
@@ -822,6 +848,18 @@ fn delete_directory_locked(
 /// also being retitled, and whether a single directory rename carries the files.
 struct Reidentify {
     remap: Remap,
+    /// The subset of `remap`'s keys that are **known to have no file**: an
+    /// orphaned `drafts` row swept into a Directory rename, and nothing else.
+    ///
+    /// [`plan_affected`] otherwise refuses a re-identification target with no
+    /// file on disk, which is the right answer for `rename_note` and
+    /// `move_note` — a Note whose file vanished underneath the operation is a
+    /// failure to report, not a rename to perform. A `drafts` row that never
+    /// had a file is a different population reaching the same predicate, and
+    /// refusing over one made the whole Directory rename fail. Named
+    /// explicitly rather than inferred from `directory_rename`, so a *Note* row
+    /// whose file has gone still refuses inside a Directory rename too.
+    file_less: BTreeSet<String>,
     /// The Note the operation was invoked on, when it was invoked on one.
     /// [`LifecycleEffects`] reports what changed *beyond* it — the caller
     /// already holds its new identity in the returned `NoteState` — so it is
@@ -1170,8 +1208,10 @@ fn plan_affected(workspace: &Arc<Workspace>, plan: &Reidentify) -> Result<Vec<Af
             .map(|(_, title)| title.as_str());
 
         let disk = read_source(&old_path)?;
-        if disk.is_none() && plan.remap.contains_key(&old_id) {
-            // The Note being re-identified has no file to move.
+        if disk.is_none() && plan.remap.contains_key(&old_id) && !plan.file_less.contains(&old_id) {
+            // The Note being re-identified has no file to move. Exempt only for
+            // an id the plan already knows carries none — see
+            // [`Reidentify::file_less`].
             return Err(AppError::NotFound(format!(
                 "no file on disk for concept id {old_id}"
             )));
@@ -2543,13 +2583,32 @@ fn final_source(affected: &Affected) -> Result<String, AppError> {
 /// passed once per level. An entry whose kind cannot be read at all is treated
 /// as a leaf and skipped, on the same best-effort terms as an unreadable
 /// directory.
+///
+/// **A name that is not valid UTF-8 is skipped, not substituted.** This used to
+/// build every entry with `to_string_lossy`, so a file named `raw-\xFF.bin`
+/// entered the pathspec as `raw-\u{FFFD}.bin` — a path that does not name the
+/// file that was walked, and that in general names a *different* file. What
+/// `commit_paths` does with it is decided by whatever happens to sit at that
+/// substituted path: nothing, and it issues a `remove` for a tree entry this
+/// operation was never asked about; an unrelated file, and it stages that one
+/// instead. Neither is a thing a rename should be able to do, and no correct
+/// answer exists here because the name cannot be spelled in the pathspec at
+/// all.
+///
+/// Skipping is the rule `index::scan::walk_bundle` already applies to the same
+/// name, for the reason it records: a file burlmd cannot name is not a Note,
+/// never enters the index, and stays untracked. A directory goes the same way
+/// and is not descended, since every path beneath it is unrepresentable too.
 fn collect_files(root: &Path, dir: &Path, out: &mut Vec<String>) {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return;
     };
     for entry in entries.flatten() {
-        let name = entry.file_name().to_string_lossy().into_owned();
-        if name == ".git" || super::is_ignored_scratch_name(&name) {
+        let file_name = entry.file_name();
+        let Some(name) = file_name.to_str() else {
+            continue;
+        };
+        if name == ".git" || super::is_ignored_scratch_name(name) {
             continue;
         }
         let Ok(file_type) = entry.file_type() else {
@@ -2559,8 +2618,12 @@ fn collect_files(root: &Path, dir: &Path, out: &mut Vec<String>) {
         match super::classify_entry(&file_type) {
             super::BundleEntry::Directory => collect_files(root, &path, out),
             super::BundleEntry::File => {
-                if let Ok(relative) = path.strip_prefix(root) {
-                    out.push(relative.to_string_lossy().into_owned());
+                // `to_str` again rather than `to_string_lossy`: the entry's own
+                // name is representable by now, but `root` is caller-supplied
+                // and an unrepresentable ancestor would reintroduce exactly the
+                // substitution above.
+                if let Some(relative) = path.strip_prefix(root).ok().and_then(Path::to_str) {
+                    out.push(relative.to_string());
                 }
             }
             super::BundleEntry::Symlink => {}
@@ -4007,6 +4070,55 @@ mod tests {
         );
     }
 
+    /// A destination carrying a **fragment** is left byte-for-byte alone by a
+    /// move, on both sides of the `.md` line.
+    ///
+    /// This is the consistency half of a decision recorded in
+    /// `tech-spec/changelog.md`: `okf::links::classify` reads `Other.md#frag`
+    /// as **External**, because it tests the destination as written and no
+    /// destination ending in `#frag` ends in `.md` — the same
+    /// no-decoding-on-read stance the percent-encoding entry describes. So
+    /// there is no `links` edge for it, no backlink, and no rename rewrites it.
+    ///
+    /// `resolve_bundle_path` used to disagree with that reading for the one
+    /// operation that consults it: `absolutize_relative_links` treated the
+    /// fragment as part of a *path*, so a move rewrote `[a](Other.md#frag)` to
+    /// `[a](</sub/Other.md#frag>)` — half-recognizing a reference the rest of
+    /// the crate does not recognize at all, and doing it as if `Other.md#frag`
+    /// were a filename. Leaving it alone is the reading that agrees with
+    /// `classify`; revisiting both together is CAP-PORT-03's business.
+    #[test]
+    fn a_move_leaves_a_fragment_bearing_destination_byte_for_byte_alone() {
+        let f = fixture();
+        f.write("Other.md", &note("Other", "elsewhere"));
+        f.write("plan.pdf", "PDF");
+        f.write(
+            "Note.md",
+            &note(
+                "Note",
+                "[note anchor](Other.md#section) and [pdf page](plan.pdf#page=3) and \
+                 [this doc](#local)",
+            ),
+        );
+        f.reindex();
+        create_directory(&f.workspace, "sub").unwrap();
+        let before = f.read("Note.md");
+
+        move_note(&f.workspace, "Note", "sub").unwrap();
+
+        assert_eq!(
+            f.read("sub/Note.md"),
+            before,
+            "a fragment-bearing destination is not a recognized reference, so \
+             the move must not rewrite it"
+        );
+        assert!(
+            f.link_targets("sub/Note").is_empty(),
+            "a fragment-bearing destination carries no edge either: {:?}",
+            f.link_targets("sub/Note")
+        );
+    }
+
     /// A rename does not move the Note, so the Directory its relative Links
     /// resolve against is unchanged and they are left exactly as the author
     /// wrote them.
@@ -4717,6 +4829,81 @@ mod tests {
             .contains("an attachment, not a Note"));
     }
 
+    /// A name that is **not valid UTF-8** — legal on every Unix filesystem, and
+    /// something a foreign bundle can contain — contributes nothing to the
+    /// pathspec, rather than contributing a path built by substitution.
+    ///
+    /// `collect_files` used `to_string_lossy`, so an entry named `raw-\xFF.bin`
+    /// went into the pathspec as `raw-\u{FFFD}.bin`: a path that does not name
+    /// the file that was walked, and in general names a *different* file
+    /// entirely. `commit_paths` then either finds nothing there (and issues a
+    /// `remove` for a tree path this operation was never asked about) or finds
+    /// the unrelated file that really does carry that name, and stages it.
+    ///
+    /// Skipping is what `index::scan::walk_bundle` already does with such a
+    /// name, and it documents why: a file burlmd cannot name is not a Note,
+    /// never enters the index, and is left untracked. This makes the commit
+    /// path agree with the walk instead of half-inventing a name for it.
+    ///
+    /// A directory with such a name is skipped whole, because every path
+    /// beneath it would be unrepresentable for the same reason.
+    #[cfg(unix)]
+    #[test]
+    fn collect_files_skips_an_entry_whose_name_is_not_valid_utf8() {
+        use std::os::unix::ffi::OsStrExt;
+
+        let f = fixture();
+        let subtree = f.root().join("work");
+        std::fs::create_dir_all(subtree.join("nested")).unwrap();
+        std::fs::write(subtree.join("ok.bin"), b"nameable\n").unwrap();
+        std::fs::write(subtree.join("nested").join("deep.bin"), b"nameable\n").unwrap();
+        // `0xFF` is not a valid UTF-8 byte in any position.
+        let raw_file = std::ffi::OsStr::from_bytes(b"raw-\xffname.bin");
+        let raw_dir = std::ffi::OsStr::from_bytes(b"raw-\xffdir");
+        std::fs::write(subtree.join(raw_file), b"opaque\n").unwrap();
+        std::fs::create_dir_all(subtree.join(raw_dir)).unwrap();
+        std::fs::write(subtree.join(raw_dir).join("inside.bin"), b"opaque\n").unwrap();
+
+        let mut pathspec = Vec::new();
+        collect_files(&f.root(), &subtree, &mut pathspec);
+        pathspec.sort();
+
+        assert_eq!(
+            pathspec,
+            vec![
+                "work/nested/deep.bin".to_string(),
+                "work/ok.bin".to_string(),
+            ],
+            "the pathspec carries a path built by lossy substitution"
+        );
+    }
+
+    /// The end-to-end half of the rule: such a file still **moves** with the
+    /// Directory (the rename is one filesystem call over the whole subtree, so
+    /// nothing about the pathspec can strand it), and the rename still
+    /// succeeds.
+    #[cfg(unix)]
+    #[test]
+    fn renaming_a_directory_carries_a_file_whose_name_is_not_valid_utf8() {
+        use std::os::unix::ffi::OsStrExt;
+
+        let f = fixture();
+        f.write("projects/One.md", &note("One", "words"));
+        f.reindex();
+        let raw_name = std::ffi::OsStr::from_bytes(b"raw-\xffname.bin");
+        std::fs::write(f.root().join("projects").join(raw_name), b"opaque bytes\n").unwrap();
+        f.commit_baseline();
+
+        rename_directory(&f.workspace, "projects", "work").expect("the rename must still succeed");
+
+        assert!(
+            f.root().join("work").join(raw_name).is_file(),
+            "the unnameable file did not move with its Directory"
+        );
+        assert!(!f.root().join("projects").exists());
+        assert!(f.git(&["show", "HEAD:work/One.md"]).contains("words"));
+    }
+
     /// `rename_directory` refuses a path whose type it does not handle. Its two
     /// mirrors did not, and each destroys something the caller did not name.
     ///
@@ -5074,6 +5261,77 @@ mod tests {
             f.draft_row("New/x").as_deref(),
             Some("---\ntitle: x\n---\n\nits own unflushed work\n"),
             "the draft did not follow the Directory rename"
+        );
+    }
+
+    /// An **orphaned** draft beneath the renamed Directory travels with it too,
+    /// exactly as `delete_directory` sweeps one away.
+    ///
+    /// The regression this pins: `rename_directory` built its remap from
+    /// `notes` rows alone, and a `drafts` row can name a concept id the index
+    /// has never held — `open_note`'s recovery branch opens exactly such a Note.
+    /// The row therefore stayed keyed to `Old/Gone` after `Old` became `New`:
+    /// `pending_drafts` reported unflushed work at a concept id whose Directory
+    /// no longer exists, opening it was the only way to reach the work, and
+    /// doing so **recreated the removed Directory** on the first tier 2 write.
+    /// The id was also permanently reserved inside a Directory nothing else
+    /// refers to.
+    #[test]
+    fn a_directory_rename_rekeys_an_orphaned_draft_beneath_it() {
+        let f = fixture();
+        f.write("Old/x.md", &note("x", "on disk under Old"));
+        f.reindex();
+        f.commit_baseline();
+        let stranded = note("Gone", "unflushed, no file, no index row");
+        f.put_draft("Old/Gone", &stranded);
+
+        let effects = rename_directory(&f.workspace, "Old", "New").unwrap();
+
+        assert!(
+            f.draft_row("Old/Gone").is_none(),
+            "the orphaned draft stayed keyed to a concept id the rename vacated"
+        );
+        assert_eq!(
+            f.draft_row("New/Gone").as_deref(),
+            Some(stranded.as_str()),
+            "the orphaned draft did not follow the Directory rename"
+        );
+        assert!(
+            effects
+                .remapped
+                .iter()
+                .any(|remap| remap.old_id == "Old/Gone" && remap.new_id == "New/Gone"),
+            "a caller holding the recovered Note open is never told it moved: {:?}",
+            effects.remapped
+        );
+
+        // The one surface that reports unflushed work names the live id, and
+        // only the live id.
+        let pending = persist::pending_drafts(&f.workspace).unwrap();
+        let pending_ids: Vec<&str> = pending.iter().map(|m| m.id.as_str()).collect();
+        assert!(
+            pending_ids.contains(&"New/Gone"),
+            "pending_drafts must name the concept id the work is now at: {pending_ids:?}"
+        );
+        assert!(
+            !pending_ids.contains(&"Old/Gone"),
+            "pending_drafts still names the dead id: {pending_ids:?}"
+        );
+
+        // And recovering it lands under `New/` rather than resurrecting `Old/`.
+        let recovered = persist::open_note(&f.workspace, "New/Gone").unwrap().0;
+        assert!(
+            recovered.note_state().unwrap().restored_from_draft,
+            "the draft is what the recovered session was built from"
+        );
+        recovered.close().unwrap();
+        assert!(
+            f.exists("New/Gone.md"),
+            "the recovered Note was not written"
+        );
+        assert!(
+            !f.exists("Old"),
+            "recovering the draft recreated the Directory the rename removed"
         );
     }
 

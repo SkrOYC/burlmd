@@ -158,17 +158,36 @@ fn resolve_path(containing_dir: &str, dest: &str) -> Option<String> {
 /// `None` when the destination is not one this bundle owns, and each case is
 /// the same judgement [`classify`] makes: it carries a URI scheme (not ours),
 /// it is already bundle-absolute (nothing to resolve), it is a fragment or
-/// query rather than a path (`#section` addresses this document), it is empty,
-/// or it climbs above the bundle root (there is no path to report).
+/// query rather than a path (`#section` addresses this document), it **carries**
+/// a fragment (see below), it is empty, or it climbs above the bundle root
+/// (there is no path to report).
 ///
 /// This exists because a relative destination resolves against the directory of
 /// the Note holding it, so moving that Note between Directories repoints it --
 /// and that is as true of `![diagram](img/diagram.png)` as it is of a Link to
 /// another Note. See `workspace::links_rewrite::absolutize_relative_links`.
+///
+/// # A fragment anywhere in the destination stops it here
+///
+/// Not just a leading one. `Other.md#section` is **External** to [`classify`],
+/// which tests the destination exactly as written and finds it does not end in
+/// `.md` -- the same no-decoding-on-read stance `tech-spec/changelog.md`
+/// records for percent-encoding. So the bundle carries no `links` edge for it,
+/// no backlink names it, and no rename rewrites it.
+///
+/// Resolving it here contradicted that for the one operation that consults this
+/// function: a move rewrote `[a](Other.md#section)` to
+/// `[a](</sub/Other.md#section>)`, treating `Other.md#section` as a *filename*
+/// and half-recognizing a reference the rest of the crate does not recognize at
+/// all. Reporting `None` is the reading that agrees with [`classify`]. Both
+/// belong to the same open question, recorded against `CAP-PORT-03`: a
+/// foreign-bundle expansion that teaches `classify` to split a fragment off
+/// before testing the extension should teach this the same split, in one change
+/// rather than two.
 pub fn resolve_bundle_path(dest: &str, containing_dir: &str) -> Option<String> {
     if dest.is_empty()
         || dest.starts_with('/')
-        || dest.starts_with('#')
+        || dest.contains('#')
         || dest.starts_with('?')
         || has_url_scheme(dest)
     {
@@ -519,6 +538,14 @@ mod tests {
             "#section",
             "",
             "../../above-the-root.png",
+            // A fragment **anywhere**, not just leading: `classify` reads
+            // `Other.md#section` as External because it does not end in `.md`,
+            // so nothing else in this crate recognizes it as a reference and
+            // this must not be the one place that half does. See the function's
+            // own documentation.
+            "Other.md#section",
+            "img/diagram.png#anchor",
+            "plan.pdf#page=3",
         ] {
             assert_eq!(
                 resolve_bundle_path(dest, "projects"),
@@ -526,6 +553,11 @@ mod tests {
                 "{dest} is not a bundle-relative path this call may rewrite"
             );
         }
+        // And the reading it now agrees with.
+        assert_eq!(
+            classify("Other.md#section", "projects"),
+            LinkTarget::External("Other.md#section".to_string())
+        );
     }
 
     #[test]

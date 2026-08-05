@@ -57,9 +57,39 @@ pub struct ParsedNote {
 /// on an editing path wants [`parse_note`], because throwing the map away here
 /// and rebuilding it later would be the second parse this design exists to
 /// avoid.
+///
+/// It has **no production caller in this crate today** — its last one, the
+/// conflict collapse in `workspace::persist`, moved to
+/// [`parse_markdown_fragment`], which is the correct entry point for text that
+/// does not begin a document. Left in place rather than removed: it is the
+/// whole-document read-only entry point, and a `containing_dir` of `""` is the
+/// right default only for a caller that genuinely parses from the bundle root.
 #[must_use]
 pub fn parse_markdown(input: &str) -> Vec<AstNode> {
     parse_note(input, "").ast
+}
+
+/// Parses a **fragment** of a Note — a region that is not the start of the
+/// document — into an AST, discarding the span map.
+///
+/// The one difference from [`parse_markdown`] is that a leading `---` is a
+/// thematic break here rather than the opening fence of a YAML metadata block,
+/// and that is the whole reason this exists. Frontmatter is *positional*: OKF
+/// §4 puts it at byte zero of the file and nowhere else, so
+/// `ENABLE_YAML_STYLE_METADATA_BLOCKS` is only ever the right reading for the
+/// segment that starts there.
+///
+/// The caller this was added for is `workspace::persist`'s conflict collapse,
+/// which parses each side of a `<<<<<<<`/`>>>>>>>` region — and the tail after
+/// it — as its own document. Parsed with the metadata option, a side that
+/// happens to open with `---` was consumed as frontmatter and produced **no
+/// nodes at all**, so one of the two versions of the user's work disappeared
+/// from the Suggestion they are being asked to choose between.
+#[must_use]
+pub fn parse_markdown_fragment(source: &str, containing_dir: &str) -> Vec<AstNode> {
+    Builder::new(source, containing_dir, Frontmatter::Absent)
+        .run()
+        .ast
 }
 
 /// Parses `source` into an AST and its span map.
@@ -70,17 +100,30 @@ pub fn parse_markdown(input: &str) -> Vec<AstNode> {
 /// destinations OKF §6.1 permits in a bundle burlmd did not write.
 #[must_use]
 pub fn parse_note(source: &str, containing_dir: &str) -> ParsedNote {
-    Builder::new(source, containing_dir).run()
+    Builder::new(source, containing_dir, Frontmatter::Possible).run()
 }
 
-fn parser_options() -> Options {
+/// Whether the text being parsed **begins the document**, and may therefore
+/// open with frontmatter. See [`parse_markdown_fragment`].
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Frontmatter {
+    Possible,
+    Absent,
+}
+
+fn parser_options(frontmatter: Frontmatter) -> Options {
     let mut options = Options::empty();
     options.insert(Options::ENABLE_STRIKETHROUGH);
     options.insert(Options::ENABLE_TASKLISTS);
     // ADR-007 decision 5: this is what makes the frontmatter block a span like
     // any other rather than a thematic break followed by garbage, and it is
-    // the whole of what "preserve unknown keys verbatim" costs.
-    options.insert(Options::ENABLE_YAML_STYLE_METADATA_BLOCKS);
+    // the whole of what "preserve unknown keys verbatim" costs. Only for text
+    // that begins the document, because that is the only place OKF §4 puts
+    // frontmatter — elsewhere the option turns a thematic break into a
+    // swallowed region.
+    if frontmatter == Frontmatter::Possible {
+        options.insert(Options::ENABLE_YAML_STYLE_METADATA_BLOCKS);
+    }
     options
 }
 
@@ -213,6 +256,7 @@ struct Builder<'a> {
     code_block: Option<CodeBlockAccum>,
     link_stack: Vec<LinkFrame>,
     spans: SpanMapBuilder,
+    frontmatter: Frontmatter,
     in_metadata: bool,
     /// Blocks hoisted out of a frame that cannot hold Block children, held
     /// back so they land after it rather than before it. See `close_image`.
@@ -227,7 +271,7 @@ struct DeferredBlock {
 }
 
 impl<'a> Builder<'a> {
-    fn new(source: &'a str, containing_dir: &'a str) -> Self {
+    fn new(source: &'a str, containing_dir: &'a str, frontmatter: Frontmatter) -> Self {
         Builder {
             source,
             containing_dir,
@@ -239,13 +283,14 @@ impl<'a> Builder<'a> {
             code_block: None,
             link_stack: Vec::new(),
             spans: SpanMapBuilder::default(),
+            frontmatter,
             in_metadata: false,
             deferred: Vec::new(),
         }
     }
 
     fn run(mut self) -> ParsedNote {
-        let parser = Parser::new_ext(self.source, parser_options());
+        let parser = Parser::new_ext(self.source, parser_options(self.frontmatter));
         for (event, range) in parser.into_offset_iter() {
             self.handle(event, range);
         }
@@ -1214,5 +1259,46 @@ mod tests {
             }
             _ => panic!("Expected Paragraph after image"),
         }
+    }
+
+    /// The two entry points differ on exactly one thing, and this is it: a
+    /// `---`-fenced block at byte zero is frontmatter to [`parse_note`] and
+    /// ordinary Markdown to [`parse_markdown_fragment`].
+    ///
+    /// Frontmatter contributes no `AstNode` at all (its bytes are recorded in
+    /// the span map instead), so a caller that parses a *fragment* with the
+    /// metadata option loses that region outright rather than rendering it
+    /// oddly — which is what made this a content-loss defect in the conflict
+    /// collapse rather than a cosmetic one.
+    #[test]
+    fn a_fragment_reads_a_leading_fence_as_a_thematic_break_not_as_frontmatter() {
+        let source = "---\nMine\n---\n";
+
+        assert!(
+            parse_note(source, "").ast.is_empty(),
+            "the whole document was frontmatter, so it contributes no Block"
+        );
+
+        let fragment = parse_markdown_fragment(source, "");
+        assert!(
+            !fragment.is_empty(),
+            "a fragment must keep the content a metadata block would swallow"
+        );
+        assert!(
+            format!("{fragment:?}").contains("Mine"),
+            "the fragment lost its text: {fragment:?}"
+        );
+    }
+
+    /// A fragment resolves relative Link destinations against `containing_dir`
+    /// exactly as [`parse_note`] does — the parameter is not decoration.
+    #[test]
+    fn a_fragment_resolves_relative_links_against_its_containing_directory() {
+        let fragment = parse_markdown_fragment("See [u](Other.md).\n", "sub");
+
+        assert!(
+            format!("{fragment:?}").contains("sub/Other"),
+            "a relative destination resolved against the bundle root: {fragment:?}"
+        );
     }
 }

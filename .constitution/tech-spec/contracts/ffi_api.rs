@@ -1004,6 +1004,12 @@ pub struct LinkCompletion {
     /// applies the wrapping, since the ordinary multi-word title produces a
     /// path with a space in it and the unwrapped form of that is not a link.
     /// `EDIT-F006`'s STOP forbids the UI from repairing it afterwards.
+    /// The link *text* is `title` with every whitespace run folded to a
+    /// single space, so it is not always byte-identical to `title`: a title
+    /// carrying an interior line terminator -- legal YAML, so reachable from a
+    /// foreign bundle -- would otherwise end the paragraph mid-link and splice
+    /// as two paragraphs of visible bracket syntax with no `Link` at all.
+    /// "Exact text to splice" is the promise; folding is what keeps it.
     pub insert_text: String,
 }
 

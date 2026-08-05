@@ -88,7 +88,7 @@ use crate::draft::{NoteMetadata, NoteState};
 use crate::error::AppError;
 use crate::index::{self, content_hash};
 use crate::markdown::{
-    parse_markdown, parse_note, splice, AstNode, ParsedNote, RenderedRange, SpanMap,
+    parse_markdown_fragment, parse_note, splice, AstNode, ParsedNote, RenderedRange, SpanMap,
 };
 use crate::okf::{concept_id_to_path, read_frontmatter};
 use crate::sync::scheduler::SyncScheduler;
@@ -3043,7 +3043,14 @@ fn conflict_suggestions(source: &str, containing_dir: &str) -> Option<Vec<AstNod
         let trimmed = line.trim_end_matches(['\n', '\r']);
         match (&section, trimmed) {
             (Section::Plain, marker) if marker.starts_with("<<<<<<<") => {
-                nodes.extend(parse_markdown_segment(&plain, containing_dir));
+                // The head of the document is the text before the **first**
+                // marker, and only there can a leading `---` be frontmatter.
+                let segment = if saw_conflict {
+                    Segment::Interior
+                } else {
+                    Segment::Head
+                };
+                nodes.extend(parse_markdown_segment(&plain, containing_dir, segment));
                 plain.clear();
                 local.clear();
                 base = None;
@@ -3060,11 +3067,19 @@ fn conflict_suggestions(source: &str, containing_dir: &str) -> Option<Vec<AstNod
             }
             (Section::Incoming, marker) if marker.starts_with(">>>>>>>") => {
                 nodes.push(AstNode::Suggestion {
-                    base_content: base
-                        .take()
-                        .map(|text| parse_markdown_segment(&text, containing_dir)),
-                    local_content: parse_markdown_segment(&local, containing_dir),
-                    incoming_content: parse_markdown_segment(&incoming, containing_dir),
+                    base_content: base.take().map(|text| {
+                        parse_markdown_segment(&text, containing_dir, Segment::Interior)
+                    }),
+                    local_content: parse_markdown_segment(
+                        &local,
+                        containing_dir,
+                        Segment::Interior,
+                    ),
+                    incoming_content: parse_markdown_segment(
+                        &incoming,
+                        containing_dir,
+                        Segment::Interior,
+                    ),
                 });
                 section = Section::Plain;
             }
@@ -3085,7 +3100,13 @@ fn conflict_suggestions(source: &str, containing_dir: &str) -> Option<Vec<AstNod
     if !saw_conflict || !matches!(section, Section::Plain) {
         return None;
     }
-    nodes.extend(parse_markdown_segment(&plain, containing_dir));
+    // Never the head: this runs only after at least one region closed, so
+    // whatever `plain` holds started after a `>>>>>>>` line.
+    nodes.extend(parse_markdown_segment(
+        &plain,
+        containing_dir,
+        Segment::Interior,
+    ));
     Some(nodes)
 }
 
@@ -3096,14 +3117,43 @@ enum Section {
     Incoming,
 }
 
-fn parse_markdown_segment(source: &str, containing_dir: &str) -> Vec<AstNode> {
+/// Parses one segment of a conflicted Note — a conflict side, or the plain text
+/// between regions — into the Blocks the collapse splices together.
+///
+/// Two things are positional here, and getting either wrong loses content.
+///
+/// `containing_dir` is passed to **every** segment. It is what
+/// `okf::links::classify` resolves a relative destination against (OKF §6.1),
+/// and a conflicted Note's segments live in the same Directory as the Note
+/// itself. Only the `---` branch used to receive it, so every conflict side and
+/// every post-head segment resolved its Links against the bundle root instead:
+/// `[u](Other.md)` inside `sub/a.md` became `Internal("Other")`, an id no
+/// `notes.id` equals, so the Link rendered as a ghost pointing at a Note
+/// sitting right beside it.
+///
+/// [`Segment::Head`] is the segment that starts at byte zero, and it is the
+/// only one parsed with the YAML metadata option. Frontmatter is positional
+/// under OKF §4 — byte zero of the file and nowhere else — so applying the
+/// option to a later segment reads a `---` that is an ordinary thematic break
+/// as the opening fence of a metadata block. A local side of `---\nMine\n---`
+/// then produced no nodes at all, silently dropping one of the two versions of
+/// the user's work out of the Suggestion asking them to choose between the two.
+fn parse_markdown_segment(source: &str, containing_dir: &str, segment: Segment) -> Vec<AstNode> {
     if source.trim().is_empty() {
         return Vec::new();
     }
-    if source.starts_with("---") {
-        return parse_note(source, containing_dir).ast;
+    match segment {
+        Segment::Head => parse_note(source, containing_dir).ast,
+        Segment::Interior => parse_markdown_fragment(source, containing_dir),
     }
-    parse_markdown(source)
+}
+
+/// Where a segment sits in the document, which is what decides whether a
+/// leading `---` can be frontmatter. See [`parse_markdown_segment`].
+#[derive(Clone, Copy)]
+enum Segment {
+    Head,
+    Interior,
 }
 
 #[cfg(test)]
@@ -5779,5 +5829,121 @@ mod tests {
         g.write("b.md", &note("Beta", "Ordinary prose about nothing."));
         let clean = g.open("b");
         assert!(!format!("{:?}", clean.reload().unwrap().ast).contains("Suggestion"));
+    }
+
+    /// Every internal Link `target_id` in `ast`, in tree order.
+    fn internal_targets(ast: &[AstNode]) -> Vec<String> {
+        fn walk(nodes: &[AstNode], out: &mut Vec<String>) {
+            for node in nodes {
+                match node {
+                    AstNode::Paragraph { content } | AstNode::Heading { content, .. } => {
+                        for element in content {
+                            if let crate::markdown::InlineElement::Link { target_id, .. } = element
+                            {
+                                out.push(target_id.clone());
+                            }
+                        }
+                    }
+                    AstNode::Blockquote { nodes } => walk(nodes, out),
+                    AstNode::List { items, .. } => walk(items, out),
+                    AstNode::ListItem { content, .. } => walk(content, out),
+                    AstNode::Suggestion {
+                        base_content,
+                        local_content,
+                        incoming_content,
+                    } => {
+                        if let Some(base) = base_content {
+                            walk(base, out);
+                        }
+                        walk(local_content, out);
+                        walk(incoming_content, out);
+                    }
+                    _ => {}
+                }
+            }
+        }
+        let mut out = Vec::new();
+        walk(ast, &mut out);
+        out
+    }
+
+    /// Every segment of a conflicted Note resolves its relative Links against
+    /// the **Note's own Directory**, not the bundle root.
+    ///
+    /// The regression this pins: only the `---`-prefixed branch of
+    /// `parse_markdown_segment` was handed `containing_dir`; every other
+    /// segment — which is every conflict side and every plain segment after the
+    /// head — went through `parse_markdown`, i.e. `parse_note(source, "")`. A
+    /// relative `[u](Other.md)` inside `sub/a.md` therefore classified as
+    /// `Internal("Other")` rather than `Internal("sub/Other")`, so the rendered
+    /// Link carried a `target_id` no `notes.id` equals and `exists` came back
+    /// false for a Note that is right there beside it.
+    #[test]
+    fn a_conflicted_notes_relative_links_resolve_against_its_own_directory() {
+        let source = "Head [h](Other.md)\n\n\
+                      <<<<<<< HEAD\nMine [l](Other.md)\n\
+                      =======\nTheirs [i](Other.md)\n\
+                      >>>>>>> origin/main\n\n\
+                      Tail [t](Other.md)\n";
+
+        let collapsed = conflict_suggestions(source, "sub").expect("the fixture must conflict");
+
+        assert_eq!(
+            internal_targets(&collapsed),
+            vec![
+                "sub/Other".to_string(),
+                "sub/Other".to_string(),
+                "sub/Other".to_string(),
+                "sub/Other".to_string(),
+            ],
+            "a segment parsed against the bundle root instead of the Note's own \
+             Directory: {collapsed:?}"
+        );
+    }
+
+    /// A conflict side (or a tail) that **opens with `---`** keeps its content.
+    ///
+    /// The regression this pins: both arms of `parse_markdown_segment` parsed
+    /// with `ENABLE_YAML_STYLE_METADATA_BLOCKS`, which is only correct for the
+    /// positional head of the document. A local side of `---\nMine\n---` is a
+    /// thematic break, a paragraph and another thematic break; parsed as a
+    /// metadata block it produced **no AST nodes at all**, so the side vanished
+    /// from the Suggestion the user is being asked to choose between — the one
+    /// place in this crate where silently dropping content decides which of two
+    /// versions of the user's work survives.
+    #[test]
+    fn a_conflict_segment_opening_with_a_thematic_break_keeps_its_content() {
+        let source = "---\ntype: Note\ntitle: Alpha\n---\n\nHead.\n\n\
+                      <<<<<<< HEAD\n---\nMine\n---\n\
+                      =======\nTheirs\n\
+                      >>>>>>> origin/main\n\
+                      ---\nTail after a break\n---\n";
+
+        let collapsed = conflict_suggestions(source, "").expect("the fixture must conflict");
+        let rendered = format!("{collapsed:?}");
+
+        assert!(
+            rendered.contains("Mine"),
+            "the local side opening with `---` was swallowed as frontmatter: {rendered}"
+        );
+        assert!(
+            rendered.contains("Theirs"),
+            "the incoming side is missing: {rendered}"
+        );
+        assert!(
+            rendered.contains("Tail after a break"),
+            "the tail segment opening with `---` was swallowed as frontmatter: {rendered}"
+        );
+        // And the head's real frontmatter is still frontmatter: it contributes
+        // no Block of its own, rather than a thematic break plus a heading
+        // built out of the YAML.
+        assert!(
+            !rendered.contains("title: Alpha"),
+            "the head's frontmatter stopped being parsed as frontmatter: {rendered}"
+        );
+        assert!(
+            rendered.contains("Head."),
+            "the head segment lost its prose: {rendered}"
+        );
     }
 }

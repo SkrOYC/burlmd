@@ -36,6 +36,10 @@ pub struct LinkCompletion {
     /// assembles a link target and cannot produce a non-conformant one — an
     /// ordinary multi-word title produces a path containing a space, and the
     /// unwrapped form of that is not a link at all.
+    ///
+    /// The link *text* is [`LinkCompletion::title`] with every whitespace run
+    /// folded to a single space, so the two are not always byte-identical —
+    /// see [`link_completions_impl`] for why the promise above requires it.
     pub insert_text: String,
 }
 
@@ -134,6 +138,32 @@ pub fn find_notes_by_title_impl(
 ///
 /// `limit` carries [`find_notes_by_title_impl`]'s semantics unchanged,
 /// including `0` returning no candidates.
+///
+/// # The title is folded onto one line before it is serialized
+///
+/// A `title` is free-form user text (`data-models/okf-bundle.md`), read from
+/// YAML by a full parser, so a foreign bundle can hand this a title containing
+/// a line terminator — `title: "line one\n\nline two"` is legal YAML and
+/// decodes to exactly that. Spliced verbatim into the text position, the
+/// blank line ends the paragraph: CommonMark sees `[line one` and `line
+/// two](</Foreign.md>)` as two paragraphs, emits **no `Link` event at all**,
+/// and leaves the brackets and the destination sitting in the user's Note as
+/// literal text with no edge behind them.
+///
+/// [`LinkCompletion::insert_text`] promises the exact text to splice, so this
+/// is the layer that owes the guarantee. Every whitespace run — spaces, tabs
+/// and line terminators alike — folds to a single space, which is what a
+/// renderer displays for a run of inline whitespace anyway.
+///
+/// Done **here rather than in `okf::serialize_link`**, which stays general: it
+/// is the sole writer of this form for callers that already hold a
+/// single-line label, and folding there would silently rewrite a caller's
+/// deliberate text. The destination half needs nothing — a concept id is a
+/// path, and `workspace::lifecycle::validate_segment` admits no line
+/// terminator into a filename.
+///
+/// `title` itself is reported unfolded: it is the Note's actual title, and the
+/// UI's own list is free to render it however it renders a long one.
 pub fn link_completions_impl(
     conn: &Connection,
     workspace_id: &str,
@@ -144,11 +174,36 @@ pub fn link_completions_impl(
     Ok(candidates
         .into_iter()
         .map(|note| LinkCompletion {
-            insert_text: crate::okf::serialize_link(&note.title, &note.id),
+            insert_text: crate::okf::serialize_link(&fold_whitespace(&note.title), &note.id),
             note_id: note.id,
             title: note.title,
         })
         .collect())
+}
+
+/// Collapses every run of whitespace in `text` to a single space, leaving
+/// non-whitespace untouched. See [`link_completions_impl`].
+///
+/// Leading and trailing whitespace is folded rather than trimmed away: a title
+/// that is nothing but whitespace would otherwise serialize to an *empty* link
+/// text, which renders no characters and so gets no span at all
+/// (`markdown::parser`'s "regions that are preserved but not addressable"), and
+/// that is a worse answer than the single space this leaves.
+fn fold_whitespace(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut in_whitespace = false;
+    for c in text.chars() {
+        if c.is_whitespace() {
+            if !in_whitespace {
+                out.push(' ');
+                in_whitespace = true;
+            }
+        } else {
+            out.push(c);
+            in_whitespace = false;
+        }
+    }
+    out
 }
 
 /// Notes linking *to* `note_id` (CAP-GRAPH-05), served by `idx_links_target`.
@@ -372,6 +427,74 @@ mod tests {
         let links = links_from_source("elsewhere/unrelated", &source);
 
         assert_eq!(links, vec![title.to_string()]);
+    }
+
+    /// Gherkin: a Note whose frontmatter title carries an **interior newline**
+    /// — legal YAML, and therefore something a foreign bundle can hand this
+    /// crate — still yields insert text that is one Markdown link.
+    ///
+    /// The regression this pins: `LinkCompletion::insert_text` promises "the
+    /// exact text to splice at the cursor", and the UI splices it verbatim.
+    /// Serialized with the newline still in the text position, the result was
+    /// `[line one` / (blank line) / `line two](</Foreign.md>)` — two paragraphs
+    /// to CommonMark, so no `Link` event at all, the brackets and the
+    /// destination left visible as literal text in the user's Note, and the
+    /// `links` edge the completion exists to create never written. Only the
+    /// *text* half needs this: the destination is a concept id, and
+    /// `validate_segment` lets no line terminator into a filename.
+    #[test]
+    fn completion_insert_text_folds_a_newline_bearing_title_into_one_link() {
+        let f = fixture();
+        // A double-quoted YAML scalar with `\n` escapes: `saphyr` decodes them,
+        // so `notes.title` genuinely holds the line break.
+        f.write(
+            "Foreign.md",
+            "---\ntype: Note\ntitle: \"line one\\n\\nline two\"\n---\n\nBody.\n",
+        );
+        reindex_workspace_impl(&f.conn, &f.workspace_id).unwrap();
+
+        let completions = link_completions_impl(&f.conn, &f.workspace_id, "line", 10).unwrap();
+        assert_eq!(completions.len(), 1);
+        assert_eq!(
+            completions[0].title, "line one\n\nline two",
+            "the fixture must actually carry a newline title, or this test is vacuous"
+        );
+
+        let parsed = crate::markdown::parse_markdown(&completions[0].insert_text);
+
+        assert_eq!(
+            parsed.len(),
+            1,
+            "the insert text parsed as more than one Block: {parsed:?}"
+        );
+        let crate::markdown::AstNode::Paragraph { content } = &parsed[0] else {
+            panic!("expected a paragraph, got {parsed:?}");
+        };
+        assert_eq!(
+            content.len(),
+            1,
+            "the insert text is not a single Link: {content:?}"
+        );
+        let crate::markdown::InlineElement::Link {
+            target_id,
+            content: text,
+            ..
+        } = &content[0]
+        else {
+            panic!("the insert text did not parse as a Link: {content:?}");
+        };
+        assert_eq!(target_id, "Foreign");
+        let rendered: String = text
+            .iter()
+            .map(|element| match element {
+                crate::markdown::InlineElement::Text(run) => run.content.clone(),
+                other => panic!("unexpected inline element in the link text: {other:?}"),
+            })
+            .collect();
+        assert_eq!(
+            rendered, "line one line two",
+            "every whitespace run in the text position folds to one space"
+        );
     }
 
     /// Parses `source` and returns the target concept id of every Link found

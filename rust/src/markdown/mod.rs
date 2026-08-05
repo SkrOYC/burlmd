@@ -11,7 +11,7 @@ pub mod spans;
 pub mod splice;
 
 pub use ast::{AstNode, InlineElement, TextRun};
-pub use parser::{parse_markdown, parse_note, ParsedNote};
+pub use parser::{parse_markdown, parse_markdown_fragment, parse_note, ParsedNote};
 pub use spans::{
     rendered_text, BlockPath, BlockSpan, InlineRun, RenderedRange, SourceResolution, SpanMap,
 };
