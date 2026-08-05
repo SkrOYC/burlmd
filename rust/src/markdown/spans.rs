@@ -356,6 +356,67 @@ impl SpanMap {
         })
     }
 
+    /// Applies ADR-008 decision 2's buffered-edit arithmetic: the Block at
+    /// `path` now occupies `new_len` bytes of source, and every byte after it
+    /// has moved by the difference. Returns the span the Block occupied
+    /// *before* the edit — the range a caller splices `new_len` bytes over —
+    /// or `None` when no Block is addressed by `path`.
+    ///
+    /// This is the **one** place offset arithmetic is permitted to stand in
+    /// for a reparse, and `SPK-WSPC-D001` §6.1 states the boundary
+    /// exhaustively: one Block's text changed, its structure deliberately not
+    /// re-derived until blur, a single uniform delta applied to what follows,
+    /// and a full reparse following immediately at `commit_block`. Reparsing
+    /// per keystroke instead would cost 3.4ms at 102 KiB — 21% of the frame
+    /// budget, on top of tier 1's own write — so this case is not merely
+    /// permitted but necessary. Outside it, arithmetic is forbidden.
+    ///
+    /// Three kinds of Block move, and getting only the third right is the
+    /// corruption ADR-008 decision 2 works through on `AAA\n\nBBB`:
+    ///
+    /// - The **edited Block is resized**, not shifted: its `source.end` moves
+    ///   by the delta and its start stays put. A rule mentioning only later
+    ///   Blocks leaves the next splice replacing too little and duplicating
+    ///   the typed bytes inside the Block the user is still typing in.
+    /// - **Later Blocks shift** by the delta, inline runs included.
+    /// - **Ancestor Blocks** — a list or blockquote containing the edited
+    ///   Block — are resized like the edited Block itself, since the edit
+    ///   happened inside them.
+    ///
+    /// The edited Block's own inline runs and `rendered_len` are left as they
+    /// were, and are therefore **stale until `commit_block` reparses**. That is
+    /// the deliberate consequence ADR-008 decision 2 accepts: while the Block
+    /// is focused the user is looking at raw source (ADR-006), nothing renders
+    /// from its node, and every consumer of inline granularity — the range
+    /// operations — blurs first.
+    pub fn apply_buffered_edit(&mut self, path: &[usize], new_len: usize) -> Option<Range<usize>> {
+        let index = *self.by_path.get(path)?;
+        let old = self.blocks[index].source.clone();
+        let delta = (new_len as isize) - ((old.end - old.start) as isize);
+        if delta == 0 {
+            return Some(old);
+        }
+
+        let shift = |offset: usize| -> usize { offset.saturating_add_signed(delta) };
+        for (position, block) in self.blocks.iter_mut().enumerate() {
+            if position == index {
+                block.source.end = shift(block.source.end);
+            } else if block.source.start >= old.end {
+                block.source.start = shift(block.source.start);
+                block.source.end = shift(block.source.end);
+                for run in &mut block.runs {
+                    run.source.start = shift(run.source.start);
+                    run.source.end = shift(run.source.end);
+                }
+            } else if path.starts_with(&block.path) {
+                // An ancestor: the edit happened inside it, so it is resized
+                // rather than shifted, exactly as the edited Block is.
+                block.source.end = shift(block.source.end);
+            }
+        }
+        Some(old)
+    }
+
     /// Resolves a `BlockRange` (ADR-006 decision 3) to the source byte range
     /// it selects.
     ///

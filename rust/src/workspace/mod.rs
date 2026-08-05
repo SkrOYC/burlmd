@@ -4,5 +4,7 @@
 //! in this epic add `lifecycle` and `persist` alongside it.
 
 pub mod bootstrap;
+pub mod persist;
 
 pub use bootstrap::{default_workspace_dir, WorkspaceInfo};
+pub use persist::{NoteSession, NoteWriteStatus, Workspace};

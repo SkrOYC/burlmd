@@ -256,6 +256,142 @@ pub fn commit_all(
     Ok(commit_id.detach().to_string())
 }
 
+/// The identity every commit this application makes is authored and committed
+/// as (ADR-008's consequences).
+///
+/// Deliberately **not** the user's identity and deliberately not read from
+/// `user.name`/`user.email`: the local Workspace has no account, and asking
+/// for one would reintroduce the onboarding step ADR-005 removed. `.invalid`
+/// is reserved by RFC 2606 precisely so it can never resolve. Once a Remote is
+/// attached, Epic G may set a provider identity for *subsequent* commits; it
+/// must not rewrite earlier ones, since the whole point of tier 3 is that
+/// history exists before any Remote does.
+pub const COMMIT_AUTHOR_NAME: &str = "burlmd";
+/// See [`COMMIT_AUTHOR_NAME`].
+pub const COMMIT_AUTHOR_EMAIL: &str = "noreply@burlmd.invalid";
+
+/// Commits **only** `relative_paths`, leaving every other change in the
+/// working tree uncommitted. Returns the new commit's hex object id, or `None`
+/// when the paths already match `HEAD` and there was therefore nothing to
+/// commit.
+///
+/// This is ADR-008 tier 3's operation, and the reason [`commit_all`] cannot
+/// serve it: a tier 3 commit covers one Note's editing session, so with two
+/// Notes dirty on disk a whole-worktree snapshot would sweep both and break
+/// the "approximately one commit per Note per writing session" guarantee that
+/// is this design's entire justification.
+///
+/// Authored and committed as [`COMMIT_AUTHOR_NAME`]/[`COMMIT_AUTHOR_EMAIL`],
+/// never as a value read from the user or from Git configuration — the
+/// signature is passed explicitly to `Repository::commit_as`, so no
+/// `~/.gitconfig` on the host can influence it.
+///
+/// The new tree starts from `HEAD`'s tree rather than from the empty tree,
+/// which is exactly the difference from [`commit_all`]: every path not named
+/// here keeps whatever `HEAD` recorded for it. A named path that is absent
+/// from disk is removed from the tree, so a deletion commits as a deletion.
+///
+/// Returning `None` rather than writing an empty commit is load-bearing, not
+/// tidiness. Opening a Note to read it and navigating away calls `close_note`,
+/// which is the *most common* path through tier 3; committing unconditionally
+/// would put one empty commit in history per Note visited.
+pub fn commit_paths(
+    repo_path: &Path,
+    message: &str,
+    relative_paths: &[String],
+) -> Result<Option<String>, AppError> {
+    let repo = gix::open(repo_path).map_err(|e| AppError::IoError(format!("open repo: {e}")))?;
+
+    let parent_tree_id = repo
+        .head_tree_id_or_empty()
+        .map_err(|e| AppError::IoError(format!("read HEAD tree: {e}")))?
+        .detach();
+    let mut editor = repo
+        .edit_tree(parent_tree_id)
+        .map_err(|e| AppError::IoError(format!("start tree edit: {e}")))?;
+
+    for relative in relative_paths {
+        let absolute = repo_path.join(relative);
+        if absolute.is_file() {
+            let bytes = std::fs::read(&absolute)
+                .map_err(|e| AppError::IoError(format!("read {}: {e}", absolute.display())))?;
+            let blob_id = repo
+                .write_blob(bytes)
+                .map_err(|e| AppError::IoError(format!("write blob: {e}")))?;
+            editor
+                .upsert(
+                    relative.as_str(),
+                    gix::object::tree::EntryKind::Blob,
+                    blob_id.detach(),
+                )
+                .map_err(|e| AppError::IoError(format!("stage {relative}: {e}")))?;
+        } else {
+            editor
+                .remove(relative.as_str())
+                .map_err(|e| AppError::IoError(format!("unstage {relative}: {e}")))?;
+        }
+    }
+
+    let tree_id = editor
+        .write()
+        .map_err(|e| AppError::IoError(format!("write tree: {e}")))?
+        .detach();
+    if tree_id == parent_tree_id {
+        return Ok(None);
+    }
+
+    let parents: Vec<gix::ObjectId> = match repo.head_id() {
+        Ok(id) => vec![id.detach()],
+        Err(_) => Vec::new(),
+    };
+
+    let signature = gix::actor::Signature {
+        name: COMMIT_AUTHOR_NAME.into(),
+        email: COMMIT_AUTHOR_EMAIL.into(),
+        time: gix::date::Time::now_local_or_utc(),
+    };
+    let mut time_buf = gix::date::parse::TimeBuf::default();
+    let signature_ref = signature.to_ref(&mut time_buf);
+    let commit_id = repo
+        .commit_as(
+            signature_ref,
+            signature_ref,
+            "HEAD",
+            message,
+            tree_id,
+            parents,
+        )
+        .map_err(|e| AppError::IoError(format!("write commit: {e}")))?;
+
+    // Same obligation as `commit_all`: `commit_as` moves the ref without
+    // touching `.git/index`, so a later `git status`/`git merge` (the CLI
+    // shell-outs push and pull use) would otherwise see phantom uncommitted
+    // changes for the paths just committed.
+    let mut index_file = repo
+        .index_from_tree(&tree_id)
+        .map_err(|e| AppError::IoError(format!("build index from tree: {e}")))?;
+    index_file
+        .write(gix::index::write::Options::default())
+        .map_err(|e| AppError::IoError(format!("write index: {e}")))?;
+
+    Ok(Some(commit_id.detach().to_string()))
+}
+
+/// Whether `relative_path` is present in the commit `HEAD` points at — what
+/// tells tier 3's generated message whether this session created the Note or
+/// changed one that was already in history. `false` for an unborn `HEAD`.
+pub fn path_in_head(repo_path: &Path, relative_path: &str) -> Result<bool, AppError> {
+    let repo = gix::open(repo_path).map_err(|e| AppError::IoError(format!("open repo: {e}")))?;
+    let tree_id = repo
+        .head_tree_id_or_empty()
+        .map_err(|e| AppError::IoError(format!("read HEAD tree: {e}")))?
+        .detach();
+    let editor = repo
+        .edit_tree(tree_id)
+        .map_err(|e| AppError::IoError(format!("start tree edit: {e}")))?;
+    Ok(editor.get(relative_path).is_some())
+}
+
 /// Push `branch` to `remote` (a configured remote name, e.g. `"origin"`).
 ///
 /// Shells out to `git push` (see module docs: `gix` has no push support at all).
@@ -626,6 +762,129 @@ mod tests {
         );
     }
 
+    /// ADR-008 tier 3: a commit covers one Note's editing session, so with two
+    /// Notes dirty on disk, closing one must not sweep both.
+    #[test]
+    fn commit_paths_commits_only_the_named_path() {
+        let dir = tempdir().unwrap();
+        init_repo(dir.path());
+        std::fs::write(dir.path().join("a.md"), b"a first\n").unwrap();
+        std::fs::write(dir.path().join("b.md"), b"b first\n").unwrap();
+        commit_all(dir.path(), "baseline", "Test User", "test@example.com").unwrap();
+
+        std::fs::write(dir.path().join("a.md"), b"a second\n").unwrap();
+        std::fs::write(dir.path().join("b.md"), b"b second\n").unwrap();
+        let commit = commit_paths(dir.path(), "just a", &["a.md".to_string()])
+            .unwrap()
+            .expect("a changed path must produce a commit");
+
+        assert_eq!(commit.len(), 40, "expected a sha1 hex object id");
+        let changed = StdCommand::new("git")
+            .args(["show", "--name-only", "--format=", "HEAD"])
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+        assert_eq!(String::from_utf8_lossy(&changed.stdout).trim(), "a.md");
+        let committed_b = StdCommand::new("git")
+            .args(["show", "HEAD:b.md"])
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+        assert_eq!(
+            String::from_utf8_lossy(&committed_b.stdout),
+            "b first\n",
+            "the other Note's working-tree change was swept in"
+        );
+    }
+
+    /// The most common path through tier 3 is a Note that was read and not
+    /// changed. One empty commit per Note visited would destroy the readable
+    /// history the design exists to produce.
+    #[test]
+    fn commit_paths_makes_no_commit_when_the_path_already_matches_head() {
+        let dir = tempdir().unwrap();
+        init_repo(dir.path());
+        std::fs::write(dir.path().join("a.md"), b"a\n").unwrap();
+        let baseline = commit_all(dir.path(), "baseline", "Test User", "test@example.com").unwrap();
+
+        let commit = commit_paths(dir.path(), "nothing changed", &["a.md".to_string()]).unwrap();
+
+        assert_eq!(commit, None);
+        let head = StdCommand::new("git")
+            .args(["rev-parse", "HEAD"])
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+        assert_eq!(String::from_utf8_lossy(&head.stdout).trim(), baseline);
+    }
+
+    /// A named path that is gone from disk commits as a deletion, which is what
+    /// makes deletion recoverable from local history (CAP-LIFE-04).
+    #[test]
+    fn commit_paths_records_a_deletion_for_a_path_no_longer_on_disk() {
+        let dir = tempdir().unwrap();
+        init_repo(dir.path());
+        std::fs::write(dir.path().join("a.md"), b"a\n").unwrap();
+        std::fs::write(dir.path().join("b.md"), b"b\n").unwrap();
+        commit_all(dir.path(), "baseline", "Test User", "test@example.com").unwrap();
+
+        std::fs::remove_file(dir.path().join("a.md")).unwrap();
+        commit_paths(dir.path(), "delete a", &["a.md".to_string()])
+            .unwrap()
+            .expect("a deletion is a change");
+
+        let tree = StdCommand::new("git")
+            .args(["ls-tree", "--name-only", "HEAD"])
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+        assert_eq!(String::from_utf8_lossy(&tree.stdout).trim(), "b.md");
+    }
+
+    /// ADR-008's consequences fix this identity, and it is deliberately not the
+    /// user's: the local Workspace has no account, and asking for one would
+    /// reintroduce the onboarding step ADR-005 removed. A repository-local
+    /// `user.name`/`user.email` — which `git commit` itself would have used —
+    /// must not reach it.
+    #[test]
+    fn commit_paths_authors_as_the_fixed_application_identity() {
+        let dir = tempdir().unwrap();
+        init_repo(dir.path());
+        git(dir.path(), &["config", "user.name", "Someone Else"]);
+        git(dir.path(), &["config", "user.email", "else@example.com"]);
+        std::fs::write(dir.path().join("a.md"), b"a\n").unwrap();
+
+        commit_paths(dir.path(), "add a", &["a.md".to_string()])
+            .unwrap()
+            .expect("a new path is a change");
+
+        let author = StdCommand::new("git")
+            .args(["log", "-1", "--format=%an <%ae>|%cn <%ce>"])
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+        assert_eq!(
+            String::from_utf8_lossy(&author.stdout).trim(),
+            "burlmd <noreply@burlmd.invalid>|burlmd <noreply@burlmd.invalid>"
+        );
+    }
+
+    /// What tells tier 3's generated message whether this session created the
+    /// Note or changed one already in history.
+    #[test]
+    fn path_in_head_distinguishes_a_new_note_from_one_already_in_history() {
+        let dir = tempdir().unwrap();
+        init_repo(dir.path());
+        std::fs::write(dir.path().join("a.md"), b"a\n").unwrap();
+
+        // An unborn HEAD holds nothing.
+        assert!(!path_in_head(dir.path(), "a.md").unwrap());
+
+        commit_all(dir.path(), "baseline", "Test User", "test@example.com").unwrap();
+
+        assert!(path_in_head(dir.path(), "a.md").unwrap());
+        assert!(!path_in_head(dir.path(), "never-existed.md").unwrap());
+    }
     /// Gherkin: Given a local directory with changes, When the commit function is called,
     /// Then a Git commit is created in the local `.git` index.
     #[test]

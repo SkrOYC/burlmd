@@ -212,6 +212,18 @@ CREATE TABLE IF NOT EXISTS drafts (
     note_id TEXT NOT NULL,
     raw_markdown TEXT NOT NULL,    -- Full current source text of the Note
     updated_at INTEGER NOT NULL,
+    -- The Core's per-Note edit sequence at the moment this row was written,
+    -- and the reason tier 2's clear is safe. `SPK-WSPC-D001` §6.2.6: a tier 1
+    -- write releases the state lock before its 8-23ms encrypted row write, so
+    -- a timer that snapshotted at sequence N, wrote the file, and then
+    -- compared an *in-memory* counter still reading N would clear a row the
+    -- keystroke is about to write -- and the keystroke would then write row(N)
+    -- into a table the timer believed it had emptied. The counter to compare
+    -- is the row's, not the buffer's, so the clear is
+    -- `DELETE FROM drafts WHERE ... AND edit_seq <= ?`, evaluated atomically
+    -- against the row itself. `<=` rather than `=` because a row lagging the
+    -- snapshot is also redundant once the newer bytes are on disk.
+    edit_seq INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (workspace_id, note_id)
     -- Deliberately no foreign key to notes, for the RENAME case only: a
     -- draft must survive its Note's concept id changing, and adding a FK here

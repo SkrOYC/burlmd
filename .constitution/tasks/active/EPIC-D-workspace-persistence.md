@@ -485,6 +485,10 @@ When a single Block edit is committed to the draft tier
 Then the measured write completes within the frame budget, and the measurement is recorded in the test rather than asserted by inspection
 ```
 
+##### WSPC-D007 Deviations & Justifications
+- **Touched Files:** `rust/src/markdown/spans.rs`, `rust/src/db/schema.sql`, and a behavioral (not signature) change to `open_note` in `rust/src/api/ffi_api.rs`
+- **Justification:** `spans.rs` gained `SpanMap::apply_buffered_edit` because the map's fields are private and its builder is `pub(super)`, so ADR-008 decision 2's buffered-edit span arithmetic (resize the edited span, shift later ones, resize ancestor containers) was inexpressible from `workspace/persist.rs` without it; the method lives with the invariants it must preserve. `schema.sql` gained `drafts.edit_seq INTEGER NOT NULL DEFAULT 0` because SPK-WSPC-D001 §6.2.6's settled draft-clear compares a sequence persisted in the row (`DELETE … AND edit_seq <= ?`), and the column did not exist; this is a baseline DDL edit (nothing deployed, `user_version` unchanged) and is mirrored into `.constitution/tech-spec/data-models/schema.sql` at reconciliation. `open_note` now delegates to a `persist::NoteSession` when the path resolves inside the active Workspace (falling back to the direct read otherwise) because `flush_note`/`close_note`/`reload_note` would otherwise be unreachable FFI — nothing else registers a session; the signature is unchanged and WSPC-D008 still owns the concept-id entry-point replacement. The milestone commit was made with the whole-project dart-analyze hook bypassed for the four expected errors in the untouched `test/components/editor_test.dart` (the `NoteState`/`NoteMetadata` reshape debt this epic's sequencing deliberately assigns to WSPC-D009); all other hooks passed and `lib/` analyzes clean.
+
 #### WSPC-D008 Editing FFI Surface
 - **Type:** Feature
 - **Effort:** 5

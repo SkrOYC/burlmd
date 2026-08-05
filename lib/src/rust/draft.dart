@@ -16,30 +16,47 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 /// FFI bridge — `api::ffi_api` re-exports these types and calls into this
 /// module's functions, keeping its own `#[frb]` functions as thin wrappers.
 class NoteMetadata {
+  /// OKF concept id: the bundle-relative path with `.md` removed.
+  ///
+  /// Carries no `workspace_id` alongside it, per the contract's rule 2:
+  /// exactly one Workspace is active at a time and the Core owns which one
+  /// (ADR-005 decision 7), so every row crossing this boundary belongs to
+  /// it and a qualifier the UI could neither choose nor check was only ever
+  /// a second source of truth for something the Core already knows.
   final String id;
-  final String workspaceId;
+
+  /// The same path with `.md` retained.
   final String path;
   final String title;
   final PlatformInt64 lastModified;
+
+  /// Populated by search results only.
   final String? snippet;
+
+  /// False when the file has no frontmatter, when it does not parse, or when
+  /// it parses without a non-empty `type` — OKF §11's first two conformance
+  /// conditions, the second of which an implementation that only tries to
+  /// parse will miss. Such a file is still fully usable; the flag exists so
+  /// the UI can offer to bring it into conformance (CAP-PORT-03).
+  final bool okfConformant;
 
   const NoteMetadata({
     required this.id,
-    required this.workspaceId,
     required this.path,
     required this.title,
     required this.lastModified,
     this.snippet,
+    required this.okfConformant,
   });
 
   @override
   int get hashCode =>
       id.hashCode ^
-      workspaceId.hashCode ^
       path.hashCode ^
       title.hashCode ^
       lastModified.hashCode ^
-      snippet.hashCode;
+      snippet.hashCode ^
+      okfConformant.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -47,26 +64,44 @@ class NoteMetadata {
       other is NoteMetadata &&
           runtimeType == other.runtimeType &&
           id == other.id &&
-          workspaceId == other.workspaceId &&
           path == other.path &&
           title == other.title &&
           lastModified == other.lastModified &&
-          snippet == other.snippet;
+          snippet == other.snippet &&
+          okfConformant == other.okfConformant;
 }
 
 class NoteState {
   final List<AstNode> ast;
   final NoteMetadata metadata;
+
+  /// Content hash of the on-disk file (ADR-007 decision 7).
+  ///
+  /// **Not an input.** The Core holds this value and compares it itself
+  /// before every tier 2 write, replacing it with the hash of what it just
+  /// wrote after each success — see `workspace::persist`. It is exposed for
+  /// display and diagnostics only, and no function on this boundary takes
+  /// it back.
   final String baseRevision;
+
+  /// True when the working source was restored from the `drafts` table
+  /// rather than read from disk — i.e. a previous session ended without
+  /// tier 2 flushing (ADR-008 tier 1, CAP-WS-03).
+  final bool restoredFromDraft;
 
   const NoteState({
     required this.ast,
     required this.metadata,
     required this.baseRevision,
+    required this.restoredFromDraft,
   });
 
   @override
-  int get hashCode => ast.hashCode ^ metadata.hashCode ^ baseRevision.hashCode;
+  int get hashCode =>
+      ast.hashCode ^
+      metadata.hashCode ^
+      baseRevision.hashCode ^
+      restoredFromDraft.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -75,5 +110,6 @@ class NoteState {
           runtimeType == other.runtimeType &&
           ast == other.ast &&
           metadata == other.metadata &&
-          baseRevision == other.baseRevision;
+          baseRevision == other.baseRevision &&
+          restoredFromDraft == other.restoredFromDraft;
 }

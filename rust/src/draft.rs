@@ -16,12 +16,26 @@ use crate::markdown::AstNode;
 #[frb]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NoteMetadata {
+    /// OKF concept id: the bundle-relative path with `.md` removed.
+    ///
+    /// Carries no `workspace_id` alongside it, per the contract's rule 2:
+    /// exactly one Workspace is active at a time and the Core owns which one
+    /// (ADR-005 decision 7), so every row crossing this boundary belongs to
+    /// it and a qualifier the UI could neither choose nor check was only ever
+    /// a second source of truth for something the Core already knows.
     pub id: String,
-    pub workspace_id: String,
+    /// The same path with `.md` retained.
     pub path: String,
     pub title: String,
     pub last_modified: i64,
+    /// Populated by search results only.
     pub snippet: Option<String>,
+    /// False when the file has no frontmatter, when it does not parse, or when
+    /// it parses without a non-empty `type` — OKF §11's first two conformance
+    /// conditions, the second of which an implementation that only tries to
+    /// parse will miss. Such a file is still fully usable; the flag exists so
+    /// the UI can offer to bring it into conformance (CAP-PORT-03).
+    pub okf_conformant: bool,
 }
 
 #[frb]
@@ -29,7 +43,18 @@ pub struct NoteMetadata {
 pub struct NoteState {
     pub ast: Vec<AstNode>,
     pub metadata: NoteMetadata,
+    /// Content hash of the on-disk file (ADR-007 decision 7).
+    ///
+    /// **Not an input.** The Core holds this value and compares it itself
+    /// before every tier 2 write, replacing it with the hash of what it just
+    /// wrote after each success — see `workspace::persist`. It is exposed for
+    /// display and diagnostics only, and no function on this boundary takes
+    /// it back.
     pub base_revision: String,
+    /// True when the working source was restored from the `drafts` table
+    /// rather than read from disk — i.e. a previous session ended without
+    /// tier 2 flushing (ADR-008 tier 1, CAP-WS-03).
+    pub restored_from_draft: bool,
 }
 
 /// Holds the AST of the note currently open in the editor, kept in memory so

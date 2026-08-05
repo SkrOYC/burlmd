@@ -14,6 +14,7 @@ import 'frb_generated.dart';
 import 'markdown/ast.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated_io.dart';
 import 'workspace/bootstrap.dart';
+import 'workspace/persist.dart';
 
 abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   RustLibApiImplPlatform({
@@ -36,10 +37,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   bool dco_decode_bool(dynamic raw);
 
   @protected
+  AppError dco_decode_box_autoadd_app_error(dynamic raw);
+
+  @protected
   AstNode dco_decode_box_autoadd_ast_node(dynamic raw);
 
   @protected
   bool dco_decode_box_autoadd_bool(dynamic raw);
+
+  @protected
+  PlatformInt64 dco_decode_box_autoadd_i_64(dynamic raw);
 
   @protected
   TextRun dco_decode_box_autoadd_text_run(dynamic raw);
@@ -72,13 +79,22 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   NoteState dco_decode_note_state(dynamic raw);
 
   @protected
+  NoteWriteStatus dco_decode_note_write_status(dynamic raw);
+
+  @protected
   OAuthFlowStart dco_decode_o_auth_flow_start(dynamic raw);
 
   @protected
   String? dco_decode_opt_String(dynamic raw);
 
   @protected
+  AppError? dco_decode_opt_box_autoadd_app_error(dynamic raw);
+
+  @protected
   bool? dco_decode_opt_box_autoadd_bool(dynamic raw);
+
+  @protected
+  PlatformInt64? dco_decode_opt_box_autoadd_i_64(dynamic raw);
 
   @protected
   List<AstNode>? dco_decode_opt_list_ast_node(dynamic raw);
@@ -114,10 +130,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   bool sse_decode_bool(SseDeserializer deserializer);
 
   @protected
+  AppError sse_decode_box_autoadd_app_error(SseDeserializer deserializer);
+
+  @protected
   AstNode sse_decode_box_autoadd_ast_node(SseDeserializer deserializer);
 
   @protected
   bool sse_decode_box_autoadd_bool(SseDeserializer deserializer);
+
+  @protected
+  PlatformInt64 sse_decode_box_autoadd_i_64(SseDeserializer deserializer);
 
   @protected
   TextRun sse_decode_box_autoadd_text_run(SseDeserializer deserializer);
@@ -154,13 +176,22 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   NoteState sse_decode_note_state(SseDeserializer deserializer);
 
   @protected
+  NoteWriteStatus sse_decode_note_write_status(SseDeserializer deserializer);
+
+  @protected
   OAuthFlowStart sse_decode_o_auth_flow_start(SseDeserializer deserializer);
 
   @protected
   String? sse_decode_opt_String(SseDeserializer deserializer);
 
   @protected
+  AppError? sse_decode_opt_box_autoadd_app_error(SseDeserializer deserializer);
+
+  @protected
   bool? sse_decode_opt_box_autoadd_bool(SseDeserializer deserializer);
+
+  @protected
+  PlatformInt64? sse_decode_opt_box_autoadd_i_64(SseDeserializer deserializer);
 
   @protected
   List<AstNode>? sse_decode_opt_list_ast_node(SseDeserializer deserializer);
@@ -199,10 +230,22 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_bool(bool self, SseSerializer serializer);
 
   @protected
+  void sse_encode_box_autoadd_app_error(
+    AppError self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_box_autoadd_ast_node(AstNode self, SseSerializer serializer);
 
   @protected
   void sse_encode_box_autoadd_bool(bool self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_i_64(
+    PlatformInt64 self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_box_autoadd_text_run(TextRun self, SseSerializer serializer);
@@ -247,6 +290,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_note_state(NoteState self, SseSerializer serializer);
 
   @protected
+  void sse_encode_note_write_status(
+    NoteWriteStatus self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_o_auth_flow_start(
     OAuthFlowStart self,
     SseSerializer serializer,
@@ -256,7 +305,19 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_opt_String(String? self, SseSerializer serializer);
 
   @protected
+  void sse_encode_opt_box_autoadd_app_error(
+    AppError? self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_opt_box_autoadd_bool(bool? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_i_64(
+    PlatformInt64? self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_opt_list_ast_node(

@@ -18,6 +18,10 @@ pub use crate::markdown::{AstNode, InlineElement, TextRun};
 // injected `Connection`), and this module's own job is the thin `#[frb]`
 // wrappers below.
 pub use crate::workspace::WorkspaceInfo;
+// Same reason again for the persistence tier: `workspace::persist` owns
+// ADR-008's machinery and the type it reports through, and the `#[frb]`
+// functions below are wrappers over it.
+pub use crate::workspace::NoteWriteStatus;
 
 /// Opens the local Workspace, creating and initializing it if absent
 /// (ADR-005 decision 1): creates the directory, initializes a Git repository
@@ -82,8 +86,27 @@ pub async fn reindex_workspace() -> Result<u32, AppError> {
     })
 }
 
+/// Opens a Note and establishes its editing session.
+///
+/// Still keyed by filesystem path rather than by concept id — `WSPC-D008`
+/// replaces this signature with the contract's `open_note(note_id)`. What it
+/// does *within* the active Workspace is already the contract's behaviour: it
+/// registers the session ADR-008's tiers operate on, so the working source,
+/// the span map and the recorded revision all exist before the first edit, and
+/// an unflushed `drafts` row is restored in preference to disk.
+///
+/// A path outside the active Workspace — or a call before any Workspace has
+/// been opened — falls back to reading the file directly. That path registers
+/// no session and therefore has no write tier: the Workspace is what supplies
+/// the bundle root, the encrypted index the draft row lives in, and the
+/// repository tier 3 commits into, and none of the three exists for a file
+/// somewhere else on the disk.
 #[frb(sync)]
 pub fn open_note(path: String) -> Result<NoteState, AppError> {
+    if let Some(state) = open_note_in_active_workspace(&path)? {
+        return Ok(state);
+    }
+
     let content = std::fs::read_to_string(&path).map_err(|e| AppError::IoError(e.to_string()))?;
 
     let path_obj = std::path::Path::new(&path);
@@ -126,37 +149,130 @@ pub fn open_note(path: String) -> Result<NoteState, AppError> {
         .unwrap_or(0);
 
     let metadata = NoteMetadata {
-        // A second facet of the "open_note isn't wired to the notes table"
-        // gap documented below on `base_revision`: `data-models/schema.sql`
-        // defines `notes.id` as a stable UUID, but this is the filesystem
-        // path (carried from Epic A's original implementation). Passing
-        // this `id` into `save_note`/`update_block` today only works
-        // because `update_block` matches against this same in-memory value,
-        // never against a DB row — `save_note` keys on `notes.id` for real,
-        // so it would need a real UUID once note creation/lookup is wired.
+        // Still the filesystem path rather than the OKF concept id
+        // `data-models/schema.sql` defines `notes.id` as: this entry point
+        // takes a path, and `WSPC-D008` is the ticket that reconciles the two
+        // (it replaces this function with the contract's
+        // `open_note(note_id)`). What is no longer a placeholder is
+        // `base_revision` below.
         id: path.clone(),
-        workspace_id: "default".to_string(),
         path: path.clone(),
         title,
         last_modified,
         snippet: None,
+        // OKF §11's first two conformance conditions, read from the file's own
+        // frontmatter rather than assumed: a Workspace this application did
+        // not write may hold a Note with none (CAP-WS-05, CAP-PORT-03).
+        okf_conformant: crate::okf::read_frontmatter(&content).is_conformant(),
     };
 
     let state = NoteState {
         ast,
         metadata,
-        // A placeholder token, not yet the same OCC domain `save_note_impl`
-        // checks against (`notes.last_modified`, stringified) — `open_note`
-        // reads straight from the filesystem and never touches the `notes`
-        // table, so there is no DB-backed revision to hand back yet. Passing
-        // this value on to `save_note` today would always mismatch and
-        // return `GitConflict`. Reconcile when the open->edit->save flow is
-        // actually wired (no Markdown serializer/write-through exists yet;
-        // see `architecture/risks.md` #6 and `flow-edit-note.md`).
-        base_revision: "head".to_string(),
+        // The content hash of the bytes on disk (ADR-007 decision 7), which is
+        // the OCC token `workspace::persist` compares before every tier 2
+        // write — no longer the `"head"` placeholder that could never match
+        // anything. It is not an input: no function on this boundary takes it
+        // back.
+        base_revision: crate::index::content_hash(content.as_bytes()),
+        // This path reads the file directly rather than through a session, so
+        // no `drafts` row was consulted and nothing was restored. Tier 1
+        // recovery arrives with the session-based `open_note` in `WSPC-D008`;
+        // `pending_drafts` below already reports the rows.
+        restored_from_draft: false,
     };
     *crate::draft::active_note_cache()? = Some(state.clone());
     Ok(state)
+}
+
+/// Opens `path` through `workspace::persist` when it names a file inside the
+/// active Workspace, or `None` when it does not — including when no Workspace
+/// is open at all.
+///
+/// The concept id is the bundle-relative path with `.md` removed (ADR-004), so
+/// it is derived here rather than taken as a parameter; a concept id is unique
+/// only within its bundle, which is exactly why this returns `None` rather
+/// than guessing for a file outside one.
+fn open_note_in_active_workspace(path: &str) -> Result<Option<NoteState>, AppError> {
+    let Ok(workspace) = crate::workspace::persist::Workspace::active() else {
+        return Ok(None);
+    };
+    let (Ok(root), Ok(absolute)) = (
+        std::fs::canonicalize(workspace.root()),
+        std::fs::canonicalize(path),
+    ) else {
+        return Ok(None);
+    };
+    let Ok(relative) = absolute.strip_prefix(&root) else {
+        return Ok(None);
+    };
+    let note_id = crate::okf::path_to_concept_id(&relative.to_string_lossy());
+    let (_, state) = crate::workspace::persist::open_note(&workspace, &note_id)?;
+    Ok(Some(state))
+}
+
+/// Forces ADR-008 tier 2 immediately: writes the Note's working source to its
+/// file atomically and returns the new `base_revision`.
+///
+/// The debounce that normally triggers tier 2 lives in the Core, not the UI —
+/// this is the explicit-flush escape hatch used by `close_note`, by application
+/// shutdown, and by tests. It takes no revision token: the Core holds one per
+/// open Note and replaces it after every successful write, so any token the UI
+/// still held would be stale by construction.
+#[frb]
+pub async fn flush_note(note_id: String) -> Result<String, AppError> {
+    open_session(&note_id)?.flush()
+}
+
+/// Status of the write tier for one open Note (ADR-008). Never fails: a Note
+/// that is not open reports no error and no unwritten edits.
+#[frb(sync)]
+pub fn note_write_status(note_id: String) -> NoteWriteStatus {
+    open_session(&note_id)
+        .and_then(|session| session.write_status())
+        .unwrap_or_default()
+}
+
+/// Discards the buffered edits and re-reads the Note from disk, returning a
+/// state with `restored_from_draft = false`.
+///
+/// This is the other half of `RevisionMismatch` and the only exit from it:
+/// `open_note` restores the draft in preference to disk and tier 2 leaves that
+/// row in place when it fails, so a reopen would return the buffer that just
+/// lost the comparison and fail again on every tick. It **destroys unwritten
+/// work by design**, so the UI must confirm first.
+#[frb]
+pub async fn reload_note(note_id: String) -> Result<NoteState, AppError> {
+    open_session(&note_id)?.reload()
+}
+
+/// Tier 3: flushes any pending write, makes one Git commit covering this
+/// editing session for this Note alone, clears the `drafts` row, and notifies
+/// the sync scheduler — which has existed since Epic C with no caller.
+///
+/// Must also run on application quit and when switching away from a Note, or
+/// the session reaches disk but never enters version history.
+#[frb]
+pub async fn close_note(note_id: String) -> Result<(), AppError> {
+    open_session(&note_id)?.close()
+}
+
+/// Notes with an unflushed draft from a previous session, for surfacing
+/// recovered work on startup (CAP-WS-03).
+#[frb]
+pub async fn pending_drafts() -> Result<Vec<NoteMetadata>, AppError> {
+    let workspace = crate::workspace::persist::Workspace::active()?;
+    crate::workspace::persist::pending_drafts(&workspace)
+}
+
+/// The open session for `note_id`, or `NotFound` when the Note is not open.
+///
+/// Kept private: which Notes are open is Core-side state, and the contract
+/// exposes it only through the functions above.
+fn open_session(note_id: &str) -> Result<crate::workspace::persist::NoteSession, AppError> {
+    let workspace_id = crate::db::connection::active_workspace_id()?;
+    crate::workspace::persist::lookup(&workspace_id, note_id)?
+        .ok_or_else(|| AppError::NotFound(format!("no open Note with id {note_id}")))
 }
 
 /// Applies a keystroke-level edit to the currently open note's in-memory
@@ -225,7 +341,7 @@ fn fts5_phrase_query(query: &str) -> String {
 /// → `SEARCH n USING sqlite_autoindex_notes_1`, at every corpus size, with and
 /// without table statistics, and the `ORDER BY rank` temp b-tree disappears
 /// with it because FTS5 already returns rows in rank order.
-pub(crate) const SEARCH_NOTES_SQL: &str = "SELECT n.id, n.workspace_id, n.path, n.title, \
+pub(crate) const SEARCH_NOTES_SQL: &str = "SELECT n.id, n.okf_conformant, n.path, n.title, \
             n.last_modified, snippet(notes_fts, 1, '', '', '…', 8) AS snippet \
      FROM notes_fts \
      CROSS JOIN fts_mapping ON fts_mapping.fts_rowid = notes_fts.rowid \
@@ -271,7 +387,7 @@ fn search_notes_impl(
     let rows = stmt.query_map(rusqlite::params![fts_query, workspace_id], |row| {
         Ok(NoteMetadata {
             id: row.get(0)?,
-            workspace_id: row.get(1)?,
+            okf_conformant: row.get(1)?,
             path: row.get(2)?,
             title: row.get(3)?,
             last_modified: row.get(4)?,
@@ -436,7 +552,6 @@ mod tests {
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].id, "note-1");
         assert_eq!(results[0].title, "Grocery List");
-        assert_eq!(results[0].workspace_id, "ws");
         assert_eq!(results[0].last_modified, 1000);
         assert!(results[0].snippet.as_deref().unwrap().contains("milk"));
     }
@@ -542,7 +657,10 @@ mod tests {
             1,
             "only the active Workspace's match may be returned"
         );
-        assert_eq!(results[0].workspace_id, "ws");
+        // The title is what distinguishes the two rows now that `NoteMetadata`
+        // carries no `workspace_id`: both Workspaces hold a `note-1`, which is
+        // exactly the collision a concept id being unique only within its own
+        // bundle permits.
         assert_eq!(results[0].title, "Grocery List");
     }
 

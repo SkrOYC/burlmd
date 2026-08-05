@@ -8,9 +8,10 @@ import '../error.dart';
 import '../frb_generated.dart';
 import '../markdown/ast.dart';
 import '../workspace/bootstrap.dart';
+import '../workspace/persist.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `fts5_phrase_query`, `save_note_impl`, `search_notes_impl`
+// These functions are ignored because they are not marked as `pub`: `fts5_phrase_query`, `open_note_in_active_workspace`, `open_session`, `save_note_impl`, `search_notes_impl`
 
 /// Opens the local Workspace, creating and initializing it if absent
 /// (ADR-005 decision 1): creates the directory, initializes a Git repository
@@ -56,8 +57,64 @@ Future<WorkspaceInfo> openWorkspace({required String path}) =>
 Future<int> reindexWorkspace() =>
     RustLib.instance.api.crateApiFfiApiReindexWorkspace();
 
+/// Opens a Note and establishes its editing session.
+///
+/// Still keyed by filesystem path rather than by concept id — `WSPC-D008`
+/// replaces this signature with the contract's `open_note(note_id)`. What it
+/// does *within* the active Workspace is already the contract's behaviour: it
+/// registers the session ADR-008's tiers operate on, so the working source,
+/// the span map and the recorded revision all exist before the first edit, and
+/// an unflushed `drafts` row is restored in preference to disk.
+///
+/// A path outside the active Workspace — or a call before any Workspace has
+/// been opened — falls back to reading the file directly. That path registers
+/// no session and therefore has no write tier: the Workspace is what supplies
+/// the bundle root, the encrypted index the draft row lives in, and the
+/// repository tier 3 commits into, and none of the three exists for a file
+/// somewhere else on the disk.
 NoteState openNote({required String path}) =>
     RustLib.instance.api.crateApiFfiApiOpenNote(path: path);
+
+/// Forces ADR-008 tier 2 immediately: writes the Note's working source to its
+/// file atomically and returns the new `base_revision`.
+///
+/// The debounce that normally triggers tier 2 lives in the Core, not the UI —
+/// this is the explicit-flush escape hatch used by `close_note`, by application
+/// shutdown, and by tests. It takes no revision token: the Core holds one per
+/// open Note and replaces it after every successful write, so any token the UI
+/// still held would be stale by construction.
+Future<String> flushNote({required String noteId}) =>
+    RustLib.instance.api.crateApiFfiApiFlushNote(noteId: noteId);
+
+/// Status of the write tier for one open Note (ADR-008). Never fails: a Note
+/// that is not open reports no error and no unwritten edits.
+NoteWriteStatus noteWriteStatus({required String noteId}) =>
+    RustLib.instance.api.crateApiFfiApiNoteWriteStatus(noteId: noteId);
+
+/// Discards the buffered edits and re-reads the Note from disk, returning a
+/// state with `restored_from_draft = false`.
+///
+/// This is the other half of `RevisionMismatch` and the only exit from it:
+/// `open_note` restores the draft in preference to disk and tier 2 leaves that
+/// row in place when it fails, so a reopen would return the buffer that just
+/// lost the comparison and fail again on every tick. It **destroys unwritten
+/// work by design**, so the UI must confirm first.
+Future<NoteState> reloadNote({required String noteId}) =>
+    RustLib.instance.api.crateApiFfiApiReloadNote(noteId: noteId);
+
+/// Tier 3: flushes any pending write, makes one Git commit covering this
+/// editing session for this Note alone, clears the `drafts` row, and notifies
+/// the sync scheduler — which has existed since Epic C with no caller.
+///
+/// Must also run on application quit and when switching away from a Note, or
+/// the session reaches disk but never enters version history.
+Future<void> closeNote({required String noteId}) =>
+    RustLib.instance.api.crateApiFfiApiCloseNote(noteId: noteId);
+
+/// Notes with an unflushed draft from a previous session, for surfacing
+/// recovered work on startup (CAP-WS-03).
+Future<List<NoteMetadata>> pendingDrafts() =>
+    RustLib.instance.api.crateApiFfiApiPendingDrafts();
 
 /// Applies a keystroke-level edit to the currently open note's in-memory
 /// AST and returns the updated `NoteState`. `block_path` is an index path
