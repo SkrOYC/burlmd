@@ -15,13 +15,15 @@ graph LR
     UI <-- "in-process FFI call / structured return" --> Core
     Core <-- "in-process call" --> Local
     Sync -- "in-process call" --> Local
-    Sync <-.-> "network: Git smart protocol over HTTPS" --> Remote
+    Sync <-. "network: Git smart protocol over HTTPS" .-> Remote
     Core -- "OS credential API" --> Sec
     Sync -- "OS credential API" --> Sec
+    Local -- "in-process call" --> Sec
+    Core -- "in-process notification" --> Sync
     Sec --- OS
 ```
 
-The synchronous editing path runs entirely through the left edge: keystrokes cross the FFI boundary, and the Core serves them from memory and the local index without ever touching the network. The dotted edge is the only asynchronous, potentially failing connection in the system, which is why it belongs to the Sync Manager alone.
+The synchronous editing path runs entirely through the left edge: keystrokes cross the FFI boundary, and the Core serves them from memory and the local index without ever touching the network. The dotted edge is the only asynchronous, potentially failing connection in the system, which is why it belongs to the Sync Manager alone. Local Repository's dependence on Secure Storage is drawn directly rather than left transitive through Core because the key read happens at index open, not per call; Core notifies Sync in-process when a commit tier fires, which is how the scheduler learns there is work.
 
 ## 1. Presentation Container
 - **Logical Type:** UI Client (Flutter)

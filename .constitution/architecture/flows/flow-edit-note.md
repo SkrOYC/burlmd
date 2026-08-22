@@ -1,6 +1,6 @@
 # Execution Flow: Edit Note
 
-**Maps to PRD Capability:** CAP-EDIT-01 (the focused Block shows raw Markdown source while every other Block renders formatted), CAP-EDIT-03 (create, split, merge and delete Blocks through ordinary typing), CAP-EDIT-04 (selection spanning multiple Blocks copies as faithful Markdown; range edits dispatch to the Core as single atomic operations), CAP-EDIT-05 (inline emphasis shortcuts wrap or unwrap the focused Block's source text), CAP-WS-02 (every editing session captured in local version history), CAP-WS-03 (in-progress edits survive abrupt termination).
+**Maps to PRD Capability:** CAP-EDIT-01 (the focused Block shows raw Markdown source while every other Block renders formatted), CAP-EDIT-02 (every structural Block type renders and edits under that model), CAP-EDIT-03 (create, split, merge and delete Blocks through ordinary typing), CAP-EDIT-04 (selection spanning multiple Blocks copies as faithful Markdown; range edits dispatch to the Core as single atomic operations), CAP-EDIT-05 (inline emphasis shortcuts wrap or unwrap the focused Block's source text), CAP-WS-02 (every editing session captured in local version history), CAP-WS-03 (in-progress edits survive abrupt termination).
 
 ```mermaid
 sequenceDiagram
@@ -80,6 +80,15 @@ sequenceDiagram
 The branch in the open sequence is load-bearing, not presentational. A draft row exists precisely when its content differs from disk, so parsing the disk bytes and *then* reporting that a draft was restored would return an AST of the wrong document — and, worse, build the Core-side span map against bytes that are not the working source, so the first `commit_block` after a recovery would splice at offsets derived from a different file.
 
 The working source is therefore whichever of the two is authoritative, while `base_revision` stays the hash of what is **on disk**, because that is what the tier 2 write must compare against before overwriting it. The two are deliberately drawn from different places, and this is what `SHEL-E007`'s "shows the drafted content rather than the last content written to disk" criterion actually requires.
+
+## Selection across unfocused Blocks, and shortcuts
+
+Two behaviors in this flow's scope never enter the keystroke loop because they happen outside it:
+
+- **Cross-Block selection and copy** (CAP-EDIT-04): while no Block is focused, rendered Blocks participate in one selection region the Presentation Container hosts. Copying dispatches the selection to the Core — expressed as a rendered-text range — which resolves it against its span map and returns faithful Markdown of exactly the selected bytes; the UI never reconstructs source text from what it can see. Deleting or typing over such a selection is one atomic Core operation, not a sequence of per-Block edits: intermediate states the Core never sanctioned are precisely what atomicity forbids.
+- **Emphasis shortcuts** (CAP-EDIT-05): inside the focused Block, shortcut keys wrap the current selection in delimiter characters — ordinary source text manipulation. Because the editable surface already holds raw source, there is nothing to translate; undo sees them as the text edits they are.
+
+The keystroke loop above remains the only path a per-character cost can compound along; neither behavior adds work to it.
 
 ## The save phase is a splice, not a serialization
 
