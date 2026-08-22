@@ -1,4 +1,6 @@
+import 'package:burlmd/src/components/draft_recovery.dart';
 import 'package:burlmd/src/components/editor.dart';
+import 'package:burlmd/src/components/search_panel.dart';
 import 'package:burlmd/src/components/workspace_tree.dart';
 import 'package:burlmd/src/providers/note_providers.dart';
 import 'package:burlmd/src/providers/rust_api_provider.dart';
@@ -66,14 +68,42 @@ class WorkspaceScreen extends ConsumerWidget {
                       style: Theme.of(context).textTheme.titleSmall,
                     ),
                   ),
-                  const Align(
-                    alignment: Alignment.centerLeft,
-                    child: Padding(
-                      padding: EdgeInsets.fromLTRB(8, 0, 8, 8),
-                      child: _RescanButton(),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                    child: Row(
+                      children: [
+                        // Expanded so a narrow sidebar constrains the
+                        // button's label instead of overflowing the row.
+                        const Expanded(child: _RescanButton()),
+                        // The search affordance (`SHEL-E006`): toggles the
+                        // panel section below the tree. It sits where
+                        // navigation lives, like the rescan action.
+                        IconButton(
+                          tooltip: 'Search notes',
+                          isSelected: ref.watch(searchSectionOpenProvider),
+                          selectedIcon: const Icon(Icons.search),
+                          icon: const Icon(Icons.search_outlined),
+                          onPressed: () => ref
+                              .read(searchSectionOpenProvider.notifier)
+                              .toggle(),
+                        ),
+                      ],
                     ),
                   ),
+                  // Recovered-draft notices (`SHEL-E007`) surface above the
+                  // tree so recovered work is announced at startup; the
+                  // panel collapses to nothing when nothing was recovered.
+                  const RecoveredDraftsPanel(),
                   const Expanded(child: WorkspaceTree()),
+                  // The search surface itself (`SHEL-E006`): a fixed-height
+                  // section under the tree, shown only while toggled. Its
+                  // result limit belongs to this surface, not to the panel
+                  // or the Core.
+                  if (ref.watch(searchSectionOpenProvider))
+                    const SizedBox(
+                      height: 280,
+                      child: SearchPanel(resultLimit: 25),
+                    ),
                 ],
               ),
             ),
@@ -200,7 +230,11 @@ class _RescanButton extends ConsumerWidget {
             ? null
             : () => ref.read(rescanStateProvider.notifier).run(),
         icon: const Icon(Icons.refresh),
-        label: const Text('Rescan workspace'),
+        label: const Text(
+          'Rescan workspace',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
       ),
     );
   }
@@ -227,6 +261,29 @@ class _EditorPane extends ConsumerWidget {
     if (selectedId == null) {
       return const Center(child: Text('Select a note to open it'));
     }
-    return const Editor();
+    // The write-tier notice (`SHEL-E007`) rides above the editor pane for
+    // whichever Note is open. Watching it here also *arms* polling: the
+    // monitor's periodic timer exists only while something watches it, and
+    // without an armed poller a write failure would be raised into nothing
+    // while the user keeps typing into a buffer nothing can persist.
+    return const Column(
+      children: [
+        WriteTierNotice(),
+        Expanded(child: Editor()),
+      ],
+    );
   }
 }
+
+/// Whether the sidebar's search section is expanded (the mount point of
+/// `SHEL-E006`'s [SearchPanel]). Ephemeral UI state, not Note content.
+class SearchSectionOpen extends Notifier<bool> {
+  @override
+  bool build() => false;
+
+  void toggle() => state = !state;
+}
+
+final searchSectionOpenProvider = NotifierProvider<SearchSectionOpen, bool>(
+  SearchSectionOpen.new,
+);

@@ -173,8 +173,10 @@ class WriteTierNotice extends ConsumerWidget {
         ],
       ),
     );
-    if (confirmed == true) {
-      await ref.read(activeNoteProvider.notifier).reloadFromDisk();
-    }
+    // The dialog awaited: the workspace (and this notice with it) may have
+    // unmounted while it was open — e.g. the Note closed underneath. Using
+    // the element's providers after unmount would throw, so guard first.
+    if (confirmed != true || !context.mounted) return;
+    await ref.read(activeNoteProvider.notifier).reloadFromDisk();
   }
 }
