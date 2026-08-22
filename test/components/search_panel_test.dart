@@ -24,6 +24,18 @@ class _StubRustApi extends RustApi {
   }
 }
 
+/// A [RustApi] whose `searchNotes` always throws — the flow-search.md
+/// "index unavailable or unreadable" branch.
+class _FailingSearchApi extends _StubRustApi {
+  _FailingSearchApi() : super(const {});
+
+  @override
+  Future<List<NoteMetadata>> searchNotes(String query, int limit) async {
+    calls.add((query, limit));
+    throw Exception('search index unavailable');
+  }
+}
+
 NoteMetadata hit(
   String id,
   String title, {
@@ -169,6 +181,37 @@ void main() {
     // The punctuation reached the Core verbatim for it to neutralize —
     // nothing on this side rewrote or filtered it.
     expect(api.calls.single.$1, query);
+  });
+
+  testWidgets('a Core failure renders a distinct error state with recovery '
+      'affordances (flow-search.md: index unavailable)', (
+    WidgetTester tester,
+  ) async {
+    final api = _FailingSearchApi();
+    await _pumpPanel(tester, api);
+
+    await _type(tester, 'anything');
+
+    // Not the calm empty states: a named failure, verbatim from the Core.
+    expect(find.text('Search failed'), findsOneWidget);
+    expect(find.textContaining('index unavailable'), findsOneWidget);
+
+    // The immediate affordance re-runs the query against whatever the
+    // index now answers. (Riverpod's automatic retry backoff also keeps
+    // re-firing the failed provider in the background, so an exact count
+    // is not stable — what matters is that the tap forced a refetch well
+    // beyond the initial attempt, without waiting out that backoff.)
+    final callsBeforeRetry = api.calls.length;
+    await tester.tap(find.byKey(const ValueKey('search-retry')));
+    // Two pumps: one to rebuild on the invalidated provider, one for its
+    // failed round trip to land back in the error state.
+    await tester.pump();
+    await tester.pump();
+    expect(api.calls.length, greaterThan(callsBeforeRetry));
+
+    // And the durable one points at the shell's rescan seam — the full
+    // reindex is what rebuilds a broken index (CAP-WS-06).
+    expect(find.textContaining('Rescan workspace'), findsOneWidget);
   });
 
   testWidgets('a blank query asks the Core nothing and shows the hint', (

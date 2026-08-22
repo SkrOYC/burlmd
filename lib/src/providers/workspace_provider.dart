@@ -112,6 +112,43 @@ final writeStatusPollIntervalProvider = Provider<Duration?>(
   (ref) => writeStatusPollInterval,
 );
 
+/// How many consecutive failed polls the monitor tolerates before it stops
+/// presenting its last-known status as trustworthy. Below the threshold a
+/// failed poll is treated as transient and the previous status keeps
+/// standing; at or above it, no status can be believed anymore.
+const writeStatusFailureThreshold = 3;
+
+/// What the write-tier surface renders for the currently open Note: the
+/// last successfully polled [status], plus how many polls in a row have
+/// failed to produce an answer at all.
+///
+/// The separate failure count exists because of SHEL-E007's STOP risk: a
+/// failing *write* is surfaced through [NoteWriteStatus.lastError], but a
+/// failing *poll* surfaces into nothing — if every poll from the very first
+/// build onward threw, the user would keep typing into a buffer nothing can
+/// verify, with no signal anywhere. Counting consecutive failures lets the
+/// monitor distinguish "one flaky read, keep last-known standing" (the
+/// rationale that forbids clearing on error) from "the answer channel itself
+/// is down" ([statusUnavailable]).
+class WriteTierSurface {
+  const WriteTierSurface({this.status, this.pollsFailed = 0});
+
+  /// Nothing is open, or polling has not produced an answer yet.
+  static const idle = WriteTierSurface();
+
+  /// The last status successfully read from `note_write_status`, or `null`
+  /// when no poll has ever succeeded for this Note.
+  final NoteWriteStatus? status;
+
+  /// Consecutive polls whose `note_write_status` round trip itself threw.
+  final int pollsFailed;
+
+  /// True once [pollsFailed] reaches [writeStatusFailureThreshold]: the
+  /// monitor can no longer vouch for [status] (if any) and says so rather
+  /// than silently presenting stale data.
+  bool get statusUnavailable => pollsFailed >= writeStatusFailureThreshold;
+}
+
 /// Polls `note_write_status` (ADR-008) for whichever Note is currently open.
 ///
 /// A poll rather than a stream because tier 2's routine trigger is a
@@ -123,28 +160,38 @@ final writeStatusPollIntervalProvider = Provider<Duration?>(
 /// Watching [activeNoteProvider] re-runs [build] on every open/close/reload,
 /// so the status is always about the Note actually on screen and a fresh
 /// read happens immediately when it changes; a periodic timer keeps the
-/// surface current between user actions. State is `null` while no Note is
-/// open. A poll round that itself throws leaves the last known status
-/// standing — clearing it would unsurface a failure that may still be real.
-class WriteTierMonitor extends Notifier<NoteWriteStatus?> {
+/// surface current between user actions. A poll round that itself throws
+/// leaves the last known status standing — clearing it would unsurface a
+/// failure that may still be real — but consecutive failures accumulate in
+/// [WriteTierSurface.pollsFailed] until the monitor declares the write
+/// status unavailable instead of pretending the old answer is current.
+class WriteTierMonitor extends Notifier<WriteTierSurface> {
   Timer? _timer;
 
+  int _consecutiveFailures = 0;
+
   @override
-  NoteWriteStatus? build() {
+  WriteTierSurface build() {
     final open = ref.watch(activeNoteProvider);
     _stopTimer();
     ref.onDispose(_stopTimer);
-    if (open == null) return null;
+    // Every rebuild starts a fresh observation window for the newly opened
+    // Note; the failure streak belongs to one Note's polling history.
+    _consecutiveFailures = 0;
+    if (open == null) return WriteTierSurface.idle;
     final interval = ref.watch(writeStatusPollIntervalProvider);
     if (interval != null) {
       _timer = Timer.periodic(interval, (_) => poll());
     }
     try {
-      return ref.read(rustApiProvider).noteWriteStatus(open.metadata.id);
+      return WriteTierSurface(
+        status: ref.read(rustApiProvider).noteWriteStatus(open.metadata.id),
+      );
     } catch (_) {
       // First read failed: report nothing yet rather than a fabricated
-      // status, but keep the timer running so later polls can surface one.
-      return null;
+      // status, but keep the timer running so later polls can escalate.
+      _consecutiveFailures = 1;
+      return WriteTierSurface.idle;
     }
   }
 
@@ -153,13 +200,23 @@ class WriteTierMonitor extends Notifier<NoteWriteStatus?> {
   void poll() {
     final open = ref.read(activeNoteProvider);
     if (open == null) {
-      state = null;
+      state = WriteTierSurface.idle;
       return;
     }
     try {
-      state = ref.read(rustApiProvider).noteWriteStatus(open.metadata.id);
+      final status = ref
+          .read(rustApiProvider)
+          .noteWriteStatus(open.metadata.id);
+      _consecutiveFailures = 0;
+      state = WriteTierSurface(status: status);
     } catch (_) {
-      // Keep the last known status standing; see the class comment.
+      _consecutiveFailures++;
+      // Keep the last known status standing for now; past the threshold,
+      // say plainly that the status cannot be determined.
+      state = WriteTierSurface(
+        status: state.status,
+        pollsFailed: _consecutiveFailures,
+      );
     }
   }
 
@@ -170,6 +227,6 @@ class WriteTierMonitor extends Notifier<NoteWriteStatus?> {
 }
 
 final writeTierMonitorProvider =
-    NotifierProvider.autoDispose<WriteTierMonitor, NoteWriteStatus?>(
+    NotifierProvider.autoDispose<WriteTierMonitor, WriteTierSurface>(
       WriteTierMonitor.new,
     );

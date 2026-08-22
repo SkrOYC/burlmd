@@ -115,6 +115,16 @@ class NoteController extends Notifier<NoteState?> {
       ref.read(editorErrorProvider.notifier).report(null);
     } catch (error) {
       ref.read(editorErrorProvider.notifier).report(error);
+      // Mirror the close-abort branch above: when another Note is still
+      // open, point the tree back at it so the selection highlight names
+      // what the editor actually shows (flow-workspace-navigation.md's
+      // "the tree selection reverts"). With no Note previously open there
+      // is nothing to revert to — the selection stays on the failed id so
+      // the editor pane stays mounted and keeps the error surfaced.
+      final stillOpen = state?.metadata.id;
+      if (stillOpen != null) {
+        ref.read(selectedNoteIdProvider.notifier).select(stillOpen);
+      }
     }
   }
 
@@ -158,8 +168,13 @@ class NoteController extends Notifier<NoteState?> {
   /// was showing has been deleted, and the deletion already discarded the
   /// session and its draft row Core-side, so sending `close_note` would only
   /// raise `NotFound`. Used when a deletion removes the open Note.
+  ///
+  /// Also clears [editorErrorProvider]: the deleted Note can no longer be
+  /// retried or inspected, so a failure panel left over from it would name
+  /// an impossibility. This mirrors what a successful open does.
   void clear() {
     state = null;
+    ref.read(editorErrorProvider.notifier).report(null);
   }
 
   /// Reloads the currently open Note from disk through `reload_note`

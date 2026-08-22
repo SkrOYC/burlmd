@@ -21,6 +21,22 @@ class _StubRustApi extends RustApi {
   }
 }
 
+/// A [RustApi] whose tree query fails on its first call and serves a real
+/// tree afterwards — the "index hiccup" flow-workspace-navigation.md's
+/// failure path describes.
+class _FlakyOnceRustApi extends RustApi {
+  int calls = 0;
+
+  @override
+  Future<List<TreeNode>> workspaceTree() async {
+    calls++;
+    if (calls == 1) throw Exception('tree query refused');
+    return [
+      TreeNode.note(id: 'ok', title: 'Recovered Note', path: 'Recovered.md'),
+    ];
+  }
+}
+
 TreeNode directory(String name, String path, List<TreeNode> children) =>
     TreeNode.directory(name: name, path: path, children: children);
 
@@ -206,5 +222,36 @@ void main() {
     await tester.pumpAndSettle();
     expect(rowSelected('Note B'), isTrue);
     expect(rowSelected('Note A'), isFalse);
+  });
+
+  testWidgets('a failed tree query shows an error state whose Retry refetches '
+      '(flow-workspace-navigation.md failure path)', (
+    WidgetTester tester,
+  ) async {
+    final api = _FlakyOnceRustApi();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [rustApiProvider.overrideWithValue(api)],
+        child: const MaterialApp(
+          home: Scaffold(body: SizedBox(width: 300, child: WorkspaceTree())),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    // The failure is named, not swallowed — and it carries the flow's
+    // required retry affordance, since a watched autoDispose provider
+    // never re-fires after an error on its own.
+    expect(find.text('Failed to load workspace tree'), findsOneWidget);
+    expect(find.text('Retry'), findsOneWidget);
+    expect(api.calls, 1);
+
+    await tester.tap(find.byKey(const ValueKey('tree-retry')));
+    await tester.pumpAndSettle();
+
+    // The retry re-ran the Core call and the tree recovered in place.
+    expect(api.calls, 2);
+    expect(find.text('Recovered Note'), findsOneWidget);
+    expect(find.text('Failed to load workspace tree'), findsNothing);
   });
 }
