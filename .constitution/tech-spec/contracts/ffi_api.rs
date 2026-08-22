@@ -191,6 +191,7 @@ pub struct ExportReport {
     pub unreadable: Vec<String>,
 }
 
+#[frb]
 pub async fn export_workspace(
     destination: String,
     form: ExportForm,
