@@ -145,11 +145,13 @@ class _EditableParagraphState extends ConsumerState<_EditableParagraph> {
       // re-deriving the field's text and its resync comparison from the Core,
       // which is that ticket's work rather than a line of it. And the deferred
       // surface is wider than "unstyled": `updateBlock` is `#[frb(sync)]` and
-      // therefore throws synchronously on every refusal the Core can raise — an
-      // unaddressable or container `block_path`, a conflicted Note, a failed
-      // draft write — and neither this callback nor `NoteController.updateBlock`
-      // catches or reports one, so until EDIT-F002 wires an error path those
-      // failures are invisible to the user rather than merely unstyled.
+      // therefore throws synchronously on every refusal the Core can raise —
+      // an unaddressable or container `block_path`, a conflicted Note, a failed
+      // draft write. Those refusals ARE caught and reported, though:
+      // `NoteController.updateBlock` funnels them into [editorErrorProvider],
+      // which [Editor]'s build renders as the persistent error surface
+      // (`SHEL-E004`), so a refused keystroke is visible to the user rather
+      // than silently dropped.
       ref.read(activeNoteProvider.notifier).updateBlock(widget.blockPath, text);
     },
   );

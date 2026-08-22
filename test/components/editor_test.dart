@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:burlmd/src/components/editor.dart';
 import 'package:burlmd/src/providers/note_providers.dart';
 import 'package:burlmd/src/providers/rust_api_provider.dart';
@@ -51,13 +53,27 @@ class _FakeRustApi extends RustApi {
 /// opens") can be asserted, and can be told to fail opens to exercise the
 /// error surface. Everything else falls back to no-op behaviour.
 class _ShellRustApi extends RustApi {
-  _ShellRustApi(this.tree, {this.failOpenFor = const {}});
+  _ShellRustApi(
+    this.tree, {
+    this.failOpenFor = const {},
+    this.failCloseFor = const {},
+    this.openGates = const {},
+  });
 
   final List<TreeNode> tree;
 
   /// Concept ids whose `openNote` throws — the "Core returns an error"
   /// branch of the Gherkin.
   final Set<String> failOpenFor;
+
+  /// Concept ids whose `closeNote` throws — the "switch aborts because the
+  /// outgoing close failed" branch.
+  final Set<String> failCloseFor;
+
+  /// Per-id gates that park `openNote` until the test releases them, so a
+  /// round trip can be held genuinely in flight while the next selection
+  /// races in (the interleaving that used to skip close).
+  final Map<String, Completer<void>> openGates;
 
   /// Every open/close call in issue order, as `'open:<id>'` / `'close:<id>'`.
   final List<String> calls = [];
@@ -95,6 +111,8 @@ class _ShellRustApi extends RustApi {
   @override
   Future<NoteState> openNote(String noteId) async {
     calls.add('open:$noteId');
+    final gate = openGates[noteId];
+    if (gate != null && !gate.isCompleted) await gate.future;
     if (failOpenFor.contains(noteId)) throw Exception('core exploded');
     return _stateFor(noteId);
   }
@@ -102,6 +120,7 @@ class _ShellRustApi extends RustApi {
   @override
   Future<void> closeNote(String noteId) async {
     calls.add('close:$noteId');
+    if (failCloseFor.contains(noteId)) throw Exception('close refused');
   }
 }
 
@@ -433,6 +452,68 @@ void main() {
     expect(api.calls, ['open:note-a', 'close:note-a', 'open:note-b']);
     expect((container.read(activeNoteProvider)!).metadata.id, 'note-b');
   });
+
+  testWidgets(
+    'rapid selections issued before a switch completes still close the '
+    'outgoing note exactly once and settle on the last selection',
+    (tester) async {
+      final gateA = Completer<void>();
+      final api = _ShellRustApi([], openGates: {'note-a': gateA});
+      final container = ProviderContainer(
+        overrides: [rustApiProvider.overrideWithValue(api)],
+      );
+      addTearDown(container.dispose);
+
+      final controller = container.read(activeNoteProvider.notifier);
+      // Hold A's round trip in flight so B genuinely races it — exactly the
+      // tap-A-then-tap-B gap where open(B) used to read a stale state and
+      // skip A's still-owed close.
+      final first = controller.open('note-a');
+      await tester.pump();
+      expect(api.calls, ['open:note-a']);
+
+      final second = controller.open('note-b');
+      gateA.complete();
+      await first;
+      await second;
+
+      // Serialized: A is opened, then closed (its commit tier runs), then
+      // B opens. Without serialization the close:A step was skipped.
+      expect(api.calls, ['open:note-a', 'close:note-a', 'open:note-b']);
+      expect(container.read(activeNoteProvider)!.metadata.id, 'note-b');
+    },
+  );
+
+  testWidgets(
+    'a failed outgoing close aborts the switch, rolls the tree selection '
+    'back to the still-open note, and keeps the error surfaced',
+    (tester) async {
+      final api = _ShellRustApi([], failCloseFor: {'note-a'});
+      final container = ProviderContainer(
+        overrides: [rustApiProvider.overrideWithValue(api)],
+      );
+      addTearDown(container.dispose);
+
+      final controller = container.read(activeNoteProvider.notifier);
+      await controller.open('note-a');
+
+      // The tree publishes the new selection, then drives the switch.
+      container.read(selectedNoteIdProvider.notifier).select('note-b');
+      await controller.open('note-b');
+
+      // The switch aborted at close_note: B never opened.
+      expect(api.calls, ['open:note-a', 'close:note-a']);
+      expect(container.read(activeNoteProvider)!.metadata.id, 'note-a');
+      // Selection rolled back so the highlight names the note actually
+      // shown in the editor, not the one the Core refused to reach.
+      expect(container.read(selectedNoteIdProvider), 'note-a');
+      // And the failure stays visible on the error surface.
+      expect(
+        '${container.read(editorErrorProvider)}',
+        contains('close refused'),
+      );
+    },
+  );
 
   testWidgets('a Core error on open surfaces instead of being swallowed', (
     tester,
