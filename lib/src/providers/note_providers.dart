@@ -141,6 +141,32 @@ class NoteController extends Notifier<NoteState?> {
       ref.read(editorErrorProvider.notifier).report(error);
     }
   }
+
+  /// Reloads the currently open Note from disk through `reload_note`
+  /// (`SHEL-E007`) — the only exit from a tier-2 `RevisionMismatch`.
+  ///
+  /// This is deliberately **not** [open]: `open_note` restores the surviving
+  /// draft row in preference to disk, so reopening would hand back the very
+  /// buffer that lost the revision comparison and reproduce the mismatch on
+  /// the next write. `reload_note` destroys unwritten work by design, so the
+  /// caller (the recovery surface's confirmation dialog) must already have
+  /// warned the user before reaching here. On success the returned disk
+  /// state replaces the buffer, which re-renders the editor from disk; a
+  /// failed round trip is surfaced through [editorErrorProvider] rather than
+  /// silently dropped.
+  Future<void> reloadFromDisk() async {
+    final current = state;
+    if (current == null) return;
+    try {
+      final reloaded = await ref
+          .read(rustApiProvider)
+          .reloadNote(current.metadata.id);
+      state = reloaded;
+      ref.read(editorErrorProvider.notifier).report(null);
+    } catch (error) {
+      ref.read(editorErrorProvider.notifier).report(error);
+    }
+  }
 }
 
 final activeNoteProvider = NotifierProvider<NoteController, NoteState?>(
