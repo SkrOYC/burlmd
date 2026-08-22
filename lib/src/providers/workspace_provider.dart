@@ -48,6 +48,12 @@ class SelectedNoteId extends Notifier<String?> {
   String? build() => null;
 
   void select(String noteId) => state = noteId;
+
+  /// Clears the selection — the close-in-the-editor half of deleting a Note
+  /// (`SHEL-E005`). Setting rather than a null-taking parameter keeps
+  /// [select] honest; only deletion and directory deletion have a reason to
+  /// unselect.
+  void clear() => state = null;
 }
 
 final selectedNoteIdProvider = NotifierProvider<SelectedNoteId, String?>(
