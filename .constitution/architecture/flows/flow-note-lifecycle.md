@@ -1,6 +1,6 @@
 # Execution Flow: Note & Directory Lifecycle
 
-**Maps to PRD Capability:** CAP-LIFE-01 (create a Note in a chosen Directory), CAP-LIFE-02 (rename with inbound Links updated), CAP-LIFE-03 (move with inbound Links updated), CAP-LIFE-04 (delete recoverable from version history). Also establishes CAP-PORT-01 for created Notes: a Note conforms to the Open Knowledge Format from the moment of creation.
+**Maps to PRD Capability:** CAP-LIFE-01 (create a Note in a chosen Directory), CAP-LIFE-02 (rename with inbound Links updated), CAP-LIFE-03 (move with inbound Links updated), CAP-LIFE-04 (delete recoverable from version history), CAP-LIFE-05 (create Directories nested to arbitrary depth). Also establishes CAP-PORT-01 for created Notes: a Note conforms to the Open Knowledge Format from the moment of creation.
 
 ```mermaid
 sequenceDiagram
