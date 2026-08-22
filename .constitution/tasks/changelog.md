@@ -3,7 +3,7 @@
 ## v1.6.0
 Stage 4 pass of the 2026-08-21 constitution realignment, executed after PRD v1.2.0, architecture v1.3.0 and tech-spec v1.3.0. Totals change: **55 → 57 active points**; the critical path is unchanged at 33.
 
-**Acceptance modes made explicit across both active epics** (14 tickets). Every implementation ticket now carries `Acceptance / Mode: gherkin / Evidence` in the current template shape instead of an unlabeled Gherkin block; behavior is unchanged and no criterion moved. The one deliberate exception: `EDIT-F001`'s mode corrected to `hitl_sil`, since its evidence is human-inspected rendered output against pass/fail criteria, not scenarios — tagging it gherkin would have been the template satisfied and the standard betrayed.
+**Acceptance modes made explicit across both active epics.** The fourteen pre-existing tickets were retrofitted to carry `Acceptance / Mode: gherkin / Evidence` in the current template shape instead of an unlabeled Gherkin block; behavior is unchanged and no criterion moved. `SHEL-E008` was born with its tag. The one deliberate exception: `EDIT-F001`'s mode corrected to `hitl_sil`, since its evidence is human-inspected rendered output against pass/fail criteria, not scenarios — tagging it gherkin would have been the template satisfied and the standard betrayed.
 
 **`SHEL-E008` added (Rescan Workspace, 2 points)**, honoring ruling Q12 that an explicit refresh affordance ships this wave rather than waiting for file-watching. Drives the existing full-reindex Core call; its STOP encodes the recorded transient-drop window by refusing to run under open sessions with unwritten edits. Not on the critical path; hangs off `SHEL-E003` in the graph.
 
