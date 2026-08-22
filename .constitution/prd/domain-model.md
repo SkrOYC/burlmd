@@ -16,20 +16,20 @@ graph TD
         suggestion[Suggestion]
     end
 
-    writer -- creates, edits, reads, deletes --> note
-    writer -- organizes --> directory
-    writer -- accepts or rejects --> suggestion
-    writer -- browses, restores --> version
+    writer -- "creates, edits, reads, deletes" --> note
+    writer -- "organizes" --> directory
+    writer -- "accepts or rejects" --> suggestion
+    writer -- "browses, restores" --> version
     agent -- reads --> note
     agent -- traverses --> link
     agent -- writes --> note
-    directory -- contains (1:N) --> note
-    directory -- nests (1:N) --> directory
-    note -- composed of (1:N) --> block
+    directory -- "contains (1:N)" --> note
+    directory -- "nests (1:N)" --> directory
+    note -- "composed of (1:N)" --> block
     block -- contains --> link
-    link -- targets a Note (may be unresolved) --> note
-    link -- may reference --> attachment
-    note -- has past states (1:N) --> version
+    link -- "targets a Note (may be unresolved)" --> note
+    link -- "may reference" --> attachment
+    note -- "has past states (1:N)" --> version
     workspace -- syncs to/from once connected --> remote
 ```
 

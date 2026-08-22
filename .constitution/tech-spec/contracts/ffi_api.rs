@@ -181,7 +181,6 @@ pub enum ExportForm {
 /// a Workspace the user is entitled to take elsewhere would invert the
 /// capability's purpose.
 #[frb]
-#[frb]
 pub struct ExportReport {
     /// Concept ids of exported Notes found non-conformant. Reported, never gated:
     /// refusing to export a Workspace the user is entitled to take elsewhere would
@@ -1292,21 +1291,26 @@ pub async fn restore_note_version(
 /// (CAP-EDIT-08); redo reapplies what undo reversed. Covers splice, Block and
 /// range operations; excludes lifecycle renames and anything sync applied
 /// (ADR-010). Depth is bounded; at the bound the oldest step falls off.
-#[frb(sync)]
-pub fn undo_note(note_id: String) -> Result<NoteState, AppError> {
+/// Async like every other mutator that returns a full `NoteState`: an undo
+/// over a large Note serializes real payload, and the sync convention is
+/// reserved for calls whose return is trivial.
+#[frb]
+pub async fn undo_note(note_id: String) -> Result<NoteState, AppError> {
     unimplemented!()
 }
 
 /// Reapplies the most recently undone operation (CAP-EDIT-08).
-#[frb(sync)]
-pub fn redo_note(note_id: String) -> Result<NoteState, AppError> {
+#[frb]
+pub async fn redo_note(note_id: String) -> Result<NoteState, AppError> {
     unimplemented!()
 }
 
 /// Finds every occurrence of `query` inside one Note, including occurrences
 /// inside rendered inline structure (CAP-FIND-03). Ranges resolve through the
 /// same span map cross-Block selection uses; runs that cannot be addressed
-/// interiorly match atomically, per the span-map rule.
+/// interiorly match atomically, per the span-map rule. Individual replacement
+/// dispatches through the existing single-range edit operation (`replace_range`)
+/// with one of these ranges; only replace-all needs its own surface.
 #[frb]
 pub async fn find_in_note(note_id: String, query: String) -> Result<Vec<BlockRange>, AppError> {
     unimplemented!()
@@ -1341,8 +1345,8 @@ pub struct DiagnosticsBundle {
 
 /// Produces a redacted diagnostics bundle on demand (CAP-SUP-01). A pure read
 /// over the local log channel; nothing is transmitted anywhere by this call.
-/// Async despite doing no I/O of its own beyond reading the log file, so the
-/// Dart thread never waits on disk.
+/// Async because it reads the log file from disk, so the Dart thread never
+/// waits on it.
 #[frb]
 pub async fn collect_diagnostics() -> Result<DiagnosticsBundle, AppError> {
     unimplemented!()
