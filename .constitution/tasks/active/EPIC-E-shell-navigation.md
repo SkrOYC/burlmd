@@ -23,7 +23,9 @@ That makes `SHEL-E001` a 2-point ticket gating twelve of this wave's fourteen UI
 - **STOP Conditions:**
   - "STOP if the harness cannot capture a screenshot in this environment; report the limitation rather than substituting a widget-test assertion, because substituting one recreates exactly the blind spot this ticket exists to close."
 - **Description:** Provide the repeatable command every subsequent UI ticket uses as its gate. It builds the native library in release mode (required because the generated loader resolves it from a path the debug bundle does not populate), builds and launches the desktop application, waits for it to render, captures a screenshot to a known location, and terminates cleanly with a non-zero exit if the application failed to start. The screenshot tooling is already provisioned in the developer environment for this purpose; this ticket turns an ad-hoc procedure documented in `tech-spec/guidelines.md` into a command.
-- **Acceptance Criteria (Gherkin):**
+- **Acceptance:**
+  - **Mode:** gherkin
+  - **Evidence:**
 ```gherkin
 Given a clean checkout in the developer environment
 When the smoke harness is run with a name
@@ -54,7 +56,9 @@ Then it exits non-zero and no screenshot is written
   - "STOP if removing the gate requires deleting the login screen or the auth provider; both remain for the deferred connect flow and only stop being a startup gate."
   - "STOP if any editing, navigation or search surface remains reachable only when authenticated; CAP-WS-01 requires none of them be."
 - **Description:** Remove the authentication gate from application startup. The application opens the local Workspace on launch and presents it directly. Authentication state governs synchronization only, and no editing capability depends on it. This is the change that makes the application usable at all — it is currently unusable end to end, for a reason that is a specification defect rather than a bug.
-- **Acceptance Criteria (Gherkin):**
+- **Acceptance:**
+  - **Mode:** gherkin
+  - **Evidence:**
 ```gherkin
 Given no credentials exist in secure storage and no network is reachable
 When the application is launched
@@ -87,7 +91,9 @@ Then the same local Workspace is reused rather than recreated
   - "STOP if the tree holds Note content in widget state; `tech-spec/guidelines.md` permits only ephemeral UI state such as which nodes are expanded."
   - "STOP if rendering the tree requires one call per Directory level; the contract returns the tree in a single call."
 - **Description:** Render the Workspace as a nested, expandable Directory tree and open a Note when one is selected. This is the primary navigation surface — without it no Note is reachable after being written. Directories sort before Notes at each level. Empty Directories appear, which is why they are indexed at all.
-- **Acceptance Criteria (Gherkin):**
+- **Acceptance:**
+  - **Mode:** gherkin
+  - **Evidence:**
 ```gherkin
 Given a Workspace with nested Directories and Notes
 When the tree is rendered
@@ -124,7 +130,9 @@ Then that Note opens
   - "STOP if switching Notes does not close the outgoing Note through the Core; leaving it unclosed skips the commit tier and loses the session from version history."
   - "STOP if an error returned across the boundary is swallowed rather than surfaced; the editor currently has no error surface at all."
 - **Description:** Mount the editor for the first time. Selecting a Note in the tree opens it and renders its Blocks; switching to another Note closes the outgoing one through the Core so its session is written and committed. Failures crossing the boundary are surfaced rather than discarded — a gap the review of Epic B recorded but left unreachable because the editor was never mounted.
-- **Acceptance Criteria (Gherkin):**
+- **Acceptance:**
+  - **Mode:** gherkin
+  - **Evidence:**
 ```gherkin
 Given a Note is selected in the tree
 When it opens
@@ -162,7 +170,9 @@ Then its rendered content is visible
   - "STOP if a rejected name collision is worked around client-side by altering the name; the Core reports the path unavailable and the user must be told."
   - "STOP if `LifecycleEffects.rewritten` is ignored. Those Notes' ids did not change and nothing about them looks stale, which is exactly why the Core returns the list — an open one holds a Link to an id that no longer exists, and following it recreates the concept the rename removed."
 - **Description:** Surface creation, rename, move and deletion for Notes, and creation, rename and deletion for Directories. Because a rename or move changes a Note's identity, the open Note must re-anchor to the returned state rather than retaining its previous identifier. Moving is available at least through an explicit action; drag-and-drop is not required.
-- **Acceptance Criteria (Gherkin):**
+- **Acceptance:**
+  - **Mode:** gherkin
+  - **Evidence:**
 ```gherkin
 Given a Directory is selected
 When a new Note is created in it with a title
@@ -221,7 +231,9 @@ Then the editor closes that Note rather than leaving it open against a removed f
 - **STOP Conditions:**
   - "STOP if the result limit is hardcoded in the UI; the Core takes it as a parameter precisely so the surface controls it."
 - **Description:** Give full-text search a surface for the first time. Search is scoped to the current Workspace, returns ranked results with snippets, and opens a Note when a result is selected. Results must remain responsive within the sub-100ms constraint, so queries are issued against the index rather than filtered client-side.
-- **Acceptance Criteria (Gherkin):**
+- **Acceptance:**
+  - **Mode:** gherkin
+  - **Evidence:**
 ```gherkin
 Given a Workspace containing Notes with distinct content
 When a query matching one of them is entered
@@ -257,7 +269,9 @@ Then results or an empty state are shown and no error surfaces
   - "STOP if recovered content is discarded when the user dismisses the notice; dismissal hides the notice, it does not delete work."
   - "STOP if a write-tier failure is left unsurfaced. `note_write_status` exists because the write tier's trigger is a Core-owned timer with no caller to return an error to; if nothing polls it, `RevisionMismatch`, `DiskFull` and `IoError` are raised into nothing while the user keeps typing into a buffer nothing can persist."
 - **Description:** Make crash recovery visible, and write failure visible with it — the two share a surface because both are the application telling the user something about durability that it cannot say through the editor itself. On startup, Notes carrying an unflushed draft from a previous session are surfaced so the user knows work was recovered rather than silently finding a Note in an unexpected state. Opening such a Note shows the recovered content, and the state carries the fact that it came from a draft.
-- **Acceptance Criteria (Gherkin):**
+- **Acceptance:**
+  - **Mode:** gherkin
+  - **Evidence:**
 ```gherkin
 Given a draft exists from a session that ended without flushing
 When the application starts
@@ -286,4 +300,37 @@ Then their buffered text is still reachable, and the confirmation says plainly t
 Given the write tier fails because the disk is full
 When the UI next polls
 Then the failure is shown persistently rather than once, since every subsequent write fails the same way until it is resolved
+```
+
+#### SHEL-E008 Rescan Workspace
+- **Type:** Feature
+- **Effort:** 2
+- **Dependencies:** SHEL-E002, SHEL-E003
+- **Category:** Correctness
+- **Scope (In-Scope Files):**
+  - `lib/src/screens/workspace.dart`
+  - `lib/src/providers/workspace_providers.dart`
+- **Scope (Out-of-Scope Files):**
+  - `rust/src/**` (the Core function exists; nothing Core-side changes)
+  - `lib/src/components/**` (don't touch editor internals)
+- **Verification Command:** `./scripts/smoke-shot.sh shel-e008 && flutter test`
+- **Expected Success Output:** `exit 0`, screenshot showing the tree reflecting an externally added Note without an application restart
+- **STOP Conditions:**
+  - "STOP if the rescan path is reachable while a Note is open with unflushed edits; the recorded transient-drop window means rescanning under open sessions can silently discard freshly-written index rows. The affordance refreshes the shell's view of the Workspace; it does not run mid-session underneath open Notes."
+- **Description:** Implement CAP-WS-06. A user-invokable action re-derives the shell's view of the Workspace from disk by driving the existing full-reindex call and refreshing the tree, so external writes made while the application runs become visible without restarting. Stale-until-refresh is the documented behavior: no file watching this wave. The affordance lives where navigation lives (the tree surface), states plainly what it does, and disables while any Note is open with unwritten edits per the STOP.
+- **Acceptance:**
+  - **Mode:** gherkin
+  - **Evidence:**
+```gherkin
+Given an external tool adds a Note to the Workspace directory while the application runs
+When the user invokes the rescan action with no Note holding unwritten edits
+Then the tree shows the new Note without an application restart
+
+Given a Note is open with buffered edits not yet written
+When the user invokes the rescan action
+Then the action is unavailable or refused, and no index rows are discarded
+
+Given the full reindex fails (unreadable file)
+When the rescan attempt completes
+Then the failure surfaces as a message naming the failure, and the tree keeps its previous view rather than showing a partial one
 ```
