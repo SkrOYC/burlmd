@@ -1,5 +1,28 @@
 # Logical Containers
 
+## Structure
+
+```mermaid
+graph LR
+    UI[Presentation Container]
+    Core[Core Engine]
+    Local[Local Repository]
+    Sync[Sync Manager]
+    Sec[Secure Storage]
+    Remote[Remote Repository]
+    OS[Host OS]
+
+    UI <-- "in-process FFI call / structured return" --> Core
+    Core <-- "in-process call" --> Local
+    Sync -- "in-process call" --> Local
+    Sync <-.-> "network: Git smart protocol over HTTPS" --> Remote
+    Core -- "OS credential API" --> Sec
+    Sync -- "OS credential API" --> Sec
+    Sec --- OS
+```
+
+The synchronous editing path runs entirely through the left edge: keystrokes cross the FFI boundary, and the Core serves them from memory and the local index without ever touching the network. The dotted edge is the only asynchronous, potentially failing connection in the system, which is why it belongs to the Sync Manager alone.
+
 ## 1. Presentation Container
 - **Logical Type:** UI Client (Flutter)
 - **Responsibility:** Captures user input and renders the hybrid Markdown editor interface based on state provided by the Core Engine. It is strictly stateless and maintains no persistent data of its own.

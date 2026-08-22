@@ -16,3 +16,12 @@ sequenceDiagram
     Core-->>UI: Formatted search results payload
     UI->>UI: Render search result list
 ```
+
+## Failure path
+
+The search surface has exactly two honest states: results, or an explicit empty state. Both are rendered; neither invents content.
+
+- **No matches:** an empty state, never an error — a query matching nothing is a normal answer (CAP-FIND-01).
+- **Query syntax hazards:** punctuation that a full-text engine would treat as grammar reaches the Core escaped or quoted so it yields results or an empty state, never a raw engine error surfaced to the user.
+- **Index unavailable or unreadable:** the Core reports the failure upward and the shell renders it as an error state with the recovery affordance — a full reindex exists precisely because the index is derived state. Search is degraded, never the editor: the Local-First Mandate means a broken index must not block reading or writing Notes.
+- **Result limit:** the caller supplies the limit, so truncation is a visible choice of the surface rather than a silent cap; the UI pages or widens it rather than hiding matches.

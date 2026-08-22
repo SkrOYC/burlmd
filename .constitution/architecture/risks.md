@@ -1,5 +1,18 @@
 # Logical Risks & Technical Debt
 
+## Trust Boundaries & Threat Notes (STRIDE)
+
+Four boundaries exist where something outside the application's own trust domain touches user data. Depth scales with actual risk; these are working notes, not a certified model.
+
+| Boundary | Dominant threats | Posture |
+| :--- | :--- | :--- |
+| **OAuth provider ↔ loopback redirect** (flow-auth-handshake) | Spoofing, Tampering: a malicious local process racing the loopback listener or intercepting the redirect; session fixation via replayed codes | PKCE with verifier never crossing to the caller; `state` minted, retained Core-side against a single-use flow id, and compared before any token exchange — a check that exists now because its absence shipped once and read as protection while being decoration. Tokens live only in OS secure storage and never transit logs or history. |
+| **Remote repository** (pull path) | Tampering, Information disclosure: a compromised or hostile repository delivers crafted content — conflict-marker payloads, frontmatter bombs, pathological nesting — that becomes bundle input | Pulled content is untrusted input: it passes the same frontmatter validation, alias-rejection and normalization rules as foreign bundles before reaching the index. The encrypted index is derived state and discardable, bounding blast radius. Disclosure is bounded by repository privacy, which provisioning enforces. |
+| **Agent actor writes to the Workspace** (CAP-PORT-03, CAP-WS-05) | Tampering, Elevation via path tricks: link destinations escaping the bundle (`../`), filenames that lie about their encoding, YAML alias bombs | Destination resolution normalizes `..` and refuses to climb above the bundle root; non-UTF-8 names are skipped rather than lossily accepted; alias-bearing frontmatter is rejected before materialization. A hostile Note can at worst fail to index or produce ghost Links — it cannot cause writes outside the bundle or crash the host. |
+| **OS secure storage** (root key, tokens) | Information disclosure, Elevation: key or token extraction by another process or a memory scrape | Keys ride the OS credential facility and raw-key application; credentials are excluded from logs and version history by constraint; zeroization applies to in-memory key material. Residual exposure is the platform's, not this system's to promise away. |
+
+Denial of service against the editing surface is treated under resilience (the write tiers, atomic commits) rather than here: the adversary there is bad luck, not an actor.
+
 ## 1. FFI Serialization Overhead
 - **Risk:** Passing the entire markdown AST tree back and forth across the FFI boundary on every block edit could violate the 16ms frame budget, causing UI stutter.
 - **Mitigation:** Rely on `flutter_rust_bridge` (v2)'s high-performance SSE (Simple Serialization Engine) which minimizes overhead. If latency persists for enormous files, refactor the FFI boundary to stream differential AST updates (only the modified node) instead of the entire tree.
