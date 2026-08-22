@@ -1,6 +1,6 @@
 # Execution Flow: Edit Note
 
-**Maps to PRD Capability:** CAP-EDIT-01 (the focused Block shows raw Markdown source while every other Block renders formatted), CAP-EDIT-03 (create, split, merge and delete Blocks through ordinary typing), CAP-WS-02 (every editing session captured in local version history), CAP-WS-03 (in-progress edits survive abrupt termination).
+**Maps to PRD Capability:** CAP-EDIT-01 (the focused Block shows raw Markdown source while every other Block renders formatted), CAP-EDIT-03 (create, split, merge and delete Blocks through ordinary typing), CAP-EDIT-04 (selection spanning multiple Blocks copies as faithful Markdown; range edits dispatch to the Core as single atomic operations), CAP-EDIT-05 (inline emphasis shortcuts wrap or unwrap the focused Block's source text), CAP-WS-02 (every editing session captured in local version history), CAP-WS-03 (in-progress edits survive abrupt termination).
 
 ```mermaid
 sequenceDiagram

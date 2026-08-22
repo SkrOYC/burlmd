@@ -48,3 +48,12 @@ The last of those post-conditions is what makes adoption a real third path rathe
 ## Indexing cost
 
 The scan step is bounded by `prd/constraints.md`'s Workspace Open Latency constraint: interaction must not block for more than 1 second regardless of Note count. For any Workspace large enough to exceed that, indexing continues incrementally in the background while the Workspace is already usable, per `risks.md` risk 3.
+
+## Failure path
+
+Bootstrap is the one flow whose failures are total: if it cannot converge on its post-conditions, there is no application to degrade gracefully within. Each failure therefore names its honest surface.
+
+- **Keychain unavailable:** the root key cannot be stored or read back, so the encrypted index cannot open. The application reports this at startup rather than silently falling back to an unencrypted index — the At-Rest Protection constraint makes that fallback a lie. Recovery belongs to the user (unlock the keychain, free disk space); retrying bootstrap converges because every step is idempotent.
+- **Workspace directory unwritable** (permissions, full disk): creation or repository initialization fails with a path-specific error naming the directory, before any index work begins. Nothing partial is left behind that a retry would trip over.
+- **Repository initialization fails:** adoption and initialize-local both report it and stop. A Workspace without history cannot honor CAP-WS-02, so proceeding without one would manufacture the exact silently-broken state ADR-005 decision 8 exists to prevent.
+- **Index build fails mid-scan:** the bundle on disk is untouched — the scan only reads. The Workspace opens with whatever indexed correctly and the rescan affordance rebuilds the rest; per the Local-First Mandate the user can still open and edit Notes while the index heals.

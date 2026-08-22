@@ -1,5 +1,21 @@
 # Stage 2: Architecture Changelog
 
+## v1.3.0
+Evolution pass driven by the Realign interview of 2026-08-21 and PRD v1.2.0, closing the compliance gaps the audit named while leaving every logical container, boundary and pattern untouched.
+
+**`containers.md` gains its required structure diagram** — a module-and-process view fitting the System/Native archetype, with every edge carrying its logical protocol category (in-process FFI call, in-process call, OS credential API, network Git smart protocol). The diagram makes the load-bearing property visible: exactly one asynchronous edge exists in the system, belongs to the Sync Manager alone, and never sits on the editing path.
+
+**Three flows added, closing P0 coverage:** `flow-note-lifecycle.md` (create/rename/move/delete as one atomic operation across files, index rows and inbound Link text, with journal unwind drawn explicitly — mapping CAP-LIFE-01…04 and establishing CAP-PORT-01 at creation), `flow-link-graph.md` (completion insertion, follow, ghost create-on-follow with re-resolution instead of cached flags — mapping CAP-GRAPH-02…04), and `flow-workspace-navigation.md` (whole-tree render, empty Directories, ephemeral expansion state — mapping CAP-GRAPH-01). The edit flow's traceability header widened to name CAP-EDIT-04 and CAP-EDIT-05, whose range dispatch and delimiter-wrapping behaviors it already specified without citing them.
+
+**Failure paths written for the two flows that lacked them.** `flow-search.md` now states its two honest states (results or explicit empty) plus index-unavailable degradation that must never block editing; `flow-workspace-bootstrap.md` names each total-failure surface honestly — keychain unavailable refuses rather than falling back to an unencrypted index, because At-Rest Protection makes that fallback a lie, and every step is idempotent so retry converges.
+
+**`risks.md` gains STRIDE notes** over the four real trust boundaries — OAuth loopback redirect, Remote pull path, Agent writes to disk, OS secure storage — recording both posture and the one place a protection previously existed only on paper (the CSRF `state` comparison that shipped unchecked).
+
+**`resilience.md` adds Observability & Diagnostics and Configuration** as cross-cutting concerns: a structured local log is now stated as a first-class deliverable with content exclusion, and the configuration surface stays minimal by decision. Conflict Resilience records the marker-flow ruling — unresolved Suggestions never gate sync and may flow through history until resolved.
+
+**`strategy.md` version marker reconciled** to the stage version after lagging since v1.1.0; its narrative needed no amendment — the pattern and its trade-offs are unchanged.
+
+Not changed, deliberately: the two stale sync flows remain banner-marked for their owning epics' passes, per their standing deferral record.
 ## v1.2.0
 Freshness pass at the close of **Epic D (Workspace & Persistence)**. Patch-shaped in substance but recorded as a minor bump, because four risks moved from *mitigation planned* to *mitigation implemented* and that is a real change in what this layer asserts about the system. No container, flow or pattern was added, removed or repurposed.
 
