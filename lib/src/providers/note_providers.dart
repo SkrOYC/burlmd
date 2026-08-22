@@ -1,4 +1,5 @@
 import 'package:burlmd/src/providers/rust_api_provider.dart';
+import 'package:burlmd/src/providers/workspace_provider.dart';
 import 'package:burlmd/src/rust/draft.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -38,15 +39,72 @@ class NoteController extends Notifier<NoteState?> {
   /// session commit, draft-row clear — so skipping it on a switch would
   /// leave the outgoing session uncommitted and absent from version
   /// history. A close that fails aborts the switch: opening the new Note
-  /// on top of an uncommitted session would bury the failure.
-  Future<void> open(String noteId) async {
+  /// on top of an uncommitted session would bury the failure. On that
+  /// abort [selectedNoteIdProvider] is rolled back to the Note that is
+  /// still open, so the tree highlight never names a Note the Core refused
+  /// to reach — and the listener it fires re-enters this method only to hit
+  /// the already-open fast path below, leaving the reported failure up.
+  ///
+  /// Calls are serialized through [_pendingOpen]: `open` reads `state` to
+  /// decide whether a close is owed, but assigns `state` only after an FFI
+  /// round trip, so two rapid selections racing on the unawaited gap could
+  /// each see the same stale outgoing Note — the second would skip the
+  /// first's close (losing its commit tier) and the provider could settle
+  /// on whichever round trip resolved last rather than the selection the
+  /// user actually made last. Chaining every request behind the previous
+  /// one makes close/open strictly sequential; a ticket overtaken by a
+  /// newer selection ([_openRequests]) returns without acting at all, so
+  /// intermediate notes are neither closed nor opened redundantly.
+  Future<void> open(String noteId) {
+    final ticket = ++_openRequests;
+    final previous = _pendingOpen ?? Future<void>.value();
+    late final Future<void> mine;
+    mine = () async {
+      await previous;
+      try {
+        await _openExclusive(ticket, noteId);
+      } finally {
+        // Drop the chain once the tail catches up so completed work can be
+        // collected instead of growing an unbounded await chain.
+        if (identical(_pendingOpen, mine)) _pendingOpen = null;
+      }
+    }();
+    _pendingOpen = mine;
+    return mine;
+  }
+
+  /// The tail of the serialized [open] chain, or `null` when no switch is
+  /// in flight or queued. Every request awaits this before touching the
+  /// Core, which is what makes close-before-open orderable.
+  Future<void>? _pendingOpen;
+
+  /// Monotonic count of [open] requests. A queued request whose ticket no
+  /// longer equals the newest one was superseded while waiting and must do
+  /// nothing.
+  int _openRequests = 0;
+
+  Future<void> _openExclusive(int ticket, String noteId) async {
+    // A newer selection arrived while this one sat in the queue: skip it
+    // entirely rather than churning closes/opens for Notes the user has
+    // already navigated past.
+    if (ticket != _openRequests) return;
     final api = ref.read(rustApiProvider);
     final current = state;
-    if (current != null && current.metadata.id != noteId) {
+    if (current != null && current.metadata.id == noteId) {
+      // Already the open Note. Most commonly the rollback path above:
+      // re-running the open would succeed and clear the error surface
+      // explaining why the aborted switch failed, so treat it as done.
+      return;
+    }
+    if (current != null) {
       try {
         await api.closeNote(current.metadata.id);
       } catch (error) {
         ref.read(editorErrorProvider.notifier).report(error);
+        // The switch aborts with the old Note still open; point the tree
+        // back at it so the selection highlight matches what the editor
+        // actually shows. The error stays surfaced above.
+        ref.read(selectedNoteIdProvider.notifier).select(current.metadata.id);
         return;
       }
     }
