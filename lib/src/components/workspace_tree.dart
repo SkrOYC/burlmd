@@ -50,6 +50,11 @@ class _WorkspaceTreeState extends ConsumerState<WorkspaceTree> {
   @override
   Widget build(BuildContext context) {
     final tree = ref.watch(workspaceTreeProvider);
+    // Watched, not read: this is the selected-row highlight's only rebuild
+    // trigger. Reading it left every row's `selected` stale after the first
+    // tap (the P2 carried over from E003's review) — with a watch, a
+    // selection change rebuilds the rows and moves the highlight.
+    final selectedId = ref.watch(selectedNoteIdProvider);
 
     return tree.when(
       loading: () => const Center(child: CircularProgressIndicator()),
@@ -60,11 +65,15 @@ class _WorkspaceTreeState extends ConsumerState<WorkspaceTree> {
           style: Theme.of(context).textTheme.bodySmall,
         ),
       ),
-      data: (root) => ListView(children: _rows(root)),
+      data: (root) => ListView(children: _rows(root, selectedId)),
     );
   }
 
-  List<Widget> _rows(List<TreeNode> nodes, {int depth = 0}) {
+  List<Widget> _rows(
+    List<TreeNode> nodes,
+    String? selectedId, {
+    int depth = 0,
+  }) {
     // Defensive ordering: the Core contract already returns Directories
     // before Notes sorted by name at each level, but the rendered tree owns
     // this criterion regardless of input order.
@@ -82,13 +91,13 @@ class _WorkspaceTreeState extends ConsumerState<WorkspaceTree> {
           onTap: () => _toggle(directory.path),
         ),
         if (_expanded.contains(directory.path))
-          ..._rows(directory.children, depth: depth + 1),
+          ..._rows(directory.children, selectedId, depth: depth + 1),
       ],
       for (final note in notes)
         _NoteRow(
           node: note,
           depth: depth,
-          selected: ref.read(selectedNoteIdProvider) == note.id,
+          selected: selectedId == note.id,
           onTap: () {
             ref.read(selectedNoteIdProvider.notifier).select(note.id);
             widget.onNoteSelected?.call(note.id);

@@ -14,6 +14,12 @@ class Editor extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final error = ref.watch(editorErrorProvider);
+    // The Core refused an operation on the active Note (open failed, a close
+    // on switch aborted it, or update_block rejected an edit). Surfaced here
+    // rather than swallowed: before SHEL-E004 this widget had no error
+    // surface at all, so every such failure was invisible to the user.
+    if (error != null) return _ErrorSurface(message: '$error');
     final note = ref.watch(activeNoteProvider);
     if (note == null) return const SizedBox.shrink();
     // ListView.builder rather than a `children:` list, so only the blocks
@@ -146,6 +152,49 @@ class _EditableParagraphState extends ConsumerState<_EditableParagraph> {
       // failures are invisible to the user rather than merely unstyled.
       ref.read(activeNoteProvider.notifier).updateBlock(widget.blockPath, text);
     },
+  );
+}
+
+/// The editor's error surface (`SHEL-E004`): a persistent, readable panel
+/// naming what the Core reported, shown in place of note content until the
+/// next successful open clears [editorErrorProvider]. Scrollable and
+/// soft-wrapped so even a long Rust-side message can neither overflow nor
+/// clip.
+class _ErrorSurface extends StatelessWidget {
+  const _ErrorSurface({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) => Center(
+    child: SingleChildScrollView(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 480),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.error_outline, semanticLabel: 'Error'),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Something went wrong talking to the note core',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              SelectableText(message),
+            ],
+          ),
+        ),
+      ),
+    ),
   );
 }
 
