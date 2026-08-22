@@ -188,10 +188,12 @@ class WriteTierMonitor extends Notifier<WriteTierSurface> {
         status: ref.read(rustApiProvider).noteWriteStatus(open.metadata.id),
       );
     } catch (_) {
-      // First read failed: report nothing yet rather than a fabricated
-      // status, but keep the timer running so later polls can escalate.
+      // First read failed: report no status yet rather than a fabricated
+      // one, but publish the failure count so escalation accounting stays
+      // honest — returning `idle` (pollsFailed 0) would understate the
+      // streak by one and delay [statusUnavailable] past the threshold.
       _consecutiveFailures = 1;
-      return WriteTierSurface.idle;
+      return WriteTierSurface(pollsFailed: _consecutiveFailures);
     }
   }
 

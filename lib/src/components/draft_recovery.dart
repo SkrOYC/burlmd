@@ -59,7 +59,7 @@ class RecoveredDraftsPanel extends ConsumerWidget {
             subtitle: const Text(
               'Unsaved changes were recovered from a previous session.',
             ),
-            onTap: () => _open(context, ref, note.id),
+            onTap: () => _open(ref, note.id),
             trailing: IconButton(
               tooltip: 'Dismiss notice',
               icon: const Icon(Icons.close),
@@ -72,7 +72,7 @@ class RecoveredDraftsPanel extends ConsumerWidget {
     );
   }
 
-  void _open(BuildContext context, WidgetRef ref, String noteId) {
+  void _open(WidgetRef ref, String noteId) {
     // Publish only. Driving `activeNoteProvider.open()` here as well would
     // issue a second, redundant open alongside the shell listener that the
     // same publication already triggers.
@@ -101,6 +101,40 @@ class WriteTierNotice extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // A refused per-keystroke write (`update_block` tier 1). Surfaced here,
+    // above the editor, rather than through [editorErrorProvider]: the
+    // flow's contract is that the user never loses sight of their text
+    // because of a transient write hiccup — the draft row holds the edit,
+    // the buffer keeps rendering, and this notice names what happened.
+    // Core's polled `note_write_status` cannot carry it (`lastError`
+    // records tier-2 failures only), so the Dart side publishes it
+    // directly. Cleared by the next successful keystroke or a note
+    // switch/reload.
+    final keystrokeFailure = ref.watch(keystrokeWriteFailureProvider);
+    if (keystrokeFailure != null) {
+      return Card(
+        margin: const EdgeInsets.all(8),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              Icon(
+                Icons.warning_amber_rounded,
+                semanticLabel: 'Edit not saved yet',
+                color: Theme.of(context).colorScheme.error,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Your latest edit could not be saved yet ($keystrokeFailure). '
+                  'Your text is still here; saving retries automatically.',
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
     final surface = ref.watch(writeTierMonitorProvider);
     // The poll channel itself is down: after several consecutive failed
     // polls no status — not even a previously good one — can be trusted, so

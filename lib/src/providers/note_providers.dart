@@ -23,6 +23,30 @@ class EditorError extends Notifier<Object?> {
   void report(Object? error) => state = error;
 }
 
+/// The last refused per-keystroke write (`update_block`, ADR-008 tier 1), or
+/// `null` when the latest keystroke went through. Deliberately **not**
+/// [editorErrorProvider]: flow-edit-note.md requires that a failed keystroke
+/// write leaves the draft row — and the rendered text the user is typing —
+/// exactly where they are, with the failure surfaced beside the content, not
+/// instead of it. Replacing the whole Note view here would blank the very
+/// buffer the user is mid-keystroke into because of a transient write hiccup.
+///
+/// Core cannot carry this one: its `note_write_status.lastError` records
+/// tier-2 file-write failures only; a failed tier-1 draft-row write returns
+/// an error across the boundary without recording it there. So the Dart side
+/// surfaces it directly through the same surface state [WriteTierNotice]
+/// watches above the editor.
+final keystrokeWriteFailureProvider =
+    NotifierProvider<KeystrokeWriteFailure, Object?>(KeystrokeWriteFailure.new);
+
+/// Holds [keystrokeWriteFailureProvider]'s value.
+class KeystrokeWriteFailure extends Notifier<Object?> {
+  @override
+  Object? build() => null;
+
+  void report(Object? error) => state = error;
+}
+
 /// Holds the currently open note's state. UI widgets must stay stateless
 /// regarding note content and read it from this provider rather than
 /// caching it themselves.
@@ -111,8 +135,11 @@ class NoteController extends Notifier<NoteState?> {
     try {
       state = await api.openNote(noteId);
       // A successful open clears any earlier failure so the surface
-      // reflects the present, not the last thing that went wrong.
+      // reflects the present, not the last thing that went wrong — both
+      // surfaces: the old Note's keystroke-write failure belongs to a
+      // session that just ended.
       ref.read(editorErrorProvider.notifier).report(null);
+      ref.read(keystrokeWriteFailureProvider.notifier).report(null);
     } catch (error) {
       ref.read(editorErrorProvider.notifier).report(error);
       // Mirror the close-abort branch above: when another Note is still
@@ -135,11 +162,14 @@ class NoteController extends Notifier<NoteState?> {
   /// edit back into the rendered AST on blur is `commit_block`'s job, which
   /// is `EDIT-F002` territory rather than this ticket's.
   ///
-  /// `update_block` is `#[frb(sync)]` and therefore throws synchronously on
-  /// every Core refusal — an unaddressable Block path, a failed draft write.
-  /// Those are surfaced through [editorErrorProvider] instead of being
-  /// raised into an empty callback stack (`SHEL-E004`: errors crossing the
-  /// boundary are never swallowed).
+  /// A refusal does **not** reach [editorErrorProvider]. That surface replaces
+  /// the Note view wholesale, and flow-edit-note.md forbids exactly that for a
+  /// failed keystroke write: the draft row stays in place, the text stays on
+  /// screen, and the failure is surfaced *beside* it. It is published through
+  /// [keystrokeWriteFailureProvider] — which [WriteTierNotice] renders above
+  /// the editor — instead. Only open/close boundary errors keep flowing to
+  /// [editorErrorProvider], as today. A subsequent keystroke that succeeds
+  /// clears the notice, as do open/close/reload below.
   void updateBlock(List<int> blockPath, String source) {
     final current = state;
     if (current == null) return;
@@ -147,8 +177,9 @@ class NoteController extends Notifier<NoteState?> {
       ref
           .read(rustApiProvider)
           .updateBlock(current.metadata.id, blockPath, source);
+      ref.read(keystrokeWriteFailureProvider.notifier).report(null);
     } catch (error) {
-      ref.read(editorErrorProvider.notifier).report(error);
+      ref.read(keystrokeWriteFailureProvider.notifier).report(error);
     }
   }
 
@@ -175,6 +206,7 @@ class NoteController extends Notifier<NoteState?> {
   void clear() {
     state = null;
     ref.read(editorErrorProvider.notifier).report(null);
+    ref.read(keystrokeWriteFailureProvider.notifier).report(null);
   }
 
   /// Reloads the currently open Note from disk through `reload_note`
@@ -198,6 +230,8 @@ class NoteController extends Notifier<NoteState?> {
           .reloadNote(current.metadata.id);
       state = reloaded;
       ref.read(editorErrorProvider.notifier).report(null);
+      // The reload replaced the buffer whose write was failing.
+      ref.read(keystrokeWriteFailureProvider.notifier).report(null);
     } catch (error) {
       ref.read(editorErrorProvider.notifier).report(error);
     }

@@ -1,6 +1,7 @@
 import 'package:burlmd/src/components/draft_recovery.dart';
 import 'package:burlmd/src/components/editor.dart';
 import 'package:burlmd/src/components/search_panel.dart';
+import 'package:burlmd/src/components/status_message.dart';
 import 'package:burlmd/src/components/workspace_tree.dart';
 import 'package:burlmd/src/providers/note_providers.dart';
 import 'package:burlmd/src/providers/rust_api_provider.dart';
@@ -117,9 +118,7 @@ class WorkspaceScreen extends ConsumerWidget {
 }
 
 void _showRescanMessage(BuildContext context, String message) {
-  ScaffoldMessenger.of(context)
-    ..hideCurrentSnackBar()
-    ..showSnackBar(SnackBar(content: Text(message)));
+  showStatusMessage(context, message);
 }
 
 /// The state of the latest user-invoked rescan (`SHEL-E008`, CAP-WS-06).

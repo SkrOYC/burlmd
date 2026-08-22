@@ -37,7 +37,6 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 QA_DIR="$REPO_ROOT/.qa"
 SHOT="$QA_DIR/$NAME.png"
 
-PROCESS_START_TIMEOUT=180 # seconds allowed for the launched process to be observed running (after both builds)
 RENDER_TIMEOUT=60         # seconds allowed for the window to appear
 SETTLE_SECONDS=3      # grace after first sign of rendering
 POLL_INTERVAL=0.5
@@ -78,8 +77,11 @@ fail() {
 deadline() { echo $(( $(date +%s) + $1 )); }
 timed_out() { (( $(date +%s) >= $1 )); }
 
-# Byte offset of the first pixel byte of a binary PPM (P6) file: the header is
-# "P6\n<w> <h>\n<maxval>\n".
+# Byte offset of the first pixel byte of a binary PPM (P6) file. The header
+# is three newline-terminated records — "P6", "<w> <h>", "<maxval>" — and the
+# awk sums each record's length plus its newline over NR = 1..3, so the value
+# printed at NR == 3 lands just past the maxval line's \n: exactly where the
+# raw RGB bytes begin.
 ppm_pixel_offset() {
   head -c 64 "$1" | awk 'BEGIN { RS = "\n" } NR < 4 { off += length($0) + 1 }
     NR == 3 { print off + 0; exit }'
@@ -123,14 +125,13 @@ DIFF_THRESHOLD=$(( noise_pixels * 3 + 20000 ))
 echo "[smoke-shot] desktop noise floor: ${noise_pixels} px; render threshold: ${DIFF_THRESHOLD} px"
 
 echo "[smoke-shot] launching $APP_BIN..."
+# No separate "did it start" wait exists here, deliberately: `kill -0` on a
+# freshly backgrounded PID succeeds immediately whether or not exec worked,
+# so such a loop would detect nothing. A process that dies at startup is
+# caught by the render loop below, whose first `kill -0` fails and reports
+# the exit status.
 "$APP_BIN" &
 APP_PID=$!
-
-PROCESS_START_DEADLINE="$(deadline "$PROCESS_START_TIMEOUT")"
-until kill -0 "$APP_PID" 2>/dev/null; do
-  timed_out "$PROCESS_START_DEADLINE" && fail "app process never started"
-  sleep "$POLL_INTERVAL"
-done
 
 echo "[smoke-shot] waiting for the window to render..."
 RENDER_DEADLINE="$(deadline "$RENDER_TIMEOUT")"
