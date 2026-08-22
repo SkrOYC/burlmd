@@ -154,9 +154,21 @@ pub async fn workspace_tree() -> Result<Vec<TreeNode>, AppError> {
     unimplemented!()
 }
 
-/// Copies the bundle to `destination` (CAP-PORT-02). Cheap by construction:
-/// the Workspace is plaintext Markdown on disk at all times, so this is a tree
-/// copy plus a conformance check, not a decrypt-and-transform pipeline.
+#[frb]
+pub enum ExportForm {
+    /// A plain directory copy of the bundle, version history excluded.
+    Copy,
+    /// A single `.okf` archive of the same tree -- the packaged distribution
+    /// form OKF §3 itself names. Nothing proprietary inside.
+    BundleArchive,
+}
+
+/// Exports the Workspace to `destination` (CAP-PORT-02), as a plain bundle
+/// copy or as one `.okf` Bundle Archive.
+///
+/// Cheap by construction: the Workspace is plaintext Markdown on disk at all
+/// times, so this is a tree copy plus a conformance check, not a
+/// decrypt-and-transform pipeline.
 /// `.git/` is excluded.
 ///
 /// Deliberately *not* justified by "the live Workspace is already conformant".
@@ -169,7 +181,10 @@ pub async fn workspace_tree() -> Result<Vec<TreeNode>, AppError> {
 /// a Workspace the user is entitled to take elsewhere would invert the
 /// capability's purpose.
 #[frb]
-pub async fn export_workspace(destination: String) -> Result<(), AppError> {
+pub async fn export_workspace(
+    destination: String,
+    form: ExportForm,
+) -> Result<(), AppError> {
     unimplemented!()
 }
 
@@ -1111,6 +1126,13 @@ pub async fn authenticate_workspace(
 /// `repository` is `None`, otherwise adopts the named one, which must be
 /// empty. Updates `workspaces.provider` and `remote_url` in place; never
 /// re-clones or discards local state.
+///
+/// **Provider seam (ADR-009):** `provider` names an entry in the provider
+/// registry, not a hard-coded branch. GitHub ships first as the proven
+/// surface; GitLab (CAP-SYNC-09) is the seam's second consumer and lands
+/// behind it. Adding a provider must be additive: one auth/provisioning
+/// module plus a registry entry, with no changes to any function in this
+/// contract.
 #[frb]
 pub async fn connect_remote(
     provider: String,
@@ -1123,6 +1145,152 @@ pub async fn connect_remote(
 /// with every editing capability intact (CAP-SYNC-05).
 #[frb]
 pub async fn sign_out() -> Result<(), AppError> {
+    unimplemented!()
+}
+
+/// Detaches the Remote from the active Workspace (CAP-SYNC-06): removes the
+/// remote from the repository config, flips `workspaces.provider` back to
+/// `"local"` and clears `remote_url`, leaving all version history exactly as
+/// it was. Unpushed local commits simply remain local commits; reconnecting
+/// later re-adds the remote and publishes them then.
+///
+/// Detach succeeds offline and without credentials -- it is local bookkeeping,
+/// not a network call. It is the inverse of `connect_remote`'s attach half
+/// and deletes nothing.
+#[frb]
+pub async fn detach_remote() -> Result<WorkspaceInfo, AppError> {
+    unimplemented!()
+}
+
+// ---------------------------------------------------------------------------
+// Realignment surfaces (2026-08-21) -- declared so no downstream stage invents
+// them; each stays `unimplemented!()` until its owning epic lands, exactly as
+// `export_workspace` has been since its capability was scoped.
+// ---------------------------------------------------------------------------
+
+#[frb]
+pub struct CollisionEntry {
+    /// The concept id both sides claim.
+    pub concept_id: String,
+    /// Title as it stands in the connected Workspace.
+    pub local_title: String,
+    /// Title as it stood in the source Workspace.
+    pub incoming_title: String,
+}
+
+#[frb]
+pub enum CollisionResolution {
+    KeepLocal,
+    KeepIncoming,
+    /// Keep both: the incoming Note arrives under a renamed identity, and
+    /// inbound Links are rewritten per the lifecycle rules.
+    KeepBothRenamed { new_title: String },
+}
+
+/// Plans a guided consolidation from a source Workspace directory
+/// (CAP-SYNC-08). Returns the non-conflicting Notes that will migrate and
+/// every identity collision requiring an explicit decision. Reads only;
+/// neither side is modified by planning.
+#[frb]
+pub async fn plan_consolidation(
+    source_path: String,
+) -> Result<(Vec<NoteMetadata>, Vec<CollisionEntry>), AppError> {
+    unimplemented!()
+}
+
+/// Applies a planned consolidation. Non-conflicting Notes migrate with fresh
+/// history ("Import N Notes"); each collision resolves exactly as decided;
+/// the source Workspace is never modified. Decisions are positional against
+/// `plan_consolidation`'s collision list from the same `source_path`, so a
+/// plan must be applied without an intervening change to either side.
+#[frb]
+pub async fn apply_consolidation(
+    source_path: String,
+    decisions: Vec<CollisionResolution>,
+) -> Result<WorkspaceInfo, AppError> {
+    unimplemented!()
+}
+
+#[frb]
+pub struct NoteVersion {
+    /// Opaque version identifier (a commit identity under the history store).
+    pub version_id: String,
+    pub timestamp: i64,
+    /// The session commit message, naming the Note and the nature of the change.
+    pub message: String,
+}
+
+/// Lists the recorded past versions of one Note, newest first (CAP-HIST-01).
+/// One entry per editing session, per the commit granularity decision.
+#[frb]
+pub async fn list_note_versions(note_id: String) -> Result<Vec<NoteVersion>, AppError> {
+    unimplemented!()
+}
+
+/// Restores a past version as the Note's current content (CAP-HIST-01).
+/// Destructive to unwritten work by design: the UI confirms first, mirroring
+/// the recovered-draft confirmation, and routes through the same reload path.
+#[frb]
+pub async fn restore_note_version(
+    note_id: String,
+    version_id: String,
+) -> Result<NoteState, AppError> {
+    unimplemented!()
+}
+
+/// Reverses the user's most recent content operation in the open Note
+/// (CAP-EDIT-08); redo reapplies what undo reversed. Covers splice, Block and
+/// range operations; excludes lifecycle renames and anything sync applied
+/// (ADR-010). Depth is bounded; at the bound the oldest step falls off.
+#[frb(sync)]
+pub fn undo_note(note_id: String) -> Result<NoteState, AppError> {
+    unimplemented!()
+}
+
+/// Reapplies the most recently undone operation (CAP-EDIT-08).
+#[frb(sync)]
+pub fn redo_note(note_id: String) -> Result<NoteState, AppError> {
+    unimplemented!()
+}
+
+/// Finds every occurrence of `query` inside one Note, including occurrences
+/// inside rendered inline structure (CAP-FIND-03). Ranges resolve through the
+/// same span map cross-Block selection uses; runs that cannot be addressed
+/// interiorly match atomically, per the span-map rule.
+#[frb]
+pub async fn find_in_note(note_id: String, query: String) -> Result<Vec<BlockRange>, AppError> {
+    unimplemented!()
+}
+
+/// Replaces every occurrence of `query` with `replacement` as ONE atomic
+/// multi-range operation (CAP-FIND-03), never a sequence of per-range calls:
+/// intermediate states would violate the same atomicity rule range editing
+/// already establishes.
+#[frb]
+pub async fn replace_all_in_note(
+    note_id: String,
+    query: String,
+    replacement: String,
+) -> Result<NoteState, AppError> {
+    unimplemented!()
+}
+
+#[frb]
+pub struct DiagnosticsBundle {
+    /// Recent structured log entries: errors, retries, scheduler decisions,
+    /// sweep outcomes. Note content NEVER enters this payload -- the exclusion
+    /// is what makes the bundle safe to hand to a third party (CAP-SUP-01,
+    /// Zero Content Telemetry).
+    pub entries: Vec<String>,
+    pub generated_at: i64,
+    /// Application and index schema versions for triage; no user identifiers.
+    pub app_version: String,
+}
+
+/// Produces a redacted diagnostics bundle on demand (CAP-SUP-01). A pure read
+/// over the local log channel; nothing is transmitted anywhere by this call.
+#[frb(sync)]
+pub fn collect_diagnostics() -> Result<DiagnosticsBundle, AppError> {
     unimplemented!()
 }
 

@@ -1,5 +1,17 @@
 # Stage 3: Technical Implementation Changelog
 
+## v1.3.0
+Evolution pass driven by the Realign interview of 2026-08-21 and PRD v1.2.0, giving every new capability a contract-shaped surface so no downstream stage invents one. No shipped signature changed and no decision was reversed; the BOM is untouched.
+
+**`contracts/ffi_api.rs` widens in two places and gains one section.** `export_workspace` now takes an `ExportForm` (`Copy` | `BundleArchive`) for the `.okf` archive ruling — it remains declared-unimplemented, as before. `connect_remote` documents the provider seam (ADR-009): registry dispatch, GitHub first, GitLab additive behind it. A trailing "Realignment surfaces" section declares `detach_remote`, `plan_consolidation` / `apply_consolidation` with explicit `CollisionResolution` decisions, `list_note_versions` / `restore_note_version`, `undo_note` / `redo_note`, `find_in_note` / `replace_all_in_note` (replace-all specified as ONE atomic multi-range operation), and `collect_diagnostics` — each documented against its capability id and each `unimplemented!()` until its owning epic, matching the `export_workspace` precedent.
+
+**Three ADRs added.** ADR-009 (provider-neutral seam: one auth/provisioning module plus registry entry per provider; additive-only rule), ADR-010 (Core-side undo command stack: bounded depth, content operations only, lifecycle and sync-applied changes excluded, stack cleared when a Note closes), and ADR-011 (one structured local log channel, content never enters it, diagnostics exported on demand only).
+
+**`guidelines.md` gains the commit convention** (Conventional Commits, followed since Epic A but undocumented) and two standing standards timed to precede Epic E's first widgets: keyboard completeness plus `Semantics` labels as a hard review bar (Q20), and `gen-l10n` string externalization from the first screen (Q21). The layout tree now names `api/auth.rs`, `api/simple.rs` and `api/ffi_api.rs` individually — closing the audit drift where `simple.rs` existed in the repository but in no specification.
+
+**No durable shapes added.** Undo state lives in Core memory bounded by session; versions read from history rather than schema; consolidation migrates rows the schema already holds; preferences storage deliberately waits for its design epic. `schema.sql` is unchanged and stays byte-identical to the live copy.
+
+**Deliberately deferred to their owning epics' Stage 3 passes:** the concrete logging dependency choice for ADR-011 (added to the BOM by the ticket that wires it, not speculatively), the HTML rendition surface for CAP-PORT-04 (waits for the design system per its own rationale, then amends this contract), and the preferences persistence shape for CAP-PREF-01 (same reasoning). Declaring them now would be speculation wearing a contract.
 ## v1.2.0
 Freshness and reconciliation pass at the close of **Epic D (Workspace & Persistence)**, run against the nine shipped tickets `WSPC-D001` … `WSPC-D009`. Minor bump: two ADRs gained amendments and the normative schema gained a column, with no decision reversed and no contract signature changed.
 

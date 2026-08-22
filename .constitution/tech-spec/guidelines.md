@@ -1,5 +1,12 @@
 # Project Structure & Guidelines
 
+## Commits
+This repository uses [Conventional Commits](https://www.conventionalcommits.org/):
+`type(scope): summary`, with types `feat`, `fix`, `docs`, `chore`, `refactor`, and
+`test`; scope names the area (`docs(prd)`, `fix(editor)`). The history has followed
+this shape since Epic A; it is documented here so review can hold work to it rather
+than infer it.
+
 ## Monorepo Layout (Standard FRB Template)
 The repository follows the default `flutter_rust_bridge` template structure to minimize custom build script overhead.
 
@@ -29,6 +36,9 @@ The repository follows the default `flutter_rust_bridge` template structure to m
 │   ├── tests/               # Rust integration tests
 │   ├── src/
 │   │   ├── api/             # FFI interface exposed to Dart (thin #[frb] wrappers)
+│   │   │   ├── auth.rs      # OAuth flow, token storage, session state
+│   │   │   ├── ffi_api.rs   # The contract surface
+│   │   │   └── simple.rs    # FRB template init hook (outside the contract)
 │   │   ├── db/              # rusqlite database management
 │   │   ├── draft.rs         # Active-draft-state domain: NoteState/NoteMetadata,
 │   │   │                      the open-note cache, block_path-addressed edits
@@ -89,6 +99,13 @@ All commands below assume the `devenv` shell (`devenv shell`, or automatic via
    - Dart: Widget tests for editor rendering (verifying AST nodes render correctly).
    - **Round-trip property tests are mandatory for the splice path.** For any Note and any Block, splicing that Block's own unmodified source back over its span must produce a byte-identical file. This is the executable form of the Edit Fidelity constraint and is cheap to state as a property over a corpus of fixture Notes, including ones with frontmatter keys the application does not manage.
    - **Every ticket touching UI must launch the real application in its Verification Command.** Not `flutter test` alone. The gap this closes is documented under "Running the real app" below: through Epic B, no ticket's gate ever started the app, and a real regression shipped that six passing widget tests could not see.
+
+5. **Accessibility (standing standard, adopted before Epic E paints widgets):**
+   - Keyboard completeness is a hard review bar: every capability reachable by pointer is reachable by keyboard, and focus order follows visual order.
+   - Every user-visible widget carries Flutter `Semantics` labels as it is written — not retrofitted. Screen-reader certification is deferred scope (`prd/out-of-scope/screen-reader-certification.md`); semantic structure is not.
+6. **Internationalization readiness (standing standard, same timing):**
+   - User-facing strings externalize through Flutter `gen-l10n` from the first screen onward; no new hardcoded UI text lands once Epic E begins.
+   - No translation effort is scheduled; this standard exists because retrofitting string extraction across painted screens is a sweep nobody enjoys.
 
 ## Terminology introduced at this layer
 
