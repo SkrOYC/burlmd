@@ -178,4 +178,33 @@ void main() {
     expect(container.read(selectedNoteIdProvider), 'n-1');
     expect(callbackId, 'n-1');
   });
+
+  testWidgets('the selected-row highlight follows the selection across taps '
+      '(E003 review P2 carry-over: build must watch, not read)', (
+    WidgetTester tester,
+  ) async {
+    // Two notes at the bundle root so no expansion is needed.
+    await _pumpTree(tester, [
+      note('a', 'Note A', 'Note A.md'),
+      note('b', 'Note B', 'Note B.md'),
+    ]);
+
+    bool rowSelected(String title) => tester
+        .widgetList<ListTile>(find.byType(ListTile))
+        .firstWhere((tile) => (tile.title! as Text).data == title)
+        .selected;
+
+    await tester.tap(find.text('Note A'));
+    await tester.pumpAndSettle();
+    expect(rowSelected('Note A'), isTrue);
+    expect(rowSelected('Note B'), isFalse);
+
+    // The stale-highlight bug this guards against: reading
+    // `selectedNoteIdProvider` instead of watching it left Note A marked
+    // selected after the second tap.
+    await tester.tap(find.text('Note B'));
+    await tester.pumpAndSettle();
+    expect(rowSelected('Note B'), isTrue);
+    expect(rowSelected('Note A'), isFalse);
+  });
 }

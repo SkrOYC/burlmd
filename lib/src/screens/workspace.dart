@@ -1,11 +1,13 @@
+import 'package:burlmd/src/components/editor.dart';
 import 'package:burlmd/src/components/workspace_tree.dart';
+import 'package:burlmd/src/providers/note_providers.dart';
 import 'package:burlmd/src/providers/workspace_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-/// The application's home surface: a Workspace shell with the Directory tree
-/// as its navigation sidebar (`SHEL-E003`). The main pane's placeholder is
-/// where `SHEL-E004` mounts the editor for the selected Note.
+/// The application's home surface: a Workspace shell with the Directory
+/// tree as its navigation sidebar (`SHEL-E003`) and the editor for the
+/// selected Note as its main pane (`SHEL-E004`).
 class WorkspaceScreen extends ConsumerWidget {
   const WorkspaceScreen({super.key});
 
@@ -57,10 +59,35 @@ class WorkspaceScreen extends ConsumerWidget {
               ),
             ),
             const VerticalDivider(width: 1),
-            const Expanded(child: SizedBox.shrink()),
+            const Expanded(child: _EditorPane()),
           ],
         ),
       ),
     );
+  }
+}
+
+/// The shell's main pane (`SHEL-E004`): the editor for whichever Note the
+/// tree has selected. Selection is published by [WorkspaceTree] through
+/// [selectedNoteIdProvider]; this pane reacts to it by driving
+/// [NoteController.open], which closes the outgoing Note through the Core
+/// before opening the new one, so navigation alone keeps every editing
+/// session committed to version history.
+class _EditorPane extends ConsumerWidget {
+  const _EditorPane();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final selectedId = ref.watch(selectedNoteIdProvider);
+    // Side effect lives in a listener, not in build's body: selection
+    // changes fire exactly once per change, so no rebuild can re-issue an
+    // open for a Note already being opened.
+    ref.listen<String?>(selectedNoteIdProvider, (_, next) {
+      if (next != null) ref.read(activeNoteProvider.notifier).open(next);
+    });
+    if (selectedId == null) {
+      return const Center(child: Text('Select a note to open it'));
+    }
+    return const Editor();
   }
 }

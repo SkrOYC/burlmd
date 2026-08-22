@@ -1,8 +1,10 @@
 import 'package:burlmd/src/components/editor.dart';
 import 'package:burlmd/src/providers/note_providers.dart';
 import 'package:burlmd/src/providers/rust_api_provider.dart';
+import 'package:burlmd/src/providers/workspace_provider.dart';
 import 'package:burlmd/src/rust/draft.dart';
 import 'package:burlmd/src/rust/markdown/ast.dart';
+import 'package:burlmd/src/screens/workspace.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -42,6 +44,74 @@ class _FakeRustApi extends RustApi {
     lastSource = source;
   }
 }
+
+/// A [RustApi] standing in for the Core at the workspace-shell level:
+/// serves a fixed tree, records `open_note`/`close_note` calls in order so
+/// the switch criterion ("closed through the Core **before** the new one
+/// opens") can be asserted, and can be told to fail opens to exercise the
+/// error surface. Everything else falls back to no-op behaviour.
+class _ShellRustApi extends RustApi {
+  _ShellRustApi(this.tree, {this.failOpenFor = const {}});
+
+  final List<TreeNode> tree;
+
+  /// Concept ids whose `openNote` throws — the "Core returns an error"
+  /// branch of the Gherkin.
+  final Set<String> failOpenFor;
+
+  /// Every open/close call in issue order, as `'open:<id>'` / `'close:<id>'`.
+  final List<String> calls = [];
+
+  NoteState _stateFor(String noteId) => NoteState(
+    ast: [
+      AstNode.heading(
+        level: 1,
+        content: [InlineElement.text(_run('Rendered $noteId'))],
+      ),
+    ],
+    metadata: NoteMetadata(
+      id: noteId,
+      path: '$noteId.md',
+      title: noteId,
+      lastModified: 0,
+      okfConformant: true,
+    ),
+    baseRevision: 'head',
+    restoredFromDraft: false,
+  );
+
+  @override
+  Future<WorkspaceInfo> openOrCreateLocalWorkspace({String? path}) async =>
+      const WorkspaceInfo(
+        id: 'ws',
+        name: 'workspace',
+        provider: 'local',
+        localPath: '/tmp/workspace',
+      );
+
+  @override
+  Future<List<TreeNode>> workspaceTree() async => tree;
+
+  @override
+  Future<NoteState> openNote(String noteId) async {
+    calls.add('open:$noteId');
+    if (failOpenFor.contains(noteId)) throw Exception('core exploded');
+    return _stateFor(noteId);
+  }
+
+  @override
+  Future<void> closeNote(String noteId) async {
+    calls.add('close:$noteId');
+  }
+}
+
+TextRun _run(String text) => TextRun(
+  content: text,
+  bold: false,
+  italic: false,
+  strikethrough: false,
+  code: false,
+);
 
 const _testMetadata = NoteMetadata(
   id: 'test-note',
@@ -312,4 +382,92 @@ void main() {
       expect(find.text('first'), findsNothing);
     },
   );
+
+  // -- SHEL-E004 ----------------------------------------------------------
+
+  testWidgets('selecting a note in the tree renders its blocks as output', (
+    tester,
+  ) async {
+    final api = _ShellRustApi([
+      TreeNode.note(id: 'n1', title: 'Seeded Note', path: 'Seeded.md'),
+    ]);
+    await _pumpShell(tester, api);
+
+    // Nothing selected yet: the pane shows an affordance, not note content.
+    expect(find.text('Select a note to open it'), findsOneWidget);
+    expect(api.calls, isEmpty);
+
+    await tester.tap(find.text('Seeded Note'));
+    await tester.pumpAndSettle();
+
+    // The Core was asked to open the selected concept id...
+    expect(api.calls, ['open:n1']);
+    // ...and the returned Block renders as formatted output (a Heading).
+    final richText = tester.widget<RichText>(
+      find.text('Rendered n1', findRichText: true),
+    );
+    final wrapperSpan = richText.text as TextSpan;
+    final headingContentSpan = wrapperSpan.children!.first as TextSpan;
+    final leafSpan = headingContentSpan.children!.first as TextSpan;
+    expect(leafSpan.text, 'Rendered n1');
+    // A Heading declares bold styling at the wrapper level.
+    expect(wrapperSpan.style?.fontWeight, FontWeight.bold);
+  });
+
+  testWidgets('switching notes closes the outgoing one through the Core '
+      'before the new one opens', (tester) async {
+    final api = _ShellRustApi([]);
+    final container = ProviderContainer(
+      overrides: [rustApiProvider.overrideWithValue(api)],
+    );
+    addTearDown(container.dispose);
+
+    final controller = container.read(activeNoteProvider.notifier);
+    await controller.open('note-a');
+    await controller.open('note-b');
+
+    // Order is the whole criterion: close_note runs tier 3 (flush, session
+    // commit, draft clear), so it must complete for the outgoing Note
+    // before open_note is issued for the next one — otherwise the
+    // outgoing session never reaches version history.
+    expect(api.calls, ['open:note-a', 'close:note-a', 'open:note-b']);
+    expect((container.read(activeNoteProvider)!).metadata.id, 'note-b');
+  });
+
+  testWidgets('a Core error on open surfaces instead of being swallowed', (
+    tester,
+  ) async {
+    final api = _ShellRustApi(
+      [TreeNode.note(id: 'bad', title: 'Broken Note', path: 'Broken.md')],
+      failOpenFor: {'bad'},
+    );
+    await _pumpShell(tester, api);
+
+    await tester.tap(find.text('Broken Note'));
+    await tester.pumpAndSettle();
+
+    expect(api.calls, ['open:bad']);
+    // The failure the fake Core threw is shown verbatim in the editor's
+    // error surface — not raised into nothing.
+    expect(find.textContaining('core exploded'), findsOneWidget);
+    // And no note content is rendered alongside it — no editable field
+    // from the editor's own rendering path.
+    expect(find.byType(TextField), findsNothing);
+  });
+}
+
+// -- SHEL-E004: mounting the editor and navigating -------------------------
+
+/// Pumps the real [WorkspaceScreen] shell against [_ShellRustApi], so the
+/// navigation path under test is the production one: tree selection ->
+/// [selectedNoteIdProvider] -> the pane's listener -> [NoteController.open]
+/// -> [Editor] rendering.
+Future<void> _pumpShell(WidgetTester tester, _ShellRustApi api) async {
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [rustApiProvider.overrideWithValue(api)],
+      child: const MaterialApp(home: WorkspaceScreen()),
+    ),
+  );
+  await tester.pumpAndSettle();
 }
