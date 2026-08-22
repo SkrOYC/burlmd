@@ -10,8 +10,14 @@
 # .qa/<name>.png, and terminates the application.
 #
 # Exits non-zero and writes no screenshot if any build step fails or the
-# application fails to start/render. grim is Wayland-only tooling provisioned
-# in devenv.nix; see .constitution/tech-spec/guidelines.md.
+# application fails to start/render. Render detection compares raw pixels
+# (grim -t ppm) against a pre-launch baseline: two baseline captures taken one
+# second apart measure the desktop's own animation noise floor (clocks, panel
+# widgets), and the app counts as rendered only once the per-pixel difference
+# count exceeds several times that noise floor. A naive byte-compare of PNGs
+# fires on the very first poll because background animations always differ.
+# grim is Wayland-only tooling provisioned in devenv.nix; see
+# .constitution/tech-spec/guidelines.md.
 
 set -euo pipefail
 
@@ -42,9 +48,14 @@ APP_BIN="$APP_BUNDLE/burlmd"
 cd "$REPO_ROOT"
 mkdir -p "$QA_DIR"
 
+# Drop any screenshot left by an earlier run up front, so a failed run can
+# never leave a stale .qa/<name>.png behind.
+rm -f "$SHOT"
+
 APP_PID=""
-BASELINE="$(mktemp /tmp/smoke-shot-baseline.XXXXXX.png)"
-CANDIDATE="$(mktemp /tmp/smoke-shot-candidate.XXXXXX.png)"
+NOISE_A="$(mktemp /tmp/smoke-shot-noise-a.XXXXXX.ppm)"
+NOISE_B="$(mktemp /tmp/smoke-shot-noise-b.XXXXXX.ppm)"
+CANDIDATE="$(mktemp /tmp/smoke-shot-candidate.XXXXXX.ppm)"
 
 cleanup() {
   if [[ -n "$APP_PID" ]] && kill -0 "$APP_PID" 2>/dev/null; then
@@ -55,7 +66,7 @@ cleanup() {
     done
     kill -9 "$APP_PID" 2>/dev/null || true
   fi
-  rm -f "$BASELINE" "$CANDIDATE"
+  rm -f "$NOISE_A" "$NOISE_B" "$CANDIDATE"
 }
 trap cleanup EXIT
 
@@ -67,6 +78,28 @@ fail() {
 deadline() { echo $(( $(date +%s) + $1 )); }
 timed_out() { (( $(date +%s) >= $1 )); }
 
+# Byte offset of the first pixel byte of a binary PPM (P6) file: the header is
+# "P6\n<w> <h>\n<maxval>\n".
+ppm_pixel_offset() {
+  head -c 64 "$1" | awk 'BEGIN { RS = "\n" } NR < 4 { off += length($0) + 1 }
+    NR == 3 { print off + 0; exit }'
+}
+
+# Count pixels whose RGB bytes differ between two same-size raw PPM captures.
+# Prints the count; prints nothing if either file cannot be parsed.
+count_diff_pixels() {
+  local off_a off_b
+  off_a="$(ppm_pixel_offset "$1")"
+  off_b="$(ppm_pixel_offset "$2")"
+  [[ -n "$off_a" && -n "$off_b" && "$off_a" -gt 0 && "$off_a" -eq "$off_b" ]] || return 0
+  paste -d ' ' \
+    <(od -An -v -tu1 -j "$off_a" "$1") \
+    <(od -An -v -tu1 -j "$off_a" "$2") \
+    | awk '{ half = NF / 2
+      for (i = 1; i <= half; i++) if ($(i) != $(i + half)) changed++
+    } END { print changed + 0 }'
+}
+
 echo "[smoke-shot] building rust native library (release)..."
 (cd rust && cargo build --release) || fail "cargo build --release failed"
 
@@ -76,9 +109,18 @@ flutter build linux --release || fail "flutter build linux --release failed"
 [[ -x "$APP_BIN" ]] || fail "app binary not found at $APP_BIN after build"
 
 # Baseline of the screen before the app exists, so "rendered" means "something
-# new was drawn", not merely "grim succeeded".
-grim "$BASELINE" >/dev/null 2>&1 \
+# substantial was drawn", not merely "grim succeeded". Two captures one second
+# apart measure how many pixels the desktop itself animates (clocks, panels);
+# the render threshold is a multiple of that noise floor plus an absolute
+# minimum, so small background animations can never fake a window appearing.
+grim -t ppm "$NOISE_A" >/dev/null 2>&1 \
   || fail "grim could not capture the screen (is this a Wayland session?)"
+sleep 1
+grim -t ppm "$NOISE_B" >/dev/null 2>&1 \
+  || fail "second grim baseline capture failed"
+noise_pixels="$(count_diff_pixels "$NOISE_A" "$NOISE_B")"
+DIFF_THRESHOLD=$(( noise_pixels * 3 + 20000 ))
+echo "[smoke-shot] desktop noise floor: ${noise_pixels} px; render threshold: ${DIFF_THRESHOLD} px"
 
 echo "[smoke-shot] launching $APP_BIN..."
 "$APP_BIN" &
@@ -98,8 +140,9 @@ while :; do
     wait "$APP_PID" || true
     fail "application exited before rendering (exit status recorded above)"
   fi
-  if grim "$CANDIDATE" >/dev/null 2>&1; then
-    if ! cmp -s "$BASELINE" "$CANDIDATE"; then
+  if grim -t ppm "$CANDIDATE" >/dev/null 2>&1; then
+    diff_pixels="$(count_diff_pixels "$NOISE_A" "$CANDIDATE")"
+    if [[ -n "$diff_pixels" && "$diff_pixels" -ge "$DIFF_THRESHOLD" ]]; then
       rendered=1
       break
     fi
@@ -116,8 +159,7 @@ if ! kill -0 "$APP_PID" 2>/dev/null; then
   fail "application exited during settle period"
 fi
 
-grim "$CANDIDATE" >/dev/null 2>&1 || fail "final grim capture failed"
-mv "$CANDIDATE" "$SHOT"
+grim "$SHOT" >/dev/null 2>&1 || fail "final grim capture failed"
 chmod u+w "$SHOT" 2>/dev/null || true
 
 echo "[smoke-shot] screenshot written to $SHOT"
