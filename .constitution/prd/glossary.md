@@ -12,3 +12,7 @@
 | Live Preview | The editing model in which the focused Block displays its raw Markdown source while every other Block renders formatted. | WYSIWYG, Rich text mode, Hybrid editor, Source mode |
 | Open Knowledge Format | The published open specification (originated by Google Cloud) representing knowledge as a directory of Markdown files with YAML frontmatter, which the on-disk Workspace conforms to. Abbreviated OKF. | Our format, Custom format, OKF-like, OKF-inspired |
 | Export | Producing a copy of the Workspace readable with no application-specific tooling. | Backup, Dump, Download |
+| Bundle Archive | A single-file `.okf` zip archive of an entire bundle, in the packaged distribution form the Open Knowledge Format itself names. | Package, Backup (use Export), Container |
+| Consolidation | The guided, one-time migration of non-conflicting Notes from a previous local Workspace into a freshly connected one, with explicit resolution of every identity collision. | Merge, Migration, Import (as a synonym) |
+| Rendition | A self-contained HTML presentation of an entire Workspace produced by Publishing, readable offline with no application-specific tooling. | Export (use it for the bundle forms), Site, Build |
+| Diagnostics Export | A user-produced bundle describing recent application behavior — errors, retries, failures — with Note content excluded. | Log dump, Crash report, Telemetry |

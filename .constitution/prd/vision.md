@@ -1,8 +1,15 @@
 ---
-version: v1.1.0
+version: v1.2.0
 ---
 
 # Product Vision
+
+## Archetype
+
+- **Primary:** `System/Native`. The shipped surfaces are a desktop application embedding a full data engine — Markdown parsing, an encrypted local index, version history, and all cryptographic material — behind an in-process boundary, with the interface layer deliberately stateless. That is a native system product, not a web or cloud one.
+- **Secondary:** `Mobile`, declared but deferred. Multi-device access is a stated expectation of the primary actor, so the architecture carries synchronization and offline tolerance as requirements rather than afterthoughts; the touch surfaces themselves are open work.
+- **Confidence:** `high`.
+- **Rationale:** Desktop gets nailed first. Flutter is built responsive-by-construction so the layout system never assumes one form factor, but the mobile interaction design is deliberately left open rather than pre-drawing every surface twice. Constraint focus therefore follows System/Native — input-to-effect latency, memory ceilings, startup cost — with Mobile rows added when that surface unshelves.
 
 ## Executive Summary
 A local-first, Git-backed note-taking application for people who write Markdown by choice. Notes are plain Markdown files in a published, non-proprietary open format on the user's own disk, organized through a hybrid structure that combines a familiar Directory tree with a lateral knowledge graph of Links. Editing is direct: the Block under the cursor shows its raw Markdown source, while every other Block renders formatted — so the user always reads a finished document and always edits real text. A Workspace works fully offline with no account; connecting it to a Remote is an opt-in step that adds multi-device sync, with concurrent edits surfaced as inline Suggestions rather than raw merge conflicts.
