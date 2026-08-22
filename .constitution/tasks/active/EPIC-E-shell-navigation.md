@@ -219,6 +219,12 @@ When its containing Directory is deleted
 Then the editor closes that Note rather than leaving it open against a removed file
 ```
 
+##### [SHEL-E005] Deviations & Justifications
+- **Touched Files:** `lib/src/providers/note_providers.dart` (two additive methods), `lib/src/providers/workspace_provider.dart` (one additive method)
+- **Justification:** Re-anchoring an identity-changed open Note needs to replace [activeNoteProvider]'s state from outside the notifier, but Riverpod marks external `.state` assignment `protected`/`visible_for_testing`, so production code cannot do it without lint violations. Three minimal additions instead: `NoteController.adopt(NoteState)` (re-anchor path — adopt the Core's returned post-operation state whose session was carried forward under the new id), `NoteController.clear()` (close-in-editor path after deletion, where sending `close_note` would raise `NotFound` because the Core already discarded the session), and `SelectedNoteId.clear()` (unselect on delete). No existing method or behavior changed.
+- **Interpretation decisions:** (1) Refreshing a rewritten open Note uses `open_note` rather than `reload_note` — on an already-open Note it returns the live session state including the installed rewrite *and* any unflushed keystrokes, whereas `reload_note` would discard unflushed work. (2) Create routes through the selection seam (`selectedNoteIdProvider`) so any outgoing Note still closes through the commit tier before the created session is adopted via `open_note`'s already-open fast path. (3) Rename/move re-anchor order is load-bearing: the new state is adopted before the new id is published to the selection seam, because the shell's listener drives `open`, whose fast path requires the active state to carry the requested id first — publishing first would close the dead old id.
+- **Known limitation:** a Workspace with zero Directories offers no row menus, so creation at the bundle root currently needs at least one Directory row to exist.
+
 #### SHEL-E006 Search Surface
 - **Type:** Feature
 - **Effort:** 3
