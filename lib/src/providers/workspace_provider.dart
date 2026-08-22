@@ -1,4 +1,5 @@
 import 'package:burlmd/src/providers/rust_api_provider.dart';
+import 'package:burlmd/src/rust/api/ffi_api.dart' as ffi;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// The active Workspace (`SHEL-E002`): opened on first read by driving the
@@ -47,4 +48,17 @@ class SelectedNoteId extends Notifier<String?> {
 
 final selectedNoteIdProvider = NotifierProvider<SelectedNoteId, String?>(
   SelectedNoteId.new,
+);
+
+/// The Core's full-reindex entry point (`reindex_workspace`, CAP-WS-06):
+/// rebuilds `notes`, `notes_fts`, `fts_mapping`, `links` and `directories`
+/// for the active Workspace from the bundle on disk and returns the number
+/// of Notes indexed. This is what a user-invokable rescan (`SHEL-E008`)
+/// drives so externally added Notes become visible without a restart.
+///
+/// Modeled as a function-valued provider rather than a new [RustApi] wrapper
+/// member because that wrapper file sits outside SHEL-E008's in-scope set;
+/// tests override this provider exactly as they override [rustApiProvider].
+final reindexWorkspaceProvider = Provider<Future<int> Function()>(
+  (ref) => ffi.reindexWorkspace,
 );
