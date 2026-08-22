@@ -1,4 +1,3 @@
-
 # Open decisions register — 2026-08-21
 
 This register comes from the Realign interview of this date. No prior register exists, so nothing is carried forward. Downstream stages must not answer these silently.
@@ -14,3 +13,4 @@ Raised at Q20. The options were undocumented, baseline standard, or certified. T
 ## OD-03: Handoff points between Wave 3's parallel tracks
 
 Raised at B6. The options were sync first, design first, or interleaved. The user chose genuinely parallel tracks and delegated the concrete interleave to planning: which tickets hand off design tokens to sync surfaces, how the interactive design epic sequences against Epic G/H milestones, and what happens when the tracks compete for a solo developer's attention. Explicitly delegated to Stage 4; Stage 4 must draw these handoffs explicitly rather than assume parallelism is free.
+
