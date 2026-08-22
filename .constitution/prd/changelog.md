@@ -9,7 +9,7 @@ Evolution pass driven by the Realign interview of 2026-08-21 (see `reports/2026-
 
 **CAP-PORT-02 widened and split.** Export now covers both the plain bundle copy and a single-file `.okf` Bundle Archive — the packaged distribution form OKF §3 itself names — both P0. New CAP-PORT-04 adds a self-contained HTML rendition at P1, sequenced behind burlmd's own design system and inheriting Zero Content Telemetry absolutely.
 
-**Constraints rewritten in Planguage form**, every scalar constraint carrying Scale/Meter/Goal/Stretch/Fail: the three pre-existing meters plus four new ones from interview rulings — Cold Start (Goal 1s, Fail 3s, set aggressively by operator intent with explicit-rebaseline wording), Idle Memory (400 MB at corpus Goal), Corpus Scale (10k Goal / 50k Stretch / 1k Fail), and Synchronization Freshness (60-second push and poll Goals, 15-minute offline backoff ceiling). A Verification section commits meters to a nightly non-blocking benchmark once CI exists. Non-Blocking Sync now states the marker-flow ruling: unresolved Suggestions never gate commits or pushes, and ambient state distinguishes pending Suggestions from clean.
+**Constraints rewritten in Planguage form**, every scalar constraint carrying Scale/Meter/Goal/Fail with Stretch where one is honest: the three pre-existing meters plus four new ones from interview rulings — Cold Start (Goal 1s, Fail 3s, set aggressively by operator intent with explicit-rebaseline wording), Idle Memory (400 MB at corpus Goal), Corpus Scale (10k Goal / 50k Stretch / 1k Fail), and Synchronization Freshness (60-second push and poll Goals, 15-minute offline backoff ceiling). A Verification section commits meters to a nightly non-blocking benchmark once CI exists. Non-Blocking Sync now states the marker-flow ruling: unresolved Suggestions never gate commits or pushes, and ambient state distinguishes pending Suggestions from clean.
 
 **Glossary expanded** with Bundle Archive, Consolidation, Rendition, and Diagnostics Export, each with avoided synonyms.
 
@@ -18,6 +18,13 @@ Evolution pass driven by the Realign interview of 2026-08-21 (see `reports/2026-
 **Four out-of-scope entries created:** `history-merge-on-connect.md` (rejected; guided consolidation replaces it), `telemetry-upload.md` (rejected; diagnostics export replaces it), `static-site-pipeline.md` (rejected; single-file rendition replaces it), and `screen-reader-certification.md` (deferred with its reopen trigger honestly recorded as unknown, per open decision OD-02).
 
 ## v1.1.1
+
+### Corrections from milestone review, folded into v1.2.0
+Nothing in this pass has merged beyond this branch; per house convention the review fixes are folded rather than versioned separately.
+
+- The first cut of this entry claimed every scalar constraint carries a Stretch field; Remote Poll Cadence honestly has none. Sentence weakened to "Stretch where one is honest."
+- A stale duplicate of CAP-PORT-02 (the old P1 copy-only wording) survived beside its replacement and was removed.
+- CAP-EDIT-08's rationale now states the lifecycle-rename exclusion explicitly instead of leaving it in this changelog only, and Preferences & Appearance is an `##` epic heading like its siblings.
 Reviewed for downstream delta following Epic D execution (WSPC-D001–D009); no layer-specific changes required. Epic D is Core-side only, so no capability's user-visible statement changed and no capability was added, reworded or descoped.
 - One narrowing was made downstream and is recorded here as a pointer rather than a PRD edit, so it is not mistaken for drift on the next pass: CAP-FIND-02 says a user jumps to a Note "by typing part of its title", while the Stage 3 contract and `WSPC-D009`'s implementation both match a **leading prefix only**. That is a deliberate Stage 3 reading, documented at `find_notes_by_title` in `tech-spec/contracts/ffi_api.rs`. Widening it to substring match would be a change to this layer and would need its own index strategy; if the narrowing is the wrong reading, the correction belongs here first.
 

@@ -84,4 +84,4 @@ Scalar constraints use Planguage fields: **Scale** (what is measured), **Meter**
 
 ## Verification
 
-Every scalar meter above is verified by a scheduled nightly benchmark run once continuous integration exists, reporting regressions without blocking merges; until then they are verified ticket-by-ticket when work touches their path. A meter nobody measures again after the spike that first reads it will drift silently — this project has already shipped one performance assumption that measurement proved wrong by a factor of 36.
+Every scalar meter above is verified by a scheduled nightly benchmark run once continuous integration exists, reporting regressions without blocking merges; until then they are verified ticket-by-ticket when work touches their path. A meter nobody measures again after the spike that first reads it will drift silently — this project has already shipped one persistence-cost assumption that measurement proved wrong by roughly 36× against what a naive benchmark reported (recorded in `tech-spec/changelog.md` v1.2.0).

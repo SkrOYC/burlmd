@@ -42,7 +42,7 @@ Priorities express the critical path to a Workspace the primary actor can rely o
 - **Priority:** P1
 - **Capability ID:** CAP-EDIT-08
 - **Capability:** When the user invokes undo, the application reverses their most recent content change in the open Note — including changes that spanned multiple Blocks or destroyed a range — without consulting version history, and redo reapplies it.
-- **Rationale:** Every editor this actor writes in reverses structural operations; an undo that stops at Block boundaries makes a cross-Block deletion unrecoverable by any means short of archaeology, and lost work is the failure the primary actor forgives least. Undo covers the user's own editing actions only: reverting what another device contributed is conflict resolution, not undo.
+- **Rationale:** Every editor this actor writes in reverses structural operations; an undo that stops at Block boundaries makes a cross-Block deletion unrecoverable by any means short of archaeology, and lost work is the failure the primary actor forgives least. Undo covers the user's own editing actions only: reverting what another device contributed is conflict resolution, not undo, and lifecycle operations such as rename are not content changes and sit outside undo's scope.
 
 ## Epic: Note & Directory Lifecycle
 
@@ -225,11 +225,6 @@ Priorities express the critical path to a Workspace the primary actor can rely o
 - **Capability:** Every Note the application *creates* conforms to the Open Knowledge Format the moment it is created, so that any conforming tool or agent can read the Notes and traverse the Links with no export step and no application-specific parser.
 - **Rationale:** Makes data sovereignty concrete rather than aspirational, and serves the Automated Consumer actor directly. Conformance is continuous, not a mode. Scoped to what the application *creates* rather than to the whole Workspace at all times, because the format defines conformance over an entire bundle: one file an external tool dropped in without frontmatter makes the bundle non-conformant, and CAP-WS-05 and CAP-PORT-03 both make that a supported and possibly permanent state. Promising more would be a promise the application can only keep by rewriting files the user never asked it to touch. *Creates* rather than *writes* for a second reason inside that same scoping: editing one of those foreign files **writes** it and leaves it non-conformant, so the wider verb would be false on a path the design supports rather than merely optimistic.
 
-- **Priority:** P1
-- **Capability ID:** CAP-PORT-02
-- **Capability:** Users can Export the Workspace to a location of their choosing, producing Notes readable with no application-specific tooling.
-- **Rationale:** Guarantees an exit path. Lower priority than it would otherwise be precisely because CAP-PORT-01 keeps the live Workspace already in that state.
-
 - **Priority:** P0
 - **Capability ID:** CAP-PORT-02
 - **Capability:** Users can Export the Workspace to a location of their choosing, producing Notes readable with no application-specific tooling — either as a plain copy of the bundle or as a single `.okf` Bundle Archive.
@@ -245,7 +240,7 @@ Priorities express the critical path to a Workspace the primary actor can rely o
 - **Capability:** Users can Publish the Workspace as a self-contained HTML rendition — a single file presenting every Note with Links navigable — readable offline in any browser with no network access beyond loading the file itself.
 - **Rationale:** Serves readers who will never install anything, following the shape the format's own reference tooling demonstrates. Deliberately sequenced after the application has a design system of its own: a rendition worth publishing should look like the product, and it inherits Zero Content Telemetry absolutely — no external scripts, no load-time calls.
 
-### Epic: Preferences & Appearance
+## Epic: Preferences & Appearance
 
 - **Priority:** P1
 - **Capability ID:** CAP-PREF-01
