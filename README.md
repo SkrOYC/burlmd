@@ -1,13 +1,17 @@
 # burlmd
 
 A local-first, Git-backed note-taking application. Notes live as plain Markdown in
-a repository you own; the app gives you a Notion-like hybrid editor over them, a
+a repository you own; the app gives you a Live Preview Markdown editor over them, a
 lateral knowledge graph on top of the directory tree, and background sync to a
-private GitHub repository over OAuth — with no central content broker in between.
+private repository over OAuth (GitHub first; GitLab planned) — with no central content broker in between.
 
 A Flutter UI renders state produced by a Rust core engine across a
 `flutter_rust_bridge` boundary. The core owns Markdown parsing, the encrypted
 SQLite index, Git plumbing via `gix`, and all cryptographic material.
+
+Editing is Live Preview: the Block you are in shows the real Markdown source,
+every other Block renders as it will read — no hidden syntax, ever. Notes live
+in an Open Knowledge Format bundle that any tool or agent can read directly.
 
 The full product, architecture, implementation and execution specifications live
 under [`.constitution/`](.constitution/). Start with
