@@ -2,6 +2,7 @@ import 'package:burlmd/src/rust/api/auth.dart' as auth_ffi;
 import 'package:burlmd/src/rust/api/ffi_api.dart' as ffi;
 import 'package:burlmd/src/rust/draft.dart';
 import 'package:burlmd/src/rust/index/query.dart';
+import 'package:burlmd/src/rust/workspace/bootstrap.dart' as bootstrap_ffi;
 import 'package:burlmd/src/rust/workspace/lifecycle.dart';
 import 'package:burlmd/src/rust/workspace/persist.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,6 +12,7 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart'
 export 'package:burlmd/src/rust/api/auth.dart' show OAuthFlowStart;
 export 'package:burlmd/src/rust/api/ffi_api.dart' show BlockRange;
 export 'package:burlmd/src/rust/index/query.dart' show LinkCompletion, TreeNode;
+export 'package:burlmd/src/rust/workspace/bootstrap.dart' show WorkspaceInfo;
 export 'package:burlmd/src/rust/workspace/lifecycle.dart'
     show IdRemap, LifecycleEffects;
 export 'package:burlmd/src/rust/workspace/persist.dart' show NoteWriteStatus;
@@ -37,6 +39,16 @@ export 'package:burlmd/src/rust/workspace/persist.dart' show NoteWriteStatus;
 /// friends unresolved at its own `dart analyze` gate.
 class RustApi {
   const RustApi();
+
+  /// Opens the local Workspace, creating and initializing it if absent
+  /// (`WSPC-D004`, ADR-005 decision 1): no credential, no provider, and no
+  /// network. Establishes the active Workspace on success, so every later
+  /// Note-level call is implicitly scoped to it. Idempotent per the Core
+  /// contract — on restart the existing repository, Workspace row and root
+  /// key are reused rather than recreated.
+  Future<bootstrap_ffi.WorkspaceInfo> openOrCreateLocalWorkspace({
+    String? path,
+  }) => ffi.openOrCreateLocalWorkspace(path: path);
 
   /// Opens a Note by concept id, restoring an unflushed draft if one exists
   /// (ADR-008 tier 1's crash recovery, CAP-WS-03).
