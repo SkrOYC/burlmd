@@ -306,6 +306,15 @@ When the UI next polls
 Then the failure is shown persistently rather than once, since every subsequent write fails the same way until it is resolved
 ```
 
+##### [SHEL-E007] Deviations & Justifications
+- **Touched Files:** `lib/src/providers/note_providers.dart` (+26 lines)
+- **Justification:** Added `NoteController.reloadFromDisk()` wrapping `reload_note`. Assigning a reloaded `NoteState` into `activeNoteProvider` requires the notifier itself (`state` setter is `@protected`); duplicating controller logic outside it was the worse alternative.
+
+##### Epic-Level Carry-Fowards Recorded During Execution
+- **Unmounted surfaces:** No ticket in E001–E008 mounts `SearchPanel` (SHEL-E006) or `RecoveredDraftsPanel`/`WriteTierNotice` (SHEL-E007) into `workspace.dart` — both tickets' scopes excluded it. Until mounted, search and draft/write-failure visibility are unreachable by users. Must be resolved at reconciliation before this epic archives.
+- **P3 follow-up:** `draft_recovery.dart` `_confirmAndReload` uses `ref` after an `await showDialog`; guard with a mounted check if the widget can unmount mid-dialog.
+- **Investigate (from SHEL-E008 review):** whether Core-side `reindex_workspace` transactionality covers a user typing into a previously-clean Note while a rescan is in flight.
+
 #### SHEL-E008 Rescan Workspace
 - **Type:** Feature
 - **Effort:** 2
