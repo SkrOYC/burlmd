@@ -1,12 +1,12 @@
 ---
-version: v1.5.0
+version: v1.6.0
 ---
 
 # Active Backlog Summary
 
-**Total Active Story Points:** 55
+**Total Active Story Points:** 57
 
-- Epic E — Shell & Navigation: 25
+- Epic E — Shell & Navigation: 27
 - Epic F — Editor Depth: 30
 
 Epics A, B, C and D (99 points — 10, 23, 16 and 50, summed from the ticket efforts in `completed/`) are complete and archived under `completed/`; they contribute nothing to the totals or the graph below.
@@ -44,6 +44,7 @@ flowchart LR
         E005[SHEL-E005<br/>Lifecycle UI]
         E006[SHEL-E006<br/>Search]
         E007[SHEL-E007<br/>Draft recovery]
+        E008[SHEL-E008<br/>Rescan workspace]
     end
 
     subgraph EpicF [Epic F - Editor Depth]
@@ -62,6 +63,7 @@ flowchart LR
     E004 --> E005
     E004 --> E006
     E004 --> E007
+    E003 --> E008
 
     E004 --> F001
     F001 --> F002
@@ -85,13 +87,22 @@ The cutover bar is deliberately "genuinely good", not "technically working". Epi
 Synchronization is **not** required for that outcome, and this is load-bearing rather than a compromise: in a local-first Workspace every close is a real commit to a real repository, so Notes are version-controlled and recoverable from the first one written. A Remote adds off-machine durability and multi-device access. Neither is a data-safety precondition.
 
 ### Deferred (Next Planning Wave)
-- **Epic G — Sync Integration.** Connecting a Workspace to a Remote, provisioning or adopting a repository, session restore, credential readback, scheduler lifecycle wiring, the sync status indicator, bounding the scheduler's shutdown wait, and the post-conflict re-push timing question. This absorbs all six of Epic C's deferred follow-ups. The contract surface already exists in `tech-spec/contracts/ffi_api.rs`, so it needs no further Stage 3 work.
+Wave 3 was shaped by the realignment interview (2026-08-21) rather than inherited: it runs **two genuinely parallel tracks** — the sync/conflict backbone and the interactive design epic — with the handoff points drawn below per open decision OD-03. Every capability the realignment added has a home here; none is orphaned.
 
-  **It must also carry the `rust/src/api/auth.rs` rework, which is not a wiring item.** `OAuthFlowStart` currently returns `code_verifier` and `state`; the contract returns a single-use `flow_id` and neither secret. `authenticate_workspace(provider, auth_code, code_verifier) -> String` becomes `authenticate_workspace(flow_id, auth_code, returned_state) -> SessionState`, raising `OAuthStateMismatch` before the token request. Recording this is not bookkeeping: the CSRF check that rounds 2 and 3 of the review spent two passes relocating has **no owning ticket anywhere in this 105-point wave**, and until Epic G lands, the shipped code still mints a `state` that nothing compares — the original defect, unchanged. Round 3's rationale for moving the check Core-side counted "it removes an obligation no ticket owned" as a benefit; that is only true once the Core-side obligation is owned, and it is not owned yet.
+**Track 1 — sync backbone:**
+- **Epic G — Sync Integration**, carrying: connect and detach (`CAP-SYNC-01/06`), second-device join via `clone_workspace` (`CAP-SYNC-07`) with guided consolidation (`CAP-SYNC-08`, `plan_consolidation`/`apply_consolidation`), session restore, credential readback, scheduler lifecycle wiring, the sync status indicator, bounding the scheduler's shutdown wait, and the post-conflict re-push timing question. Absorbs all six of Epic C's deferred follow-ups plus the `rust/src/api/auth.rs` rework, which is not a wiring item: `OAuthFlowStart` currently returns `code_verifier` and `state`; the contract returns a single-use `flow_id` and neither secret, and `authenticate_workspace(flow_id, auth_code, returned_state) -> SessionState` must raise `OAuthStateMismatch` before any token request. Until Epic G lands, the shipped code still mints a `state` nothing compares — the original CSRF defect, unchanged — and this supersedes Epic C's recorded position that the verifier transiting Dart was an accepted decision: under the current contract it does not transit Dart at all.
+- **Epic H — Conflict & Suggestions**: conflict-marker pre-processing, populating the Suggestion node, block-level accept/reject (`CAP-SYNC-04` as ruled at Q4), markers flowing freely through commits per B3, and the delete-vs-edit restore-and-suggest path from Q6. Prerequisite recorded in the contract: `Suggestion.base_content` requires the pull path to set a three-way conflict style.
+- **GitLab provider** (`CAP-SYNC-09`, P1) lands behind GitHub inside this track once the seam has one proven consumer (ADR-009, B5).
 
-  This also supersedes `tasks/completed/EPIC-C-security-sync.md`'s recorded position that the `code_verifier` transiting Dart is an "accepted design decision (not a gap)". Under the new contract it does not transit Dart at all. Said here rather than left as two documents disagreeing.
-- **Epic H — Conflict & Suggestions.** The conflict-marker pre-processor, populating the Suggestion node, and the resolution surface. Note the concrete prerequisite recorded in the contract: `Suggestion.base_content` can only ever be populated if the pull path sets a three-way conflict style, since the default emits no base section — as implemented today that field is structurally dead.
-- **Epic I — Quality & Portability.** Continuous integration, images, Export, and the graph visualization. CI was explicitly considered for this wave and deferred by decision; it is recorded as a known risk in `changelog.md` rather than an oversight.
+**Track 2 — design system and surfaces:**
+- **Design & Preferences epic** (`CAP-PREF-01`): interactive by decision — human-driven design work expressed through `hitl_sil` and `visual_regression` acceptance modes, not Gherkin-by-default. Produces burlmd's design tokens.
+
+**Handoff points between tracks (OD-03):** the design epic delivers tokens before three consuming surfaces build final UI: the sync status indicator (Epic G renders it, but its visual form waits for tokens), the editor chrome Epic F's wave-3 follow-ups touch, and CAP-PORT-04's rendition, which is explicitly sequenced behind this epic. When both tracks want the same hands on the same day, Track 1's correctness work wins and design slips — solo-dev reality, stated here so the slip is planned rather than felt as failure.
+
+**Riding either track, placed by dependency rather than by theme:**
+- Undo (`CAP-EDIT-08`), version restore (`CAP-HIST-01`), in-Note find & replace (`CAP-FIND-03`) — a Wave-3 editor-depth cluster after Epic F proves the promotion model; each consumes its declared contract surface (`undo_note`/`redo_note`, `list_note_versions`/`restore_note_version`, `find_in_note`/`replace_all_in_note`).
+- Diagnostics export (`CAP-SUP-01`) — rides Epic I alongside CI, since ADR-011's log channel and the nightly benchmark share the observability work.
+- **Epic I — Quality & Portability** (revised): continuous integration as the Linux+macOS matrix chosen at Q9, the nightly non-blocking benchmark job verifying every meter in `prd/constraints.md`, images (`CAP-EDIT-06`, `assets/` per Q7), Export surfacing (`CAP-PORT-02`, `export_workspace` + `.okf` archive), and the graph visualization (`CAP-GRAPH-06`).
 
 ### Built, and still unsurfaced
 Three Core capabilities were built in Epic D with no consumer in Epic E or F. They are now **built and shipped** rather than planned, and each is still unreachable from the running application — which is exactly the state this section exists to keep visible, since this whole wave was scoped because Epics A–C shipped Core components nothing called.

@@ -1,5 +1,21 @@
 # Stage 4: Tasks Changelog
 
+## v1.6.0
+Stage 4 pass of the 2026-08-21 constitution realignment, executed after PRD v1.2.0, architecture v1.3.0 and tech-spec v1.3.0. Totals change: **55 → 57 active points**; the critical path is unchanged at 33.
+
+**Acceptance modes made explicit across both active epics** (14 tickets). Every implementation ticket now carries `Acceptance / Mode: gherkin / Evidence` in the current template shape instead of an unlabeled Gherkin block; behavior is unchanged and no criterion moved. The one deliberate exception: `EDIT-F001`'s mode corrected to `hitl_sil`, since its evidence is human-inspected rendered output against pass/fail criteria, not scenarios — tagging it gherkin would have been the template satisfied and the standard betrayed.
+
+**`SHEL-E008` added (Rescan Workspace, 2 points)**, honoring ruling Q12 that an explicit refresh affordance ships this wave rather than waiting for file-watching. Drives the existing full-reindex Core call; its STOP encodes the recorded transient-drop window by refusing to run under open sessions with unwritten edits. Not on the critical path; hangs off `SHEL-E003` in the graph.
+
+**`EDIT-F002` gained the IME composition scenario** from the realignment audit: a live composition string must survive blur/commit without loss or duplication. ADR-006 inherits the platform IME and nothing tested this; it rides F002 because that is where promotion first meets composition.
+
+**Wave 3 reshaped in the phasing strategy per rulings B5/B6:** two genuinely parallel tracks (sync/conflict backbone vs interactive design epic), GitLab at P1 behind GitHub inside Track 1, and the OD-03 handoff points drawn explicitly — design tokens gate the sync indicator, editor chrome, and CAP-PORT-04's rendition, with correctness beating design when the tracks compete for the same hands. Undo/version-restore/find-and-replace placed as a Wave-3 editor cluster consuming their declared contract surfaces; diagnostics rides Epic I with CI and the nightly benchmark job; Epic I revised to the Linux+macOS matrix chosen at Q9.
+
+### Corrections from milestone review, folded into v1.6.0
+Nothing beyond this branch has merged; fixes fold rather than version separately.
+
+- A first mechanical retrofit tagged the Spike `EDIT-F001` as `gherkin`; corrected to `hitl_sil` above rather than left as template noise.
+- The traceability sweep for this pass confirmed every new capability id from PRD v1.2.0 now has either an active ticket (`CAP-WS-06`), a Wave-3 home in the phasing strategy, or a named deferral with reasoning — none is orphaned.
 ## v1.5.0
 **Epic D — Workspace & Persistence completed and archived.** All nine tickets (`WSPC-D001` … `WSPC-D009`, 50 story points, one of them a Spike) are implemented, reviewed and merged across 17 commits, and `EPIC-D-workspace-persistence.md` moves from `active/` to `completed/` with a Completion Notes section appended. The active backlog drops from **105 points to 55** — Epic E (25) and Epic F (30). Minor bump: scope removed by completion, no restructuring of the stage.
 
