@@ -12,6 +12,16 @@ Evolution pass driven by the Realign interview of 2026-08-21 and PRD v1.2.0, giv
 **No durable shapes added.** Undo state lives in Core memory bounded by session; versions read from history rather than schema; consolidation migrates rows the schema already holds; preferences storage deliberately waits for its design epic. `schema.sql` is unchanged and stays byte-identical to the live copy.
 
 **Deliberately deferred to their owning epics' Stage 3 passes:** the concrete logging dependency choice for ADR-011 (added to the BOM by the ticket that wires it, not speculatively), the HTML rendition surface for CAP-PORT-04 (waits for the design system per its own rationale, then amends this contract), and the preferences persistence shape for CAP-PREF-01 (same reasoning). Declaring them now would be speculation wearing a contract.
+
+### Corrections from milestone review, folded into v1.3.0
+Nothing beyond this branch has merged; per house convention the review fixes fold rather than version separately.
+
+- **CAP-SYNC-07 had no surface and no deferral** — the one capability this pass missed entirely. `clone_workspace(provider, repository, destination)` now declares it, with the non-empty-repository point stated against `connect_remote` and the consolidation hand-off named.
+- **`export_workspace` returned `()` while its own doc and `flow-export.md` require a report.** Returns `ExportReport` (non-conformant ids; unreadable paths) — partial output plus an explicit list is honest, silent completeness is not.
+- **`apply_consolidation` bound decisions positionally**, a silent-misresolution footgun across a background pull between plan and apply. Decisions are now keyed by `concept_id` and verified at apply time.
+- **Detach–reconnect contradicted `connect_remote`'s emptiness precondition**: reconnect after detach targets a repository this Workspace previously published to, with a fast-forward check rather than emptiness.
+- **Tier-1 scope closed for the new mutators** (`undo_note`, `redo_note`, `replace_all_in_note`): the Realignment banner and an ADR-008 amendment state the general rule — every content mutator writes the draft row and increments `edit_seq` — replacing what was an enumeration pretending to be exhaustive.
+- `DiagnosticsBundle` gained the promised `schema_version`; `collect_diagnostics` is async so the Dart thread never waits on the log read; ADR-011 records `tracing` as ruling Q11's named candidate for the ticket that wires it to confirm.
 ## v1.2.0
 Freshness and reconciliation pass at the close of **Epic D (Workspace & Persistence)**, run against the nine shipped tickets `WSPC-D001` … `WSPC-D009`. Minor bump: two ADRs gained amendments and the normative schema gained a column, with no decision reversed and no contract signature changed.
 

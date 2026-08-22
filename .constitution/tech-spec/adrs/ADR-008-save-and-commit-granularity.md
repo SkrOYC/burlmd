@@ -35,6 +35,10 @@ Persistence is tiered, with each tier triggered by a different event and serving
 
 The user is never shown a save control, a commit message field, or a Git concept at any tier.
 
+## Amendment — 2026-08-21 (realignment surfaces)
+
+Decision 1's mutator enumeration was written as exhaustive when the contract had a closed set of content mutators. The realignment adds three — `undo_note`, `redo_note` and `replace_all_in_note` — and the rule is now general rather than enumerative: **every present and future content mutator writes the draft row and increments `edit_seq` under the state lock**, because work an operation restores or produces must be crash-durable the moment it exists, not when the idle timer happens to fire. Undo's entries store inverses over source text (ADR-010), so an undo after the idle write is itself a tier-1 mutation followed by the ordinary tier sequence; no new persistence mechanism exists or may be invented for it.
+
 ## Consequences
 - **Positive:** Version history stays readable — approximately one commit per Note per writing session, rather than one per keystroke or one per arbitrary time slice. Timer-based commits were explicitly rejected on the grounds that a 30-second boundary splits a single thought across two commits for no reason a reader of the log could reconstruct.
 - **Positive:** The `drafts` table stops being dead schema, and `notify_activity()` stops being dead code.

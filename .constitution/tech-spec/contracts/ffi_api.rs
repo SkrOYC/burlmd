@@ -181,10 +181,21 @@ pub enum ExportForm {
 /// a Workspace the user is entitled to take elsewhere would invert the
 /// capability's purpose.
 #[frb]
+#[frb]
+pub struct ExportReport {
+    /// Concept ids of exported Notes found non-conformant. Reported, never gated:
+    /// refusing to export a Workspace the user is entitled to take elsewhere would
+    /// invert the capability's purpose.
+    pub non_conformant: Vec<String>,
+    /// Paths that could not be read during the walk. Partial output plus this list
+    /// is honest; silent completeness is not.
+    pub unreadable: Vec<String>,
+}
+
 pub async fn export_workspace(
     destination: String,
     form: ExportForm,
-) -> Result<(), AppError> {
+) -> Result<ExportReport, AppError> {
     unimplemented!()
 }
 
@@ -1124,7 +1135,10 @@ pub async fn authenticate_workspace(
 /// Attaches a Remote to an existing local Workspace and publishes its
 /// history (CAP-SYNC-01). Provisions a new private repository when
 /// `repository` is `None`, otherwise adopts the named one, which must be
-/// empty. Updates `workspaces.provider` and `remote_url` in place; never
+/// empty -- verified per the provider module -- **or a repository this
+/// Workspace previously published to** (reconnect after detach: local history
+/// must be a descendant of the remote head, which makes re-publishing a plain
+/// push). Updates `workspaces.provider` and `remote_url` in place; never
 /// re-clones or discards local state.
 ///
 /// **Provider seam (ADR-009):** `provider` names an entry in the provider
@@ -1162,10 +1176,37 @@ pub async fn detach_remote() -> Result<WorkspaceInfo, AppError> {
     unimplemented!()
 }
 
+/// Joins a connected Workspace from a second device (CAP-SYNC-07, ruling Q1):
+/// authorize via `begin_oauth_flow` / `authenticate_workspace`, then clone
+/// `repository` and make the clone the active Workspace. Unlike
+/// `connect_remote`, adopting populated history is the entire point; the
+/// destination must be empty or absent because two populated histories never
+/// merge (`prd/out-of-scope/history-merge-on-connect.md`). Consolidating a
+/// previous local archive into the clone afterward is `plan_consolidation`
+/// / `apply_consolidation`'s job.
+#[frb]
+pub async fn clone_workspace(
+    provider: String,
+    repository: String,
+    /// Directory to clone into; `None` resolves the default location's next
+    /// free sibling, since the default is already occupied by this device's
+    /// existing Workspace when one exists.
+    destination: Option<String>,
+) -> Result<WorkspaceInfo, AppError> {
+    unimplemented!()
+}
+
 // ---------------------------------------------------------------------------
 // Realignment surfaces (2026-08-21) -- declared so no downstream stage invents
 // them; each stays `unimplemented!()` until its owning epic lands, exactly as
 // `export_workspace` has been since its capability was scoped.
+//
+// The tier-1 obligation extends here by rule: every content mutator below
+// writes the draft row and increments `edit_seq` under the state lock, for
+// the same reason `resolve_suggestion` does -- work restored by undo, or
+// produced by replace-all, must not live only in memory until the idle timer
+// fires. A mutator absent from both ADR-008's enumeration and this banner is
+// a defect to raise, not an omission to improvise around.
 // ---------------------------------------------------------------------------
 
 #[frb]
@@ -1198,15 +1239,24 @@ pub async fn plan_consolidation(
     unimplemented!()
 }
 
+#[frb]
+pub struct CollisionDecision {
+    /// Must still collide identically at apply time, else `AppError` -- a
+    /// background pull between plan and apply shifts the collision list, and
+    /// positional binding would silently misresolve. Keyed by identity so the
+    /// Core verifies what the user actually decided on.
+    pub concept_id: String,
+    pub resolution: CollisionResolution,
+}
+
 /// Applies a planned consolidation. Non-conflicting Notes migrate with fresh
 /// history ("Import N Notes"); each collision resolves exactly as decided;
-/// the source Workspace is never modified. Decisions are positional against
-/// `plan_consolidation`'s collision list from the same `source_path`, so a
-/// plan must be applied without an intervening change to either side.
+/// the source Workspace is never modified. Every decision's `concept_id` must
+/// still collide identically at apply time.
 #[frb]
 pub async fn apply_consolidation(
     source_path: String,
-    decisions: Vec<CollisionResolution>,
+    decisions: Vec<CollisionDecision>,
 ) -> Result<WorkspaceInfo, AppError> {
     unimplemented!()
 }
@@ -1283,14 +1333,18 @@ pub struct DiagnosticsBundle {
     /// Zero Content Telemetry).
     pub entries: Vec<String>,
     pub generated_at: i64,
-    /// Application and index schema versions for triage; no user identifiers.
+    /// Application version for triage; no user identifiers.
     pub app_version: String,
+    /// Index schema version, because schema drift is itself a triage answer.
+    pub schema_version: String,
 }
 
 /// Produces a redacted diagnostics bundle on demand (CAP-SUP-01). A pure read
 /// over the local log channel; nothing is transmitted anywhere by this call.
-#[frb(sync)]
-pub fn collect_diagnostics() -> Result<DiagnosticsBundle, AppError> {
+/// Async despite doing no I/O of its own beyond reading the log file, so the
+/// Dart thread never waits on disk.
+#[frb]
+pub async fn collect_diagnostics() -> Result<DiagnosticsBundle, AppError> {
     unimplemented!()
 }
 
