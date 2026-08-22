@@ -142,6 +142,26 @@ class NoteController extends Notifier<NoteState?> {
     }
   }
 
+  /// Adopts `newState` as the open Note's state without any Core round trip
+  /// (`SHEL-E005`). This is the re-anchor path for identity-changing
+  /// lifecycle operations — rename, move, containing-directory rename: the
+  /// Core carries the open session forward under the new concept id (working
+  /// source, span map, recorded revision), so closing and reopening would
+  /// address a dead identifier and fail. The returned post-operation state is
+  /// authoritative; adopting it directly keeps the editor anchored to the
+  /// same live session under its new id.
+  void adopt(NoteState newState) {
+    state = newState;
+  }
+
+  /// Closes the editor without touching the Core (`SHEL-E005`): the Note it
+  /// was showing has been deleted, and the deletion already discarded the
+  /// session and its draft row Core-side, so sending `close_note` would only
+  /// raise `NotFound`. Used when a deletion removes the open Note.
+  void clear() {
+    state = null;
+  }
+
   /// Reloads the currently open Note from disk through `reload_note`
   /// (`SHEL-E007`) — the only exit from a tier-2 `RevisionMismatch`.
   ///
