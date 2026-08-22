@@ -1,5 +1,16 @@
 # Stage 3: Technical Implementation Changelog
 
+## v1.4.0
+Freshness pass at the close of **Epic E (Shell & Navigation)**. Minor bump: `guidelines.md` gained two Dart standards and the repo layout tree and real-application procedure were reconciled with what shipped; no ADR, contract signature, schema or storage-format document changed.
+
+**`guidelines.md` gained the error-surface rule and the shell provider-seam convention** as standing Dart standards. The first states that every error returned across the FFI boundary must reach a user-visible surface — codifying what `SHEL-E004` built after Epic B's review had recorded the editor shipping with no error path at all. The second states that shell surfaces coordinate through provider seams rather than widget ownership: note selection through the shared selection seam (`selectedNoteIdProvider`), the tree rendered from the Core's single whole-tree payload with only expansion state ephemeral, and note switching closing the outgoing Note through the commit tier before the next opens. Both are descriptions of shipped behavior promoted to rules so Epic F's editor work inherits them rather than rediscovering them.
+
+**The layout tree now names `workspace.dart` and `scripts/`.** `screens/` previously gave only `login.dart` as its example, which after `SHEL-E002` described the one screen that is no longer a route at startup; the entry now records both screens and why login survives (the deferred connect flow). `scripts/smoke-shot.sh` — which thirteen ticket gates invoked this wave but no specification named — is now in the tree with a pointer to `.qa/` being gitignored.
+
+**The real-application procedure gained a command.** The paragraph describing the ad-hoc `grim`/`wtype` Wayland procedure now leads with `scripts/smoke-shot.sh <name>` (`SHEL-E001`): release native library and bundle builds, launch, render detection by raw-pixel diff against a measured desktop noise floor, screenshot to a known path, non-zero exit on failure to start or render. Every UI ticket's Verification Command gates on it; the underlying manual procedure remains documented for interactive debugging.
+
+**Two standing standards recorded as unmet by the epic that adopted them.** The accessibility bar (`Semantics` labels) and the i18n-readiness rule (`gen-l10n` externalization from the first screen) were both written to precede Epic E's first widgets, and Epic E's widgets meet neither: zero `Semantics` wrappers ship, user-facing strings are hardcoded literals across the new components, and no `l10n` scaffolding exists. Recorded here and in the archived epic's follow-ups rather than silently dropped — they are owed before the design-system epic builds final UI, since retrofitting string extraction across more surfaces only gets more expensive.
+
 ## v1.3.0
 Evolution pass driven by the Realign interview of 2026-08-21 and PRD v1.2.0, giving every new capability a contract-shaped surface so no downstream stage invents one. No shipped signature changed and no decision was reversed; the BOM is untouched.
 

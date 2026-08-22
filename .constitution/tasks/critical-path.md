@@ -1,52 +1,36 @@
 ---
-version: v1.6.0
+version: v1.7.0
 ---
 
 # Active Backlog Summary
 
-**Total Active Story Points:** 57
+**Total Active Story Points:** 30
 
-- Epic E — Shell & Navigation: 27
 - Epic F — Editor Depth: 30
 
-Epics A, B, C and D (99 points — 10, 23, 16 and 50, summed from the ticket efforts in `completed/`) are complete and archived under `completed/`; they contribute nothing to the totals or the graph below.
+Epics A through E (126 points — 10, 23, 16, 50 and 27, summed from the ticket efforts in `completed/`) are complete and archived under `completed/`; they contribute nothing to the totals or the graph below.
 
-Epic D is what changed between v1.4.0 and this revision. The Core is now real: a bundle on disk, an encrypted index derived from it, span-preserving editing that never rewrites a byte the user did not touch, the four persistence tiers, and Note and Directory lifecycle with atomic inbound-link rewriting. The claim that opened the previous revision — that every production `INSERT` in the repository lives inside a test module — is no longer true. What remains true is the other half: the application still opens to a login screen that cannot be passed, and nothing built in Epic D is reachable from it. **Everything left in this wave is user-facing.** That is a different kind of work from what just shipped, and it is worth naming, because the remaining 57 points carry all of the product risk and none of the algorithmic risk.
+Epic E is what changed between v1.6.0 and this revision, and it changed the kind of work this document schedules. The application is usable: it opens straight into the Workspace with no login gate, the Directory tree navigates, the editor mounts and closes every outgoing Note through the commit tier before another opens, Note and Directory lifecycle actions re-anchor identity changes through the Core's id remapping, search and crash recovery are visible surfaces rather than unreachable code, and CAP-WS-06's rescan ships behind a guard that refuses to run under open unflushed sessions. None of that was asserted from widget tests alone — thirteen smoke screenshots were captured by `scripts/smoke-shot.sh` as ticket gates, which is what building the harness first was for. What remains is one epic about writing quality: Live Preview, cross-Block selection, Block manipulation through ordinary typing, Link insertion through completion, and range editing across a multi-Block selection. It is the last thing standing between the current application and the cutover bar described below.
 
 ## Critical Path
 
-The longest dependency chain is **33 of the 57 points**. Everything else can be scheduled around it.
+The longest dependency chain is **18 of the 30 points**. Everything else can be scheduled around it.
 
-1. `SHEL-E001` — Manual-QA Smoke Harness
-2. `SHEL-E002` — Open Directly Into the Workspace
-3. `SHEL-E003` — Directory Tree Sidebar
-4. `SHEL-E004` — Mount the Editor and Navigate
-5. `EDIT-F001` — Spike: Rendered-to-Raw Promotion Fidelity
-6. `EDIT-F002` — Live Preview Block Promotion
-7. `EDIT-F003` — Cross-Block Selection and Copy
-8. `EDIT-F007` — Editing Across a Multi-Block Selection
+1. `EDIT-F001` — Spike: Rendered-to-Raw Promotion Fidelity
+2. `EDIT-F002` — Live Preview Block Promotion
+3. `EDIT-F003` — Cross-Block Selection and Copy
+4. `EDIT-F007` — Editing Across a Multi-Block Selection
 
-**`SHEL-E001` has moved onto the critical path, and this is the one scheduling consequence of Epic D's completion worth reading carefully.** The previous revision recorded the smoke harness as deliberately *off* the path. That was correct then and is wrong now, and the reason is arithmetic rather than judgement: `SHEL-E004` was reached through `WSPC-D008` at 31 points of Epic D work, which dominated the 10-point `SHEL-E001` → `E002` → `E003` route into the same node. With Epic D archived, that dominating route no longer exists, so the Epic E chain is the only way into `SHEL-E004` and the harness is its root. The practical advice is unchanged and now doubly binding: do it first, since thirteen later tickets invoke `smoke-shot.sh` as their verification gate — `SHEL-E002` through `SHEL-E008` and `EDIT-F002` through `EDIT-F007`.
+With Epic E archived, the chain into `EDIT-F001` is no longer a story worth telling: its remaining dependency, `SHEL-E004`, is done, so the Spike is simply the root of the path, which is now entirely intra-epic. `EDIT-F003` and `EDIT-F004` remain interchangeable at step 3 — both are 5 points, both depend only on `EDIT-F002`, and both feed `EDIT-F007`, so the chain measures 18 either way. `EDIT-F003` stays listed because cross-Block selection is the harder of the two to retrofit.
 
-`EDIT-F003` and `EDIT-F004` are interchangeable at step 7: both are 5 points, both depend only on `EDIT-F002`, and both feed `EDIT-F007`, so the chain is 33 points either way. `EDIT-F003` is listed because cross-Block selection is the harder of the two to retrofit.
+The scheduling advice carried from the last revision survives as precedent rather than instruction: build the cheapest thing that unblocks the most work first. Here that is still the Spike — five tickets hang off `EDIT-F002`.
 
-**An undeclared dependency edge surfaced during Epic D's execution, and is recorded so future DAGs model it.** The published v1.4.0 graph had `WSPC-D006` (Lifecycle) depending only on `WSPC-D005`. In practice it also needed `WSPC-D007` (Persistence Tiers): `D006`'s acceptance criteria require a pathspec-scoped commit covering exactly the paths a lifecycle operation touched, and require carrying every affected Note's buffer, span map, recorded revision and draft row forward through a rename — both of which are `D007`'s to provide. The edge was `D007 → D006`, not the reverse, and it was discovered mid-execution rather than at planning time. The lesson generalizes: a ticket that mutates files *and* must leave open editing sessions coherent depends on whatever owns those sessions, even when the two tickets look independent from their file scopes.
+**One dependency-modeling lesson stands from Epic D's execution, kept here because future DAGs are still drawn against it.** The published v1.4.0 graph had `WSPC-D006` (Lifecycle) depending only on `WSPC-D005`. In practice it also needed `WSPC-D007` (Persistence Tiers): `D006`'s acceptance criteria require a pathspec-scoped commit covering exactly the paths a lifecycle operation touched, and require carrying every affected Note's buffer, span map, recorded revision and draft row forward through a rename — both of which are `D007`'s to provide. The edge was discovered mid-execution rather than at planning time. The lesson generalizes: a ticket that mutates files *and* must leave open editing sessions coherent depends on whatever owns those sessions, even when the two tickets look independent from their file scopes. No such undeclared edge surfaced during Epic E; its published dependencies held throughout.
 
 ## Build Order Diagram
 
 ```mermaid
 flowchart LR
-    subgraph EpicE [Epic E - Shell and Navigation]
-        E001[SHEL-E001<br/>Smoke harness]
-        E002[SHEL-E002<br/>Open workspace]
-        E003[SHEL-E003<br/>Tree sidebar]
-        E004[SHEL-E004<br/>Mount editor]
-        E005[SHEL-E005<br/>Lifecycle UI]
-        E006[SHEL-E006<br/>Search]
-        E007[SHEL-E007<br/>Draft recovery]
-        E008[SHEL-E008<br/>Rescan workspace]
-    end
-
     subgraph EpicF [Epic F - Editor Depth]
         F001[EDIT-F001<br/>Spike: promotion]
         F002[EDIT-F002<br/>Live Preview]
@@ -57,15 +41,6 @@ flowchart LR
         F007[EDIT-F007<br/>Range editing]
     end
 
-    E001 --> E002
-    E002 --> E003
-    E003 --> E004
-    E004 --> E005
-    E004 --> E006
-    E004 --> E007
-    E003 --> E008
-
-    E004 --> F001
     F001 --> F002
     F002 --> F003
     F002 --> F004
@@ -75,14 +50,14 @@ flowchart LR
     F004 --> F007
 ```
 
-Every Epic D node and every edge out of one is gone from the graph above, Epic D being archived. Nine of those edges crossed into this wave — `D004 → E002`, `D009 → E003`, `D008 → E004`, `D006 → E005`, `D009 → E006`, `D007 → E007`, `D008 → F002`, `D009 → F006` and `D006 → F006` — and all nine are **satisfied**, not dropped for convenience: each named a Core capability that now exists and that the target ticket consumes. They are removed because their source nodes are, not because the dependency stopped mattering. A ticket in this wave that cannot find the Core function it needs should treat that as a defect to report rather than as scope to invent.
+Every Epic E node and every edge out of one is gone from the graph above, Epic E being archived. One of those edges crossed into the remaining work — `SHEL-E004 → EDIT-F001` — and it is **satisfied**, not dropped: the mounted, navigating editor it named now exists in `lib/src/`. The seven intra-epic edges were removed because their source nodes were, not because the dependencies stopped mattering; each delivered the capability its target consumes, and a ticket in this wave that cannot find what it needs should treat that as a defect to report rather than as scope to invent.
 
 ## Phasing Strategy
 
 ### In-Scope (Current Phase)
 Desktop only. The outcome is a local-only Workspace the primary actor can use daily: create, rename, move and delete Notes and Directories; write in them with Live Preview across every Block type; select and copy across Blocks; insert Links through completion; search the full text; and have every editing session land in local version history automatically.
 
-The cutover bar is deliberately "genuinely good", not "technically working". Epics D and E alone would produce an application that persists Notes and can open them, but whose editor can only edit plain single-line paragraphs — usable for capture and unpleasant for anything else. Epic F is what makes it worth switching to.
+The cutover bar is deliberately "genuinely good", not "technically working". Epics D and E together produce an application that persists Notes, opens them, navigates them, searches them and recovers them — but whose editor can only edit plain single-line paragraphs: usable for capture and unpleasant for anything else. Epic F is what makes it worth switching to.
 
 Synchronization is **not** required for that outcome, and this is load-bearing rather than a compromise: in a local-first Workspace every close is a real commit to a real repository, so Notes are version-controlled and recoverable from the first one written. A Remote adds off-machine durability and multi-device access. Neither is a data-safety precondition.
 
@@ -95,7 +70,7 @@ Wave 3 was shaped by the realignment interview (2026-08-21) rather than inherite
 - **GitLab provider** (`CAP-SYNC-09`, P1) lands behind GitHub inside this track once the seam has one proven consumer (ADR-009, B5).
 
 **Track 2 — design system and surfaces:**
-- **Design & Preferences epic** (`CAP-PREF-01`): interactive by decision — human-driven design work expressed through `hitl_sil` and `visual_regression` acceptance modes, not Gherkin-by-default. Produces burlmd's design tokens.
+- **Design & Preferences epic** (`CAP-PREF-01`): interactive by decision — human-driven design work expressed through `hitl_sil` and `visual_regression` acceptance modes, not Gherkin-by-default. Produces burlmd's design tokens. Owes the string externalization and `Semantics` pass recorded at `tech-spec/changelog.md` v1.4.0 — Epic E's widgets ship hardcoded literals with no accessibility labels, and retrofitting extraction across more surfaces only gets more expensive.
 
 **Handoff points between tracks (OD-03):** the design epic delivers tokens before three consuming surfaces build final UI: the sync status indicator (Epic G renders it, but its visual form waits for tokens), the editor chrome Epic F's wave-3 follow-ups touch, and CAP-PORT-04's rendition, which is explicitly sequenced behind this epic. When both tracks want the same hands on the same day, Track 1's correctness work wins and design slips — solo-dev reality, stated here so the slip is planned rather than felt as failure.
 
@@ -106,7 +81,7 @@ Wave 3 was shaped by the realignment interview (2026-08-21) rather than inherite
 - **Epic I — Quality & Portability** (revised): continuous integration as the Linux+macOS matrix chosen at Q9, the nightly non-blocking benchmark job verifying every meter in `prd/constraints.md`, images (`CAP-EDIT-06`, `assets/` per Q7), Export surfacing (`CAP-PORT-02`, `export_workspace` + `.okf` archive), and the graph visualization (`CAP-GRAPH-06`).
 
 ### Built, and still unsurfaced
-Three Core capabilities were built in Epic D with no consumer in Epic E or F. They are now **built and shipped** rather than planned, and each is still unreachable from the running application — which is exactly the state this section exists to keep visible, since this whole wave was scoped because Epics A–C shipped Core components nothing called.
+Three Core capabilities were built in Epic D with no consumer in Epic E or F. They remain unreachable from the running application after Epic E — which is exactly the state this section exists to keep visible, since the whole point of this wave structure was that Epics A–C shipped Core components nothing called, and calling nothing twice would repeat the failure.
 
 - **Backlinks** (`CAP-GRAPH-05`, P1). `WSPC-D009` built the query and `idx_links_target` backs it, but no ticket surfaces inbound Links in the UI. The index work was not wasted: the same table and index serve the link rewriting `WSPC-D006` depends on, which is why it was built then rather than deferred wholesale.
 - **Title-prefix jump** (`CAP-FIND-02`, P1). `WSPC-D009` built `find_notes_by_title`, but `SHEL-E006` is full-text search and no ticket surfaces the title jump. Two notes for whoever picks it up: it matches a **leading prefix only**, which is a deliberate Stage 3 narrowing of CAP-FIND-02's "part of its title" recorded in `tech-spec/contracts/ffi_api.rs`; and its per-keystroke cost is unmeasured, since `schema.sql` declares no index on `notes(title)` and the query scans the Workspace's rows. Measure it before putting it behind a palette.
@@ -120,8 +95,7 @@ Separately, three capability fragments — two P0, one P1 — are covered by tic
 
 Sweeping every `CAP-*` id against the active tickets and the contract afterwards left four unreferenced, all deferred by design and all already accounted for above: `CAP-EDIT-06` (images) and `CAP-GRAPH-06` (graph visualization) to Epic I, `CAP-SYNC-02` to Epic G, and `CAP-EDIT-07`, a P2 explicitly redundant with the keyboard shortcuts `EDIT-F005` delivers. Two P0s — `CAP-WS-02` and `CAP-WS-04` — were covered by `WSPC-D007` and `WSPC-D004` without being named in either; they are named now.
 
-
-The three built-but-unsurfaced capabilities above — backlinks, the title-prefix jump, and opening a foreign Workspace — need only UI work to become reachable, and all three are placed in Wave 3's Track 1 above. The traceability fragments listed after them are a separate matter, and are closed in this wave.
+The three built-but-unsurfaced capabilities above need only shell work over shipped Core to become reachable — Epic E proved that shape twice over, turning `search_notes` and the recovery/write-status queries into user-facing surfaces (`SHEL-E006`, `SHEL-E007`) without touching Rust. All three are placed in Wave 3's Track 1 above. The traceability fragments listed after them are a separate matter, and are closed in this wave.
 
 ### Deferred (Future Scope)
 Mobile targets, multiple simultaneous Workspaces, and adopting a non-empty Remote. Each has a standing entry under `prd/out-of-scope/` explaining the reasoning and the conditions that would reopen it.
