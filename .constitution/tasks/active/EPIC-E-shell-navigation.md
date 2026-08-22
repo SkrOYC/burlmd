@@ -4,7 +4,7 @@ Makes the application usable. Epic D produces a working Core with nothing on scr
 
 Every ticket here changes what the user sees, so every Verification Command launches the real application. That standard exists because no ticket through Epic B ever did, and a rendering regression shipped past six passing widget tests as a result.
 
-That makes `SHEL-E001` a 2-point ticket gating twelve of this wave's fourteen UI tickets, on tooling (`grim`/`wtype`) that `tech-spec/guidelines.md` records as Wayland-only and outside every build path. Its STOP condition already forbids substituting a widget-test assertion if capture proves impossible, and the consequence of hitting it is stated here rather than left implicit: the twelve dependent gates degrade to `flutter test` alone, which is the exact blind spot this standard exists to close, so hitting it is a signal to fix the harness or change platform — not to proceed with weaker gates.
+That makes `SHEL-E001` a 2-point ticket gating thirteen of this wave's fifteen UI tickets, on tooling (`grim`/`wtype`) that `tech-spec/guidelines.md` records as Wayland-only and outside every build path. Its STOP condition already forbids substituting a widget-test assertion if capture proves impossible, and the consequence of hitting it is stated here rather than left implicit: the thirteen dependent gates degrade to `flutter test` alone, which is the exact blind spot this standard exists to close, so hitting it is a signal to fix the harness or change platform — not to proceed with weaker gates.
 
 #### SHEL-E001 Manual-QA Smoke Harness
 - **Type:** Chore
@@ -309,11 +309,11 @@ Then the failure is shown persistently rather than once, since every subsequent 
 - **Category:** Correctness
 - **Scope (In-Scope Files):**
   - `lib/src/screens/workspace.dart`
-  - `lib/src/providers/workspace_providers.dart`
+  - `lib/src/providers/workspace_provider.dart`
 - **Scope (Out-of-Scope Files):**
   - `rust/src/**` (the Core function exists; nothing Core-side changes)
   - `lib/src/components/**` (don't touch editor internals)
-- **Verification Command:** `./scripts/smoke-shot.sh shel-e008 && flutter test`
+- **Verification Command:** `flutter test && ./scripts/smoke-shot.sh shel-e008`
 - **Expected Success Output:** `exit 0`, screenshot showing the tree reflecting an externally added Note without an application restart
 - **STOP Conditions:**
   - "STOP if the rescan path is reachable while a Note is open with unflushed edits; the recorded transient-drop window means rescanning under open sessions can silently discard freshly-written index rows. The affordance refreshes the shell's view of the Workspace; it does not run mid-session underneath open Notes."

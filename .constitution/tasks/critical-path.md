@@ -11,11 +11,11 @@ version: v1.6.0
 
 Epics A, B, C and D (99 points — 10, 23, 16 and 50, summed from the ticket efforts in `completed/`) are complete and archived under `completed/`; they contribute nothing to the totals or the graph below.
 
-Epic D is what changed between v1.4.0 and this revision. The Core is now real: a bundle on disk, an encrypted index derived from it, span-preserving editing that never rewrites a byte the user did not touch, the four persistence tiers, and Note and Directory lifecycle with atomic inbound-link rewriting. The claim that opened the previous revision — that every production `INSERT` in the repository lives inside a test module — is no longer true. What remains true is the other half: the application still opens to a login screen that cannot be passed, and nothing built in Epic D is reachable from it. **Everything left in this wave is user-facing.** That is a different kind of work from what just shipped, and it is worth naming, because the remaining 55 points carry all of the product risk and none of the algorithmic risk.
+Epic D is what changed between v1.4.0 and this revision. The Core is now real: a bundle on disk, an encrypted index derived from it, span-preserving editing that never rewrites a byte the user did not touch, the four persistence tiers, and Note and Directory lifecycle with atomic inbound-link rewriting. The claim that opened the previous revision — that every production `INSERT` in the repository lives inside a test module — is no longer true. What remains true is the other half: the application still opens to a login screen that cannot be passed, and nothing built in Epic D is reachable from it. **Everything left in this wave is user-facing.** That is a different kind of work from what just shipped, and it is worth naming, because the remaining 57 points carry all of the product risk and none of the algorithmic risk.
 
 ## Critical Path
 
-The longest dependency chain is **33 of the 55 points**. Everything else can be scheduled around it.
+The longest dependency chain is **33 of the 57 points**. Everything else can be scheduled around it.
 
 1. `SHEL-E001` — Manual-QA Smoke Harness
 2. `SHEL-E002` — Open Directly Into the Workspace
@@ -26,7 +26,7 @@ The longest dependency chain is **33 of the 55 points**. Everything else can be 
 7. `EDIT-F003` — Cross-Block Selection and Copy
 8. `EDIT-F007` — Editing Across a Multi-Block Selection
 
-**`SHEL-E001` has moved onto the critical path, and this is the one scheduling consequence of Epic D's completion worth reading carefully.** The previous revision recorded the smoke harness as deliberately *off* the path. That was correct then and is wrong now, and the reason is arithmetic rather than judgement: `SHEL-E004` was reached through `WSPC-D008` at 31 points of Epic D work, which dominated the 10-point `SHEL-E001` → `E002` → `E003` route into the same node. With Epic D archived, that dominating route no longer exists, so the Epic E chain is the only way into `SHEL-E004` and the harness is its root. The practical advice is unchanged and now doubly binding: do it first, since twelve later tickets invoke `smoke-shot.sh` as their verification gate — `SHEL-E002` through `SHEL-E007` and `EDIT-F002` through `EDIT-F007`.
+**`SHEL-E001` has moved onto the critical path, and this is the one scheduling consequence of Epic D's completion worth reading carefully.** The previous revision recorded the smoke harness as deliberately *off* the path. That was correct then and is wrong now, and the reason is arithmetic rather than judgement: `SHEL-E004` was reached through `WSPC-D008` at 31 points of Epic D work, which dominated the 10-point `SHEL-E001` → `E002` → `E003` route into the same node. With Epic D archived, that dominating route no longer exists, so the Epic E chain is the only way into `SHEL-E004` and the harness is its root. The practical advice is unchanged and now doubly binding: do it first, since thirteen later tickets invoke `smoke-shot.sh` as their verification gate — `SHEL-E002` through `SHEL-E008` and `EDIT-F002` through `EDIT-F007`.
 
 `EDIT-F003` and `EDIT-F004` are interchangeable at step 7: both are 5 points, both depend only on `EDIT-F002`, and both feed `EDIT-F007`, so the chain is 33 points either way. `EDIT-F003` is listed because cross-Block selection is the harder of the two to retrofit.
 
@@ -87,7 +87,7 @@ The cutover bar is deliberately "genuinely good", not "technically working". Epi
 Synchronization is **not** required for that outcome, and this is load-bearing rather than a compromise: in a local-first Workspace every close is a real commit to a real repository, so Notes are version-controlled and recoverable from the first one written. A Remote adds off-machine durability and multi-device access. Neither is a data-safety precondition.
 
 ### Deferred (Next Planning Wave)
-Wave 3 was shaped by the realignment interview (2026-08-21) rather than inherited: it runs **two genuinely parallel tracks** — the sync/conflict backbone and the interactive design epic — with the handoff points drawn below per open decision OD-03. Every capability the realignment added has a home here; none is orphaned.
+Wave 3 was shaped by the realignment interview (2026-08-21) rather than inherited: it runs **two genuinely parallel tracks** — the sync/conflict backbone and the interactive design epic — with the handoff points drawn below per open decision OD-03. Every capability the realignment added has a home here, and the three built-but-unsurfaced capabilities from earlier waves are placed below as well; nothing in the active capability list is without a home or a named deferral.
 
 **Track 1 — sync backbone:**
 - **Epic G — Sync Integration**, carrying: connect and detach (`CAP-SYNC-01/06`), second-device join via `clone_workspace` (`CAP-SYNC-07`) with guided consolidation (`CAP-SYNC-08`, `plan_consolidation`/`apply_consolidation`), session restore, credential readback, scheduler lifecycle wiring, the sync status indicator, bounding the scheduler's shutdown wait, and the post-conflict re-push timing question. Absorbs all six of Epic C's deferred follow-ups plus the `rust/src/api/auth.rs` rework, which is not a wiring item: `OAuthFlowStart` currently returns `code_verifier` and `state`; the contract returns a single-use `flow_id` and neither secret, and `authenticate_workspace(flow_id, auth_code, returned_state) -> SessionState` must raise `OAuthStateMismatch` before any token request. Until Epic G lands, the shipped code still mints a `state` nothing compares — the original CSRF defect, unchanged — and this supersedes Epic C's recorded position that the verifier transiting Dart was an accepted decision: under the current contract it does not transit Dart at all.
@@ -102,6 +102,7 @@ Wave 3 was shaped by the realignment interview (2026-08-21) rather than inherite
 **Riding either track, placed by dependency rather than by theme:**
 - Undo (`CAP-EDIT-08`), version restore (`CAP-HIST-01`), in-Note find & replace (`CAP-FIND-03`) — a Wave-3 editor-depth cluster after Epic F proves the promotion model; each consumes its declared contract surface (`undo_note`/`redo_note`, `list_note_versions`/`restore_note_version`, `find_in_note`/`replace_all_in_note`).
 - Diagnostics export (`CAP-SUP-01`) — rides Epic I alongside CI, since ADR-011's log channel and the nightly benchmark share the observability work.
+- The three built-but-unsurfaced capabilities — backlinks (`CAP-GRAPH-05`), the title-prefix jump (`CAP-FIND-02`), and opening a foreign Workspace (`CAP-WS-05`) — surface as small UI tickets inside Track 1: they need only shell work over shipped Core, and the foreign-Workspace picker is a natural neighbor of `clone_workspace`'s destination selection.
 - **Epic I — Quality & Portability** (revised): continuous integration as the Linux+macOS matrix chosen at Q9, the nightly non-blocking benchmark job verifying every meter in `prd/constraints.md`, images (`CAP-EDIT-06`, `assets/` per Q7), Export surfacing (`CAP-PORT-02`, `export_workspace` + `.okf` archive), and the graph visualization (`CAP-GRAPH-06`).
 
 ### Built, and still unsurfaced
@@ -120,7 +121,7 @@ Separately, three capability fragments — two P0, one P1 — are covered by tic
 Sweeping every `CAP-*` id against the active tickets and the contract afterwards left four unreferenced, all deferred by design and all already accounted for above: `CAP-EDIT-06` (images) and `CAP-GRAPH-06` (graph visualization) to Epic I, `CAP-SYNC-02` to Epic G, and `CAP-EDIT-07`, a P2 explicitly redundant with the keyboard shortcuts `EDIT-F005` delivers. Two P0s — `CAP-WS-02` and `CAP-WS-04` — were covered by `WSPC-D007` and `WSPC-D004` without being named in either; they are named now.
 
 
-The three built-but-unsurfaced capabilities above — backlinks, the title-prefix jump, and opening a foreign Workspace — need only UI work to become reachable, and all three belong in the next wave alongside Epic G. The traceability fragments listed after them are a separate matter, and are closed in this wave.
+The three built-but-unsurfaced capabilities above — backlinks, the title-prefix jump, and opening a foreign Workspace — need only UI work to become reachable, and all three are placed in Wave 3's Track 1 above. The traceability fragments listed after them are a separate matter, and are closed in this wave.
 
 ### Deferred (Future Scope)
 Mobile targets, multiple simultaneous Workspaces, and adopting a non-empty Remote. Each has a standing entry under `prd/out-of-scope/` explaining the reasoning and the conditions that would reopen it.
