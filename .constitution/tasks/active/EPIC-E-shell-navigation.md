@@ -151,6 +151,10 @@ When a screenshot is captured
 Then its rendered content is visible
 ```
 
+##### [SHEL-E004] Deviations & Justifications
+- **Touched Files:** `test/components/workspace_tree_test.dart` (not in this ticket's declared scope)
+- **Justification:** The milestone review of SHEL-E003 raised a P2 — the tree's selection highlight read `selectedNoteIdProvider` without watching, leaving stale highlight after the first tap. Fixing it was mandated during SHEL-E004 because the editor consumes the same selection seam; the fix landed in `workspace_tree.dart` (adjacent-scope) and this regression test locks the behavior.
+
 #### SHEL-E005 Note and Directory Lifecycle Actions
 - **Type:** Feature
 - **Effort:** 5
