@@ -37,8 +37,8 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 QA_DIR="$REPO_ROOT/.qa"
 SHOT="$QA_DIR/$NAME.png"
 
-START_TIMEOUT=180     # seconds allowed for both builds + launch
-RENDER_TIMEOUT=60     # seconds allowed for the window to appear
+PROCESS_START_TIMEOUT=180 # seconds allowed for the launched process to be observed running (after both builds)
+RENDER_TIMEOUT=60         # seconds allowed for the window to appear
 SETTLE_SECONDS=3      # grace after first sign of rendering
 POLL_INTERVAL=0.5
 
@@ -126,9 +126,9 @@ echo "[smoke-shot] launching $APP_BIN..."
 "$APP_BIN" &
 APP_PID=$!
 
-START_DEADLINE="$(deadline "$START_TIMEOUT")"
+PROCESS_START_DEADLINE="$(deadline "$PROCESS_START_TIMEOUT")"
 until kill -0 "$APP_PID" 2>/dev/null; do
-  timed_out "$START_DEADLINE" && fail "app process never started"
+  timed_out "$PROCESS_START_DEADLINE" && fail "app process never started"
   sleep "$POLL_INTERVAL"
 done
 
@@ -137,8 +137,8 @@ RENDER_DEADLINE="$(deadline "$RENDER_TIMEOUT")"
 rendered=0
 while :; do
   if ! kill -0 "$APP_PID" 2>/dev/null; then
-    wait "$APP_PID" || true
-    fail "application exited before rendering (exit status recorded above)"
+    wait "$APP_PID" && APP_EXIT=0 || APP_EXIT=$?
+    fail "application exited before rendering (exit status ${APP_EXIT})"
   fi
   if grim -t ppm "$CANDIDATE" >/dev/null 2>&1; then
     diff_pixels="$(count_diff_pixels "$NOISE_A" "$CANDIDATE")"

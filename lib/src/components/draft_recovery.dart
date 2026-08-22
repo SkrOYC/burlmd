@@ -9,10 +9,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 /// user knows work was recovered rather than silently finding a Note in an
 /// unexpected state.
 ///
-/// Selecting an entry opens the Note through the existing selection seam
-/// (`selectedNoteIdProvider` + [NoteController.open]); `open_note` itself
-/// restores the draft in preference to disk, so what renders is the drafted
-/// content and `NoteState.restoredFromDraft` carries where it came from.
+/// Selecting an entry publishes the Note's id through the existing selection
+/// seam (`selectedNoteIdProvider`); the shell's editor-pane listener drives
+/// [NoteController.open] from it — the single open path navigation uses.
+/// `open_note` itself restores the draft in preference to disk, so what
+/// renders is the drafted content and `NoteState.restoredFromDraft` carries
+/// where it came from.
 ///
 /// Dismissing an entry hides **only the notice**: the draft row, the
 /// recovered content and this list's underlying data are untouched
@@ -71,8 +73,10 @@ class RecoveredDraftsPanel extends ConsumerWidget {
   }
 
   void _open(BuildContext context, WidgetRef ref, String noteId) {
+    // Publish only. Driving `activeNoteProvider.open()` here as well would
+    // issue a second, redundant open alongside the shell listener that the
+    // same publication already triggers.
     ref.read(selectedNoteIdProvider.notifier).select(noteId);
-    ref.read(activeNoteProvider.notifier).open(noteId);
   }
 }
 
@@ -97,8 +101,38 @@ class WriteTierNotice extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final status = ref.watch(writeTierMonitorProvider);
-    final error = status?.lastError;
+    final surface = ref.watch(writeTierMonitorProvider);
+    // The poll channel itself is down: after several consecutive failed
+    // polls no status — not even a previously good one — can be trusted, so
+    // say so rather than silently presenting stale data (SHEL-E007's STOP
+    // risk of write failures surfacing into nothing). The monitor keeps
+    // retrying on its own; there is no user action that fixes polling.
+    if (surface.statusUnavailable) {
+      return Card(
+        margin: const EdgeInsets.all(8),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              Icon(
+                Icons.warning_amber_rounded,
+                semanticLabel: 'Write status unavailable',
+                color: Theme.of(context).colorScheme.error,
+              ),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'The note\'s save status cannot be checked right now. '
+                  'Your latest edits may not be written to disk yet; '
+                  'checking continues automatically.',
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    final error = surface.status?.lastError;
     if (error == null) return const SizedBox.shrink();
 
     final message = switch (error) {

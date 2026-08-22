@@ -38,6 +38,10 @@ class _RecoveryRustApi extends RustApi {
   /// What `openNote` returns, per concept id.
   final Map<String, NoteState> openStates = {};
 
+  /// When non-null, every write-status poll throws instead of answering —
+  /// the "the poll channel itself is down" case.
+  Object? throwStatus;
+
   /// What `reloadNote` returns (the disk state), per concept id.
   final Map<String, NoteState> reloadStates = {};
 
@@ -50,6 +54,8 @@ class _RecoveryRustApi extends RustApi {
   @override
   NoteWriteStatus noteWriteStatus(String noteId) {
     calls.add('status:$noteId');
+    final failure = throwStatus;
+    if (failure != null) throw failure;
     return status;
   }
 
@@ -130,15 +136,27 @@ Future<ProviderContainer> _pumpSurface(
   await tester.pumpWidget(
     UncontrolledProviderScope(
       container: container,
-      child: const MaterialApp(
+      child: MaterialApp(
         home: Scaffold(
-          body: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              RecoveredDraftsPanel(),
-              WriteTierNotice(),
-              Expanded(child: Editor()),
-            ],
+          body: Consumer(
+            builder: (context, ref, _) {
+              // Mirrors the shell's editor pane: the selection seam drives
+              // `NoteController.open`, exactly as production navigation
+              // does — the recovery surface itself only publishes.
+              ref.listen<String?>(selectedNoteIdProvider, (_, next) {
+                if (next != null) {
+                  ref.read(activeNoteProvider.notifier).open(next);
+                }
+              });
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  RecoveredDraftsPanel(),
+                  WriteTierNotice(),
+                  Expanded(child: Editor()),
+                ],
+              );
+            },
           ),
         ),
       ),
@@ -268,7 +286,7 @@ void main() {
     expect(container.read(activeNoteProvider)!.restoredFromDraft, isFalse);
     // …and the write status cleared.
     expect(find.textContaining('revision mismatch'), findsNothing);
-    expect(container.read(writeTierMonitorProvider)?.lastError, isNull);
+    expect(container.read(writeTierMonitorProvider).status?.lastError, isNull);
   });
 
   testWidgets('declining the reload keeps the buffered text reachable and '
@@ -331,5 +349,53 @@ void main() {
     container.read(writeTierMonitorProvider.notifier).poll();
     await tester.pump();
     expect(find.textContaining('disk is full'), findsNothing);
+  });
+
+  testWidgets('a poll that fails once or twice keeps last-known standing, '
+      'but persistent failures surface a write-status-unavailable state', (
+    tester,
+  ) async {
+    final api = _RecoveryRustApi()
+      ..status = const NoteWriteStatus(hasUnwrittenEdits: false);
+
+    final container = await _pumpSurface(
+      tester,
+      api,
+      seededNote: _state('n-open', 'Buffered line'),
+    );
+
+    // The channel goes dark mid-session.
+    api.throwStatus = true;
+
+    // One failed poll: transient. The previous clean status keeps standing
+    // (clearing it would unsurface a failure that may still be real) and no
+    // unavailable claim is made yet.
+    container.read(writeTierMonitorProvider.notifier).poll();
+    await tester.pump();
+    expect(
+      container.read(writeTierMonitorProvider).status?.hasUnwrittenEdits,
+      isFalse,
+    );
+    expect(find.textContaining('cannot be checked'), findsNothing);
+
+    container.read(writeTierMonitorProvider.notifier).poll();
+    await tester.pump();
+    expect(find.textContaining('cannot be checked'), findsNothing);
+
+    // A third consecutive failure crosses the threshold: rather than keep
+    // presenting an answer nothing can verify, the surface says plainly
+    // that the save status is unknown (SHEL-E007's STOP risk).
+    container.read(writeTierMonitorProvider.notifier).poll();
+    await tester.pump();
+    expect(find.textContaining('cannot be checked'), findsOneWidget);
+    expect(container.read(writeTierMonitorProvider).statusUnavailable, isTrue);
+
+    // And when the channel comes back, the unavailable state clears.
+    api.throwStatus = null;
+    api.status = const NoteWriteStatus(hasUnwrittenEdits: true);
+    container.read(writeTierMonitorProvider.notifier).poll();
+    await tester.pump();
+    expect(find.textContaining('cannot be checked'), findsNothing);
+    expect(container.read(writeTierMonitorProvider).statusUnavailable, isFalse);
   });
 }

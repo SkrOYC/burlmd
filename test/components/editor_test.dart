@@ -515,6 +515,30 @@ void main() {
     },
   );
 
+  testWidgets('a failed open of the newly selected note also rolls the tree '
+      'selection back to the still-open note', (tester) async {
+    final api = _ShellRustApi([], failOpenFor: {'note-b'});
+    final container = ProviderContainer(
+      overrides: [rustApiProvider.overrideWithValue(api)],
+    );
+    addTearDown(container.dispose);
+
+    final controller = container.read(activeNoteProvider.notifier);
+    await controller.open('note-a');
+
+    // The tree publishes the new selection, then drives the switch; this
+    // time it is the incoming open_note that refuses.
+    container.read(selectedNoteIdProvider.notifier).select('note-b');
+    await controller.open('note-b');
+
+    // B never opened; A is still what the editor shows.
+    expect(api.calls, ['open:note-a', 'close:note-a', 'open:note-b']);
+    expect(container.read(activeNoteProvider)!.metadata.id, 'note-a');
+    // Selection rolled back so the highlight names the note actually
+    // shown — same rule as the close-abort branch above.
+    expect(container.read(selectedNoteIdProvider), 'note-a');
+  });
+
   testWidgets('a Core error on open surfaces instead of being swallowed', (
     tester,
   ) async {

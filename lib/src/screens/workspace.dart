@@ -214,13 +214,16 @@ class _RescanButton extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final rescan = ref.watch(rescanStateProvider);
-    final open = ref.watch(activeNoteProvider);
+    // Derived from the write-tier monitor's polled state rather than a
+    // synchronous `note_write_status` call here: the monitor already polls
+    // every interval while a Note is open and publishes what it saw, so this
+    // stays current as edits flush instead of going stale between rebuilds.
+    // (The monitor state is null when nothing is open or no poll has landed
+    // yet; `run()`'s independent fail-closed check remains the safety net.)
+    final status = ref.watch(writeTierMonitorProvider).status;
     final blockedByOpenEdits =
-        open != null &&
-        WorkspaceRescan.noteHoldsUnwrittenEdits(
-          ref.read(rustApiProvider),
-          open.metadata.id,
-        );
+        status != null &&
+        (status.hasUnwrittenEdits || status.lastError != null);
     final blocked = rescan.running || blockedByOpenEdits;
 
     return Tooltip(

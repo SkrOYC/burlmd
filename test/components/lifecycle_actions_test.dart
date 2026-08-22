@@ -440,7 +440,7 @@ void main() {
 
     await tester.tap(find.text('Projects'));
     await tester.pumpAndSettle();
-    await _invokeRowAction(tester, 'folder Projects', 'New note here');
+    await _invokeRowAction(tester, 'directory Projects', 'New note here');
 
     // The prompt dialog asks for a title before anything reaches the Core.
     await tester.enterText(find.byType(TextField), 'New note');
@@ -487,13 +487,40 @@ void main() {
     expect(api.calls, contains('deleteNote:doomed'));
   });
 
+  testWidgets('deleting the open note clears a stale editor error along '
+      'with the note', (WidgetTester tester) async {
+    // The editor pane checks the error surface before the null-note branch,
+    // so a failure left over from the doomed note would outlive its deletion
+    // unless `clear()` resets it — the deleted note can no longer be
+    // retried, so its error panel names an impossibility.
+    final api = _LifecycleApi(tree: [noteNode('doomed', 'Doomed', 'Doomed.md')])
+      ..openStates = {'doomed': stateFor('doomed', title: 'Doomed')};
+    late ProviderContainer container;
+    await tester.pumpWidget(_probeHarness(api, (c) => container = c));
+    addTearDown(container.dispose);
+
+    final controller = container.read(activeNoteProvider.notifier);
+    container
+        .read(editorErrorProvider.notifier)
+        .report(AppError.pathUnavailable('open refused: Doomed.md'));
+    await controller.open('doomed');
+    expect(container.read(activeNoteProvider), isNotNull);
+
+    await container.read(lifecycleActionsProvider).deleteNote('doomed');
+    await tester.pumpAndSettle();
+
+    expect(container.read(activeNoteProvider), isNull);
+    expect(container.read(selectedNoteIdProvider), isNull);
+    expect(container.read(editorErrorProvider), isNull);
+  });
+
   testWidgets('directory deletion confirms that contained notes go with it', (
     WidgetTester tester,
   ) async {
     final api = _LifecycleApi(tree: [directory('Projects', 'Projects', [])]);
     await _pumpTree(tester, api);
 
-    await _invokeRowAction(tester, 'folder Projects', 'Delete');
+    await _invokeRowAction(tester, 'directory Projects', 'Delete');
     expect(find.textContaining('Every note inside'), findsOneWidget);
     expect(api.calls.where((c) => c.startsWith('deleteDirectory')), isEmpty);
 

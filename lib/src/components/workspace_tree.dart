@@ -57,21 +57,25 @@ class _WorkspaceTreeState extends ConsumerState<WorkspaceTree> {
   @override
   Widget build(BuildContext context) {
     final tree = ref.watch(workspaceTreeProvider);
+    // Riverpod 3 schedules its own background retry after a failed load and
+    // parks the state in a loading-with-error value in between; keying the
+    // error branch on `when(error:)` alone would flash the failure for one
+    // frame and drop back to a spinner. The flow's error state stands until
+    // data actually returns — the Retry button forces an immediate refetch
+    // instead of waiting out that backoff.
+    final treeError = tree.hasError && tree.value == null ? tree.error : null;
+
     // Watched, not read: this is the selected-row highlight's only rebuild
     // trigger. Reading it left every row's `selected` stale after the first
     // tap (the P2 carried over from E003's review) — with a watch, a
     // selection change rebuilds the rows and moves the highlight.
     final selectedId = ref.watch(selectedNoteIdProvider);
 
+    if (treeError != null) return const _TreeErrorState();
+
     return tree.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (error, _) => Padding(
-        padding: const EdgeInsets.all(12),
-        child: Text(
-          'Failed to load workspace tree',
-          style: Theme.of(context).textTheme.bodySmall,
-        ),
-      ),
+      error: (_, _) => const _TreeErrorState(),
       data: (root) => ListView(children: _rows(root, selectedId)),
     );
   }
@@ -114,6 +118,35 @@ class _WorkspaceTreeState extends ConsumerState<WorkspaceTree> {
   }
 }
 
+/// The sidebar's error state (flow-workspace-navigation.md failure path):
+/// names the failure and offers Retry, which invalidates the tree provider
+/// for an immediate refetch rather than waiting out Riverpod's automatic
+/// retry backoff.
+class _TreeErrorState extends ConsumerWidget {
+  const _TreeErrorState();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => Padding(
+    padding: const EdgeInsets.all(12),
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Failed to load workspace tree',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        TextButton.icon(
+          key: const ValueKey('tree-retry'),
+          onPressed: () => ref.invalidate(workspaceTreeProvider),
+          icon: const Icon(Icons.refresh, size: 18),
+          label: const Text('Retry'),
+        ),
+      ],
+    ),
+  );
+}
+
 class _DirectoryRow extends ConsumerWidget {
   const _DirectoryRow({
     required this.node,
@@ -133,21 +166,24 @@ class _DirectoryRow extends ConsumerWidget {
       contentPadding: EdgeInsets.only(left: 8.0 + depth * 16.0, right: 8.0),
       leading: Icon(
         expanded ? Icons.folder_open : Icons.folder,
-        semanticLabel: expanded ? 'Expanded folder' : 'Folder',
+        semanticLabel: expanded ? 'Expanded directory' : 'Directory',
       ),
       title: Text(node.name, overflow: TextOverflow.ellipsis),
       trailing: PopupMenuButton<String>(
-        tooltip: 'Actions for folder ${node.name}',
+        tooltip: 'Actions for directory ${node.name}',
         onSelected: (action) => switch (action) {
           'new-note' => _createNote(context, ref),
-          'new-folder' => _createFolder(context, ref),
+          'new-directory' => _createDirectory(context, ref),
           'rename' => _rename(context, ref),
           'delete' => _delete(context, ref),
           _ => Future<void>.value(),
         },
         itemBuilder: (_) => const [
           PopupMenuItem(value: 'new-note', child: Text('New note here')),
-          PopupMenuItem(value: 'new-folder', child: Text('New subfolder')),
+          PopupMenuItem(
+            value: 'new-directory',
+            child: Text('New subdirectory'),
+          ),
           PopupMenuItem(value: 'rename', child: Text('Rename')),
           PopupMenuItem(value: 'delete', child: Text('Delete')),
         ],
@@ -171,10 +207,10 @@ class _DirectoryRow extends ConsumerWidget {
     report(context, outcome);
   }
 
-  Future<void> _createFolder(BuildContext context, WidgetRef ref) async {
+  Future<void> _createDirectory(BuildContext context, WidgetRef ref) async {
     final name = await promptForText(
       context,
-      title: 'New subfolder in "${node.name}"',
+      title: 'New subdirectory in "${node.name}"',
       label: 'Name',
     );
     if (name == null) return;
@@ -189,7 +225,7 @@ class _DirectoryRow extends ConsumerWidget {
   Future<void> _rename(BuildContext context, WidgetRef ref) async {
     final newName = await promptForText(
       context,
-      title: 'Rename folder "${node.name}"',
+      title: 'Rename directory "${node.name}"',
       label: 'New name',
       initialValue: node.name,
     );
@@ -207,7 +243,7 @@ class _DirectoryRow extends ConsumerWidget {
     // confirming this dialog first.
     final confirmed = await confirmDeletion(
       context,
-      kind: 'folder',
+      kind: 'directory',
       name: node.name,
       consequence:
           'Every note inside "${node.name}" is deleted with it. '
@@ -253,7 +289,7 @@ class _NoteRow extends ConsumerWidget {
         },
         itemBuilder: (_) => const [
           PopupMenuItem(value: 'rename', child: Text('Rename')),
-          PopupMenuItem(value: 'move', child: Text('Move to folder…')),
+          PopupMenuItem(value: 'move', child: Text('Move to directory…')),
           PopupMenuItem(value: 'delete', child: Text('Delete')),
         ],
       ),
@@ -403,7 +439,7 @@ Future<String?> pickDirectory(BuildContext context, WidgetRef ref) async {
   return showDialog<String>(
     context: context,
     builder: (dialogContext) => SimpleDialog(
-      title: const Text('Move to which folder?'),
+      title: const Text('Move to which directory?'),
       children: [
         for (final path in paths)
           SimpleDialogOption(

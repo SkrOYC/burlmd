@@ -138,7 +138,7 @@ class LifecycleActions {
   Future<LifecycleOutcome> createDirectory(String path) => _guard(() async {
     await _api.createDirectory(path);
     _ref.invalidate(workspaceTreeProvider);
-    return LifecycleCompleted('Created folder $path');
+    return LifecycleCompleted('Created directory $path');
   });
 
   /// Renames a Directory. Every Note beneath it gets a new concept id; an
@@ -162,7 +162,7 @@ class LifecycleActions {
     for (final noteId in removed) {
       _closeIfOpen(noteId);
     }
-    return const LifecycleCompleted('Deleted folder');
+    return const LifecycleCompleted('Deleted directory');
   });
 
   // -- internals ------------------------------------------------------------

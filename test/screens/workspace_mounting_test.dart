@@ -189,16 +189,17 @@ void main() {
     final container = await _pumpShell(tester, api);
 
     // With no Note open there is nothing to poll: the monitor is idle.
-    expect(container.read(writeTierMonitorProvider), isNull);
+    expect(container.read(writeTierMonitorProvider).status, isNull);
+    expect(container.read(writeTierMonitorProvider).statusUnavailable, isFalse);
 
     await tester.tap(find.text('Alpha'));
     await tester.pumpAndSettle();
 
     // Opening a Note arms the monitor — polling actually happens now that
     // the shell watches it, instead of failures being raised into nothing.
-    expect(container.read(writeTierMonitorProvider), isNotNull);
+    expect(container.read(writeTierMonitorProvider).status, isNotNull);
     expect(
-      container.read(writeTierMonitorProvider)?.lastError,
+      container.read(writeTierMonitorProvider).status?.lastError,
       isA<AppError_DiskFull>(),
     );
 

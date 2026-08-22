@@ -58,36 +58,50 @@ class _SearchPanelState extends ConsumerState<SearchPanel> {
           ),
         ),
         Expanded(
-          child: results.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
-            // A genuine Core failure is surfaced, never swallowed (the
-            // SHEL-E004 rule). Punctuation-heavy queries are not in that
-            // class: the Core quotes every token before MATCH, so they come
-            // back as results or an empty list, never as an exception.
-            error: (error, _) => _EmptyState(message: 'Search failed: $error'),
-            data: (hits) {
-              if (ref.read(searchQueryProvider).trim().isEmpty) {
-                return const _EmptyState(message: 'Type to search your notes');
-              }
-              if (hits.isEmpty) {
-                return const _EmptyState(message: 'No matching notes');
-              }
-              return ListView(
-                children: [
-                  for (final hit in hits)
-                    _ResultRow(
-                      hit: hit,
-                      onTap: () {
-                        ref
-                            .read(selectedNoteIdProvider.notifier)
-                            .select(hit.id);
-                        widget.onNoteSelected?.call(hit.id);
-                      },
+          // Riverpod 3 parks a failed load in a loading-with-error value
+          // while its automatic retry backoff runs; keying the error branch
+          // on `when(error:)` alone would flash the failure for one frame.
+          // The flow's error state stands until results actually return.
+          child: (results.hasError && results.value == null)
+              ? _SearchErrorState(
+                  error: results.error!,
+                  onRetry: () =>
+                      ref.invalidate(searchResultsProvider(widget.resultLimit)),
+                )
+              : results.when(
+                  loading: () =>
+                      const Center(child: CircularProgressIndicator()),
+                  error: (error, _) => _SearchErrorState(
+                    error: error,
+                    onRetry: () => ref.invalidate(
+                      searchResultsProvider(widget.resultLimit),
                     ),
-                ],
-              );
-            },
-          ),
+                  ),
+                  data: (hits) {
+                    if (ref.read(searchQueryProvider).trim().isEmpty) {
+                      return const _EmptyState(
+                        message: 'Type to search your notes',
+                      );
+                    }
+                    if (hits.isEmpty) {
+                      return const _EmptyState(message: 'No matching notes');
+                    }
+                    return ListView(
+                      children: [
+                        for (final hit in hits)
+                          _ResultRow(
+                            hit: hit,
+                            onTap: () {
+                              ref
+                                  .read(selectedNoteIdProvider.notifier)
+                                  .select(hit.id);
+                              widget.onNoteSelected?.call(hit.id);
+                            },
+                          ),
+                      ],
+                    );
+                  },
+                ),
         ),
       ],
     );
@@ -111,6 +125,64 @@ class _EmptyState extends StatelessWidget {
           message,
           style: Theme.of(context).textTheme.bodySmall,
           textAlign: TextAlign.center,
+        ),
+      ),
+    );
+  }
+}
+
+/// A genuine Core failure (flow-search.md's "index unavailable or
+/// unreadable" branch): rendered distinctly from the calm empty states, with
+/// a retry for a transient hiccup and a pointer to the shell's rescan
+/// affordance, whose full reindex (`CAP-WS-06`) is what rebuilds a broken
+/// index. The panel does not drive the reindex itself — the rescan action in
+/// the sidebar owns that seam and its open-edits guard.
+class _SearchErrorState extends StatelessWidget {
+  const _SearchErrorState({required this.error, required this.onRetry});
+
+  final Object error;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: const [
+                Icon(Icons.error_outline, semanticLabel: 'Error'),
+                SizedBox(width: 8),
+                Flexible(child: Text('Search failed')),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '$error',
+              style: Theme.of(context).textTheme.bodySmall,
+              textAlign: TextAlign.center,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 8),
+            TextButton.icon(
+              key: const ValueKey('search-retry'),
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh, size: 18),
+              label: const Text('Retry'),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'If this keeps happening, run "Rescan workspace" to rebuild '
+              'the search index.',
+              style: Theme.of(context).textTheme.bodySmall,
+              textAlign: TextAlign.center,
+            ),
+          ],
         ),
       ),
     );
