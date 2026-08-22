@@ -39,6 +39,11 @@ Priorities express the critical path to a Workspace the primary actor can rely o
 - **Capability:** Users can apply inline formatting through a floating toolbar surfaced on selection.
 - **Rationale:** Redundant with keyboard shortcuts for this actor; valuable only for occasional or pointer-driven use.
 
+- **Priority:** P1
+- **Capability ID:** CAP-EDIT-08
+- **Capability:** When the user invokes undo, the application reverses their most recent content change in the open Note — including changes that spanned multiple Blocks or destroyed a range — without consulting version history, and redo reapplies it.
+- **Rationale:** Every editor this actor writes in reverses structural operations; an undo that stops at Block boundaries makes a cross-Block deletion unrecoverable by any means short of archaeology, and lost work is the failure the primary actor forgives least. Undo covers the user's own editing actions only: reverting what another device contributed is conflict resolution, not undo.
+
 ## Epic: Note & Directory Lifecycle
 
 - **Priority:** P0
@@ -130,6 +135,25 @@ Priorities express the critical path to a Workspace the primary actor can rely o
 - **Capability:** Users can open an existing Workspace directory that the application did not create, including one populated by another tool.
 - **Rationale:** Adoption path for users with existing Markdown collections; not required to start writing.
 
+- **Priority:** P1
+- **Capability ID:** CAP-WS-06
+- **Capability:** When the user invokes an explicit refresh action, the application re-derives its internal view of the Workspace from the files currently on disk, so that changes made by external tools while the application was open become visible.
+- **Rationale:** CAP-PORT-03 recognizes external changes made while the application was closed. An Agent actor can also write while it runs; until live monitoring exists, an honest user-invoked rescan keeps that state reachable rather than invisible.
+
+## Epic: History & Recovery
+
+- **Priority:** P1
+- **Capability ID:** CAP-HIST-01
+- **Capability:** For the Note they are reading, users can see the list of its past versions and restore any earlier version as the current content.
+- **Rationale:** CAP-WS-02 guarantees every session lands in version history, but a guarantee nobody can see or act on protects nothing. Restore is destructive to unwritten work, so it confirms first.
+
+## Epic: Supportability
+
+- **Priority:** P1
+- **Capability ID:** CAP-SUP-01
+- **Capability:** When something goes wrong, users can produce a diagnostics bundle describing the application's recent behavior — errors, retries, and failures, with Note content excluded — and hand it to someone troubleshooting.
+- **Rationale:** Zero Content Telemetry forbids phoning home, so when the application misbehaves there is otherwise nothing a user can attach to a bug report. The exclusion of content is what makes the bundle safe to share.
+
 ## Epic: Synchronization & Conflict Resolution
 
 - **Priority:** P1
@@ -157,6 +181,26 @@ Priorities express the critical path to a Workspace the primary actor can rely o
 - **Capability:** When provider authorization expires or is revoked, the Workspace remains fully readable and editable locally, and the user is prompted to re-authorize rather than blocked.
 - **Rationale:** A lapsed credential is a sync problem; it must never become a writing problem.
 
+- **Priority:** P1
+- **Capability ID:** CAP-SYNC-06
+- **Capability:** Users can detach the Remote from a connected Workspace, returning it to fully functional local-only operation with all history intact, and reconnect later without loss.
+- **Rationale:** Connection must remain reversible. A user who attached a work account to a personal archive needs an exit that does not cost them their Notes, and sign-out alone leaves the attachment in place.
+
+- **Priority:** P1
+- **Capability ID:** CAP-SYNC-07
+- **Capability:** On a second device, users can join an existing connected Workspace by authorizing the same provider and selecting the repository the first device publishes to; the application clones it and the clone becomes a full local Workspace.
+- **Rationale:** Multi-device access is the point of connecting at all. Authorize-then-clone completes the path ADR decisions reserve for it and matches how version-controlled storage is normally adopted on a second machine.
+
+- **Priority:** P1
+- **Capability ID:** CAP-SYNC-08
+- **Capability:** While connecting, users can consolidate Notes from a previous local Workspace into the freshly connected one: non-conflicting Notes migrate automatically, and each collision — the same identity arising on both sides — resolves explicitly as keep mine, keep theirs, or keep both under a new name. The source Workspace is never modified.
+- **Rationale:** Real users arrive with existing local archives on both ends of a connect. Full history merging between divergent archives stays out of scope (`out-of-scope/history-merge-on-connect.md`); guided consolidation gives those users a supported path that never silently discards either side.
+
+- **Priority:** P1
+- **Capability ID:** CAP-SYNC-09
+- **Capability:** Users can connect a Workspace through a second hosting provider, GitLab, with the same authorize, provision-or-select, publish, detach, and consolidate behaviors the first provider supports.
+- **Rationale:** Provider choice is stated in operator intent, and a seam built for exactly one provider tends to ossify around it. Sequenced behind the first provider, which proves the surface before a second consumer arrives.
+
 ## Epic: Discovery & Retrieval
 
 - **Priority:** P0
@@ -168,6 +212,11 @@ Priorities express the critical path to a Workspace the primary actor can rely o
 - **Capability ID:** CAP-FIND-02
 - **Capability:** Users can jump directly to a Note by typing part of its title, without leaving the keyboard.
 - **Rationale:** The dominant navigation path once a Workspace is large; full-text search covers the need until then.
+
+- **Priority:** P1
+- **Capability ID:** CAP-FIND-03
+- **Capability:** Within the Note they are editing, users can find every occurrence of a search string — including occurrences inside rendered inline structure — navigate between them, and replace found occurrences individually or all at once.
+- **Rationale:** Workspace search stops at the Note boundary, leaving long Notes to scroll-and-squint. Replacement composes with the same machinery that powers cross-Block selection, and replace-all must behave as one operation rather than many.
 
 ## Epic: Portability & Interoperability
 
@@ -181,7 +230,24 @@ Priorities express the critical path to a Workspace the primary actor can rely o
 - **Capability:** Users can Export the Workspace to a location of their choosing, producing Notes readable with no application-specific tooling.
 - **Rationale:** Guarantees an exit path. Lower priority than it would otherwise be precisely because CAP-PORT-01 keeps the live Workspace already in that state.
 
+- **Priority:** P0
+- **Capability ID:** CAP-PORT-02
+- **Capability:** Users can Export the Workspace to a location of their choosing, producing Notes readable with no application-specific tooling — either as a plain copy of the bundle or as a single `.okf` Bundle Archive.
+- **Rationale:** Guarantees an exit path. Lower priority than it would otherwise be precisely because CAP-PORT-01 keeps the live Workspace already in that state. The archive form is distribution of the bundle in the packaged form the Open Knowledge Format itself names, not a proprietary container.
+
 - **Priority:** P1
 - **Capability ID:** CAP-PORT-03
 - **Capability:** Changes made to Workspace files by external tools while the application is closed are recognized and reflected when it next opens.
 - **Rationale:** A format other tools can write is only genuinely open if the application tolerates them having written to it.
+
+- **Priority:** P1
+- **Capability ID:** CAP-PORT-04
+- **Capability:** Users can Publish the Workspace as a self-contained HTML rendition — a single file presenting every Note with Links navigable — readable offline in any browser with no network access beyond loading the file itself.
+- **Rationale:** Serves readers who will never install anything, following the shape the format's own reference tooling demonstrates. Deliberately sequenced after the application has a design system of its own: a rendition worth publishing should look like the product, and it inherits Zero Content Telemetry absolutely — no external scripts, no load-time calls.
+
+### Epic: Preferences & Appearance
+
+- **Priority:** P1
+- **Capability ID:** CAP-PREF-01
+- **Capability:** Users can adjust how the application looks and behaves through a preferences surface — appearance theme, text size, and comparable settings — with choices persisted across sessions.
+- **Rationale:** Writers live in this application for hours; light and dark environments alone make fixed styling a daily irritation. This capability is owned by an interactive design epic: the settings surface defines burlmd's design language, and human design judgment drives it rather than widget-by-widget assembly. It precedes the surfaces that consume its tokens, notably CAP-PORT-04's rendition.

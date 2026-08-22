@@ -1,5 +1,22 @@
 # Stage 1: Product Requirements Changelog
 
+## v1.2.0
+Evolution pass driven by the Realign interview of 2026-08-21 (see `reports/2026-08-21-interview-realign.md`), widening and deepening the layer after the operator judged the original planning shallow. Minor bump: new capabilities, a mandatory block the stage contract now requires, and materially expanded constraints; no restructuring of the stage.
+
+**Archetype block added to `vision.md`.** Primary System/Native, Secondary Mobile, confidence high. The rationale records the operator's qualifier verbatim in intent: desktop first, Flutter responsive-by-construction, mobile surfaces deliberately open work rather than pre-designed.
+
+**Eleven capabilities added, opening three new epics.** CAP-EDIT-08 (undo as a Core-side command stack over content operations, excluding lifecycle renames and sync-applied changes), CAP-FIND-03 (in-Note find and replace), CAP-HIST-01 (per-Note version list and restore) under a new **History & Recovery** epic, CAP-SUP-01 (content-excluding diagnostics export) under a new **Supportability** epic, CAP-WS-06 (explicit Workspace rescan for mid-session external writes), CAP-SYNC-06 (detach the Remote), CAP-SYNC-07 (second-device authorize-then-clone join), CAP-SYNC-08 (guided consolidation of a previous local Workspace into a connected one, with three-way collision resolution), and CAP-SYNC-09 (GitLab as a second provider at P1). CAP-PREF-01 opens a new **Preferences & Appearance** epic owned by an interactive design epic that precedes surfaces consuming its tokens.
+
+**CAP-PORT-02 widened and split.** Export now covers both the plain bundle copy and a single-file `.okf` Bundle Archive — the packaged distribution form OKF §3 itself names — both P0. New CAP-PORT-04 adds a self-contained HTML rendition at P1, sequenced behind burlmd's own design system and inheriting Zero Content Telemetry absolutely.
+
+**Constraints rewritten in Planguage form**, every scalar constraint carrying Scale/Meter/Goal/Stretch/Fail: the three pre-existing meters plus four new ones from interview rulings — Cold Start (Goal 1s, Fail 3s, set aggressively by operator intent with explicit-rebaseline wording), Idle Memory (400 MB at corpus Goal), Corpus Scale (10k Goal / 50k Stretch / 1k Fail), and Synchronization Freshness (60-second push and poll Goals, 15-minute offline backoff ceiling). A Verification section commits meters to a nightly non-blocking benchmark once CI exists. Non-Blocking Sync now states the marker-flow ruling: unresolved Suggestions never gate commits or pushes, and ambient state distinguishes pending Suggestions from clean.
+
+**Glossary expanded** with Bundle Archive, Consolidation, Rendition, and Diagnostics Export, each with avoided synonyms.
+
+**Domain model de-C4'd.** The C4 context diagram is replaced by a problem-space concept sketch per the current Stage 1 contract, and gains two concepts the rulings introduced: Attachment (non-Note content referenced by Links) and Version (a past Note state making restore possible). The Agent actor now reads *and writes*.
+
+**Four out-of-scope entries created:** `history-merge-on-connect.md` (rejected; guided consolidation replaces it), `telemetry-upload.md` (rejected; diagnostics export replaces it), `static-site-pipeline.md` (rejected; single-file rendition replaces it), and `screen-reader-certification.md` (deferred with its reopen trigger honestly recorded as unknown, per open decision OD-02).
+
 ## v1.1.1
 Reviewed for downstream delta following Epic D execution (WSPC-D001–D009); no layer-specific changes required. Epic D is Core-side only, so no capability's user-visible statement changed and no capability was added, reworded or descoped.
 - One narrowing was made downstream and is recorded here as a pointer rather than a PRD edit, so it is not mistaken for drift on the next pass: CAP-FIND-02 says a user jumps to a Note "by typing part of its title", while the Stage 3 contract and `WSPC-D009`'s implementation both match a **leading prefix only**. That is a deliberate Stage 3 reading, documented at `find_notes_by_title` in `tech-spec/contracts/ffi_api.rs`. Widening it to substring match would be a change to this layer and would need its own index strategy; if the narrowing is the wrong reading, the correction belongs here first.

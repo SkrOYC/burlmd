@@ -1,13 +1,71 @@
 # Non-Functional Constraints
 
+Scalar constraints use Planguage fields: **Scale** (what is measured), **Meter** (how), **Goal** (target to hit), **Stretch** (optional better target), **Fail** (level that makes the design unacceptable). Constraints without an honest meter stay prose and say so.
+
 ## Performance
-- **Search Latency:** Full-text search and title filtering must return results in under 100 milliseconds.
-- **UI Responsiveness:** Writing and editing interactions must execute in under 16 milliseconds (60fps), including the transition of a Block into and out of its raw editing state.
-- **Workspace Open Latency:** Opening a Workspace must not block interaction for more than 1 second, regardless of Note count. Index construction beyond that point must proceed incrementally in the background while the Workspace is already usable.
+
+- **Search Latency**
+  - **Scale:** Time from submitting a full-text search or title-filter query to receiving results.
+  - **Meter:** Benchmark query set executed against the index at the Corpus Scale Goal below.
+  - **Goal:** Under 100 milliseconds.
+  - **Stretch:** Under 25 milliseconds.
+  - **Fail:** Over 250 milliseconds, or any growth curve that reaches 100 milliseconds before the Corpus Scale Fail point.
+
+- **UI Responsiveness**
+  - **Scale:** Frame time of writing and editing interactions, including the transition of a Block into and out of its raw editing state.
+  - **Meter:** Frame timing captured over a scripted editing session spanning Block types, splices, and range operations.
+  - **Goal:** Every interaction within the 16-millisecond budget (60fps).
+  - **Stretch:** Headroom such that whole-file reparses at the ADR-measured sizes never approach the budget.
+  - **Fail:** Any discrete editing action regularly dropping frames on Notes within ordinary length.
+
+- **Workspace Open Latency**
+  - **Scale:** Time from launch request to an interactable shell with the Workspace open.
+  - **Meter:** Timed opens across corpora at the Corpus Scale Goal.
+  - **Goal:** No more than 1 second regardless of Note count. Index construction beyond that proceeds incrementally in the background while the Workspace is usable.
+  - **Stretch:** Sub-second open at the Corpus Scale Stretch.
+  - **Fail:** Open blocking longer than 3 seconds at the Corpus Scale Goal.
+
+- **Cold Start**
+  - **Scale:** Time from process launch to the interactive shell, cold — no warm caches assumed.
+  - **Meter:** Timed launches on reference hardware after process start, covering runtime initialization, keychain access, and encrypted-index open.
+  - **Goal:** 1 second.
+  - **Stretch:** 500 milliseconds.
+  - **Fail:** 3 seconds. The Goal is deliberately aggressive, chosen by operator intent to force optimization rather than neglect; if first measurement lands above it, rebaseline explicitly through this file rather than silently accepting.
+
+- **Idle Memory**
+  - **Scale:** Resident memory at rest, after opening a Workspace at the Corpus Scale Goal and letting activity settle.
+  - **Meter:** Operating-system process metrics on reference hardware.
+  - **Goal:** 400 MB.
+  - **Stretch:** 250 MB.
+  - **Fail:** 1 GB, or unbounded growth over a multi-hour session.
+
+## Scale & Capacity
+
+- **Corpus Scale**
+  - **Scale:** Number of Notes in the Workspace over which every other meter in this file must hold.
+  - **Meter:** Synthetic corpora at each level, exercising search, tree building, open, and indexing.
+  - **Goal:** 10,000 Notes.
+  - **Stretch:** 50,000 Notes.
+  - **Fail:** 1,000 Notes. Below the Fail point, any missed meter is a defect rather than a scaling story.
+
+## Synchronization Freshness
+
+- **Sync Latency While Connected**
+  - **Scale:** Time from a local commit landing in version history to its publication on the Remote, while online and authorized.
+  - **Meter:** End-to-end timed pushes on a live connection.
+  - **Goal:** Within 60 seconds.
+  - **Stretch:** Within 15 seconds.
+  - **Fail:** Beyond 15 minutes while the connection is healthy.
+
+- **Remote Poll Cadence**
+  - **Scale:** How often the Remote is checked for upstream changes while online.
+  - **Meter:** Interval instrumentation of the background scheduler.
+  - **Goal:** Every 60 seconds, backing off when offline with a ceiling of 15 minutes between attempts.
+  - **Fail:** An offline backoff ceiling beyond one hour, or polling that stops entirely while authorization remains valid.
 
 ## Reliability
 - **Local-First Mandate:** The application must be 100% functional when completely disconnected from the internet, and must never require an account, credential, or provider authorization in order to create, read, edit, search, or organize Notes. Reads, writes, searches, and Link traversals must all resolve locally.
-- **Non-Blocking Sync:** Background synchronization must never block the main UI thread or interrupt the user's editing flow.
+- **Non-Blocking Sync:** Background synchronization must never block the main UI thread or interrupt the user's editing flow. Reconciliation is included: unresolved Suggestions never gate commits, pushes, or any editing capability, and may flow through version history until resolved. The ambient synchronization state distinguishes "pending Suggestions" from clean.
 - **Durability of In-Progress Work:** Edits not yet written to a Note must survive abrupt process termination, including termination the application receives no opportunity to handle.
 
 ## Correctness & Fidelity
@@ -23,3 +81,7 @@
 
 ## Privacy
 - **Zero Content Telemetry:** The application must not collect, transmit, or analyze the contents of the user's Notes for analytics, telemetry, or diagnostic purposes.
+
+## Verification
+
+Every scalar meter above is verified by a scheduled nightly benchmark run once continuous integration exists, reporting regressions without blocking merges; until then they are verified ticket-by-ticket when work touches their path. A meter nobody measures again after the spike that first reads it will drift silently — this project has already shipped one performance assumption that measurement proved wrong by a factor of 36.
