@@ -1,6 +1,6 @@
 # Spike Report: EDIT-F001 Rendered-to-Raw Promotion Fidelity
 
-> **Status: placeholder.** Established by the Stage 4 planning pass to satisfy the Spike Protocol. The findings below are filled in during execution of EDIT-F001; nothing here is a result yet.
+**Status:** Complete. Executed on branch `feat/epic-f-editor-depth`; prototype lives at `/tmp/spike-edit-f001` (Flutter widget tests) and `/tmp/spike-edit-f001-cargo` (Rust parser probe), outside this repository. No file under `lib/`, `rust/src/` or `test/` was touched.
 
 ## 1. Context & Objective
 - **Triggering upstream file/section:** `.constitution/tech-spec/adrs/ADR-006-raw-on-focus-editing.md` decisions 2 and 6, and its first Negative consequence; the typographic-identity standard in `tech-spec/guidelines.md`.
@@ -9,18 +9,84 @@
 Under CAP-EDIT-01 the text necessarily differs between the two states — `**bold**` versus bold. The geometry must not. If it does, every Block visibly jumps as the caret moves through the Note, which would make the editing model unpleasant in exactly the way it exists to avoid.
 
 ## 2. Codebase Baseline
-- **Current State:** [To be filled from direct inspection. Known going in: `lib/src/components/editor.dart` already dispatches between a read-only render path and an editable path, so both presentations exist to compare.]
-- **Discovered Constraints:** [To be filled.]
+- **Current State:** `lib/src/components/editor.dart` already dispatches between a read-only render path (`renderBlock` → `Text.rich` over `renderInline` spans) and an editable path (`_EditableParagraph` → `TextField`). Both presentations exist to compare, but they are *never shown for the same Block*: only single-run paragraphs are editable today, everything else renders read-only. The read-only path styles runs via nullable fields on `TextSpan` (so leaf runs inherit ancestor weight — e.g. a heading's bold), while `_paragraphStyle` builds an explicit `TextStyle` for the editable field. Those two styling conventions are exactly where divergence would originate.
+- **Discovered Constraints:**
+  - `Text.rich` merges its outer style with `MaterialApp`'s `DefaultTextStyle` (`bodyMedium`, which carries `height ≈ 1.43`). `EditableText` reads its `style` literally and consults no `DefaultTextStyle`. Any property left implicit therefore differs between the states by construction (measured below).
+  - `RenderParagraph` defaults to `TextLeadingDistribution.even`; `RenderEditable` defaults to `proportional`. Left implicit, this shifts glyphs ~2px vertically between states at equal total height.
+  - `EditableText`/`TextField` do **not** participate in an enclosing `SelectionArea` on Flutter 3.44.3 (measured, §3c) — which resolves the drag-outward question before `EDIT-F003` reaches it.
 
 ## 3. Options & Trade-offs
-- **Option A — promote-on-focus** (ADR-006 decision 2). Cheapest, extends the existing dispatch, inherits platform text editing. Viable only if the two states can be made typographically identical.
-- **Option B — custom selectable render objects per Block** (ADR-006 decision 6). No promotion at all, so no movement is possible; costs implementing selection highlight painting and selection-event handling directly.
-- [Screenshot comparisons per Block type to be recorded here.]
+
+### 3a. Promotion fidelity measurements (real RenderBox geometry)
+
+Method: `flutter test` on a real rendered tree (scratch project). Each Block wrapped in a `RepaintBoundary`; size read off the actual `RenderBox`; line count and first painted glyph-line's vertical offset derived from `getBoxesForSelection` boxes on the deepest `RenderParagraph`/`RenderEditable` in each subtree. Formatted fixtures mirror `editor.dart`'s render path; raw fixtures hold Markdown source in an `EditableText` at the same width constraint (400 logical px). Test default font (Ahem) makes every glyph a fixed-size box — proportional-font caveats noted in §5.
+
+Both presentations driven from **one shared style factory**, with every metric-pertinent property pinned explicitly:
+
+| Block | State | width | height | lines | firstLineTop |
+|---|---|---|---|---|---|
+| paragraph (`Intro with **b** end`) | formatted | 228.0 | **20.0** | 1 | 2.8 |
+| paragraph | raw | 400.0 | **20.0** | 1 | 2.8 |
+| heading lvl 2 (`## Head two`, 24px bold) | formatted | 194.0 | **30.0** | 1 | 3.0 |
+| heading lvl 2 | raw | 400.0 | **30.0** | 1 | 3.0 |
+| list item (`- item one`, bullet row) | formatted | 400.0 | **20.0** | 1 | 2.8 |
+| list item | raw | 400.0 | **20.0** | 1 | 2.8 |
+| blockquote (`> quoted line`, left border) | formatted | 171.8 | **20.0** | 1 | 2.8 |
+| blockquote | raw | 400.0 | **20.0** | 1 | 2.8 |
+| code block (fenced, 2 content lines, pad 8) | formatted | 400.0 | **52.0** | **2** | 9.9 |
+| code block (raw incl. fence lines) | raw | 400.0 | **88.0** | **4** | 9.9 |
+
+With styles pinned, paragraph, heading, list item and blockquote are geometrically identical in every measured dimension. Width differs only where the formatted Row/inline layout shrink-wraps (228.0 vs 400.0) — the block's *occupied* width, not its layout slot; under the editor's full-width column both get the same constraints, so no sibling moves.
+
+**The hazard, demonstrated rather than asserted.** With `height` left implicit (the natural way to write both paths):
+
+| paragraph variant | height | firstLineTop |
+|---|---|---|
+| formatted (`Text.rich`, inherits `bodyMedium.height ≈ 1.43`) | 20.0 | 3.0 |
+| raw (`EditableText`, no `DefaultTextStyle` lookup) | **14.0** | **0.0** |
+
+That is a ~6 px vertical jump *per line* on every focus — invisible to any widget-property assertion that checks `style.fontSize` on both sides, because both would report 14. Only rendered geometry catches it. Similarly, leaving leading distribution implicit produced equal heights (20.0) but shifted firstLineTop 2.85 vs 4.74 — a sub-baseline wobble visible as glyph jump at promotion.
+
+### 3b. Properties that must be held identical, and how
+
+| Property | Must hold | How to hold it |
+|---|---|---|
+| Font size per Block type (heading levels ×) | yes | Shared style factory producing the single `TextStyle` per Block type, consumed by both `renderBlock` and the promoted field. |
+| Font family / fallbacks (incl. monospace for inline code) | yes | Same factory; the raw field shows delimiters as plain text in the Block's *base* style, so only per-type families matter. |
+| Font weight / slant / decoration of the Block's base style (headings bold) | yes | Factory emits explicit values (not null-inherit) so the field cannot miss an inherited weight. |
+| Line height (`TextStyle.height`) | yes — the sharpest trap | Pin explicitly in the factory for BOTH paths. `Text` inherits `DefaultTextStyle`'s height; `EditableText` does not. Measured 20.0 vs 14.0 unpinned. |
+| Leading distribution (`TextHeightBehavior.leadingDistribution`) | yes | Set `textHeightBehavior: TextHeightBehavior(leadingDistribution: even)` on the editable field (and/or merge into `DefaultTextStyle`); don't rely on either default. Measured 2.85 vs 4.74 unpinned. |
+| Container padding & decoration (blockquote border+left pad, code background+pad, list marker column) | yes | Replicate the exact container widget around the promoted field; measured identical when replicated (firstLineTop 9.9 in both code-block states). |
+| Wrap width, soft-wrap, `maxLines` (null) | yes | Promoted field sits in the same layout slot with the same constraints; `maxLines: null`. |
+| Text scaling (`MediaQuery.textScaler`), text direction, alignment | yes | Never bypass `MediaQuery` for either path; verify at a non-1.0 scale factor in `EDIT-F002`'s smoke shot. |
+
+Not required to match: caret/cursor painting (paint-only, no layout effect), selection highlight, IME composing underline.
+
+**Intrinsic exceptions (content differences CAP-EDIT-01 sanctions, not styling failures):** a fenced code Block's raw state contains the fence lines, so it necessarily grows (52→88 px, 2→4 lines measured); a thematic break renders as a `Divider` unfocused and as `---` text focused. No styling discipline removes those lines — they are source bytes the raw model must show. Recommendation recorded in §4.
+
+### 3c. Selection experiments (drag-outward, Flutter 3.44.3)
+
+Real gesture-driven drags against `SelectionArea(onSelectionChanged:)` containing `Text('BEFORE…')`, a focused `TextField`, `Text('AFTER…')`:
+
+- **Outward:** mouse-drag starting *inside* the focused field's text, ending past AFTER ⇒ region selection stayed **null**. The gesture belongs to the field; `SelectableRegion` never engages.
+- **Inward:** mouse-drag from BEFORE down past the field ⇒ selected text was `"rker textAFTER marker text"` — the surrounding widgets selected normally and the field's content was **skipped entirely**, as a hole in the region.
+- The field retained primary focus throughout.
+
+So `EditableText`/`TextField` does not merely resist extending selection outward; it does not participate in the region at all, in either direction. A selection anchored inside a focused Block **cannot** extend past it.
+
+### 3d. Option A vs Option B
+- **Option A — promote-on-focus** (ADR-006 decision 2). Cheapest, extends the existing dispatch, inherits platform text editing. Viable per §3a once the property table above is enforced; the enforcement cost is one shared style factory plus two pinned properties (`height`, `textHeightBehavior`) — properties whose omission produces silent, assertion-proof jumps.
+- **Option B — custom selectable render objects per Block** (ADR-006 decision 6). No promotion at all, so no movement is possible; costs implementing selection highlight painting and selection-event handling directly. **Not selected:** the visual-stability precondition of ADR-006 decision 6 ("if the promotion proves visually unacceptable") did not trigger.
 
 ## 4. Execution Directives
-- **Chosen Option:** [To be filled.]
-- **Why it fits:** [To be filled.]
-- **Downstream Backlog Impact:** Unblocks `EDIT-F002` (Live Preview Block Promotion) and through it the rest of Epic F. A not-viable verdict selects ADR-006's escalation path, which changes the shape of `EDIT-F002` and is a Stage 3 decision rather than an improvised widget change.
+- **Chosen Option:** Option A — promote-on-focus is **viable**.
+- **Why it fits:** Every inline-delimiter Block type in scope (paragraph, heading, list item, blockquote) measured pixel-identical in height, line count and first-line position across both states once the shared style factory pins the property table in §3b. The two known movement sources are (1) implicit `height`/leading-distribution defaults that differ structurally between `Text` and `EditableText` — fixed by pinning, verified by measurement — and (2) content-grown Blocks (code fences, thematic break), where the difference is the user's own source text becoming visible, sanctioned by CAP-EDIT-01 and not a fidelity defect. The STOP condition "cannot be made typographically stable" is not met; the ADR-006 decision 6 escalation stays untaken.
+- **Answers the ticket requires settled:**
+  - **(a) Interior case — confirmed dissolved, twice over.** Since drag-outward is unreachable (§3c), a cross-Block selection whose interior contains the focused Block cannot exist *while it is focused* — the region cannot anchor inside the field nor pass through it. And independently, blurring before dispatching any range operation is already the correct protocol: blur fires `commit_block`, which reparses and rebuilds the span map, so `delete_range`/`replace_range` never splice against stale inline ranges, and every endpoint is a rendered offset on an unfocused Block. Rule for `EDIT-F007`: dispatch range operations only when no Block holds focus; blur is the commit point.
+  - **(b) Drag-outward — NOT reachable; ADR-006's sentence should be corrected.** Its Negative consequence reads *"While a Block is focused for editing, selection is scoped to that Block until the user drags outward."* Measured reality: selection cannot be dragged out of the focused field at all, and region drags across it skip its content. `BlockRange` therefore needs **no** focused-endpoint rule — no range endpoint can ever be a raw-source offset. Proposed correction wording: *"While a Block is focused for editing, its editable field does not participate in the surrounding SelectionArea (verified empirically on Flutter 3.44.3): gestures inside it belong to the field alone, and region drags crossing it select around it, omitting its content. A selection consequently can never have an endpoint inside the focused Block, `BlockRange` needs no focused-endpoint case, and every range operation is dispatched only after blur."*
+  - **(c) Rendered→source offsets — confirmed, nothing beyond the parser's own inline ranges.** Fresh independent probe against pulldown-cmark 0.12.2 (`Parser::into_offset_iter()`): every rendered offset of a fixture containing bold, code span, entity and link resolved into some run's source range; byte-identical runs interpolate (`source.start + (offset − rendered.start)`), non-interpolable interiors (code-span/entity/link-target bytes) clamp atomically to run endpoints — exactly ADR-007 decision 8 as amended by `SPK-WSPC-D001`/implemented by `WSPC-D003`. No STOP.
+- **Downstream Backlog Impact:** Unblocks `EDIT-F002` (Live Preview Block Promotion) and through it the rest of Epic F. `EDIT-F002` inherits: the shared style factory with pinned `height` and `textHeightBehavior`; replicated container decorations around promoted fields; the blur-before-range-op protocol; the corrected ADR-006 sentence (a Stage 3 edit, not `EDIT-F002`'s code); and a documented decision on the two intrinsic-movement Block types (accept the fence-line growth for code Blocks and the `---` line for thematic breaks, or exclude them from promotion — recommend accepting, since hiding source bytes contradicts the model).
+- **Verification Command result:** the ticket's gate command (file non-empty, placeholder markers absent, no production code in the Spike's commit) ⇒ exit 0.
 
 ## 5. Method note
-The verdict must come from inspected rendered output, not from widget-property assertions. Property assertions are precisely what failed to catch the structurally similar defect during Epic B's closeout, where six passing tests missed a paragraph rendering bug that a single screenshot exposed.
+Evidence is measured rendered geometry from a running widget tree (`flutter test`, scratch project `/tmp/spike-edit-f001`): `RenderBox.size`, painted glyph-box line counts and first-line offsets — never widget-property assertions. The selection findings come from real pointer drags through a live `SelectionArea`, observed via its `onSelectionChanged` payload. Caveat: `flutter test` paints with the Ahem test font, in which every glyph is a fixed-width square, so absolute widths are not production widths and proportional-font wrap-point shifts near line boundaries are not directly exercised; the *identity* conclusions transfer because both states flow through the same text-layout engine under the same pinned styles, and `EDIT-F002`'s mandatory smoke-shot screenshot provides the production-font visual confirmation. This method exists because six passing widget-property assertions missed Epic B's equivalent defect; these numbers would have caught it on the first line of the table.
