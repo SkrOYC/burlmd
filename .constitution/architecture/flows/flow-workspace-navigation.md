@@ -23,7 +23,7 @@ sequenceDiagram
 ## Design notes
 
 - **One call renders the whole sidebar.** The tree arrives as a single payload with children nested, so expanding a collapsed level costs no further round trip. Per-call whole-tree rebuilds are acceptable at the Corpus Scale Goal but are a known sensitivity point at the Stretch (`risks.md` risk 3's indexing family); measure before putting this behind keystrokes.
-- **Empty Directories appear** — except Asset Directories, which the Attachment ruling keeps out of the tree entirely. A Directory with no Notes has no file to represent it on disk, which is why the index tracks Directories at all.
+- **Empty Directories appear** — except Asset Directories, which the Attachment ruling keeps out of the tree entirely. The tree payload is derived from indexed Notes, so a Directory with no Note inside it would vanish from the view unless the index tracks Directories separately — which is exactly why it does.
 - **Expansion state is the UI's own.** Which nodes stand open is ephemeral interaction state, exactly like selection coordinates — not Note content, so the Presentation Container may hold it without becoming an owner of data.
 
 ## Failure path

@@ -15,4 +15,5 @@
 | Bundle Archive | A single-file `.okf` zip archive of an entire Workspace bundle, in the packaged distribution form the Open Knowledge Format itself names. | Package, Backup (use Export), Container |
 | Consolidation | The guided, one-time migration of non-conflicting Notes from a previous local Workspace into a freshly connected one, with explicit resolution of every identity collision. | Merge, Migration, Import (as a synonym) |
 | Rendition | A self-contained HTML presentation of an entire Workspace produced by Publishing, readable offline with no application-specific tooling. | Export (use it for the bundle forms), Site, Build |
+| Publishing | Producing a Rendition of the Workspace for readers who will not install anything. Distinct from Export, which hands over the bundle itself. | Deploy (until a hosting story exists), Release |
 | Diagnostics Export | A user-produced export describing recent application behavior — errors, retries, failures — with Note content excluded. | Log dump, Crash report, Telemetry |
