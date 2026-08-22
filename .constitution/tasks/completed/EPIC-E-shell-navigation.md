@@ -364,9 +364,11 @@ All eight tickets (`SHEL-E001` … `SHEL-E008`, 27 story points) are implemented
 
 The following were identified during implementation or reconciliation and are explicitly out of this epic's scope. They are recorded here rather than silently dropped:
 
-1. **A Zero-Directory Workspace has no entry point for creating a root-level Directory.** Row menus only exist on existing tree rows (also recorded as `SHEL-E005`'s known limitation). Until surfaced otherwise, first content must arrive through a path that already has a Directory.
-2. **`RecoveredDraftsPanel` can overflow vertically** with very many recovered drafts (P3): it has no scroll container.
-3. **The tree-row overflow "move" picker silently no-ops while the tree snapshot is loading** (P3).
-4. **Open question from the `SHEL-E008` review:** whether Core-side `reindex_workspace` transactionality covers typing into a previously-clean Note while a rescan is in flight. Worth settling before any future ticket widens the rescan path.
-5. **No test coverage of the periodic-timer arm path** (write-tier polling) — a deliberate fake-clock tradeoff, recorded so its absence reads as a decision rather than an oversight.
-6. **Two standing standards adopted before this epic painted widgets were not met by its own widgets:** zero `Semantics` wrappers ship, user-facing strings are hardcoded literals across the new components, and no `gen-l10n` scaffolding exists. Recorded in `tech-spec/changelog.md` v1.4.0 as well; owed before the Wave 3 design epic builds final UI.
+1. **`lib/src/components/status_message.dart`** is a new shared SnackBar seam introduced by the PR review-fix commits (one `showStatusMessage(BuildContext, String)` helper so lifecycle-outcome and rescan reporting hide-then-show through a single path). It is a justified reconciliation artifact consumed by the `SHEL-E005` and `SHEL-E008` surfaces, neither of whose declared scopes owned a shared reporting seam.
+
+2. **A Zero-Directory Workspace has no entry point for creating a root-level Directory.** Row menus only exist on existing tree rows (also recorded as `SHEL-E005`'s known limitation). Until surfaced otherwise, first content must arrive through a path that already has a Directory.
+3. **`RecoveredDraftsPanel` can overflow vertically** with very many recovered drafts (P3): it has no scroll container.
+4. **The tree-row overflow "move" picker silently no-ops while the tree snapshot is loading** (P3).
+5. **Open question from the `SHEL-E008` review:** whether Core-side `reindex_workspace` transactionality covers typing into a previously-clean Note while a rescan is in flight. Worth settling before any future ticket widens the rescan path.
+6. **No test coverage of the periodic-timer arm path** (write-tier polling) — a deliberate fake-clock tradeoff, recorded so its absence reads as a decision rather than an oversight.
+7. **Two standing standards adopted before this epic painted widgets were not met by its own widgets:** zero `Semantics` wrappers ship, user-facing strings are hardcoded literals across the new components, and no `gen-l10n` scaffolding exists. Recorded in `tech-spec/changelog.md` v1.4.0 as well; owed before the Wave 3 design epic builds final UI.

@@ -183,6 +183,14 @@ class WorkspaceRescan extends Notifier<RescanState> {
     state = RescanState.idle;
   }
 
+  /// Whether a polled [NoteWriteStatus] indicates the Note still holds
+  /// unwritten edits (`note_write_status`, ADR-008): a buffered edit not yet
+  /// flushed, or a write-tier failure — which the contract always pairs with
+  /// unwritten edits, but checking both keeps the guard conservative.
+  static bool indicatesUnwrittenEdits(NoteWriteStatus status) {
+    return status.hasUnwrittenEdits || status.lastError != null;
+  }
+
   /// Whether the Core reports `noteId`'s write tier as holding unwritten
   /// edits (`note_write_status`, ADR-008): a buffered edit not yet flushed,
   /// or a write-tier failure — which the contract always pairs with
@@ -190,7 +198,7 @@ class WorkspaceRescan extends Notifier<RescanState> {
   static bool noteHoldsUnwrittenEdits(RustApi api, String noteId) {
     try {
       final status = api.noteWriteStatus(noteId);
-      return status.hasUnwrittenEdits || status.lastError != null;
+      return indicatesUnwrittenEdits(status);
     } catch (_) {
       // The poll itself failed: cleanliness cannot be established, so the
       // only safe answer for a destructive-window operation is "dirty".
@@ -221,8 +229,7 @@ class _RescanButton extends ConsumerWidget {
     // yet; `run()`'s independent fail-closed check remains the safety net.)
     final status = ref.watch(writeTierMonitorProvider).status;
     final blockedByOpenEdits =
-        status != null &&
-        (status.hasUnwrittenEdits || status.lastError != null);
+        status != null && WorkspaceRescan.indicatesUnwrittenEdits(status);
     final blocked = rescan.running || blockedByOpenEdits;
 
     return Tooltip(
