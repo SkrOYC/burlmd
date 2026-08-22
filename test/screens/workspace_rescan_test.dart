@@ -84,6 +84,10 @@ Future<ProviderContainer> _pumpShell(
     overrides: [
       rustApiProvider.overrideWithValue(api),
       reindexWorkspaceProvider.overrideWithValue(reindex),
+      // The shell now mounts the write-tier surface, whose monitor arms a
+      // periodic timer; disable polling here (no fake clock to fire it),
+      // matching draft_recovery_test.dart's pattern.
+      writeStatusPollIntervalProvider.overrideWithValue(null),
     ],
   );
   addTearDown(container.dispose);
