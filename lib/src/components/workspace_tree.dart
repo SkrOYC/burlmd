@@ -1,4 +1,5 @@
 import 'package:burlmd/src/components/lifecycle_actions.dart';
+import 'package:burlmd/src/components/status_message.dart';
 import 'package:burlmd/src/providers/rust_api_provider.dart';
 import 'package:burlmd/src/providers/workspace_provider.dart';
 // The generated `TreeNode` variant types (`TreeNode_Directory`,
@@ -192,71 +193,68 @@ class _DirectoryRow extends ConsumerWidget {
     );
   }
 
-  Future<void> _createNote(BuildContext context, WidgetRef ref) async {
-    final title = await promptForText(
+  Future<void> _createNote(BuildContext context, WidgetRef ref) => _run(
+    context,
+    ref,
+    () => promptForText(
       context,
       title: 'New note in "${node.name}"',
       label: 'Title',
-    );
-    if (title == null) return;
-    if (!context.mounted) return;
-    final outcome = await ref
-        .read(lifecycleActionsProvider)
-        .createNote(node.path, title);
-    if (!context.mounted) return;
-    report(context, outcome);
-  }
+    ),
+    (title) => ref.read(lifecycleActionsProvider).createNote(node.path, title),
+  );
 
-  Future<void> _createDirectory(BuildContext context, WidgetRef ref) async {
-    final name = await promptForText(
+  // The Core validates the joined path's segments itself (`/`, `..`,
+  // absolute paths, NULs and line terminators all come back as
+  // `PathUnavailable`) — no client-side duplicate here.
+  Future<void> _createDirectory(BuildContext context, WidgetRef ref) => _run(
+    context,
+    ref,
+    () => promptForText(
       context,
       title: 'New subdirectory in "${node.name}"',
       label: 'Name',
-    );
-    if (name == null) return;
-    if (!context.mounted) return;
-    final outcome = await ref
+    ),
+    (name) => ref
         .read(lifecycleActionsProvider)
-        .createDirectory(joinDirectoryPath(node.path, name));
-    if (!context.mounted) return;
-    report(context, outcome);
-  }
+        .createDirectory(joinDirectoryPath(node.path, name)),
+  );
 
-  Future<void> _rename(BuildContext context, WidgetRef ref) async {
-    final newName = await promptForText(
-      context,
-      title: 'Rename directory "${node.name}"',
-      label: 'New name',
-      initialValue: node.name,
-    );
-    if (newName == null || newName == node.name) return;
-    if (!context.mounted) return;
-    final outcome = await ref
-        .read(lifecycleActionsProvider)
-        .renameDirectory(node.path, newName);
-    if (!context.mounted) return;
-    report(context, outcome);
-  }
+  Future<void> _rename(BuildContext context, WidgetRef ref) => _run(
+    context,
+    ref,
+    () async {
+      final newName = await promptForText(
+        context,
+        title: 'Rename directory "${node.name}"',
+        label: 'New name',
+        initialValue: node.name,
+      );
+      return (newName == null || newName == node.name) ? null : newName;
+    },
+    (newName) =>
+        ref.read(lifecycleActionsProvider).renameDirectory(node.path, newName),
+  );
 
-  Future<void> _delete(BuildContext context, WidgetRef ref) async {
-    // STOP guard: deletion is never offered to the Core without the user
-    // confirming this dialog first.
-    final confirmed = await confirmDeletion(
-      context,
-      kind: 'directory',
-      name: node.name,
-      consequence:
-          'Every note inside "${node.name}" is deleted with it. '
-          'They stay recoverable from local version history.',
-    );
-    if (!confirmed) return;
-    if (!context.mounted) return;
-    final outcome = await ref
-        .read(lifecycleActionsProvider)
-        .deleteDirectory(node.path);
-    if (!context.mounted) return;
-    report(context, outcome);
-  }
+  Future<void> _delete(BuildContext context, WidgetRef ref) => _run<bool>(
+    context,
+    ref,
+    () async {
+      // STOP guard: deletion is never offered to the Core without the user
+      // confirming this dialog first.
+      return await confirmDeletion(
+            context,
+            kind: 'directory',
+            name: node.name,
+            consequence:
+                'Every note inside "${node.name}" is deleted with it. '
+                'They stay recoverable from local version history.',
+          )
+          ? true
+          : null;
+    },
+    (_) => ref.read(lifecycleActionsProvider).deleteDirectory(node.path),
+  );
 }
 
 class _NoteRow extends ConsumerWidget {
@@ -297,57 +295,70 @@ class _NoteRow extends ConsumerWidget {
     );
   }
 
-  Future<void> _rename(BuildContext context, WidgetRef ref) async {
-    final newTitle = await promptForText(
-      context,
-      title: 'Rename note',
-      label: 'New title',
-      initialValue: node.title,
-    );
-    if (newTitle == null || newTitle == node.title) return;
-    if (!context.mounted) return;
-    final outcome = await ref
-        .read(lifecycleActionsProvider)
-        .renameNote(node.id, newTitle);
-    if (!context.mounted) return;
-    report(context, outcome);
-  }
+  Future<void> _rename(BuildContext context, WidgetRef ref) => _run(
+    context,
+    ref,
+    () async {
+      final newTitle = await promptForText(
+        context,
+        title: 'Rename note',
+        label: 'New title',
+        initialValue: node.title,
+      );
+      return (newTitle == null || newTitle == node.title) ? null : newTitle;
+    },
+    (newTitle) =>
+        ref.read(lifecycleActionsProvider).renameNote(node.id, newTitle),
+  );
 
   /// Moving happens through this explicit destination picker; drag-and-drop
   /// is not required by SHEL-E005.
-  Future<void> _move(BuildContext context, WidgetRef ref) async {
-    final destination = await pickDirectory(context, ref);
-    if (destination == null) return;
-    if (!context.mounted) return;
-    final outcome = await ref
-        .read(lifecycleActionsProvider)
-        .moveNote(node.id, destination);
-    if (!context.mounted) return;
-    report(context, outcome);
-  }
+  Future<void> _move(BuildContext context, WidgetRef ref) => _run(
+    context,
+    ref,
+    () => pickDirectory(context, ref),
+    (destination) =>
+        ref.read(lifecycleActionsProvider).moveNote(node.id, destination),
+  );
 
-  Future<void> _delete(BuildContext context, WidgetRef ref) async {
-    // STOP guard: deletion is never offered to the Core without the user
-    // confirming this dialog first.
-    final confirmed = await confirmDeletion(
-      context,
-      kind: 'note',
-      name: node.title,
-      consequence:
-          'It stays recoverable from local version history, but links '
-          'elsewhere that pointed at it will no longer resolve.',
-    );
-    if (!confirmed) return;
-    if (!context.mounted) return;
-    final outcome = await ref
-        .read(lifecycleActionsProvider)
-        .deleteNote(node.id);
-    if (!context.mounted) return;
-    report(context, outcome);
-  }
+  Future<void> _delete(BuildContext context, WidgetRef ref) =>
+      _run<bool>(context, ref, () async {
+        // STOP guard: deletion is never offered to the Core without the user
+        // confirming this dialog first.
+        return await confirmDeletion(
+              context,
+              kind: 'note',
+              name: node.title,
+              consequence:
+                  'It stays recoverable from local version history, but links '
+                  'elsewhere that pointed at it will no longer resolve.',
+            )
+            ? true
+            : null;
+      }, (_) => ref.read(lifecycleActionsProvider).deleteNote(node.id));
 }
 
 // -- Dialogs and outcome reporting ------------------------------------------
+
+/// Runs one lifecycle action end to end: [collect] shows the gating dialog
+/// and returns the value to send to the Core (or `null` when the user
+/// cancelled, declined, or entered an unchanged/no-op value), then [act]
+/// performs the operation and [report] surfaces its outcome. Both mounted
+/// checks are load-bearing: an unmounted context after the dialog means the
+/// action is never sent, and one after it means the outcome is never shown.
+Future<void> _run<T>(
+  BuildContext context,
+  WidgetRef ref,
+  Future<T?> Function() collect,
+  Future<LifecycleOutcome> Function(T value) act,
+) async {
+  final value = await collect();
+  if (value == null) return;
+  if (!context.mounted) return;
+  final outcome = await act(value);
+  if (!context.mounted) return;
+  report(context, outcome);
+}
 
 /// Asks for one line of text (a title or a directory name). Returns the
 /// trimmed input, or `null` when the dialog was dismissed. An empty submit
@@ -361,7 +372,13 @@ Future<String?> promptForText(
   String? initialValue,
 }) async {
   final controller = TextEditingController(text: initialValue ?? '');
-  final result = await showDialog<String>(
+  // Pushed as an explicit route so the dialog's `completed` future is
+  // reachable: the controller must outlive the popping route's exit
+  // transition (its TextField stays attached — and cursor-blink ticks read
+  // it — until teardown finishes), so disposing right after `showDialog`
+  // returns would risk a use-after-dispose. Awaiting `completed` disposes
+  // deterministically instead of leaking past the dialog's lifetime.
+  final route = DialogRoute<String>(
     context: context,
     builder: (dialogContext) => AlertDialog(
       title: Text(title),
@@ -384,8 +401,14 @@ Future<String?> promptForText(
       ],
     ),
   );
-  final trimmed = result?.trim();
-  return (trimmed == null || trimmed.isEmpty) ? null : trimmed;
+  final String? result;
+  try {
+    result = await Navigator.of(context, rootNavigator: true).push(route);
+    await route.completed;
+  } finally {
+    controller.dispose();
+  }
+  return (result == null || result.isEmpty) ? null : result;
 }
 
 /// The confirmation gate every deletion must pass before reaching the Core.
@@ -462,9 +485,7 @@ void report(BuildContext context, LifecycleOutcome outcome) {
     LifecycleFailed(:final error) => 'The action failed: $error',
   };
   if (message == null) return;
-  ScaffoldMessenger.of(context)
-    ..hideCurrentSnackBar()
-    ..showSnackBar(SnackBar(content: Text(message)));
+  showStatusMessage(context, message);
 }
 
 /// Joins a parent Directory path (bundle-relative, `/`-separated, no leading

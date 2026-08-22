@@ -15,10 +15,12 @@ class Editor extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final error = ref.watch(editorErrorProvider);
-    // The Core refused an operation on the active Note (open failed, a close
-    // on switch aborted it, or update_block rejected an edit). Surfaced here
-    // rather than swallowed: before SHEL-E004 this widget had no error
-    // surface at all, so every such failure was invisible to the user.
+    // The Core refused an operation on the active Note (an open failed, or a
+    // close on switch aborted it). Surfaced here rather than swallowed:
+    // before SHEL-E004 this widget had no error surface at all, so every
+    // such failure was invisible to the user. A refused *keystroke* write is
+    // deliberately NOT routed here — it would blank the text the user is
+    // typing; WriteTierNotice surfaces it above the editor instead.
     if (error != null) return _ErrorSurface(message: '$error');
     final note = ref.watch(activeNoteProvider);
     if (note == null) return const SizedBox.shrink();
@@ -148,10 +150,11 @@ class _EditableParagraphState extends ConsumerState<_EditableParagraph> {
       // therefore throws synchronously on every refusal the Core can raise —
       // an unaddressable or container `block_path`, a conflicted Note, a failed
       // draft write. Those refusals ARE caught and reported, though:
-      // `NoteController.updateBlock` funnels them into [editorErrorProvider],
-      // which [Editor]'s build renders as the persistent error surface
-      // (`SHEL-E004`), so a refused keystroke is visible to the user rather
-      // than silently dropped.
+      // [NoteController.updateBlock] publishes them through
+      // [keystrokeWriteFailureProvider], which the persistent WriteTierNotice
+      // above this editor renders (`SHEL-E007`'s write-tier surface) — so a
+      // refused keystroke is visible without ever taking the user's own text
+      // off the screen.
       ref.read(activeNoteProvider.notifier).updateBlock(widget.blockPath, text);
     },
   );
