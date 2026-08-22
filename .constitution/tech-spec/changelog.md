@@ -1,5 +1,11 @@
 # Stage 3: Technical Implementation Changelog
 
+## v1.4.1
+Review follow-ups to **SPK-EDIT-F001** at the start of **Epic F (Editor Depth)**. Patch bump: two documentation corrections, no decision reversed, no contract signature changed.
+
+- **ADR-006 negative consequence corrected per SPK-EDIT-F001.** The original sentence claimed selection is scoped to the focused Block "until the user drags outward"; the spike measured on Flutter 3.44.3 that drag-outward is unreachable — a focused `EditableText`/`TextField` does not participate in the surrounding `SelectionArea` in either direction, so a selection can never have an endpoint inside the focused Block. Every `BlockRange` offset is therefore always a rendered offset over an unfocused Block, no focused-endpoint rule exists or is needed, and range operations are dispatched only after blur.
+- **Spike report method note clarified.** SPK-EDIT-F001 now records explicitly that it delivers measured rendered geometry (`RenderBox.size`, `getBoxesForSelection` line counts/offsets) where the ticket's Gherkin criterion asks for rendered screenshot comparisons — stronger evidence than eyeballed pixels against the STOP condition's demand for inspected rendered output, with `EDIT-F002`'s smoke-shot screenshot as the production-font visual confirmation on top.
+
 ## v1.4.0
 Freshness pass at the close of **Epic E (Shell & Navigation)**. Minor bump: `guidelines.md` gained two Dart standards and the repo layout tree and real-application procedure were reconciled with what shipped; no ADR, contract signature, schema or storage-format document changed.
 
