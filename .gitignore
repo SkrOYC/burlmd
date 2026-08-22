@@ -61,6 +61,12 @@ secrets.*
 *.keystore
 key.properties
 
+# --- Manual-QA smoke screenshots (SHEL-E001) --------------------------------
+# PNGs must never be committed; a repository whose premise is readable
+# plaintext diffs should not accumulate binary artifacts. See
+# scripts/smoke-shot.sh.
+.qa/
+
 # --- Local / editor -------------------------------------------------------
 .vscode/
 .idea/
