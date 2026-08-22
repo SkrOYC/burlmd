@@ -30,6 +30,10 @@ class SearchPanel extends ConsumerStatefulWidget {
 
   /// Invoked when the user selects a result, in addition to the provider
   /// update — the same dual seam [WorkspaceTree] offers.
+  ///
+  /// Standing dual-seam API kept for headless/embedded consumers and tests:
+  /// production mounts drive selection purely through
+  /// [selectedNoteIdProvider].
   final ValueChanged<String>? onNoteSelected;
 
   @override
