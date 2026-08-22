@@ -353,3 +353,20 @@ Given the full reindex fails (unreadable file)
 When the rescan attempt completes
 Then the failure surfaces as a message naming the failure, and the tree keeps its previous view rather than showing a partial one
 ```
+
+## Completion Notes & Deferred Follow-Ups
+
+All eight tickets (`SHEL-E001` … `SHEL-E008`, 27 story points) are implemented, independently reviewed and merged across 15 commits (`713de70` … `b3cd66f`): nine feature commits, one review-fix commit, one harness hardening, three docs commits recording deviations, and the integration milestone that mounted the remaining surfaces. The convention followed throughout was a single-pass full review per milestone with every P0 and P1 fixed before the next ticket began; P2/P3 findings were either fixed in round or recorded below.
+
+**Validation.** Every ticket launched the real application as part of its gate — thirteen smoke screenshots via `scripts/smoke-shot.sh` (the harness built first for exactly this reason), each alongside its targeted `flutter test` runs. The epic-level carry-forward recorded during execution — that no ticket mounted `SearchPanel`, `RecoveredDraftsPanel` or `WriteTierNotice` into the shell — was discharged at reconciliation rather than archived open: commit `b3cd66f` mounts all three into `workspace.dart` (search toggled from the sidebar, drafts panel above the tree, write-tier notice above the editor), with write-tier polling arming when a Note is open.
+
+**Deviations shipped under record:** `SHEL-E004` touched `test/components/workspace_tree_test.dart` outside its declared scope (P2 selection-highlight fix mandated by review); `SHEL-E005` added three minimal provider methods (`NoteController.adopt`/`.clear()`, `SelectedNoteId.clear()`) to re-anchor an identity-changed open Note without violating Riverpod's protected state setter; `SHEL-E007` added `NoteController.reloadFromDisk()` for the same reason.
+
+The following were identified during implementation or reconciliation and are explicitly out of this epic's scope. They are recorded here rather than silently dropped:
+
+1. **A Zero-Directory Workspace has no entry point for creating a root-level Directory.** Row menus only exist on existing tree rows (also recorded as `SHEL-E005`'s known limitation). Until surfaced otherwise, first content must arrive through a path that already has a Directory.
+2. **`RecoveredDraftsPanel` can overflow vertically** with very many recovered drafts (P3): it has no scroll container.
+3. **The tree-row overflow "move" picker silently no-ops while the tree snapshot is loading** (P3).
+4. **Open question from the `SHEL-E008` review:** whether Core-side `reindex_workspace` transactionality covers typing into a previously-clean Note while a rescan is in flight. Worth settling before any future ticket widens the rescan path.
+5. **No test coverage of the periodic-timer arm path** (write-tier polling) — a deliberate fake-clock tradeoff, recorded so its absence reads as a decision rather than an oversight.
+6. **Two standing standards adopted before this epic painted widgets were not met by its own widgets:** zero `Semantics` wrappers ship, user-facing strings are hardcoded literals across the new components, and no `gen-l10n` scaffolding exists. Recorded in `tech-spec/changelog.md` v1.4.0 as well; owed before the Wave 3 design epic builds final UI.

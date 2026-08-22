@@ -29,7 +29,12 @@ The repository follows the default `flutter_rust_bridge` template structure to m
 │   │   ├── components/      # Reusable UI blocks
 │   │   ├── providers/       # Riverpod state definitions
 │   │   ├── rust/            # Auto-generated FRB Dart bindings
-│   │   └── screens/         # Full-screen routes (e.g. login.dart)
+│   │   └── screens/         # Full-screen routes (workspace.dart, login.dart —
+│   │                        #   login retained for the deferred connect flow,
+│   │                        #   no longer a startup gate since SHEL-E002)
+├── scripts/                 # smoke-shot.sh — the manual-QA smoke harness
+│                              every UI ticket gates on (SHEL-E001); writes
+│                              screenshots to .qa/, which is gitignored
 ├── test/                    # Dart widget tests
 ├── rust/                    # Rust Core Engine source code
 │   ├── Cargo.toml
@@ -92,6 +97,8 @@ All commands below assume the `devenv` shell (`devenv shell`, or automatic via
    - Must be formatted with `dart format`.
    - UI widgets must be completely stateless regarding note content. All active note state is pulled from Riverpod providers connected to the FRB. Ephemeral selection coordinates (`block_path` plus character offset) are UI state, not note content, and are exempt — this is what allows cross-Block selection under ADR-006 without amending `architecture/containers.md`.
    - The rendered and raw presentations of a Block must be typographically identical. Only the text differs (`**bold**` versus bold); font, size, weight, line height, and padding must not, or the Block visibly jumps when it takes focus.
+   - **Every error returned across the FFI boundary must reach a user-visible surface.** No call site may swallow a Core error. This rule exists because the editor shipped through Epic B with no error path at all — failures crossed the boundary and were discarded, a gap Epic B's review recorded but could not reach until the editor was mounted (`SHEL-E004`, which landed the shell's error surface).
+   - **Shell surfaces coordinate through provider seams, not widget ownership.** Note selection flows through the shared selection seam (`selectedNoteIdProvider`) so the tree, editor and lifecycle actions stay coherent without referencing each other; the Directory tree renders from the Core's single whole-tree payload (one call, children nested) and holds only expansion state as ephemeral UI state. Note switching must close the outgoing Note through the Core before opening the next, so its session reaches the commit tier (`SHEL-E004`).
 3. **Nix:**
    - Every `*.nix` file must be formatted with `nixfmt` (RFC style). Today that is only `devenv.nix`.
 4. **Testing:**
@@ -175,6 +182,8 @@ relative to the process's working directory — a location distinct from the
 Before running the desktop app locally (`flutter run -d linux`, or any manual
 visual check), run `cargo build --release` once from `rust/` (and again after
 any change to the Rust API surface) so that path exists.
+
+Since `SHEL-E001` the procedure below is also a command: `scripts/smoke-shot.sh <name>` builds the release native library and app bundle, launches, waits for actual rendering, captures `.qa/<name>.png`, and exits non-zero if the application fails to start or render. Render detection compares raw pixels against a measured desktop noise floor rather than byte-comparing images, because background desktop animation always differs between two captures. Every UI ticket's Verification Command gates on it.
 
 For actually looking at rendered output rather than only asserting widget
 properties in `flutter test` — screenshot with `grim`, and, when keystroke
