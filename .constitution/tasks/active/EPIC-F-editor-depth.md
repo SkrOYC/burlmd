@@ -422,6 +422,18 @@ Then it succeeds only after a staged valid completion and rendered-Link follow r
   candidate therefore receives focused semantics, and Arrow/Enter/Escape are
   dispatched through the Block's existing keyboard interception; pointer and
   keyboard acceptance converge at the same immutable-snapshot replacement.
+- `lib/src/components/block_editor.dart` — the completion surface is hosted by
+  Flutter 3.44.3's `OverlayPortal.overlayChildLayoutBuilder`, anchored from
+  the raw field's paint transform and width. This deliberately leaves the
+  fixed promotion slot's geometry untouched while allowing the popup to paint
+  and receive pointer events outside that slot; blur/source invalidation hides
+  the portal and unmount removes its owned overlay child.
+- `lib/src/components/block_view.dart` — rendered Link text remains ordinary
+  nested `TextSpan` content, with the recognizer attached to its styled leaves.
+  This preserves bold/italic/strike/code styling, wrapping, selection-visible
+  text, and F003's existing `RenderParagraph`/rendered-offset mapping. Separate
+  zero-geometry `Focus`/`Semantics` targets provide ordered keyboard stops per
+  Link, so Block Enter still promotes the Block rather than selecting a Link.
 
 #### EDIT-F007 Editing Across a Multi-Block Selection
 - **Type:** Feature

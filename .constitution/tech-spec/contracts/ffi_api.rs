@@ -1156,9 +1156,14 @@ pub struct LinkCompletion {
 /// Workspace and identifies the current Note's Directory. The caller requests
 /// at most 10 candidates and Core clamps a larger `limit` to 10. Existing
 /// matches are `LinkCompletionKind::Existing`. If the query is a valid future
-/// title/target in that Directory and the exact target is not already indexed,
-/// Core includes one clearly marked `ProspectiveGhost` within the same limit,
-/// with the exact `target_id` and
+/// title in that Directory and the exact target is not already indexed, Core
+/// includes one clearly marked `ProspectiveGhost` within the same limit.
+/// `query` is a prospective **title**, never a target path: it must satisfy
+/// the Note-title rules and therefore rejects separators, dot-path segments,
+/// reserved names, and any input that would make the user type a location.
+/// Existing title-prefix candidates are still returned for the unmodified
+/// query, even when it is invalid as a prospective title. The ghost carries
+/// the exact `target_id` and
 /// standard-Markdown `insert_text` already derived. The UI replaces exactly
 /// the immutable trigger range with this Core-supplied text; it neither
 /// constructs nor repairs a link destination.
@@ -1200,8 +1205,12 @@ pub async fn resolve_link_target(target_id: String) -> Result<LinkTargetResoluti
 /// Creates the Note at the **exact** internal Link identity it carries
 /// (CAP-GRAPH-04). The Core derives title and Directory from `target_id`,
 /// creates missing parent Directories and the conformant Note atomically, then
-/// indexes and opens it. It refuses a file or path collision rather than
-/// silently choosing a different identity, and returns the opened state.
+/// indexes, opens, and commits it. It refuses a file or path collision rather
+/// than silently choosing a different identity, and returns the opened state.
+/// If final-path publication, indexing, session registration, or commit fails
+/// before history records the Note, it removes the Note and only the parent
+/// Directories when they remain empty, and directory-index rows this operation
+/// created; pre-existing Directories and foreign content are preserved.
 ///
 /// Callers must first invoke `resolve_link_target`: an `Existing` result opens
 /// that Note; only a still-`Missing` target reaches this operation.

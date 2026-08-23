@@ -1,12 +1,14 @@
 import 'dart:async';
 
 import 'package:burlmd/l10n/generated/app_localizations.dart';
+import 'package:burlmd/src/components/block_editor.dart';
 import 'package:burlmd/src/components/block_view.dart';
 import 'package:burlmd/src/components/link_completion.dart';
 import 'package:burlmd/src/providers/rust_api_provider.dart';
 import 'package:burlmd/src/rust/index/query.dart';
 import 'package:burlmd/src/rust/markdown/ast.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show RenderParagraph;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -239,22 +241,100 @@ void main() {
   );
 
   testWidgets(
-    'an internal Link is distinct and pointer/keyboard activation share its callback',
+    'an OverlayPortal completion escapes its single-line editor slot and pointer accepts it',
+    (tester) async {
+      final node = AstNode.paragraph(content: [_plainText('[[plan')]);
+      final api = _CompletionApi((_) => [_existing('plan')]);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [rustApiProvider.overrideWithValue(api)],
+          child: MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: Scaffold(
+              body: Align(
+                alignment: Alignment.topLeft,
+                child: SizedBox(
+                  key: const ValueKey('single-line-editor-slot'),
+                  width: 240,
+                  height: 21,
+                  child: BlockEditor(
+                    noteId: 'source',
+                    blockPath: const [0],
+                    source: '[[plan',
+                    initialCaret: 6,
+                    style: blockTextStyle(node),
+                    focusToken: 1,
+                    onFocusLost: (_) {},
+                    onCommitEligibilityChanged: (_, _) {},
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+
+      final option = find.byKey(const ValueKey('link-completion-0'));
+      expect(find.byType(OverlayPortal), findsOneWidget);
+      expect(option, findsOneWidget);
+      expect(
+        tester.getRect(option).top,
+        greaterThanOrEqualTo(
+          tester
+              .getRect(find.byKey(const ValueKey('single-line-editor-slot')))
+              .bottom,
+        ),
+      );
+
+      await tester.tap(option);
+      await tester.pump();
+      expect(
+        tester.widget<EditableText>(find.byType(EditableText)).controller.text,
+        '[plan](</notes/plan.md>)',
+      );
+    },
+  );
+
+  testWidgets(
+    'internal Links preserve nested styling, have ordered keyboard stops, and do not steal Block Enter',
     (tester) async {
       final calls = <String>[];
+      final promotions = <List<int>>[];
       final node = AstNode.paragraph(
         content: [
+          _plainText('Before '),
           InlineElement.link(
             targetId: 'projects/plan',
             exists: false,
             content: [
               InlineElement.text(
                 const TextRun(
-                  content: 'Plan',
-                  bold: false,
-                  italic: false,
+                  content: 'Bold italic',
+                  bold: true,
+                  italic: true,
                   strikethrough: false,
                   code: false,
+                ),
+              ),
+            ],
+          ),
+          _plainText(' then '),
+          InlineElement.link(
+            targetId: 'projects/second',
+            exists: true,
+            content: [
+              InlineElement.text(
+                const TextRun(
+                  content: 'code strike',
+                  bold: false,
+                  italic: false,
+                  strikethrough: true,
+                  code: true,
                 ),
               ),
             ],
@@ -269,20 +349,85 @@ void main() {
             body: BlockView(
               node: node,
               blockPath: const [0],
-              onFocusRequested: (_, _) {},
+              onFocusRequested: (path, _) => promotions.add(path),
               onLinkActivated: calls.add,
             ),
           ),
         ),
       );
       expect(find.byType(RichText), findsOneWidget);
+
+      final outer =
+          tester.widget<RichText>(find.byType(RichText)).text as TextSpan;
+      final root = outer.children!.single as TextSpan;
+      final firstLink = root.children![1] as TextSpan;
+      final firstRun = firstLink.children!.single as TextSpan;
+      final secondLink = root.children![3] as TextSpan;
+      final secondRun = secondLink.children!.single as TextSpan;
+      expect(firstRun.style!.fontWeight, FontWeight.bold);
+      expect(firstRun.style!.fontStyle, FontStyle.italic);
+      expect(secondRun.style!.fontFamily, 'monospace');
+      expect(secondRun.style!.decoration, TextDecoration.lineThrough);
+      expect(root.toPlainText(), 'Before Bold italic then code strike');
+
+      final semantics = tester.ensureSemantics();
+      expect(
+        find.bySemanticsLabel('Open missing linked note Bold italic'),
+        findsWidgets,
+      );
+      expect(
+        find.bySemanticsLabel('Open linked note code strike'),
+        findsWidgets,
+      );
+      semantics.dispose();
+
+      // Block focus is the first stop. Its Enter remains the structural
+      // promotion command even when the Block contains Links.
       await tester.sendKeyEvent(LogicalKeyboardKey.tab);
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       await tester.pump();
-      expect(calls, ['projects/plan']);
-      await tester.tap(find.byType(RichText));
+      expect(promotions, [
+        const [0],
+      ]);
+      expect(calls, isEmpty);
+
+      // Subsequent ordered stops are individual Links, not a synthetic
+      // first-Link action. Their keyboard and pointer paths converge.
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       await tester.pump();
-      expect(calls, ['projects/plan', 'projects/plan']);
+      expect(calls, ['projects/plan', 'projects/second']);
+      final paragraph = tester.renderObject<RenderParagraph>(
+        find.byType(RichText),
+      );
+      final secondStart = 'Before Bold italic then '.length;
+      final secondLinkBox = paragraph
+          .getBoxesForSelection(
+            TextSelection(
+              baseOffset: secondStart,
+              extentOffset: secondStart + 'code strike'.length,
+            ),
+          )
+          .first
+          .toRect();
+      await tester.tapAt(paragraph.localToGlobal(secondLinkBox.center));
+      await tester.pump();
+      expect(promotions, [
+        const [0],
+      ]);
+      expect(calls, ['projects/plan', 'projects/second', 'projects/second']);
     },
   );
 }
+
+InlineElement _plainText(String content) => InlineElement.text(
+  TextRun(
+    content: content,
+    bold: false,
+    italic: false,
+    strikethrough: false,
+    code: false,
+  ),
+);

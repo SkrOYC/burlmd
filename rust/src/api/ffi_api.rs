@@ -734,8 +734,10 @@ pub async fn find_notes_by_title(query: String, limit: u32) -> Result<Vec<NoteMe
 /// Candidates for the completion triggered by `[[` (CAP-GRAPH-02). The
 /// trigger is a UI affordance; what gets inserted is `LinkCompletion::insert_text`,
 /// built Core-side. Results are capped at ten and include a Core-derived
-/// prospective ghost when `query` is a valid, as-yet-unoccupied target in the
-/// current Note's Directory. `limit == 0` returns no candidates.
+/// prospective ghost when `query` is a valid, as-yet-unoccupied **title** in
+/// the current Note's Directory. It is not a target path, so separators,
+/// dot-path segments, and reserved names never create a prospective result.
+/// `limit == 0` returns no candidates.
 #[frb]
 pub async fn link_completions(
     note_id: String,
@@ -760,9 +762,11 @@ pub async fn resolve_link_target(target_id: String) -> Result<LinkTargetResoluti
 }
 
 /// Creates the exact validated identity carried by a still-missing Link.
-/// Parent Directories are materialized under the lifecycle lock; if a burlmd
-/// caller created the target after resolution this opens that Note instead,
-/// while a foreign filesystem collision is refused rather than overwritten.
+/// Parent Directories are materialized with Note publication, indexing, session
+/// registration, and the pre-history commit under the lifecycle lock; if a
+/// burlmd caller created the target after resolution this opens that Note
+/// instead, while a foreign filesystem collision is refused rather than
+/// overwritten.
 #[frb]
 pub async fn create_link_target(target_id: String) -> Result<NoteState, AppError> {
     let workspace = crate::workspace::persist::Workspace::active()?;

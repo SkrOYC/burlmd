@@ -79,6 +79,7 @@ class LinkCompletionPopup extends ConsumerStatefulWidget {
 }
 
 class LinkCompletionState extends ConsumerState<LinkCompletionPopup> {
+  final GlobalKey _surfaceKey = GlobalKey();
   LinkCompletionSnapshot? _snapshot;
   List<core.LinkCompletion> _candidates = const [];
   int _activeIndex = 0;
@@ -86,6 +87,16 @@ class LinkCompletionState extends ConsumerState<LinkCompletionPopup> {
 
   bool get isOpen => _snapshot != null && _candidates.isNotEmpty;
   int get candidateCount => _candidates.length;
+
+  /// True only once the actual popup surface has been laid out. This keeps the
+  /// F006 smoke hook honest: a pending Core response or an offstage widget is
+  /// not evidence that a user could see or tap a completion.
+  bool get isVisiblyMounted {
+    final renderObject = _surfaceKey.currentContext?.findRenderObject();
+    return renderObject is RenderBox &&
+        renderObject.attached &&
+        renderObject.hasSize;
+  }
 
   /// QA staging is allowed to invoke the same acceptance path as Enter, but
   /// only after a real candidate list is visibly open.
@@ -239,6 +250,7 @@ class LinkCompletionState extends ConsumerState<LinkCompletionPopup> {
       container: true,
       label: l10n.linkCompletionLabel,
       child: Material(
+        key: _surfaceKey,
         elevation: 6,
         color: Theme.of(context).colorScheme.surface,
         child: ConstrainedBox(

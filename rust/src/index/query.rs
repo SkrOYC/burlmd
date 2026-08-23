@@ -23,7 +23,7 @@ use rusqlite::Connection;
 
 use crate::draft::NoteMetadata;
 use crate::error::AppError;
-use crate::workspace::lifecycle::link_target_identity;
+use crate::workspace::lifecycle::{link_target_identity, prospective_link_target_identity};
 
 /// Whether a completion points at an existing indexed Note or describes the
 /// valid future Note that the typed title would create in the current
@@ -212,7 +212,7 @@ pub fn link_completions_impl(
         return Ok(Vec::new());
     }
 
-    let prospective = match link_target_identity(&join_target_id(&current.directory_path, query)) {
+    let prospective = match prospective_link_target_identity(&current.directory_path, query) {
         Ok(identity) if !crate::index::note_exists(conn, workspace_id, &identity.target_id)? => {
             Some(identity)
         }
@@ -262,14 +262,6 @@ pub fn resolve_link_target_impl(
         directory_path: identity.directory_path,
         title: identity.title,
     })
-}
-
-fn join_target_id(directory_path: &str, title: &str) -> String {
-    if directory_path.is_empty() {
-        title.to_string()
-    } else {
-        format!("{directory_path}/{title}")
-    }
 }
 
 /// Collapses every run of whitespace in `text` to a single space, leaving
@@ -537,6 +529,70 @@ mod tests {
             ),
             vec!["projects/Future Plan".to_string()]
         );
+    }
+
+    /// Completion input is a title in the current Note's Directory, not a
+    /// target path. Invalid future-title text must never manufacture a ghost,
+    /// while title-prefix results remain available because they are queried
+    /// independently of prospective-target validation.
+    #[test]
+    fn prospective_ghost_completion_rejects_paths_dot_segments_and_reserved_titles() {
+        let f = fixture();
+        f.write("projects/Current.md", &conformant("Current", "Body."));
+        f.write(
+            "Foreign Slash.md",
+            &conformant("Future/Plan", "existing title-prefix result"),
+        );
+        reindex_workspace_impl(&f.conn, &f.workspace_id).unwrap();
+
+        for query in [
+            "Future/Plan",
+            "Future\\Plan",
+            ".",
+            "..",
+            "../escape",
+            "index",
+            "log",
+        ] {
+            let completions =
+                link_completions_impl(&f.conn, &f.workspace_id, "projects/Current", query, 10)
+                    .unwrap();
+            assert!(
+                !completions.iter().any(|completion| matches!(
+                    completion.kind,
+                    LinkCompletionKind::ProspectiveGhost { .. }
+                )),
+                "{query:?} must not create a prospective path target: {completions:?}"
+            );
+        }
+
+        let existing =
+            link_completions_impl(&f.conn, &f.workspace_id, "projects/Current", "Future/", 10)
+                .unwrap();
+        assert!(matches!(
+            existing.as_slice(),
+            [LinkCompletion {
+                kind: LinkCompletionKind::Existing { note_id },
+                ..
+            }] if note_id == "Foreign Slash"
+        ));
+
+        let ordinary = link_completions_impl(
+            &f.conn,
+            &f.workspace_id,
+            "projects/Current",
+            "Future Plan",
+            10,
+        )
+        .unwrap();
+        assert!(matches!(
+            ordinary.last(),
+            Some(LinkCompletion {
+                kind: LinkCompletionKind::ProspectiveGhost { target_id },
+                title,
+                ..
+            }) if target_id == "projects/Future Plan" && title == "Future Plan"
+        ));
     }
 
     #[test]
