@@ -398,7 +398,11 @@ void main() {
           .createNote('Projects', 'Created');
       await tester.pump();
       container.read(activeNoteProvider.notifier).adopt(stateFor('Newer'));
-      container.read(selectedNoteIdProvider.notifier).select('Newer');
+      // This probes an authoritative host-side replacement, not ordinary
+      // navigation; lifecycle admission intentionally rejects the latter.
+      container
+          .read(selectedNoteIdProvider.notifier)
+          .selectForLifecycle('Newer');
       gate.complete();
       await pending;
 
@@ -1063,10 +1067,11 @@ void main() {
         .read(lifecycleActionsProvider)
         .createNote('', 'Created');
     await tester.pump();
-    // This represents an external selection seam attempt. The rendered tree
-    // is disabled while lifecycle work owns the gate, but the action layer
-    // still cleans up correctly if another presentation host changes it.
-    container.read(selectedNoteIdProvider.notifier).select('Elsewhere');
+    // This probes an authoritative host-side replacement. Ordinary producers
+    // are rejected by the shared lifecycle selection admission.
+    container
+        .read(selectedNoteIdProvider.notifier)
+        .selectForLifecycle('Elsewhere');
     gate.complete();
 
     final outcome = (await create) as LifecycleCompleted;
@@ -1094,7 +1099,9 @@ void main() {
         .read(lifecycleActionsProvider)
         .createNote('', 'Created');
     await tester.pump();
-    container.read(selectedNoteIdProvider.notifier).select('Elsewhere');
+    container
+        .read(selectedNoteIdProvider.notifier)
+        .selectForLifecycle('Elsewhere');
     gate.complete();
 
     expect(await create, isA<LifecycleCompleted>());
@@ -1327,7 +1334,9 @@ void main() {
         await tester.pump();
         final reanchored = stateFor('new/inside');
         container.read(activeNoteProvider.notifier).adopt(reanchored);
-        container.read(selectedNoteIdProvider.notifier).select('new/inside');
+        container
+            .read(selectedNoteIdProvider.notifier)
+            .selectForLifecycle('new/inside');
         gate.complete();
         await pending;
         expect(container.read(activeNoteProvider), same(reanchored));

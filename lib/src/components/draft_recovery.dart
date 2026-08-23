@@ -28,6 +28,7 @@ class RecoveredDraftsPanel extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final drafts = ref.watch(pendingDraftsProvider);
     final dismissed = ref.watch(dismissedRecoveriesProvider);
+    final selectionBlocked = ref.watch(noteSelectionBlockedProvider);
     final surfaced =
         drafts.value?.where((note) => !dismissed.contains(note.id)).toList() ??
         const [];
@@ -59,7 +60,7 @@ class RecoveredDraftsPanel extends ConsumerWidget {
             subtitle: const Text(
               'Unsaved changes were recovered from a previous session.',
             ),
-            onTap: () => _open(ref, note.id),
+            onTap: selectionBlocked ? null : () => _open(ref, note.id),
             trailing: IconButton(
               tooltip: 'Dismiss notice',
               icon: const Icon(Icons.close),

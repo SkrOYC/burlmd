@@ -36,10 +36,39 @@ final workspaceTreeProvider = FutureProvider.autoDispose<List<TreeNode>>((
   return ref.watch(rustApiProvider).workspaceTree();
 });
 
+/// Number of full-workspace rescans that currently own the Core's indexing
+/// boundary. This is a count instead of a boolean so an eventual nested
+/// caller cannot reopen editor input while an outer rescan is still settling.
+final rescanEditingProvider = NotifierProvider<RescanEditing, int>(
+  RescanEditing.new,
+);
+
+class RescanEditing extends Notifier<int> {
+  @override
+  int build() => 0;
+
+  void begin() => state++;
+
+  void end() {
+    assert(state > 0, 'Rescan editing gate released without an owner.');
+    if (state > 0) state--;
+  }
+}
+
+/// Whether ordinary note selection is unsafe because a Workspace mutation is
+/// settling. This deliberately excludes [noteSwitchingProvider]: selection
+/// requests already admitted before a switch are serialized by
+/// [NoteController], while lifecycle and rescan work can invalidate the
+/// selected Note itself.
+final noteSelectionBlockedProvider = Provider<bool>(
+  (ref) =>
+      ref.watch(lifecycleEditingProvider) > 0 ||
+      ref.watch(rescanEditingProvider) > 0,
+);
+
 /// The concept id of the Note currently selected in the tree, or `null`
-/// when nothing is selected. This is the seam `SHEL-E004` consumes to mount
-/// the editor for the selected Note — the tree writes it on selection so
-/// navigation needs no rework when the editor arrives.
+/// when nothing is selected. This is the shared selection admission seam
+/// every navigation producer uses before the editor opens the Note.
 ///
 /// Selection coordinates are ephemeral UI state, not Note content
 /// (`tech-spec/guidelines.md`) — exactly what this small [Notifier] holds.
@@ -52,7 +81,22 @@ class SelectedNoteId extends Notifier<String?> {
   /// id intentionally stays visible while the editor shows the failure, and a
   /// second tap must produce a new listener event rather than silently doing
   /// nothing because the identifier is equal.
-  void select(String noteId) {
+  bool select(String noteId) {
+    // A stale callback can arrive before a disabled row has rebuilt. Keeping
+    // this check at the shared seam prevents Search, recovered drafts,
+    // keyboard commands, and future producers from leaving the highlight on
+    // a Note that the editor is forbidden to mount.
+    if (ref.read(noteSelectionBlockedProvider)) return false;
+    _publish(noteId);
+    return true;
+  }
+
+  /// Publishes a selection that the lifecycle coordinator has already
+  /// admitted. Lifecycle-created or rekeyed Notes must be able to update the
+  /// shared highlight while the ordinary navigation gate remains closed.
+  void selectForLifecycle(String noteId) => _publish(noteId);
+
+  void _publish(String noteId) {
     if (state == noteId) state = null;
     state = noteId;
   }

@@ -5,6 +5,7 @@ import 'package:burlmd/src/components/status_message.dart';
 import 'package:burlmd/src/components/workspace_tree.dart';
 import 'package:burlmd/src/providers/note_providers.dart';
 import 'package:burlmd/src/providers/rust_api_provider.dart';
+import 'package:burlmd/src/providers/search_provider.dart';
 import 'package:burlmd/src/providers/workspace_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -156,6 +157,17 @@ class WorkspaceRescan extends Notifier<RescanState> {
   Future<void> run() async {
     if (state.running) return;
 
+    // Rescan and lifecycle actions both rewrite the Workspace's Core view.
+    // The regular affordance is disabled by the same shared gate, but this
+    // direct check protects a stale frame or programmatic caller as well.
+    if (ref.read(lifecycleEditingProvider) > 0) {
+      state = const RescanState(
+        refusedReason:
+            'Rescan unavailable while workspace changes are in progress.',
+      );
+      return;
+    }
+
     // STOP condition: rescanning under open sessions can silently discard
     // freshly-written index rows (the recorded transient-drop window), so
     // any open Note whose write tier still holds unwritten edits refuses
@@ -172,15 +184,33 @@ class WorkspaceRescan extends Notifier<RescanState> {
       return;
     }
 
+    final editing = ref.read(rescanEditingProvider.notifier);
+    // Close the shared admission boundary before any async gap. A selection
+    // already waiting on open_note observes the generation change and cannot
+    // mount a session that the reindex may have invalidated.
+    editing.begin();
+    ref.read(lifecycleAdmissionProvider.notifier).next();
     state = const RescanState(running: true);
     try {
+      await ref.read(activeNoteProvider.notifier).settlePendingOpen();
+      if (!ref.mounted) return;
       await ref.read(reindexWorkspaceProvider)();
+      if (!ref.mounted) return;
+      // A complete index is authoritative for every view derived from it.
+      // Keep the old tree visible on failure, but refresh the tree, search,
+      // and recovery surfaces together after success.
+      ref.invalidate(workspaceTreeProvider);
+      ref.invalidate(searchResultsProvider);
+      ref.invalidate(pendingDraftsProvider);
+      state = RescanState.idle;
     } catch (error) {
-      state = RescanState(failure: error);
-      return;
+      if (ref.mounted) state = RescanState(failure: error);
+    } finally {
+      // Provider disposal can outlive the FFI future. Never write a retired
+      // notifier while unwinding it, and never leave a live container's
+      // reference-counted input gate held after either outcome.
+      if (ref.mounted) editing.end();
     }
-    ref.invalidate(workspaceTreeProvider);
-    state = RescanState.idle;
   }
 
   /// Whether a polled [NoteWriteStatus] indicates the Note still holds
@@ -230,7 +260,10 @@ class _RescanButton extends ConsumerWidget {
     final status = ref.watch(writeTierMonitorProvider).status;
     final blockedByOpenEdits =
         status != null && WorkspaceRescan.indicatesUnwrittenEdits(status);
-    final blocked = rescan.running || blockedByOpenEdits;
+    final blocked =
+        rescan.running ||
+        blockedByOpenEdits ||
+        ref.watch(lifecycleEditingProvider) > 0;
 
     return Tooltip(
       message: 'Re-read the workspace from disk and refresh the note tree',

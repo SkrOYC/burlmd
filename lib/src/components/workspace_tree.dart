@@ -82,7 +82,7 @@ class _WorkspaceTreeState extends ConsumerState<WorkspaceTree> {
     // admission boundary until that result has settled, rather than letting a
     // tree tap race an old-id rekey or an in-flight close.
     final lifecycleActive =
-        ref.watch(lifecycleEditingProvider) > 0 ||
+        ref.watch(noteSelectionBlockedProvider) ||
         ref.watch(noteSwitchingProvider);
 
     if (treeError != null) return const _TreeErrorState();
@@ -136,8 +136,10 @@ class _WorkspaceTreeState extends ConsumerState<WorkspaceTree> {
           onTap: lifecycleActive
               ? null
               : () {
-                  ref.read(selectedNoteIdProvider.notifier).select(note.id);
-                  widget.onNoteSelected?.call(note.id);
+                  final selected = ref
+                      .read(selectedNoteIdProvider.notifier)
+                      .select(note.id);
+                  if (selected) widget.onNoteSelected?.call(note.id);
                 },
         ),
     ];

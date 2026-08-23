@@ -44,6 +44,7 @@ class _SearchPanelState extends ConsumerState<SearchPanel> {
   @override
   Widget build(BuildContext context) {
     final results = ref.watch(searchResultsProvider(widget.resultLimit));
+    final selectionBlocked = ref.watch(noteSelectionBlockedProvider);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -95,12 +96,16 @@ class _SearchPanelState extends ConsumerState<SearchPanel> {
                         for (final hit in hits)
                           _ResultRow(
                             hit: hit,
-                            onTap: () {
-                              ref
-                                  .read(selectedNoteIdProvider.notifier)
-                                  .select(hit.id);
-                              widget.onNoteSelected?.call(hit.id);
-                            },
+                            onTap: selectionBlocked
+                                ? null
+                                : () {
+                                    final selected = ref
+                                        .read(selectedNoteIdProvider.notifier)
+                                        .select(hit.id);
+                                    if (selected) {
+                                      widget.onNoteSelected?.call(hit.id);
+                                    }
+                                  },
                           ),
                       ],
                     );
@@ -200,7 +205,7 @@ class _ResultRow extends StatelessWidget {
   const _ResultRow({required this.hit, required this.onTap});
 
   final NoteMetadata hit;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {

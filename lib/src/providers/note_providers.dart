@@ -183,7 +183,8 @@ class LifecycleFocusRemapSignal extends Notifier<LifecycleFocusRemap?> {
 final editorInputBlockedProvider = Provider<bool>(
   (ref) =>
       ref.watch(noteSwitchingProvider) ||
-      ref.watch(lifecycleEditingProvider) > 0,
+      ref.watch(lifecycleEditingProvider) > 0 ||
+      ref.watch(rescanEditingProvider) > 0,
 );
 
 /// Holds the currently open note's state. UI widgets must stay stateless
@@ -279,7 +280,7 @@ class NoteController extends Notifier<NoteState?> {
     // entirely rather than churning closes/opens for Notes the user has
     // already navigated past.
     if (ticket != _openRequests) return;
-    if (!admittedByLifecycle && ref.read(lifecycleEditingProvider) > 0) {
+    if (!admittedByLifecycle && ref.read(noteSelectionBlockedProvider)) {
       return;
     }
     final lifecycleAdmission = ref.read(lifecycleAdmissionProvider);
@@ -320,7 +321,7 @@ class NoteController extends Notifier<NoteState?> {
           // The switch aborts with the old Note still open; point the tree
           // back at it so the selection highlight matches what the editor
           // actually shows. The error stays surfaced above.
-          ref.read(selectedNoteIdProvider.notifier).select(current.metadata.id);
+          _restoreSelection(current.metadata.id, admittedByLifecycle);
           return;
         }
       }
@@ -373,7 +374,7 @@ class NoteController extends Notifier<NoteState?> {
       } else {
         final stillOpen = state?.metadata.id;
         if (stillOpen != null) {
-          ref.read(selectedNoteIdProvider.notifier).select(stillOpen);
+          _restoreSelection(stillOpen, admittedByLifecycle);
         }
       }
     } finally {
@@ -386,8 +387,17 @@ class NoteController extends Notifier<NoteState?> {
     required bool admittedByLifecycle,
   }) =>
       ref.mounted &&
-      (admittedByLifecycle || ref.read(lifecycleEditingProvider) == 0) &&
+      (admittedByLifecycle || !ref.read(noteSelectionBlockedProvider)) &&
       ref.read(lifecycleAdmissionProvider) == expectedAdmission;
+
+  void _restoreSelection(String noteId, bool admittedByLifecycle) {
+    final selection = ref.read(selectedNoteIdProvider.notifier);
+    if (admittedByLifecycle) {
+      selection.selectForLifecycle(noteId);
+    } else {
+      selection.select(noteId);
+    }
+  }
 
   /// The per-keystroke call (ADR-007 decision 4): buffers `source` — the
   /// Block's raw Markdown text, not an `AstNode` — into the Note's working

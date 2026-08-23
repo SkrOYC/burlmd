@@ -105,4 +105,36 @@ void main() {
       expect(container.read(editorErrorProvider), isNull);
     },
   );
+
+  test(
+    'shared selection and direct opens are refused during lifecycle work, then recover without divergence',
+    () async {
+      final api = _SwitchingRustApi();
+      final container = _containerFor(api);
+      final controller = container.read(activeNoteProvider.notifier);
+
+      await controller.open('a');
+      container.read(selectedNoteIdProvider.notifier).select('a');
+      container.read(lifecycleEditingProvider.notifier).begin();
+
+      expect(
+        container.read(selectedNoteIdProvider.notifier).select('b'),
+        isFalse,
+      );
+      await controller.open('b');
+      expect(container.read(selectedNoteIdProvider), 'a');
+      expect(container.read(activeNoteProvider)!.metadata.id, 'a');
+      expect(api.calls, ['open:a']);
+
+      container.read(lifecycleEditingProvider.notifier).end();
+      expect(
+        container.read(selectedNoteIdProvider.notifier).select('b'),
+        isTrue,
+      );
+      await controller.open('b');
+      expect(container.read(selectedNoteIdProvider), 'b');
+      expect(container.read(activeNoteProvider)!.metadata.id, 'b');
+      expect(api.calls, ['open:a', 'close:a', 'open:b']);
+    },
+  );
 }
