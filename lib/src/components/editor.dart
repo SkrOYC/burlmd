@@ -542,7 +542,7 @@ class EditorState extends ConsumerState<Editor> {
         );
       });
     } catch (error) {
-      ref.read(editorErrorProvider.notifier).report(error);
+      _reportEditorOperationFailure(error);
     }
   }
 
@@ -607,7 +607,7 @@ class EditorState extends ConsumerState<Editor> {
       copyMarkdown: () => _copyFrozenRange(generation, range, state, noteId),
       onError: (error) {
         if (_isLiveRange(generation, range, state, noteId)) {
-          ref.read(editorErrorProvider.notifier).report(error);
+          _reportEditorOperationFailure(error);
         }
       },
     );
@@ -634,6 +634,19 @@ class EditorState extends ConsumerState<Editor> {
             selection.startOffset != selection.endOffset;
       })
       .length;
+
+  /// A range edit, copy, or promotion can be refused without invalidating
+  /// the Note currently mounted in the editor. Keep that Note available and
+  /// report the retryable operation through the shared, dismissible status
+  /// surface instead of [editorErrorProvider], whose panel is only visible
+  /// when no Note is open.
+  void _reportEditorOperationFailure(Object error) {
+    if (!mounted) return;
+    showStatusMessage(
+      context,
+      AppLocalizations.of(context)!.editorOperationFailed('$error'),
+    );
+  }
 
   static bool _sameRange(BlockRange a, BlockRange b) =>
       a.startPath.length == b.startPath.length &&
@@ -1412,6 +1425,7 @@ class EditorState extends ConsumerState<Editor> {
     int? endIndex;
     var startOffset = 0;
     var endOffset = 0;
+    var hasUncollapsedSelection = false;
     for (var index = 0; index < note.ast.length; index++) {
       final broker = _selectionBrokers[index];
       if (broker == null || broker.selectables.isEmpty) continue;
@@ -1425,9 +1439,8 @@ class EditorState extends ConsumerState<Editor> {
         if (leafIndex == null) continue;
         final SelectedContentRange? selection = broker.selectables[leaf]
             .getSelection();
-        if (selection == null || selection.startOffset == selection.endOffset) {
-          continue;
-        }
+        if (selection == null) continue;
+        hasUncollapsedSelection |= selection.startOffset != selection.endOffset;
         final mappedLow = blockCoreRenderedOffset(
           node,
           leafIndex: leafIndex,
@@ -1447,7 +1460,14 @@ class EditorState extends ConsumerState<Editor> {
       endIndex = index;
       endOffset = high;
     }
-    if (startIndex == null || endIndex == null) return null;
+    if (startIndex == null || endIndex == null || !hasUncollapsedSelection) {
+      return null;
+    }
+    // A collapsed selectable can be a genuine edge of an uncollapsed range:
+    // dragging from the exact end of one Block into its neighbour leaves the
+    // first selectable collapsed at its end. Retaining those endpoint ranges
+    // preserves Core's structural coordinates, while the guard above keeps a
+    // lone collapsed caret from becoming a range operation.
     return BlockRange(
       startPath: Uint64List.fromList([startIndex]),
       startOffset: BigInt.from(startOffset),
@@ -1523,7 +1543,7 @@ class EditorState extends ConsumerState<Editor> {
           .copyRangeAsMarkdown(note.metadata.id, range);
       unawaited(Clipboard.setData(ClipboardData(text: markdown)));
     } catch (error) {
-      ref.read(editorErrorProvider.notifier).report(error);
+      _reportEditorOperationFailure(error);
     }
     return null;
   }

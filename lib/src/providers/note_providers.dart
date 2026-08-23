@@ -19,11 +19,13 @@ class EditorError extends Notifier<Object?> {
   void report(Object? error) => state = error;
 }
 
-/// A one-shot close refusal for an otherwise still-open Note session.
+/// A one-shot close status for a Note switch.
 ///
-/// Unlike an open failure, a close refusal leaves the old Core session valid
-/// and retryable. [Editor] acknowledges this value after showing its
-/// dismissible status message, preventing stale errors on later rebuilds.
+/// A true refusal leaves the old Core session valid and retryable; a
+/// [CloseNoteWarning] says Core already retired it after a safe write but
+/// could not finish post-close bookkeeping. [Editor] acknowledges either
+/// through its dismissible status message, preventing stale errors on later
+/// rebuilds.
 final noteCloseFailureProvider = NotifierProvider<NoteCloseFailure, Object?>(
   NoteCloseFailure.new,
 );
@@ -63,8 +65,8 @@ class KeystrokeWriteFailure extends Notifier<Object?> {
 
 /// Whether the outgoing Note is closing before its replacement opens.
 ///
-/// The old state remains available solely so a failed close can restore that
-/// session, but it no longer grants edit authority once switching begins.
+/// The old state remains available solely so a true close refusal can restore
+/// that session, but it no longer grants edit authority once switching begins.
 final noteSwitchingProvider = NotifierProvider<NoteSwitching, bool>(
   NoteSwitching.new,
 );
@@ -91,12 +93,14 @@ class NoteController extends Notifier<NoteState?> {
   /// (`SHEL-E004`'s STOP condition): `close_note` runs tier 3 — flush,
   /// session commit, draft-row clear — so skipping it on a switch would
   /// leave the outgoing session uncommitted and absent from version
-  /// history. A close that fails aborts the switch: opening the new Note
-  /// on top of an uncommitted session would bury the failure. On that
-  /// abort [selectedNoteIdProvider] is rolled back to the Note that is
-  /// still open, so the tree highlight never names a Note the Core refused
-  /// to reach — and the listener it fires re-enters this method only to hit
-  /// the already-open fast path below, leaving the reported failure up.
+  /// history. A close refusal aborts the switch: opening the new Note on top
+  /// of an uncommitted session would bury the failure. A post-close warning
+  /// is different — its session is gone after a safe write, so switching must
+  /// continue and surface the warning nonfatally. On a refusal,
+  /// [selectedNoteIdProvider] is rolled back to the Note that is still open,
+  /// so the tree highlight never names a Note the Core refused to reach — and
+  /// the listener it fires re-enters this method only to hit the already-open
+  /// fast path below, leaving the reported failure up.
   ///
   /// Calls are serialized through [_pendingOpen]: `open` reads `state` to
   /// decide whether a close is owed, but assigns `state` only after an FFI
@@ -150,6 +154,7 @@ class NoteController extends Notifier<NoteState?> {
       return;
     }
     var switching = false;
+    var closedWithWarning = false;
     if (current != null) {
       // Revoke the old editor before awaiting the close. The old provider
       // value remains only to restore it when this close itself refuses.
@@ -158,17 +163,28 @@ class NoteController extends Notifier<NoteState?> {
       try {
         await api.closeNote(current.metadata.id);
       } catch (error) {
-        ref.read(noteSwitchingProvider.notifier).set(false);
-        // Closing refused, so the old session remains Core-valid and can be
-        // edited again. It is a nonfatal one-shot outcome, not the persistent
-        // no-session error panel used for a failed open.
-        ref.read(editorErrorProvider.notifier).report(null);
-        ref.read(noteCloseFailureProvider.notifier).report(error);
-        // The switch aborts with the old Note still open; point the tree
-        // back at it so the selection highlight matches what the editor
-        // actually shows. The error stays surfaced above.
-        ref.read(selectedNoteIdProvider.notifier).select(current.metadata.id);
-        return;
+        if (error is CloseNoteWarning) {
+          // Core retired the outgoing session after the bytes were safe, but
+          // could not finish commit or draft cleanup. Continue to the selected
+          // Note: restoring `current` here would make its raw editor writable
+          // against a deregistered session. The Editor consumes this one-shot
+          // warning through the same dismissible status surface as a refusal.
+          closedWithWarning = true;
+          ref.read(editorErrorProvider.notifier).report(null);
+          ref.read(noteCloseFailureProvider.notifier).report(error);
+        } else {
+          ref.read(noteSwitchingProvider.notifier).set(false);
+          // Closing refused, so the old session remains Core-valid and can be
+          // edited again. It is a nonfatal one-shot outcome, not the persistent
+          // no-session error panel used for a failed open.
+          ref.read(editorErrorProvider.notifier).report(null);
+          ref.read(noteCloseFailureProvider.notifier).report(error);
+          // The switch aborts with the old Note still open; point the tree
+          // back at it so the selection highlight matches what the editor
+          // actually shows. The error stays surfaced above.
+          ref.read(selectedNoteIdProvider.notifier).select(current.metadata.id);
+          return;
+        }
       }
     }
     try {
@@ -178,7 +194,12 @@ class NoteController extends Notifier<NoteState?> {
       // surfaces: the old Note's keystroke-write failure belongs to a
       // session that just ended.
       ref.read(editorErrorProvider.notifier).report(null);
-      ref.read(noteCloseFailureProvider.notifier).acknowledge();
+      // Keep a post-close warning available for the Editor's dismissible
+      // status even though opening the next Note succeeded. A clean close or
+      // a first open should clear stale refusal status as before.
+      if (!closedWithWarning) {
+        ref.read(noteCloseFailureProvider.notifier).acknowledge();
+      }
       ref.read(keystrokeWriteFailureProvider.notifier).report(null);
     } catch (error) {
       ref.read(editorErrorProvider.notifier).report(error);

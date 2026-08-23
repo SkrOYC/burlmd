@@ -548,6 +548,29 @@ void main() {
     expect(api.commitCount, 0);
   });
 
+  testWidgets('a failed promotion keeps the mounted Note readable and shows '
+      'a dismissible localized status', (tester) async {
+    final api = _FakeRustApi();
+    final container = await pumpEditor(tester, [
+      _plainParagraph('still readable'),
+    ], api: api);
+
+    // The fake has no source for this path, so promotion fails after the
+    // rendered Note is already mounted. This must not route through the
+    // no-note-only fatal panel.
+    await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
+
+    expect(find.text('still readable'), findsOneWidget);
+    expect(_writableFields(), findsNothing);
+    expect(find.byType(SnackBar), findsOneWidget);
+    expect(
+      find.textContaining('Could not complete the editor operation'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('no source for [0]'), findsOneWidget);
+    expect(container.read(editorErrorProvider), isNull);
+  });
+
   testWidgets('a multi-run paragraph keeps each run\'s distinct styling '
       'while rendered', (tester) async {
     await pumpEditor(tester, [

@@ -2259,7 +2259,16 @@ impl NoteSession {
     /// `SPK-WSPC-D001` §6.2.6's asymmetry applied to the harshest case, and it
     /// keeps `architecture/resilience.md`'s promise that unwritten work
     /// survives events the application never got to handle.
-    pub fn close(&self) -> Result<(), AppError> {
+    /// Closes this session and tells the caller whether the close completed
+    /// with a nonfatal post-close warning.
+    ///
+    /// `Err` is reserved for a refusal that leaves this session registered and
+    /// usable (most importantly a tier-2/OCC refusal). Once the session has
+    /// been retired, failures in the commit-record or redundant draft-row
+    /// cleanup stages are returned as [CloseOutcome::ClosedWithWarning]
+    /// instead. The presentation boundary needs that distinction to avoid
+    /// restoring a provider snapshot whose Core session no longer exists.
+    pub(crate) fn close_with_outcome(&self) -> Result<CloseOutcome, AppError> {
         let (edited, unwritten) = {
             let state = self.lock_state()?;
             (state.session_edited, state.unwritten)
@@ -2356,14 +2365,29 @@ impl NoteSession {
                 .iter()
                 .map(|e| format!("clearing the draft row for {}: {e:?}", self.0.note_id))
                 .collect();
-            return Err(super::lifecycle::commit_stage_failure(
-                &subject, error, &also,
+            return Ok(CloseOutcome::ClosedWithWarning(
+                super::lifecycle::commit_stage_failure(&subject, error, &also),
             ));
         }
         if let Some(error) = draft_clear_failure {
-            return Err(draft_stage_failure(&subject, error));
+            return Ok(CloseOutcome::ClosedWithWarning(draft_stage_failure(
+                &subject, error,
+            )));
         }
-        Ok(())
+        Ok(CloseOutcome::Closed)
+    }
+
+    /// Closes this session using the legacy all-errors-as-`Err` result shape.
+    ///
+    /// Internal callers that do not need to distinguish an already-retired
+    /// session keep this narrower surface. The FFI uses
+    /// [`Self::close_with_outcome`] so Dart can preserve a true close refusal
+    /// without reviving a dead session after a warning.
+    pub fn close(&self) -> Result<(), AppError> {
+        match self.close_with_outcome()? {
+            CloseOutcome::Closed => Ok(()),
+            CloseOutcome::ClosedWithWarning(error) => Err(error),
+        }
     }
 
     /// The generated message tier 3 commits with. It carries no correctness
@@ -2376,6 +2400,18 @@ impl NoteSession {
         let verb = if existed { "Update" } else { "Create" };
         Ok(format!("{verb} {title}\n\n{}\n", self.0.relative_path))
     }
+}
+
+/// Whether tier 3 refused before retiring a session, or retired it with a
+/// warning about a post-close bookkeeping stage.
+///
+/// Kept Core-internal: `api::ffi_api::CloseNoteResult` deliberately carries a
+/// stable, serializable warning string instead of exposing persistence's
+/// internal error choreography over FFI.
+#[derive(Debug)]
+pub(crate) enum CloseOutcome {
+    Closed,
+    ClosedWithWarning(AppError),
 }
 
 /// The error [`NoteSession::close`] returns when the **draft-row cleanup**
@@ -6519,6 +6555,34 @@ mod tests {
         let (reopened, state) = open_note(&f.workspace, "a").unwrap();
         assert!(!state.restored_from_draft);
         reopened.close().unwrap();
+    }
+
+    /// The FFI needs a different answer from the legacy [`NoteSession::close`]
+    /// caller once Core has retired the session. A commit-record failure is
+    /// still surfaced, but it is not a close refusal and therefore must not
+    /// lead Presentation to restore a dead editor snapshot.
+    #[test]
+    fn close_outcome_marks_a_post_close_commit_failure_as_a_warning() {
+        let f = fixture();
+        f.write("a.md", &note("Alpha", "First."));
+        f.commit_baseline();
+        let session = f.open("a");
+        session.update_block(&[0], "Alpha edited.\n").unwrap();
+        std::fs::remove_dir_all(f.root().join(".git")).unwrap();
+
+        let outcome = session.close_with_outcome().unwrap();
+
+        let CloseOutcome::ClosedWithWarning(error) = outcome else {
+            panic!("a failed commit after retirement must be a close warning");
+        };
+        assert!(
+            format!("{error:?}").contains("the commit recording it in version history failed"),
+            "the warning must preserve the failed post-close stage"
+        );
+        assert!(
+            lookup(f.workspace.id(), "a").unwrap().is_none(),
+            "a close warning must still retire the session"
+        );
     }
 
     /// The same trap, one stage earlier: a close whose **draft-row clear**

@@ -126,27 +126,24 @@ fn note_metadata_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<NoteMetad
 /// and states no lower bound, so a caller asking for zero results is asking a
 /// coherent question and gets the literal answer.
 ///
-/// "Ordered alphabetically" is read the way [`workspace_tree_impl`] reads it,
-/// and for the same two reasons. `COLLATE NOCASE`, because plain `ORDER BY
-/// title` is byte order and puts every capitalized title ahead of every
-/// lowercase one — `Zebra` before `apple` — which is not the reading anyone
-/// scanning a jump list expects. And `, id` as a tie-break, because titles are
-/// unique only per `(workspace_id, path)` (`schema.sql`), so two Notes can
-/// share one verbatim and the remainder falls to SQLite's unspecified row
-/// order. The tie-break is load-bearing here in a way it is not in the tree:
-/// `LIMIT` is applied after the sort, so an unstable tie changes *which* Notes
-/// come back, not merely the order they come back in.
+/// The predicate and primary sort use `title_lookup_key`, a normalized,
+/// full-Unicode case-folded derived value. SQLite's stock `LIKE` and `NOCASE`
+/// are ASCII-only, so applying either directly to `title` would make `über`
+/// fail to find `Über`. The user-visible title and `id` follow as deterministic
+/// tie-breaks: titles are unique only per `(workspace_id, path)` (`schema.sql`)
+/// and `LIMIT` is applied after the sort, so an unstable tie changes *which*
+/// Notes come back, not merely their order.
 pub fn find_notes_by_title_impl(
     conn: &Connection,
     workspace_id: &str,
     query: &str,
     limit: u32,
 ) -> Result<Vec<NoteMetadata>, AppError> {
-    let pattern = like_prefix_pattern(query);
+    let pattern = like_prefix_pattern(&crate::index::title_lookup_key(query));
     let mut stmt = conn.prepare(
         "SELECT id, okf_conformant, path, title, last_modified FROM notes \
-         WHERE workspace_id = ?1 AND title LIKE ?2 ESCAPE '\\' \
-         ORDER BY title COLLATE NOCASE, id LIMIT ?3",
+         WHERE workspace_id = ?1 AND title_lookup_key LIKE ?2 ESCAPE '\\' \
+         ORDER BY title_lookup_key COLLATE NOCASE, title, id LIMIT ?3",
     )?;
     let rows = stmt.query_map(
         rusqlite::params![workspace_id, pattern, limit],
@@ -626,8 +623,8 @@ mod tests {
             .unwrap();
         f.conn
             .execute(
-                "INSERT INTO notes (id, workspace_id, path, title, last_modified, content_hash) \
-                 VALUES ('isolated/Only', 'other', 'isolated/Only.md', 'Only', 0, 'hash')",
+                "INSERT INTO notes (id, workspace_id, path, title, title_lookup_key, last_modified, content_hash) \
+                 VALUES ('isolated/Only', 'other', 'isolated/Only.md', 'Only', 'only', 0, 'hash')",
                 [],
             )
             .unwrap();
@@ -1160,6 +1157,77 @@ mod tests {
             results.iter().map(|n| n.id.clone()).collect::<Vec<_>>(),
             again.iter().map(|n| n.id.clone()).collect::<Vec<_>>(),
             "the order must be stable across repeated calls"
+        );
+    }
+
+    /// Stock SQLite `LIKE` and `NOCASE` only fold ASCII. The lookup key must
+    /// therefore normalize and full-case-fold before SQL sees the prefix: a
+    /// user typing either composed uppercase or decomposed lowercase finds
+    /// the same title from a foreign bundle.
+    #[test]
+    fn title_prefix_query_matches_unicode_case_and_normalization() {
+        let f = fixture();
+        f.write("Current.md", &conformant("Current", "Body."));
+        f.write("uber.md", &conformant("Über Plan", "Body."));
+        f.write("masse.md", &conformant("Maße", "Body."));
+        reindex_workspace_impl(&f.conn, &f.workspace_id).unwrap();
+
+        let uber = find_notes_by_title_impl(&f.conn, &f.workspace_id, "u\u{308}BER", 10).unwrap();
+        assert_eq!(uber.len(), 1);
+        assert_eq!(uber[0].title, "Über Plan");
+
+        let masse = find_notes_by_title_impl(&f.conn, &f.workspace_id, "MASSE", 10).unwrap();
+        assert_eq!(masse.len(), 1);
+        assert_eq!(masse[0].title, "Maße");
+
+        let completions =
+            link_completions_impl(&f.conn, &f.workspace_id, "Current", "ÜBER", 10).unwrap();
+        assert!(matches!(
+            completions.first(),
+            Some(LinkCompletion { title, kind: LinkCompletionKind::Existing { .. }, .. })
+                if title == "Über Plan"
+        ));
+    }
+
+    #[test]
+    fn title_prefix_query_uses_the_lookup_key_index() {
+        let f = fixture();
+        f.write("Current.md", &conformant("Current", "Body."));
+        for number in 0..100 {
+            let title = format!("Project {number:03}");
+            f.write(
+                &format!("project-{number:03}.md"),
+                &conformant(&title, "Body."),
+            );
+        }
+        reindex_workspace_impl(&f.conn, &f.workspace_id).unwrap();
+
+        let mut stmt = f
+            .conn
+            .prepare(
+                "EXPLAIN QUERY PLAN \
+                 SELECT id, okf_conformant, path, title, last_modified FROM notes \
+                 WHERE workspace_id = ?1 AND title_lookup_key LIKE ?2 ESCAPE '\\' \
+                 ORDER BY title_lookup_key COLLATE NOCASE, title, id LIMIT ?3",
+            )
+            .unwrap();
+        let plan = stmt
+            .query_map(
+                rusqlite::params![
+                    f.workspace_id,
+                    like_prefix_pattern(&crate::index::title_lookup_key("Project 09")),
+                    10_u32,
+                ],
+                |row| row.get::<_, String>(3),
+            )
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+
+        assert!(
+            plan.iter()
+                .any(|detail| detail.contains("idx_notes_title_lookup")),
+            "title-prefix lookup must use its workspace/key index, got plan: {plan:?}"
         );
     }
 

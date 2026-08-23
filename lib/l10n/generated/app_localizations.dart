@@ -165,6 +165,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Could not switch notes: {error}'**
   String noteCloseFailed(String error);
+
+  /// Dismissible status message when a retryable editor operation fails while the current note stays open.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not complete the editor operation: {error}'**
+  String editorOperationFailed(String error);
 }
 
 class _AppLocalizationsDelegate

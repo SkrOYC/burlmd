@@ -1,5 +1,22 @@
 # Stage 3: Technical Implementation Changelog
 
+## v1.6.2
+
+Patch corrections from PR #10 review, round 6. No bill-of-materials, PRD, or
+architecture change.
+
+- The encrypted index stores `notes.title_lookup_key`, derived through NFKC,
+  full default Unicode case folding, and NFC. Find and Link completion query
+  that key, then order results by the key, title, and concept ID.
+- `init_schema` migrates a version 1 index in one transaction. It adds and
+  backfills the key, creates the lookup index, and records schema version 2.
+  A later schema version remains unchanged.
+- `close_note` returns `CloseNoteResult` instead of `()`. An FFI error means
+  Core refused the close and keeps the session live. A result warning means
+  Core retired the session after a safe write, but could not record history or
+  clear redundant draft bookkeeping. Dart continues the switch and reports
+  that warning without restoring a dead editor session.
+
 ## v1.6.1
 
 Patch correction from PR #10 review, round 4. No bill-of-materials, PRD, or architecture change.

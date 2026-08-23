@@ -1581,6 +1581,16 @@ impl SseDecode for bool {
     }
 }
 
+impl SseDecode for crate::api::ffi_api::CloseNoteResult {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_warning = <Option<String>>::sse_decode(deserializer);
+        return crate::api::ffi_api::CloseNoteResult {
+            warning: var_warning,
+        };
+    }
+}
+
 impl SseDecode for i64 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -2356,6 +2366,23 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::ffi_api::BlockRange>
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::ffi_api::CloseNoteResult {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [self.warning.into_into_dart().into_dart()].into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::ffi_api::CloseNoteResult
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::ffi_api::CloseNoteResult>
+    for crate::api::ffi_api::CloseNoteResult
+{
+    fn into_into_dart(self) -> crate::api::ffi_api::CloseNoteResult {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::workspace::lifecycle::IdRemap {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
@@ -2910,6 +2937,13 @@ impl SseEncode for bool {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         serializer.cursor.write_u8(self as _).unwrap();
+    }
+}
+
+impl SseEncode for crate::api::ffi_api::CloseNoteResult {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <Option<String>>::sse_encode(self.warning, serializer);
     }
 }
 

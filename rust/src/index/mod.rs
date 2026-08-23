@@ -48,6 +48,8 @@ use std::path::PathBuf;
 
 use rusqlite::{Connection, OptionalExtension};
 use sha2::{Digest, Sha256};
+use unicode_casefold::UnicodeCaseFold;
+use unicode_normalization::UnicodeNormalization;
 
 use crate::error::AppError;
 use crate::markdown::{parse_note, rendered_text, AstNode, InlineElement};
@@ -103,6 +105,17 @@ pub fn content_hash(bytes: &[u8]) -> String {
         let _ = write!(out, "{byte:02x}");
     }
     out
+}
+
+/// Canonical lookup key for user-supplied Note titles.
+///
+/// This uses compatibility normalization, full default Unicode case folding,
+/// then canonical composition. The stored key lets SQLite perform a prefix
+/// lookup without relying on its stock `LIKE`/`NOCASE` implementation, which
+/// is ASCII-only in the bundled SQLCipher build. It is derived index state:
+/// callers must continue to display and serialize [`IndexedNote::title`].
+pub(crate) fn title_lookup_key(title: &str) -> String {
+    title.nfkc().case_fold().nfc().collect::<String>()
 }
 
 /// Derives every index row for one Note from its source text.
@@ -251,14 +264,15 @@ pub fn insert_note_rows(
     note: &IndexedNote,
 ) -> Result<(), AppError> {
     conn.execute(
-        "INSERT INTO notes (id, workspace_id, path, title, last_modified, content_hash, \
-                            okf_conformant) \
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        "INSERT INTO notes (id, workspace_id, path, title, title_lookup_key, last_modified, \
+                            content_hash, okf_conformant) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
         rusqlite::params![
             note.concept_id,
             workspace_id,
             note.path,
             note.title,
+            title_lookup_key(&note.title),
             note.last_modified,
             note.content_hash,
             note.okf_conformant,

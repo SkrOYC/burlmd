@@ -19,10 +19,11 @@
 
 PRAGMA foreign_keys = ON;
 
--- Baseline schema version. Deliberately still 1: nothing is deployed, no index
--- file exists on any machine, so the v1.1.0 corrections here are edits to the
--- baseline rather than a migration away from it. The first migration written
--- after this project has real users should branch on this value.
+-- Schema version 2 adds `notes.title_lookup_key`: a normalized, full-Unicode
+-- case-folded title used only for title-prefix lookup. SQLite's stock LIKE and
+-- NOCASE handling folds ASCII only, so querying `title` directly would make
+-- `über` fail to find a Note titled `Über`. The original title remains the
+-- user-visible value and is never rewritten by this derived lookup key.
 --
 -- Deliberately NOT set here. `db::connection::init_schema` replays this whole
 -- batch via `execute_batch` on every open (every statement above and below is
@@ -30,7 +31,7 @@ PRAGMA foreign_keys = ON;
 -- = 1;` in this file would silently reset a migrated database back to the
 -- baseline on every subsequent open -- turning the one value a future
 -- migration branches on into a constant. Instead, `init_schema` reads `PRAGMA
--- user_version` first and writes it to 1 only when it reads 0, i.e. on a
+-- user_version` first and writes it to 2 only when it reads 0, i.e. on a
 -- freshly created file. `WSPC-D004` carries a criterion for this: an index
 -- whose `user_version` reads something other than 0 must be left as it was.
 
@@ -71,6 +72,10 @@ CREATE TABLE IF NOT EXISTS notes (
     workspace_id TEXT NOT NULL,
     path TEXT NOT NULL,            -- Same value as `id`, with '.md' retained
     title TEXT NOT NULL,           -- From frontmatter `title`, else derived from filename
+    -- NFKC + full default case fold + NFC, derived by `index::title_lookup_key`.
+    -- Kept as data rather than a SQLite collation because the bundled
+    -- SQLCipher build has no ICU extension and stock LIKE/NOCASE are ASCII-only.
+    title_lookup_key TEXT NOT NULL,
     last_modified INTEGER NOT NULL, -- Unix timestamp, for display and ordering only
     -- Content hash of the on-disk file. This is the OCC token `base_revision`
     -- in `contracts/ffi_api.rs` (ADR-007 decision 7), replacing the
@@ -95,6 +100,14 @@ CREATE TABLE IF NOT EXISTS notes (
     UNIQUE(workspace_id, path),
     FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
 );
+
+-- CAP-FIND-02 and CAP-GRAPH-02 both prefix-match this key. `NOCASE` remains
+-- useful to SQLite's LIKE planner for the already-folded ASCII subset; every
+-- non-ASCII case distinction was removed before storage. The remaining
+-- columns make the user-visible sort and the deterministic concept-id
+-- tie-break available without a temporary sort for the capped query.
+CREATE INDEX IF NOT EXISTS idx_notes_title_lookup
+    ON notes(workspace_id, title_lookup_key COLLATE NOCASE, title, id);
 
 -- Lateral connections between Notes, forming the knowledge graph.
 -- One row is one edge. Links are stored on disk as standard bundle-absolute

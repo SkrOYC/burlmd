@@ -47,7 +47,15 @@ class SelectedNoteId extends Notifier<String?> {
   @override
   String? build() => null;
 
-  void select(String noteId) => state = noteId;
+  /// Selects [noteId], re-emitting an explicit tap of the already-selected
+  /// Note. This makes an incoming `open_note` failure retryable: its selected
+  /// id intentionally stays visible while the editor shows the failure, and a
+  /// second tap must produce a new listener event rather than silently doing
+  /// nothing because the identifier is equal.
+  void select(String noteId) {
+    if (state == noteId) state = null;
+    state = noteId;
+  }
 
   /// Clears the selection — the close-in-the-editor half of deleting a Note
   /// (`SHEL-E005`). Setting rather than a null-taking parameter keeps

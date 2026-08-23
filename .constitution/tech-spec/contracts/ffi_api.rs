@@ -1059,6 +1059,18 @@ pub async fn reload_note(note_id: String) -> Result<NoteState, AppError> {
     unimplemented!()
 }
 
+/// Terminal result from tier 3 for one Note session.
+///
+/// `warning = None` means the session closed cleanly. A warning means that
+/// Core retired the session after it safely wrote the Note, but could not
+/// record its Git commit or clear redundant draft bookkeeping. The warning is
+/// user-visible, but Dart must not restore the outgoing editor because its
+/// Core session no longer exists.
+#[frb]
+pub struct CloseNoteResult {
+    pub warning: Option<String>,
+}
+
 /// Tier 3: flushes any pending write, makes one Git commit covering this
 /// editing session, clears the `drafts` row, and calls the sync scheduler's
 /// `notify_activity()` -- which has existed since Epic C with no caller
@@ -1066,8 +1078,14 @@ pub async fn reload_note(note_id: String) -> Result<NoteState, AppError> {
 ///
 /// Must also run on application quit and when switching away from a Note, or
 /// the session is written to disk but never enters version history.
+///
+/// `Err` is a true refusal. Core keeps the session registered, and Dart keeps
+/// the outgoing Note writable after it reports the failure. An `Ok` result
+/// always means Core retired the session. If `warning` is present, Dart
+/// continues the switch and reports the warning through its dismissible status
+/// surface rather than restoring a dead session.
 #[frb]
-pub async fn close_note(note_id: String) -> Result<(), AppError> {
+pub async fn close_note(note_id: String) -> Result<CloseNoteResult, AppError> {
     unimplemented!()
 }
 

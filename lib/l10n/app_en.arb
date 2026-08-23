@@ -69,5 +69,12 @@
     "placeholders": {
       "error": { "type": "String", "example": "Could not commit the note" }
     }
+  },
+  "editorOperationFailed": "Could not complete the editor operation: {error}",
+  "@editorOperationFailed": {
+    "description": "Dismissible status message when a retryable editor operation fails while the current note stays open.",
+    "placeholders": {
+      "error": { "type": "String", "example": "Core rejected the range" }
+    }
   }
 }

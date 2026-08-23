@@ -91,7 +91,18 @@ class RustApi {
   /// Tier 3: flushes any pending write, makes one Git commit covering this
   /// editing session, clears the draft row, and notifies the sync scheduler.
   /// Must also run on application quit and when switching away from a Note.
-  Future<void> closeNote(String noteId) => ffi.closeNote(noteId: noteId);
+  ///
+  /// A post-close Core warning is represented as [CloseNoteWarning]. Unlike
+  /// other errors it means the session was already retired; callers must not
+  /// restore a writable snapshot for it. Keeping the method's `Future<void>`
+  /// shape preserves the focused test doubles that model ordinary successful
+  /// closes without an FRB dependency.
+  Future<void> closeNote(String noteId) async {
+    final result = await ffi.closeNote(noteId: noteId);
+    if (result.warning case final String warning) {
+      throw CloseNoteWarning(warning);
+    }
+  }
 
   /// Notes with an unflushed draft from a previous session, for surfacing
   /// recovered work on startup (CAP-WS-03).
@@ -328,6 +339,21 @@ class RustApi {
     authCode: authCode,
     codeVerifier: codeVerifier,
   );
+}
+
+/// A close completed Core-side but reported an incomplete post-close stage.
+///
+/// This is intentionally separate from an FFI error. A true close refusal
+/// leaves the session live and retryable; this warning says Core deregistered
+/// it after safely writing its Note, so Presentation must continue switching
+/// rather than re-enable an editor aimed at a dead session.
+class CloseNoteWarning implements Exception {
+  const CloseNoteWarning(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
 }
 
 /// Injects the Rust API surface into the widget tree. `RustLib.init()` must

@@ -1,5 +1,12 @@
 # Stage 4: Tasks Changelog
 
+## v1.9.2
+
+PR #10 review round 6 corrected the archived Epic F scope-closeout statement
+and recorded the post-closeout hardening. The correction does not change task
+scope, estimates, dependencies, acceptance criteria, the active backlog, or
+the critical path.
+
 ## v1.9.1
 
 Reviewed for upstream delta; no task changes required.
