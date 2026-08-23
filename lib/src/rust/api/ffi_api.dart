@@ -381,10 +381,10 @@ String copyRangeAsMarkdown({
   range: range,
 );
 
-/// Markdown for the complete rendered Note. Core derives the source extent
-/// from its root Block spans, rather than accepting a synthetic rendered end
-/// offset: terminal thematic breaks and empty fenced code Blocks render as
-/// empty strings but still own source that Select All must include.
+/// Markdown for the complete editable body of the Note. Core derives the
+/// source extent without rendered offsets: conformant frontmatter stays
+/// outside it, while terminal empty renderings, reference definitions, raw
+/// HTML, and whitespace still belong to Select All.
 String copyWholeNoteAsMarkdown({required String noteId}) =>
     RustLib.instance.api.crateApiFfiApiCopyWholeNoteAsMarkdown(noteId: noteId);
 
@@ -399,8 +399,8 @@ RangeEditResult deleteRange({
   range: range,
 );
 
-/// Deletes the complete rendered Note in one Core transaction. This is a
-/// distinct operation from [`delete_range`]: it has no rendered endpoints to
+/// Deletes the complete editable body of the Note in one Core transaction.
+/// This is distinct from [`delete_range`]: it has no rendered endpoints to
 /// reinterpret, so ordinary cross-Block UTF-16 range behavior is unchanged.
 RangeEditResult deleteWholeNote({required String noteId}) =>
     RustLib.instance.api.crateApiFfiApiDeleteWholeNote(noteId: noteId);
@@ -419,8 +419,9 @@ RangeEditResult replaceRange({
   replacement: replacement,
 );
 
-/// Replaces the complete rendered Note in one Core transaction. The returned
-/// caret is derived from the post-reparse state just like [`replace_range`].
+/// Replaces the complete editable body of the Note in one Core transaction.
+/// The returned caret is derived from the post-reparse state just like
+/// [`replace_range`].
 RangeEditResult replaceWholeNote({
   required String noteId,
   required String replacement,

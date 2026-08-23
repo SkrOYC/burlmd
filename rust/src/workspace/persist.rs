@@ -1784,17 +1784,17 @@ impl NoteSession {
         )
     }
 
-    /// Replaces every rendered top-level Block in the Note through one source
-    /// splice. The range starts at the first top-level Block span and ends at
-    /// the final one, so frontmatter remains outside this rendered Note
-    /// operation while terminal zero-width renderings retain their source.
+    /// Replaces the complete editable body of the Note through one source
+    /// splice. The body boundary is Core-owned: a conformant frontmatter block
+    /// and its closing line ending stay outside the operation, while every
+    /// remaining source byte belongs to it whether Markdown renders it or not.
     pub fn replace_whole_note(
         &self,
         replacement: &str,
     ) -> Result<(NoteState, RangeEditLocation), AppError> {
         self.structural_edit_with_result(
             |working, spans, _, _| {
-                let resolved = whole_note_source_range(spans)?;
+                let resolved = whole_note_source_range(working, spans)?;
                 let join = resolved
                     .start
                     .checked_add(replacement.len())
@@ -1826,13 +1826,14 @@ impl NoteSession {
             .to_string())
     }
 
-    /// The source covering every rendered top-level Block in the Note. Core
-    /// owns this boundary because a terminal Block may render no text at all;
-    /// no Flutter UTF-16 offset can express its source end.
+    /// The complete editable body of the Note. Core owns this boundary because
+    /// Markdown can carry source with no rendered Block (reference
+    /// definitions, raw HTML, and whitespace), and no Flutter UTF-16 offset
+    /// can express that source extent.
     pub fn copy_whole_note_as_markdown(&self) -> Result<String, AppError> {
         let state = self.lock_state()?;
         state.refuse_while_conflicted(&self.0.note_id, "copying the whole Note")?;
-        let range = whole_note_source_range(&state.spans)?;
+        let range = whole_note_source_range(&state.source, &state.spans)?;
         state.source.get(range).map(str::to_string).ok_or_else(|| {
             AppError::ParseError("whole-Note source range is not addressable".to_string())
         })
@@ -3889,33 +3890,52 @@ pub enum RangeEditLocation {
     },
 }
 
-/// The source extent of the rendered Note: all top-level Block spans, from
-/// the first through the last. This is intentionally not a `RenderedRange`:
-/// a thematic break and an empty fenced code Block both have a valid rendered
-/// offset of zero, but that offset resolves at their source start rather than
-/// at the end of their source span.
-fn whole_note_source_range(spans: &SpanMap) -> Result<std::ops::Range<usize>, AppError> {
-    let start = spans
-        .blocks()
-        .filter(|block| block.path.len() == 1)
-        .map(|block| block.source.start)
-        .min()
+/// The complete source extent a whole-Note operation owns. A conformant
+/// frontmatter block is read-only note metadata, not body content; its parsed
+/// span and the one line ending that terminates its closing fence therefore
+/// remain byte-identical. Everything after that boundary is body content,
+/// including Markdown the AST intentionally cannot address.
+///
+/// The parser owns recognition of the frontmatter span and
+/// [`read_frontmatter`] owns conformance. This helper only advances past the
+/// exact line ending that [`SpanMap::frontmatter`] documents as outside that
+/// parser-produced span; it never searches source text for fence-like lines.
+fn whole_note_source_range(
+    source: &str,
+    spans: &SpanMap,
+) -> Result<std::ops::Range<usize>, AppError> {
+    let Some(frontmatter) = spans.frontmatter() else {
+        return Ok(0..source.len());
+    };
+    let raw_frontmatter = source.get(frontmatter.clone()).ok_or_else(|| {
+        AppError::ParseError("frontmatter span is not addressable in this Note".to_string())
+    })?;
+    if !read_frontmatter(raw_frontmatter).is_conformant() {
+        return Ok(0..source.len());
+    }
+
+    let suffix = source.get(frontmatter.end..).ok_or_else(|| {
+        AppError::ParseError("frontmatter end is not addressable in this Note".to_string())
+    })?;
+    let line_ending_len = if suffix.starts_with("\r\n") {
+        2
+    } else if suffix.starts_with('\n') {
+        1
+    } else {
+        0
+    };
+    let body_start = frontmatter
+        .end
+        .checked_add(line_ending_len)
         .ok_or_else(|| {
-            AppError::ParseError(
-                "whole-Note operation requires at least one rendered Block".to_string(),
-            )
+            AppError::ParseError("frontmatter boundary overflowed source".to_string())
         })?;
-    let end = spans
-        .blocks()
-        .filter(|block| block.path.len() == 1)
-        .map(|block| block.source.end)
-        .max()
-        .ok_or_else(|| {
-            AppError::ParseError(
-                "whole-Note operation requires at least one rendered Block".to_string(),
-            )
-        })?;
-    Ok(start..end)
+    if !source.is_char_boundary(body_start) {
+        return Err(AppError::ParseError(
+            "frontmatter boundary is not a source character boundary".to_string(),
+        ));
+    }
+    Ok(body_start..source.len())
 }
 
 /// Resolves the exact source join after a range replacement against the span
@@ -5383,6 +5403,188 @@ mod tests {
             "the one range operation did not persist its complete source as one draft"
         );
         assert_eq!(f.read("a.md"), original, "range edit wrote tier 2 eagerly");
+    }
+
+    /// Whole-Note editing is a body operation, not a rendered-Block range.
+    /// Reference definitions and raw HTML deliberately have no editable AST
+    /// span, but must survive Select All copy and be removed or replaced with
+    /// the rest of the body in the same draft transaction.
+    #[test]
+    fn whole_note_operations_cover_unaddressable_body_source_and_preserve_frontmatter() {
+        let cases = [
+            (
+                "trailing-reference",
+                "\n",
+                "\nVisible paragraph.\n\n[tail]: /target \"Tail\"\n",
+                true,
+            ),
+            (
+                "trailing-raw-html",
+                "\n",
+                "\nVisible paragraph.\n\n<section data-kept=\"yes\">opaque tail</section>\n",
+                true,
+            ),
+            (
+                "unaddressable-only",
+                "\n",
+                "\n[only-reference]: /target \"Only\"\n\n<!-- opaque raw body -->\n",
+                false,
+            ),
+            (
+                "crlf",
+                "\r\n",
+                "\r\nVisible paragraph.\r\n\r\n[tail]: /target\r\n",
+                true,
+            ),
+        ];
+
+        for (name, line_ending, body, has_rendered_block) in cases {
+            let frontmatter = format!(
+                "---{line_ending}type: Note{line_ending}title: Whole {name}{line_ending}unmanaged: keep-these-bytes{line_ending}---"
+            );
+            let original = format!("{frontmatter}{line_ending}{body}");
+            let expected_after_delete = format!("{frontmatter}{line_ending}");
+            let replacement = "Replacement body.";
+            let expected_after_replace = format!("{frontmatter}{line_ending}{replacement}");
+
+            let f = fixture();
+
+            let copy_id = format!("whole-body-{name}-copy");
+            f.write(&format!("{copy_id}.md"), &original);
+            let copy_session = f.open(&copy_id);
+            assert_eq!(
+                copy_session.note_state().unwrap().ast.is_empty(),
+                !has_rendered_block,
+                "{name}: fixture no longer distinguishes rendered and unaddressable body source"
+            );
+            assert_eq!(
+                copy_session.copy_whole_note_as_markdown().unwrap(),
+                body,
+                "{name}: copy omitted body bytes with no editable span"
+            );
+            assert_eq!(
+                *copy_session.working_source().unwrap(),
+                original,
+                "{name}: copy mutated the open session"
+            );
+            assert!(
+                f.draft(&copy_id).is_none(),
+                "{name}: copy created a draft row"
+            );
+
+            let delete_id = format!("whole-body-{name}-delete");
+            f.write(&format!("{delete_id}.md"), &original);
+            let delete_session = f.open(&delete_id);
+            let (deleted, delete_caret) = delete_session.delete_whole_note().unwrap();
+            assert!(
+                deleted.ast.is_empty(),
+                "{name}: deleting the complete body retained an AST node"
+            );
+            assert_eq!(
+                delete_caret,
+                RangeEditLocation::Phantom { insertion_index: 0 }
+            );
+            assert_eq!(
+                deleted.metadata.title,
+                format!("Whole {name}"),
+                "{name}: deleting the body changed frontmatter-derived metadata"
+            );
+            assert!(
+                deleted.metadata.okf_conformant,
+                "{name}: deleting the body made intact frontmatter non-conformant"
+            );
+            assert_eq!(
+                *delete_session.working_source().unwrap(),
+                expected_after_delete,
+                "{name}: delete did not preserve exactly the frontmatter and its line ending"
+            );
+            assert_eq!(
+                delete_session.note_state().unwrap(),
+                deleted,
+                "{name}: returned delete state was not installed in the session"
+            );
+            assert_eq!(
+                f.draft(&delete_id)
+                    .as_ref()
+                    .map(|row| row.raw_markdown.as_str()),
+                Some(expected_after_delete.as_str()),
+                "{name}: delete did not persist the complete resulting body as one draft"
+            );
+            assert_eq!(
+                f.read(&format!("{delete_id}.md")),
+                original,
+                "{name}: delete wrote tier 2 eagerly"
+            );
+
+            let replace_id = format!("whole-body-{name}-replace");
+            f.write(&format!("{replace_id}.md"), &original);
+            let replace_session = f.open(&replace_id);
+            let (replaced, replace_caret) =
+                replace_session.replace_whole_note(replacement).unwrap();
+            assert_eq!(replaced.ast.len(), 1, "{name}: replacement did not reparse");
+            assert_eq!(
+                replace_caret,
+                RangeEditLocation::Block {
+                    block_path: vec![0],
+                    source_offset_utf16: replacement.encode_utf16().count(),
+                },
+                "{name}: replacement caret was not derived from the reparsed body"
+            );
+            assert_eq!(
+                replaced.metadata.title,
+                format!("Whole {name}"),
+                "{name}: replacement changed frontmatter-derived metadata"
+            );
+            assert!(replaced.metadata.okf_conformant);
+            assert_eq!(
+                *replace_session.working_source().unwrap(),
+                expected_after_replace,
+                "{name}: replacement did not retain byte-identical frontmatter and line ending"
+            );
+            assert_eq!(replace_session.note_state().unwrap(), replaced);
+            assert_eq!(
+                f.draft(&replace_id)
+                    .as_ref()
+                    .map(|row| row.raw_markdown.as_str()),
+                Some(expected_after_replace.as_str()),
+                "{name}: replacement did not persist its full source as one draft"
+            );
+            assert_eq!(
+                f.read(&format!("{replace_id}.md")),
+                original,
+                "{name}: replacement wrote tier 2 eagerly"
+            );
+        }
+    }
+
+    #[test]
+    fn whole_note_body_boundary_excludes_only_conformant_frontmatter() {
+        let cases = [
+            (
+                "no frontmatter",
+                "[only-reference]: /target\n",
+                "[only-reference]: /target\n",
+            ),
+            (
+                "non-conformant frontmatter",
+                "---\ntitle: Missing type\n---\n\n[only-reference]: /target\n",
+                "---\ntitle: Missing type\n---\n\n[only-reference]: /target\n",
+            ),
+            (
+                "conformant frontmatter",
+                "---\ntype: Note\ntitle: Present\n---\n\n[only-reference]: /target\n",
+                "\n[only-reference]: /target\n",
+            ),
+        ];
+
+        for (name, source, expected_body) in cases {
+            let parsed = parse_note(source, "");
+            let range = whole_note_source_range(source, &parsed.spans).unwrap();
+            assert_eq!(
+                &source[range], expected_body,
+                "{name}: the body boundary did not follow parser-recognized conformance"
+            );
+        }
     }
 
     #[test]

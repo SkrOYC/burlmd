@@ -1495,7 +1495,7 @@ class EditorState extends ConsumerState<Editor> {
     if (_requiresFreshRenderedSelection) return null;
     final note = ref.read(activeNoteProvider);
     if (note == null) return null;
-    if (_wholeNoteSelectedId == note.metadata.id && note.ast.isNotEmpty) {
+    if (_wholeNoteSelectedId == note.metadata.id) {
       return const _WholeNoteRangeTarget();
     }
     final range = selectedBlockRange();
@@ -1579,7 +1579,7 @@ class EditorState extends ConsumerState<Editor> {
       return fallback?.invoke(intent);
     }
     final note = ref.read(activeNoteProvider);
-    if (note == null || note.ast.isEmpty) {
+    if (note == null) {
       // ignore: invalid_use_of_protected_member
       return fallback?.invoke(intent);
     }

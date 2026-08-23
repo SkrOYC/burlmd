@@ -1,5 +1,16 @@
 # Stage 3: Technical Implementation Changelog
 
+## v1.6.5
+
+Patch correction from PR #10 review, round 10. No bill-of-materials, PRD, or
+architecture change.
+
+- Core whole-Note operations now cover the complete editable body, not only
+  the span between rendered Blocks. A conformant frontmatter block and its
+  closing line ending remain byte-identical. The body includes trailing and
+  unaddressable source such as reference definitions, raw HTML, and whitespace.
+  Select All also routes an unaddressable-only body to the Core operation.
+
 ## v1.6.4
 
 Patch correction from PR #10 review, round 9. No bill-of-materials, PRD, or
