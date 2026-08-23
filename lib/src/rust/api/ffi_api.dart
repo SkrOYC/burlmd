@@ -13,8 +13,7 @@ import '../workspace/lifecycle.dart';
 import '../workspace/persist.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `fts5_phrase_query`, `open_session`, `search_notes_impl`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `from`
+// These functions are ignored because they are not marked as `pub`: `fts5_phrase_query`, `into_rendered_range`, `open_session`, `rendered_utf16_to_scalar_offset`, `search_notes_impl`
 
 /// Opens the local Workspace, creating and initializing it if absent
 /// (ADR-005 decision 1): creates the directory, initializes a Git repository
@@ -462,13 +461,15 @@ class BlockCaret {
           caretOffset == other.caretOffset;
 }
 
-/// A selection spanning one or more unfocused Blocks, expressed as character
-/// offsets into each Block's **rendered** text (ADR-006 decision 3). A caller
-/// must blur and commit any focused Block, then establish a fresh rendered
-/// selection before calling a range operation; this API never accepts raw
-/// focused-field offsets or a range over an uncommitted span map. See
-/// `contracts/ffi_api.rs` for the per-`AstNode`-variant definition of
-/// "rendered text" these offsets are into.
+/// A selection spanning one or more unfocused Blocks, expressed as Flutter
+/// **UTF-16 code-unit** offsets into each Block's rendered text (ADR-006
+/// decision 3). The FFI boundary accepts Flutter's native coordinate space;
+/// Core converts it to its scalar-offset span-map space and refuses an offset
+/// that splits a surrogate pair. A caller must blur and commit any focused
+/// Block, then establish a fresh rendered selection before calling a range
+/// operation; this API never accepts raw focused-field offsets or a range over
+/// an uncommitted span map. See `contracts/ffi_api.rs` for the per-`AstNode`
+/// variant definition of "rendered text" these offsets are into.
 class BlockRange {
   final Uint64List startPath;
   final BigInt startOffset;

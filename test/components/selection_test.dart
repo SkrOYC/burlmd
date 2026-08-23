@@ -5,6 +5,7 @@ import 'package:burlmd/src/rust/draft.dart';
 import 'package:burlmd/src/rust/markdown/ast.dart';
 import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show RenderParagraph;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart'
@@ -45,6 +46,8 @@ class _FakeRustApi extends RustApi {
 
   final List<BlockRange> copyRequests = [];
 
+  String copyResult = coreMarkdown;
+
   /// Raw source returned per block path by [getBlockSource].
   final Map<String, String> sources = {};
 
@@ -64,7 +67,7 @@ class _FakeRustApi extends RustApi {
   @override
   String copyRangeAsMarkdown(String noteId, BlockRange range) {
     copyRequests.add(range);
-    return coreMarkdown;
+    return copyResult;
   }
 
   @override
@@ -140,6 +143,21 @@ Rect _textBox(WidgetTester tester, String probe) {
   );
   final box = tester.renderObject<RenderBox>(finder.first);
   return box.localToGlobal(Offset.zero) & box.size;
+}
+
+/// A real rendered UTF-16 text position in the first paragraph containing
+/// [probe]. This avoids assuming a non-BMP scalar has one painted-cell width:
+/// Flutter owns the text geometry and reports the caret it would use.
+Offset _caretPoint(WidgetTester tester, String probe, int utf16Offset) {
+  final finder = find.byWidgetPredicate(
+    (widget) => widget is RichText && widget.text.toPlainText().contains(probe),
+  );
+  final paragraph = tester.renderObject<RenderParagraph>(finder.first);
+  final caret = paragraph.getOffsetForCaret(
+    TextPosition(offset: utf16Offset),
+    Rect.zero,
+  );
+  return paragraph.localToGlobal(caret + Offset(0, paragraph.size.height / 2));
 }
 
 /// Drags with a mouse pointer from [start] to [end] in several increments —
@@ -395,6 +413,62 @@ void main() {
     );
   });
 
+  testWidgets('a cross-Block selection after a non-BMP scalar keeps Flutter '
+      'UTF-16 offsets and copies the Core result', (tester) async {
+    final api = _FakeRustApi()..copyResult = 'prefix 😀\n\ntail';
+    await pumpEditor(tester, [
+      _plainParagraph('prefix 😀 first'),
+      _plainParagraph('middle'),
+      _plainParagraph('tail block'),
+    ], api: api);
+
+    var clipboard = '';
+    mockClipboard(tester, (text) => clipboard = text);
+
+    // "prefix 😀" is 9 UTF-16 code units but eight Unicode scalars. Start
+    // immediately after the emoji, so a scalar/Core mismatch would send 8.
+    await dragSelect(
+      tester,
+      _caretPoint(tester, 'prefix 😀 first', 'prefix 😀'.length),
+      _caretPoint(tester, 'tail block', 4),
+    );
+    await tester.pumpAndSettle();
+    await pressWithControl(tester, LogicalKeyboardKey.keyC);
+    await tester.pumpAndSettle();
+
+    expect(api.copyRequests, [_matchesRange(0, 9, 2, 4)]);
+    expect(clipboard, 'prefix 😀\n\ntail');
+  });
+
+  testWidgets('the visible image fallback maps its alt text endpoint into '
+      'Core rendered text', (tester) async {
+    final api = _FakeRustApi()..copyResult = '![orbit](missing.png)\n\ntai';
+    await pumpEditor(tester, [
+      AstNode.image(altText: 'orbit', urlOrPath: 'missing.png'),
+      _plainParagraph('tail text'),
+    ], api: api);
+    await tester.pumpAndSettle();
+
+    expect(find.text('[image: orbit]'), findsOneWidget);
+    var clipboard = '';
+    mockClipboard(tester, (text) => clipboard = text);
+
+    // The painted fallback begins with a non-Core `[image: ` decoration.
+    // Selecting after it must resolve offset 2 in Image.alt_text, not 10 in
+    // the visible label nor a nonexistent image leaf.
+    await dragSelect(
+      tester,
+      _caretPoint(tester, '[image: orbit]', '[image: or'.length),
+      _caretPoint(tester, 'tail text', 3),
+    );
+    await tester.pumpAndSettle();
+    await pressWithControl(tester, LogicalKeyboardKey.keyC);
+    await tester.pumpAndSettle();
+
+    expect(api.copyRequests, [_matchesRange(0, 2, 1, 3)]);
+    expect(clipboard, '![orbit](missing.png)\n\ntai');
+  });
+
   testWidgets('select-all selects the whole Note', (tester) async {
     final api = _FakeRustApi();
     await pumpEditor(tester, [
@@ -428,6 +502,48 @@ void main() {
       reason: 'select-all must cover every Block of the Note end to end',
     );
     expect(clipboard, _FakeRustApi.coreMarkdown);
+  });
+
+  testWidgets('select-all copies the complete lazy Note when its final Block '
+      'has not been mounted', (tester) async {
+    const blockCount = 80;
+    final expectedMarkdown = List<String>.generate(
+      blockCount,
+      (index) => 'block $index',
+    ).join('\n\n');
+    final api = _FakeRustApi()..copyResult = expectedMarkdown;
+    await pumpEditor(
+      tester,
+      List<AstNode>.generate(
+        blockCount,
+        (index) => _plainParagraph('block $index'),
+      ),
+      api: api,
+    );
+
+    expect(
+      find.byKey(const ValueKey('block-${blockCount - 1}')),
+      findsNothing,
+      reason: 'the lazy ListView must not materialize the last Block first',
+    );
+    var clipboard = '';
+    mockClipboard(tester, (text) => clipboard = text);
+    final first = _textBox(tester, 'block 0');
+    await dragSelect(
+      tester,
+      first.topLeft + Offset(2 * 14 + 7, first.height / 2),
+      first.topLeft + Offset(4 * 14 + 7, first.height / 2),
+    );
+    await tester.pumpAndSettle();
+    await pressWithControl(tester, LogicalKeyboardKey.keyA);
+    await tester.pumpAndSettle();
+    await pressWithControl(tester, LogicalKeyboardKey.keyC);
+    await tester.pumpAndSettle();
+
+    expect(api.copyRequests, [
+      _matchesRange(0, 0, blockCount - 1, 'block ${blockCount - 1}'.length),
+    ]);
+    expect(clipboard, expectedMarkdown);
   });
 
   testWidgets('a focused Block\'s internal text selection still copies '

@@ -12,6 +12,11 @@ Patch correction for F002's structural split and quoted-list seams.
   source spans. Nested quoted lists therefore retain `> - ` during Enter and
   Backspace, and errors are resolved before the structural transaction installs
   new state.
+- `BlockRange` now accepts Flutter UTF-16 rendered-text offsets. Core converts
+  them to scalar offsets before span resolution and rejects surrogate-pair
+  interiors. This keeps the cross-block selection boundary consistent with
+  `resolve_block_caret` and prevents non-BMP endpoints from shifting copied or
+  edited Markdown.
 
 ## v1.5.1
 Contract correction for the F002 structural continuation seam. Patch bump:

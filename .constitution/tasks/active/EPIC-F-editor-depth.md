@@ -137,7 +137,7 @@ The last scenario exists because ADR-006 inherits the platform IME inside the fo
   - `test/components/selection_test.dart`
 - **Scope (Out-of-Scope Files):**
   - `lib/src/components/block_editor.dart`
-- **Verification Command:** `flutter test test/components/selection_test.dart && ./scripts/smoke-shot.sh f003-selection`
+- **Verification Command:** `cargo test --lib --manifest-path rust/Cargo.toml && flutter_rust_bridge_codegen generate && flutter test test/components/selection_test.dart test/components/editor_test.dart && BURLMD_SMOKE_F003=1 ./scripts/smoke-shot.sh f003-selection && dart analyze && git diff --check && ! rg -n '\[DEBUG-' lib rust test scripts`
 - **Expected Success Output:** `exit 0`
 - **STOP Conditions:**
   - "STOP if producing Markdown for a selection requires serializing in Dart; the Core owns both the AST and the source text and already exposes this."
@@ -170,6 +170,8 @@ Then the selection behaves normally within that Block
 
 ##### [EDIT-F003] Deviations & Justifications
 - `lib/main.dart` — adds an env-gated (`BURLMD_SMOKE_F003`) staging half that builds the heterogeneous demo Note through the Core (create_note + insert_block) and selects it so the editor pane mounts. Strictly forced: the Editor only mounts once a Note is selected, so it cannot stage its own Note — the same structural reason EDIT-F002's staging half lives there. The select-all half of the hook stays in `editor.dart` (in scope). Inert without the QA-harness variable.
+- `scripts/smoke-shot.sh` — when `BURLMD_SMOKE_F003=1`, requires the staged code-block/list/paragraph Note to report that the editor-level Select All reached the full Core range before capturing. A generic rendered window cannot satisfy this gate; the readiness file remains inert for ordinary launches.
+- `.constitution/tech-spec/{contracts/ffi_api.rs,guidelines.md,changelog.md}`, `rust/src/api/ffi_api.rs`, and generated bindings — the `BlockRange` boundary now accepts Flutter UTF-16 rendered-text offsets, converts them to Core scalar offsets, and rejects a surrogate interior. The contract, guidance, changelog, FFI wrapper, and generated Dart documentation must change together because they define or expose the same boundary.
 
 #### EDIT-F004 Block Creation, Splitting and Merging
 - **Type:** Feature

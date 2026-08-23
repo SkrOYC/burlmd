@@ -503,13 +503,15 @@ pub fn continue_block_after(
     })
 }
 
-/// A selection spanning one or more unfocused Blocks, expressed as character
-/// offsets into each Block's **rendered** text (ADR-006 decision 3). A caller
-/// must blur and commit any focused Block, then establish a fresh rendered
-/// selection before calling a range operation; this API never accepts raw
-/// focused-field offsets or a range over an uncommitted span map. See
-/// `contracts/ffi_api.rs` for the per-`AstNode`-variant definition of
-/// "rendered text" these offsets are into.
+/// A selection spanning one or more unfocused Blocks, expressed as Flutter
+/// **UTF-16 code-unit** offsets into each Block's rendered text (ADR-006
+/// decision 3). The FFI boundary accepts Flutter's native coordinate space;
+/// Core converts it to its scalar-offset span-map space and refuses an offset
+/// that splits a surrogate pair. A caller must blur and commit any focused
+/// Block, then establish a fresh rendered selection before calling a range
+/// operation; this API never accepts raw focused-field offsets or a range over
+/// an uncommitted span map. See `contracts/ffi_api.rs` for the per-`AstNode`
+/// variant definition of "rendered text" these offsets are into.
 #[frb]
 pub struct BlockRange {
     pub start_path: Vec<usize>,
@@ -518,18 +520,42 @@ pub struct BlockRange {
     pub end_offset: usize,
 }
 
-/// A pure change of ownership. `BlockRange` is `markdown::spans::RenderedRange`'s
-/// FFI-boundary twin and the two carry the same four fields for exactly that
-/// reason — see that type's own documentation.
-impl From<BlockRange> for crate::markdown::RenderedRange {
-    fn from(range: BlockRange) -> Self {
-        crate::markdown::RenderedRange::new(
-            range.start_path,
-            range.start_offset,
-            range.end_path,
-            range.end_offset,
-        )
+impl BlockRange {
+    /// Converts the FFI's Flutter UTF-16 offsets into the scalar offsets the
+    /// Core span map resolves. The AST remains the rendered-text authority, so
+    /// this boundary never reconstructs presentation text in Dart or Rust.
+    fn into_rendered_range(
+        self,
+        ast: &[AstNode],
+    ) -> Result<crate::markdown::RenderedRange, AppError> {
+        Ok(crate::markdown::RenderedRange::new(
+            self.start_path.clone(),
+            rendered_utf16_to_scalar_offset(ast, &self.start_path, self.start_offset)?,
+            self.end_path.clone(),
+            rendered_utf16_to_scalar_offset(ast, &self.end_path, self.end_offset)?,
+        ))
     }
+}
+
+fn rendered_utf16_to_scalar_offset(
+    ast: &[AstNode],
+    path: &[usize],
+    utf16_offset: usize,
+) -> Result<usize, AppError> {
+    let [top_level] = path else {
+        return Err(AppError::ParseError(format!(
+            "BlockRange path {path:?} must address one top-level rendered Block"
+        )));
+    };
+    let node = ast.get(*top_level).ok_or_else(|| {
+        AppError::ParseError(format!("no Block is addressed by block_path {path:?}"))
+    })?;
+    let rendered = crate::markdown::rendered_text(node);
+    crate::markdown::spans::utf16_to_scalar_offset(&rendered, utf16_offset).ok_or_else(|| {
+        AppError::ParseError(format!(
+            "rendered UTF-16 offset {utf16_offset} is out of range or splits a surrogate pair for block_path {path:?}"
+        ))
+    })
 }
 
 /// Markdown for a multi-Block selection (CAP-EDIT-04), executed Core-side
@@ -537,12 +563,18 @@ impl From<BlockRange> for crate::markdown::RenderedRange {
 /// Dart would mean a second serializer.
 #[frb(sync)]
 pub fn copy_range_as_markdown(note_id: String, range: BlockRange) -> Result<String, AppError> {
-    open_session(&note_id)?.copy_range_as_markdown(&range.into())
+    let session = open_session(&note_id)?;
+    let state = session.note_state()?;
+    let range = range.into_rendered_range(&state.ast)?;
+    session.copy_range_as_markdown(&range)
 }
 
 #[frb(sync)]
 pub fn delete_range(note_id: String, range: BlockRange) -> Result<NoteState, AppError> {
-    open_session(&note_id)?.delete_range(&range.into())
+    let session = open_session(&note_id)?;
+    let state = session.note_state()?;
+    let range = range.into_rendered_range(&state.ast)?;
+    session.delete_range(&range)
 }
 
 /// Replaces a multi-Block selection with text -- typing over a selection that
@@ -554,7 +586,10 @@ pub fn replace_range(
     range: BlockRange,
     replacement: String,
 ) -> Result<NoteState, AppError> {
-    open_session(&note_id)?.replace_range(&range.into(), &replacement)
+    let session = open_session(&note_id)?;
+    let state = session.note_state()?;
+    let range = range.into_rendered_range(&state.ast)?;
+    session.replace_range(&range, &replacement)
 }
 
 /// FTS5's bare `MATCH` syntax is a full query language (boolean operators,
@@ -1202,24 +1237,38 @@ mod tests {
         assert!(copied.contains("third block"));
     }
 
-    /// `BlockRange` (the FFI-boundary type) converts to `RenderedRange` (the
-    /// Core-side type `copy_range_as_markdown`/`delete_range`/`replace_range`
-    /// actually resolve against) by pure field mapping — no reinterpretation.
+    /// The FFI `BlockRange` uses Flutter UTF-16 offsets while the Core span map
+    /// uses scalar offsets. Conversion preserves boundaries after a non-BMP
+    /// scalar and rejects its surrogate interior rather than shifting a range.
     #[test]
-    fn block_range_converts_to_rendered_range_by_pure_field_mapping() {
+    fn block_range_converts_utf16_boundaries_and_rejects_surrogate_interiors() {
+        let parsed = crate::markdown::parse_note("a😀b\n", "");
         let range = BlockRange {
             start_path: vec![0],
-            start_offset: 3,
-            end_path: vec![1, 2],
-            end_offset: 9,
+            start_offset: 1,
+            end_path: vec![0],
+            // `a😀` is three UTF-16 code units but two Unicode scalars.
+            end_offset: "a😀".encode_utf16().count(),
         };
 
-        let converted: crate::markdown::RenderedRange = range.into();
+        let converted = range.into_rendered_range(&parsed.ast).unwrap();
 
         assert_eq!(converted.start_path, vec![0]);
-        assert_eq!(converted.start_offset, 3);
-        assert_eq!(converted.end_path, vec![1, 2]);
-        assert_eq!(converted.end_offset, 9);
+        assert_eq!(converted.start_offset, 1);
+        assert_eq!(converted.end_path, vec![0]);
+        assert_eq!(converted.end_offset, 2);
+
+        let interior = BlockRange {
+            start_path: vec![0],
+            // The second code unit of 😀 is not a scalar boundary.
+            start_offset: 2,
+            end_path: vec![0],
+            end_offset: 3,
+        };
+        assert!(matches!(
+            interior.into_rendered_range(&parsed.ast),
+            Err(AppError::ParseError(message)) if message.contains("splits a surrogate pair")
+        ));
     }
 
     // -- WSPC-D008 review finding #1: wrapper-layer coverage -----------------
@@ -1486,7 +1535,7 @@ mod tests {
         assert_eq!(state.ast.len(), 3);
 
         let last_len = crate::markdown::rendered_text(&state.ast[2])
-            .chars()
+            .encode_utf16()
             .count();
         let whole = BlockRange {
             start_path: vec![0],
@@ -1513,7 +1562,7 @@ mod tests {
         );
 
         let remaining_len = crate::markdown::rendered_text(&after_delete.ast[0])
-            .chars()
+            .encode_utf16()
             .count();
         let whole_remaining = BlockRange {
             start_path: vec![0],
@@ -1545,6 +1594,78 @@ mod tests {
             !note_write_status("ranges".to_string()).has_unwritten_edits,
             "flush_note must clear the unwritten-edits flag"
         );
+    }
+
+    /// Flutter reports selection offsets in UTF-16. This drives the real FFI
+    /// wrapper through text on both sides of a non-BMP scalar and proves the
+    /// copied Markdown is the exact source slice, not a scalar-shifted range.
+    #[test]
+    fn wrapper_layer_range_copy_uses_utf16_and_refuses_a_surrogate_interior() {
+        let _guards = wrapper_guards();
+        let ws = wrapper_bootstrap();
+        wrapper_write_note(
+            &ws.root,
+            "utf16-range.md",
+            &note_source("UTF-16 range", "left 😀one\n\nmiddle\n\nright 😀tail"),
+        );
+        block_on(open_note("utf16-range".to_string())).unwrap();
+
+        let copied = copy_range_as_markdown(
+            "utf16-range".to_string(),
+            BlockRange {
+                start_path: vec![0],
+                start_offset: "left 😀".encode_utf16().count(),
+                end_path: vec![2],
+                end_offset: "right 😀".encode_utf16().count(),
+            },
+        )
+        .unwrap();
+        assert_eq!(copied, "one\n\nmiddle\n\nright 😀");
+
+        let interior = copy_range_as_markdown(
+            "utf16-range".to_string(),
+            BlockRange {
+                start_path: vec![0],
+                // One code unit into 😀 is not a valid Core boundary.
+                start_offset: "left ".encode_utf16().count() + 1,
+                end_path: vec![2],
+                end_offset: "right 😀".encode_utf16().count(),
+            },
+        );
+        assert!(matches!(
+            interior,
+            Err(AppError::ParseError(message)) if message.contains("splits a surrogate pair")
+        ));
+    }
+
+    /// An Image's visible fallback maps its selectable `alt_text` endpoint to
+    /// Core's atomic image run. A mixed range therefore returns the exact
+    /// Markdown image construct rather than an impossible slice of its label.
+    #[test]
+    fn wrapper_layer_range_copy_including_an_image_alt_endpoint_is_exact() {
+        let _guards = wrapper_guards();
+        let ws = wrapper_bootstrap();
+        wrapper_write_note(
+            &ws.root,
+            "image-range.md",
+            &note_source("Image range", "![orbit](missing.png)\n\ntail text"),
+        );
+        block_on(open_note("image-range".to_string())).unwrap();
+
+        let copied = copy_range_as_markdown(
+            "image-range".to_string(),
+            BlockRange {
+                // Offset 2 is inside `orbit`, after the UI-only `[image: `
+                // fallback decoration has been removed at Presentation.
+                start_path: vec![0],
+                start_offset: 2,
+                end_path: vec![1],
+                end_offset: 3,
+            },
+        )
+        .unwrap();
+
+        assert_eq!(copied, "![orbit](missing.png)\n\ntai");
     }
 
     /// The RevisionMismatch escape hatch: `reload_note` must re-read the

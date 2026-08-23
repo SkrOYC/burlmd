@@ -410,6 +410,7 @@ class _LeafText {
     this.rendered, {
     required this.corePrefix,
     required this.coreWidth,
+    this.leadingDecorationWidth = 0,
   });
 
   final String rendered;
@@ -424,6 +425,12 @@ class _LeafText {
   /// a selection over such decoration resolves to the boundary it sits on.
   final int corePrefix;
   final int coreWidth;
+
+  /// UTF-16 width of painted text that comes before this leaf's Core-rendered
+  /// contribution. Image fallbacks visibly include `[image: `, while the
+  /// Core contract intentionally defines Image rendered text as `alt_text`.
+  /// Mapping that decoration here keeps the selectable leaf faithful to both.
+  final int leadingDecorationWidth;
 }
 
 /// Flattens [node]'s rendered text leaves in paint order, aligning with the
@@ -485,9 +492,17 @@ List<_LeafText> _leaves(AstNode node, int corePrefix) => switch (node) {
     for (final (index, child) in localContent.indexed)
       ..._leaves(child, _siblingCoreStart(localContent, index, corePrefix)),
   ],
-  // ThematicBreak and Image hold no selectable text (the contract gives
-  // ThematicBreak the empty rendered string), so they contribute no
-  // leaves; a click anywhere on them focuses at source offset 0.
+  AstNode_Image(:final altText) => [
+    _LeafText(
+      '[image: $altText]',
+      corePrefix: corePrefix,
+      coreWidth: altText.length,
+      leadingDecorationWidth: '[image: '.length,
+    ),
+  ],
+  // ThematicBreak has no selectable text (the contract gives it the empty
+  // rendered string), so it contributes no leaves; a click on it focuses at
+  // source offset 0.
   _ => const [],
 };
 
@@ -517,6 +532,11 @@ int _coreRenderedLength(AstNode node) => switch (node) {
   AstNode_Blockquote(:final nodes) => _joinedCoreLength(nodes),
   AstNode_Suggestion(:final localContent) => _joinedCoreLength(localContent),
 };
+
+/// The UTF-16 width of [node]'s Core-defined rendered text. This is the
+/// endpoint width for a whole-Block `BlockRange`, including an unmounted lazy
+/// ListView entry selected through the editor-level Select All action.
+int blockCoreRenderedLength(AstNode node) => _coreRenderedLength(node);
 
 int _joinedCoreLength(List<AstNode> nodes) {
   var total = 0;
@@ -554,8 +574,8 @@ List<_LeafText> _listItemLeaves(
 }
 
 /// Maps a selection position — an index into [node]'s painted text leaves
-/// plus a rendered-character offset within that leaf — into the Core's
-/// canonical rendered string of the Block, the offset space `BlockRange`
+/// plus a Flutter UTF-16 offset within that leaf — into the Core's canonical
+/// rendered string of the Block, the UTF-16 offset space [BlockRange]
 /// is expressed in (ADR-007 decision 8: the Core resolves those to source
 /// offsets for splicing; the UI must map its selection ONTO this space,
 /// never the reverse). Offsets inside decoration the definition does not
@@ -568,7 +588,11 @@ int blockCoreRenderedOffset(
   final leaves = _blockLeaves(node);
   if (leafIndex < 0 || leafIndex >= leaves.length) return 0;
   final leaf = leaves[leafIndex];
-  return leaf.corePrefix + renderedOffset.clamp(0, leaf.coreWidth);
+  final coreOffset = (renderedOffset - leaf.leadingDecorationWidth).clamp(
+    0,
+    leaf.coreWidth,
+  );
+  return leaf.corePrefix + coreOffset;
 }
 
 String _inlineRendered(List<InlineElement> elements) =>
