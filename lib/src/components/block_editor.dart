@@ -155,6 +155,7 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
   String? _compositionBaseText;
   String? _inputGateCompositionBaseText;
   bool _pendingResolutionScheduled = false;
+  bool _inputGateReconciliationScheduled = false;
   bool _hasResyncConflict = false;
   bool _phantomMaterialized = false;
   final OverlayPortalController _completionOverlayController =
@@ -201,7 +202,8 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
     // IME-owned, and clearing it here loses the marked-text commit. The gate
     // reconciliation below rebases the completed composition against this
     // exact Core source after the action settles.
-    if (ref.read(editorInputBlockedProvider)) {
+    if (ref.read(editorInputBlockedProvider) ||
+        _inputGateCompositionBaseText != null) {
       _queuePendingResync(
         source: widget.source,
         token: widget.resyncToken,
@@ -316,7 +318,9 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
       // The gate may have opened while the IME still held a marked range.
       // Its completion can change only `composing`, so the controller
       // listener (rather than EditableText.onChanged) owns this hand-off.
-      if (!_hasLiveComposition) _reconcileInputGateComposition();
+      if (!_hasLiveComposition && !_inputGateReconciliationScheduled) {
+        _reconcileInputGateComposition();
+      }
       return;
     }
     if (widget.phantom) {
@@ -374,6 +378,27 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
     _bufferSource(_controller.text);
     _lastSettledText = _controller.text;
     _compositionBaseText = null;
+  }
+
+  /// Waits until the frame that reopens the input gate has delivered any
+  /// lifecycle-owned replacement to [didUpdateWidget]. A provider listener
+  /// runs as soon as its value changes, whereas the parent rebuild that
+  /// carries the refetched Block source follows in the frame's build phase.
+  /// Replaying a completed IME value synchronously here would therefore write
+  /// the old source into a newly rewritten Core session before the child had a
+  /// chance to queue that rewrite for the normal lossless rebase.
+  ///
+  /// A refusal or cancellation has no widget replacement. The post-frame
+  /// fallback still runs in that case, so a completed composition is neither
+  /// stranded nor discarded.
+  void _scheduleInputGateCompositionReconciliation() {
+    if (_inputGateReconciliationScheduled) return;
+    _inputGateReconciliationScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _inputGateReconciliationScheduled = false;
+      if (!mounted || ref.read(editorInputBlockedProvider)) return;
+      _reconcileInputGateComposition();
+    });
   }
 
   void _resolvePendingResync() {
@@ -713,8 +738,16 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
   Widget build(BuildContext context) {
     final inputBlocked = ref.watch(editorInputBlockedProvider);
     ref.listen<bool>(editorInputBlockedProvider, (wasBlocked, isBlocked) {
+      if (wasBlocked == false && isBlocked && _hasLiveComposition) {
+        // The IME candidate can have started before lifecycle work claimed the
+        // gate. Preserve its Core-backed base at admission close, because a
+        // read-only EditableText need not deliver another marked-value
+        // callback while the gate remains held.
+        _inputGateCompositionBaseText ??=
+            _compositionBaseText ?? _lastSettledText;
+      }
       if (wasBlocked == true && !isBlocked) {
-        _reconcileInputGateComposition();
+        _scheduleInputGateCompositionReconciliation();
       }
     });
     return OverlayPortal.overlayChildLayoutBuilder(

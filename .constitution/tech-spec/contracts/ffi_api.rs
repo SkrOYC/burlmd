@@ -946,6 +946,19 @@ pub struct BlockRange {
     pub end_offset: usize,
 }
 
+/// Core-owned Select All boundary for the complete rendered Note. This is
+/// deliberately represented by separate operations rather than a synthetic
+/// [`BlockRange`] endpoint: a terminal `ThematicBreak` or empty `CodeBlock`
+/// has rendered length zero, and its valid rendered offset zero names the
+/// start—not the end—of its Markdown source. Core derives the source extent
+/// from the first through final top-level Block spans; frontmatter remains
+/// outside the rendered Note operation. Ordinary `BlockRange` behavior,
+/// including UTF-16 validation and reverse-range refusal, is unchanged.
+///
+/// A whole-Note copy, delete, or replacement is one Core operation. Delete
+/// and replacement return the same authoritative [RangeEditResult] caret as
+/// their ordinary range equivalents.
+
 /// Markdown for a multi-Block selection (CAP-EDIT-04). Executed Core-side
 /// because the Core owns both the AST and the source text; reproducing it in
 /// Dart would mean a second serializer.
@@ -955,7 +968,17 @@ pub fn copy_range_as_markdown(note_id: String, range: BlockRange) -> Result<Stri
 }
 
 #[frb(sync)]
+pub fn copy_whole_note_as_markdown(note_id: String) -> Result<String, AppError> {
+    unimplemented!()
+}
+
+#[frb(sync)]
 pub fn delete_range(note_id: String, range: BlockRange) -> Result<RangeEditResult, AppError> {
+    unimplemented!()
+}
+
+#[frb(sync)]
+pub fn delete_whole_note(note_id: String) -> Result<RangeEditResult, AppError> {
     unimplemented!()
 }
 
@@ -971,6 +994,14 @@ pub fn delete_range(note_id: String, range: BlockRange) -> Result<RangeEditResul
 pub fn replace_range(
     note_id: String,
     range: BlockRange,
+    replacement: String,
+) -> Result<RangeEditResult, AppError> {
+    unimplemented!()
+}
+
+#[frb(sync)]
+pub fn replace_whole_note(
+    note_id: String,
     replacement: String,
 ) -> Result<RangeEditResult, AppError> {
     unimplemented!()

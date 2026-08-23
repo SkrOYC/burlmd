@@ -1429,6 +1429,100 @@ void main() {
     );
   });
 
+  testWidgets('a lifecycle rewrite rebases a gate-held IME composition only '
+      'after its authoritative Block source reaches the field', (tester) async {
+    final api = _FakeRustApi()..sources['0'] = 'base';
+    final container = await pumpEditor(tester, [
+      _plainParagraph('base'),
+    ], api: api);
+    await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
+
+    final editing = container.read(lifecycleEditingProvider.notifier);
+    editing.begin();
+    // The platform may finish a candidate after the gate closes but before
+    // Flutter paints the read-only rebuild. The provider boundary, rather
+    // than the last frame's EditableText configuration, is authoritative.
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(
+        text: 'base中',
+        composing: TextRange(start: 4, end: 5),
+        selection: TextSelection.collapsed(offset: 5),
+      ),
+    );
+    await tester.pump();
+    expect(_writableFields(), findsNothing);
+    api.sources['0'] = 'renamed base';
+    container.read(activeNoteProvider.notifier).state = _testNoteState([
+      _plainParagraph('renamed base'),
+    ]);
+    editing.end();
+    // TestTextInput correctly rejects platform updates while the previous
+    // frame's EditableText is read-only. Pump the release frame first: its
+    // BlockEditor update must queue the authoritative source while the marked
+    // range remains live; the following composing-only completion then takes
+    // the same post-release reconciliation path as a real IME.
+    await tester.pump();
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(
+        text: 'base中',
+        selection: TextSelection.collapsed(offset: 5),
+      ),
+    );
+
+    await tester.pump();
+
+    expect(_field(tester).controller.text, 'renamed base中');
+    expect(api.lastSource, 'renamed base中');
+    expect(
+      container.read(keystrokeWriteFailureProvider),
+      isNull,
+      reason: 'the disjoint rewrite and IME edit have a deterministic rebase',
+    );
+  });
+
+  testWidgets('a lifecycle refusal re-admits an IME cancellation after the '
+      'gate release without waiting for a widget replacement', (tester) async {
+    final api = _FakeRustApi()..sources['0'] = 'base';
+    final container = await pumpEditor(tester, [
+      _plainParagraph('base'),
+    ], api: api);
+    await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
+
+    final editing = container.read(lifecycleEditingProvider.notifier);
+    editing.begin();
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(
+        text: 'base中',
+        composing: TextRange(start: 4, end: 5),
+        selection: TextSelection.collapsed(offset: 5),
+      ),
+    );
+    await tester.pump();
+
+    // A refusal leaves the existing Core session intact. Clearing composing
+    // with the original value is a cancellation, so no stale source is
+    // buffered and the post-frame fallback must not leave the field stuck.
+    editing.end();
+    await tester.pump();
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(
+        text: 'base',
+        selection: TextSelection.collapsed(offset: 4),
+      ),
+    );
+    await tester.pump();
+
+    expect(_field(tester).controller.text, 'base');
+    expect(
+      api.lastSource,
+      'base',
+      reason:
+          'the completion callback may restage the unchanged base, but it '
+          'must never preserve the cancelled marked candidate',
+    );
+    expect(_writableFields(), findsOneWidget);
+  });
+
   testWidgets('only the latest external source is rebased with a completed '
       'IME composition', (tester) async {
     final api = _FakeRustApi()..sources['0'] = 'base';

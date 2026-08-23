@@ -831,6 +831,108 @@ void main() {
       expect(container.read(selectedNoteIdProvider), 'kept');
     });
 
+    testWidgets(
+      'a delete waits for an intercepted A to B open and clears B instead of mounting its dead id',
+      (tester) async {
+        final delayedB = Completer<NoteState>();
+        final api = _LifecycleApi()
+          ..openStates['A'] = stateFor('A')
+          ..openNoteGates['B'] = delayedB;
+        late ProviderContainer container;
+        await tester.pumpWidget(_probeHarness(api, (c) => container = c));
+        addTearDown(container.dispose);
+        final controller = container.read(activeNoteProvider.notifier);
+        await controller.open('A');
+        container.read(selectedNoteIdProvider.notifier).select('B');
+        final openingB = controller.open('B');
+        await tester.pump();
+
+        final deletingB = container
+            .read(lifecycleActionsProvider)
+            .deleteNote('B');
+        await tester.pump();
+        // The lifecycle request owns the UI boundary but must not snapshot A
+        // while B's already-issued open is still crossing the FFI boundary.
+        expect(api.calls, ['closeNote:A']);
+        expect(api.openNoteCalls, ['A', 'B']);
+        expect(container.read(lifecycleEditingProvider), 1);
+
+        delayedB.complete(stateFor('B'));
+        await openingB;
+        expect(await deletingB, isA<LifecycleCompleted>());
+
+        expect(container.read(activeNoteProvider), isNull);
+        expect(container.read(selectedNoteIdProvider), isNull);
+        expect(api.calls, ['closeNote:A', 'deleteNote:B']);
+        expect(api.openNoteCalls, ['A', 'B']);
+      },
+    );
+
+    testWidgets(
+      'a rename reanchors an intercepted A to B open to the returned id',
+      (tester) async {
+        final delayedB = Completer<NoteState>();
+        final renamed = stateFor('Renamed/B');
+        final api = _LifecycleApi()
+          ..openStates['A'] = stateFor('A')
+          ..openNoteGates['B'] = delayedB
+          ..renameNoteResult = (renamed, effects());
+        late ProviderContainer container;
+        await tester.pumpWidget(_probeHarness(api, (c) => container = c));
+        addTearDown(container.dispose);
+        final controller = container.read(activeNoteProvider.notifier);
+        await controller.open('A');
+        container.read(selectedNoteIdProvider.notifier).select('B');
+        final openingB = controller.open('B');
+        await tester.pump();
+
+        final renamingB = container
+            .read(lifecycleActionsProvider)
+            .renameNote('B', 'Renamed');
+        delayedB.complete(stateFor('B'));
+        await openingB;
+        expect(await renamingB, isA<LifecycleCompleted>());
+
+        expect(container.read(activeNoteProvider), same(renamed));
+        expect(container.read(selectedNoteIdProvider), 'Renamed/B');
+        expect(api.openNoteCalls, ['A', 'B']);
+      },
+    );
+
+    testWidgets(
+      'a refused rename restores the selected B session after it intercepted A to B open',
+      (tester) async {
+        final delayedB = Completer<NoteState>();
+        final restoredB = stateFor('B');
+        final api = _LifecycleApi()
+          ..openStates['A'] = stateFor('A')
+          ..openStates['B'] = restoredB
+          ..openNoteGates['B'] = delayedB
+          ..renameNoteError = AppError.pathUnavailable('B already exists');
+        late ProviderContainer container;
+        await tester.pumpWidget(_probeHarness(api, (c) => container = c));
+        addTearDown(container.dispose);
+        final controller = container.read(activeNoteProvider.notifier);
+        await controller.open('A');
+        container.read(selectedNoteIdProvider.notifier).select('B');
+        final openingB = controller.open('B');
+        await tester.pump();
+
+        final renamingB = container
+            .read(lifecycleActionsProvider)
+            .renameNote('B', 'Renamed');
+        delayedB.complete(restoredB);
+        await openingB;
+        expect(await renamingB, isA<LifecycleRefused>());
+
+        expect(container.read(activeNoteProvider), same(restoredB));
+        expect(container.read(selectedNoteIdProvider), 'B');
+        // The intercepted result cannot mount; only the post-refusal retry
+        // may install B, once Core has confirmed it still exists.
+        expect(api.openNoteCalls, ['A', 'B', 'B']);
+      },
+    );
+
     testWidgets('a terminal delete warning closes the dead editor instead of '
         'restoring it', (tester) async {
       final api = _LifecycleApi()

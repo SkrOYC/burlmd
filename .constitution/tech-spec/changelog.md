@@ -1,5 +1,19 @@
 # Stage 3: Technical Implementation Changelog
 
+## v1.6.4
+
+Patch correction from PR #10 review, round 9. No bill-of-materials, PRD, or
+architecture change.
+
+- Select All now uses three explicit Core whole-Note operations:
+  `copy_whole_note_as_markdown`, `delete_whole_note`, and
+  `replace_whole_note`. Core derives their source span from the first through
+  final top-level Block rather than accepting a synthetic `BlockRange` end
+  offset. This includes source for a terminal thematic break or empty fenced
+  code Block, whose rendered text is empty, while keeping frontmatter outside
+  the rendered Note selection and preserving normal cross-Block UTF-16 range
+  semantics unchanged.
+
 ## v1.6.3
 
 Patch corrections from PR #10 review, round 7. No bill-of-materials, PRD, or

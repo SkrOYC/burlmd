@@ -24,10 +24,13 @@ class _FixedNoteController extends NoteController {
 
 class _RangeApi extends RustApi {
   final List<(BlockRange, String)> replacements = [];
+  final List<String> wholeNoteReplacements = [];
   final List<String> replacementNoteIds = [];
   final List<BlockRange> deletes = [];
+  final List<String> wholeNoteDeletes = [];
   final List<String> deleteNoteIds = [];
   final List<String> copiedNoteIds = [];
+  final List<String> wholeNoteCopiedIds = [];
   final List<(List<int>, String)> updates = [];
   Object? operationError;
 
@@ -48,9 +51,25 @@ class _RangeApi extends RustApi {
   }
 
   @override
+  RangeEditResult replaceWholeNote(String noteId, String replacement) {
+    if (operationError case final Object error) throw error;
+    wholeNoteReplacements.add(replacement);
+    replacementNoteIds.add(noteId);
+    return RangeEditResult(state: result, caret: caret);
+  }
+
+  @override
   RangeEditResult deleteRange(String noteId, BlockRange range) {
     if (operationError case final Object error) throw error;
     deletes.add(range);
+    deleteNoteIds.add(noteId);
+    return RangeEditResult(state: result, caret: caret);
+  }
+
+  @override
+  RangeEditResult deleteWholeNote(String noteId) {
+    if (operationError case final Object error) throw error;
+    wholeNoteDeletes.add(noteId);
     deleteNoteIds.add(noteId);
     return RangeEditResult(state: result, caret: caret);
   }
@@ -60,6 +79,13 @@ class _RangeApi extends RustApi {
     if (operationError case final Object error) throw error;
     copiedNoteIds.add(noteId);
     return 'core markdown';
+  }
+
+  @override
+  String copyWholeNoteAsMarkdown(String noteId) {
+    if (operationError case final Object error) throw error;
+    wholeNoteCopiedIds.add(noteId);
+    return 'core whole-note markdown';
   }
 
   @override
@@ -727,6 +753,93 @@ void main() {
     expect(api.replacements, isEmpty);
     expect(api.updates, isEmpty);
     expect(clipboard.value, 'core markdown');
+  });
+
+  testWidgets('Select All uses the Core whole-Note boundary for terminal '
+      'empty renderings across copy, delete, cut, and replacement', (
+    tester,
+  ) async {
+    final fixtures = <(String, List<AstNode>)>[
+      ('sole thematic break', [const AstNode.thematicBreak()]),
+      (
+        'terminal thematic break',
+        [_paragraph('before the rule'), const AstNode.thematicBreak()],
+      ),
+      ('sole empty fenced code Block', [AstNode.codeBlock(code: '')]),
+      (
+        'terminal empty fenced code Block',
+        [_paragraph('before the fence'), AstNode.codeBlock(code: '')],
+      ),
+    ];
+    const operations = <String>['copy', 'delete', 'cut', 'replace'];
+
+    for (final (fixtureName, ast) in fixtures) {
+      for (final operation in operations) {
+        final api = _RangeApi()
+          ..result = _note(['replacement result'])
+          ..caret = RangeEditCaret.block(
+            blockPath: Uint64List.fromList(const [0]),
+            sourceOffsetUtf16: BigInt.zero,
+          )
+          ..sources['0'] = 'replacement result\n';
+        await _pump(tester, api, ast: ast);
+        final area = tester.element(find.byType(SelectionArea));
+        final clipboard = _mockClipboard(tester, 'pasted replacement');
+
+        Actions.invoke(
+          area,
+          const SelectAllTextIntent(SelectionChangedCause.keyboard),
+        );
+        await tester.pump();
+        expect(
+          tester.state<EditorState>(find.byType(Editor)).debugWholeNoteSelected,
+          isTrue,
+          reason: '$fixtureName must create an editable whole-Note target',
+        );
+
+        switch (operation) {
+          case 'copy':
+            Actions.invoke(area, CopySelectionTextIntent.copy);
+          case 'delete':
+            Actions.invoke(area, const DeleteCharacterIntent(forward: true));
+          case 'cut':
+            Actions.invoke(
+              area,
+              const CopySelectionTextIntent.cut(SelectionChangedCause.keyboard),
+            );
+          case 'replace':
+            tester.testTextInput.enterText('typed replacement');
+        }
+        await tester.pump();
+        await tester.pump();
+        await tester.pump();
+
+        expect(api.copiedNoteIds, isEmpty, reason: '$fixtureName $operation');
+        expect(api.replacements, isEmpty, reason: '$fixtureName $operation');
+        expect(api.deletes, isEmpty, reason: '$fixtureName $operation');
+        expect(
+          api.wholeNoteCopiedIds,
+          operation == 'copy' || operation == 'cut' ? ['range-note'] : isEmpty,
+          reason: '$fixtureName $operation',
+        );
+        expect(
+          api.wholeNoteDeletes,
+          operation == 'delete' || operation == 'cut'
+              ? ['range-note']
+              : isEmpty,
+          reason: '$fixtureName $operation',
+        );
+        expect(
+          api.wholeNoteReplacements,
+          operation == 'replace' ? ['typed replacement'] : isEmpty,
+          reason: '$fixtureName $operation',
+        );
+        if (operation == 'copy' || operation == 'cut') {
+          expect(clipboard.value, 'core whole-note markdown');
+        }
+        await tester.pumpWidget(const SizedBox.shrink());
+      }
+    }
   });
 
   testWidgets('a provider state or Note transition immediately revokes the '

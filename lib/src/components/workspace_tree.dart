@@ -81,7 +81,9 @@ class _WorkspaceTreeState extends ConsumerState<WorkspaceTree> {
     // or source. Keep navigation and every lifecycle menu behind the same
     // admission boundary until that result has settled, rather than letting a
     // tree tap race an old-id rekey or an in-flight close.
-    final lifecycleActive = ref.watch(lifecycleEditingProvider) > 0;
+    final lifecycleActive =
+        ref.watch(lifecycleEditingProvider) > 0 ||
+        ref.watch(noteSwitchingProvider);
 
     if (treeError != null) return const _TreeErrorState();
 

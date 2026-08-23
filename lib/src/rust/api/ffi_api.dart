@@ -381,6 +381,13 @@ String copyRangeAsMarkdown({
   range: range,
 );
 
+/// Markdown for the complete rendered Note. Core derives the source extent
+/// from its root Block spans, rather than accepting a synthetic rendered end
+/// offset: terminal thematic breaks and empty fenced code Blocks render as
+/// empty strings but still own source that Select All must include.
+String copyWholeNoteAsMarkdown({required String noteId}) =>
+    RustLib.instance.api.crateApiFfiApiCopyWholeNoteAsMarkdown(noteId: noteId);
+
 /// Deletes one forward `BlockRange` in one source splice, reparse and draft
 /// write. A reverse range is rejected as `ParseError`; Presentation normalizes
 /// its selection before this boundary rather than silently changing it here.
@@ -391,6 +398,12 @@ RangeEditResult deleteRange({
   noteId: noteId,
   range: range,
 );
+
+/// Deletes the complete rendered Note in one Core transaction. This is a
+/// distinct operation from [`delete_range`]: it has no rendered endpoints to
+/// reinterpret, so ordinary cross-Block UTF-16 range behavior is unchanged.
+RangeEditResult deleteWholeNote({required String noteId}) =>
+    RustLib.instance.api.crateApiFfiApiDeleteWholeNote(noteId: noteId);
 
 /// Replaces a forward multi-Block selection with raw committed text -- typing
 /// or pasting over a selection that crosses Blocks. The result's caret is
@@ -403,6 +416,16 @@ RangeEditResult replaceRange({
 }) => RustLib.instance.api.crateApiFfiApiReplaceRange(
   noteId: noteId,
   range: range,
+  replacement: replacement,
+);
+
+/// Replaces the complete rendered Note in one Core transaction. The returned
+/// caret is derived from the post-reparse state just like [`replace_range`].
+RangeEditResult replaceWholeNote({
+  required String noteId,
+  required String replacement,
+}) => RustLib.instance.api.crateApiFfiApiReplaceWholeNote(
+  noteId: noteId,
   replacement: replacement,
 );
 

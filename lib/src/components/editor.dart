@@ -26,6 +26,24 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart'
     show Uint64List;
 
+/// A frozen cross-Block target owned by the editor's input proxy. Ordinary
+/// selections retain their public Core [BlockRange] coordinates; Select All
+/// is a distinct Core operation because an empty terminal rendering has no
+/// rendered offset that can name the end of its source.
+sealed class _RangeTarget {
+  const _RangeTarget();
+}
+
+class _RenderedRangeTarget extends _RangeTarget {
+  const _RenderedRangeTarget(this.range);
+
+  final BlockRange range;
+}
+
+class _WholeNoteRangeTarget extends _RangeTarget {
+  const _WholeNoteRangeTarget();
+}
+
 /// Renders the currently open note's AST as Live Preview (`EDIT-F002`,
 /// CAP-EDIT-01): every Block renders formatted, except the one holding the
 /// caret, which displays its raw Markdown source in an editable field.
@@ -72,7 +90,7 @@ class EditorState extends ConsumerState<Editor> {
   /// The direct platform proxy active only for a rendered cross-Block range.
   /// The range itself is frozen in the proxy; a subsequent selection, focus,
   /// source, or Note transition revokes it before any stale callback can edit.
-  RangeTextInputClient? _rangeInputClient;
+  RangeTextInputClient<_RangeTarget>? _rangeInputClient;
   int _rangeGeneration = 0;
   NoteState? _rangeState;
   String? _rangeNoteId;
@@ -612,18 +630,18 @@ class EditorState extends ConsumerState<Editor> {
       _closeRangeInput();
       return;
     }
-    final range = selectedBlockRange();
-    if (range == null || !_isRangeInputEligible(range)) {
+    final target = _selectedRangeTarget();
+    if (target == null || !_isRangeInputEligible(target)) {
       _closeRangeInput();
       return;
     }
-    _activateRangeInput(range);
+    _activateRangeInput(target);
   }
 
-  void _activateRangeInput(BlockRange range) {
+  void _activateRangeInput(_RangeTarget target) {
     if (ref.read(editorInputBlockedProvider)) return;
     final existing = _rangeInputClient;
-    if (existing != null && _sameRange(existing.range, range)) return;
+    if (existing != null && _sameRangeTarget(existing.range, target)) return;
 
     _closeRangeInput();
     final state = ref.read(activeNoteProvider);
@@ -631,13 +649,13 @@ class EditorState extends ConsumerState<Editor> {
     final noteId = state.metadata.id;
     final generation = ++_rangeGeneration;
     final client = RangeTextInputClient(
-      range: range,
+      range: target,
       onReplace: (replacement) =>
-          _replaceFrozenRange(generation, range, state, noteId, replacement),
-      onDelete: () => _deleteFrozenRange(generation, range, state, noteId),
-      copyMarkdown: () => _copyFrozenRange(generation, range, state, noteId),
+          _replaceFrozenRange(generation, target, state, noteId, replacement),
+      onDelete: () => _deleteFrozenRange(generation, target, state, noteId),
+      copyMarkdown: () => _copyFrozenRange(generation, target, state, noteId),
       onError: (error) {
-        if (_isLiveRange(generation, range, state, noteId)) {
+        if (_isLiveRange(generation, target, state, noteId)) {
           _reportEditorOperationFailure(error);
         }
       },
@@ -648,11 +666,14 @@ class EditorState extends ConsumerState<Editor> {
     client.attach();
   }
 
-  bool _isRangeInputEligible(BlockRange range) =>
+  bool _isRangeInputEligible(_RangeTarget target) => switch (target) {
+    _WholeNoteRangeTarget() => true,
+    _RenderedRangeTarget(:final range) =>
       range.startPath.length == 1 &&
-      range.endPath.length == 1 &&
-      (range.startPath.single != range.endPath.single ||
-          _selectedLeafCount() > 1);
+          range.endPath.length == 1 &&
+          (range.startPath.single != range.endPath.single ||
+              _selectedLeafCount() > 1),
+  };
 
   /// The selection system, rather than the Markdown tree, is authoritative
   /// about which rendered leaves the user visibly selected. A same-top-level
@@ -687,9 +708,20 @@ class EditorState extends ConsumerState<Editor> {
       a.startOffset == b.startOffset &&
       a.endOffset == b.endOffset;
 
+  static bool _sameRangeTarget(_RangeTarget a, _RangeTarget b) =>
+      switch ((a, b)) {
+        (_WholeNoteRangeTarget(), _WholeNoteRangeTarget()) => true,
+        (
+          _RenderedRangeTarget(:final range),
+          _RenderedRangeTarget(range: final rangeB),
+        ) =>
+          _sameRange(range, rangeB),
+        _ => false,
+      };
+
   bool _isLiveRange(
     int generation,
-    BlockRange range,
+    _RangeTarget target,
     NoteState state,
     String noteId,
   ) =>
@@ -697,7 +729,7 @@ class EditorState extends ConsumerState<Editor> {
       !ref.read(editorInputBlockedProvider) &&
       generation == _rangeGeneration &&
       _rangeInputClient != null &&
-      _sameRange(_rangeInputClient!.range, range) &&
+      _sameRangeTarget(_rangeInputClient!.range, target) &&
       _isRangeStateCurrent(state, noteId);
 
   bool _isRangeStateCurrent([NoteState? state, String? noteId]) {
@@ -730,38 +762,55 @@ class EditorState extends ConsumerState<Editor> {
 
   Future<String> _copyFrozenRange(
     int generation,
-    BlockRange range,
+    _RangeTarget target,
     NoteState state,
     String noteId,
   ) async {
-    if (!_isLiveRange(generation, range, state, noteId)) return '';
-    return ref.read(rustApiProvider).copyRangeAsMarkdown(noteId, range);
+    if (!_isLiveRange(generation, target, state, noteId)) return '';
+    final api = ref.read(rustApiProvider);
+    return switch (target) {
+      _WholeNoteRangeTarget() => api.copyWholeNoteAsMarkdown(noteId),
+      _RenderedRangeTarget(:final range) => api.copyRangeAsMarkdown(
+        noteId,
+        range,
+      ),
+    };
   }
 
   Future<void> _replaceFrozenRange(
     int generation,
-    BlockRange range,
+    _RangeTarget target,
     NoteState state,
     String noteId,
     String replacement,
   ) async {
-    if (!_isLiveRange(generation, range, state, noteId)) return;
-    final result = ref
-        .read(rustApiProvider)
-        .replaceRange(noteId, range, replacement);
-    if (!_isLiveRange(generation, range, state, noteId)) return;
+    if (!_isLiveRange(generation, target, state, noteId)) return;
+    final api = ref.read(rustApiProvider);
+    final result = switch (target) {
+      _WholeNoteRangeTarget() => api.replaceWholeNote(noteId, replacement),
+      _RenderedRangeTarget(:final range) => api.replaceRange(
+        noteId,
+        range,
+        replacement,
+      ),
+    };
+    if (!_isLiveRange(generation, target, state, noteId)) return;
     _adoptRangeResult(result);
   }
 
   Future<void> _deleteFrozenRange(
     int generation,
-    BlockRange range,
+    _RangeTarget target,
     NoteState state,
     String noteId,
   ) async {
-    if (!_isLiveRange(generation, range, state, noteId)) return;
-    final result = ref.read(rustApiProvider).deleteRange(noteId, range);
-    if (!_isLiveRange(generation, range, state, noteId)) return;
+    if (!_isLiveRange(generation, target, state, noteId)) return;
+    final api = ref.read(rustApiProvider);
+    final result = switch (target) {
+      _WholeNoteRangeTarget() => api.deleteWholeNote(noteId),
+      _RenderedRangeTarget(:final range) => api.deleteRange(noteId, range),
+    };
+    if (!_isLiveRange(generation, target, state, noteId)) return;
     _adoptRangeResult(result);
   }
 
@@ -1436,6 +1485,23 @@ class EditorState extends ConsumerState<Editor> {
   @visibleForTesting
   BlockRange? debugSelectedRange() => selectedBlockRange();
 
+  /// Whether the frozen target is the Core-owned whole-Note operation rather
+  /// than an ordinary rendered [BlockRange].
+  @visibleForTesting
+  bool get debugWholeNoteSelected =>
+      _selectedRangeTarget() is _WholeNoteRangeTarget;
+
+  _RangeTarget? _selectedRangeTarget() {
+    if (_requiresFreshRenderedSelection) return null;
+    final note = ref.read(activeNoteProvider);
+    if (note == null) return null;
+    if (_wholeNoteSelectedId == note.metadata.id && note.ast.isNotEmpty) {
+      return const _WholeNoteRangeTarget();
+    }
+    final range = selectedBlockRange();
+    return range == null ? null : _RenderedRangeTarget(range);
+  }
+
   /// Reads the region's current selection and expresses it as a [BlockRange]
   /// with Flutter UTF-16 rendered offsets into each endpoint Block, or null
   /// when there is no uncollapsed cross-Block selection right now. Per-Block offsets are
@@ -1445,14 +1511,6 @@ class EditorState extends ConsumerState<Editor> {
     if (_requiresFreshRenderedSelection) return null;
     final note = ref.read(activeNoteProvider);
     if (note == null) return null;
-    if (_wholeNoteSelectedId == note.metadata.id && note.ast.isNotEmpty) {
-      return BlockRange(
-        startPath: Uint64List.fromList(const [0]),
-        startOffset: BigInt.zero,
-        endPath: Uint64List.fromList([note.ast.length - 1]),
-        endOffset: BigInt.from(blockCoreRenderedLength(note.ast.last)),
-      );
-    }
     int? startIndex;
     int? endIndex;
     var startOffset = 0;
@@ -1691,11 +1749,13 @@ class EditorState extends ConsumerState<Editor> {
       throw StateError('F007 needs a rendered cross-Block fixture.');
     }
     _activateRangeInput(
-      BlockRange(
-        startPath: Uint64List.fromList(const [0]),
-        startOffset: BigInt.zero,
-        endPath: Uint64List.fromList([note.ast.length - 1]),
-        endOffset: BigInt.from(blockCoreRenderedLength(note.ast.last)),
+      _RenderedRangeTarget(
+        BlockRange(
+          startPath: Uint64List.fromList(const [0]),
+          startOffset: BigInt.zero,
+          endPath: Uint64List.fromList([note.ast.length - 1]),
+          endOffset: BigInt.from(blockCoreRenderedLength(note.ast.last)),
+        ),
       ),
     );
   }

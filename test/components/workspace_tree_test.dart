@@ -265,6 +265,44 @@ void main() {
     container.read(lifecycleEditingProvider.notifier).end();
   });
 
+  testWidgets('an in-flight note switch disables navigation and row menus', (
+    WidgetTester tester,
+  ) async {
+    late ProviderContainer container;
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          rustApiProvider.overrideWithValue(
+            _StubRustApi([note('a', 'Note A', 'Note A.md')]),
+          ),
+        ],
+        child: MaterialApp(
+          home: Scaffold(
+            body: Consumer(
+              builder: (context, ref, _) {
+                container = ProviderScope.containerOf(context);
+                return const SizedBox(width: 300, child: WorkspaceTree());
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+    addTearDown(container.dispose);
+    await tester.pumpAndSettle();
+
+    container.read(noteSwitchingProvider.notifier).set(true);
+    await tester.pump();
+
+    await tester.tap(find.text('Note A'));
+    await tester.pump();
+    expect(container.read(selectedNoteIdProvider), isNull);
+    final menu = tester.widget<PopupMenuButton<String>>(
+      find.byWidgetPredicate((widget) => widget is PopupMenuButton<String>),
+    );
+    expect(menu.enabled, isFalse);
+  });
+
   testWidgets('a failed tree query shows an error state whose Retry refetches '
       '(flow-workspace-navigation.md failure path)', (
     WidgetTester tester,

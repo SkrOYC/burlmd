@@ -212,8 +212,17 @@ class RustApi {
   String copyRangeAsMarkdown(String noteId, ffi.BlockRange range) =>
       ffi.copyRangeAsMarkdown(noteId: noteId, range: range);
 
+  /// Core-derived Markdown for the whole rendered Note. Unlike a
+  /// [BlockRange], this has no synthetic rendered endpoint, so an empty
+  /// terminal rendering still contributes its source.
+  String copyWholeNoteAsMarkdown(String noteId) =>
+      ffi.copyWholeNoteAsMarkdown(noteId: noteId);
+
   ffi.RangeEditResult deleteRange(String noteId, ffi.BlockRange range) =>
       ffi.deleteRange(noteId: noteId, range: range);
+
+  ffi.RangeEditResult deleteWholeNote(String noteId) =>
+      ffi.deleteWholeNote(noteId: noteId);
 
   /// Replaces a multi-Block selection with text — typing over a selection
   /// that crosses Blocks. The caller must re-derive caret position from the
@@ -223,6 +232,9 @@ class RustApi {
     ffi.BlockRange range,
     String replacement,
   ) => ffi.replaceRange(noteId: noteId, range: range, replacement: replacement);
+
+  ffi.RangeEditResult replaceWholeNote(String noteId, String replacement) =>
+      ffi.replaceWholeNote(noteId: noteId, replacement: replacement);
 
   /// Full-text search within the active Workspace (CAP-FIND-01), bm25-ranked
   /// and capped at `limit` — the caller-supplied cap that replaces the

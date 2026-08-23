@@ -651,6 +651,15 @@ pub fn copy_range_as_markdown(note_id: String, range: BlockRange) -> Result<Stri
     session.copy_range_as_markdown(&range)
 }
 
+/// Markdown for the complete rendered Note. Core derives the source extent
+/// from its root Block spans, rather than accepting a synthetic rendered end
+/// offset: terminal thematic breaks and empty fenced code Blocks render as
+/// empty strings but still own source that Select All must include.
+#[frb(sync)]
+pub fn copy_whole_note_as_markdown(note_id: String) -> Result<String, AppError> {
+    open_session(&note_id)?.copy_whole_note_as_markdown()
+}
+
 /// Deletes one forward `BlockRange` in one source splice, reparse and draft
 /// write. A reverse range is rejected as `ParseError`; Presentation normalizes
 /// its selection before this boundary rather than silently changing it here.
@@ -661,6 +670,18 @@ pub fn delete_range(note_id: String, range: BlockRange) -> Result<RangeEditResul
         let range = range.into_rendered_range(&state.ast)?;
         session.delete_range(&range)
     })?;
+    Ok(RangeEditResult {
+        state,
+        caret: range_edit_caret_from_persist(caret),
+    })
+}
+
+/// Deletes the complete rendered Note in one Core transaction. This is a
+/// distinct operation from [`delete_range`]: it has no rendered endpoints to
+/// reinterpret, so ordinary cross-Block UTF-16 range behavior is unchanged.
+#[frb(sync)]
+pub fn delete_whole_note(note_id: String) -> Result<RangeEditResult, AppError> {
+    let (state, caret) = with_open_session_edit(&note_id, |session| session.delete_whole_note())?;
     Ok(RangeEditResult {
         state,
         caret: range_edit_caret_from_persist(caret),
@@ -682,6 +703,21 @@ pub fn replace_range(
         let range = range.into_rendered_range(&state.ast)?;
         session.replace_range(&range, &replacement)
     })?;
+    Ok(RangeEditResult {
+        state,
+        caret: range_edit_caret_from_persist(caret),
+    })
+}
+
+/// Replaces the complete rendered Note in one Core transaction. The returned
+/// caret is derived from the post-reparse state just like [`replace_range`].
+#[frb(sync)]
+pub fn replace_whole_note(
+    note_id: String,
+    replacement: String,
+) -> Result<RangeEditResult, AppError> {
+    let (state, caret) =
+        with_open_session_edit(&note_id, |session| session.replace_whole_note(&replacement))?;
     Ok(RangeEditResult {
         state,
         caret: range_edit_caret_from_persist(caret),
@@ -1878,6 +1914,69 @@ mod tests {
             !note_write_status("ranges".to_string()).has_unwritten_edits,
             "flush_note must clear the unwritten-edits flag"
         );
+    }
+
+    /// Select All cannot use an ordinary rendered range for terminal Blocks
+    /// that render as empty text: offset zero names their source start, not
+    /// their end. The dedicated whole-Note entry points must instead use the
+    /// Core span boundary for copy and for the one-shot structural mutations.
+    #[test]
+    fn wrapper_whole_note_operations_include_terminal_empty_renderings() {
+        let _guards = wrapper_guards();
+        let ws = wrapper_bootstrap();
+        let cases = [
+            ("sole-rule", "---\n"),
+            ("terminal-rule", "before the rule\n\n---\n"),
+            ("sole-empty-fence", "```\n```\n"),
+            ("terminal-empty-fence", "before the fence\n\n```\n```\n"),
+            ("ordinary-terminal", "before\n\nordinary terminal\n"),
+        ];
+
+        for (name, body) in cases {
+            let copy_id = format!("whole-{name}-copy");
+            wrapper_write_note(
+                &ws.root,
+                &format!("{copy_id}.md"),
+                &note_source(&format!("Whole {name}"), body),
+            );
+            block_on(open_note(copy_id.clone())).unwrap();
+            assert!(
+                copy_whole_note_as_markdown(copy_id)
+                    .unwrap()
+                    .contains(body.trim_end()),
+                "{name}: whole-Note copy must retain the terminal source"
+            );
+
+            let delete_id = format!("whole-{name}-delete");
+            wrapper_write_note(
+                &ws.root,
+                &format!("{delete_id}.md"),
+                &note_source(&format!("Whole {name}"), body),
+            );
+            block_on(open_note(delete_id.clone())).unwrap();
+            let deleted = delete_whole_note(delete_id).unwrap();
+            assert!(
+                deleted.state.ast.is_empty(),
+                "{name}: delete retained a Block"
+            );
+            assert!(matches!(deleted.caret, RangeEditCaret::Phantom { .. }));
+
+            let replace_id = format!("whole-{name}-replace");
+            wrapper_write_note(
+                &ws.root,
+                &format!("{replace_id}.md"),
+                &note_source(&format!("Whole {name}"), body),
+            );
+            block_on(open_note(replace_id.clone())).unwrap();
+            let replaced =
+                replace_whole_note(replace_id.clone(), "replacement".to_string()).unwrap();
+            assert_eq!(replaced.state.ast.len(), 1, "{name}: replacement shape");
+            assert_eq!(
+                get_block_source(replace_id, vec![0]).unwrap(),
+                "replacement\n",
+                "{name}: replacement must cover terminal source exactly"
+            );
+        }
     }
 
     /// Flutter reports selection offsets in UTF-16. This drives the real FFI
