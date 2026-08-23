@@ -248,6 +248,129 @@ void main() {
         const TextSelection(baseOffset: 7, extentOffset: 3),
       );
     });
+
+    group('inline code follows CommonMark code-span delimiters', () {
+      test('chooses a delimiter longer than every selected backtick run', () {
+        final singleRun = applyInlineEmphasis(
+          _value('a`b', 0, 3),
+          delimiter: '`',
+        );
+        expect(singleRun.text, '``a`b``');
+        expect(
+          singleRun.selection,
+          const TextSelection(baseOffset: 2, extentOffset: 5),
+        );
+
+        final multipleRun = applyInlineEmphasis(
+          _value('a``b', 0, 4),
+          delimiter: '`',
+        );
+        expect(multipleRun.text, '```a``b```');
+        expect(
+          multipleRun.selection,
+          const TextSelection(baseOffset: 3, extentOffset: 7),
+        );
+      });
+
+      test(
+        'protects edge backticks and spaces from code-span normalization',
+        () {
+          // CommonMark strips exactly one space from both ends of a non-space
+          // code span. The added space here is therefore syntax, not content.
+          final leadingBacktick = applyInlineEmphasis(
+            _value('`edge', 0, 5),
+            delimiter: '`',
+          );
+          expect(leadingBacktick.text, '`` `edge ``');
+          expect(
+            leadingBacktick.selection,
+            const TextSelection(baseOffset: 3, extentOffset: 8),
+          );
+
+          final trailingBacktick = applyInlineEmphasis(
+            _value('edge`', 0, 5),
+            delimiter: '`',
+          );
+          expect(trailingBacktick.text, '`` edge` ``');
+          expect(
+            trailingBacktick.selection,
+            const TextSelection(baseOffset: 3, extentOffset: 8),
+          );
+
+          final edgeSpaces = applyInlineEmphasis(
+            _value(' word ', 0, 6),
+            delimiter: '`',
+          );
+          expect(edgeSpaces.text, '`  word  `');
+          expect(
+            edgeSpaces.selection,
+            const TextSelection(baseOffset: 2, extentOffset: 8),
+          );
+
+          // The CommonMark all-spaces exception preserves those spaces, so no
+          // extra padding is required or correct.
+          final allSpaces = applyInlineEmphasis(
+            _value('   ', 0, 3),
+            delimiter: '`',
+          );
+          expect(allSpaces.text, '`   `');
+          expect(
+            allSpaces.selection,
+            const TextSelection(baseOffset: 1, extentOffset: 4),
+          );
+        },
+      );
+
+      test(
+        'unwraps valid multi-backtick spans and their protecting spaces',
+        () {
+          final wrapped = applyInlineEmphasis(
+            _value('``edge`', 0, 7),
+            delimiter: '`',
+          );
+          final unwrapped = applyInlineEmphasis(wrapped, delimiter: '`');
+          expect(unwrapped.text, '``edge`');
+          expect(
+            unwrapped.selection,
+            const TextSelection(baseOffset: 0, extentOffset: 7),
+          );
+
+          final fullRun = applyInlineEmphasis(
+            _value('`` `thing` ``', 13, 0),
+            delimiter: '`',
+          );
+          expect(fullRun.text, '`thing`');
+          expect(
+            fullRun.selection,
+            const TextSelection(baseOffset: 7, extentOffset: 0),
+          );
+        },
+      );
+
+      test('preserves UTF-16 offsets and keeps the empty-caret template', () {
+        final wrapped = applyInlineEmphasis(
+          _value('a🙂`b', 1, 4),
+          delimiter: '`',
+        );
+        expect(wrapped.text, 'a`` 🙂` ``b');
+        expect(
+          wrapped.selection,
+          const TextSelection(baseOffset: 4, extentOffset: 7),
+        );
+
+        final empty = applyInlineEmphasis(_value('word', 2, 2), delimiter: '`');
+        expect(empty.text, 'wo``rd');
+        expect(empty.selection, const TextSelection.collapsed(offset: 3));
+      });
+
+      test(
+        'leaves multiline source untouched because CommonMark normalizes it',
+        () {
+          final original = _value('first\nsecond', 0, 12);
+          expect(applyInlineEmphasis(original, delimiter: '`'), original);
+        },
+      );
+    });
   });
 
   testWidgets(
