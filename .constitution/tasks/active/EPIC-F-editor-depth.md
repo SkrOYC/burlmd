@@ -16,7 +16,7 @@ It is not gone entirely, and `EDIT-F003`/`EDIT-F007` are where it survives. A `B
 - **Scope (Out-of-Scope Files):**
   - `lib/**` (no production code in a Spike)
   - `rust/src/**`
-- **Verification Command:** `test -s .constitution/spikes/SPK-EDIT-F001.md && ! grep -q 'Status: placeholder' .constitution/spikes/SPK-EDIT-F001.md && ! grep -q 'To be filled' .constitution/spikes/SPK-EDIT-F001.md && git diff --quiet HEAD~1 HEAD -- lib rust/src`
+- **Verification Command:** `spike_commit=a960e34afb59e46ead601375bbfd6424eb4193ec; correction_commit=HEAD; test -s .constitution/spikes/SPK-EDIT-F001.md && ! grep -q 'Status: placeholder' .constitution/spikes/SPK-EDIT-F001.md && ! grep -q 'To be filled' .constitution/spikes/SPK-EDIT-F001.md && git diff --quiet "$spike_commit^" "$spike_commit" -- lib rust/src && git diff --check "$correction_commit^" "$correction_commit" && flutter test test/components/editor_test.dart test/components/selection_test.dart && dart analyze && ! rg -n '\[DEBUG-' lib rust test scripts`
 - **Expected Success Output:** `exit 0`
 - **STOP Conditions:**
 - "STOP if this Spike is landed across more than one commit; its gate asserts that the Spike's own commit touched no production code, for the reason recorded on `WSPC-D001`. This restriction applies to the original Spike delivery only: a separately committed, independent-review correction may add narrowly scoped evidence, contract reconciliation, regression coverage, and the minimum proven stabilization without rewriting history; record the deviation and every out-of-scope touch below."

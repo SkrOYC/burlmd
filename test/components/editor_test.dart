@@ -477,7 +477,7 @@ void main() {
   });
 
   testWidgets('raw source may wrap an extra line at a boundary without moving '
-      'paragraph, heading, or list entries', (tester) async {
+      'plain or decorated Block entries', (tester) async {
     // The constrained viewport deliberately exercises real RenderParagraph
     // and RenderEditable line boxes at soft-wrap boundaries. It does not
     // inspect TextStyle properties: the source strings differ by Markdown
@@ -503,7 +503,7 @@ void main() {
             (text) => '## $text **tail**',
           ),
           (
-            'list item',
+            'decorated list item',
             (text) => AstNode.list(
               ordered: false,
               items: [
@@ -515,6 +515,20 @@ void main() {
               ],
             ),
             (text) => '- $text **tail**',
+          ),
+          (
+            'decorated blockquote',
+            (text) => AstNode.blockquote(
+              nodes: [
+                _paragraphOf([_plainRun('$text '), _boldRun('tail')]),
+              ],
+            ),
+            (text) => '> $text **tail**',
+          ),
+          (
+            'decorated code block',
+            (text) => AstNode.codeBlock(code: text),
+            (text) => '```\n$text\n```',
           ),
         ];
 
