@@ -144,11 +144,22 @@ class EditorState extends ConsumerState<Editor> {
     // focused-endpoint case is needed. The Actions wrapper above the area
     // overrides its default copy with the Core-produced Markdown path.
     //
-    // One extra slot past the AST when a phantom Block is open (`EDIT-F004`,
+    // One extra slot while a phantom Block is open (`EDIT-F004`,
     // CAP-EDIT-03): the empty Block Enter created and CommonMark cannot
-    // represent. An EMPTY Note gets the same slot permanently — otherwise
-    // there would be nothing to click or type into to start composing.
-    final phantomSlot = note.ast.isEmpty || (_focused?.isPhantom ?? false);
+    // represent. It renders at the phantom's ANCHOR — directly beneath the
+    // Block Enter was pressed in, exactly where `insert_block` will splice
+    // it — not past the whole AST; only a phantom opened after the last
+    // Block lands visually at the bottom. An EMPTY Note gets one slot
+    // permanently — otherwise there would be nothing to click or type into
+    // to start composing.
+    final focusedForSlot = _focused;
+    final phantomSlot =
+        note.ast.isEmpty || (focusedForSlot?.isPhantom ?? false);
+    // The phantom's insert index: the slot it occupies in view order, which
+    // for the empty Note's ever-present first line is 0.
+    final phantomAnchor = note.ast.isEmpty && focusedForSlot?.isPhantom != true
+        ? 0
+        : math.min(focusedForSlot?.path.first ?? 0, note.ast.length);
     return Actions(
       actions: <Type, Action<Intent>>{CopySelectionTextIntent: _copyAction},
       child: SelectionArea(
@@ -159,9 +170,15 @@ class EditorState extends ConsumerState<Editor> {
             _areaContext = areaContext;
             return ListView.builder(
               itemCount: note.ast.length + (phantomSlot ? 1 : 0),
-              itemBuilder: (context, i) => i < note.ast.length
-                  ? _buildEntry(context, note, i)
-                  : _buildPhantomEntry(note),
+              itemBuilder: (context, i) => phantomSlot && i == phantomAnchor
+                  ? _buildPhantomEntry(note)
+                  // Slots past the phantom shift back by one onto their
+                  // real Block index.
+                  : _buildEntry(
+                      context,
+                      note,
+                      phantomSlot && i > phantomAnchor ? i - 1 : i,
+                    ),
             );
           },
         ),
@@ -186,8 +203,10 @@ class EditorState extends ConsumerState<Editor> {
     int index,
   ) {
     final focused = _focused;
-    // A phantom's path names the slot PAST the AST (`EDIT-F004`); it never
-    // matches a rendered Block's path, even when the numbers coincide.
+    // A phantom's path names its anchor slot (the index a new Block would
+    // splice into), which can coincide numerically with a real Block's
+    // index — so the phantom must never satisfy this early-out; the
+    // `isPhantom` guard keeps the two identities apart.
     if (focused != null &&
         !focused.isPhantom &&
         _pathEquals(focused.path, path)) {
@@ -326,9 +345,11 @@ class EditorState extends ConsumerState<Editor> {
   // first character arrives, at which point that character IS the Block's
   // `insert_block` source.
 
-  /// The phantom slot past the AST: an empty raw-editable field styled as a
-  /// paragraph. Also the permanent first line of an EMPTY Note, which is the
-  /// only way composing can begin there.
+  /// The phantom Block slot: an empty raw-editable field styled as a
+  /// paragraph, rendered at its anchor index — directly beneath the Block
+  /// Enter was pressed in ([Editor.build]). Also the permanent first
+  /// line of an EMPTY Note, which is the only way composing can begin
+  /// there.
   Widget _buildPhantomEntry(NoteState note) {
     final index = _focused?.path.first ?? 0;
     const node = AstNode.paragraph(content: []);
@@ -368,9 +389,12 @@ class EditorState extends ConsumerState<Editor> {
     final note = ref.read(activeNoteProvider);
     if (note == null) return;
     final clamped = caret.clamp(0, focused.source.length);
-    // "End of the Block" means only whitespace remains after the caret —
-    // covering both caret-at-length and a Core-side trailing newline the
-    // field displays as invisible trailing space.
+    // "End of the Block" means only whitespace remains after the caret.
+    // Core sources carry a terminating newline (spans.rs `block_source`
+    // contract), so this covers caret-at-length AND the caret sitting just
+    // before that invisible trailing newline — both are the visual end of
+    // the Block. This holds for EVERY Block, not just the last one, so the
+    // phantom below must be able to open mid-document.
     if (focused.source.substring(clamped).trim().isEmpty) {
       setState(() {
         _focused = _Focus(
@@ -415,14 +439,13 @@ class EditorState extends ConsumerState<Editor> {
     final note = ref.read(activeNoteProvider);
     if (note == null) return;
     // Two legitimate entry points: an Enter-created phantom holding focus
-    // (its path names the slot past the AST), or the empty Note's
-    // ever-present first line, where no focus session exists yet.
-    if (focused != null &&
-        (!focused.isPhantom || !_pathEquals(focused.path, [note.ast.length]))) {
-      return;
-    }
+    // (its path names the anchor slot it will splice into — possibly
+    // MID-document, when Enter was pressed at the end of a non-final
+    // Block), or the empty Note's ever-present first line, where no focus
+    // session exists yet.
+    if (focused != null && !focused.isPhantom) return;
     if (focused == null && note.ast.isNotEmpty) return;
-    final index = focused?.path.first ?? 0;
+    final index = (focused?.path.first ?? 0).clamp(0, note.ast.length);
     try {
       final api = ref.read(rustApiProvider);
       final newState = api.insertBlock(note.metadata.id, [index], text);

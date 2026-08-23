@@ -29,6 +29,9 @@ class _FixedNoteController extends NoteController {
 /// re-derive focus from. Every call is recorded so tests can assert both
 /// what reached the Core and what never did.
 class _CoreFake extends RustApi {
+  /// Seeds follow the documented contract (`rust_api_provider.dart`): each
+  /// Block source includes its delimiters and TERMINATING NEWLINE — exactly
+  /// what `getBlockSource` hands back and what `update_block` buffers.
   _CoreFake(this.blocks);
 
   /// The Core's working source: one raw-source string per Block.
@@ -98,8 +101,14 @@ class _CoreFake extends RustApi {
   @override
   NoteState mergeBlockWithPrevious(String noteId, List<int> blockPath) {
     calls.add('merge:${blockPath.first}');
-    blocks[blockPath.first - 1] =
-        blocks[blockPath.first - 1] + blocks[blockPath.first];
+    // The Core splices out the gap between the two Blocks — the
+    // predecessor's terminating newline and any blank line between them —
+    // so the join is content-to-content.
+    final previous = blocks[blockPath.first - 1];
+    final stripped = previous.endsWith('\n')
+        ? previous.substring(0, previous.length - 1)
+        : previous;
+    blocks[blockPath.first - 1] = stripped + blocks[blockPath.first];
     blocks.removeAt(blockPath.first);
     return state;
   }
@@ -210,14 +219,14 @@ void main() {
   testWidgets('Enter at the end of a Block starts a new empty Block holding '
       'focus, held as UI-side caret position rather than committed to the '
       'Core', (tester) async {
-    final api = _CoreFake(['first', 'second']);
+    final api = _CoreFake(['first\n', 'second\n']);
     await pumpEditor(tester, [
       _paragraph('first'),
       _paragraph('second'),
     ], api: api);
 
     await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
-    await placeCaret(tester, 'first'.length);
+    await placeCaret(tester, 'first\n'.length);
     await pressKey(tester, LogicalKeyboardKey.enter);
 
     // A new empty editable Block exists and holds focus...
@@ -229,17 +238,17 @@ void main() {
     expect(api.updateCount, 0);
     expect(api.calls.where((c) => c == 'commit'), isEmpty);
     // The adopted state is untouched — the phantom lives UI-side only.
-    expect(api.blocks, ['first', 'second']);
+    expect(api.blocks, ['first\n', 'second\n']);
   });
 
   testWidgets('the first character typed in the new empty Block goes through '
       'insert_block; subsequent keystrokes go through update_block against '
       'the returned path', (tester) async {
-    final api = _CoreFake(['first']);
+    final api = _CoreFake(['first\n']);
     await pumpEditor(tester, [_paragraph('first')], api: api);
 
     await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
-    await placeCaret(tester, 'first'.length);
+    await placeCaret(tester, 'first\n'.length);
     await pressKey(tester, LogicalKeyboardKey.enter);
 
     await tester.enterText(_writableFields().first, 'x');
@@ -248,7 +257,7 @@ void main() {
     // insert_block carried the character itself, not an empty Block first.
     expect(api.calls.where((c) => c.startsWith('insert')), ['insert:1:x']);
     // The returned state is authoritative: the Note gained the Block.
-    expect(api.blocks, ['first', 'x']);
+    expect(api.blocks, ['first\n', 'x']);
 
     await tester.enterText(_writableFields().first, 'xy');
     await tester.pump();
@@ -268,14 +277,14 @@ void main() {
 
   testWidgets('focus leaving the empty Block without typing inserts nothing '
       'and leaves the Note unchanged', (tester) async {
-    final api = _CoreFake(['first', 'second']);
+    final api = _CoreFake(['first\n', 'second\n']);
     await pumpEditor(tester, [
       _paragraph('first'),
       _paragraph('second'),
     ], api: api);
 
     await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
-    await placeCaret(tester, 'first'.length);
+    await placeCaret(tester, 'first\n'.length);
     await pressKey(tester, LogicalKeyboardKey.enter);
     expect(_writableFields(), findsOneWidget);
 
@@ -293,8 +302,8 @@ void main() {
       reason: 'nothing typed, so nothing inserted',
     );
     expect(api.blocks, [
-      'first',
-      'second',
+      'first\n',
+      'second\n',
     ], reason: 'the Note is byte-for-byte unchanged');
   });
 
@@ -302,7 +311,7 @@ void main() {
 
   testWidgets('Enter in the middle of a Block splits it at the caret and the '
       'combined sources equal the original', (tester) async {
-    final api = _CoreFake(['hello world']);
+    final api = _CoreFake(['hello world\n']);
     await pumpEditor(tester, [_paragraph('hello world')], api: api);
 
     await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
@@ -312,12 +321,13 @@ void main() {
     // The split went through the Core at the caret's source offset...
     expect(api.calls.where((c) => c.startsWith('split')), ['split:0:5']);
     // ...the returned state is authoritative...
-    expect(api.blocks, ['hello', ' world']);
-    // ...and the combined sources equal the original.
-    expect(api.blocks.join(), 'hello world');
+    expect(api.blocks, ['hello', ' world\n']);
+    // ...and the combined sources equal the original, terminating newline
+    // included.
+    expect(api.blocks.join(), 'hello world\n');
 
     // Focus re-derived from the returned state: second half, caret at start.
-    expect(_field(tester).controller.text, ' world');
+    expect(_field(tester).controller.text, ' world\n');
     expect(_field(tester).focusNode.hasFocus, isTrue);
     expect(_field(tester).controller.selection.baseOffset, 0);
   });
@@ -326,7 +336,7 @@ void main() {
 
   testWidgets('Backspace at the start of a non-first Block merges it into '
       'its predecessor with the caret at the join', (tester) async {
-    final api = _CoreFake(['alpha', 'beta']);
+    final api = _CoreFake(['alpha\n', 'beta\n']);
     await pumpEditor(tester, [
       _paragraph('alpha'),
       _paragraph('beta'),
@@ -337,10 +347,10 @@ void main() {
     await pressKey(tester, LogicalKeyboardKey.backspace);
 
     expect(api.calls.where((c) => c.startsWith('merge')), ['merge:1']);
-    expect(api.blocks, ['alphabeta']);
+    expect(api.blocks, ['alphabeta\n']);
 
     // Caret sits at the join: where 'alpha' ends inside the merged Block.
-    expect(_field(tester).controller.text, 'alphabeta');
+    expect(_field(tester).controller.text, 'alphabeta\n');
     expect(_field(tester).controller.selection.baseOffset, 'alpha'.length);
     expect(_field(tester).focusNode.hasFocus, isTrue);
   });
@@ -348,7 +358,7 @@ void main() {
   testWidgets('Backspace at the start of the first Block changes nothing', (
     tester,
   ) async {
-    final api = _CoreFake(['alpha']);
+    final api = _CoreFake(['alpha\n']);
     await pumpEditor(tester, [_paragraph('alpha')], api: api);
 
     await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
@@ -357,8 +367,8 @@ void main() {
 
     // No merge reached the Core and the Note is untouched.
     expect(api.calls.where((c) => c.startsWith('merge')), isEmpty);
-    expect(api.blocks, ['alpha']);
-    expect(_field(tester).controller.text, 'alpha');
+    expect(api.blocks, ['alpha\n']);
+    expect(_field(tester).controller.text, 'alpha\n');
     expect(_field(tester).controller.selection.baseOffset, 0);
   });
 
@@ -408,5 +418,85 @@ void main() {
     // Block holding focus, still uncommitted.
     expect(_field(tester).controller.text, '');
     expect(api.calls.where((c) => c == 'commit'), isEmpty);
+  });
+
+  // -- Regression (P0): Enter at end of a NON-final Block ------------------
+
+  testWidgets('Enter at the end of a NON-final Block opens the phantom after '
+      'it and typing reaches the Core without losing text', (tester) async {
+    final api = _CoreFake(['one\n', 'two\n', 'three\n']);
+    await pumpEditor(tester, [
+      _paragraph('one'),
+      _paragraph('two'),
+      _paragraph('three'),
+    ], api: api);
+
+    await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
+    await placeCaret(tester, 'one\n'.length);
+    await pressKey(tester, LogicalKeyboardKey.enter);
+
+    // The phantom opened mid-document — between Blocks 0 and 1.
+    expect(_writableFields(), findsOneWidget);
+    expect(_field(tester).controller.text, '');
+
+    await tester.enterText(_writableFields().first, 'x');
+    await tester.pump();
+
+    // The first keystroke reached the Core as insert_block at index 1,
+    // shifting the later Blocks down — nothing was swallowed.
+    expect(api.calls.where((c) => c.startsWith('insert')), ['insert:1:x']);
+    expect(api.blocks, ['one\n', 'x', 'two\n', 'three\n']);
+
+    await tester.enterText(_writableFields().first, 'xy');
+    await tester.pump();
+
+    // Subsequent keystrokes flow through update_block against the returned
+    // path; the text typed before is still there.
+    expect(api.updateCount, 1);
+    expect(api.lastUpdatePath, [1]);
+    expect(api.lastUpdateSource, 'xy');
+    expect(api.blocks, ['one\n', 'xy', 'two\n', 'three\n']);
+    expect(_field(tester).controller.text, 'xy');
+    expect(_field(tester).focusNode.hasFocus, isTrue);
+  });
+
+  // -- Regression (P2): the phantom renders under its owning Block ---------
+
+  /// The `entry-*` keys of the rendered list items in paint order — the
+  /// document's visual Block/phantom sequence.
+  List<String> entryOrder(WidgetTester tester) => tester
+      .widgetList(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget.key is ValueKey<String> &&
+              (widget.key as ValueKey<String>).value.startsWith('entry-'),
+        ),
+      )
+      .map((widget) => (widget.key as ValueKey<String>).value)
+      .toList();
+
+  testWidgets('the phantom renders directly beneath the Block Enter was '
+      'pressed in, not at the bottom of the Note', (tester) async {
+    final api = _CoreFake(['one\n', 'two\n', 'three\n']);
+    await pumpEditor(tester, [
+      _paragraph('one'),
+      _paragraph('two'),
+      _paragraph('three'),
+    ], api: api);
+
+    expect(entryOrder(tester), ['entry-0', 'entry-1', 'entry-2']);
+
+    await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
+    await placeCaret(tester, 'one\n'.length);
+    await pressKey(tester, LogicalKeyboardKey.enter);
+
+    // The phantom sits between Blocks 0 and 1 — where insert_block would
+    // splice it — with the untouched Blocks still below it in view order.
+    expect(entryOrder(tester), [
+      'entry-0',
+      'entry-phantom',
+      'entry-1',
+      'entry-2',
+    ]);
   });
 }
