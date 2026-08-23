@@ -876,6 +876,11 @@ pub fn merge_block_with_previous(
 /// selection UI knowing it, and should decide there whether a selection
 /// crossing invisible content warrants a confirmation.
 ///
+/// A `BlockRange` is forward after Presentation normalizes its selection:
+/// `start` must resolve at or before `end` in source order. Reverse ranges are
+/// rejected with `ParseError` and leave the Note unchanged; Core never swaps
+/// endpoints because atomic-run boundary bias is endpoint-specific.
+///
 /// `EDIT-F001` settled the former drag-outward question on Flutter 3.44.3:
 /// a focused `EditableText` does not participate in its enclosing
 /// `SelectionArea`. A gesture in the field is field-local; a region drag that

@@ -11,7 +11,14 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart'
 
 export 'package:burlmd/src/rust/api/auth.dart' show OAuthFlowStart;
 export 'package:burlmd/src/rust/api/ffi_api.dart'
-    show BlockCaret, BlockRange, StructuralEdit;
+    show
+        BlockCaret,
+        BlockRange,
+        RangeEditCaret,
+        RangeEditCaret_Block,
+        RangeEditCaret_Phantom,
+        RangeEditResult,
+        StructuralEdit;
 export 'package:burlmd/src/rust/index/query.dart'
     show
         LinkCompletion,
@@ -189,13 +196,13 @@ class RustApi {
   String copyRangeAsMarkdown(String noteId, ffi.BlockRange range) =>
       ffi.copyRangeAsMarkdown(noteId: noteId, range: range);
 
-  NoteState deleteRange(String noteId, ffi.BlockRange range) =>
+  ffi.RangeEditResult deleteRange(String noteId, ffi.BlockRange range) =>
       ffi.deleteRange(noteId: noteId, range: range);
 
   /// Replaces a multi-Block selection with text — typing over a selection
   /// that crosses Blocks. The caller must re-derive caret position from the
-  /// returned state.
-  NoteState replaceRange(
+  /// returned state and caret.
+  ffi.RangeEditResult replaceRange(
     String noteId,
     ffi.BlockRange range,
     String replacement,

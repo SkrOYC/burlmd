@@ -137,6 +137,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<AstNode>? dco_decode_opt_list_ast_node(dynamic raw);
 
   @protected
+  RangeEditCaret dco_decode_range_edit_caret(dynamic raw);
+
+  @protected
+  RangeEditResult dco_decode_range_edit_result(dynamic raw);
+
+  @protected
   (NoteState, LifecycleEffects) dco_decode_record_note_state_lifecycle_effects(
     dynamic raw,
   );
@@ -282,6 +288,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<AstNode>? sse_decode_opt_list_ast_node(SseDeserializer deserializer);
+
+  @protected
+  RangeEditCaret sse_decode_range_edit_caret(SseDeserializer deserializer);
+
+  @protected
+  RangeEditResult sse_decode_range_edit_result(SseDeserializer deserializer);
 
   @protected
   (NoteState, LifecycleEffects) sse_decode_record_note_state_lifecycle_effects(
@@ -471,6 +483,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_opt_list_ast_node(
     List<AstNode>? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_range_edit_caret(
+    RangeEditCaret self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_range_edit_result(
+    RangeEditResult self,
     SseSerializer serializer,
   );
 

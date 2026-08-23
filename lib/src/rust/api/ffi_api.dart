@@ -12,8 +12,11 @@ import '../workspace/bootstrap.dart';
 import '../workspace/lifecycle.dart';
 import '../workspace/persist.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
+import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
+part 'ffi_api.freezed.dart';
 
-// These functions are ignored because they are not marked as `pub`: `fts5_phrase_query`, `into_rendered_range`, `open_session`, `rendered_utf16_to_scalar_offset`, `search_notes_impl`
+// These functions are ignored because they are not marked as `pub`: `fts5_phrase_query`, `into_rendered_range`, `open_session`, `range_edit_caret_from_persist`, `rendered_utf16_to_scalar_offset`, `search_notes_impl`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `clone`, `eq`, `fmt`
 
 /// Opens the local Workspace, creating and initializing it if absent
 /// (ADR-005 decision 1): creates the directory, initializes a Git repository
@@ -375,16 +378,22 @@ String copyRangeAsMarkdown({
   range: range,
 );
 
-NoteState deleteRange({required String noteId, required BlockRange range}) =>
-    RustLib.instance.api.crateApiFfiApiDeleteRange(
-      noteId: noteId,
-      range: range,
-    );
+/// Deletes one forward `BlockRange` in one source splice, reparse and draft
+/// write. A reverse range is rejected as `ParseError`; Presentation normalizes
+/// its selection before this boundary rather than silently changing it here.
+RangeEditResult deleteRange({
+  required String noteId,
+  required BlockRange range,
+}) => RustLib.instance.api.crateApiFfiApiDeleteRange(
+  noteId: noteId,
+  range: range,
+);
 
-/// Replaces a multi-Block selection with text -- typing over a selection that
-/// crosses Blocks. The caller must re-derive caret position from the
-/// returned state rather than reusing anything passed in.
-NoteState replaceRange({
+/// Replaces a forward multi-Block selection with raw committed text -- typing
+/// or pasting over a selection that crosses Blocks. The result's caret is
+/// derived from the post-splice parse and must be used verbatim rather than
+/// retaining a former path or predicting from replacement length.
+RangeEditResult replaceRange({
   required String noteId,
   required BlockRange range,
   required String replacement,
@@ -519,6 +528,37 @@ class BlockRange {
           startOffset == other.startOffset &&
           endPath == other.endPath &&
           endOffset == other.endOffset;
+}
+
+@freezed
+sealed class RangeEditCaret with _$RangeEditCaret {
+  const RangeEditCaret._();
+
+  const factory RangeEditCaret.block({
+    required Uint64List blockPath,
+    required BigInt sourceOffsetUtf16,
+  }) = RangeEditCaret_Block;
+  const factory RangeEditCaret.phantom({required BigInt insertionIndex}) =
+      RangeEditCaret_Phantom;
+}
+
+/// The indivisible result of `delete_range` and `replace_range`.
+class RangeEditResult {
+  final NoteState state;
+  final RangeEditCaret caret;
+
+  const RangeEditResult({required this.state, required this.caret});
+
+  @override
+  int get hashCode => state.hashCode ^ caret.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is RangeEditResult &&
+          runtimeType == other.runtimeType &&
+          state == other.state &&
+          caret == other.caret;
 }
 
 /// Authoritative result of a structural edit that keeps the raw editor open.

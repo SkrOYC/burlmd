@@ -1950,6 +1950,44 @@ impl SseDecode for Option<Vec<crate::markdown::ast::AstNode>> {
     }
 }
 
+impl SseDecode for crate::api::ffi_api::RangeEditCaret {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut tag_ = <i32>::sse_decode(deserializer);
+        match tag_ {
+            0 => {
+                let mut var_blockPath = <Vec<usize>>::sse_decode(deserializer);
+                let mut var_sourceOffsetUtf16 = <usize>::sse_decode(deserializer);
+                return crate::api::ffi_api::RangeEditCaret::Block {
+                    block_path: var_blockPath,
+                    source_offset_utf16: var_sourceOffsetUtf16,
+                };
+            }
+            1 => {
+                let mut var_insertionIndex = <usize>::sse_decode(deserializer);
+                return crate::api::ffi_api::RangeEditCaret::Phantom {
+                    insertion_index: var_insertionIndex,
+                };
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+
+impl SseDecode for crate::api::ffi_api::RangeEditResult {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_state = <crate::draft::NoteState>::sse_decode(deserializer);
+        let mut var_caret = <crate::api::ffi_api::RangeEditCaret>::sse_decode(deserializer);
+        return crate::api::ffi_api::RangeEditResult {
+            state: var_state,
+            caret: var_caret,
+        };
+    }
+}
+
 impl SseDecode
     for (
         crate::draft::NoteState,
@@ -2567,6 +2605,60 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::auth::OAuthFlowStart>
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::ffi_api::RangeEditCaret {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            crate::api::ffi_api::RangeEditCaret::Block {
+                block_path,
+                source_offset_utf16,
+            } => [
+                0.into_dart(),
+                block_path.into_into_dart().into_dart(),
+                source_offset_utf16.into_into_dart().into_dart(),
+            ]
+            .into_dart(),
+            crate::api::ffi_api::RangeEditCaret::Phantom { insertion_index } => {
+                [1.into_dart(), insertion_index.into_into_dart().into_dart()].into_dart()
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::ffi_api::RangeEditCaret
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::ffi_api::RangeEditCaret>
+    for crate::api::ffi_api::RangeEditCaret
+{
+    fn into_into_dart(self) -> crate::api::ffi_api::RangeEditCaret {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::ffi_api::RangeEditResult {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.state.into_into_dart().into_dart(),
+            self.caret.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::ffi_api::RangeEditResult
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::ffi_api::RangeEditResult>
+    for crate::api::ffi_api::RangeEditResult
+{
+    fn into_into_dart(self) -> crate::api::ffi_api::RangeEditResult {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::api::ffi_api::StructuralEdit {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
@@ -3104,6 +3196,37 @@ impl SseEncode for Option<Vec<crate::markdown::ast::AstNode>> {
         if let Some(value) = self {
             <Vec<crate::markdown::ast::AstNode>>::sse_encode(value, serializer);
         }
+    }
+}
+
+impl SseEncode for crate::api::ffi_api::RangeEditCaret {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        match self {
+            crate::api::ffi_api::RangeEditCaret::Block {
+                block_path,
+                source_offset_utf16,
+            } => {
+                <i32>::sse_encode(0, serializer);
+                <Vec<usize>>::sse_encode(block_path, serializer);
+                <usize>::sse_encode(source_offset_utf16, serializer);
+            }
+            crate::api::ffi_api::RangeEditCaret::Phantom { insertion_index } => {
+                <i32>::sse_encode(1, serializer);
+                <usize>::sse_encode(insertion_index, serializer);
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+
+impl SseEncode for crate::api::ffi_api::RangeEditResult {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <crate::draft::NoteState>::sse_encode(self.state, serializer);
+        <crate::api::ffi_api::RangeEditCaret>::sse_encode(self.caret, serializer);
     }
 }
 

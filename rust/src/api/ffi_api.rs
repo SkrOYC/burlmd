@@ -520,6 +520,31 @@ pub struct BlockRange {
     pub end_offset: usize,
 }
 
+/// Authoritative caret location after a range replacement or deletion.
+///
+/// `Block` names an editable leaf in the returned state. `source_offset_utf16`
+/// is an offset in that leaf's raw source, in Flutter UTF-16 code units.
+/// `Phantom` names the existing empty-editor insertion slot when no editable
+/// Block remains; Presentation must not invent an empty Block in Dart.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[frb]
+pub enum RangeEditCaret {
+    Block {
+        block_path: Vec<usize>,
+        source_offset_utf16: usize,
+    },
+    Phantom {
+        insertion_index: usize,
+    },
+}
+
+/// The indivisible result of `delete_range` and `replace_range`.
+#[frb]
+pub struct RangeEditResult {
+    pub state: NoteState,
+    pub caret: RangeEditCaret,
+}
+
 impl BlockRange {
     /// Converts the FFI's Flutter UTF-16 offsets into the scalar offsets the
     /// Core span map resolves. The AST remains the rendered-text authority, so
@@ -569,27 +594,56 @@ pub fn copy_range_as_markdown(note_id: String, range: BlockRange) -> Result<Stri
     session.copy_range_as_markdown(&range)
 }
 
+/// Deletes one forward `BlockRange` in one source splice, reparse and draft
+/// write. A reverse range is rejected as `ParseError`; Presentation normalizes
+/// its selection before this boundary rather than silently changing it here.
 #[frb(sync)]
-pub fn delete_range(note_id: String, range: BlockRange) -> Result<NoteState, AppError> {
+pub fn delete_range(note_id: String, range: BlockRange) -> Result<RangeEditResult, AppError> {
     let session = open_session(&note_id)?;
     let state = session.note_state()?;
     let range = range.into_rendered_range(&state.ast)?;
-    session.delete_range(&range)
+    let (state, caret) = session.delete_range(&range)?;
+    Ok(RangeEditResult {
+        state,
+        caret: range_edit_caret_from_persist(caret),
+    })
 }
 
-/// Replaces a multi-Block selection with text -- typing over a selection that
-/// crosses Blocks. The caller must re-derive caret position from the
-/// returned state rather than reusing anything passed in.
+/// Replaces a forward multi-Block selection with raw committed text -- typing
+/// or pasting over a selection that crosses Blocks. The result's caret is
+/// derived from the post-splice parse and must be used verbatim rather than
+/// retaining a former path or predicting from replacement length.
 #[frb(sync)]
 pub fn replace_range(
     note_id: String,
     range: BlockRange,
     replacement: String,
-) -> Result<NoteState, AppError> {
+) -> Result<RangeEditResult, AppError> {
     let session = open_session(&note_id)?;
     let state = session.note_state()?;
     let range = range.into_rendered_range(&state.ast)?;
-    session.replace_range(&range, &replacement)
+    let (state, caret) = session.replace_range(&range, &replacement)?;
+    Ok(RangeEditResult {
+        state,
+        caret: range_edit_caret_from_persist(caret),
+    })
+}
+
+fn range_edit_caret_from_persist(
+    caret: crate::workspace::persist::RangeEditLocation,
+) -> RangeEditCaret {
+    match caret {
+        crate::workspace::persist::RangeEditLocation::Block {
+            block_path,
+            source_offset_utf16,
+        } => RangeEditCaret::Block {
+            block_path,
+            source_offset_utf16,
+        },
+        crate::workspace::persist::RangeEditLocation::Phantom { insertion_index } => {
+            RangeEditCaret::Phantom { insertion_index }
+        }
+    }
 }
 
 /// FTS5's bare `MATCH` syntax is a full query language (boolean operators,
@@ -1271,7 +1325,7 @@ mod tests {
     /// uses scalar offsets. Conversion preserves boundaries after a non-BMP
     /// scalar and rejects its surrogate interior rather than shifting a range.
     #[test]
-    fn block_range_converts_utf16_boundaries_and_rejects_surrogate_interiors() {
+    fn range_edit_result_rejects_utf16_surrogate() {
         let parsed = crate::markdown::parse_note("a😀b\n", "");
         let range = BlockRange {
             start_path: vec![0],
@@ -1626,12 +1680,12 @@ mod tests {
         };
         let after_delete = delete_range("ranges".to_string(), second_and_third).unwrap();
         assert_eq!(
-            after_delete.ast.len(),
+            after_delete.state.ast.len(),
             1,
             "delete_range must remove every Block the range spans"
         );
 
-        let remaining_len = crate::markdown::rendered_text(&after_delete.ast[0])
+        let remaining_len = crate::markdown::rendered_text(&after_delete.state.ast[0])
             .encode_utf16()
             .count();
         let whole_remaining = BlockRange {
@@ -1646,7 +1700,15 @@ mod tests {
             "Replaced content.".to_string(),
         )
         .unwrap();
-        assert_eq!(after_replace.ast.len(), 1);
+        assert_eq!(after_replace.state.ast.len(), 1);
+        assert_eq!(
+            after_replace.caret,
+            RangeEditCaret::Block {
+                block_path: vec![0],
+                source_offset_utf16: "Replaced content.".encode_utf16().count(),
+            },
+            "the wrapper must expose the Core-derived caret with its state"
+        );
         assert_eq!(
             get_block_source("ranges".to_string(), vec![0]).unwrap(),
             "Replaced content.\n",

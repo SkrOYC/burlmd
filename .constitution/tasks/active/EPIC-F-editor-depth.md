@@ -521,3 +521,14 @@ Given `BURLMD_SMOKE_F007=1`
 When the smoke harness captures `f007-range-editing`
 Then it succeeds only after the staged type-over, delete, paste, and Core-returned-caret readiness marker is present
 ```
+
+##### [EDIT-F007] Deviations & Justifications
+- `.constitution/tech-spec/contracts/ffi_api.rs` and
+  `.constitution/tech-spec/changelog.md` — Core work established that a range
+  mutation must return the indivisible `RangeEditResult { state, caret }`,
+  including a UTF-16 `Block` caret or a `Phantom` insertion index. These two
+  Stage 3 records clarify that implemented boundary and its rationale; they do
+  not alter any upstream product, architecture, or ticket scope.
+- No other modified implementation, generated-binding, test, smoke, or Rust
+  file is outside EDIT-F007's declared in-scope list. This task-plan entry is
+  the required scope-closeout record for the two documentation files above.
