@@ -435,8 +435,9 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
       return KeyEventResult.handled;
     }
     final selection = _controller.selection;
-    if (event.logicalKey == LogicalKeyboardKey.enter ||
-        event.logicalKey == LogicalKeyboardKey.numpadEnter) {
+    if (event is KeyDownEvent &&
+        (event.logicalKey == LogicalKeyboardKey.enter ||
+            event.logicalKey == LogicalKeyboardKey.numpadEnter)) {
       // A non-collapsed selection is the platform's to delete first; the
       // user pressing Enter again then hits the collapsed path below.
       if (!selection.isCollapsed || widget.onEnter == null) {

@@ -1024,7 +1024,11 @@ class EditorState extends ConsumerState<Editor> {
         );
       });
     } catch (error) {
-      ref.read(editorErrorProvider.notifier).report(error);
+      // A merge refusal leaves the currently focused source untouched. Keep
+      // that field mounted so the user can revise or copy it, just like a
+      // refused per-keystroke write; replacing the whole editor here would
+      // discard the only visible representation of the blocked operation.
+      ref.read(keystrokeWriteFailureProvider.notifier).report(error);
     }
   }
 

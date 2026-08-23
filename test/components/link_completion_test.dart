@@ -301,6 +301,53 @@ void main() {
   );
 
   testWidgets(
+    'an Enter repeat after completion acceptance does not trigger structural Enter',
+    (tester) async {
+      final structuralEnters = <(String, int)>[];
+      final api = _CompletionApi((_) => [_existing('plan')]);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [rustApiProvider.overrideWithValue(api)],
+          child: MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: Scaffold(
+              body: BlockEditor(
+                noteId: 'source',
+                blockPath: const [0],
+                source: '[[p',
+                initialCaret: 3,
+                style: const TextStyle(fontSize: 16),
+                focusToken: 1,
+                onFocusLost: (_) {},
+                onCommitEligibilityChanged: (_, _) {},
+                onEnter: (source, caret) =>
+                    structuralEnters.add((source, caret)),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.byKey(const ValueKey('link-completion-0')), findsOneWidget);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+      await tester.sendKeyRepeatEvent(LogicalKeyboardKey.enter);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+
+      expect(structuralEnters, isEmpty);
+      expect(
+        tester.widget<EditableText>(find.byType(EditableText)).controller.text,
+        '[plan](</notes/plan.md>)',
+      );
+    },
+  );
+
+  testWidgets(
     'internal Links preserve nested styling, have ordered keyboard stops, and do not steal Block Enter',
     (tester) async {
       final calls = <String>[];

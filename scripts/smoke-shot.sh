@@ -53,6 +53,10 @@ rm -f "$SHOT"
 
 APP_PID=""
 READY_FILE=""
+SMOKE_STATE_DIR=""
+SMOKE_HOME=""
+SMOKE_DATA_HOME=""
+SMOKE_DB_PATH=""
 NOISE_A="$(mktemp /tmp/smoke-shot-noise-a.XXXXXX.ppm)"
 NOISE_B="$(mktemp /tmp/smoke-shot-noise-b.XXXXXX.ppm)"
 CANDIDATE="$(mktemp /tmp/smoke-shot-candidate.XXXXXX.ppm)"
@@ -68,6 +72,12 @@ cleanup() {
   fi
   rm -f "$NOISE_A" "$NOISE_B" "$CANDIDATE"
   [[ -z "$READY_FILE" ]] || rm -f "$READY_FILE"
+  # The smoke state directory is created with this exact /tmp prefix below.
+  # Keep cleanup limited to that validated, per-run directory: the harness
+  # must never remove a caller-selected HOME, XDG directory, or database.
+  if [[ -n "$SMOKE_STATE_DIR" && -d "$SMOKE_STATE_DIR" && "$SMOKE_STATE_DIR" == /tmp/burlmd-smoke-state.* ]]; then
+    rm -rf -- "$SMOKE_STATE_DIR"
+  fi
 }
 trap cleanup EXIT
 
@@ -127,6 +137,21 @@ DIFF_THRESHOLD=$(( noise_pixels * 3 + 20000 ))
 echo "[smoke-shot] desktop noise floor: ${noise_pixels} px; render threshold: ${DIFF_THRESHOLD} px"
 
 echo "[smoke-shot] launching $APP_BIN..."
+# Every smoke process gets a new, private home, XDG data tree, and index
+# database. Scenario staging deliberately creates/deletes fixture Notes, so
+# inheriting the developer's normal paths could otherwise alter a real
+# Workspace. Use a fixed absolute mktemp template and validate its result
+# before any recursive cleanup is ever allowed to target it.
+SMOKE_STATE_DIR="$(mktemp -d /tmp/burlmd-smoke-state.XXXXXX)" \
+  || fail "could not create an isolated smoke state directory"
+[[ -d "$SMOKE_STATE_DIR" && "$SMOKE_STATE_DIR" == /tmp/burlmd-smoke-state.* ]] \
+  || fail "isolated smoke state directory failed validation"
+SMOKE_HOME="$SMOKE_STATE_DIR/home"
+SMOKE_DATA_HOME="$SMOKE_STATE_DIR/data"
+SMOKE_DB_PATH="$SMOKE_STATE_DIR/index.sqlite3"
+mkdir -p -- "$SMOKE_HOME" "$SMOKE_DATA_HOME" \
+  || fail "could not initialize isolated smoke state"
+
 # No separate "did it start" wait exists here, deliberately: `kill -0` on a
 # freshly backgrounded PID succeeds immediately whether or not exec worked,
 # so such a loop would detect nothing. A process that dies at startup is
@@ -150,10 +175,17 @@ if [[ "${BURLMD_SMOKE_F002:-}" == "1" || "${BURLMD_SMOKE_F003:-}" == "1" || "${B
 fi
 if (( ${#SCENARIO_ENV[@]} > 0 )); then
   echo "[smoke-shot] staging scenario env: ${SCENARIO_ENV[*]}"
-  env "${SCENARIO_ENV[@]}" "$APP_BIN" &
-else
-  "$APP_BIN" &
 fi
+# Specify the isolated paths after the caller-provided scenario variables so
+# they cannot be overridden by inherited state. BURLMD_SMOKE_ISOLATED also
+# makes main.dart refuse direct scenario launches that would touch a real
+# Workspace before Rust initialization.
+env "${SCENARIO_ENV[@]}" \
+  "BURLMD_SMOKE_ISOLATED=1" \
+  "HOME=$SMOKE_HOME" \
+  "XDG_DATA_HOME=$SMOKE_DATA_HOME" \
+  "BURLMD_DB_PATH=$SMOKE_DB_PATH" \
+  "$APP_BIN" &
 APP_PID=$!
 
 echo "[smoke-shot] waiting for the window to render..."
