@@ -102,6 +102,22 @@ class _CoreFake extends RustApi {
   }
 
   @override
+  StructuralEdit continueBlockAfter(
+    String noteId,
+    List<int> blockPath,
+    String source,
+  ) {
+    final index = blocks.isEmpty ? 0 : blockPath.first + 1;
+    calls.add('insert:$index:$source');
+    blocks.insert(index, source);
+    return StructuralEdit(
+      state: state,
+      blockPath: Uint64List.fromList([index]),
+      caretOffset: BigInt.from(source.length),
+    );
+  }
+
+  @override
   NoteState splitBlock(String noteId, List<int> blockPath, int offset) {
     calls.add('split:${blockPath.first}:$offset');
     final block = blocks[blockPath.first];
@@ -179,7 +195,7 @@ class _NestedListFake extends RustApi {
       sources[path.join('/')]!;
 
   @override
-  StructuralEdit insertListItemAfter(
+  StructuralEdit continueBlockAfter(
     String noteId,
     List<int> path,
     String source,
@@ -203,6 +219,73 @@ class _NestedListFake extends RustApi {
 
   @override
   void updateBlock(String noteId, List<int> path, String source) {
+    if (path.length != 3) {
+      throw StateError('container write requested at $path');
+    }
+    sources[path.join('/')] = source;
+  }
+}
+
+/// A quote fixture whose editable leaves are distinct from its container.
+/// It deliberately exposes only the generic continuation API: a list-only
+/// dispatch or a container write fails before it can hide a wrong path.
+class _NestedBlockquoteFake extends RustApi {
+  final calls = <String>[];
+  final sources = <String, String>{'0/0': '> alpha\n', '1': 'middle\n'};
+
+  NoteState get state => NoteState(
+    ast: [
+      AstNode.blockquote(nodes: [_paragraph('alpha')]),
+      _paragraph('middle'),
+      _paragraph('beta'),
+    ],
+    metadata: _CoreFake._meta,
+    baseRevision: 'head',
+    restoredFromDraft: false,
+  );
+
+  @override
+  BlockCaret resolveBlockCaret(
+    String noteId,
+    List<int> topLevelPath,
+    int offset,
+  ) => BlockCaret(
+    blockPath: Uint64List.fromList([0, 0]),
+    caretOffset: BigInt.zero,
+  );
+
+  @override
+  String getBlockSource(String noteId, List<int> path) {
+    final source = sources[path.join('/')];
+    if (source == null) {
+      throw StateError('container source requested at $path');
+    }
+    return source;
+  }
+
+  @override
+  StructuralEdit continueBlockAfter(
+    String noteId,
+    List<int> path,
+    String source,
+  ) {
+    if (path.join('/') != '0/0') {
+      throw StateError('continuation must receive the quote leaf, got $path');
+    }
+    calls.add('continue:${path.join('/')}:$source');
+    sources['1'] = '$source\n';
+    return StructuralEdit(
+      state: state,
+      blockPath: Uint64List.fromList([1]),
+      caretOffset: BigInt.from(source.length),
+    );
+  }
+
+  @override
+  void updateBlock(String noteId, List<int> path, String source) {
+    if (path.join('/') == '0') {
+      throw StateError('container write requested at $path');
+    }
     sources[path.join('/')] = source;
   }
 }
@@ -419,6 +502,18 @@ void main() {
     expect(_field(tester).controller.selection.baseOffset, 0);
   });
 
+  testWidgets('Enter classifies the live field value, not its stale promoted '
+      'source', (tester) async {
+    final api = _CoreFake(['a']);
+    await pumpEditor(tester, [_paragraph('a')], api: api);
+    await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
+    await tester.enterText(_writableFields().first, 'abc');
+    await placeCaret(tester, 1);
+    await pressKey(tester, LogicalKeyboardKey.enter);
+
+    expect(api.calls.where((call) => call.startsWith('split')), ['split:0:1']);
+  });
+
   // -- CAP-EDIT-03: Backspace at start merges / no-ops ---------------------
 
   testWidgets('Backspace at the start of a non-first Block merges it into '
@@ -600,6 +695,22 @@ void main() {
 
     expect(api.calls, ['insert:0/0/0:middle']);
     expect(_field(tester).controller.text, 'middle');
+    expect(_field(tester).controller.selection.baseOffset, 'middle'.length);
+  });
+
+  testWidgets('Enter at a nested blockquote leaf lets Core exit the quote and '
+      'focus its returned top-level leaf', (tester) async {
+    final api = _NestedBlockquoteFake();
+    await pumpEditor(tester, api.state.ast, api: api);
+
+    await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
+    await placeCaret(tester, '> alpha\n'.length);
+    await pressKey(tester, LogicalKeyboardKey.enter);
+    await tester.enterText(_writableFields().first, 'middle');
+    await tester.pump();
+
+    expect(api.calls, ['continue:0/0:middle']);
+    expect(_field(tester).controller.text, 'middle\n');
     expect(_field(tester).controller.selection.baseOffset, 'middle'.length);
   });
 

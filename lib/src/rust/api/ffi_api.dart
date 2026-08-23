@@ -346,15 +346,16 @@ NoteState mergeBlockWithPrevious({
   blockPath: blockPath,
 );
 
-/// Inserts a sibling list item after an editable descendant. This is the
-/// nested-Enter counterpart to `insert_block`: unlike a general new Block it
-/// deliberately preserves the containing list and returns Core's post-reparse
-/// focus target.
-StructuralEdit insertListItemAfter({
+/// Continues after an editable leaf, returning Core's post-reparse focus
+/// target. Core, rather than Flutter's widget-path shape, inspects the AST:
+/// a leaf in a List gets a sibling ListItem; every other leaf gets an
+/// independent Block after its top-level container (so a Blockquote leaf exits
+/// the quote).
+StructuralEdit continueBlockAfter({
   required String noteId,
   required Uint64List blockPath,
   required String source,
-}) => RustLib.instance.api.crateApiFfiApiInsertListItemAfter(
+}) => RustLib.instance.api.crateApiFfiApiContinueBlockAfter(
   noteId: noteId,
   blockPath: blockPath,
   source: source,

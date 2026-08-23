@@ -750,12 +750,30 @@ pub fn split_block(
     unimplemented!()
 }
 
-/// Inserts a sibling item after a leaf inside a List, preserving that List's
-/// Markdown container. The returned [StructuralEdit] is authoritative after
-/// reparse: it names the new editable leaf and its UTF-16 caret, so Flutter
-/// does not infer a nested sibling path.
+/// The Core-owned postcondition of a structural edit that preserves editing
+/// focus. `state` is the authoritative reparse result; `block_path` names an
+/// editable leaf in that result; and `caret_offset` is Flutter UTF-16. Dart
+/// must use this result rather than predict sibling paths after a reparse.
+#[frb]
+pub struct StructuralEdit {
+    pub state: NoteState,
+    pub block_path: Vec<usize>,
+    pub caret_offset: usize,
+}
+
+/// Continues after an editable leaf. The returned [StructuralEdit] is
+/// authoritative after reparse: it names the new editable leaf and its UTF-16
+/// caret, so Flutter does not infer a path from nested widget layout.
+///
+/// Core inspects the AST/container context. A leaf in a List receives a
+/// sibling ListItem, preserving that List and its marker. Any other leaf gets
+/// an independent Block after its top-level ancestor: a Blockquote leaf
+/// therefore exits the quote into an adjacent top-level paragraph. `[0]` is
+/// the empty-Note sentinel and creates the first top-level Block. Presentation
+/// supplies only the actual editable leaf path and source; it must never
+/// select a structural behavior from the path length.
 #[frb(sync)]
-pub fn insert_list_item_after(
+pub fn continue_block_after(
     note_id: String,
     block_path: Vec<usize>,
     source: String,

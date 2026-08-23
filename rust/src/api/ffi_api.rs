@@ -469,18 +469,18 @@ pub fn merge_block_with_previous(
     open_session(&note_id)?.merge_block_with_previous(&block_path)
 }
 
-/// Inserts a sibling list item after an editable descendant. This is the
-/// nested-Enter counterpart to `insert_block`: unlike a general new Block it
-/// deliberately preserves the containing list and returns Core's post-reparse
-/// focus target.
+/// Continues after an editable leaf, returning Core's post-reparse focus
+/// target. Core, rather than Flutter's widget-path shape, inspects the AST:
+/// a leaf in a List gets a sibling ListItem; every other leaf gets an
+/// independent Block after its top-level container (so a Blockquote leaf exits
+/// the quote).
 #[frb(sync)]
-pub fn insert_list_item_after(
+pub fn continue_block_after(
     note_id: String,
     block_path: Vec<usize>,
     source: String,
 ) -> Result<StructuralEdit, AppError> {
-    let (state, block_path) =
-        open_session(&note_id)?.insert_list_item_after(&block_path, &source)?;
+    let (state, block_path) = open_session(&note_id)?.continue_block_after(&block_path, &source)?;
     Ok(StructuralEdit {
         state,
         block_path,
