@@ -429,7 +429,8 @@ pub struct StructuralEdit {
     pub caret_offset: usize,
     /// Present only when the edit removed the raw field entirely. This opaque
     /// Core-owned slot can sit inside a List or Blockquote as well as before a
-    /// surviving top-level sibling; Presentation returns it unchanged to
+    /// surviving top-level sibling; it is bound to this returned Note identity
+    /// and source, so Presentation returns it unchanged to
     /// `continue_block_at_insertion_slot`.
     pub phantom_insertion_slot: Option<StructuralEditInsertionSlot>,
 }
@@ -568,7 +569,9 @@ pub fn replace_selection_and_split_block(
 
 /// Materializes a Core-returned empty editor slot. Unlike continuing after a
 /// leaf, this inserts *at* the slot, so full selection in a non-final Block
-/// cannot append after its surviving sibling.
+/// cannot append after its surviving sibling. Core refuses a slot after its
+/// returned Note identity or source changes; no source, draft, or edit state
+/// is changed on that refusal.
 #[frb(sync)]
 pub fn continue_block_at_insertion_slot(
     note_id: String,

@@ -2114,12 +2114,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 3)
-      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    if (arr.length != 5)
+      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
     return StructuralEditInsertionSlot(
       sourceOffset: dco_decode_usize(arr[0]),
       linePrefix: dco_decode_String(arr[1]),
       requiredAfterNewlines: dco_decode_usize(arr[2]),
+      noteId: dco_decode_String(arr[3]),
+      sourceFingerprint: dco_decode_String(arr[4]),
     );
   }
 
@@ -2848,10 +2850,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_sourceOffset = sse_decode_usize(deserializer);
     var var_linePrefix = sse_decode_String(deserializer);
     var var_requiredAfterNewlines = sse_decode_usize(deserializer);
+    var var_noteId = sse_decode_String(deserializer);
+    var var_sourceFingerprint = sse_decode_String(deserializer);
     return StructuralEditInsertionSlot(
       sourceOffset: var_sourceOffset,
       linePrefix: var_linePrefix,
       requiredAfterNewlines: var_requiredAfterNewlines,
+      noteId: var_noteId,
+      sourceFingerprint: var_sourceFingerprint,
     );
   }
 
@@ -3547,6 +3553,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_usize(self.sourceOffset, serializer);
     sse_encode_String(self.linePrefix, serializer);
     sse_encode_usize(self.requiredAfterNewlines, serializer);
+    sse_encode_String(self.noteId, serializer);
+    sse_encode_String(self.sourceFingerprint, serializer);
   }
 
   @protected
