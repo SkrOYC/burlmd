@@ -1,5 +1,22 @@
 # Stage 3: Technical Implementation Changelog
 
+## v1.5.0
+Retroactive contract correction for **EDIT-F002 Live Preview Block Promotion**.
+Minor bump: adds the synchronous `resolve_block_caret` FFI surface and its
+strong `BlockCaret` result; existing calls retain their signatures.
+
+- `BlockCaret` returns the editable leaf `block_path` and its raw-source caret
+  offset in Flutter UTF-16 code units. `resolve_block_caret` accepts exactly a
+  top-level Block path plus canonical rendered UTF-16 coordinate, rejects a
+  surrogate interior, and resolves through Core's existing span map.
+- The Presentation Container supplies only laid-out rendered geometry. It no
+  longer estimates raw offsets from delimiters, HTML entities, escapes, or
+  link destinations, and it replaces only the resolved nested leaf while its
+  list/blockquote container and siblings remain formatted.
+- The F002 smoke command now requires `BURLMD_SMOKE_F002=1` and verifies a
+  readiness signal emitted only after the staged note is open and its raw
+  field is promoted; a generic Workspace screenshot cannot satisfy it.
+
 ## v1.4.2
 Independent-review correction to **SPK-EDIT-F001**. Patch bump: no decision or FFI signature changed.
 

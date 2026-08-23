@@ -64,6 +64,27 @@ Future<WorkspaceInfo> openWorkspace({required String path}) =>
 /// write waits on — for the whole of it, which `SPK-WSPC-D001` §6.2.7 forbids.
 /// `scan_bundle` derives the rows with nothing held; `write_scanned_bundle` is
 /// SQL only.
+///
+/// **Both phases run under the lifecycle lock**, because splitting them opened
+/// an O(bundle) window between the snapshot and the write. A `rename_note`
+/// completing inside it has already moved the file and rewritten its rows, but
+/// the scan in flight was taken before the move — so the write phase reinstates
+/// the old concept id, drops the new one, and leaves the index naming a file
+/// that no longer exists. `write_scanned_bundle` is one transaction, so the two
+/// never interleave *mid-write*; what needed serializing is scan-against-write,
+/// which is what a lock spanning both gives.
+///
+/// The order holds: this is the topmost of `workspace::persist`'s four locks,
+/// and the only other lock either phase takes is the connection, which is the
+/// bottom one — `scan_bundle` walks the filesystem with nothing held at all
+/// (`index::scan`'s own documentation on why it must not run inside a
+/// connection closure), and `write_scanned_bundle` takes the connection
+/// beneath this. Nothing here reaches back up.
+///
+/// The lock is **not reentrant**, so the ticket that finally wires
+/// `SyncDeps::reindex` to this must dispatch it from the scheduler rather than
+/// from inside a lifecycle operation. Nothing does today: `bootstrap::converge`
+/// runs its own scan-and-rebuild and does not route through here.
 Future<int> reindexWorkspace() =>
     RustLib.instance.api.crateApiFfiApiReindexWorkspace();
 
@@ -235,6 +256,22 @@ String getBlockSource({
   blockPath: blockPath,
 );
 
+/// Resolves a rendered pointer position synchronously through the Core span
+/// map. `top_level_path` contains exactly one top-level Block index and
+/// `rendered_utf16_offset` is Flutter's `TextPosition.offset` in the Core's
+/// canonical rendered string for that Block. Invalid offsets (including one
+/// splitting a surrogate pair) return `ParseError` rather than silently
+/// rounding to a different character.
+BlockCaret resolveBlockCaret({
+  required String noteId,
+  required Uint64List topLevelPath,
+  required BigInt renderedUtf16Offset,
+}) => RustLib.instance.api.crateApiFfiApiResolveBlockCaret(
+  noteId: noteId,
+  topLevelPath: topLevelPath,
+  renderedUtf16Offset: renderedUtf16Offset,
+);
+
 /// The per-keystroke call (ADR-007 decision 4, ADR-008 tier 1): substitutes
 /// `new_source` into the Note's working source over the focused Block's
 /// span, adjusts the span map arithmetically, and writes the draft row. Does
@@ -383,8 +420,34 @@ Future<List<NoteMetadata>> backlinks({required String noteId}) =>
 Future<List<TreeNode>> workspaceTree() =>
     RustLib.instance.api.crateApiFfiApiWorkspaceTree();
 
-/// A selection spanning one or more Blocks, expressed as character offsets
-/// into each Block's **rendered** text (ADR-006 decision 3). See
+/// One pointer-resolved raw-source caret. Both fields use Flutter UTF-16 code
+/// units: `block_path` is the actual editable leaf, and `caret_offset` is an
+/// offset into that leaf's raw Markdown source. The input path to
+/// [`resolve_block_caret`] is top-level only, so Dart never infers a nested
+/// path from widget layout or Markdown punctuation.
+class BlockCaret {
+  final Uint64List blockPath;
+  final BigInt caretOffset;
+
+  const BlockCaret({required this.blockPath, required this.caretOffset});
+
+  @override
+  int get hashCode => blockPath.hashCode ^ caretOffset.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BlockCaret &&
+          runtimeType == other.runtimeType &&
+          blockPath == other.blockPath &&
+          caretOffset == other.caretOffset;
+}
+
+/// A selection spanning one or more unfocused Blocks, expressed as character
+/// offsets into each Block's **rendered** text (ADR-006 decision 3). A caller
+/// must blur and commit any focused Block, then establish a fresh rendered
+/// selection before calling a range operation; this API never accepts raw
+/// focused-field offsets or a range over an uncommitted span map. See
 /// `contracts/ffi_api.rs` for the per-`AstNode`-variant definition of
 /// "rendered text" these offsets are into.
 class BlockRange {

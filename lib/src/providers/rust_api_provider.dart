@@ -10,7 +10,7 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart'
     show Uint64List;
 
 export 'package:burlmd/src/rust/api/auth.dart' show OAuthFlowStart;
-export 'package:burlmd/src/rust/api/ffi_api.dart' show BlockRange;
+export 'package:burlmd/src/rust/api/ffi_api.dart' show BlockCaret, BlockRange;
 export 'package:burlmd/src/rust/index/query.dart' show LinkCompletion, TreeNode;
 export 'package:burlmd/src/rust/workspace/bootstrap.dart' show WorkspaceInfo;
 export 'package:burlmd/src/rust/workspace/lifecycle.dart'
@@ -89,6 +89,20 @@ class RustApi {
         noteId: noteId,
         blockPath: Uint64List.fromList(blockPath),
       );
+
+  /// Resolves a pointer coordinate in a top-level formatted Block through the
+  /// Core span map. [renderedUtf16Offset] and [BlockCaret.caretOffset] are
+  /// Flutter UTF-16 code-unit offsets; the returned path always names the
+  /// actual editable leaf, including inside list and quote containers.
+  ffi.BlockCaret resolveBlockCaret(
+    String noteId,
+    List<int> topLevelPath,
+    int renderedUtf16Offset,
+  ) => ffi.resolveBlockCaret(
+    noteId: noteId,
+    topLevelPath: Uint64List.fromList(topLevelPath),
+    renderedUtf16Offset: BigInt.from(renderedUtf16Offset),
+  );
 
   /// The per-keystroke call (ADR-007 decision 4, ADR-008 tier 1): buffers
   /// `newSource` into the Note's working source and writes the draft row.

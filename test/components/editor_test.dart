@@ -11,6 +11,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart'
     show RenderBox, RenderEditable, RenderObject, RenderParagraph;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart'
+    show Uint64List;
 import 'package:flutter_test/flutter_test.dart';
 
 /// A [NoteController] whose initial state is fixed at construction, so tests
@@ -37,7 +39,9 @@ class _FixedNoteController extends NoteController {
 /// - `commit_block` on blur — records the committed path, counts calls, and
 ///   returns a caller-supplied authoritative [NoteState].
 class _FakeRustApi extends RustApi {
-  _FakeRustApi();
+  _FakeRustApi({this.failContainerPaths = false});
+
+  final bool failContainerPaths;
 
   String? lastNoteId;
   List<int>? lastBlockPath;
@@ -52,6 +56,24 @@ class _FakeRustApi extends RustApi {
   // they cannot be map keys.
   final Map<String, String> sources = {};
 
+  /// Pointer-resolution replies keyed by the top-level path. Tests that do
+  /// not care about nesting get the identity leaf and the supplied UTF-16
+  /// rendered coordinate, while nested-promotion tests must declare the
+  /// Core-owned answer explicitly.
+  final Map<String, BlockCaret> resolvedCarets = {};
+
+  @override
+  BlockCaret resolveBlockCaret(
+    String noteId,
+    List<int> topLevelPath,
+    int renderedUtf16Offset,
+  ) =>
+      resolvedCarets[topLevelPath.join('/')] ??
+      BlockCaret(
+        blockPath: Uint64List.fromList(topLevelPath),
+        caretOffset: BigInt.from(renderedUtf16Offset),
+      );
+
   /// The authoritative state [commitBlock] returns.
   NoteState? commitResult;
 
@@ -62,6 +84,9 @@ class _FakeRustApi extends RustApi {
 
   @override
   void updateBlock(String noteId, List<int> blockPath, String newSource) {
+    if (failContainerPaths && blockPath.length == 1) {
+      throw StateError('Core refuses container paths: $blockPath');
+    }
     lastNoteId = noteId;
     lastBlockPath = blockPath;
     lastSource = newSource;
@@ -672,6 +697,57 @@ void main() {
           'the raw `- ` marker may shift its glyphs, but not the Block slot',
     );
     expect(focused.size, before.size);
+  });
+
+  testWidgets('a nested list leaf is promoted and edited through its leaf '
+      'path, never the Core-refused container path', (tester) async {
+    final api = _FakeRustApi(failContainerPaths: true)
+      ..sources['0/0/0'] = 'first item'
+      ..resolvedCarets['0'] = BlockCaret(
+        blockPath: Uint64List.fromList([0, 0, 0]),
+        caretOffset: BigInt.from(2),
+      );
+    await pumpEditor(tester, [
+      AstNode.list(
+        ordered: false,
+        items: [
+          AstNode.listItem(content: [_plainParagraph('first item')]),
+          AstNode.listItem(content: [_plainParagraph('formatted sibling')]),
+        ],
+      ),
+    ], api: api);
+
+    await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
+    expect(_field(tester).controller.text, 'first item');
+    expect(find.text('formatted sibling'), findsOneWidget);
+    expect(_field(tester).controller.selection.baseOffset, 2);
+
+    await tester.enterText(find.byType(EditableText), 'edited item');
+    await tester.pump();
+
+    expect(api.lastBlockPath, [0, 0, 0]);
+    expect(api.lastSource, 'edited item');
+  });
+
+  testWidgets('a nested blockquote leaf is promoted through its leaf path', (
+    tester,
+  ) async {
+    final api = _FakeRustApi(failContainerPaths: true)
+      ..sources['0/0'] = 'quoted leaf'
+      ..resolvedCarets['0'] = BlockCaret(
+        blockPath: Uint64List.fromList([0, 0]),
+        caretOffset: BigInt.one,
+      );
+    await pumpEditor(tester, [
+      AstNode.blockquote(nodes: [_plainParagraph('quoted leaf')]),
+    ], api: api);
+
+    await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
+    await tester.enterText(find.byType(EditableText), 'edited quote');
+    await tester.pump();
+
+    expect(api.lastBlockPath, [0, 0]);
+    expect(api.lastSource, 'edited quote');
   });
 
   // -- Blur commits, focus re-derived from the returned state --------------

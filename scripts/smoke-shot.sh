@@ -52,6 +52,7 @@ mkdir -p "$QA_DIR"
 rm -f "$SHOT"
 
 APP_PID=""
+READY_FILE=""
 NOISE_A="$(mktemp /tmp/smoke-shot-noise-a.XXXXXX.ppm)"
 NOISE_B="$(mktemp /tmp/smoke-shot-noise-b.XXXXXX.ppm)"
 CANDIDATE="$(mktemp /tmp/smoke-shot-candidate.XXXXXX.ppm)"
@@ -66,6 +67,7 @@ cleanup() {
     kill -9 "$APP_PID" 2>/dev/null || true
   fi
   rm -f "$NOISE_A" "$NOISE_B" "$CANDIDATE"
+  [[ -z "$READY_FILE" ]] || rm -f "$READY_FILE"
 }
 trap cleanup EXIT
 
@@ -141,6 +143,11 @@ SCENARIO_ENV=()
 while IFS='=' read -r entry; do
   SCENARIO_ENV+=("$entry")
 done < <(env | grep '^BURLMD_SMOKE')
+if [[ "${BURLMD_SMOKE_F002:-}" == "1" ]]; then
+  READY_FILE="$(mktemp /tmp/burlmd-f002-ready.XXXXXX)"
+  rm -f "$READY_FILE"
+  SCENARIO_ENV+=("BURLMD_SMOKE_READY_FILE=$READY_FILE")
+fi
 if (( ${#SCENARIO_ENV[@]} > 0 )); then
   echo "[smoke-shot] staging scenario env: ${SCENARIO_ENV[*]}"
   env "${SCENARIO_ENV[@]}" "$APP_BIN" &
@@ -174,6 +181,12 @@ sleep "$SETTLE_SECONDS"
 
 if ! kill -0 "$APP_PID" 2>/dev/null; then
   fail "application exited during settle period"
+fi
+
+if [[ "${BURLMD_SMOKE_F002:-}" == "1" ]]; then
+  [[ -s "$READY_FILE" ]] || fail "F002 scenario never reached focused raw-source readiness"
+  [[ "$(<"$READY_FILE")" == "f002-focused-raw-source" ]] \
+    || fail "F002 scenario readiness marker was invalid"
 fi
 
 grim "$SHOT" >/dev/null 2>&1 || fail "final grim capture failed"

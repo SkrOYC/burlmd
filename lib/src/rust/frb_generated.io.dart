@@ -36,6 +36,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   AstNode dco_decode_ast_node(dynamic raw);
 
   @protected
+  BlockCaret dco_decode_block_caret(dynamic raw);
+
+  @protected
   BlockRange dco_decode_block_range(dynamic raw);
 
   @protected
@@ -159,6 +162,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   AstNode sse_decode_ast_node(SseDeserializer deserializer);
+
+  @protected
+  BlockCaret sse_decode_block_caret(SseDeserializer deserializer);
 
   @protected
   BlockRange sse_decode_block_range(SseDeserializer deserializer);
@@ -293,6 +299,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_ast_node(AstNode self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_block_caret(BlockCaret self, SseSerializer serializer);
 
   @protected
   void sse_encode_block_range(BlockRange self, SseSerializer serializer);

@@ -7,6 +7,8 @@ import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart'
+    show Uint64List;
 import 'package:flutter_test/flutter_test.dart';
 
 /// CAP-EDIT-04 (`EDIT-F003`): cross-Block selection over ONE region, with
@@ -48,6 +50,16 @@ class _FakeRustApi extends RustApi {
 
   /// The authoritative state [commitBlock] returns on blur.
   NoteState? commitResult;
+
+  @override
+  BlockCaret resolveBlockCaret(
+    String noteId,
+    List<int> topLevelPath,
+    int renderedUtf16Offset,
+  ) => BlockCaret(
+    blockPath: Uint64List.fromList(topLevelPath),
+    caretOffset: BigInt.from(renderedUtf16Offset),
+  );
 
   @override
   String copyRangeAsMarkdown(String noteId, BlockRange range) {

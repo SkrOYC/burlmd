@@ -607,6 +607,37 @@ pub fn get_block_source(note_id: String, block_path: Vec<usize>) -> Result<Strin
     unimplemented!()
 }
 
+/// A pointer-resolved raw-source caret for Live Preview promotion.
+///
+/// `block_path` is the actual editable **leaf** Block path, which may be
+/// nested beneath the supplied top-level container. `caret_offset` is an
+/// offset into that leaf's raw Markdown source. Both offsets crossing this
+/// boundary use Flutter UTF-16 code units — never Rust bytes or Unicode
+/// scalar counts. A value splitting a surrogate pair is invalid and returns
+/// `ParseError`; it is never rounded to a neighboring scalar.
+#[frb]
+pub struct BlockCaret {
+    pub block_path: Vec<usize>,
+    pub caret_offset: usize,
+}
+
+/// Resolves a rendered pointer coordinate synchronously through the Core span
+/// map for Live Preview promotion (`CAP-EDIT-01`). `top_level_path` contains
+/// exactly one top-level Block index. `rendered_utf16_offset` is Flutter's
+/// `TextPosition.offset` in that Block's canonical rendered string — the same
+/// per-variant string `BlockRange` defines below. The Core returns the leaf
+/// path and raw-source UTF-16 caret in [`BlockCaret`], so Presentation never
+/// infers Markdown delimiter widths, entity spellings, link destinations, or
+/// nested container paths from widget layout.
+#[frb(sync)]
+pub fn resolve_block_caret(
+    note_id: String,
+    top_level_path: Vec<usize>,
+    rendered_utf16_offset: usize,
+) -> Result<BlockCaret, AppError> {
+    unimplemented!()
+}
+
 /// Records the focused Block's current source text. This is the per-keystroke
 /// call, and it is deliberately cheap: it substitutes the text into the
 /// in-memory note source and writes the resulting `drafts` row (ADR-008
