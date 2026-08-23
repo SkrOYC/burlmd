@@ -19,6 +19,10 @@ class LinkCompletion {
   /// assembles a link target and cannot produce a non-conformant one — an
   /// ordinary multi-word title produces a path containing a space, and the
   /// unwrapped form of that is not a link at all.
+  ///
+  /// The link *text* is [`LinkCompletion::title`] with every whitespace run
+  /// folded to a single space, so the two are not always byte-identical —
+  /// see [`link_completions_impl`] for why the promise above requires it.
   final String insertText;
 
   const LinkCompletion({

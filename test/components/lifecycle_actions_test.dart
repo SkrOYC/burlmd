@@ -9,6 +9,8 @@ import 'package:burlmd/src/rust/error.dart';
 import 'package:burlmd/src/rust/markdown/ast.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart'
+    show Uint64List;
 import 'package:flutter_test/flutter_test.dart';
 
 /// A [RustApi] standing in for the Core's lifecycle surface. Everything the
@@ -56,6 +58,16 @@ class _LifecycleApi extends RustApi {
 
   /// What [commitBlock] returns; unset means commits are unexpected.
   NoteState? commitBlockResult;
+
+  @override
+  BlockCaret resolveBlockCaret(
+    String noteId,
+    List<int> topLevelPath,
+    int renderedUtf16Offset,
+  ) => BlockCaret(
+    blockPath: Uint64List.fromList(topLevelPath),
+    caretOffset: BigInt.from(renderedUtf16Offset),
+  );
 
   @override
   String getBlockSource(String noteId, List<int> blockPath) {

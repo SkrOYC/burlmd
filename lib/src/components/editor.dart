@@ -225,29 +225,22 @@ class EditorState extends ConsumerState<Editor> {
     // `isPhantom` guard keeps the two identities apart.
     if (focused != null &&
         !focused.isPhantom &&
-        _pathEquals(focused.path, path)) {
-      // The invisible baseline is the complete formatted Block (including
-      // any code pane, quote border, or list marker) exactly once. The
-      // positioned editor receives its matching decoration exactly once too;
-      // wrapping the slot itself would decorate the baseline a second time
-      // and reserve the wrong geometry.
-      return blockPromotionSlot(
+        _pathStartsWith(focused.path, path)) {
+      return renderBlockWithFocusedLeaf(
         note.ast[index],
-        blockContainer(
-          note.ast[index],
-          BlockEditor(
-            key: ValueKey('edit-$index'),
-            noteId: note.metadata.id,
-            blockPath: path,
-            source: focused.source,
-            initialCaret: focused.caret,
-            style: blockTextStyle(note.ast[index]),
-            resyncToken: focused.resyncToken,
-            focusToken: focused.token,
-            onEnter: (caret) => _handleEnterRequested(path, caret),
-            onBackspaceAtStart: () => _handleBackspaceAtStart(path),
-            onFocusLost: _handleFieldBlur,
-          ),
+        focused.path.sublist(path.length),
+        (leaf) => BlockEditor(
+          key: ValueKey('edit-${focused.path.join('-')}'),
+          noteId: note.metadata.id,
+          blockPath: focused.path,
+          source: focused.source,
+          initialCaret: focused.caret,
+          style: blockTextStyle(leaf),
+          resyncToken: focused.resyncToken,
+          focusToken: focused.token,
+          onEnter: (caret) => _handleEnterRequested(focused.path, caret),
+          onBackspaceAtStart: () => _handleBackspaceAtStart(focused.path),
+          onFocusLost: _handleFieldBlur,
         ),
       );
     }
@@ -270,15 +263,15 @@ class EditorState extends ConsumerState<Editor> {
     );
   }
 
-  /// Promotes [blockPath] to the raw editable field with the caret at
-  /// [caret] — the source offset the user clicked, resolved by [BlockView].
-  void _promote(List<int> blockPath, int caret) {
+  /// Promotes the Core-resolved editable leaf for a top-level rendered
+  /// coordinate. Flutter never estimates source punctuation or nested paths.
+  void _promote(List<int> topLevelPath, int renderedUtf16Offset) {
     // A phantom focus shares its numeric path with a real Block (both name
     // the same index), so the phantom must never satisfy this early-out —
     // clicking a Block while a phantom is open promotes that Block.
     if (_focused != null &&
         !_focused!.isPhantom &&
-        _pathEquals(_focused!.path, blockPath)) {
+        _pathEquals(_focused!.path, topLevelPath)) {
       return;
     }
     // Moving focus between Blocks commits the outgoing one first: its last
@@ -286,11 +279,20 @@ class EditorState extends ConsumerState<Editor> {
     // reads the Note, and blur is the commit point (ADR-006, ADR-008).
     if (_focused != null) _commitFocused();
     final note = ref.read(activeNoteProvider);
-    if (note == null || blockPath.first >= note.ast.length) return;
+    if (note == null ||
+        topLevelPath.length != 1 ||
+        topLevelPath.first >= note.ast.length) {
+      return;
+    }
     try {
-      final source = ref
-          .read(rustApiProvider)
-          .getBlockSource(note.metadata.id, blockPath);
+      final api = ref.read(rustApiProvider);
+      final caret = api.resolveBlockCaret(
+        note.metadata.id,
+        topLevelPath,
+        renderedUtf16Offset,
+      );
+      final path = caret.blockPath.map((part) => part.toInt()).toList();
+      final source = api.getBlockSource(note.metadata.id, path);
       setState(() {
         // A SelectionArea can retain its last registered selection while this
         // entry is being replaced. It described the old rendered tree, so it
@@ -300,9 +302,9 @@ class EditorState extends ConsumerState<Editor> {
         _requiresFreshRenderedSelection = true;
         _focused = _Focus(
           noteId: note.metadata.id,
-          path: blockPath,
+          path: path,
           source: source,
-          caret: caret,
+          caret: caret.caretOffset.toInt(),
           lastSeenState: note,
         );
       });
@@ -365,6 +367,10 @@ class EditorState extends ConsumerState<Editor> {
 
   static bool _pathEquals(List<int> a, List<int> b) =>
       a.length == b.length && a.indexed.every((e) => b[e.$1] == e.$2);
+
+  static bool _pathStartsWith(List<int> path, List<int> prefix) =>
+      path.length >= prefix.length &&
+      prefix.indexed.every((entry) => path[entry.$1] == entry.$2);
 
   // -- Block creation, splitting and merging (EDIT-F004, CAP-EDIT-03) ------
   //
@@ -688,6 +694,15 @@ class EditorState extends ConsumerState<Editor> {
         _focused == null &&
         (ref.read(activeNoteProvider)?.ast.isNotEmpty ?? false)) {
       _promote([0], 'Intro with **bo'.length);
+      final readinessPath = Platform.environment['BURLMD_SMOKE_READY_FILE'];
+      if (_focused != null && readinessPath != null) {
+        try {
+          File(readinessPath).writeAsStringSync('f002-focused-raw-source\n');
+        } on FileSystemException {
+          // The marker is QA-only. The shell harness rejects a missing marker;
+          // normal editing must not fail if an externally supplied path is bad.
+        }
+      }
     }
   }
 

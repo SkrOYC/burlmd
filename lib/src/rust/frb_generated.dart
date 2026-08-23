@@ -74,7 +74,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.12.0';
 
   @override
-  int get rustContentHash => -1164637606;
+  int get rustContentHash => 1472975404;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -197,6 +197,12 @@ abstract class RustLibApi extends BaseApi {
     required String noteId,
     required BlockRange range,
     required String replacement,
+  });
+
+  BlockCaret crateApiFfiApiResolveBlockCaret({
+    required String noteId,
+    required Uint64List topLevelPath,
+    required BigInt renderedUtf16Offset,
   });
 
   Future<List<NoteMetadata>> crateApiFfiApiSearchNotes({
@@ -1129,6 +1135,38 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   );
 
   @override
+  BlockCaret crateApiFfiApiResolveBlockCaret({
+    required String noteId,
+    required Uint64List topLevelPath,
+    required BigInt renderedUtf16Offset,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(noteId, serializer);
+          sse_encode_list_prim_usize_strict(topLevelPath, serializer);
+          sse_encode_usize(renderedUtf16Offset, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 31)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_block_caret,
+          decodeErrorData: sse_decode_app_error,
+        ),
+        constMeta: kCrateApiFfiApiResolveBlockCaretConstMeta,
+        argValues: [noteId, topLevelPath, renderedUtf16Offset],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiFfiApiResolveBlockCaretConstMeta =>
+      const TaskConstMeta(
+        debugName: "resolve_block_caret",
+        argNames: ["noteId", "topLevelPath", "renderedUtf16Offset"],
+      );
+
+  @override
   Future<List<NoteMetadata>> crateApiFfiApiSearchNotes({
     required String query,
     required int limit,
@@ -1142,7 +1180,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 31,
+            funcId: 32,
             port: port_,
           );
         },
@@ -1175,7 +1213,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           sse_encode_String(noteId, serializer);
           sse_encode_list_prim_usize_strict(blockPath, serializer);
           sse_encode_usize(offset, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 32)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 33)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_note_state,
@@ -1206,7 +1244,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           sse_encode_String(noteId, serializer);
           sse_encode_list_prim_usize_strict(blockPath, serializer);
           sse_encode_String(newSource, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 33)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 34)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
@@ -1233,7 +1271,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 34,
+            funcId: 35,
             port: port_,
           );
         },
@@ -1338,6 +1376,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       default:
         throw Exception("unreachable");
     }
+  }
+
+  @protected
+  BlockCaret dco_decode_block_caret(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return BlockCaret(
+      blockPath: dco_decode_list_prim_usize_strict(arr[0]),
+      caretOffset: dco_decode_usize(arr[1]),
+    );
   }
 
   @protected
@@ -1784,6 +1834,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       default:
         throw UnimplementedError('');
     }
+  }
+
+  @protected
+  BlockCaret sse_decode_block_caret(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_blockPath = sse_decode_list_prim_usize_strict(deserializer);
+    var var_caretOffset = sse_decode_usize(deserializer);
+    return BlockCaret(blockPath: var_blockPath, caretOffset: var_caretOffset);
   }
 
   @protected
@@ -2306,6 +2364,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_list_ast_node(localContent, serializer);
         sse_encode_list_ast_node(incomingContent, serializer);
     }
+  }
+
+  @protected
+  void sse_encode_block_caret(BlockCaret self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_list_prim_usize_strict(self.blockPath, serializer);
+    sse_encode_usize(self.caretOffset, serializer);
   }
 
   @protected

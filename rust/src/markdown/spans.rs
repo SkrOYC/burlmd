@@ -293,6 +293,65 @@ impl SpanMap {
         self.resolve_at(source, index, rendered_offset)
     }
 
+    /// Resolves a Flutter UTF-16 caret offset in one top-level rendered Block
+    /// to the editable leaf that owns it and to a UTF-16 offset in that leaf's
+    /// raw source. The caller supplies exactly one top-level path component;
+    /// nested paths are returned by this map rather than guessed by a UI.
+    ///
+    /// A UTF-16 offset that splits a surrogate pair is rejected. Flutter's
+    /// `TextPosition.offset` and `TextEditingValue` both use UTF-16 code units,
+    /// while the parser/span map uses Unicode scalar offsets and source bytes.
+    #[must_use]
+    pub fn resolve_utf16_caret(
+        &self,
+        source: &str,
+        top_level_path: &[usize],
+        rendered: &str,
+        rendered_utf16_offset: usize,
+    ) -> Option<(BlockPath, usize)> {
+        if top_level_path.len() != 1 {
+            return None;
+        }
+        let index = *self.by_path.get(top_level_path)?;
+        let block = self.blocks.get(index)?;
+        if rendered.chars().count() != block.rendered_len {
+            return None;
+        }
+        let rendered_offset = utf16_to_scalar_offset(rendered, rendered_utf16_offset)?;
+        let (leaf_index, resolution) = self.resolve_leaf_at(source, index, rendered_offset)?;
+        let leaf = &self.blocks[leaf_index];
+        let source_offset = resolution.start();
+        let leaf_source = source.get(leaf.source.clone())?;
+        let relative_byte = source_offset.checked_sub(leaf.source.start)?;
+        let prefix = leaf_source.get(..relative_byte)?;
+        Some((leaf.path.clone(), prefix.encode_utf16().count()))
+    }
+
+    fn resolve_leaf_at(
+        &self,
+        source: &str,
+        index: usize,
+        rendered_offset: usize,
+    ) -> Option<(usize, SourceResolution)> {
+        let block = &self.blocks[index];
+        if rendered_offset > block.rendered_len {
+            return None;
+        }
+        if block.children.is_empty() {
+            return Some((index, self.resolve_at(source, index, rendered_offset)?));
+        }
+
+        let mut consumed = 0;
+        for child in &block.children {
+            let child_len = self.blocks[*child].rendered_len;
+            if rendered_offset <= consumed + child_len {
+                return self.resolve_leaf_at(source, *child, rendered_offset - consumed);
+            }
+            consumed += child_len + 1;
+        }
+        None
+    }
+
     fn resolve_at(
         &self,
         source: &str,
@@ -476,6 +535,22 @@ impl SpanMap {
         }
         Some(start..end)
     }
+}
+
+/// Converts an offset in UTF-16 code units to a Unicode scalar offset without
+/// allowing a caller to land inside a surrogate pair.
+fn utf16_to_scalar_offset(text: &str, utf16_offset: usize) -> Option<usize> {
+    let mut units = 0;
+    for (scalar, character) in text.chars().enumerate() {
+        if utf16_offset == units {
+            return Some(scalar);
+        }
+        units += character.len_utf16();
+        if utf16_offset < units {
+            return None;
+        }
+    }
+    (utf16_offset == units).then_some(text.chars().count())
 }
 
 /// Accumulates [`BlockSpan`]s during a parse and derives the tree
@@ -1342,6 +1417,85 @@ mod tests {
         );
         assert_eq!(parsed.spans.resolve_offset(source, &[0], 6), None);
         assert_eq!(parsed.spans.resolve_offset(source, &[9], 0), None);
+    }
+
+    #[test]
+    fn utf16_caret_resolution_returns_leaf_paths_and_raw_utf16_offsets() {
+        let cases = [
+            // A non-BMP scalar occupies two Flutter UTF-16 code units but four
+            // source bytes. The caret after it must be 2 in raw Flutter text.
+            ("emoji", "😀 tail\n", 2, vec![0], 2),
+            // Entities are atomic in the span map: entering the rendered '&'
+            // resolves to the start of the raw `&amp;` spelling.
+            ("entity", "x &amp; y\n", 2, vec![0], 2),
+            // Escapes leave a source gap before their rendered character; the
+            // map, rather than Dart punctuation arithmetic, supplies it.
+            ("escape", "x \\*escaped\\* y\n", 2, vec![0], 3),
+            // Link destinations are not reconstructible from the rendered
+            // label, especially when the source spelling is noncanonical.
+            (
+                "noncanonical link",
+                "[label](./a%20noncanonical%20name.md) tail\n",
+                2,
+                vec![0],
+                0,
+            ),
+            // Setext syntax is structural source, not rendered text.
+            ("setext heading", "Heading\n=======\n", 3, vec![0], 3),
+            // Fences are structural source too, and the raw caret includes
+            // their UTF-16 width while the rendered coordinate excludes it.
+            ("fenced code", "```rust\n😀\n```\n", 2, vec![0], 10),
+        ];
+
+        for (name, source, rendered_offset, path, expected_offset) in cases {
+            let parsed = parse_note(source, "");
+            let rendered = rendered_text(&parsed.ast[0]);
+            assert_eq!(
+                parsed
+                    .spans
+                    .resolve_utf16_caret(source, &path, &rendered, rendered_offset),
+                Some((path, expected_offset)),
+                "{name}"
+            );
+        }
+    }
+
+    #[test]
+    fn utf16_caret_resolution_promotes_nested_list_and_quote_leaves() {
+        let source = "- first\n- > second 😀\n";
+        let parsed = parse_note(source, "");
+        let rendered = rendered_text(&parsed.ast[0]);
+
+        // `first\nsecond 😀`: offset 7 falls in the blockquote paragraph,
+        // which must not be promoted as the List or ListItem container.
+        assert_eq!(
+            parsed.spans.resolve_utf16_caret(source, &[0], &rendered, 7),
+            Some((vec![0, 1, 0, 0], 1))
+        );
+        assert_eq!(
+            parsed
+                .spans
+                .resolve_utf16_caret(source, &[0], &rendered, 15),
+            Some((vec![0, 1, 0, 0], 9)),
+            "the caret after emoji remains a UTF-16, not byte, offset"
+        );
+    }
+
+    #[test]
+    fn utf16_caret_resolution_rejects_a_surrogate_interior_and_non_top_level_paths() {
+        let source = "😀\n";
+        let parsed = parse_note(source, "");
+        let rendered = rendered_text(&parsed.ast[0]);
+        assert_eq!(
+            parsed.spans.resolve_utf16_caret(source, &[0], &rendered, 1),
+            None
+        );
+        assert_eq!(
+            parsed
+                .spans
+                .resolve_utf16_caret(source, &[0, 0], &rendered, 0),
+            None
+        );
     }
 
     /// ADR-007 decision 5: the frontmatter block is a span like any other and

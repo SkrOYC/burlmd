@@ -825,6 +825,41 @@ impl NoteSession {
         Ok(())
     }
 
+    /// Resolves a pointer caret in a top-level rendered Block to the actual
+    /// editable leaf path and a raw-source UTF-16 caret offset. This reads the
+    /// AST and span map installed by the same parse while holding the session
+    /// state lock; it never mutates the working source or draft row.
+    pub fn resolve_block_caret(
+        &self,
+        top_level_path: &[usize],
+        rendered_utf16_offset: usize,
+    ) -> Result<(Vec<usize>, usize), AppError> {
+        if top_level_path.len() != 1 {
+            return Err(AppError::ParseError(format!(
+                "block_path {top_level_path:?} must name exactly one top-level Block"
+            )));
+        }
+        let state = self.lock_state()?;
+        let top_level = state.ast.get(top_level_path[0]).ok_or_else(|| {
+            AppError::ParseError(format!("no Block at block_path {top_level_path:?}"))
+        })?;
+        let rendered = crate::markdown::rendered_text(top_level);
+        state
+            .spans
+            .resolve_utf16_caret(
+                &state.source,
+                top_level_path,
+                &rendered,
+                rendered_utf16_offset,
+            )
+            .ok_or_else(|| {
+                AppError::ParseError(format!(
+                    "rendered UTF-16 offset {rendered_utf16_offset} is invalid for \
+                     block_path {top_level_path:?}"
+                ))
+            })
+    }
+
     // -- Reparsing mutators --------------------------------------------------
 
     /// Reparses the working source and rebuilds the span map (ADR-007
@@ -5068,6 +5103,11 @@ mod tests {
 
         // The leaf inside the item is what the user actually focuses, and it
         // is served.
+        assert_eq!(
+            session.resolve_block_caret(&[0], 1).unwrap(),
+            (vec![0, 0, 0], 1),
+            "pointer promotion resolves the List container to its editable leaf"
+        );
         session.update_block(&[0, 0, 0], "alpha edited").unwrap();
         assert!(session.working_source().unwrap().contains("alpha edited"));
     }

@@ -362,6 +362,37 @@ pub fn get_block_source(note_id: String, block_path: Vec<usize>) -> Result<Strin
     open_session(&note_id)?.block_source(&block_path)
 }
 
+/// One pointer-resolved raw-source caret. Both fields use Flutter UTF-16 code
+/// units: `block_path` is the actual editable leaf, and `caret_offset` is an
+/// offset into that leaf's raw Markdown source. The input path to
+/// [`resolve_block_caret`] is top-level only, so Dart never infers a nested
+/// path from widget layout or Markdown punctuation.
+#[frb]
+pub struct BlockCaret {
+    pub block_path: Vec<usize>,
+    pub caret_offset: usize,
+}
+
+/// Resolves a rendered pointer position synchronously through the Core span
+/// map. `top_level_path` contains exactly one top-level Block index and
+/// `rendered_utf16_offset` is Flutter's `TextPosition.offset` in the Core's
+/// canonical rendered string for that Block. Invalid offsets (including one
+/// splitting a surrogate pair) return `ParseError` rather than silently
+/// rounding to a different character.
+#[frb(sync)]
+pub fn resolve_block_caret(
+    note_id: String,
+    top_level_path: Vec<usize>,
+    rendered_utf16_offset: usize,
+) -> Result<BlockCaret, AppError> {
+    let (block_path, caret_offset) =
+        open_session(&note_id)?.resolve_block_caret(&top_level_path, rendered_utf16_offset)?;
+    Ok(BlockCaret {
+        block_path,
+        caret_offset,
+    })
+}
+
 /// The per-keystroke call (ADR-007 decision 4, ADR-008 tier 1): substitutes
 /// `new_source` into the Note's working source over the focused Block's
 /// span, adjusts the span map arithmetically, and writes the draft row. Does

@@ -207,6 +207,149 @@ Widget renderBlock(AstNode node) => switch (node) {
   ),
 };
 
+/// Renders a top-level container while replacing exactly one descendant leaf
+/// with its raw editor. The container's siblings, marker/border decoration,
+/// and layout remain the normal formatted rendering; only Core's resolved
+/// leaf path may become editable.
+Widget renderBlockWithFocusedLeaf(
+  AstNode node,
+  List<int> relativeLeafPath,
+  Widget Function(AstNode leaf) buildEditor,
+) {
+  if (relativeLeafPath.isEmpty) {
+    final editor = buildEditor(node);
+    return switch (node) {
+      AstNode_CodeBlock() => blockPromotionSlot(
+        node,
+        blockContainer(node, editor),
+      ),
+      _ => blockPromotionSlot(node, editor),
+    };
+  }
+  final childIndex = relativeLeafPath.first;
+  final remaining = relativeLeafPath.sublist(1);
+  return switch (node) {
+    AstNode_List(:final ordered, :final items)
+        when childIndex >= 0 && childIndex < items.length =>
+      blockContainer(
+        node,
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (final (index, item) in items.indexed)
+              index == childIndex
+                  ? switch (item) {
+                      AstNode_ListItem(:final content) when index == 0 =>
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            for (final (contentIndex, child) in content.indexed)
+                              contentIndex == remaining.first
+                                  ? renderBlockWithFocusedLeaf(
+                                      child,
+                                      remaining.sublist(1),
+                                      buildEditor,
+                                    )
+                                  : renderBlock(child),
+                          ],
+                        ),
+                      AstNode_ListItem(:final content, :final checked) =>
+                        _renderFocusedListItem(
+                          content,
+                          checked,
+                          ordered ? '${index + 1}.' : '•',
+                          remaining,
+                          buildEditor,
+                        ),
+                      _ => renderBlockWithFocusedLeaf(
+                        item,
+                        remaining,
+                        buildEditor,
+                      ),
+                    }
+                  : switch (item) {
+                      AstNode_ListItem(:final content, :final checked)
+                          when index > 0 =>
+                        _renderListItem(
+                          content,
+                          checked,
+                          ordered ? '${index + 1}.' : '•',
+                        ),
+                      AstNode_ListItem(:final content) => Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: content.map(renderBlock).toList(),
+                      ),
+                      _ => renderBlock(item),
+                    },
+          ],
+        ),
+      ),
+    AstNode_ListItem(:final content, :final checked)
+        when childIndex >= 0 && childIndex < content.length =>
+      _renderFocusedListItem(
+        content,
+        checked,
+        '•',
+        relativeLeafPath,
+        buildEditor,
+      ),
+    AstNode_Blockquote(:final nodes)
+        when childIndex >= 0 && childIndex < nodes.length =>
+      blockContainer(
+        node,
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (final (index, child) in nodes.indexed)
+              index == childIndex
+                  ? renderBlockWithFocusedLeaf(child, remaining, buildEditor)
+                  : renderBlock(child),
+          ],
+        ),
+      ),
+    AstNode_Suggestion(:final localContent)
+        when childIndex >= 0 && childIndex < localContent.length =>
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final (index, child) in localContent.indexed)
+            index == childIndex
+                ? renderBlockWithFocusedLeaf(child, remaining, buildEditor)
+                : renderBlock(child),
+        ],
+      ),
+    _ => renderBlock(node),
+  };
+}
+
+Widget _renderFocusedListItem(
+  List<AstNode> content,
+  bool? checked,
+  String marker,
+  List<int> relativeLeafPath,
+  Widget Function(AstNode leaf) buildEditor,
+) => Row(
+  crossAxisAlignment: CrossAxisAlignment.start,
+  children: [
+    _markerWidget(checked, marker),
+    Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final (index, child) in content.indexed)
+            index == relativeLeafPath.first
+                ? renderBlockWithFocusedLeaf(
+                    child,
+                    relativeLeafPath.sublist(1),
+                    buildEditor,
+                  )
+                : renderBlock(child),
+        ],
+      ),
+    ),
+  ],
+);
+
 Widget _renderListItem(List<AstNode> content, bool? checked, String marker) =>
     Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -255,40 +398,20 @@ TextSpan _renderLinkSpan(List<InlineElement> content) => TextSpan(
 );
 
 // ---------------------------------------------------------------------------
-// Clicked-position → source-offset mapping
-//
-// Promoting a Block places the caret where the user clicked (CAP-EDIT-01),
-// but the click lands in *rendered* space while the editable field holds
-// *raw source*. This section converts between them. It is a Dart-side
-// approximation built purely from what the AST already carries — delimiter
-// widths for styled runs and structural prefixes (heading hashes, list
-// markers, quote markers, code fences) — never from laid-out geometry, which
-// SPK-EDIT-F001 identified as the dangerous version of this problem. The
-// authoritative rendered→source resolution is Core-side (ADR-007 decision 8)
-// and is what EDIT-F003's range operations will use; this mapping only needs
-// to be right for plain runs (where it is exact — identity) and reasonable
-// elsewhere, because a caret a delimiter or two off is corrected by the very
-// next keystroke round trip through `update_block`.
+// Clicked-position → canonical rendered-coordinate mapping
 // ---------------------------------------------------------------------------
 
 /// One selectable text leaf of a Block's rendered output, in paint order:
-/// its rendered string, the number of raw-source bytes preceding it inside
-/// the Block (structural prefixes — heading hashes, list markers, quote
-/// markers, opening fences), a function mapping a rendered offset within
-/// the leaf to a source offset relative to the leaf's own start — and where
-/// the leaf begins in the Core's canonical rendered string of the Block.
+/// its rendered string and where it begins in the Core's canonical rendered
+/// string of the top-level Block. Core, not Dart, resolves source and leaf.
 class _LeafText {
   const _LeafText(
-    this.rendered,
-    this.sourcePrefix,
-    this.mapOffset, {
+    this.rendered, {
     required this.corePrefix,
     required this.coreWidth,
   });
 
   final String rendered;
-  final int sourcePrefix;
-  final int Function(int renderedOffset) mapOffset;
 
   /// Start and width of this leaf's contribution to the Core's canonical
   /// rendered string of the Block — the per-variant definition the contract
@@ -306,91 +429,64 @@ class _LeafText {
 /// `RenderParagraph`s [BlockView] collects from its subtree — including the
 /// pseudo-leaves for list markers, which are painted as `Text` widgets but
 /// belong to no AST leaf.
-List<_LeafText> _blockLeaves(AstNode node, [int sourcePrefix = 0]) =>
-    _leaves(node, sourcePrefix, 0);
+List<_LeafText> _blockLeaves(AstNode node) => _leaves(node, 0);
 
-List<_LeafText> _leaves(AstNode node, int sourcePrefix, int corePrefix) =>
-    switch (node) {
-      AstNode_Paragraph(:final content) => [
-        _LeafText(
-          _inlineRendered(content),
-          sourcePrefix,
-          (off) => _inlineSourceOffset(content, off),
-          corePrefix: corePrefix,
-          // A paragraph's canonical rendered text IS its painted text.
-          coreWidth: _inlineRenderedLengthAll(content),
+List<_LeafText> _leaves(AstNode node, int corePrefix) => switch (node) {
+  AstNode_Paragraph(:final content) => [
+    _LeafText(
+      _inlineRendered(content),
+      corePrefix: corePrefix,
+      // A paragraph's canonical rendered text IS its painted text.
+      coreWidth: _inlineRenderedLengthAll(content),
+    ),
+  ],
+  AstNode_Heading(:final content) => [
+    _LeafText(
+      _inlineRendered(content),
+      // The '#' prefix is raw-source structure, not rendered text.
+      corePrefix: corePrefix,
+      coreWidth: _inlineRenderedLengthAll(content),
+    ),
+  ],
+  AstNode_List(:final ordered, :final items) => [
+    for (final (index, item) in items.indexed)
+      ...switch (item) {
+        AstNode_ListItem listItem => _listItemLeaves(
+          listItem,
+          ordered,
+          index,
+          // The List's children are joined with a single '\n' in the
+          // canonical string, so each sibling's start accumulates the
+          // previous ones' lengths plus that separator.
+          _siblingCoreStart(items, index, corePrefix),
         ),
-      ],
-      AstNode_Heading(:final level, :final content) => [
-        _LeafText(
-          _inlineRendered(content),
-          sourcePrefix + '${'#' * level} '.length,
-          (off) => _inlineSourceOffset(content, off),
-          // The '#' prefix is raw-source structure, not rendered text.
-          corePrefix: corePrefix,
-          coreWidth: _inlineRenderedLengthAll(content),
-        ),
-      ],
-      AstNode_List(:final ordered, :final items) => [
-        for (final (index, item) in items.indexed)
-          ...switch (item) {
-            AstNode_ListItem listItem => _listItemLeaves(
-              listItem,
-              ordered,
-              index,
-              sourcePrefix,
-              // The List's children are joined with a single '\n' in the
-              // canonical string, so each sibling's start accumulates the
-              // previous ones' lengths plus that separator.
-              _siblingCoreStart(items, index, corePrefix),
-            ),
-            _ => _leaves(
-              item,
-              sourcePrefix,
-              _siblingCoreStart(items, index, corePrefix),
-            ),
-          },
-      ],
-      // A ListItem reached outside of a List mirrors renderBlock's fallback.
-      AstNode_ListItem item => _listItemLeaves(
-        item,
-        false,
-        0,
-        sourcePrefix,
-        corePrefix,
-      ),
-      AstNode_Blockquote(:final nodes) => [
-        for (final (index, child) in nodes.indexed)
-          ..._leaves(
-            child,
-            sourcePrefix + 2,
-            _siblingCoreStart(nodes, index, corePrefix),
-          ),
-      ],
-      AstNode_CodeBlock(:final language, :final code) => [
-        _LeafText(
-          code,
-          sourcePrefix + '```${language ?? ''}\n'.length,
-          (off) => off.clamp(0, code.length),
-          // Canonical text is `code` verbatim — not the fence, not the
-          // language — which is exactly what the unfocused render paints.
-          corePrefix: corePrefix,
-          coreWidth: code.length,
-        ),
-      ],
-      AstNode_Suggestion(:final localContent) => [
-        for (final (index, child) in localContent.indexed)
-          ..._leaves(
-            child,
-            sourcePrefix,
-            _siblingCoreStart(localContent, index, corePrefix),
-          ),
-      ],
-      // ThematicBreak and Image hold no selectable text (the contract gives
-      // ThematicBreak the empty rendered string), so they contribute no
-      // leaves; a click anywhere on them focuses at source offset 0.
-      _ => const [],
-    };
+        _ => _leaves(item, _siblingCoreStart(items, index, corePrefix)),
+      },
+  ],
+  // A ListItem reached outside of a List mirrors renderBlock's fallback.
+  AstNode_ListItem item => _listItemLeaves(item, false, 0, corePrefix),
+  AstNode_Blockquote(:final nodes) => [
+    for (final (index, child) in nodes.indexed)
+      ..._leaves(child, _siblingCoreStart(nodes, index, corePrefix)),
+  ],
+  AstNode_CodeBlock(:final code) => [
+    _LeafText(
+      code,
+      // Canonical text is `code` verbatim — not the fence, not the
+      // language — which is exactly what the unfocused render paints.
+      corePrefix: corePrefix,
+      coreWidth: code.length,
+    ),
+  ],
+  AstNode_Suggestion(:final localContent) => [
+    for (final (index, child) in localContent.indexed)
+      ..._leaves(child, _siblingCoreStart(localContent, index, corePrefix)),
+  ],
+  // ThematicBreak and Image hold no selectable text (the contract gives
+  // ThematicBreak the empty rendered string), so they contribute no
+  // leaves; a click anywhere on them focuses at source offset 0.
+  _ => const [],
+};
 
 /// Where sibling [index] of [siblings] starts in the parent's canonical
 /// rendered string: children concatenate in order, joined with one '\n'.
@@ -431,7 +527,6 @@ List<_LeafText> _listItemLeaves(
   AstNode_ListItem item,
   bool ordered,
   int index,
-  int sourcePrefix,
   int corePrefix,
 ) {
   final marker = ordered ? '${index + 1}. ' : '- ';
@@ -444,35 +539,13 @@ List<_LeafText> _listItemLeaves(
     // The painted marker row itself: clicking the bullet lands before the
     // item's first content character. It carries real ink but ZERO width in
     // the canonical string — the definition does not model decoration.
-    _LeafText(
-      '$marker$check',
-      sourcePrefix,
-      (off) => off.clamp(0, marker.length),
-      corePrefix: corePrefix,
-      coreWidth: 0,
-    ),
+    _LeafText('$marker$check', corePrefix: corePrefix, coreWidth: 0),
     for (final (childIndex, child) in item.content.indexed)
       ..._leaves(
         child,
-        sourcePrefix + marker.length + check.length,
         _siblingCoreStart(item.content, childIndex, corePrefix),
       ),
   ];
-}
-
-/// Converts a click — expressed as an index into [node]'s painted text
-/// leaves plus a rendered-character offset within that leaf — into a source
-/// offset into the Block's raw Markdown.
-int blockSourceOffsetForTap(
-  AstNode node, {
-  required int leafIndex,
-  required int renderedOffset,
-}) {
-  final leaves = _blockLeaves(node);
-  if (leafIndex < 0 || leafIndex >= leaves.length) return 0;
-  final leaf = leaves[leafIndex];
-  return leaf.sourcePrefix +
-      leaf.mapOffset(renderedOffset.clamp(0, leaf.rendered.length));
 }
 
 /// Maps a selection position — an index into [node]'s painted text leaves
@@ -511,73 +584,6 @@ int _inlineRenderedLength(InlineElement element) => switch (element) {
 int _inlineRenderedLengthAll(List<InlineElement> elements) =>
     elements.fold(0, (sum, element) => sum + _inlineRenderedLength(element));
 
-int _openingDelimiters(InlineElement element) => switch (element) {
-  InlineElement_Text(:final field0) =>
-    (field0.bold ? 2 : 0) +
-        (field0.italic ? 1 : 0) +
-        (field0.strikethrough ? 2 : 0) +
-        (field0.code ? 1 : 0),
-  InlineElement_Link() || InlineElement_ExternalLink() => 1, // '['
-};
-
-/// Total source bytes an inline element occupies: its rendered length plus
-/// both delimiter pairs. A link's destination bytes are not derivable from
-/// what the AST carries, so they are estimated from `targetId` (rendered as
-/// the bundle-absolute `<​/path.md>` form per ADR-004 decision 5); the
-/// estimate is documented as approximate and only ever shifts a caret past a
-/// link, never any Core-side resolution (ADR-007 decision 8).
-int _inlineSourceLength(InlineElement element) => switch (element) {
-  InlineElement_Text() =>
-    _openingDelimiters(element) +
-        _inlineRenderedLength(element) +
-        _openingDelimiters(element),
-  InlineElement_Link(:final targetId, :final content) =>
-    1 +
-        _inlineSourceLengthAll(content) +
-        ']('.length +
-        1 +
-        '/'.length +
-        targetId.length +
-        '.md'.length +
-        1 +
-        1,
-  InlineElement_ExternalLink(:final url, :final content) =>
-    1 + _inlineSourceLengthAll(content) + ']('.length + url.length + 1,
-};
-
-int _inlineSourceLengthAll(List<InlineElement> elements) =>
-    elements.fold(0, (sum, element) => sum + _inlineSourceLength(element));
-
-/// Maps a rendered offset within a run sequence to a source offset relative
-/// to the sequence's start. Offsets landing strictly inside an element whose
-/// interior is not interpolable (code spans, entities, link targets —
-/// ADR-007 decision 8's atomic class) resolve to that element's boundaries,
-/// mirroring the Core-side rule at UI granularity.
-int _inlineSourceOffset(List<InlineElement> elements, int renderedOffset) {
-  var source = 0;
-  var consumed = 0;
-  for (final element in elements) {
-    final renderedLength = _inlineRenderedLength(element);
-    if (renderedOffset <= consumed + renderedLength) {
-      final local = renderedOffset - consumed;
-      return switch (element) {
-        InlineElement_Text(:final field0) =>
-          source +
-              _openingDelimiters(element) +
-              local.clamp(0, field0.content.length),
-        InlineElement_Link(:final content) ||
-        InlineElement_ExternalLink(:final content) =>
-          source +
-              _openingDelimiters(element) +
-              _inlineSourceOffset(content, local),
-      };
-    }
-    consumed += renderedLength;
-    source += _inlineSourceLength(element);
-  }
-  return source;
-}
-
 // ---------------------------------------------------------------------------
 // The unfocused Block surface
 // ---------------------------------------------------------------------------
@@ -586,8 +592,8 @@ int _inlineSourceOffset(List<InlineElement> elements, int renderedOffset) {
 /// tap detector that promotes it to the raw editable field (`EDIT-F002`,
 /// ADR-006 decision 2). On tap the clicked position is resolved through the
 /// painted `RenderParagraph`s — real rendered geometry, not widget-property
-/// guesses — mapped to a raw-source offset, and handed to the parent
-/// ([Editor]), which owns focus as ephemeral UI state.
+/// guesses — mapped to Core's canonical rendered UTF-16 offset and handed to
+/// the parent ([Editor]), which asks Core for the raw caret and leaf path.
 class BlockView extends StatelessWidget {
   const BlockView({
     super.key,
@@ -599,7 +605,7 @@ class BlockView extends StatelessWidget {
 
   final AstNode node;
   final List<int> blockPath;
-  final void Function(List<int> blockPath, int caretSourceOffset)
+  final void Function(List<int> topLevelPath, int renderedUtf16Offset)
   onFocusRequested;
 
   /// When non-null, this Block's painted text registers with it instead of
@@ -644,7 +650,7 @@ class BlockView extends StatelessWidget {
       final position = box.getPositionForOffset(local);
       onFocusRequested(
         blockPath,
-        blockSourceOffsetForTap(
+        blockCoreRenderedOffset(
           node,
           leafIndex: index,
           renderedOffset: position.offset,
