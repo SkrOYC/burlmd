@@ -1,5 +1,31 @@
 # Stage 3: Technical Implementation Changelog
 
+## v1.6.3
+
+Patch corrections from PR #10 review, round 7. No bill-of-materials, PRD, or
+architecture change.
+
+- Tier-1 source mutations take a Workspace edit lease before FFI session lookup
+  and retain it through draft persistence. A lifecycle path closes admission,
+  drains existing leases, then snapshots/reconciles Notes; later calls refuse
+  without waiting behind filesystem or Git work. This prevents stale handles
+  after rename/move/delete and same-ID inbound-link rewrites.
+  The FFI owns one counted lease; direct internal session calls borrow it rather
+  than attempting a second admission. Lifecycle constructs its reopen guard
+  before a fallible admission wait.
+- `continue_block_after` derives its post-splice focus before installation and
+  draft persistence, requiring that focus overlap the inserted source rather
+  than a pre-existing sibling. An unaddressable fragment refuses unchanged
+  instead of persisting content that a retry would duplicate. Structural insert
+  and continuation seams preserve the Note's CRLF convention.
+- Lifecycle FFI calls return one typed `LifecycleResult`. A commit-stage
+  warning carries the settled state, effects, or removed ids and a typed stage;
+  it is not an `AppError`. Dart settles that authoritative result, then shows a
+  localized dismissible warning. True refusals retain the previous session.
+- A later settlement stage uses the same typed result with a `Settlement`
+  warning. Directory creation rolls back only directories it created when its
+  index transaction refuses, preserving the refusal invariant.
+
 ## v1.6.2
 
 Patch corrections from PR #10 review, round 6. No bill-of-materials, PRD, or

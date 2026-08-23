@@ -114,12 +114,12 @@ class _HomeState extends ConsumerState<_Home> {
     }
     NoteState? state;
     try {
-      state = await api.createNote('', title);
+      state = (await api.createNote('', title)).state;
     } catch (_) {
       // A previous smoke run left the Note behind: delete and recreate.
       try {
         await api.deleteNote(title);
-        state = await api.createNote('', title);
+        state = (await api.createNote('', title)).state;
       } catch (_) {
         return;
       }
@@ -154,11 +154,11 @@ class _HomeState extends ConsumerState<_Home> {
     }
     NoteState? state;
     try {
-      state = await api.createNote('', title);
+      state = (await api.createNote('', title)).state;
     } catch (_) {
       try {
         await api.deleteNote(title);
-        state = await api.createNote('', title);
+        state = (await api.createNote('', title)).state;
       } catch (_) {
         return;
       }
@@ -187,12 +187,12 @@ class _HomeState extends ConsumerState<_Home> {
     }
     NoteState? state;
     try {
-      state = await api.createNote('', title);
+      state = (await api.createNote('', title)).state;
     } catch (_) {
       // A previous smoke run left the Note behind: delete and recreate.
       try {
         await api.deleteNote(title);
-        state = await api.createNote('', title);
+        state = (await api.createNote('', title)).state;
       } catch (_) {
         return;
       }
@@ -227,12 +227,12 @@ class _HomeState extends ConsumerState<_Home> {
     }
     NoteState? state;
     try {
-      state = await api.createNote('', title);
+      state = (await api.createNote('', title)).state;
     } catch (_) {
       // A previous smoke run left the Note behind: delete and recreate.
       try {
         await api.deleteNote(title);
-        state = await api.createNote('', title);
+        state = (await api.createNote('', title)).state;
       } catch (_) {
         return;
       }
@@ -263,16 +263,16 @@ class _HomeState extends ConsumerState<_Home> {
     }
     NoteState? state;
     try {
-      state = await api.createNote('', title);
+      state = (await api.createNote('', title)).state;
     } catch (_) {
       try {
         await api.deleteNote(title);
-        state = await api.createNote('', title);
+        state = (await api.createNote('', title)).state;
       } catch (_) {
         return;
       }
     }
-    state = api.insertBlock(state.metadata.id, [
+    state = api.insertBlock(state!.metadata.id, [
       state.ast.length,
     ], 'shortcut target');
     ref.invalidate(workspaceTreeProvider);
@@ -300,7 +300,7 @@ class _HomeState extends ConsumerState<_Home> {
         await api.deleteNote(title);
       } catch (_) {}
       await api.createNote('', targetTitle);
-      var state = await api.createNote('', title);
+      var state = (await api.createNote('', title)).state!;
       state = api.insertBlock(state.metadata.id, [
         state.ast.length,
       ], '[[$targetTitle');
@@ -332,11 +332,11 @@ class _HomeState extends ConsumerState<_Home> {
           // The fixture may not exist yet.
         }
       }
-      var type = await api.createNote('', typeTitle);
+      var type = (await api.createNote('', typeTitle)).state!;
       for (final source in ['first range', 'middle range', 'tail range']) {
         type = api.insertBlock(type.metadata.id, [type.ast.length], source);
       }
-      var deletion = await api.createNote('', deleteTitle);
+      var deletion = (await api.createNote('', deleteTitle)).state!;
       for (final source in ['delete first', 'delete middle', 'delete tail']) {
         deletion = api.insertBlock(deletion.metadata.id, [
           deletion.ast.length,

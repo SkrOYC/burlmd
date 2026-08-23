@@ -58,7 +58,7 @@
 //! second operation running alongside the first — which the prose above reads
 //! as though it did. It does not: the checks that make an operation safe
 //! ([`ensure_path_available`], [`ensure_directory_exists`],
-//! [`ensure_destinations_hold_no_foreign_draft`]) are all check-then-act against
+//! [`ensure_destinations_hold_no_foreign_draft_or_session`]) are all check-then-act against
 //! two stores that no transaction spans, so two callers can pass the same check
 //! before either acts on it. FRB 2.12's default executor dispatches every
 //! `#[frb] async fn` in `api::ffi_api` on a thread pool, so two lifecycle calls
@@ -83,6 +83,9 @@ use std::collections::BTreeSet;
 use std::path::{Component, Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+
+#[cfg(test)]
+use std::cell::Cell;
 
 use flutter_rust_bridge::frb;
 use rusqlite::{Connection, OptionalExtension};
@@ -127,6 +130,96 @@ pub struct LifecycleEffects {
     pub rewritten: Vec<String>,
 }
 
+/// The post-publication stage that completed with a recoverable warning.
+///
+/// This is deliberately a closed type rather than a sentence Dart must
+/// inspect. A lifecycle `Err(AppError)` means neither authoritative mutation
+/// nor its presentation settlement took place; a warning means the mutation
+/// did take place and only its history record is missing.
+#[frb]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LifecycleWarningStage {
+    Commit,
+    Settlement,
+}
+
+/// A non-fatal lifecycle warning, carried with the authoritative result.
+#[frb]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LifecycleWarning {
+    pub stage: LifecycleWarningStage,
+    pub detail: String,
+}
+
+/// The authoritative outcome of any Note or Directory lifecycle operation.
+///
+/// FRB cannot express the operation-specific generic result shape here, so
+/// all lifecycle calls use this one record. `state` is populated for create,
+/// rename, and move; `effects` names reanchored and rewritten Notes;
+/// `removed` names deleted Notes. A populated `warning` never reverses any of
+/// those effects: Presentation must settle them first, then report it.
+#[frb]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct LifecycleResult {
+    pub state: Option<NoteState>,
+    pub effects: LifecycleEffects,
+    pub removed: Vec<String>,
+    pub warning: Option<LifecycleWarning>,
+}
+
+/// Internal counterpart of [`LifecycleResult`]. Test-only legacy helpers map
+/// terminal warnings back to errors; production callers preserve the typed
+/// successful outcome without string parsing.
+#[derive(Debug)]
+enum LifecycleTerminal<T> {
+    Applied(T),
+    AppliedWithWarning {
+        value: T,
+        stage: LifecycleWarningStage,
+        detail: String,
+    },
+}
+
+impl<T> LifecycleTerminal<T> {
+    fn map<U>(self, map: impl FnOnce(T) -> U) -> LifecycleTerminal<U> {
+        match self {
+            Self::Applied(value) => LifecycleTerminal::Applied(map(value)),
+            Self::AppliedWithWarning {
+                value,
+                stage,
+                detail,
+            } => LifecycleTerminal::AppliedWithWarning {
+                value: map(value),
+                stage,
+                detail,
+            },
+        }
+    }
+
+    #[cfg(test)]
+    fn into_legacy(self) -> Result<T, AppError> {
+        match self {
+            Self::Applied(value) => Ok(value),
+            Self::AppliedWithWarning { detail, .. } => Err(AppError::IoError(detail)),
+        }
+    }
+
+    fn into_result(self, apply: impl FnOnce(T) -> LifecycleResult) -> LifecycleResult {
+        match self {
+            Self::Applied(value) => apply(value),
+            Self::AppliedWithWarning {
+                value,
+                stage,
+                detail,
+            } => {
+                let mut result = apply(value);
+                result.warning = Some(LifecycleWarning { stage, detail });
+                result
+            }
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Notes
 // ---------------------------------------------------------------------------
@@ -154,13 +247,33 @@ pub struct LifecycleEffects {
 /// the explicit route and the one that leaves the user in control of the
 /// tree's shape. An empty `directory_path` is the bundle root and is
 /// unaffected.
-pub fn create_note(
+#[cfg(test)]
+pub(crate) fn create_note(
     workspace: &Arc<Workspace>,
     directory_path: &str,
     title: &str,
 ) -> Result<NoteState, AppError> {
     persist::with_lifecycle_lock(workspace, || {
         create_note_serialized(workspace, directory_path, title)
+    })
+    .and_then(LifecycleTerminal::into_legacy)
+}
+
+/// FFI-facing create result. A commit-stage warning retains the newly opened
+/// session and returns its state, because the Note is already authoritative.
+pub fn create_note_outcome(
+    workspace: &Arc<Workspace>,
+    directory_path: &str,
+    title: &str,
+) -> Result<LifecycleResult, AppError> {
+    persist::with_lifecycle_lock(workspace, || {
+        create_note_serialized(workspace, directory_path, title)
+    })
+    .map(|terminal| {
+        terminal.into_result(|state| LifecycleResult {
+            state: Some(state),
+            ..LifecycleResult::default()
+        })
     })
 }
 
@@ -224,6 +337,7 @@ pub(crate) fn prospective_link_target_identity(
 /// the lifecycle lock: if another burlmd operation created the target first,
 /// the existing Note is opened; a foreign file collision is refused by the
 /// exclusive create in [`create_note_serialized`].
+#[cfg(test)]
 pub(crate) fn create_link_target(
     workspace: &Arc<Workspace>,
     target_id: &str,
@@ -231,6 +345,23 @@ pub(crate) fn create_link_target(
     let identity = link_target_identity(target_id)?;
     persist::with_lifecycle_lock(workspace, || {
         create_link_target_serialized(workspace, &identity, |_| Ok(()))
+    })
+    .and_then(LifecycleTerminal::into_legacy)
+}
+
+pub(crate) fn create_link_target_outcome(
+    workspace: &Arc<Workspace>,
+    target_id: &str,
+) -> Result<LifecycleResult, AppError> {
+    let identity = link_target_identity(target_id)?;
+    persist::with_lifecycle_lock(workspace, || {
+        create_link_target_serialized(workspace, &identity, |_| Ok(()))
+    })
+    .map(|terminal| {
+        terminal.into_result(|state| LifecycleResult {
+            state: Some(state),
+            ..LifecycleResult::default()
+        })
     })
 }
 
@@ -243,10 +374,10 @@ fn create_link_target_serialized(
     workspace: &Arc<Workspace>,
     identity: &LinkTargetIdentity,
     before_publish: impl FnOnce(&Path) -> Result<(), AppError>,
-) -> Result<NoteState, AppError> {
+) -> Result<LifecycleTerminal<NoteState>, AppError> {
     if workspace.with_db(|conn| index::note_exists(conn, workspace.id(), &identity.target_id))? {
         return persist::open_note_serialized(workspace, &identity.target_id)
-            .map(|(_, state)| state);
+            .map(|(_, state)| LifecycleTerminal::Applied(state));
     }
 
     let directory_rows_to_remove = missing_directory_rows(workspace, &identity.directory_path)?;
@@ -334,27 +465,14 @@ fn create_link_target_serialized(
         &format!("{subject}\n\n{relative}\n"),
         std::slice::from_ref(&relative),
     ) {
-        // `commit_paths` can only report an error after moving HEAD when its
-        // post-commit index refresh failed. In that case removing the Note
-        // would make history lie, so retain the completed creation and report
-        // the established commit-stage failure. Otherwise the failed commit is
-        // fully unwound, including the session that was registered above.
-        if crate::git::operations::path_in_head(workspace.root(), &relative).unwrap_or(false) {
-            return Err(commit_stage_failure(&subject, error, &[]));
-        }
-        return rollback_link_target_creation(
-            workspace,
-            &identity.target_id,
-            &new_path,
-            published,
-            &directory_rows_to_remove,
-            &mut created_directories,
-            true,
-            error,
-        );
+        return Ok(LifecycleTerminal::AppliedWithWarning {
+            value: state,
+            stage: LifecycleWarningStage::Commit,
+            detail: format!("{:?}", commit_stage_failure(&subject, error, &[])),
+        });
     }
 
-    Ok(state)
+    Ok(LifecycleTerminal::Applied(state))
 }
 
 /// Creates the missing physical ancestors one at a time, so the rollback path
@@ -435,10 +553,10 @@ fn directory_ancestors(directory: &str) -> Vec<String> {
     ancestors
 }
 
-fn finish_link_target_directory_cleanup(
+fn finish_link_target_directory_cleanup<T>(
     created_directories: &mut Vec<PathBuf>,
     error: AppError,
-) -> Result<NoteState, AppError> {
+) -> Result<T, AppError> {
     cleanup_created_directories(created_directories).map_err(|cleanup| {
         AppError::IoError(format!(
             "{error:?}; also could not roll back the Directories created for this Link target: {cleanup:?}"
@@ -448,7 +566,7 @@ fn finish_link_target_directory_cleanup(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn rollback_link_target_creation(
+fn rollback_link_target_creation<T>(
     workspace: &Arc<Workspace>,
     note_id: &str,
     note_path: &Path,
@@ -457,7 +575,7 @@ fn rollback_link_target_creation(
     created_directories: &mut Vec<PathBuf>,
     discard_session: bool,
     error: AppError,
-) -> Result<NoteState, AppError> {
+) -> Result<T, AppError> {
     if discard_session {
         persist::discard_session(workspace, note_id)?;
     }
@@ -515,7 +633,7 @@ fn create_note_serialized(
     workspace: &Arc<Workspace>,
     directory_path: &str,
     title: &str,
-) -> Result<NoteState, AppError> {
+) -> Result<LifecycleTerminal<NoteState>, AppError> {
     validate_title(title)?;
     let directory = normalize_directory(directory_path)?;
     // The same call `move_note` makes, so both entry points onto a Directory
@@ -549,21 +667,7 @@ fn create_note_serialized(
         })
     });
     if let Err(error) = written {
-        // The file is the only thing worth undoing here. Two asymmetries are
-        // left standing deliberately, because both are benign and repairing
-        // either would cost more than it buys:
-        //
-        // - An on-disk folder `ensure_directory_exists` had to materialize for
-        //   a Directory the index already knew about stays. It is not a level
-        //   this call invented — the Directory existed before it ran — and an
-        //   empty folder holds no user content, is invisible to
-        //   `walk_bundle`'s Note scan, and is not tracked by Git.
-        // - Nothing rolls back if `open_note` below fails *after* the index
-        //   transaction committed. That leaves the Note fully created and
-        //   correctly indexed but not open, which is a state the user can act
-        //   on — the Note is in the tree and opening it is one click — whereas
-        //   deleting a Note that was successfully created because the *open*
-        //   failed would discard a real result over a recoverable one.
+        // The folder existed before this operation and is not ours to remove.
         let _ = std::fs::remove_file(&new_path);
         return Err(error);
     }
@@ -583,6 +687,16 @@ fn create_note_serialized(
     // No duplicate Create follows: `NoteSession::commit_message` asks
     // `path_in_head`, which now answers yes, so the session's own close commits
     // an Update.
+    // Register before the post-publication commit stage. From this point on a
+    // warning must retain an editor-valid state rather than return an error.
+    let (_, state) = match persist::open_note_serialized(workspace, &new_id) {
+        Ok(opened) => opened,
+        Err(error) => {
+            // Session registration is still pre-publication. Undo both
+            // authoritative stores so an FFI Err retains its literal meaning.
+            return rollback_created_note(workspace, &new_id, &new_path, error);
+        }
+    };
     let relative = concept_id_to_path(&new_id);
     let subject = format!("Create {title}");
     let committed = crate::git::operations::commit_paths(
@@ -596,13 +710,39 @@ fn create_note_serialized(
         // does not record it" rather than "the create failed". Nothing is rolled
         // back for the same reason `delete_note` rolls nothing back at this
         // point — the two stores have already settled.
-        return Err(commit_stage_failure(&subject, error, &[]));
+        return Ok(LifecycleTerminal::AppliedWithWarning {
+            value: state,
+            stage: LifecycleWarningStage::Commit,
+            detail: format!("{:?}", commit_stage_failure(&subject, error, &[])),
+        });
     }
 
-    // The lock-free half of `persist::open_note`: this call is already inside
-    // `with_lifecycle_lock`, and that lock is not reentrant.
-    let (_, state) = persist::open_note_serialized(workspace, &new_id)?;
-    Ok(state)
+    Ok(LifecycleTerminal::Applied(state))
+}
+
+fn rollback_created_note<T>(
+    workspace: &Arc<Workspace>,
+    note_id: &str,
+    path: &Path,
+    error: AppError,
+) -> Result<T, AppError> {
+    workspace
+        .with_db(|conn| {
+            in_owned_transaction(conn, |tx| {
+                index::remove_note_rows(tx, workspace.id(), note_id)?;
+                clear_draft(tx, workspace.id(), note_id)
+            })
+        })
+        .and_then(|_| {
+            std::fs::remove_file(path)
+                .map_err(|remove| AppError::IoError(format!("remove {}: {remove}", path.display())))
+        })
+        .map_err(|rollback| {
+            AppError::IoError(format!(
+                "{error:?}; also could not roll back unpublished Note creation: {rollback:?}"
+            ))
+        })?;
+    Err(error)
 }
 
 /// Deletes a Note and commits the deletion, so it stays recoverable from local
@@ -626,13 +766,36 @@ fn create_note_serialized(
 /// file on disk and a `notes` row, and this deletes an id that has only that —
 /// see [`delete_orphaned_draft`]. [`AppError::NotFound`] is reserved for an id
 /// that none of the three stores knows.
-pub fn delete_note(workspace: &Arc<Workspace>, note_id: &str) -> Result<(), AppError> {
-    persist::with_lifecycle_lock(workspace, || {
-        persist::with_write_locks(workspace, || delete_note_locked(workspace, note_id))
+#[cfg(test)]
+pub(crate) fn delete_note(workspace: &Arc<Workspace>, note_id: &str) -> Result<(), AppError> {
+    delete_note_outcome(workspace, note_id).and_then(|result| {
+        result
+            .warning
+            .map_or(Ok(()), |warning| Err(AppError::IoError(warning.detail)))
     })
 }
 
-fn delete_note_locked(workspace: &Arc<Workspace>, note_id: &str) -> Result<(), AppError> {
+/// FFI-facing delete result. `removed` is authoritative even when the Git
+/// commit stage reports a warning, so an open editor can be closed safely.
+pub fn delete_note_outcome(
+    workspace: &Arc<Workspace>,
+    note_id: &str,
+) -> Result<LifecycleResult, AppError> {
+    persist::with_lifecycle_lock(workspace, || {
+        persist::with_write_locks(workspace, || delete_note_locked(workspace, note_id))
+    })
+    .map(|terminal| {
+        terminal.into_result(|removed| LifecycleResult {
+            removed,
+            ..LifecycleResult::default()
+        })
+    })
+}
+
+fn delete_note_locked(
+    workspace: &Arc<Workspace>,
+    note_id: &str,
+) -> Result<LifecycleTerminal<Vec<String>>, AppError> {
     let path = workspace.note_path(note_id)?;
     let title = indexed_title(workspace, note_id)?;
     if !path.exists() && title.is_none() {
@@ -653,7 +816,8 @@ fn delete_note_locked(workspace: &Arc<Workspace>, note_id: &str) -> Result<(), A
         // and the session are cleared and that is the whole of the deletion.
         // `clear_draft` runs in its own transaction for the reason every other
         // index step here does — a failure must leave the row exactly as it was.
-        return delete_orphaned_draft(workspace, note_id);
+        delete_orphaned_draft(workspace, note_id)?;
+        return Ok(LifecycleTerminal::Applied(vec![note_id.to_string()]));
     }
     // A Note is a file. Nothing stops a bundle from holding a *directory*
     // named `Archive.md` — a foreign tool's, or a user's — and without this
@@ -695,17 +859,35 @@ fn delete_note_locked(workspace: &Arc<Workspace>, note_id: &str) -> Result<(), A
     // index agrees, so the trash entry must go regardless of whether version
     // history recorded it. Leaving it parked would keep the deleted Note's full
     // content sitting untracked inside the bundle.
-    journal.commit();
+    let cleanup = journal.commit();
     // Retired for the same reason, and *before* the commit error is surfaced.
     // Propagating the commit failure first jumped over this, leaving a session
     // open over a Note that no longer exists in either store — and a session
     // that, closed normally, flushes its buffer and recreates the file the
     // deletion just removed.
     let discarded = persist::discard_session(workspace, note_id);
-    if let Err(error) = committed {
-        return Err(commit_stage_failure(&subject, error, &[]));
+    if let Err(error) = discarded {
+        return Ok(LifecycleTerminal::AppliedWithWarning {
+            value: vec![note_id.to_string()],
+            stage: LifecycleWarningStage::Settlement,
+            detail: format!("{error:?}"),
+        });
     }
-    discarded
+    if let Err(error) = cleanup {
+        return Ok(LifecycleTerminal::AppliedWithWarning {
+            value: vec![note_id.to_string()],
+            stage: LifecycleWarningStage::Settlement,
+            detail: format!("the deleted Note remains removed, but a recovery trash artifact could not be removed: {error:?}"),
+        });
+    }
+    if let Err(error) = committed {
+        return Ok(LifecycleTerminal::AppliedWithWarning {
+            value: vec![note_id.to_string()],
+            stage: LifecycleWarningStage::Commit,
+            detail: format!("{:?}", commit_stage_failure(&subject, error, &[])),
+        });
+    }
+    Ok(LifecycleTerminal::Applied(vec![note_id.to_string()]))
 }
 
 /// Clears a `drafts` row that is the only thing left of a concept id: no file,
@@ -743,13 +925,40 @@ fn delete_orphaned_draft(workspace: &Arc<Workspace>, note_id: &str) -> Result<()
 /// returned state carries the new one. Returns [`AppError::PathUnavailable`] on
 /// exactly the same terms as [`create_note`]: renaming is not a weaker check
 /// than creating.
-pub fn rename_note(
+#[cfg(test)]
+pub(crate) fn rename_note(
     workspace: &Arc<Workspace>,
     note_id: &str,
     new_title: &str,
 ) -> Result<(NoteState, LifecycleEffects), AppError> {
+    rename_note_outcome(workspace, note_id, new_title).and_then(|result| {
+        let state = result.state.ok_or_else(|| {
+            AppError::IoError("rename completed without an authoritative Note state".to_string())
+        })?;
+        result
+            .warning
+            .map_or(Ok((state, result.effects)), |warning| {
+                Err(AppError::IoError(warning.detail))
+            })
+    })
+}
+
+/// FFI-facing rename result. A commit-stage warning carries the new Note id
+/// and every side effect so Presentation never restores the old session.
+pub fn rename_note_outcome(
+    workspace: &Arc<Workspace>,
+    note_id: &str,
+    new_title: &str,
+) -> Result<LifecycleResult, AppError> {
     persist::with_lifecycle_lock(workspace, || {
         rename_note_serialized(workspace, note_id, new_title)
+    })
+    .map(|terminal| {
+        terminal.into_result(|(state, effects)| LifecycleResult {
+            state: Some(state),
+            effects,
+            ..LifecycleResult::default()
+        })
     })
 }
 
@@ -757,7 +966,7 @@ fn rename_note_serialized(
     workspace: &Arc<Workspace>,
     note_id: &str,
     new_title: &str,
-) -> Result<(NoteState, LifecycleEffects), AppError> {
+) -> Result<LifecycleTerminal<(NoteState, LifecycleEffects)>, AppError> {
     validate_title(new_title)?;
     let old_path = workspace.note_path(note_id)?;
     if !old_path.is_file() {
@@ -796,9 +1005,9 @@ fn rename_note_serialized(
             concept_id_to_path(&new_id)
         ),
     };
-    let effects = apply_reidentify(workspace, &plan)?;
+    let terminal = apply_reidentify(workspace, &plan)?;
     let state = settled_state(workspace, &new_id)?;
-    Ok((state, effects))
+    Ok(terminal.map(|effects| (state, effects)))
 }
 
 /// Moves a Note to another Directory, rewriting every inbound Link
@@ -828,13 +1037,40 @@ fn rename_note_serialized(
 /// destinations already resolve identically from anywhere and are copied
 /// through byte for byte; external ones are not ours to touch. A [`rename_note`]
 /// stays in place, so it changes none of them.
-pub fn move_note(
+#[cfg(test)]
+pub(crate) fn move_note(
     workspace: &Arc<Workspace>,
     note_id: &str,
     new_directory_path: &str,
 ) -> Result<(NoteState, LifecycleEffects), AppError> {
+    move_note_outcome(workspace, note_id, new_directory_path).and_then(|result| {
+        let state = result.state.ok_or_else(|| {
+            AppError::IoError("move completed without an authoritative Note state".to_string())
+        })?;
+        result
+            .warning
+            .map_or(Ok((state, result.effects)), |warning| {
+                Err(AppError::IoError(warning.detail))
+            })
+    })
+}
+
+/// FFI-facing move result. See [`rename_note_outcome`] for terminal warning
+/// semantics.
+pub fn move_note_outcome(
+    workspace: &Arc<Workspace>,
+    note_id: &str,
+    new_directory_path: &str,
+) -> Result<LifecycleResult, AppError> {
     persist::with_lifecycle_lock(workspace, || {
         move_note_serialized(workspace, note_id, new_directory_path)
+    })
+    .map(|terminal| {
+        terminal.into_result(|(state, effects)| LifecycleResult {
+            state: Some(state),
+            effects,
+            ..LifecycleResult::default()
+        })
     })
 }
 
@@ -842,7 +1078,7 @@ fn move_note_serialized(
     workspace: &Arc<Workspace>,
     note_id: &str,
     new_directory_path: &str,
-) -> Result<(NoteState, LifecycleEffects), AppError> {
+) -> Result<LifecycleTerminal<(NoteState, LifecycleEffects)>, AppError> {
     let old_path = workspace.note_path(note_id)?;
     if !old_path.is_file() {
         return Err(AppError::NotFound(format!(
@@ -890,9 +1126,9 @@ fn move_note_serialized(
             concept_id_to_path(&new_id)
         ),
     };
-    let effects = apply_reidentify(workspace, &plan)?;
+    let terminal = apply_reidentify(workspace, &plan)?;
     let state = settled_state(workspace, &new_id)?;
-    Ok((state, effects))
+    Ok(terminal.map(|effects| (state, effects)))
 }
 
 // ---------------------------------------------------------------------------
@@ -906,8 +1142,20 @@ fn move_note_serialized(
 /// created too, so a Note can be written into it and so the user sees it in a
 /// file manager. Git tracks no empty directory, which is why this makes no
 /// commit — the Directory enters version history with the first Note in it.
-pub fn create_directory(workspace: &Arc<Workspace>, path: &str) -> Result<(), AppError> {
+#[cfg(test)]
+pub(crate) fn create_directory(workspace: &Arc<Workspace>, path: &str) -> Result<(), AppError> {
     persist::with_lifecycle_lock(workspace, || create_directory_serialized(workspace, path))
+}
+
+/// FFI-facing Directory creation result. It has no Git stage, but shares the
+/// lifecycle result shape so callers never need to infer success from a void
+/// value.
+pub fn create_directory_outcome(
+    workspace: &Arc<Workspace>,
+    path: &str,
+) -> Result<LifecycleResult, AppError> {
+    persist::with_lifecycle_lock(workspace, || create_directory_serialized(workspace, path))?;
+    Ok(LifecycleResult::default())
 }
 
 fn create_directory_serialized(workspace: &Arc<Workspace>, path: &str) -> Result<(), AppError> {
@@ -923,13 +1171,22 @@ fn create_directory_serialized(workspace: &Arc<Workspace>, path: &str) -> Result
             "{directory} is already a file in this Workspace"
         )));
     }
-    std::fs::create_dir_all(&absolute)
-        .map_err(|e| AppError::IoError(format!("create {}: {e}", absolute.display())))?;
-    workspace.with_db(|conn| {
+    let mut created = Vec::new();
+    materialize_link_target_directories(workspace, &directory, &mut created)?;
+    let recorded = workspace.with_db(|conn| {
         in_owned_transaction(conn, |tx| {
             index::record_directories(tx, workspace.id(), &directory)
         })
-    })
+    });
+    if let Err(error) = recorded {
+        cleanup_created_directories(&mut created).map_err(|cleanup| {
+            AppError::IoError(format!(
+                "{error:?}; also could not roll back Directories created for this operation: {cleanup:?}"
+            ))
+        })?;
+        return Err(error);
+    }
+    Ok(())
 }
 
 /// Renames a Directory, moving its contents and rewriting inbound Links to
@@ -938,13 +1195,34 @@ fn create_directory_serialized(workspace: &Arc<Workspace>, path: &str) -> Result
 /// Every Note in the subtree is remapped, and the Notes holding rewritten Links
 /// are **not confined to that subtree** — anything anywhere in the bundle may
 /// link into it, which is why [`LifecycleEffects`] carries both lists.
-pub fn rename_directory(
+#[cfg(test)]
+pub(crate) fn rename_directory(
     workspace: &Arc<Workspace>,
     path: &str,
     new_name: &str,
 ) -> Result<LifecycleEffects, AppError> {
+    rename_directory_outcome(workspace, path, new_name).and_then(|result| {
+        result.warning.map_or(Ok(result.effects), |warning| {
+            Err(AppError::IoError(warning.detail))
+        })
+    })
+}
+
+/// FFI-facing Directory rename result. `effects` describes every session that
+/// must settle before a post-commit warning is surfaced.
+pub fn rename_directory_outcome(
+    workspace: &Arc<Workspace>,
+    path: &str,
+    new_name: &str,
+) -> Result<LifecycleResult, AppError> {
     persist::with_lifecycle_lock(workspace, || {
         rename_directory_serialized(workspace, path, new_name)
+    })
+    .map(|terminal| {
+        terminal.into_result(|effects| LifecycleResult {
+            effects,
+            ..LifecycleResult::default()
+        })
     })
 }
 
@@ -952,7 +1230,7 @@ fn rename_directory_serialized(
     workspace: &Arc<Workspace>,
     path: &str,
     new_name: &str,
-) -> Result<LifecycleEffects, AppError> {
+) -> Result<LifecycleTerminal<LifecycleEffects>, AppError> {
     let directory = normalize_directory(path)?;
     if directory.is_empty() {
         return Err(AppError::PathUnavailable(
@@ -989,7 +1267,7 @@ fn rename_directory_serialized(
         )));
     }
     if new_directory == directory {
-        return Ok(LifecycleEffects::default());
+        return Ok(LifecycleTerminal::Applied(LifecycleEffects::default()));
     }
 
     let prefix = format!("{directory}/");
@@ -1025,7 +1303,7 @@ fn rename_directory_serialized(
     // is about the **destination**, and a draft at `Old/x` re-keying to `New/x`
     // is its own. Only a *second*, foreign draft already sitting at `New/x`
     // trips it — the collision the refusal exists for.
-    ensure_destinations_hold_no_foreign_draft(workspace, &remap)?;
+    ensure_destinations_hold_no_foreign_draft_or_session(workspace, &remap)?;
 
     let plan = Reidentify {
         remap,
@@ -1067,16 +1345,40 @@ fn rename_directory_serialized(
 /// concept id with no file and no index row, and it is cleared and reported
 /// here for the reason [`delete_note`] clears one — otherwise it survives the
 /// deletion of the Directory it lived in and keeps its name reserved forever.
-pub fn delete_directory(workspace: &Arc<Workspace>, path: &str) -> Result<Vec<String>, AppError> {
+#[cfg(test)]
+pub(crate) fn delete_directory(
+    workspace: &Arc<Workspace>,
+    path: &str,
+) -> Result<Vec<String>, AppError> {
+    delete_directory_outcome(workspace, path).and_then(|result| {
+        result.warning.map_or(Ok(result.removed), |warning| {
+            Err(AppError::IoError(warning.detail))
+        })
+    })
+}
+
+/// FFI-facing Directory delete result. `removed` stays authoritative when the
+/// record in Git fails, so every removed editor can close rather than revive a
+/// discarded session.
+pub fn delete_directory_outcome(
+    workspace: &Arc<Workspace>,
+    path: &str,
+) -> Result<LifecycleResult, AppError> {
     persist::with_lifecycle_lock(workspace, || {
         persist::with_write_locks(workspace, || delete_directory_locked(workspace, path))
+    })
+    .map(|terminal| {
+        terminal.into_result(|removed| LifecycleResult {
+            removed,
+            ..LifecycleResult::default()
+        })
     })
 }
 
 fn delete_directory_locked(
     workspace: &Arc<Workspace>,
     path: &str,
-) -> Result<Vec<String>, AppError> {
+) -> Result<LifecycleTerminal<Vec<String>>, AppError> {
     let directory = normalize_directory(path)?;
     if directory.is_empty() {
         return Err(AppError::PathUnavailable(
@@ -1163,7 +1465,7 @@ fn delete_directory_locked(
         &directory_pathspec,
     );
 
-    journal.commit();
+    let cleanup = journal.commit();
     // Every session is retired before the commit error is surfaced, for the
     // reason `delete_note_locked` gives: the Notes are gone from both stores
     // whether or not version history recorded it, and a session left open over
@@ -1177,10 +1479,6 @@ fn delete_directory_locked(
             discarded = outcome;
         }
     }
-    if let Err(error) = committed {
-        return Err(commit_stage_failure(&subject, error, &[]));
-    }
-    discarded?;
     // The orphaned-draft ids are reported alongside the indexed ones, and for
     // the reason this function returns a list at all: a caller may be holding
     // one open — `open_note`'s recovery branch opens exactly such a Note from
@@ -1189,7 +1487,28 @@ fn delete_directory_locked(
     removed.extend(orphaned_drafts);
     removed.sort();
     removed.dedup();
-    Ok(removed)
+    if let Err(error) = discarded {
+        return Ok(LifecycleTerminal::AppliedWithWarning {
+            value: removed,
+            stage: LifecycleWarningStage::Settlement,
+            detail: format!("{error:?}"),
+        });
+    }
+    if let Err(error) = cleanup {
+        return Ok(LifecycleTerminal::AppliedWithWarning {
+            value: removed,
+            stage: LifecycleWarningStage::Settlement,
+            detail: format!("the deleted Directory remains removed, but a recovery trash artifact could not be removed: {error:?}"),
+        });
+    }
+    if let Err(error) = committed {
+        return Ok(LifecycleTerminal::AppliedWithWarning {
+            value: removed,
+            stage: LifecycleWarningStage::Commit,
+            detail: format!("{:?}", commit_stage_failure(&subject, error, &[])),
+        });
+    }
+    Ok(LifecycleTerminal::Applied(removed))
 }
 
 // ---------------------------------------------------------------------------
@@ -1306,14 +1625,14 @@ struct Affected {
 fn apply_reidentify(
     workspace: &Arc<Workspace>,
     plan: &Reidentify,
-) -> Result<LifecycleEffects, AppError> {
+) -> Result<LifecycleTerminal<LifecycleEffects>, AppError> {
     persist::with_write_locks(workspace, || apply_reidentify_locked(workspace, plan))
 }
 
 fn apply_reidentify_locked(
     workspace: &Arc<Workspace>,
     plan: &Reidentify,
-) -> Result<LifecycleEffects, AppError> {
+) -> Result<LifecycleTerminal<LifecycleEffects>, AppError> {
     let affected = plan_affected(workspace, plan)?;
 
     let mut journal = FileJournal::default();
@@ -1409,7 +1728,7 @@ fn apply_reidentify_locked(
     // must not also leave a trash entry parked in the bundle.
     let committed =
         crate::git::operations::commit_paths(workspace.root(), &plan.message, &pathspec);
-    journal.commit();
+    let cleanup = journal.commit();
 
     // In-memory and infallible in the sense that matters: nothing after this
     // point can leave the bundle and the index disagreeing.
@@ -1422,6 +1741,8 @@ fn apply_reidentify_locked(
     // the user's buffered work was stranded where nothing could reach it — the
     // reversion `architecture/risks.md` risk 8 describes, reached from the one
     // direction the journal cannot see.
+    #[cfg(test)]
+    workspace.run_before_session_settlement();
     let mut carried = Ok(());
     for a in &affected {
         let outcome = persist::carry_session_forward(
@@ -1435,15 +1756,9 @@ fn apply_reidentify_locked(
             carried = outcome;
         }
     }
-    if let Err(error) = committed {
-        let subject = plan.message.lines().next().unwrap_or("the operation");
-        return Err(commit_stage_failure(subject, error, &best_effort));
-    }
-    carried?;
-
     let beyond_the_invoked =
         |a: &&Affected| plan.invoked.as_deref().is_none_or(|id| id != a.old_id);
-    Ok(LifecycleEffects {
+    let effects = LifecycleEffects {
         remapped: affected
             .iter()
             .filter(|a| a.old_id != a.new_id)
@@ -1470,7 +1785,30 @@ fn apply_reidentify_locked(
             .filter(beyond_the_invoked)
             .map(|a| a.new_id.clone())
             .collect(),
-    })
+    };
+    if let Err(error) = carried {
+        return Ok(LifecycleTerminal::AppliedWithWarning {
+            value: effects,
+            stage: LifecycleWarningStage::Settlement,
+            detail: format!("{error:?}"),
+        });
+    }
+    if let Err(error) = cleanup {
+        return Ok(LifecycleTerminal::AppliedWithWarning {
+            value: effects,
+            stage: LifecycleWarningStage::Settlement,
+            detail: format!("a lifecycle recovery artifact could not be removed: {error:?}"),
+        });
+    }
+    if let Err(error) = committed {
+        let subject = plan.message.lines().next().unwrap_or("the operation");
+        return Ok(LifecycleTerminal::AppliedWithWarning {
+            value: effects,
+            stage: LifecycleWarningStage::Commit,
+            detail: format!("{:?}", commit_stage_failure(subject, error, &best_effort)),
+        });
+    }
+    Ok(LifecycleTerminal::Applied(effects))
 }
 
 /// Reads, rewrites and validates every Note the operation touches, **before
@@ -1833,7 +2171,7 @@ fn settled_state(workspace: &Arc<Workspace>, note_id: &str) -> Result<NoteState,
     // next tier 2 write. Do not copy this line into one of those.
     let source = String::from_utf8_lossy(&bytes).into_owned();
     let ParsedNote { mut ast, spans } = parse_note(&source, containing_dir(note_id));
-    workspace.with_db(|conn| index::resolve_link_existence(conn, workspace.id(), &mut ast))?;
+    workspace.resolve_link_existence(&mut ast)?;
     Ok(NoteState {
         ast,
         metadata: metadata_from(note_id, &source, &spans, file_mtime(&path)),
@@ -1994,22 +2332,62 @@ impl FileJournal {
     }
 
     /// Keeps every step and discards the trash entries a deletion parked.
-    fn commit(&mut self) {
-        for step in std::mem::take(&mut self.steps) {
-            Self::discard_trash(&step);
+    fn commit(&mut self) -> Result<(), AppError> {
+        let steps = std::mem::take(&mut self.steps);
+        let mut failures = Vec::new();
+        for step in &steps {
+            if let Err(error) = Self::discard_trash(step) {
+                failures.push(format!("{error:?}"));
+            }
+        }
+        if failures.is_empty() {
+            Ok(())
+        } else {
+            // Retain them for Drop's best-effort retry, but do not hide this
+            // terminal state from the FFI caller.
+            self.steps = steps;
+            Err(AppError::IoError(format!(
+                "could not remove {} recovery trash artifact(s): {}",
+                failures.len(),
+                failures.join("; ")
+            )))
         }
     }
 
-    fn discard_trash(step: &FileStep) {
+    fn discard_trash(step: &FileStep) -> Result<(), AppError> {
         let FileStep::Trashed { trash, .. } = step else {
-            return;
+            return Ok(());
         };
-        if trash.is_dir() {
-            let _ = std::fs::remove_dir_all(trash);
+        #[cfg(test)]
+        if TAKE_NEXT_TRASH_CLEANUP_FAILURE.with(|failure| failure.replace(false)) {
+            return Err(AppError::IoError(
+                "injected trash cleanup failure".to_string(),
+            ));
+        }
+        let result = if trash.is_dir() {
+            std::fs::remove_dir_all(trash)
         } else {
-            let _ = std::fs::remove_file(trash);
+            std::fs::remove_file(trash)
+        };
+        match result {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(error) => Err(AppError::IoError(format!(
+                "remove recovery trash {}: {error}",
+                trash.display()
+            ))),
         }
     }
+}
+
+#[cfg(test)]
+thread_local! {
+    static TAKE_NEXT_TRASH_CLEANUP_FAILURE: Cell<bool> = const { Cell::new(false) };
+}
+
+#[cfg(test)]
+fn fail_next_trash_cleanup_for_test() {
+    TAKE_NEXT_TRASH_CLEANUP_FAILURE.with(|failure| failure.set(true));
 }
 
 /// Rolls `journal` back behind an error that is already being returned, and
@@ -2121,7 +2499,7 @@ pub(super) fn restate(error: AppError, rewrite: impl FnOnce(&str) -> String) -> 
 impl Drop for FileJournal {
     fn drop(&mut self) {
         for step in &self.steps {
-            Self::discard_trash(step);
+            let _ = Self::discard_trash(step);
         }
     }
 }
@@ -2401,7 +2779,7 @@ struct HeldBy<'a> {
     path: &'a Path,
 }
 
-/// All three halves of the availability check the contract requires.
+/// All four halves of the availability check the contract requires.
 ///
 /// The filesystem is consulted **as well as** the index, and it is the half
 /// that is easy to omit: `notes.id` is a case-sensitive `TEXT` key while
@@ -2438,6 +2816,15 @@ struct HeldBy<'a> {
 /// outright, after either of which the name really is free. Substituting the
 /// draft silently, or deleting it to make room, are the two outcomes
 /// `architecture/risks.md` risk 8 is about.
+///
+/// # A live session is a fourth store
+///
+/// A clean session can outlive all three durable records when another process
+/// removes its file and a rebuild drops its row. It still owns its concept id:
+/// replacing it would strand the existing editor handle and give an unrelated
+/// lifecycle operation permission to overwrite its next draft. The source
+/// session is the sole exception — a same-id no-op retains it, while a rekey
+/// deliberately retires it and installs its successor after publication.
 fn ensure_path_available(
     workspace: &Arc<Workspace>,
     new_id: &str,
@@ -2468,6 +2855,13 @@ fn ensure_path_available(
              recover the draft (or delete it) before taking the name"
         )));
     }
+    if persist::lookup(workspace.id(), new_id)?.is_some()
+        && held.is_none_or(|source| source.id != new_id)
+    {
+        return Err(AppError::PathUnavailable(format!(
+            "{new_id} is still open in another session: close or recover that Note before taking its concept id"
+        )));
+    }
     Ok(())
 }
 
@@ -2491,8 +2885,8 @@ fn is_same_file(candidate: &Path, held_by: Option<&Path>) -> bool {
     }
 }
 
-/// The `drafts` half of [`ensure_path_available`], applied to every destination
-/// a [`rename_directory`] would move a Note onto.
+/// The `drafts` and live-session halves of [`ensure_path_available`], applied
+/// to every destination a [`rename_directory`] would move a Note onto.
 ///
 /// A Directory rename is the one re-identification that never runs
 /// [`ensure_path_available`] per Note: it checks its *own* destination — that
@@ -2517,13 +2911,13 @@ fn is_same_file(candidate: &Path, held_by: Option<&Path>) -> bool {
 /// under `directory` — [`rename_directory`] returns early when the two are equal
 /// and cannot nest one inside the other — but the rule is the one that is
 /// correct rather than the one that happens to be unreachable.
-fn ensure_destinations_hold_no_foreign_draft(
+fn ensure_destinations_hold_no_foreign_draft_or_session(
     workspace: &Arc<Workspace>,
     remap: &Remap,
 ) -> Result<(), AppError> {
     // `Remap` iterates in sorted key order, so "the first colliding id" is a
     // stable answer rather than whichever row the map happened to yield.
-    let colliding = workspace.with_db(|conn| {
+    let draft_collision = workspace.with_db(|conn| {
         for (old_id, new_id) in remap {
             if new_id != old_id && draft_exists(conn, workspace.id(), new_id)? {
                 return Ok(Some(new_id.clone()));
@@ -2531,13 +2925,26 @@ fn ensure_destinations_hold_no_foreign_draft(
         }
         Ok(None)
     })?;
-    match colliding {
-        None => Ok(()),
-        Some(new_id) => Err(AppError::PathUnavailable(format!(
-            "{new_id} still holds unflushed work from an earlier session: open that Note to \
+    match draft_collision {
+        None => {}
+        Some(new_id) => {
+            return Err(AppError::PathUnavailable(format!(
+                "{new_id} still holds unflushed work from an earlier session: open that Note to \
              recover the draft (or delete it) before moving a Note onto its concept id"
-        ))),
+            )));
+        }
     }
+    for (old_id, new_id) in remap {
+        if new_id != old_id
+            && !remap.contains_key(new_id)
+            && persist::lookup(workspace.id(), new_id)?.is_some()
+        {
+            return Err(AppError::PathUnavailable(format!(
+                "{new_id} is still open in another session: close or recover that Note before moving a Directory onto its concept id"
+            )));
+        }
+    }
+    Ok(())
 }
 
 /// Normalizes a Directory path to the bundle-relative, `/`-separated, no
@@ -3458,23 +3865,22 @@ mod tests {
     }
 
     /// A commit failure happens after both publication stores and session
-    /// registration. Link-target creation is stricter than ordinary creation:
-    /// it unwinds all of those owned resources because it also owns the parent
-    /// Directories it materialized for create-on-follow.
+    /// registration. It is terminal success: create-on-follow retains the
+    /// target and its parents, because removing them would contradict the
+    /// authoritative state the user can already reach.
     #[test]
-    fn create_link_target_commit_failure_removes_owned_note_parents_index_and_session() {
+    fn create_link_target_commit_failure_retains_authoritative_target_and_session() {
         let f = fixture();
         std::fs::remove_dir_all(f.root().join(".git")).unwrap();
 
         let result = create_link_target(&f.workspace, "projects/future/Plan A");
 
         assert!(result.is_err(), "{result:?}");
-        assert!(!f.root().join("projects").exists());
-        assert!(f.note_ids().is_empty());
-        assert!(f.directory_ids().is_empty());
+        assert!(f.root().join("projects/future/Plan A.md").exists());
+        assert_eq!(f.note_ids(), vec!["projects/future/Plan A"]);
         assert!(persist::lookup(f.workspace.id(), "projects/future/Plan A")
             .unwrap()
-            .is_none());
+            .is_some());
     }
 
     /// The filename is the title verbatim plus `.md`, with no slugification,
@@ -4780,6 +5186,21 @@ mod tests {
         assert!(f.root().join("a/b/c").is_dir());
     }
 
+    #[test]
+    fn a_directory_index_failure_rolls_back_only_the_physical_levels_it_created() {
+        let f = fixture();
+        f.inject_index_failure(
+            "CREATE TRIGGER fail_directory_insert BEFORE INSERT ON directories \
+             BEGIN SELECT RAISE(FAIL, 'injected directory index failure'); END;",
+        );
+
+        let result = create_directory(&f.workspace, "created/deep");
+
+        assert!(result.is_err());
+        assert!(!f.root().join("created").exists());
+        assert!(f.directory_ids().is_empty());
+    }
+
     /// A backslash in a Directory path is refused by every operation that takes
     /// one, and nothing is created, renamed or deleted.
     ///
@@ -5230,6 +5651,398 @@ mod tests {
             .flush()
             .expect("the carried-forward session must still be able to write");
         assert!(f.read("New Name.md").contains("first block, edited"));
+    }
+
+    /// Session retirement is post-publication. A poisoned registry must not
+    /// leave a deleted Note writable or report a false settlement warning.
+    #[test]
+    fn a_poisoned_registry_still_retires_a_deleted_session() {
+        let f = fixture();
+        f.write("Doomed.md", &note("Doomed", "body"));
+        f.reindex();
+        let session = f.open("Doomed");
+        let _registry_poison = persist::poison_registry_for_test();
+
+        let result = delete_note_outcome(&f.workspace, "Doomed").unwrap();
+
+        assert!(
+            result.warning.is_none(),
+            "registry recovery is not a warning"
+        );
+        assert_eq!(result.removed, vec!["Doomed"]);
+        assert!(persist::lookup(f.workspace.id(), "Doomed")
+            .unwrap()
+            .is_none());
+        assert!(matches!(
+            session.update_block(&[0], "must not recreate this Note\n"),
+            Err(AppError::ParseError(message)) if message.contains("retired")
+        ));
+        assert!(f.draft_row("Doomed").is_none());
+        assert!(!f.exists("Doomed.md"));
+    }
+
+    /// A state mutex poisoned by a failed caller is recoverable only long
+    /// enough to retire it. Its former handle must then be closed rather than
+    /// poison every later registry operation or recreate the deleted Note.
+    #[test]
+    fn a_poisoned_state_still_retires_a_deleted_session() {
+        let f = fixture();
+        f.write("Doomed.md", &note("Doomed", "body"));
+        f.reindex();
+        let session = f.open("Doomed");
+        session.poison_state_for_test();
+
+        let result = delete_note_outcome(&f.workspace, "Doomed").unwrap();
+
+        assert!(result.warning.is_none(), "state recovery is not a warning");
+        assert!(persist::lookup(f.workspace.id(), "Doomed")
+            .unwrap()
+            .is_none());
+        assert!(matches!(
+            session.update_block(&[0], "must not recreate this Note\n"),
+            Err(AppError::ParseError(message)) if message.contains("retired")
+        ));
+        assert!(f.draft_row("Doomed").is_none());
+    }
+
+    /// Registry recovery covers the move/rekey path too: exactly one live
+    /// session remains, under the destination id, and the retired handle
+    /// cannot seed a stale draft under the vacated name.
+    #[test]
+    fn a_poisoned_registry_rekeys_a_renamed_session_once() {
+        let f = fixture();
+        f.write("Old.md", &note("Old", "body"));
+        f.reindex();
+        let old = f.open("Old");
+        let _registry_poison = persist::poison_registry_for_test();
+
+        let result = rename_note_outcome(&f.workspace, "Old", "New").unwrap();
+
+        assert!(result.warning.is_none());
+        assert_eq!(
+            result.state.as_ref().map(|state| &state.metadata.id),
+            Some(&"New".to_string())
+        );
+        assert!(persist::lookup(f.workspace.id(), "Old").unwrap().is_none());
+        assert!(matches!(
+            old.update_block(&[0], "stale writer\n"),
+            Err(AppError::ParseError(message)) if message.contains("retired")
+        ));
+        assert!(f.draft_row("Old").is_none());
+
+        let new = persist::lookup(f.workspace.id(), "New")
+            .unwrap()
+            .expect("exactly the destination session must remain live");
+        new.update_block(&[0], "destination remains writable\n")
+            .unwrap();
+        new.flush().unwrap();
+        assert!(f.read("New.md").contains("destination remains writable"));
+        assert!(persist::lookup(f.workspace.id(), "Old").unwrap().is_none());
+    }
+
+    /// State recovery happens at the settlement seam, after the filesystem and
+    /// index already identify the destination. Clearing the poison marker is
+    /// required: the moved session must accept a later normal edit.
+    #[test]
+    fn a_poisoned_state_rekeys_a_moved_session_once() {
+        let f = fixture();
+        f.write("Old.md", &note("Old", "body"));
+        f.reindex();
+        create_directory(&f.workspace, "Archive").unwrap();
+        let old = f.open("Old");
+        let to_poison = old.clone();
+        f.workspace
+            .set_before_session_settlement(Some(Arc::new(move || {
+                to_poison.poison_state_for_test();
+            })));
+
+        let result = move_note_outcome(&f.workspace, "Old", "Archive").unwrap();
+        f.workspace.set_before_session_settlement(None);
+
+        assert!(result.warning.is_none());
+        assert_eq!(
+            result
+                .state
+                .as_ref()
+                .map(|state| state.metadata.id.as_str()),
+            Some("Archive/Old")
+        );
+        assert!(persist::lookup(f.workspace.id(), "Old").unwrap().is_none());
+        assert!(matches!(
+            old.update_block(&[0], "stale writer\n"),
+            Err(AppError::ParseError(message)) if message.contains("retired")
+        ));
+        let moved = persist::lookup(f.workspace.id(), "Archive/Old")
+            .unwrap()
+            .expect("the destination session must replace the retired one");
+        moved
+            .update_block(&[0], "moved session remains writable\n")
+            .unwrap();
+        moved.flush().unwrap();
+        assert!(f
+            .read("Archive/Old.md")
+            .contains("moved session remains writable"));
+        assert!(f.draft_row("Old").is_none());
+    }
+
+    /// The source half of an inbound-Link rewrite retains its id. It still
+    /// needs the same poison recovery, because replacing the source/spans and
+    /// revision under a poisoned mutex is what keeps its later edits from
+    /// restoring the old Link.
+    #[test]
+    fn a_poisoned_state_installs_a_same_id_inbound_link_rewrite() {
+        let f = fixture();
+        f.write("Old.md", &note("Old", "target"));
+        f.write("source.md", &note("source", &link("Old", "Old")));
+        f.reindex();
+        let target = f.open("Old");
+        let source = f.open("source");
+        let to_poison = source.clone();
+        f.workspace
+            .set_before_session_settlement(Some(Arc::new(move || {
+                to_poison.poison_state_for_test();
+            })));
+
+        let result = rename_note_outcome(&f.workspace, "Old", "New").unwrap();
+        f.workspace.set_before_session_settlement(None);
+
+        assert!(result.warning.is_none());
+        assert_eq!(result.effects.rewritten, vec!["source"]);
+        assert!(persist::lookup(f.workspace.id(), "Old").unwrap().is_none());
+        assert!(matches!(
+            target.update_block(&[0], "stale target writer\n"),
+            Err(AppError::ParseError(message)) if message.contains("retired")
+        ));
+        assert!(source.working_source().unwrap().contains("</New.md>"));
+        assert_eq!(
+            source.note_state().unwrap().base_revision,
+            content_hash(f.read("source.md").as_bytes())
+        );
+        source
+            .update_block(&[0], "rewritten source remains writable\n")
+            .unwrap();
+        source.flush().unwrap();
+        assert!(f
+            .read("source.md")
+            .contains("rewritten source remains writable"));
+    }
+
+    /// Destination validation is intentionally the last fallible step before
+    /// registry retirement. An invalid id therefore leaves the old live key
+    /// and its draft bookkeeping untouched.
+    #[test]
+    fn an_invalid_rekey_destination_leaves_the_old_session_live() {
+        let f = fixture();
+        f.write("Old.md", &note("Old", "body"));
+        f.reindex();
+        let old = f.open("Old");
+
+        let result = persist::carry_session_forward(
+            &f.workspace,
+            "Old",
+            "../outside",
+            None,
+            content_hash(f.read("Old.md").as_bytes()),
+        );
+
+        assert!(
+            matches!(result, Err(AppError::PathUnavailable(_))),
+            "{result:?}"
+        );
+        assert!(persist::lookup(f.workspace.id(), "Old").unwrap().is_some());
+        assert!(persist::lookup(f.workspace.id(), "../outside")
+            .unwrap()
+            .is_none());
+        old.update_block(&[0], "old session is still authoritative\n")
+            .unwrap();
+        assert!(f
+            .draft_row("Old")
+            .expect("the old session must still own its draft")
+            .contains("old session is still authoritative"));
+    }
+
+    /// Link-existence badges are advisory only. Once the filesystem and index
+    /// publish a rewrite, a badge lookup failure must not unwind the source,
+    /// spans, revision, or session registry — and it must not be mislabeled as
+    /// a lifecycle warning.
+    #[test]
+    fn a_link_badge_failure_after_publication_keeps_sessions_authoritative() {
+        let f = fixture();
+        f.write("Old.md", &note("Old", "target"));
+        f.write("source.md", &note("source", &link("Old", "Old")));
+        f.reindex();
+        let _target = f.open("Old");
+        let source = f.open("source");
+        f.workspace.set_fail_link_resolution_for_test(true);
+
+        let result = rename_note_outcome(&f.workspace, "Old", "New");
+        f.workspace.set_fail_link_resolution_for_test(false);
+        let result = result.unwrap();
+
+        assert!(result.warning.is_none(), "a badge refresh is not a warning");
+        assert_eq!(result.effects.rewritten, vec!["source"]);
+        assert!(persist::lookup(f.workspace.id(), "Old").unwrap().is_none());
+        assert!(persist::lookup(f.workspace.id(), "New").unwrap().is_some());
+        assert!(persist::lookup(f.workspace.id(), "source")
+            .unwrap()
+            .is_some());
+        assert!(source.working_source().unwrap().contains("</New.md>"));
+        assert_eq!(
+            source.note_state().unwrap().base_revision,
+            content_hash(f.read("source.md").as_bytes())
+        );
+        source
+            .update_block(&[0], "link rewrite spans remain writable\n")
+            .unwrap();
+        source.flush().unwrap();
+        assert!(f
+            .read("source.md")
+            .contains("link rewrite spans remain writable"));
+    }
+
+    /// A commit-stage failure is terminal success at the FFI boundary: the
+    /// returned state is the session Core carried to the new id, not an error
+    /// that would invite Presentation to restore the dead old editor.
+    #[test]
+    fn injected_commit_failure_returns_authoritative_rename_state_and_warning() {
+        let f = fixture();
+        f.write("Old.md", &note("Old", "body"));
+        f.reindex();
+        let _session = f.open("Old");
+        crate::git::operations::fail_next_commit_paths_for_test();
+
+        let result = rename_note_outcome(&f.workspace, "Old", "Renamed").unwrap();
+
+        assert_eq!(
+            result
+                .state
+                .as_ref()
+                .map(|state| state.metadata.id.as_str()),
+            Some("Renamed")
+        );
+        assert_eq!(
+            result.warning.as_ref().map(|warning| warning.stage),
+            Some(LifecycleWarningStage::Commit)
+        );
+        assert!(f.exists("Renamed.md"));
+        assert!(persist::lookup(f.workspace.id(), "Old").unwrap().is_none());
+        let carried = persist::lookup(f.workspace.id(), "Renamed")
+            .unwrap()
+            .expect("the authoritative renamed session must stay writable");
+        carried.update_block(&[0], "edited\n").unwrap();
+        carried.flush().unwrap();
+        assert!(f.read("Renamed.md").contains("edited"));
+    }
+
+    /// Moving uses the same result shape as rename. The warning must retain
+    /// the state under the destination id rather than report a false refusal.
+    #[test]
+    fn injected_commit_failure_returns_authoritative_move_state_and_warning() {
+        let f = fixture();
+        f.write("Old.md", &note("Old", "body"));
+        f.reindex();
+        create_directory(&f.workspace, "Archive").unwrap();
+        let _session = f.open("Old");
+        crate::git::operations::fail_next_commit_paths_for_test();
+
+        let result = move_note_outcome(&f.workspace, "Old", "Archive").unwrap();
+
+        assert_eq!(
+            result
+                .state
+                .as_ref()
+                .map(|state| state.metadata.id.as_str()),
+            Some("Archive/Old")
+        );
+        assert_eq!(
+            result.warning.as_ref().map(|warning| warning.stage),
+            Some(LifecycleWarningStage::Commit)
+        );
+        assert!(f.exists("Archive/Old.md"));
+        assert!(persist::lookup(f.workspace.id(), "Old").unwrap().is_none());
+        let carried = persist::lookup(f.workspace.id(), "Archive/Old")
+            .unwrap()
+            .expect("the authoritative moved session must stay writable");
+        carried.update_block(&[0], "moved edit\n").unwrap();
+        carried.flush().unwrap();
+        assert!(f.read("Archive/Old.md").contains("moved edit"));
+    }
+
+    /// Both delete variants report their removed ids with the warning. That
+    /// gives Dart enough information to clear every dead editor without ever
+    /// calling close on a session Core has already retired.
+    #[test]
+    fn injected_commit_failure_reports_authoritative_note_and_directory_removals() {
+        let f = fixture();
+        f.write("Doomed.md", &note("Doomed", "body"));
+        f.write("Folder/Inside.md", &note("Inside", "body"));
+        f.reindex();
+        let _note_session = f.open("Doomed");
+        let _directory_session = f.open("Folder/Inside");
+
+        crate::git::operations::fail_next_commit_paths_for_test();
+        let note = delete_note_outcome(&f.workspace, "Doomed").unwrap();
+        assert_eq!(note.removed, vec!["Doomed"]);
+        assert_eq!(
+            note.warning.as_ref().map(|warning| warning.stage),
+            Some(LifecycleWarningStage::Commit)
+        );
+        assert!(persist::lookup(f.workspace.id(), "Doomed")
+            .unwrap()
+            .is_none());
+        assert!(!f.exists("Doomed.md"));
+
+        crate::git::operations::fail_next_commit_paths_for_test();
+        let directory = delete_directory_outcome(&f.workspace, "Folder").unwrap();
+        assert_eq!(directory.removed, vec!["Folder/Inside"]);
+        assert_eq!(
+            directory.warning.as_ref().map(|warning| warning.stage),
+            Some(LifecycleWarningStage::Commit)
+        );
+        assert!(persist::lookup(f.workspace.id(), "Folder/Inside")
+            .unwrap()
+            .is_none());
+        assert!(!f.exists("Folder/Inside.md"));
+        assert!(f.note_ids().is_empty());
+    }
+
+    #[test]
+    fn cleanup_failure_after_note_and_directory_delete_is_a_terminal_warning() {
+        let f = fixture();
+        f.write("Doomed.md", &note("Doomed", "body"));
+        f.write("Folder/Inside.md", &note("Inside", "body"));
+        f.reindex();
+        let _note = f.open("Doomed");
+        let _inside = f.open("Folder/Inside");
+
+        fail_next_trash_cleanup_for_test();
+        let note = delete_note_outcome(&f.workspace, "Doomed").unwrap();
+        assert_eq!(note.removed, vec!["Doomed"]);
+        assert_eq!(
+            note.warning.as_ref().map(|w| w.stage),
+            Some(LifecycleWarningStage::Settlement)
+        );
+        assert!(note
+            .warning
+            .unwrap()
+            .detail
+            .contains("recovery trash artifact"));
+        assert!(!f.exists("Doomed.md"));
+        assert!(persist::lookup(f.workspace.id(), "Doomed")
+            .unwrap()
+            .is_none());
+
+        fail_next_trash_cleanup_for_test();
+        let directory = delete_directory_outcome(&f.workspace, "Folder").unwrap();
+        assert_eq!(directory.removed, vec!["Folder/Inside"]);
+        assert_eq!(
+            directory.warning.as_ref().map(|w| w.stage),
+            Some(LifecycleWarningStage::Settlement)
+        );
+        assert!(!f.exists("Folder/Inside.md"));
+        assert!(persist::lookup(f.workspace.id(), "Folder/Inside")
+            .unwrap()
+            .is_none());
     }
 
     /// The deletion arm of the same rule: the Note is gone from the bundle and
@@ -5684,6 +6497,176 @@ mod tests {
         );
         assert!(f.exists("A.md"), "the file moved anyway");
         assert_eq!(f.note_ids(), vec!["A".to_string()]);
+    }
+
+    /// A destination session is still authoritative even when a foreign file
+    /// deletion and reindex leave it with no durable row or file. Taking that
+    /// id would retire an unrelated live editor and later overwrite its draft.
+    fn assert_live_destination_session_refuses_note_rekey(
+        f: &Fixture,
+        source_id: &str,
+        destination_id: &str,
+        source_path: &str,
+        destination_path: &str,
+        operation: impl FnOnce(&Arc<Workspace>) -> Result<(NoteState, LifecycleEffects), AppError>,
+    ) {
+        let destination = f.open(destination_id);
+        let destination_source = destination.working_source().unwrap();
+        std::fs::remove_file(f.root().join(destination_path)).unwrap();
+        f.reindex();
+        assert!(
+            !f.note_ids().contains(&destination_id.to_string()),
+            "the external deletion and rebuild must remove the destination row"
+        );
+        let source = f.open(source_id);
+        let source_on_disk = f.read(source_path);
+
+        let refused = operation(&f.workspace);
+
+        assert!(
+            matches!(refused, Err(AppError::PathUnavailable(_))),
+            "{refused:?}"
+        );
+        assert!(
+            f.exists(source_path),
+            "the source file moved despite refusal"
+        );
+        assert!(
+            !f.exists(destination_path),
+            "the externally absent destination was recreated despite refusal"
+        );
+        assert_eq!(f.read(source_path), source_on_disk);
+        assert!(persist::lookup(f.workspace.id(), source_id)
+            .unwrap()
+            .is_some());
+        assert!(persist::lookup(f.workspace.id(), destination_id)
+            .unwrap()
+            .is_some());
+        assert_eq!(destination.working_source().unwrap(), destination_source);
+        assert!(f.draft_row(destination_id).is_none());
+
+        // The destination handle remains its own recoverable editor rather
+        // than being displaced by the source's failed lifecycle operation.
+        destination
+            .update_block(&[0], "destination session remains authoritative\n")
+            .unwrap();
+        source
+            .update_block(&[0], "source session remains authoritative\n")
+            .unwrap();
+        assert!(f
+            .draft_row(destination_id)
+            .expect("the destination session must retain its own draft")
+            .contains("destination session remains authoritative"));
+        assert!(f
+            .draft_row(source_id)
+            .expect("the source session must retain its own draft")
+            .contains("source session remains authoritative"));
+    }
+
+    #[test]
+    fn a_live_orphaned_destination_session_refuses_a_rename_before_publication() {
+        let f = fixture();
+        f.write("Old.md", &note("Old", "source"));
+        f.write("New.md", &note("New", "destination"));
+        f.reindex();
+
+        assert_live_destination_session_refuses_note_rekey(
+            &f,
+            "Old",
+            "New",
+            "Old.md",
+            "New.md",
+            |workspace| rename_note(workspace, "Old", "New"),
+        );
+    }
+
+    #[test]
+    fn a_live_orphaned_destination_session_refuses_a_move_before_publication() {
+        let f = fixture();
+        f.write("Old.md", &note("Old", "source"));
+        f.write("Archive/Old.md", &note("Old", "destination"));
+        f.reindex();
+
+        assert_live_destination_session_refuses_note_rekey(
+            &f,
+            "Old",
+            "Archive/Old",
+            "Old.md",
+            "Archive/Old.md",
+            |workspace| move_note(workspace, "Old", "Archive"),
+        );
+    }
+
+    /// The per-Note availability guard is not used for Directory renames, so
+    /// their remap preflight must protect the same orphaned live session.
+    #[test]
+    fn a_live_orphaned_destination_session_refuses_a_directory_rename() {
+        let f = fixture();
+        f.write("Old/x.md", &note("x", "source"));
+        f.write("New/x.md", &note("x", "destination"));
+        f.reindex();
+        let destination = f.open("New/x");
+        let destination_source = destination.working_source().unwrap();
+        std::fs::remove_file(f.root().join("New/x.md")).unwrap();
+        std::fs::remove_dir(f.root().join("New")).unwrap();
+        f.reindex();
+        let source = f.open("Old/x");
+
+        let refused = rename_directory(&f.workspace, "Old", "New");
+
+        assert!(
+            matches!(refused, Err(AppError::PathUnavailable(_))),
+            "{refused:?}"
+        );
+        assert!(f.exists("Old/x.md"));
+        assert!(!f.exists("New/x.md"));
+        assert_eq!(f.note_ids(), vec!["Old/x".to_string()]);
+        assert!(persist::lookup(f.workspace.id(), "Old/x")
+            .unwrap()
+            .is_some());
+        assert!(persist::lookup(f.workspace.id(), "New/x")
+            .unwrap()
+            .is_some());
+        assert_eq!(destination.working_source().unwrap(), destination_source);
+        assert!(f.draft_row("New/x").is_none());
+
+        destination
+            .update_block(&[0], "destination draft remains its own\n")
+            .unwrap();
+        source
+            .update_block(&[0], "source draft remains its own\n")
+            .unwrap();
+        assert!(f
+            .draft_row("New/x")
+            .expect("the destination draft must remain addressable")
+            .contains("destination draft remains its own"));
+        assert!(f
+            .draft_row("Old/x")
+            .expect("the source draft must remain addressable")
+            .contains("source draft remains its own"));
+    }
+
+    /// The source session is not foreign to a same-id operation. This keeps
+    /// the new live-session guard from turning an otherwise harmless no-op
+    /// move into a false collision.
+    #[test]
+    fn a_same_id_move_keeps_its_own_live_session() {
+        let f = fixture();
+        f.write("Old.md", &note("Old", "body"));
+        f.reindex();
+        let session = f.open("Old");
+
+        let result = move_note(&f.workspace, "Old", "").unwrap();
+
+        assert_eq!(result.0.metadata.id, "Old");
+        assert!(persist::lookup(f.workspace.id(), "Old").unwrap().is_some());
+        session
+            .update_block(&[0], "same id remains writable\n")
+            .unwrap();
+        assert!(f
+            .draft_row("Old")
+            .expect("the source session must remain its own")
+            .contains("same id remains writable"));
     }
 
     /// A rename that only changes case still finds its **own** draft row at the

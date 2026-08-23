@@ -1591,6 +1591,13 @@ impl SseDecode for crate::api::ffi_api::CloseNoteResult {
     }
 }
 
+impl SseDecode for i32 {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        deserializer.cursor.read_i32::<NativeEndian>().unwrap()
+    }
+}
+
 impl SseDecode for i64 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -1655,6 +1662,49 @@ impl SseDecode for crate::workspace::lifecycle::LifecycleEffects {
         return crate::workspace::lifecycle::LifecycleEffects {
             remapped: var_remapped,
             rewritten: var_rewritten,
+        };
+    }
+}
+
+impl SseDecode for crate::workspace::lifecycle::LifecycleResult {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_state = <Option<crate::draft::NoteState>>::sse_decode(deserializer);
+        let mut var_effects =
+            <crate::workspace::lifecycle::LifecycleEffects>::sse_decode(deserializer);
+        let mut var_removed = <Vec<String>>::sse_decode(deserializer);
+        let mut var_warning =
+            <Option<crate::workspace::lifecycle::LifecycleWarning>>::sse_decode(deserializer);
+        return crate::workspace::lifecycle::LifecycleResult {
+            state: var_state,
+            effects: var_effects,
+            removed: var_removed,
+            warning: var_warning,
+        };
+    }
+}
+
+impl SseDecode for crate::workspace::lifecycle::LifecycleWarning {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_stage =
+            <crate::workspace::lifecycle::LifecycleWarningStage>::sse_decode(deserializer);
+        let mut var_detail = <String>::sse_decode(deserializer);
+        return crate::workspace::lifecycle::LifecycleWarning {
+            stage: var_stage,
+            detail: var_detail,
+        };
+    }
+}
+
+impl SseDecode for crate::workspace::lifecycle::LifecycleWarningStage {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::workspace::lifecycle::LifecycleWarningStage::Commit,
+            1 => crate::workspace::lifecycle::LifecycleWarningStage::Settlement,
+            _ => unreachable!("Invalid variant for LifecycleWarningStage: {}", inner),
         };
     }
 }
@@ -1947,6 +1997,30 @@ impl SseDecode for Option<i64> {
     }
 }
 
+impl SseDecode for Option<crate::workspace::lifecycle::LifecycleWarning> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<crate::workspace::lifecycle::LifecycleWarning>::sse_decode(
+                deserializer,
+            ));
+        } else {
+            return None;
+        }
+    }
+}
+
+impl SseDecode for Option<crate::draft::NoteState> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<crate::draft::NoteState>::sse_decode(deserializer));
+        } else {
+            return None;
+        }
+    }
+}
+
 impl SseDecode for Option<Vec<crate::markdown::ast::AstNode>> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -1995,21 +2069,6 @@ impl SseDecode for crate::api::ffi_api::RangeEditResult {
             state: var_state,
             caret: var_caret,
         };
-    }
-}
-
-impl SseDecode
-    for (
-        crate::draft::NoteState,
-        crate::workspace::lifecycle::LifecycleEffects,
-    )
-{
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
-        let mut var_field0 = <crate::draft::NoteState>::sse_decode(deserializer);
-        let mut var_field1 =
-            <crate::workspace::lifecycle::LifecycleEffects>::sse_decode(deserializer);
-        return (var_field0, var_field1);
     }
 }
 
@@ -2119,13 +2178,6 @@ impl SseDecode for crate::workspace::bootstrap::WorkspaceInfo {
             remote_url: var_remoteUrl,
             local_path: var_localPath,
         };
-    }
-}
-
-impl SseDecode for i32 {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
-        deserializer.cursor.read_i32::<NativeEndian>().unwrap()
     }
 }
 
@@ -2462,6 +2514,71 @@ impl flutter_rust_bridge::IntoIntoDart<crate::workspace::lifecycle::LifecycleEff
     for crate::workspace::lifecycle::LifecycleEffects
 {
     fn into_into_dart(self) -> crate::workspace::lifecycle::LifecycleEffects {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::workspace::lifecycle::LifecycleResult {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.state.into_into_dart().into_dart(),
+            self.effects.into_into_dart().into_dart(),
+            self.removed.into_into_dart().into_dart(),
+            self.warning.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::workspace::lifecycle::LifecycleResult
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::workspace::lifecycle::LifecycleResult>
+    for crate::workspace::lifecycle::LifecycleResult
+{
+    fn into_into_dart(self) -> crate::workspace::lifecycle::LifecycleResult {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::workspace::lifecycle::LifecycleWarning {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.stage.into_into_dart().into_dart(),
+            self.detail.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::workspace::lifecycle::LifecycleWarning
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::workspace::lifecycle::LifecycleWarning>
+    for crate::workspace::lifecycle::LifecycleWarning
+{
+    fn into_into_dart(self) -> crate::workspace::lifecycle::LifecycleWarning {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::workspace::lifecycle::LifecycleWarningStage {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::Commit => 0.into_dart(),
+            Self::Settlement => 1.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::workspace::lifecycle::LifecycleWarningStage
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::workspace::lifecycle::LifecycleWarningStage>
+    for crate::workspace::lifecycle::LifecycleWarningStage
+{
+    fn into_into_dart(self) -> crate::workspace::lifecycle::LifecycleWarningStage {
         self
     }
 }
@@ -2947,6 +3064,13 @@ impl SseEncode for crate::api::ffi_api::CloseNoteResult {
     }
 }
 
+impl SseEncode for i32 {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        serializer.cursor.write_i32::<NativeEndian>(self).unwrap();
+    }
+}
+
 impl SseEncode for i64 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -2997,6 +3121,43 @@ impl SseEncode for crate::workspace::lifecycle::LifecycleEffects {
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <Vec<crate::workspace::lifecycle::IdRemap>>::sse_encode(self.remapped, serializer);
         <Vec<String>>::sse_encode(self.rewritten, serializer);
+    }
+}
+
+impl SseEncode for crate::workspace::lifecycle::LifecycleResult {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <Option<crate::draft::NoteState>>::sse_encode(self.state, serializer);
+        <crate::workspace::lifecycle::LifecycleEffects>::sse_encode(self.effects, serializer);
+        <Vec<String>>::sse_encode(self.removed, serializer);
+        <Option<crate::workspace::lifecycle::LifecycleWarning>>::sse_encode(
+            self.warning,
+            serializer,
+        );
+    }
+}
+
+impl SseEncode for crate::workspace::lifecycle::LifecycleWarning {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <crate::workspace::lifecycle::LifecycleWarningStage>::sse_encode(self.stage, serializer);
+        <String>::sse_encode(self.detail, serializer);
+    }
+}
+
+impl SseEncode for crate::workspace::lifecycle::LifecycleWarningStage {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::workspace::lifecycle::LifecycleWarningStage::Commit => 0,
+                crate::workspace::lifecycle::LifecycleWarningStage::Settlement => 1,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
     }
 }
 
@@ -3223,6 +3384,26 @@ impl SseEncode for Option<i64> {
     }
 }
 
+impl SseEncode for Option<crate::workspace::lifecycle::LifecycleWarning> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <crate::workspace::lifecycle::LifecycleWarning>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for Option<crate::draft::NoteState> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <crate::draft::NoteState>::sse_encode(value, serializer);
+        }
+    }
+}
+
 impl SseEncode for Option<Vec<crate::markdown::ast::AstNode>> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -3261,19 +3442,6 @@ impl SseEncode for crate::api::ffi_api::RangeEditResult {
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <crate::draft::NoteState>::sse_encode(self.state, serializer);
         <crate::api::ffi_api::RangeEditCaret>::sse_encode(self.caret, serializer);
-    }
-}
-
-impl SseEncode
-    for (
-        crate::draft::NoteState,
-        crate::workspace::lifecycle::LifecycleEffects,
-    )
-{
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
-        <crate::draft::NoteState>::sse_encode(self.0, serializer);
-        <crate::workspace::lifecycle::LifecycleEffects>::sse_encode(self.1, serializer);
     }
 }
 
@@ -3361,13 +3529,6 @@ impl SseEncode for crate::workspace::bootstrap::WorkspaceInfo {
         <String>::sse_encode(self.provider, serializer);
         <Option<String>>::sse_encode(self.remote_url, serializer);
         <String>::sse_encode(self.local_path, serializer);
-    }
-}
-
-impl SseEncode for i32 {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
-        serializer.cursor.write_i32::<NativeEndian>(self).unwrap();
     }
 }
 

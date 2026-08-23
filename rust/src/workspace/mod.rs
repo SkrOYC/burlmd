@@ -14,7 +14,9 @@ mod links_rewrite;
 pub mod persist;
 
 pub use bootstrap::{default_workspace_dir, WorkspaceInfo};
-pub use lifecycle::{IdRemap, LifecycleEffects};
+pub use lifecycle::{
+    IdRemap, LifecycleEffects, LifecycleResult, LifecycleWarning, LifecycleWarningStage,
+};
 pub use persist::{NoteSession, NoteWriteStatus, Workspace};
 
 /// The prefix [`lifecycle`]'s `FileJournal` parks a deletion under.

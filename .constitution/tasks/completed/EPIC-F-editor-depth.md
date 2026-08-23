@@ -575,6 +575,26 @@ generated FFI bindings, localization, and regression tests. The accompanying
 Stage 3 reconciliation documents the contract and schema. These changes harden
 the completed delivery; they do not revise the historical 25-commit range.
 
+### PR #10 review round 7 correction
+
+Round 7 hardened the completed Epic's Rust continuation and lifecycle paths.
+`continue_block_after` accepts only an editable leaf that overlaps the inserted
+source. Focusing a pre-existing sibling cannot persist unaddressable Markdown.
+Source-mutating FFI calls take an edit lease before session lookup. Lifecycle
+operations drain admitted requests before snapshotting. These steps prevent
+stale handles after rename, move, delete, and inbound-link rewrites that keep
+the same identifier.
+
+The correction also makes lifecycle terminal outcomes explicit across the FFI.
+After rename, move, note deletion, or directory deletion settles filesystem,
+index, and session state, a Git commit-stage failure returns authoritative
+state, effects, or removed IDs with a typed warning. Presentation settles that
+data before it shows a localized dismissible warning. Only a true refusal keeps
+the prior editor writable.
+
+This bounded correction includes Rust regressions and Stage 3 and Stage 4
+reconciliation. It does not reopen an Epic F ticket.
+
 ## Deferred follow-ups and remaining risks
 
 No Epic F acceptance criterion remains open. Deferred work is recorded in the

@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:burlmd/src/components/editor.dart';
 import 'package:burlmd/src/components/lifecycle_actions.dart';
 import 'package:burlmd/src/components/workspace_tree.dart';
+import 'package:burlmd/l10n/generated/app_localizations.dart';
 import 'package:burlmd/src/providers/note_providers.dart';
 import 'package:burlmd/src/providers/rust_api_provider.dart';
 import 'package:burlmd/src/providers/workspace_provider.dart';
@@ -32,20 +35,30 @@ class _LifecycleApi extends RustApi {
 
   NoteState? createNoteResult;
   Object? createNoteError;
+  Completer<void>? createNoteGate;
   (NoteState, LifecycleEffects)? renameNoteResult;
   Object? renameNoteError;
+  Completer<void>? renameNoteGate;
   (NoteState, LifecycleEffects)? moveNoteResult;
   Object? moveNoteError;
   Object? deleteNoteError;
+  Completer<void>? deleteNoteGate;
   Object? createDirectoryError;
   LifecycleEffects? renameDirectoryResult;
   Object? renameDirectoryError;
   List<String>? deleteDirectoryResult;
+  Completer<void>? deleteDirectoryGate;
+  LifecycleWarning? lifecycleWarning;
 
   /// What `open_note` returns per id — for already-open Notes the live
   /// session state (post-rewrite, post-remap), which is exactly what the
   /// production re-anchor and rewritten-reload paths fetch.
   Map<String, NoteState> openStates = {};
+  final Map<String, Completer<NoteState>> openNoteGates = {};
+
+  /// A delayed reload lets tests race the disk result against a lifecycle
+  /// operation that replaces or removes the session meanwhile.
+  Completer<NoteState>? reloadNoteGate;
 
   /// The last source text `update_block` received — the "next keystroke"
   /// probe for the focus-refresh criterion.
@@ -102,6 +115,20 @@ class _LifecycleApi extends RustApi {
   @override
   Future<NoteState> openNote(String noteId) async {
     openNoteCalls.add(noteId);
+    final gate = openNoteGates[noteId];
+    if (gate != null) return gate.future;
+    final opened = openStates[noteId];
+    if (opened != null) return opened;
+    final created = createNoteResult;
+    if (created != null && created.metadata.id == noteId) return created;
+    throw StateError('no open state for $noteId');
+  }
+
+  @override
+  Future<NoteState> reloadNote(String noteId) async {
+    calls.add('reloadNote:$noteId');
+    final gate = reloadNoteGate;
+    if (gate != null) return gate.future;
     return openStates[noteId]!;
   }
 
@@ -111,61 +138,84 @@ class _LifecycleApi extends RustApi {
   }
 
   @override
-  Future<NoteState> createNote(String directoryPath, String title) async {
+  Future<LifecycleResult> createNote(String directoryPath, String title) async {
     calls.add('createNote:$directoryPath:$title');
+    final gate = createNoteGate;
+    if (gate != null && !gate.isCompleted) await gate.future;
     final error = createNoteError;
     if (error != null) throw error;
-    return createNoteResult!;
+    return lifecycleResult(state: createNoteResult!, warning: lifecycleWarning);
   }
 
   @override
-  Future<(NoteState, LifecycleEffects)> renameNote(
-    String noteId,
-    String newTitle,
-  ) async {
+  Future<LifecycleResult> renameNote(String noteId, String newTitle) async {
     calls.add('renameNote:$noteId:$newTitle');
+    final gate = renameNoteGate;
+    if (gate != null && !gate.isCompleted) await gate.future;
     final error = renameNoteError;
     if (error != null) throw error;
-    return renameNoteResult!;
+    final (state, effects) = renameNoteResult!;
+    return lifecycleResult(
+      state: state,
+      effects: effects,
+      warning: lifecycleWarning,
+    );
   }
 
   @override
-  Future<(NoteState, LifecycleEffects)> moveNote(
+  Future<LifecycleResult> moveNote(
     String noteId,
     String newDirectoryPath,
   ) async {
     calls.add('moveNote:$noteId:$newDirectoryPath');
     final error = moveNoteError;
     if (error != null) throw error;
-    return moveNoteResult!;
+    final (state, effects) = moveNoteResult!;
+    return lifecycleResult(
+      state: state,
+      effects: effects,
+      warning: lifecycleWarning,
+    );
   }
 
   @override
-  Future<void> deleteNote(String noteId) async {
+  Future<LifecycleResult> deleteNote(String noteId) async {
     calls.add('deleteNote:$noteId');
+    final gate = deleteNoteGate;
+    if (gate != null && !gate.isCompleted) await gate.future;
     final error = deleteNoteError;
     if (error != null) throw error;
+    return lifecycleResult(removed: [noteId], warning: lifecycleWarning);
   }
 
   @override
-  Future<void> createDirectory(String path) async {
+  Future<LifecycleResult> createDirectory(String path) async {
     calls.add('createDirectory:$path');
     final error = createDirectoryError;
     if (error != null) throw error;
+    return lifecycleResult(warning: lifecycleWarning);
   }
 
   @override
-  Future<LifecycleEffects> renameDirectory(String path, String newName) async {
+  Future<LifecycleResult> renameDirectory(String path, String newName) async {
     calls.add('renameDirectory:$path:$newName');
     final error = renameDirectoryError;
     if (error != null) throw error;
-    return renameDirectoryResult!;
+    return lifecycleResult(
+      effects: renameDirectoryResult!,
+      warning: lifecycleWarning,
+    );
   }
 
   @override
-  Future<List<String>> deleteDirectory(String path) async {
+  Future<LifecycleResult> deleteDirectory(String path) async {
     calls.add('deleteDirectory:$path');
-    return deleteDirectoryResult ?? const [];
+    final gate = deleteDirectoryGate;
+    if (gate != null && !gate.isCompleted) await gate.future;
+    return lifecycleResult(
+      removed: deleteDirectoryResult ?? const [],
+      warning: lifecycleWarning,
+    );
   }
 }
 
@@ -209,12 +259,28 @@ LifecycleEffects effects({
   List<String> rewritten = const [],
 }) => LifecycleEffects(remapped: remapped, rewritten: rewritten);
 
+LifecycleResult lifecycleResult({
+  NoteState? state,
+  LifecycleEffects? effects,
+  List<String> removed = const [],
+  LifecycleWarning? warning,
+}) => LifecycleResult(
+  state: state,
+  effects: effects ?? const LifecycleEffects(remapped: [], rewritten: []),
+  removed: removed,
+  warning: warning,
+);
+
 Future<void> _pumpTree(WidgetTester tester, _LifecycleApi api) async {
   await tester.pumpWidget(
     ProviderScope(
       overrides: [rustApiProvider.overrideWithValue(api)],
-      child: const MaterialApp(
-        home: Scaffold(body: SizedBox(width: 300, child: WorkspaceTree())),
+      child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: const Scaffold(
+          body: SizedBox(width: 300, child: WorkspaceTree()),
+        ),
       ),
     ),
   );
@@ -304,6 +370,127 @@ void main() {
       expect(api.calls.length, 1);
       expect(container.read(selectedNoteIdProvider), isNull);
     });
+
+    testWidgets('a delayed create cannot overwrite a newer selection', (
+      tester,
+    ) async {
+      final gate = Completer<void>();
+      final api = _LifecycleApi()
+        ..createNoteGate = gate
+        ..createNoteResult = stateFor('Projects/Created', title: 'Created');
+      late ProviderContainer container;
+      await tester.pumpWidget(_probeHarness(api, (c) => container = c));
+      addTearDown(container.dispose);
+      container.read(activeNoteProvider.notifier).adopt(stateFor('Old'));
+      container.read(selectedNoteIdProvider.notifier).select('Old');
+
+      final pending = container
+          .read(lifecycleActionsProvider)
+          .createNote('Projects', 'Created');
+      await tester.pump();
+      container.read(activeNoteProvider.notifier).adopt(stateFor('Newer'));
+      container.read(selectedNoteIdProvider.notifier).select('Newer');
+      gate.complete();
+      await pending;
+
+      expect(container.read(activeNoteProvider)!.metadata.id, 'Newer');
+      expect(container.read(selectedNoteIdProvider), 'Newer');
+    });
+
+    testWidgets('a create warning still publishes its authoritative state', (
+      tester,
+    ) async {
+      final created = stateFor('Projects/Created', title: 'Created');
+      final open = Completer<NoteState>();
+      final api = _LifecycleApi()
+        ..createNoteResult = created
+        ..openNoteGates[created.metadata.id] = open
+        ..lifecycleWarning = const LifecycleWarning(
+          stage: LifecycleWarningStage.commit,
+          detail: 'commit unavailable',
+        );
+      late ProviderContainer container;
+      await tester.pumpWidget(_probeHarness(api, (c) => container = c));
+      addTearDown(container.dispose);
+
+      final pending = container
+          .read(lifecycleActionsProvider)
+          .createNote('Projects', 'Created');
+      await tester.pump();
+
+      // The terminal warning cannot escape while the Core-created session is
+      // not yet the active editor state.
+      expect(container.read(activeNoteProvider), isNull);
+      expect(container.read(selectedNoteIdProvider), isNull);
+      expect(container.read(lifecycleEditingProvider), 1);
+      open.complete(created);
+      final outcome = await pending;
+
+      expect(
+        (outcome as LifecycleCompleted).warning,
+        same(api.lifecycleWarning),
+      );
+      expect(container.read(activeNoteProvider), same(created));
+      expect(container.read(selectedNoteIdProvider), created.metadata.id);
+      expect(container.read(lifecycleEditingProvider), 0);
+    });
+
+    testWidgets('an ordinary create warning waits for the created editor '
+        'session and retires the old raw field', (tester) async {
+      final old = stateFor('Old', ast: [paragraph('old raw source')]);
+      final created = stateFor(
+        'Projects/Created',
+        title: 'Created',
+        ast: [paragraph('created source')],
+      );
+      final api = _LifecycleApi()
+        ..createNoteResult = created
+        ..openStates = {created.metadata.id: created}
+        ..lifecycleWarning = const LifecycleWarning(
+          stage: LifecycleWarningStage.commit,
+          detail: 'commit unavailable',
+        );
+      late ProviderContainer container;
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [rustApiProvider.overrideWithValue(api)],
+          child: Consumer(
+            builder: (context, ref, _) {
+              container = ProviderScope.containerOf(context);
+              return const MaterialApp(
+                localizationsDelegates: AppLocalizations.localizationsDelegates,
+                supportedLocales: AppLocalizations.supportedLocales,
+                home: Scaffold(body: Editor()),
+              );
+            },
+          ),
+        ),
+      );
+      addTearDown(container.dispose);
+      container.read(activeNoteProvider.notifier).adopt(old);
+      container.read(selectedNoteIdProvider.notifier).select(old.metadata.id);
+      api.stagedBlockSources['0'] = ['old raw source'];
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('block-0')));
+      await tester.pumpAndSettle();
+      final writable = find.byWidgetPredicate(
+        (widget) => widget is EditableText && !widget.readOnly,
+      );
+      expect(writable, findsOneWidget);
+
+      final outcome = await container
+          .read(lifecycleActionsProvider)
+          .createNote('Projects', 'Created');
+      await tester.pumpAndSettle();
+      report(tester.element(find.byType(Scaffold)), outcome);
+      await tester.pump();
+
+      expect(container.read(activeNoteProvider), same(created));
+      expect(container.read(selectedNoteIdProvider), created.metadata.id);
+      expect(find.text('created source'), findsOneWidget);
+      expect(writable, findsNothing);
+      expect(find.textContaining('The change is applied'), findsOneWidget);
+    });
   });
 
   group('renaming the open note', () {
@@ -336,6 +523,34 @@ void main() {
       expect(container.read(selectedNoteIdProvider), 'Projects/Renamed');
       expect(api.openNoteCalls, isEmpty);
       expect(api.calls.where((c) => c.startsWith('closeNote')), isEmpty);
+    });
+
+    testWidgets('a terminal commit warning settles the renamed editor before '
+        'it reaches presentation', (tester) async {
+      final renamed = stateFor('Projects/Renamed', title: 'Renamed');
+      final api = _LifecycleApi()
+        ..renameNoteResult = (renamed, effects())
+        ..lifecycleWarning = const LifecycleWarning(
+          stage: LifecycleWarningStage.commit,
+          detail: 'injected commit failure',
+        );
+      late ProviderContainer container;
+      await tester.pumpWidget(_probeHarness(api, (c) => container = c));
+      addTearDown(container.dispose);
+      container.read(activeNoteProvider.notifier).adopt(stateFor('Old'));
+      container.read(selectedNoteIdProvider.notifier).select('Old');
+
+      final outcome = await container
+          .read(lifecycleActionsProvider)
+          .renameNote('Old', 'Renamed');
+
+      expect(
+        (outcome as LifecycleCompleted).warning,
+        same(api.lifecycleWarning),
+      );
+      expect(container.read(activeNoteProvider), same(renamed));
+      expect(container.read(selectedNoteIdProvider), 'Projects/Renamed');
+      expect(container.read(editorInputBlockedProvider), isFalse);
     });
   });
 
@@ -412,6 +627,102 @@ void main() {
       expect(container.read(selectedNoteIdProvider), 'b');
       expect(api.openNoteCalls, ['b']);
     });
+
+    testWidgets('a terminal directory warning re-anchors a contained editor '
+        'before presentation reports it', (tester) async {
+      final moved = stateFor('Renamed/Old');
+      final api = _LifecycleApi()
+        ..renameDirectoryResult = effects(
+          remapped: [IdRemap(oldId: 'Projects/Old', newId: 'Renamed/Old')],
+        )
+        ..openStates = {'Renamed/Old': moved}
+        ..lifecycleWarning = const LifecycleWarning(
+          stage: LifecycleWarningStage.commit,
+          detail: 'injected commit failure',
+        );
+      late ProviderContainer container;
+      await tester.pumpWidget(_probeHarness(api, (c) => container = c));
+      addTearDown(container.dispose);
+      container
+          .read(activeNoteProvider.notifier)
+          .adopt(stateFor('Projects/Old'));
+      container.read(selectedNoteIdProvider.notifier).select('Projects/Old');
+
+      final outcome = await container
+          .read(lifecycleActionsProvider)
+          .renameDirectory('Projects', 'Renamed');
+
+      expect(
+        (outcome as LifecycleCompleted).warning,
+        same(api.lifecycleWarning),
+      );
+      expect(container.read(activeNoteProvider), same(moved));
+      expect(container.read(selectedNoteIdProvider), 'Renamed/Old');
+      expect(container.read(editorInputBlockedProvider), isFalse);
+    });
+
+    testWidgets('a delayed remap fetch cannot resurrect a Note deleted by a '
+        'newer lifecycle operation', (tester) async {
+      final delayedOpen = Completer<NoteState>();
+      final api = _LifecycleApi()
+        ..renameDirectoryResult = effects(
+          remapped: [IdRemap(oldId: 'Old/Note', newId: 'New/Note')],
+        )
+        ..openNoteGates['New/Note'] = delayedOpen;
+      late ProviderContainer container;
+      await tester.pumpWidget(_probeHarness(api, (c) => container = c));
+      addTearDown(container.dispose);
+      container.read(activeNoteProvider.notifier).adopt(stateFor('Old/Note'));
+      container.read(selectedNoteIdProvider.notifier).select('Old/Note');
+
+      final remap = container
+          .read(lifecycleActionsProvider)
+          .renameDirectory('Old', 'New');
+      await tester.pump();
+      expect(api.openNoteCalls, ['New/Note']);
+
+      await container.read(lifecycleActionsProvider).deleteNote('Old/Note');
+      expect(container.read(activeNoteProvider), isNull);
+
+      delayedOpen.complete(stateFor('New/Note'));
+      await remap;
+      expect(container.read(activeNoteProvider), isNull);
+      expect(container.read(selectedNoteIdProvider), isNull);
+      expect(container.read(lifecycleEditingProvider), 0);
+    });
+
+    testWidgets('a delayed remap fetch cannot overwrite a newer re-anchor', (
+      tester,
+    ) async {
+      final delayedOpen = Completer<NoteState>();
+      final finalState = stateFor('Final/Note');
+      final api = _LifecycleApi()
+        ..renameDirectoryResult = effects(
+          remapped: [IdRemap(oldId: 'Old/Note', newId: 'Middle/Note')],
+        )
+        ..openNoteGates['Middle/Note'] = delayedOpen
+        ..renameNoteResult = (finalState, effects());
+      late ProviderContainer container;
+      await tester.pumpWidget(_probeHarness(api, (c) => container = c));
+      addTearDown(container.dispose);
+      container.read(activeNoteProvider.notifier).adopt(stateFor('Old/Note'));
+      container.read(selectedNoteIdProvider.notifier).select('Old/Note');
+
+      final remap = container
+          .read(lifecycleActionsProvider)
+          .renameDirectory('Old', 'Middle');
+      await tester.pump();
+      await container
+          .read(lifecycleActionsProvider)
+          .renameNote('Old/Note', 'Final');
+      expect(container.read(activeNoteProvider), same(finalState));
+
+      delayedOpen.complete(stateFor('Middle/Note'));
+      await remap;
+      expect(container.read(activeNoteProvider), same(finalState));
+      expect(container.read(selectedNoteIdProvider), 'Final/Note');
+      expect(container.read(lifecycleEditingProvider), 0);
+    });
   });
 
   group('deletion', () {
@@ -447,6 +758,32 @@ void main() {
       expect(container.read(selectedNoteIdProvider), 'kept');
     });
 
+    testWidgets('a terminal delete warning closes the dead editor instead of '
+        'restoring it', (tester) async {
+      final api = _LifecycleApi()
+        ..lifecycleWarning = const LifecycleWarning(
+          stage: LifecycleWarningStage.commit,
+          detail: 'injected commit failure',
+        );
+      late ProviderContainer container;
+      await tester.pumpWidget(_probeHarness(api, (c) => container = c));
+      addTearDown(container.dispose);
+      container.read(activeNoteProvider.notifier).adopt(stateFor('gone'));
+      container.read(selectedNoteIdProvider.notifier).select('gone');
+
+      final outcome = await container
+          .read(lifecycleActionsProvider)
+          .deleteNote('gone');
+
+      expect(
+        (outcome as LifecycleCompleted).warning,
+        same(api.lifecycleWarning),
+      );
+      expect(container.read(activeNoteProvider), isNull);
+      expect(container.read(selectedNoteIdProvider), isNull);
+      expect(container.read(editorInputBlockedProvider), isFalse);
+    });
+
     testWidgets('deleting a directory closes an open note from inside it', (
       tester,
     ) async {
@@ -464,6 +801,141 @@ void main() {
       expect(outcome, isA<LifecycleCompleted>());
       expect(container.read(activeNoteProvider), isNull);
       expect(container.read(selectedNoteIdProvider), isNull);
+    });
+
+    testWidgets('a delayed note delete cannot close a recreated selection', (
+      tester,
+    ) async {
+      final gate = Completer<void>();
+      final api = _LifecycleApi()..deleteNoteGate = gate;
+      late ProviderContainer container;
+      await tester.pumpWidget(_probeHarness(api, (c) => container = c));
+      addTearDown(container.dispose);
+      container.read(activeNoteProvider.notifier).adopt(stateFor('gone'));
+      container.read(selectedNoteIdProvider.notifier).select('gone');
+      final pending = container
+          .read(lifecycleActionsProvider)
+          .deleteNote('gone');
+      await tester.pump();
+      final recreated = stateFor('gone', title: 'recreated');
+      container.read(activeNoteProvider.notifier).adopt(recreated);
+      container.read(selectedNoteIdProvider.notifier).select('gone');
+      gate.complete();
+      await pending;
+      expect(container.read(activeNoteProvider), same(recreated));
+      expect(container.read(selectedNoteIdProvider), 'gone');
+    });
+
+    testWidgets(
+      'a delayed directory delete cannot close a reanchored selection',
+      (tester) async {
+        final gate = Completer<void>();
+        final api = _LifecycleApi()
+          ..deleteDirectoryGate = gate
+          ..deleteDirectoryResult = ['old/inside'];
+        late ProviderContainer container;
+        await tester.pumpWidget(_probeHarness(api, (c) => container = c));
+        addTearDown(container.dispose);
+        container
+            .read(activeNoteProvider.notifier)
+            .adopt(stateFor('old/inside'));
+        container.read(selectedNoteIdProvider.notifier).select('old/inside');
+        final pending = container
+            .read(lifecycleActionsProvider)
+            .deleteDirectory('old');
+        await tester.pump();
+        final reanchored = stateFor('new/inside');
+        container.read(activeNoteProvider.notifier).adopt(reanchored);
+        container.read(selectedNoteIdProvider.notifier).select('new/inside');
+        gate.complete();
+        await pending;
+        expect(container.read(activeNoteProvider), same(reanchored));
+        expect(container.read(selectedNoteIdProvider), 'new/inside');
+      },
+    );
+  });
+
+  group('reload raced by lifecycle', () {
+    Future<ProviderContainer> prepare(
+      WidgetTester tester,
+      _LifecycleApi api,
+    ) async {
+      late ProviderContainer container;
+      await tester.pumpWidget(_probeHarness(api, (c) => container = c));
+      addTearDown(container.dispose);
+      container.read(activeNoteProvider.notifier).adopt(stateFor('Old/Note'));
+      container.read(selectedNoteIdProvider.notifier).select('Old/Note');
+      return container;
+    }
+
+    testWidgets('a delayed reload result cannot overwrite a lifecycle rename', (
+      tester,
+    ) async {
+      final reload = Completer<NoteState>();
+      final renamed = stateFor('Renamed/Note');
+      final api = _LifecycleApi()
+        ..reloadNoteGate = reload
+        ..renameNoteResult = (renamed, effects());
+      final container = await prepare(tester, api);
+
+      final reloadFuture = container
+          .read(activeNoteProvider.notifier)
+          .reloadFromDisk();
+      await tester.pump();
+      await container
+          .read(lifecycleActionsProvider)
+          .renameNote('Old/Note', 'Renamed');
+      reload.complete(stateFor('Old/Note', title: 'stale disk state'));
+      await reloadFuture;
+
+      expect(container.read(activeNoteProvider), same(renamed));
+      expect(container.read(selectedNoteIdProvider), 'Renamed/Note');
+      expect(container.read(editorErrorProvider), isNull);
+    });
+
+    testWidgets('a delayed reload result cannot overwrite a lifecycle move', (
+      tester,
+    ) async {
+      final reload = Completer<NoteState>();
+      final moved = stateFor('Archive/Note');
+      final api = _LifecycleApi()
+        ..reloadNoteGate = reload
+        ..moveNoteResult = (moved, effects());
+      final container = await prepare(tester, api);
+
+      final reloadFuture = container
+          .read(activeNoteProvider.notifier)
+          .reloadFromDisk();
+      await tester.pump();
+      await container
+          .read(lifecycleActionsProvider)
+          .moveNote('Old/Note', 'Archive');
+      reload.complete(stateFor('Old/Note', title: 'stale disk state'));
+      await reloadFuture;
+
+      expect(container.read(activeNoteProvider), same(moved));
+      expect(container.read(selectedNoteIdProvider), 'Archive/Note');
+      expect(container.read(editorErrorProvider), isNull);
+    });
+
+    testWidgets('a delayed reload error is ignored after lifecycle deletion', (
+      tester,
+    ) async {
+      final reload = Completer<NoteState>();
+      final api = _LifecycleApi()..reloadNoteGate = reload;
+      final container = await prepare(tester, api);
+
+      final reloadFuture = container
+          .read(activeNoteProvider.notifier)
+          .reloadFromDisk();
+      await tester.pump();
+      await container.read(lifecycleActionsProvider).deleteNote('Old/Note');
+      reload.completeError(StateError('stale reload failure'));
+      await reloadFuture;
+
+      expect(container.read(activeNoteProvider), isNull);
+      expect(container.read(selectedNoteIdProvider), isNull);
+      expect(container.read(editorErrorProvider), isNull);
     });
   });
 
@@ -582,6 +1054,32 @@ void main() {
     expect(find.textContaining('That name cannot be used'), findsOneWidget);
   });
 
+  testWidgets('a completed lifecycle warning uses the localized dismissible '
+      'status instead of a failure outcome', (tester) async {
+    final api = _LifecycleApi();
+    await _pumpTree(tester, api);
+
+    report(
+      tester.element(find.byType(Scaffold)),
+      const LifecycleCompleted(
+        'Renamed',
+        warning: LifecycleWarning(
+          stage: LifecycleWarningStage.commit,
+          detail: 'Git index refresh failed',
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(
+      find.text(
+        'The change is applied, but its Git commit failed: '
+        'Git index refresh failed',
+      ),
+      findsOneWidget,
+    );
+  });
+
   // -- The focus-refresh semantics (the subtlest clause) --------------------
 
   testWidgets('renaming A refreshes open note B\'s editable field from the '
@@ -658,6 +1156,130 @@ void main() {
     await tester.pumpAndSettle();
     expect(api.lastUpdateBlockSource, 'see [[A]] new target +1');
     expect(api.lastUpdateBlockSource, isNot(contains('old target')));
+  });
+
+  testWidgets('a gated lifecycle success makes the raw editor read-only '
+      'before Core can replace its source', (WidgetTester tester) async {
+    final gate = Completer<void>();
+    final renamed = stateFor(
+      'Renamed',
+      title: 'Renamed',
+      ast: [paragraph('authoritative replacement')],
+    );
+    final api = _LifecycleApi()
+      ..renameNoteGate = gate
+      ..renameNoteResult = (renamed, effects());
+    late ProviderContainer container;
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [rustApiProvider.overrideWithValue(api)],
+        child: Consumer(
+          builder: (context, ref, _) {
+            container = ProviderScope.containerOf(context);
+            return const MaterialApp(home: Scaffold(body: Editor()));
+          },
+        ),
+      ),
+    );
+    addTearDown(container.dispose);
+    container
+        .read(activeNoteProvider.notifier)
+        .adopt(stateFor('Old', ast: [paragraph('editable before rename')]));
+    container.read(selectedNoteIdProvider.notifier).select('Old');
+    api.stagedBlockSources['0'] = ['editable before rename'];
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('block-0')));
+    await tester.pumpAndSettle();
+    final field = find.byType(EditableText);
+    expect(tester.widget<EditableText>(field).readOnly, isFalse);
+
+    final action = container
+        .read(lifecycleActionsProvider)
+        .renameNote('Old', 'Renamed');
+    await tester.pump();
+    expect(container.read(editorInputBlockedProvider), isTrue);
+    expect(tester.widget<EditableText>(field).readOnly, isTrue);
+
+    // A platform value already queued when the Core admission gate closes is
+    // restored to the last Core-backed source rather than becoming an
+    // unbuffered controller-only edit that the returned state would discard.
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(
+        text: 'lost local mutation',
+        selection: TextSelection.collapsed(offset: 19),
+      ),
+    );
+    await tester.pump();
+    expect(
+      tester.widget<EditableText>(field).controller.text,
+      'editable before rename',
+    );
+    expect(api.calls.where((call) => call.startsWith('updateBlock:')), isEmpty);
+
+    gate.complete();
+    await action;
+    await tester.pumpAndSettle();
+    expect(container.read(editorInputBlockedProvider), isFalse);
+    expect(container.read(activeNoteProvider), same(renamed));
+    expect(find.text('authoritative replacement'), findsOneWidget);
+  });
+
+  testWidgets('a refused gated lifecycle restores edit authority without '
+      'replaying rejected input', (WidgetTester tester) async {
+    final gate = Completer<void>();
+    final api = _LifecycleApi()
+      ..renameNoteGate = gate
+      ..renameNoteError = StateError('rename refused');
+    late ProviderContainer container;
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [rustApiProvider.overrideWithValue(api)],
+        child: Consumer(
+          builder: (context, ref, _) {
+            container = ProviderScope.containerOf(context);
+            return const MaterialApp(home: Scaffold(body: Editor()));
+          },
+        ),
+      ),
+    );
+    addTearDown(container.dispose);
+    container
+        .read(activeNoteProvider.notifier)
+        .adopt(stateFor('Old', ast: [paragraph('still editable')]));
+    container.read(selectedNoteIdProvider.notifier).select('Old');
+    api.stagedBlockSources['0'] = ['still editable'];
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('block-0')));
+    await tester.pumpAndSettle();
+    final field = find.byType(EditableText);
+
+    final action = container
+        .read(lifecycleActionsProvider)
+        .renameNote('Old', 'Renamed');
+    await tester.pump();
+    expect(tester.widget<EditableText>(field).readOnly, isTrue);
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(
+        text: 'rejected during lifecycle',
+        selection: TextSelection.collapsed(offset: 25),
+      ),
+    );
+    await tester.pump();
+    expect(
+      tester.widget<EditableText>(field).controller.text,
+      'still editable',
+    );
+    expect(api.calls.where((call) => call.startsWith('updateBlock:')), isEmpty);
+
+    gate.complete();
+    expect(await action, isA<LifecycleFailed>());
+    await tester.pump();
+    expect(container.read(editorInputBlockedProvider), isFalse);
+    expect(tester.widget<EditableText>(field).readOnly, isFalse);
+
+    await tester.enterText(field, 'recovered after refusal');
+    await tester.pump();
+    expect(api.lastUpdateBlockSource, 'recovered after refusal');
   });
 }
 

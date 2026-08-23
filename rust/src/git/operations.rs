@@ -470,7 +470,28 @@ pub fn commit_paths(
     message: &str,
     relative_paths: &[String],
 ) -> Result<Option<String>, AppError> {
+    #[cfg(test)]
+    if TAKE_NEXT_COMMIT_PATHS_FAILURE.with(|failure| failure.replace(false)) {
+        return Err(AppError::IoError(
+            "injected commit_paths failure after lifecycle publication".to_string(),
+        ));
+    }
     commit_paths_hooked(repo_path, message, relative_paths, || {})
+}
+
+#[cfg(test)]
+thread_local! {
+    // Lifecycle tests use this instead of damaging `.git`: the failure occurs
+    // at the exact post-publication stage while leaving filesystem and index
+    // fixtures intact. Thread-local state avoids affecting another test.
+    static TAKE_NEXT_COMMIT_PATHS_FAILURE: std::cell::Cell<bool> = const {
+        std::cell::Cell::new(false)
+    };
+}
+
+#[cfg(test)]
+pub(crate) fn fail_next_commit_paths_for_test() {
+    TAKE_NEXT_COMMIT_PATHS_FAILURE.with(|failure| failure.set(true));
 }
 
 /// [`commit_paths`] with a seam for the test that drives the torn `HEAD` window.

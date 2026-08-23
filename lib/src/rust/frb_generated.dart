@@ -117,11 +117,13 @@ abstract class RustLibApi extends BaseApi {
     required BlockRange range,
   });
 
-  Future<void> crateApiFfiApiCreateDirectory({required String path});
+  Future<LifecycleResult> crateApiFfiApiCreateDirectory({required String path});
 
-  Future<NoteState> crateApiFfiApiCreateLinkTarget({required String targetId});
+  Future<LifecycleResult> crateApiFfiApiCreateLinkTarget({
+    required String targetId,
+  });
 
-  Future<NoteState> crateApiFfiApiCreateNote({
+  Future<LifecycleResult> crateApiFfiApiCreateNote({
     required String directoryPath,
     required String title,
   });
@@ -131,9 +133,9 @@ abstract class RustLibApi extends BaseApi {
     required Uint64List blockPath,
   });
 
-  Future<List<String>> crateApiFfiApiDeleteDirectory({required String path});
+  Future<LifecycleResult> crateApiFfiApiDeleteDirectory({required String path});
 
-  Future<void> crateApiFfiApiDeleteNote({required String noteId});
+  Future<LifecycleResult> crateApiFfiApiDeleteNote({required String noteId});
 
   RangeEditResult crateApiFfiApiDeleteRange({
     required String noteId,
@@ -171,7 +173,7 @@ abstract class RustLibApi extends BaseApi {
     required Uint64List blockPath,
   });
 
-  Future<(NoteState, LifecycleEffects)> crateApiFfiApiMoveNote({
+  Future<LifecycleResult> crateApiFfiApiMoveNote({
     required String noteId,
     required String newDirectoryPath,
   });
@@ -192,12 +194,12 @@ abstract class RustLibApi extends BaseApi {
 
   Future<NoteState> crateApiFfiApiReloadNote({required String noteId});
 
-  Future<LifecycleEffects> crateApiFfiApiRenameDirectory({
+  Future<LifecycleResult> crateApiFfiApiRenameDirectory({
     required String path,
     required String newName,
   });
 
-  Future<(NoteState, LifecycleEffects)> crateApiFfiApiRenameNote({
+  Future<LifecycleResult> crateApiFfiApiRenameNote({
     required String noteId,
     required String newTitle,
   });
@@ -461,7 +463,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
-  Future<void> crateApiFfiApiCreateDirectory({required String path}) {
+  Future<LifecycleResult> crateApiFfiApiCreateDirectory({
+    required String path,
+  }) {
     return handler.executeNormal(
       NormalTask(
         callFfi: (port_) {
@@ -475,7 +479,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           );
         },
         codec: SseCodec(
-          decodeSuccessData: sse_decode_unit,
+          decodeSuccessData: sse_decode_lifecycle_result,
           decodeErrorData: sse_decode_app_error,
         ),
         constMeta: kCrateApiFfiApiCreateDirectoryConstMeta,
@@ -489,7 +493,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "create_directory", argNames: ["path"]);
 
   @override
-  Future<NoteState> crateApiFfiApiCreateLinkTarget({required String targetId}) {
+  Future<LifecycleResult> crateApiFfiApiCreateLinkTarget({
+    required String targetId,
+  }) {
     return handler.executeNormal(
       NormalTask(
         callFfi: (port_) {
@@ -503,7 +509,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           );
         },
         codec: SseCodec(
-          decodeSuccessData: sse_decode_note_state,
+          decodeSuccessData: sse_decode_lifecycle_result,
           decodeErrorData: sse_decode_app_error,
         ),
         constMeta: kCrateApiFfiApiCreateLinkTargetConstMeta,
@@ -520,7 +526,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
-  Future<NoteState> crateApiFfiApiCreateNote({
+  Future<LifecycleResult> crateApiFfiApiCreateNote({
     required String directoryPath,
     required String title,
   }) {
@@ -538,7 +544,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           );
         },
         codec: SseCodec(
-          decodeSuccessData: sse_decode_note_state,
+          decodeSuccessData: sse_decode_lifecycle_result,
           decodeErrorData: sse_decode_app_error,
         ),
         constMeta: kCrateApiFfiApiCreateNoteConstMeta,
@@ -583,7 +589,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   );
 
   @override
-  Future<List<String>> crateApiFfiApiDeleteDirectory({required String path}) {
+  Future<LifecycleResult> crateApiFfiApiDeleteDirectory({
+    required String path,
+  }) {
     return handler.executeNormal(
       NormalTask(
         callFfi: (port_) {
@@ -597,7 +605,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           );
         },
         codec: SseCodec(
-          decodeSuccessData: sse_decode_list_String,
+          decodeSuccessData: sse_decode_lifecycle_result,
           decodeErrorData: sse_decode_app_error,
         ),
         constMeta: kCrateApiFfiApiDeleteDirectoryConstMeta,
@@ -611,7 +619,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "delete_directory", argNames: ["path"]);
 
   @override
-  Future<void> crateApiFfiApiDeleteNote({required String noteId}) {
+  Future<LifecycleResult> crateApiFfiApiDeleteNote({required String noteId}) {
     return handler.executeNormal(
       NormalTask(
         callFfi: (port_) {
@@ -625,7 +633,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           );
         },
         codec: SseCodec(
-          decodeSuccessData: sse_decode_unit,
+          decodeSuccessData: sse_decode_lifecycle_result,
           decodeErrorData: sse_decode_app_error,
         ),
         constMeta: kCrateApiFfiApiDeleteNoteConstMeta,
@@ -886,7 +894,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
-  Future<(NoteState, LifecycleEffects)> crateApiFfiApiMoveNote({
+  Future<LifecycleResult> crateApiFfiApiMoveNote({
     required String noteId,
     required String newDirectoryPath,
   }) {
@@ -904,7 +912,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           );
         },
         codec: SseCodec(
-          decodeSuccessData: sse_decode_record_note_state_lifecycle_effects,
+          decodeSuccessData: sse_decode_lifecycle_result,
           decodeErrorData: sse_decode_app_error,
         ),
         constMeta: kCrateApiFfiApiMoveNoteConstMeta,
@@ -1114,7 +1122,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "reload_note", argNames: ["noteId"]);
 
   @override
-  Future<LifecycleEffects> crateApiFfiApiRenameDirectory({
+  Future<LifecycleResult> crateApiFfiApiRenameDirectory({
     required String path,
     required String newName,
   }) {
@@ -1132,7 +1140,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           );
         },
         codec: SseCodec(
-          decodeSuccessData: sse_decode_lifecycle_effects,
+          decodeSuccessData: sse_decode_lifecycle_result,
           decodeErrorData: sse_decode_app_error,
         ),
         constMeta: kCrateApiFfiApiRenameDirectoryConstMeta,
@@ -1149,7 +1157,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
-  Future<(NoteState, LifecycleEffects)> crateApiFfiApiRenameNote({
+  Future<LifecycleResult> crateApiFfiApiRenameNote({
     required String noteId,
     required String newTitle,
   }) {
@@ -1167,7 +1175,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           );
         },
         codec: SseCodec(
-          decodeSuccessData: sse_decode_record_note_state_lifecycle_effects,
+          decodeSuccessData: sse_decode_lifecycle_result,
           decodeErrorData: sse_decode_app_error,
         ),
         constMeta: kCrateApiFfiApiRenameNoteConstMeta,
@@ -1549,6 +1557,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  LifecycleWarning dco_decode_box_autoadd_lifecycle_warning(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_lifecycle_warning(raw);
+  }
+
+  @protected
+  NoteState dco_decode_box_autoadd_note_state(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_note_state(raw);
+  }
+
+  @protected
   TextRun dco_decode_box_autoadd_text_run(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dco_decode_text_run(raw);
@@ -1561,6 +1581,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     if (arr.length != 1)
       throw Exception('unexpected arr length: expect 1 but see ${arr.length}');
     return CloseNoteResult(warning: dco_decode_opt_String(arr[0]));
+  }
+
+  @protected
+  int dco_decode_i_32(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as int;
   }
 
   @protected
@@ -1613,6 +1639,38 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       remapped: dco_decode_list_id_remap(arr[0]),
       rewritten: dco_decode_list_String(arr[1]),
     );
+  }
+
+  @protected
+  LifecycleResult dco_decode_lifecycle_result(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    return LifecycleResult(
+      state: dco_decode_opt_box_autoadd_note_state(arr[0]),
+      effects: dco_decode_lifecycle_effects(arr[1]),
+      removed: dco_decode_list_String(arr[2]),
+      warning: dco_decode_opt_box_autoadd_lifecycle_warning(arr[3]),
+    );
+  }
+
+  @protected
+  LifecycleWarning dco_decode_lifecycle_warning(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return LifecycleWarning(
+      stage: dco_decode_lifecycle_warning_stage(arr[0]),
+      detail: dco_decode_String(arr[1]),
+    );
+  }
+
+  @protected
+  LifecycleWarningStage dco_decode_lifecycle_warning_stage(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return LifecycleWarningStage.values[raw as int];
   }
 
   @protected
@@ -1795,6 +1853,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  LifecycleWarning? dco_decode_opt_box_autoadd_lifecycle_warning(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_lifecycle_warning(raw);
+  }
+
+  @protected
+  NoteState? dco_decode_opt_box_autoadd_note_state(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_note_state(raw);
+  }
+
+  @protected
   List<AstNode>? dco_decode_opt_list_ast_node(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null ? null : dco_decode_list_ast_node(raw);
@@ -1825,21 +1895,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     return RangeEditResult(
       state: dco_decode_note_state(arr[0]),
       caret: dco_decode_range_edit_caret(arr[1]),
-    );
-  }
-
-  @protected
-  (NoteState, LifecycleEffects) dco_decode_record_note_state_lifecycle_effects(
-    dynamic raw,
-  ) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    final arr = raw as List<dynamic>;
-    if (arr.length != 2) {
-      throw Exception('Expected 2 elements, got ${arr.length}');
-    }
-    return (
-      dco_decode_note_state(arr[0]),
-      dco_decode_lifecycle_effects(arr[1]),
     );
   }
 
@@ -2086,6 +2141,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  LifecycleWarning sse_decode_box_autoadd_lifecycle_warning(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_lifecycle_warning(deserializer));
+  }
+
+  @protected
+  NoteState sse_decode_box_autoadd_note_state(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_note_state(deserializer));
+  }
+
+  @protected
   TextRun sse_decode_box_autoadd_text_run(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_text_run(deserializer));
@@ -2096,6 +2165,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_warning = sse_decode_opt_String(deserializer);
     return CloseNoteResult(warning: var_warning);
+  }
+
+  @protected
+  int sse_decode_i_32(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getInt32();
   }
 
   @protected
@@ -2145,6 +2220,40 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_remapped = sse_decode_list_id_remap(deserializer);
     var var_rewritten = sse_decode_list_String(deserializer);
     return LifecycleEffects(remapped: var_remapped, rewritten: var_rewritten);
+  }
+
+  @protected
+  LifecycleResult sse_decode_lifecycle_result(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_state = sse_decode_opt_box_autoadd_note_state(deserializer);
+    var var_effects = sse_decode_lifecycle_effects(deserializer);
+    var var_removed = sse_decode_list_String(deserializer);
+    var var_warning = sse_decode_opt_box_autoadd_lifecycle_warning(
+      deserializer,
+    );
+    return LifecycleResult(
+      state: var_state,
+      effects: var_effects,
+      removed: var_removed,
+      warning: var_warning,
+    );
+  }
+
+  @protected
+  LifecycleWarning sse_decode_lifecycle_warning(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_stage = sse_decode_lifecycle_warning_stage(deserializer);
+    var var_detail = sse_decode_String(deserializer);
+    return LifecycleWarning(stage: var_stage, detail: var_detail);
+  }
+
+  @protected
+  LifecycleWarningStage sse_decode_lifecycle_warning_stage(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_i_32(deserializer);
+    return LifecycleWarningStage.values[inner];
   }
 
   @protected
@@ -2413,6 +2522,32 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  LifecycleWarning? sse_decode_opt_box_autoadd_lifecycle_warning(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_lifecycle_warning(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  NoteState? sse_decode_opt_box_autoadd_note_state(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_note_state(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
   List<AstNode>? sse_decode_opt_list_ast_node(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
@@ -2450,16 +2585,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_state = sse_decode_note_state(deserializer);
     var var_caret = sse_decode_range_edit_caret(deserializer);
     return RangeEditResult(state: var_state, caret: var_caret);
-  }
-
-  @protected
-  (NoteState, LifecycleEffects) sse_decode_record_note_state_lifecycle_effects(
-    SseDeserializer deserializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    var var_field0 = sse_decode_note_state(deserializer);
-    var var_field1 = sse_decode_lifecycle_effects(deserializer);
-    return (var_field0, var_field1);
   }
 
   @protected
@@ -2555,12 +2680,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       remoteUrl: var_remoteUrl,
       localPath: var_localPath,
     );
-  }
-
-  @protected
-  int sse_decode_i_32(SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    return deserializer.buffer.getInt32();
   }
 
   @protected
@@ -2711,6 +2830,24 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_box_autoadd_lifecycle_warning(
+    LifecycleWarning self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_lifecycle_warning(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_note_state(
+    NoteState self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_note_state(self, serializer);
+  }
+
+  @protected
   void sse_encode_box_autoadd_text_run(TextRun self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_text_run(self, serializer);
@@ -2723,6 +2860,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_opt_String(self.warning, serializer);
+  }
+
+  @protected
+  void sse_encode_i_32(int self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putInt32(self);
   }
 
   @protected
@@ -2769,6 +2912,37 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_list_id_remap(self.remapped, serializer);
     sse_encode_list_String(self.rewritten, serializer);
+  }
+
+  @protected
+  void sse_encode_lifecycle_result(
+    LifecycleResult self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_opt_box_autoadd_note_state(self.state, serializer);
+    sse_encode_lifecycle_effects(self.effects, serializer);
+    sse_encode_list_String(self.removed, serializer);
+    sse_encode_opt_box_autoadd_lifecycle_warning(self.warning, serializer);
+  }
+
+  @protected
+  void sse_encode_lifecycle_warning(
+    LifecycleWarning self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_lifecycle_warning_stage(self.stage, serializer);
+    sse_encode_String(self.detail, serializer);
+  }
+
+  @protected
+  void sse_encode_lifecycle_warning_stage(
+    LifecycleWarningStage self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
   }
 
   @protected
@@ -3004,6 +3178,32 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_opt_box_autoadd_lifecycle_warning(
+    LifecycleWarning? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_lifecycle_warning(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_note_state(
+    NoteState? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_note_state(self, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_opt_list_ast_node(
     List<AstNode>? self,
     SseSerializer serializer,
@@ -3044,16 +3244,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_note_state(self.state, serializer);
     sse_encode_range_edit_caret(self.caret, serializer);
-  }
-
-  @protected
-  void sse_encode_record_note_state_lifecycle_effects(
-    (NoteState, LifecycleEffects) self,
-    SseSerializer serializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_note_state(self.$1, serializer);
-    sse_encode_lifecycle_effects(self.$2, serializer);
   }
 
   @protected
@@ -3129,11 +3319,5 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_String(self.provider, serializer);
     sse_encode_opt_String(self.remoteUrl, serializer);
     sse_encode_String(self.localPath, serializer);
-  }
-
-  @protected
-  void sse_encode_i_32(int self, SseSerializer serializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    serializer.buffer.putInt32(self);
   }
 }

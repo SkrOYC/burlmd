@@ -246,7 +246,7 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
   void _onEditingValueChanged() {
     _scheduleCompletionOverlay();
     final value = _controller.value;
-    if (ref.read(noteSwitchingProvider)) {
+    if (ref.read(editorInputBlockedProvider)) {
       // A platform callback can be queued before the switch's read-only
       // rebuild. Restore Core-backed text rather than leaving input solely in
       // a controller for a session being closed.
@@ -339,8 +339,14 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
           offset: caret.clamp(0, merged.length),
         ),
       );
-      _bufferSource(merged);
     }
+    // [pending.source] was fetched from Core for this exact pending resync,
+    // so equality is the only proof that the rebased result is already
+    // durable there. In particular, a completed composition commonly leaves
+    // [merged] equal to the field's local text while Core still holds the
+    // composition base; buffering only when the controller changes would
+    // silently lose those completed IME bytes.
+    if (merged != pending.source) _bufferSource(merged);
     _lastSettledText = merged;
   }
 
@@ -438,7 +444,7 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
   /// byte and Backspace-at-start from deleting into this Block alone —
   /// both become Core structural operations decided by the parent.
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
-    if (ref.read(noteSwitchingProvider)) return KeyEventResult.handled;
+    if (ref.read(editorInputBlockedProvider)) return KeyEventResult.handled;
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
     }
@@ -540,7 +546,11 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
   /// one buffered Core write.  The popup never constructs a destination; it
   /// supplies only its immutable replacement result.
   void _applyLinkCompletion(String source, TextSelection selection) {
-    if (_hasResyncConflict || widget.phantom) return;
+    if (ref.read(editorInputBlockedProvider) ||
+        _hasResyncConflict ||
+        widget.phantom) {
+      return;
+    }
     _controller.value = TextEditingValue(text: source, selection: selection);
     _bufferSource(source);
     _lastSettledText = source;
@@ -619,7 +629,7 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
 
   @override
   Widget build(BuildContext context) {
-    final switching = ref.watch(noteSwitchingProvider);
+    final inputBlocked = ref.watch(editorInputBlockedProvider);
     return OverlayPortal.overlayChildLayoutBuilder(
       controller: _completionOverlayController,
       overlayChildBuilder: (context, info) {
@@ -665,11 +675,11 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
             style: widget.style,
             cursorColor: Theme.of(context).colorScheme.primary,
             backgroundCursorColor: Colors.grey,
-            readOnly: switching,
+            readOnly: inputBlocked,
             maxLines: null,
             keyboardType: TextInputType.multiline,
             onChanged: (text) {
-              if (switching) return;
+              if (inputBlocked) return;
               if (widget.phantom) return;
               if (_hasResyncConflict) return;
               // The Block's raw source text, not a reconstructed AstNode — this

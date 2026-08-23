@@ -70,6 +70,20 @@
       "error": { "type": "String", "example": "Could not commit the note" }
     }
   },
+  "lifecycleCommitWarning": "The change is applied, but its Git commit failed: {detail}",
+  "@lifecycleCommitWarning": {
+    "description": "Dismissible status message after a Note or Directory lifecycle operation completes but Git cannot record it.",
+    "placeholders": {
+      "detail": { "type": "String", "example": "Git index refresh failed" }
+    }
+  },
+  "lifecycleSettlementWarning": "The change is applied, but cleanup could not finish: {detail}",
+  "@lifecycleSettlementWarning": {
+    "description": "Dismissible status message after a lifecycle operation completes but Core cannot finish a post-publication cleanup step.",
+    "placeholders": {
+      "detail": { "type": "String", "example": "Session registry cleanup failed" }
+    }
+  },
   "editorOperationFailed": "Could not complete the editor operation: {error}",
   "@editorOperationFailed": {
     "description": "Dismissible status message when a retryable editor operation fails while the current note stays open.",

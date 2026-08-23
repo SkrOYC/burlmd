@@ -4,6 +4,7 @@ import 'dart:math' as math;
 
 import 'package:burlmd/src/components/block_editor.dart';
 import 'package:burlmd/src/components/block_view.dart';
+import 'package:burlmd/src/components/lifecycle_actions.dart';
 import 'package:burlmd/src/components/range_text_input_client.dart';
 import 'package:burlmd/src/components/status_message.dart';
 import 'package:burlmd/src/providers/note_providers.dart';
@@ -152,8 +153,8 @@ class EditorState extends ConsumerState<Editor> {
     ref.listen<NoteState?>(activeNoteProvider, (previous, next) {
       if (!identical(previous, next)) _invalidateRenderedRange();
     });
-    ref.listen<bool>(noteSwitchingProvider, (_, switching) {
-      if (switching) _closeRangeInput();
+    ref.listen<bool>(editorInputBlockedProvider, (_, inputBlocked) {
+      if (inputBlocked) _closeRangeInput();
     });
     ref.listen<Object?>(noteCloseFailureProvider, (_, failure) {
       if (failure == null) return;
@@ -390,6 +391,7 @@ class EditorState extends ConsumerState<Editor> {
   /// and a stale Note can only be followed safely from this fresh sealed
   /// resolution.
   Future<void> _followInternalLink(String targetId) async {
+    if (ref.read(editorInputBlockedProvider)) return;
     final origin = ref.read(activeNoteProvider);
     if (origin == null) return;
     final request = ++_linkRequestGeneration;
@@ -410,7 +412,6 @@ class EditorState extends ConsumerState<Editor> {
         ):
           await _offerCreateLinkedNote(
             linkContext,
-            api,
             targetId: targetId,
             directoryPath: directoryPath,
             title: title,
@@ -428,14 +429,14 @@ class EditorState extends ConsumerState<Editor> {
   bool _isCurrentLinkRequest(int request, NoteState origin) {
     final current = ref.read(activeNoteProvider);
     return mounted &&
+        !ref.read(editorInputBlockedProvider) &&
         request == _linkRequestGeneration &&
         identical(current, origin) &&
         current?.metadata.id == origin.metadata.id;
   }
 
   Future<void> _offerCreateLinkedNote(
-    BuildContext context,
-    RustApi api, {
+    BuildContext context, {
     required String targetId,
     required String directoryPath,
     required String title,
@@ -463,11 +464,36 @@ class EditorState extends ConsumerState<Editor> {
     if (accepted != true || !_isCurrentLinkRequest(request, origin)) return;
     try {
       // `targetId` comes only from the fresh Core resolution above. Dart does
-      // not derive a title, directory, or replacement identity here.
-      final created = await api.createLinkTarget(targetId);
-      if (!_isCurrentLinkRequest(request, origin)) return;
-      ref.invalidate(workspaceTreeProvider);
-      ref.read(selectedNoteIdProvider.notifier).select(created.metadata.id);
+      // not derive a title, directory, or replacement identity here. The
+      // lifecycle action keeps the editor read-only through the outgoing
+      // close and incoming open, so this warning cannot arrive before the
+      // authoritative created session is active.
+      final outcome = await ref
+          .read(lifecycleActionsProvider)
+          .createLinkTarget(targetId);
+      if (!context.mounted) return;
+      switch (outcome) {
+        case LifecycleCompleted(:final warning) when warning != null:
+          final message = switch (warning.stage) {
+            LifecycleWarningStage.commit => l10n.lifecycleCommitWarning(
+              warning.detail,
+            ),
+            LifecycleWarningStage.settlement => l10n.lifecycleSettlementWarning(
+              warning.detail,
+            ),
+          };
+          if (context.mounted) showStatusMessage(context, message);
+        case LifecycleCompleted():
+          return;
+        case LifecycleRefused(:final reason)
+            when _isCurrentLinkRequest(request, origin):
+          _reportLinkOperationFailure(context, StateError(reason));
+        case LifecycleFailed(:final error)
+            when _isCurrentLinkRequest(request, origin):
+          _reportLinkOperationFailure(context, error);
+        case LifecycleRefused() || LifecycleFailed():
+          return;
+      }
     } catch (error) {
       if (context.mounted && _isCurrentLinkRequest(request, origin)) {
         _reportLinkOperationFailure(context, error);
@@ -489,7 +515,7 @@ class EditorState extends ConsumerState<Editor> {
   /// Promotes the Core-resolved editable leaf for a top-level rendered
   /// coordinate. Flutter never estimates source punctuation or nested paths.
   void _promote(List<int> topLevelPath, int renderedUtf16Offset) {
-    if (ref.read(noteSwitchingProvider)) return;
+    if (ref.read(editorInputBlockedProvider)) return;
     // A phantom focus shares its numeric path with a real Block (both name
     // the same index), so the phantom must never satisfy this early-out —
     // clicking a Block while a phantom is open promotes that Block.
@@ -582,6 +608,10 @@ class EditorState extends ConsumerState<Editor> {
   /// parsing Markdown or by treating every noncollapsed single-leaf selection
   /// as a range.
   void _handleRenderedSelectionChanged(SelectedContent? _) {
+    if (ref.read(editorInputBlockedProvider)) {
+      _closeRangeInput();
+      return;
+    }
     final range = selectedBlockRange();
     if (range == null || !_isRangeInputEligible(range)) {
       _closeRangeInput();
@@ -591,6 +621,7 @@ class EditorState extends ConsumerState<Editor> {
   }
 
   void _activateRangeInput(BlockRange range) {
+    if (ref.read(editorInputBlockedProvider)) return;
     final existing = _rangeInputClient;
     if (existing != null && _sameRange(existing.range, range)) return;
 
@@ -663,6 +694,7 @@ class EditorState extends ConsumerState<Editor> {
     String noteId,
   ) =>
       mounted &&
+      !ref.read(editorInputBlockedProvider) &&
       generation == _rangeGeneration &&
       _rangeInputClient != null &&
       _sameRange(_rangeInputClient!.range, range) &&
@@ -783,7 +815,7 @@ class EditorState extends ConsumerState<Editor> {
   /// list), so nothing survives the commit except the returned state
   /// itself.
   bool _commitFocused() {
-    if (ref.read(noteSwitchingProvider)) return false;
+    if (ref.read(editorInputBlockedProvider)) return false;
     final focused = _focused;
     if (focused == null || !focused.canCommit) return false;
     _closeRangeInput();
@@ -939,7 +971,7 @@ class EditorState extends ConsumerState<Editor> {
   /// Mid-Block it splits through `split_block`, adopting the returned state
   /// and re-deriving focus onto the second half with the caret at its start.
   void _handleEnterRequested(List<int> blockPath, String source, int caret) {
-    if (ref.read(noteSwitchingProvider)) return;
+    if (ref.read(editorInputBlockedProvider)) return;
     final focused = _focused;
     if (focused == null ||
         !focused.canCommit ||
@@ -1104,7 +1136,7 @@ class EditorState extends ConsumerState<Editor> {
   /// and focus converts to an ordinary editing session over it — subsequent
   /// keystrokes then flow through `update_block` like any other Block.
   bool _handlePhantomInsert(String text) {
-    if (ref.read(noteSwitchingProvider)) return false;
+    if (ref.read(editorInputBlockedProvider)) return false;
     final focused = _focused;
     final note = ref.read(activeNoteProvider);
     if (note == null) return false;
@@ -1154,7 +1186,7 @@ class EditorState extends ConsumerState<Editor> {
   /// Completes the handoff from the phantom controller to Core's returned
   /// Block when multiple platform values arrive before Flutter can rebuild.
   void _handlePhantomMaterializedUpdate(String text, TextSelection selection) {
-    if (ref.read(noteSwitchingProvider)) return;
+    if (ref.read(editorInputBlockedProvider)) return;
     final focused = _focused;
     final note = ref.read(activeNoteProvider);
     if (focused == null ||
@@ -1174,7 +1206,7 @@ class EditorState extends ConsumerState<Editor> {
   /// returns the predecessor leaf and raw-source UTF-16 join offset, rather
   /// than asking Flutter to predict either from a tree it just invalidated.
   void _handleBackspaceAtStart(List<int> blockPath) {
-    if (ref.read(noteSwitchingProvider)) return;
+    if (ref.read(editorInputBlockedProvider)) return;
     if (!_canReplaceFocusedSession) return;
     final note = ref.read(activeNoteProvider);
     if (note == null) return;
