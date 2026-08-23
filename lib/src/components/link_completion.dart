@@ -87,14 +87,24 @@ class LinkCompletionPopup extends ConsumerStatefulWidget {
 }
 
 class LinkCompletionState extends ConsumerState<LinkCompletionPopup> {
+  static const _candidateExtent = 56.0;
+
   final GlobalKey _surfaceKey = GlobalKey();
+  final ScrollController _scrollController = ScrollController();
   LinkCompletionSnapshot? _snapshot;
   List<core.LinkCompletion> _candidates = const [];
   int _activeIndex = 0;
   int _generation = 0;
+  int _scrollRequest = 0;
 
   bool get isOpen => _snapshot != null && _candidates.isNotEmpty;
   int get candidateCount => _candidates.length;
+
+  @visibleForTesting
+  int get activeIndex => _activeIndex;
+
+  @visibleForTesting
+  ScrollController get scrollController => _scrollController;
 
   /// True only once the actual popup surface has been laid out. This keeps the
   /// F006 smoke hook honest: a pending Core response or an offstage widget is
@@ -109,8 +119,8 @@ class LinkCompletionState extends ConsumerState<LinkCompletionPopup> {
   /// QA staging is allowed to invoke the same acceptance path as Enter, but
   /// only after a real candidate list is visibly open.
   bool acceptActiveForSmoke() {
-    if (!isOpen || _hasLiveComposition(widget.controller.value)) return false;
-    _accept(_candidates[_activeIndex]);
+    if (!_canAcceptActiveCandidate) return false;
+    _acceptActiveCandidate();
     return true;
   }
 
@@ -138,6 +148,11 @@ class LinkCompletionState extends ConsumerState<LinkCompletionPopup> {
 
   @override
   void dispose() {
+    // Invalidate any queued reveal before releasing the controller. The
+    // post-frame callback also checks [mounted], so a popup dismissed while a
+    // frame is pending cannot touch a disposed ScrollPosition.
+    _scrollRequest++;
+    _scrollController.dispose();
     widget.controller.removeListener(_refresh);
     widget.focusNode.removeListener(_refresh);
     super.dispose();
@@ -160,6 +175,7 @@ class LinkCompletionState extends ConsumerState<LinkCompletionPopup> {
     _snapshot = next;
     _candidates = const [];
     _activeIndex = 0;
+    _scrollRequest++;
     final generation = ++_generation;
     setState(() {});
     unawaited(_load(next, generation));
@@ -181,6 +197,7 @@ class LinkCompletionState extends ConsumerState<LinkCompletionPopup> {
         return;
       }
       setState(() => _candidates = results.take(10).toList(growable: false));
+      _scheduleActiveCandidateReveal();
     } catch (error) {
       if (mounted && generation == _generation) {
         // Completion is an optional query over derived index state. Reporting
@@ -203,6 +220,7 @@ class LinkCompletionState extends ConsumerState<LinkCompletionPopup> {
   void _dismiss() {
     if (_snapshot == null && _candidates.isEmpty) return;
     _generation++;
+    _scrollRequest++;
     if (mounted) {
       setState(() {
         _snapshot = null;
@@ -232,24 +250,79 @@ class LinkCompletionState extends ConsumerState<LinkCompletionPopup> {
     }
     switch (event.logicalKey) {
       case LogicalKeyboardKey.arrowDown:
-        setState(() => _activeIndex = (_activeIndex + 1) % _candidates.length);
+        _moveActiveCandidate(1);
         return true;
       case LogicalKeyboardKey.arrowUp:
-        setState(
-          () => _activeIndex =
-              (_activeIndex - 1 + _candidates.length) % _candidates.length,
-        );
+        _moveActiveCandidate(-1);
         return true;
       case LogicalKeyboardKey.escape:
         _dismiss();
         return true;
       case LogicalKeyboardKey.enter || LogicalKeyboardKey.numpadEnter:
-        _accept(_candidates[_activeIndex]);
+        // Do not commit an option that has not reached the constrained popup
+        // viewport yet. This also means a rapid Arrow/Enter pair cannot
+        // accept an item from a still-pending layout generation.
+        if (_canAcceptActiveCandidate) _acceptActiveCandidate();
         return true;
       default:
         return false;
     }
   }
+
+  void _moveActiveCandidate(int delta) {
+    setState(
+      () => _activeIndex =
+          (_activeIndex + delta + _candidates.length) % _candidates.length,
+    );
+    _scheduleActiveCandidateReveal();
+  }
+
+  /// The popup has a fixed one-line candidate extent, so reveal the selected
+  /// item directly through the State-owned controller. A post-frame callback
+  /// waits for the constrained viewport dimensions without retaining an async
+  /// animation that could outlive this State.
+  void _scheduleActiveCandidateReveal() {
+    final request = ++_scrollRequest;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          request != _scrollRequest ||
+          !_scrollController.hasClients) {
+        return;
+      }
+      final position = _scrollController.position;
+      final top = _activeIndex * _candidateExtent;
+      final bottom = top + _candidateExtent;
+      final viewportEnd = position.pixels + position.viewportDimension;
+      final desired = switch ((top < position.pixels, bottom > viewportEnd)) {
+        (true, _) => top,
+        (_, true) => bottom - position.viewportDimension,
+        _ => position.pixels,
+      };
+      final clamped = desired
+          .clamp(position.minScrollExtent, position.maxScrollExtent)
+          .toDouble();
+      if (clamped != position.pixels) _scrollController.jumpTo(clamped);
+    });
+  }
+
+  bool get _activeCandidateIsVisible {
+    if (!isVisiblyMounted || !_scrollController.hasClients) return false;
+    final position = _scrollController.position;
+    final top = _activeIndex * _candidateExtent;
+    final bottom = top + _candidateExtent;
+    return top >= position.pixels &&
+        bottom <= position.pixels + position.viewportDimension;
+  }
+
+  bool get _canAcceptActiveCandidate {
+    final snapshot = _snapshot;
+    return snapshot != null &&
+        isOpen &&
+        _activeCandidateIsVisible &&
+        snapshot.matches(widget.controller.value, widget.focusNode.hasFocus);
+  }
+
+  void _acceptActiveCandidate() => _accept(_candidates[_activeIndex]);
 
   void _accept(core.LinkCompletion candidate) {
     final snapshot = _snapshot;
@@ -283,6 +356,8 @@ class LinkCompletionState extends ConsumerState<LinkCompletionPopup> {
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxHeight: 216),
           child: ListView.builder(
+            controller: _scrollController,
+            itemExtent: _candidateExtent,
             shrinkWrap: true,
             itemCount: _candidates.length,
             itemBuilder: (context, index) {

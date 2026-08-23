@@ -466,6 +466,10 @@ Future<void> activateInternalLink(
   int index,
   String targetId,
 ) async {
+  // Internal-Link focus and semantics use the painted glyph boxes measured
+  // after layout, so wait for the measurement rebuild before locating the
+  // physical focus target.
+  await tester.pump();
   final target = find.byKey(ValueKey('internal-link-focus-$index-$targetId'));
   Focus.of(
     tester.element(

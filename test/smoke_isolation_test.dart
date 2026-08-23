@@ -34,6 +34,20 @@ void main() {
       expect(await validateSmokeIsolation(mismatchedNonce), isNotNull);
     });
 
+    test(
+      'rejects a private-looking root that does not own the nonce',
+      () async {
+        final mismatchedRoot = await Directory(
+          '/tmp',
+        ).createTemp('burlmd-smoke-state.');
+        addTearDown(() => mismatchedRoot.delete(recursive: true));
+        final environment = Map<String, String>.from(state.environment)
+          ..['BURLMD_SMOKE_ROOT'] = mismatchedRoot.path;
+
+        expect(await validateSmokeIsolation(environment), isNotNull);
+      },
+    );
+
     test('rejects a missing or non-private harness root', () async {
       final missingRoot = Map<String, String>.from(state.environment)
         ..remove('BURLMD_SMOKE_ROOT');
@@ -80,17 +94,76 @@ void main() {
       },
     );
 
+    test('rejects an external existing readiness marker', () async {
+      final externalRoot = await Directory.systemTemp.createTemp(
+        'burlmd-external-ready.',
+      );
+      addTearDown(() => externalRoot.delete(recursive: true));
+      final external = await File('${externalRoot.path}/ready').create();
+      final environment = Map<String, String>.from(state.environment)
+        ..['BURLMD_SMOKE_READY_FILE'] = external.path;
+
+      expect(await validateSmokeIsolation(environment), isNotNull);
+    });
+
+    test(
+      'rejects a readiness marker traversal outside the private state',
+      () async {
+        final externalRoot = await Directory.systemTemp.createTemp(
+          'burlmd-traversed-ready.',
+        );
+        addTearDown(() => externalRoot.delete(recursive: true));
+        final external = await File('${externalRoot.path}/ready').create();
+        final environment = Map<String, String>.from(state.environment)
+          ..['BURLMD_SMOKE_READY_FILE'] =
+              '${state.root.path}/../${external.uri.pathSegments.last}';
+
+        expect(await validateSmokeIsolation(environment), isNotNull);
+      },
+    );
+
+    test(
+      'rejects a readiness marker symlink that escapes the state root',
+      () async {
+        final externalRoot = await Directory.systemTemp.createTemp(
+          'burlmd-ready-symlink-target.',
+        );
+        addTearDown(() => externalRoot.delete(recursive: true));
+        final external = await File('${externalRoot.path}/ready').create();
+        await state.readyFile.delete();
+        await Link(state.readyFile.path).create(external.path);
+
+        expect(await validateSmokeIsolation(state.environment), isNotNull);
+      },
+    );
+
     test('accepts the complete canonical harness contract', () async {
       expect(await validateSmokeIsolation(state.environment), isNull);
     });
+
+    test(
+      'harness creates and forwards only its root-bound readiness marker',
+      () async {
+        final script = await File('scripts/smoke-shot.sh').readAsString();
+
+        expect(
+          script,
+          contains(r'READY_FILE="$SMOKE_STATE_DIR/.burlmd-smoke-ready"'),
+        );
+        expect(script, contains(r'touch -- "$READY_FILE"'));
+        expect(script, contains(r'"BURLMD_SMOKE_READY_FILE=$READY_FILE"'));
+        expect(script, isNot(contains('mktemp /tmp/burlmd-selection-ready.')));
+      },
+    );
   });
 }
 
 class _SmokeState {
-  _SmokeState._(this.root, this.workspace, this.environment);
+  _SmokeState._(this.root, this.workspace, this.readyFile, this.environment);
 
   final Directory root;
   final Directory workspace;
+  final File readyFile;
   final Map<String, String> environment;
 
   static Future<_SmokeState> create() async {
@@ -100,6 +173,7 @@ class _SmokeState {
     final workspace = Directory('${data.path}/burlmd/workspace');
     final database = File('${data.path}/burlmd/index.sqlite3');
     final nonceFile = File('${root.path}/.burlmd-smoke-nonce');
+    final readyFile = File('${root.path}/.burlmd-smoke-ready');
     const nonce =
         '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
 
@@ -107,13 +181,15 @@ class _SmokeState {
     await workspace.create(recursive: true);
     await database.create();
     await nonceFile.writeAsString('$nonce\n');
+    await readyFile.create();
 
-    return _SmokeState._(root, workspace, {
+    return _SmokeState._(root, workspace, readyFile, {
       'BURLMD_SMOKE_ISOLATED': '1',
       'BURLMD_SMOKE_ROOT': root.path,
       'BURLMD_SMOKE_NONCE': nonce,
       'BURLMD_SMOKE_NONCE_FILE': nonceFile.path,
       'BURLMD_SMOKE_WORKSPACE': workspace.path,
+      'BURLMD_SMOKE_READY_FILE': readyFile.path,
       'HOME': home.path,
       'XDG_DATA_HOME': data.path,
       'BURLMD_DB_PATH': database.path,

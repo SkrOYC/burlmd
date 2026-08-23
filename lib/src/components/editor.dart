@@ -1171,6 +1171,25 @@ class EditorState extends ConsumerState<Editor> {
           : api.splitBlock(note.metadata.id, blockPath, source, caret);
       final newState = structural.state;
       ref.read(activeNoteProvider.notifier).adopt(newState);
+      final phantomInsertionIndex = structural.phantomInsertionIndex;
+      if (phantomInsertionIndex != null) {
+        final insertionIndex = phantomInsertionIndex.toInt();
+        setState(() {
+          _focused = _Focus(
+            noteId: note.metadata.id,
+            // This is an insertion slot, not a path to a surviving Block.
+            // In particular full selection in a non-final field must not
+            // focus or continue after the sibling that shifted into its index.
+            path: [insertionIndex],
+            source: '',
+            caret: 0,
+            lastSeenState: newState,
+            isPhantom: true,
+            phantomInsertionIndex: insertionIndex,
+          );
+        });
+        return;
+      }
       final secondPath = structural.blockPath
           .map((part) => part.toInt())
           .toList();
@@ -1282,16 +1301,16 @@ class EditorState extends ConsumerState<Editor> {
       return false;
     }
     if (focused == null && note.ast.isNotEmpty) return false;
-    // Empty Notes have no leaf to anchor, so `[0]` is the documented append
-    // sentinel. Every non-empty Note retains the actual Core leaf path.
-    final insertionPath = focused?.path ?? const [0];
     try {
       final api = ref.read(rustApiProvider);
-      final structural = api.continueBlockAfter(
-        note.metadata.id,
-        insertionPath,
-        text,
-      );
+      final slot = focused?.phantomInsertionIndex;
+      final structural = slot == null
+          ? api.continueBlockAfter(
+              note.metadata.id,
+              focused?.path ?? const [0],
+              text,
+            )
+          : api.continueBlockAtInsertionSlot(note.metadata.id, slot, text);
       final newState = structural.state;
       ref.read(activeNoteProvider.notifier).adopt(newState);
       final insertedPath = structural.blockPath

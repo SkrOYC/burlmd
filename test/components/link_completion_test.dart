@@ -268,6 +268,102 @@ void main() {
   );
 
   testWidgets(
+    'arrow navigation reveals wrapped-end candidates before Enter can accept them',
+    (tester) async {
+      final controller = TextEditingController.fromValue(
+        const TextEditingValue(
+          text: '[[p',
+          selection: TextSelection.collapsed(offset: 3),
+        ),
+      );
+      addTearDown(controller.dispose);
+      final focusNode = FocusNode();
+      addTearDown(focusNode.dispose);
+      final key = GlobalKey<LinkCompletionState>();
+      String? accepted;
+      await _pumpCompletion(
+        tester,
+        api: _CompletionApi(
+          (_) => [
+            for (var index = 0; index < 10; index++) _existing('item $index'),
+          ],
+        ),
+        controller: controller,
+        focusNode: focusNode,
+        key: key,
+        onAccepted: (source, _) => accepted = source,
+      );
+
+      KeyDownEvent keyDown(LogicalKeyboardKey logicalKey) => KeyDownEvent(
+        timeStamp: Duration.zero,
+        physicalKey: logicalKey == LogicalKeyboardKey.arrowUp
+            ? PhysicalKeyboardKey.arrowUp
+            : PhysicalKeyboardKey.arrowDown,
+        logicalKey: logicalKey,
+      );
+      Future<void> move(LogicalKeyboardKey logicalKey) async {
+        expect(key.currentState!.handleKeyEvent(keyDown(logicalKey)), isTrue);
+        await tester.pump();
+        await tester.pump();
+      }
+
+      // Up wraps from the visible first candidate to the last. An Enter in
+      // this same event turn is consumed but cannot accept an off-viewport
+      // candidate before the reveal frame runs.
+      expect(
+        key.currentState!.handleKeyEvent(keyDown(LogicalKeyboardKey.arrowUp)),
+        isTrue,
+      );
+      expect(
+        key.currentState!.handleKeyEvent(keyDown(LogicalKeyboardKey.enter)),
+        isTrue,
+      );
+      expect(accepted, isNull);
+      await tester.pump();
+      await tester.pump();
+
+      // The final candidate is now visible and exposed as focused semantics.
+      expect(key.currentState!.activeIndex, 9);
+      expect(key.currentState!.scrollController.offset, greaterThan(0));
+      final list = find.byType(ListView);
+      final last = find.byKey(const ValueKey('link-completion-9'));
+      expect(last, findsOneWidget);
+      expect(
+        tester.getRect(last).bottom,
+        lessThanOrEqualTo(tester.getRect(list).bottom),
+      );
+
+      final focusedSemantics = tester.ensureSemantics();
+      expect(
+        find.semantics.byLabel('Link to existing note item 9'),
+        matchesSemantics(
+          label: 'Link to existing note item 9',
+          isButton: true,
+          isFocusable: true,
+          isFocused: true,
+        ),
+      );
+      focusedSemantics.dispose();
+
+      // Down wraps back to the start, then the end is reachable again.
+      await move(LogicalKeyboardKey.arrowDown);
+      expect(key.currentState!.activeIndex, 0);
+      expect(key.currentState!.scrollController.offset, 0);
+      for (var index = 0; index < 9; index++) {
+        await move(LogicalKeyboardKey.arrowDown);
+      }
+      expect(key.currentState!.activeIndex, 9);
+      expect(key.currentState!.scrollController.offset, greaterThan(0));
+
+      // A pointer may still choose another visible candidate while keyboard
+      // navigation owns the active semantics state.
+      await tester.tap(find.byKey(const ValueKey('link-completion-8')));
+      await tester.pump();
+      expect(accepted, '[item 8](</notes/item 8.md>)');
+    },
+  );
+
+  testWidgets(
     'CJK composition revokes pointer and Enter completion acceptance',
     (tester) async {
       final controller = TextEditingController.fromValue(
@@ -725,8 +821,30 @@ void main() {
       expect(calls, isEmpty);
 
       // Subsequent ordered stops are individual Links, not a synthetic
-      // first-Link action. Their keyboard and pointer paths converge.
+      // first-Link action. The first painted glyph box owns the focus target,
+      // label, semantic action, and minimal visible focus indication.
       await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+      final firstFocus = find.byKey(
+        const ValueKey('internal-link-focus-0-projects/plan'),
+      );
+      expect(tester.getSize(firstFocus), isNot(Size.zero));
+      final focusedSemantics = tester.ensureSemantics();
+      expect(
+        find.semantics.byLabel('Open missing linked note Bold italic'),
+        matchesSemantics(
+          label: 'Open missing linked note Bold italic',
+          isButton: true,
+          isFocusable: true,
+          isFocused: true,
+          hasTapAction: true,
+        ),
+      );
+      final decoration = tester.widget<DecoratedBox>(
+        find.descendant(of: firstFocus, matching: find.byType(DecoratedBox)),
+      );
+      expect((decoration.decoration as BoxDecoration).border, isNotNull);
+      focusedSemantics.dispose();
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       await tester.sendKeyEvent(LogicalKeyboardKey.tab);
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
@@ -809,7 +927,7 @@ void main() {
           .single
           .toRect();
       final firstTarget = find.byKey(
-        const ValueKey('internal-link-semantics-first-target-0-0'),
+        const ValueKey('internal-link-focus-0-first-target'),
       );
       expect(firstTarget, findsOneWidget);
       _expectRectClose(
@@ -831,7 +949,9 @@ void main() {
       expect(wrappedBoxes.length, greaterThan(1));
       for (final (index, box) in wrappedBoxes.indexed) {
         final target = find.byKey(
-          ValueKey('internal-link-semantics-wrapped-target-0-$index'),
+          index == 0
+              ? const ValueKey('internal-link-focus-1-wrapped-target')
+              : ValueKey('internal-link-semantics-wrapped-target-0-$index'),
         );
         expect(target, findsOneWidget);
         _expectRectClose(
@@ -850,6 +970,7 @@ void main() {
         matchesSemantics(
           label: 'Open linked note $firstTitle',
           isButton: true,
+          isFocusable: true,
           hasTapAction: true,
         ),
       );
@@ -882,16 +1003,14 @@ void main() {
       expect(calls, ['first-target', 'first-target']);
       semantics.dispose();
 
-      // The focus stop owns no Block-sized render box; only its glyph-bound
-      // semantics sibling receives assistive hit geometry.
+      // The keyboard stop is this same glyph-bound semantics target, rather
+      // than an unrelated zero-size widget.
       final focusTarget = find.byKey(
         const ValueKey('internal-link-focus-0-first-target'),
       );
-      expect(
-        tester.getSize(
-          find.descendant(of: focusTarget, matching: find.byType(SizedBox)),
-        ),
-        Size.zero,
+      _expectRectClose(
+        tester.getRect(focusTarget),
+        paragraph.localToGlobal(firstBox.topLeft) & firstBox.size,
       );
     },
   );

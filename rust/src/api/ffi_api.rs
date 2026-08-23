@@ -426,6 +426,10 @@ pub struct StructuralEdit {
     pub state: NoteState,
     pub block_path: Vec<usize>,
     pub caret_offset: usize,
+    /// Present only when the edit removed the raw field entirely. The slot is
+    /// Core-owned and may sit before a surviving sibling, so Presentation must
+    /// materialize it through `continue_block_at_insertion_slot`.
+    pub phantom_insertion_index: Option<usize>,
 }
 
 /// Resolves a rendered pointer position synchronously through the Core span
@@ -517,6 +521,7 @@ pub fn split_block(
         state,
         block_path,
         caret_offset,
+        phantom_insertion_index: None,
     })
 }
 
@@ -534,7 +539,7 @@ pub fn replace_selection_and_split_block(
     selection_base: usize,
     selection_extent: usize,
 ) -> Result<StructuralEdit, AppError> {
-    let (state, block_path, caret_offset) = with_open_session_edit(&note_id, |session| {
+    let (state, location) = with_open_session_edit(&note_id, |session| {
         session.replace_selection_and_split_block_from_editor_source(
             &block_path,
             &source,
@@ -542,10 +547,40 @@ pub fn replace_selection_and_split_block(
             selection_extent,
         )
     })?;
+    let (block_path, caret_offset, phantom_insertion_index) = match location {
+        crate::workspace::persist::StructuralEditLocation::Block {
+            block_path,
+            caret_offset,
+        } => (block_path, caret_offset, None),
+        crate::workspace::persist::StructuralEditLocation::Phantom { insertion_index } => {
+            (Vec::new(), 0, Some(insertion_index))
+        }
+    };
     Ok(StructuralEdit {
         state,
         block_path,
         caret_offset,
+        phantom_insertion_index,
+    })
+}
+
+/// Materializes a Core-returned empty editor slot. Unlike continuing after a
+/// leaf, this inserts *at* the slot, so full selection in a non-final Block
+/// cannot append after its surviving sibling.
+#[frb(sync)]
+pub fn continue_block_at_insertion_slot(
+    note_id: String,
+    insertion_index: usize,
+    source: String,
+) -> Result<StructuralEdit, AppError> {
+    let (state, block_path) = with_open_session_edit(&note_id, |session| {
+        session.continue_block_at_insertion_slot(insertion_index, &source)
+    })?;
+    Ok(StructuralEdit {
+        state,
+        block_path,
+        caret_offset: source.encode_utf16().count(),
+        phantom_insertion_index: None,
     })
 }
 
@@ -565,6 +600,7 @@ pub fn merge_block_with_previous(
         state,
         block_path,
         caret_offset,
+        phantom_insertion_index: None,
     })
 }
 
@@ -586,6 +622,7 @@ pub fn continue_block_after(
         state,
         block_path,
         caret_offset: source.encode_utf16().count(),
+        phantom_insertion_index: None,
     })
 }
 

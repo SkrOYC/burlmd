@@ -819,14 +819,18 @@ pub fn replace_selection_and_split_block(
 }
 
 /// The Core-owned postcondition of a structural edit that preserves editing
-/// focus. `state` is the authoritative reparse result; `block_path` names an
-/// editable leaf in that result; and `caret_offset` is Flutter UTF-16. Dart
-/// must use this result rather than predict sibling paths after a reparse.
+/// focus. `state` is the authoritative reparse result. Ordinarily
+/// `block_path` names an editable leaf and `caret_offset` is Flutter UTF-16.
+/// When a selected Enter removed the entire raw field,
+/// `phantom_insertion_index` instead names the empty editor slot at the
+/// deleted top-level position; `block_path` is empty and Presentation must not
+/// substitute a surviving sibling path.
 #[frb]
 pub struct StructuralEdit {
     pub state: NoteState,
     pub block_path: Vec<usize>,
     pub caret_offset: usize,
+    pub phantom_insertion_index: Option<usize>,
 }
 
 /// Continues after an editable leaf. The returned [StructuralEdit] is
@@ -850,6 +854,20 @@ pub struct StructuralEdit {
 pub fn continue_block_after(
     note_id: String,
     block_path: Vec<usize>,
+    source: String,
+) -> Result<StructuralEdit, AppError> {
+    unimplemented!()
+}
+
+/// Materializes first text in a Core-returned empty editor slot. The index is
+/// an insertion position in the returned state's top-level AST, so it can be
+/// zero before a surviving sibling or zero in a sole empty Note. Presentation
+/// must use this call for `StructuralEdit::phantom_insertion_index`, rather
+/// than calling `continue_block_after` with an invented leaf path.
+#[frb(sync)]
+pub fn continue_block_at_insertion_slot(
+    note_id: String,
+    insertion_index: usize,
     source: String,
 ) -> Result<StructuralEdit, AppError> {
     unimplemented!()
