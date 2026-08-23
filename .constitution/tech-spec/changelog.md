@@ -1,5 +1,17 @@
 # Stage 3: Technical Implementation Changelog
 
+## v1.5.1
+Contract correction for the F002 structural continuation seam. Patch bump:
+replaces the list-only continuation call with `continue_block_after`, retaining
+`StructuralEdit` and its result shape.
+
+- Core now chooses continuation from the parsed AST rather than Flutter's
+  nested-path length. A List leaf gets a sibling ListItem; a Blockquote leaf
+  exits to an adjacent top-level paragraph. In both cases Core returns the
+  actual editable leaf path and UTF-16 caret after reparse.
+- `[0]` remains the empty-Note sentinel, so first-character insertion and
+  existing top-level Enter behavior retain their established semantics.
+
 ## v1.5.0
 Retroactive contract correction for **EDIT-F002 Live Preview Block Promotion**.
 Minor bump: adds the synchronous `resolve_block_caret` FFI surface and its
@@ -16,9 +28,9 @@ strong `BlockCaret` result; existing calls retain their signatures.
 - The F002 smoke command now requires `BURLMD_SMOKE_F002=1` and verifies a
   readiness signal emitted only after the staged note is open and its raw
   field is promoted; a generic Workspace screenshot cannot satisfy it.
-- `insert_list_item_after` is the narrow structural continuation surface for
-  Enter at a nested list leaf. It preserves the list, then returns an
-  authoritative `StructuralEdit` leaf path and UTF-16 caret after reparse.
+- `insert_list_item_after` was initially added as a narrow list continuation
+  surface. v1.5.1 supersedes it with the generic, Core-owned
+  `continue_block_after` operation.
 
 ## v1.4.2
 Independent-review correction to **SPK-EDIT-F001**. Patch bump: no decision or FFI signature changed.

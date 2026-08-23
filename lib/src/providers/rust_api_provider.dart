@@ -156,11 +156,14 @@ class RustApi {
         blockPath: Uint64List.fromList(blockPath),
       );
 
-  ffi.StructuralEdit insertListItemAfter(
+  /// Continues after a real editable leaf. Core inspects the AST to preserve a
+  /// List or exit another container, then returns the actual post-reparse
+  /// focus target.
+  ffi.StructuralEdit continueBlockAfter(
     String noteId,
     List<int> blockPath,
     String source,
-  ) => ffi.insertListItemAfter(
+  ) => ffi.continueBlockAfter(
     noteId: noteId,
     blockPath: Uint64List.fromList(blockPath),
     source: source,

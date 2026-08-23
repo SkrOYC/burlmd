@@ -86,7 +86,7 @@ class BlockEditor extends ConsumerStatefulWidget {
   /// Block mid-text and opening an empty phantom Block at its end. Only
   /// fired for a collapsed selection; a non-collapsed selection lets the
   /// platform delete it first.
-  final void Function(int caret)? onEnter;
+  final void Function(String source, int caret)? onEnter;
 
   /// Backspace pressed with a collapsed caret at source offset 0
   /// (`EDIT-F004`, CAP-EDIT-03): the parent merges this Block into its
@@ -114,6 +114,8 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
   // rebuild. Ephemeral edit-widget presentation state, not note content.
   late final TextEditingController _controller;
   late final FocusNode _focusNode;
+  String? _pendingResyncSource;
+  int _pendingResyncToken = -1;
 
   @override
   void initState() {
@@ -137,16 +139,27 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
     // or duplicating exactly the characters the composition criterion
     // forbids losing. The in-flight composition completes into the field
     // first, and the next resync picks up whatever the Core then holds.
-    if (widget.source != _controller.text &&
-        _controller.value.composing == TextRange.empty) {
+    if (widget.source == _controller.text) return;
+    if (_controller.value.composing != TextRange.empty) {
+      _pendingResyncSource = widget.source;
+      _pendingResyncToken = widget.resyncToken;
+      return;
+    }
+    _applyExternalResync(widget.source);
+  }
+
+  void _applyExternalResync(String source) {
+    if (source != _controller.text) {
       final caret = _controller.selection.baseOffset;
       _controller.value = TextEditingValue(
-        text: widget.source,
+        text: source,
         selection: TextSelection.collapsed(
-          offset: caret.clamp(0, widget.source.length),
+          offset: caret.clamp(0, source.length),
         ),
       );
     }
+    _pendingResyncSource = null;
+    _pendingResyncToken = -1;
   }
 
   @override
@@ -179,7 +192,10 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
       if (!selection.isCollapsed || widget.onEnter == null) {
         return KeyEventResult.ignored;
       }
-      widget.onEnter!(selection.baseOffset.clamp(0, _controller.text.length));
+      widget.onEnter!(
+        _controller.text,
+        selection.baseOffset.clamp(0, _controller.text.length),
+      );
       return KeyEventResult.handled;
     }
     if (event.logicalKey == LogicalKeyboardKey.backspace &&
@@ -224,6 +240,7 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
         maxLines: null,
         keyboardType: TextInputType.multiline,
         onChanged: (text) {
+          final composing = _controller.value.composing;
           if (widget.phantom) {
             // The empty phantom Block has no `block_path` to buffer into:
             // CommonMark has no empty paragraph, so there is nothing the
@@ -241,6 +258,12 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
           ref
               .read(activeNoteProvider.notifier)
               .updateBlock(widget.blockPath, text);
+          final pending = _pendingResyncSource;
+          if (pending != null &&
+              composing == TextRange.empty &&
+              _pendingResyncToken <= widget.resyncToken) {
+            _applyExternalResync(pending);
+          }
         },
       ),
     ),

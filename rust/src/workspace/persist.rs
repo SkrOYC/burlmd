@@ -992,57 +992,147 @@ impl NoteSession {
         })
     }
 
-    /// Inserts a new sibling item in the nearest containing List. Unlike
-    /// [`insert_block`](Self::insert_block), this deliberately continues the
-    /// Markdown container instead of ending it with a blank-line seam.
-    /// Returns the new state's actual first editable leaf path.
-    pub fn insert_list_item_after(
+    /// Continues after an editable leaf and returns the new state's actual
+    /// first editable leaf path.
+    ///
+    /// A nearest containing List is continued with a sibling ListItem. Every
+    /// other container intentionally exits: the new source is an independent
+    /// top-level Block after the leaf's top-level ancestor. In particular,
+    /// Enter at the end of a Blockquote paragraph creates a paragraph after
+    /// the quote rather than asking the Presentation layer to pretend that a
+    /// quote is a List.
+    pub fn continue_block_after(
         &self,
         block_path: &[usize],
         source: &str,
     ) -> Result<(NoteState, Vec<usize>), AppError> {
-        let marker = {
+        enum Continuation {
+            List {
+                marker: String,
+                list_path: Vec<usize>,
+                item_index: usize,
+            },
+            Independent {
+                top_level_path: Vec<usize>,
+            },
+            EmptyNote,
+        }
+
+        let continuation = {
             let state = self.lock_state()?;
-            let (list_path, item_index) =
-                nearest_list_item(&state.ast, block_path).ok_or_else(|| {
-                    AppError::ParseError(format!(
-                        "block_path {block_path:?} is not inside a List item"
-                    ))
+            if state.spans.is_empty() && block_path == [0] {
+                Continuation::EmptyNote
+            } else {
+                let leaf = state.spans.block(block_path).ok_or_else(|| {
+                    AppError::ParseError(format!("no Block at block_path {block_path:?}"))
                 })?;
-            let mut item_path = list_path;
-            item_path.push(item_index);
-            let item_source = state
-                .spans
-                .block_source(&state.source, &item_path)
-                .map(str::to_string)
-                .ok_or_else(|| {
-                    AppError::ParseError(format!("no ListItem at block_path {item_path:?}"))
-                })?;
-            let marker = list_marker(&item_source).ok_or_else(|| {
-                AppError::ParseError(format!(
-                    "ListItem at block_path {item_path:?} has no repeatable Markdown marker"
-                ))
-            })?;
-            marker.to_string()
+                if !leaf.is_leaf() {
+                    return Err(AppError::ParseError(format!(
+                        "block_path {block_path:?} does not name an editable leaf"
+                    )));
+                }
+                match nearest_list_item(&state.ast, block_path) {
+                    Some((list_path, item_index)) => {
+                        let mut item_path = list_path.clone();
+                        item_path.push(item_index);
+                        let item_source = state
+                            .spans
+                            .block_source(&state.source, &item_path)
+                            .ok_or_else(|| {
+                                AppError::ParseError(format!(
+                                    "no ListItem at block_path {item_path:?}"
+                                ))
+                            })?;
+                        let marker = list_marker(item_source).ok_or_else(|| {
+                            AppError::ParseError(format!(
+                                "ListItem at block_path {item_path:?} has no repeatable Markdown marker"
+                            ))
+                        })?;
+                        Continuation::List {
+                            marker: marker.to_string(),
+                            list_path,
+                            item_index,
+                        }
+                    }
+                    None => Continuation::Independent {
+                        top_level_path: vec![block_path[0]],
+                    },
+                }
+            }
         };
-        let state = self.structural_edit(|working, spans| {
-            // The ListItem container span includes its following siblings in
-            // pulldown-cmark's event ranges; the editable leaf's end is the
-            // exact insertion boundary for this item's visible content.
-            let at = block_span(spans, block_path)?.end;
-            splice::splice_source(working, at..at, &format!("\n{marker}{source}"))
-                .map_err(splice_error)
-        })?;
-        let (list_path, item_index) =
-            nearest_list_item(&state.ast, block_path).ok_or_else(|| {
-                AppError::ParseError(
-                    "inserted List item did not preserve its container".to_string(),
-                )
-            })?;
-        let mut focused = list_path;
-        focused.push(item_index.saturating_add(1));
-        focused.push(0);
-        Ok((state, focused))
+
+        let (state, focus_parent) = match continuation {
+            Continuation::List {
+                marker,
+                list_path,
+                item_index,
+            } => {
+                let state = self.structural_edit(|working, spans| {
+                    // The ListItem container span includes its following
+                    // siblings in pulldown-cmark's event ranges; the editable
+                    // leaf's end is the exact insertion boundary for this
+                    // item's visible content.
+                    let at = block_span(spans, block_path)?.end;
+                    splice::splice_source(working, at..at, &format!("\n{marker}{source}"))
+                        .map_err(splice_error)
+                })?;
+                let mut item_path = list_path;
+                item_path.push(item_index.saturating_add(1));
+                (state, item_path)
+            }
+            Continuation::Independent { top_level_path } => {
+                let next_top_level = top_level_path[0].saturating_add(1);
+                let state =
+                    self.structural_edit(|working, spans| {
+                        let at = block_span(spans, &top_level_path)?.end;
+                        let before = working.get(..at).ok_or_else(|| {
+                            AppError::ParseError(format!("offset {at} is not addressable"))
+                        })?;
+                        let after = working.get(at..).ok_or_else(|| {
+                            AppError::ParseError(format!("offset {at} is not addressable"))
+                        })?;
+                        let newline = if before.contains('\n') {
+                            newline_style(before)
+                        } else {
+                            newline_style(working)
+                        };
+                        let mut text = separator_before(before, BLOCK_SEPARATOR_NEWLINES);
+                        text.push_str(source);
+                        let required_after = if after.is_empty() {
+                            1
+                        } else {
+                            BLOCK_SEPARATOR_NEWLINES
+                        };
+                        let existing_after = leading_newlines(after);
+                        text.push_str(&newline.repeat(required_after.saturating_sub(
+                            trailing_newlines(source).saturating_add(existing_after),
+                        )));
+                        splice::splice_source(working, at..at, &text).map_err(splice_error)
+                    })?;
+                (state, vec![next_top_level])
+            }
+            Continuation::EmptyNote => {
+                let state = self.insert_block(block_path, source.to_string())?;
+                (state, vec![0])
+            }
+        };
+        let focus = self.first_editable_leaf_at(&focus_parent)?;
+        Ok((state, focus))
+    }
+
+    fn first_editable_leaf_at(&self, parent_path: &[usize]) -> Result<Vec<usize>, AppError> {
+        let state = self.lock_state()?;
+        state
+            .spans
+            .blocks()
+            .filter(|block| block.is_leaf() && block.path.starts_with(parent_path))
+            .map(|block| block.path.clone())
+            .min()
+            .ok_or_else(|| {
+                AppError::ParseError(format!(
+                    "continued Block at {parent_path:?} has no editable leaf"
+                ))
+            })
     }
 
     /// Deletes a Block, taking the newline run that immediately followed it
@@ -2957,6 +3047,18 @@ fn trailing_newlines(text: &str) -> usize {
         .count()
 }
 
+/// How many newlines `text` begins with, counting a `\r\n` pair as one.
+///
+/// This complements [`trailing_newlines`] at an insertion seam: existing
+/// separator bytes after an insertion point already separate the new source
+/// from the following Block and must not be duplicated.
+fn leading_newlines(text: &str) -> usize {
+    text.bytes()
+        .take_while(|byte| matches!(byte, b'\n' | b'\r'))
+        .filter(|byte| *byte != b'\r')
+        .count()
+}
+
 /// How the text ending at this boundary spells a line ending: `"\r\n"` when the
 /// last one in `text` is a CRLF pair, `"\n"` otherwise (including when there is
 /// none at all).
@@ -4300,14 +4402,12 @@ mod tests {
     }
 
     #[test]
-    fn inserting_after_a_nested_list_leaf_preserves_the_list_and_returns_its_new_leaf() {
+    fn continuing_after_a_nested_list_leaf_preserves_the_list_and_returns_its_new_leaf() {
         let f = fixture();
         f.write("a.md", "- alpha\n- beta\n");
         let session = f.open("a");
 
-        let (state, focus) = session
-            .insert_list_item_after(&[0, 0, 0], "middle")
-            .unwrap();
+        let (state, focus) = session.continue_block_after(&[0, 0, 0], "middle").unwrap();
 
         assert_eq!(
             *session.working_source().unwrap(),
@@ -4315,6 +4415,63 @@ mod tests {
         );
         assert_eq!(focus, vec![0, 1, 0]);
         assert_eq!(session.block_source(&focus).unwrap(), "middle");
+        assert!(matches!(
+            node_at_path(&state.ast, &focus),
+            Some(AstNode::Paragraph { .. })
+        ));
+    }
+
+    #[test]
+    fn continuing_after_a_blockquote_leaf_exits_to_a_top_level_block_and_returns_its_leaf() {
+        let f = fixture();
+        f.write("a.md", "> alpha\n\nBeta\n");
+        let session = f.open("a");
+
+        let (state, focus) = session.continue_block_after(&[0, 0], "middle").unwrap();
+
+        assert_eq!(
+            *session.working_source().unwrap(),
+            "> alpha\n\nmiddle\n\nBeta\n"
+        );
+        assert_eq!(focus, vec![1]);
+        assert_eq!(session.block_source(&focus).unwrap(), "middle\n");
+        assert!(matches!(
+            node_at_path(&state.ast, &focus),
+            Some(AstNode::Paragraph { .. })
+        ));
+    }
+
+    #[test]
+    fn continuing_after_a_top_level_leaf_inserts_after_that_leaf() {
+        let f = fixture();
+        f.write("a.md", "Alpha\n\nBeta\n");
+        let session = f.open("a");
+
+        let (state, focus) = session.continue_block_after(&[0], "middle").unwrap();
+
+        assert_eq!(
+            *session.working_source().unwrap(),
+            "Alpha\n\nmiddle\n\nBeta\n"
+        );
+        assert_eq!(focus, vec![1]);
+        assert_eq!(session.block_source(&focus).unwrap(), "middle\n");
+        assert!(matches!(
+            node_at_path(&state.ast, &focus),
+            Some(AstNode::Paragraph { .. })
+        ));
+    }
+
+    #[test]
+    fn continuing_in_an_empty_note_uses_the_first_block_sentinel() {
+        let f = fixture();
+        f.write("a.md", "");
+        let session = f.open("a");
+
+        let (state, focus) = session.continue_block_after(&[0], "first").unwrap();
+
+        assert_eq!(*session.working_source().unwrap(), "first\n");
+        assert_eq!(focus, vec![0]);
+        assert_eq!(session.block_source(&focus).unwrap(), "first\n");
         assert!(matches!(
             node_at_path(&state.ast, &focus),
             Some(AstNode::Paragraph { .. })

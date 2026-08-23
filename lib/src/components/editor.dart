@@ -166,11 +166,13 @@ class EditorState extends ConsumerState<Editor> {
     final focusedForSlot = _focused;
     final phantomSlot =
         note.ast.isEmpty || (focusedForSlot?.isPhantom ?? false);
-    // The phantom's insert index: the slot it occupies in view order, which
-    // for the empty Note's ever-present first line is 0.
+    // The phantom's insert index: the slot after its anchor's top-level
+    // container. The focus path stays the real leaf for Core continuation;
+    // this is presentation-only placement, so a nested leaf still renders its
+    // phantom beneath the containing top-level Block.
     final phantomAnchor = note.ast.isEmpty && focusedForSlot?.isPhantom != true
         ? 0
-        : math.min(focusedForSlot?.path.first ?? 0, note.ast.length);
+        : math.min((focusedForSlot?.path.first ?? -1) + 1, note.ast.length);
     return Actions(
       actions: <Type, Action<Intent>>{CopySelectionTextIntent: _copyAction},
       child: Listener(
@@ -238,7 +240,8 @@ class EditorState extends ConsumerState<Editor> {
           style: blockTextStyle(leaf),
           resyncToken: focused.resyncToken,
           focusToken: focused.token,
-          onEnter: (caret) => _handleEnterRequested(focused.path, caret),
+          onEnter: (source, caret) =>
+              _handleEnterRequested(focused.path, source, caret),
           onBackspaceAtStart: () => _handleBackspaceAtStart(focused.path),
           onFocusLost: _handleFieldBlur,
         ),
@@ -457,7 +460,7 @@ class EditorState extends ConsumerState<Editor> {
         // Enter in a still-empty phantom cannot be represented in CommonMark
         // (no empty paragraph), so it does nothing; Backspace at its start
         // has nothing behind it. Both are explicit no-ops.
-        onEnter: (_) {},
+        onEnter: (_, _) {},
         onBackspaceAtStart: () {},
         onPhantomInsert: _handlePhantomInsert,
         onFocusLost: _handleFieldBlur,
@@ -469,7 +472,7 @@ class EditorState extends ConsumerState<Editor> {
   /// Block's end this opens the empty phantom Block after it — no Core call;
   /// mid-Block it splits through `split_block`, adopting the returned state
   /// and re-deriving focus onto the second half with the caret at its start.
-  void _handleEnterRequested(List<int> blockPath, int caret) {
+  void _handleEnterRequested(List<int> blockPath, String source, int caret) {
     final focused = _focused;
     if (focused == null ||
         focused.isPhantom ||
@@ -478,23 +481,22 @@ class EditorState extends ConsumerState<Editor> {
     }
     final note = ref.read(activeNoteProvider);
     if (note == null) return;
-    final clamped = caret.clamp(0, focused.source.length);
+    final clamped = caret.clamp(0, source.length);
     // "End of the Block" means only whitespace remains after the caret.
     // Core sources carry a terminating newline (spans.rs `block_source`
     // contract), so this covers caret-at-length AND the caret sitting just
     // before that invisible trailing newline — both are the visual end of
     // the Block. This holds for EVERY Block, not just the last one, so the
     // phantom below must be able to open mid-document.
-    if (focused.source.substring(clamped).trim().isEmpty) {
+    if (source.substring(clamped).trim().isEmpty) {
       setState(() {
         _focused = _Focus(
           noteId: focused.noteId,
-          // A top-level leaf's next slot is a real top-level insertion path.
-          // Nested leaves keep their structural address; they must not be
-          // collapsed to `[topLevelIndex + 1]`.
-          path: blockPath.length == 1
-              ? [blockPath.first + 1]
-              : List<int>.from(blockPath),
+          // The phantom remembers the editable leaf Enter came from. Core
+          // owns the continuation decision: a List leaf gets a sibling item,
+          // while a Blockquote leaf exits to a top-level Block. Flutter must
+          // not guess from the path's nesting shape.
+          path: List<int>.from(blockPath),
           source: '',
           caret: 0,
           lastSeenState: note,
@@ -529,8 +531,8 @@ class EditorState extends ConsumerState<Editor> {
   }
 
   /// The first character(s) typed into the empty phantom Block: [text]
-  /// BECOMES the new Block's `insert_block` source. The returned state is
-  /// adopted, the Block's real source is fetched against the returned path,
+  /// BECOMES the new Block's `continue_block_after` source. The returned state
+  /// is adopted, the Block's real source is fetched against the returned path,
   /// and focus converts to an ordinary editing session over it — subsequent
   /// keystrokes then flow through `update_block` like any other Block.
   void _handlePhantomInsert(String text) {
@@ -549,32 +551,23 @@ class EditorState extends ConsumerState<Editor> {
     final insertionPath = focused?.path ?? const [0];
     try {
       final api = ref.read(rustApiProvider);
-      final structural = insertionPath.length > 1
-          ? api.insertListItemAfter(note.metadata.id, insertionPath, text)
-          : null;
-      final newState =
-          structural?.state ??
-          api.insertBlock(note.metadata.id, insertionPath, text);
+      final structural = api.continueBlockAfter(
+        note.metadata.id,
+        insertionPath,
+        text,
+      );
+      final newState = structural.state;
       ref.read(activeNoteProvider.notifier).adopt(newState);
-      final insertedPath =
-          structural?.blockPath.map((part) => part.toInt()).toList() ??
-          _existingLeafPath(newState, insertionPath) ??
-          _nextLeafPath(newState, insertionPath);
-      if (insertedPath == null) {
-        throw StateError(
-          'Core insert returned no editable leaf for $insertionPath',
-        );
-      }
+      final insertedPath = structural.blockPath
+          .map((part) => part.toInt())
+          .toList();
       final source = api.getBlockSource(note.metadata.id, insertedPath);
       setState(() {
         _focused = _Focus(
           noteId: note.metadata.id,
           path: insertedPath,
           source: source,
-          caret: (structural?.caretOffset.toInt() ?? text.length).clamp(
-            0,
-            source.length,
-          ),
+          caret: structural.caretOffset.toInt().clamp(0, source.length),
           lastSeenState: newState,
         );
       });
@@ -643,7 +636,7 @@ class EditorState extends ConsumerState<Editor> {
       final source = api.getBlockSource(note.metadata.id, [0]);
       _promote([0], source.length);
       await WidgetsBinding.instance.endOfFrame;
-      _handleEnterRequested([0], source.length);
+      _handleEnterRequested([0], source, source.length);
     } catch (_) {
       // A staging failure must never take the app down; the shot just
       // shows whatever state was reached.

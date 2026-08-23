@@ -123,6 +123,7 @@ The last scenario exists because ADR-006 inherits the platform IME inside the fo
 - `scripts/smoke-shot.sh` and `lib/src/components/editor.dart` — F002 now stages and asserts a readiness marker only after the selected demo Note reaches focused raw-source state. The exact verification command exports `BURLMD_SMOKE_F002=1`; a generic Workspace screenshot cannot pass this gate.
 - `test/components/selection_test.dart` — F002's container-promotion correction touched this otherwise F003-owned suite only to update its `RustApi` fake for the additive `resolve_block_caret` contract and to retain real rendered-selection coverage; no F003 acceptance criterion changed.
 - `test/components/block_editing_test.dart` — F002's structural-focus correction updates its Core fake and regressions because Enter, split, and Backspace now retain or re-derive real leaf paths after Core reparses; it does not change EDIT-F004 behavior or acceptance.
+- `.constitution/tech-spec/contracts/ffi_api.rs`, `rust/src/api/ffi_api.rs`, `rust/src/workspace/persist.rs`, `lib/src/providers/rust_api_provider.dart`, generated bindings, and `test/components/block_editing_test.dart` — P1 continuation correction: `continue_block_after` replaces the list-only surface. Core now inspects the AST, continues Lists as sibling items, exits Blockquotes into adjacent top-level Blocks, and returns the real leaf/caret in both cases; Flutter no longer dispatches from path length.
 
 #### EDIT-F003 Cross-Block Selection and Copy
 - **Type:** Feature
