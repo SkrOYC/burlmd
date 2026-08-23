@@ -282,6 +282,9 @@ When the smoke harness captures `f005-emphasis`
 Then it succeeds only after the staged focused-Block shortcut readiness marker is present
 ```
 
+##### [EDIT-F005] Deviations & Justifications
+- `lib/src/components/editor.dart` — adds the env-gated (`BURLMD_SMOKE_F005`) promotion half and invalidates the readiness marker on blur. `BlockEditor` owns the raw-source shortcut transformation and marker creation; the Editor is the smallest honest seam that can promote the Core-staged Block and revoke certification when focus leaves it. All behavior is inert when the QA environment variable is absent.
+
 #### EDIT-F006 Link Insertion Completion
 - **Type:** Feature
 - **Effort:** 8

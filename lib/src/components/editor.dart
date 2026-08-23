@@ -95,6 +95,9 @@ class EditorState extends ConsumerState<Editor> {
     if (Platform.environment.containsKey('BURLMD_SMOKE_F004')) {
       unawaited(_runSmokeF004());
     }
+    if (Platform.environment.containsKey('BURLMD_SMOKE_F005')) {
+      unawaited(_runSmokeF005());
+    }
   }
 
   @override
@@ -261,6 +264,9 @@ class EditorState extends ConsumerState<Editor> {
           onBackspaceAtStart: () => _handleBackspaceAtStart(focused.path),
           onFocusLost: _handleFieldBlur,
           onCommitEligibilityChanged: _handleCommitEligibilityChanged,
+          smokeF005:
+              Platform.environment.containsKey('BURLMD_SMOKE_F005') &&
+              note.metadata.title == 'F005 emphasis',
         ),
       );
     }
@@ -351,6 +357,7 @@ class EditorState extends ConsumerState<Editor> {
   void _handleFieldBlur(int focusToken) {
     if (_focused == null || _focused!.token != focusToken) return;
     _invalidateSmokeF002Readiness();
+    _invalidateSmokeF005Readiness();
     _commitFocused();
   }
 
@@ -758,6 +765,41 @@ class EditorState extends ConsumerState<Editor> {
         focused?.isPhantom == true &&
         focused?.path.isNotEmpty == true &&
         hasFocusedEmptyField;
+  }
+
+  // -- BURLMD_SMOKE_F005 ---------------------------------------------------
+  //
+  // The staging half in main.dart creates the Note; this half promotes its
+  // first Block. BlockEditor then selects the staged raw source and performs
+  // the same delimiter operation a platform-primary B shortcut uses. The
+  // The BlockEditor readiness marker is written only after the focused raw
+  // field has painted the delimiter result and its selected inner source.
+  Future<void> _runSmokeF005() async {
+    final deadline = DateTime.now().add(const Duration(seconds: 30));
+    while (DateTime.now().isBefore(deadline)) {
+      if (!mounted) return;
+      if (ref.read(activeNoteProvider)?.ast.isNotEmpty ?? false) break;
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    }
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted || _focused != null) return;
+    try {
+      final note = ref.read(activeNoteProvider);
+      if (note?.metadata.title != 'F005 emphasis') return;
+      _promote([0], 0);
+    } catch (error) {
+      ref.read(editorErrorProvider.notifier).report(error);
+    }
+  }
+
+  void _invalidateSmokeF005Readiness() {
+    final readinessPath = Platform.environment['BURLMD_SMOKE_READY_FILE'];
+    if (readinessPath == null) return;
+    try {
+      File(readinessPath).deleteSync();
+    } on FileSystemException {
+      // A missing marker is already the required state after blur.
+    }
   }
 
   // -- Cross-Block selection and copy (EDIT-F003, CAP-EDIT-04) -------------
