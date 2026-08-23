@@ -218,6 +218,36 @@ void main() {
         );
       });
     }
+
+    test('italic composes with strong runs instead of unwrapping one star', () {
+      final composed = applyInlineEmphasis(
+        _value('**word**', 2, 6),
+        delimiter: '*',
+      );
+
+      expect(composed.text, '***word***');
+      expect(
+        composed.selection,
+        const TextSelection(baseOffset: 3, extentOffset: 7),
+      );
+
+      final unwrapped = applyInlineEmphasis(composed, delimiter: '*');
+      expect(unwrapped.text, '**word**');
+      expect(
+        unwrapped.selection,
+        const TextSelection(baseOffset: 2, extentOffset: 6),
+      );
+
+      final reversed = applyInlineEmphasis(
+        _value('**word**', 6, 2),
+        delimiter: '*',
+      );
+      expect(reversed.text, '***word***');
+      expect(
+        reversed.selection,
+        const TextSelection(baseOffset: 7, extentOffset: 3),
+      );
+    });
   });
 
   testWidgets(
@@ -241,6 +271,32 @@ void main() {
       expect(api.source, '**word**');
     },
   );
+
+  testWidgets('italic shortcut composes with bold and toggles back cleanly', (
+    tester,
+  ) async {
+    final api = await _pumpBlockEditor(tester, source: '**word**');
+    _field(tester).controller.selection = const TextSelection(
+      baseOffset: 2,
+      extentOffset: 6,
+    );
+
+    await _primaryShortcut(tester, LogicalKeyboardKey.keyI);
+    expect(_field(tester).controller.text, '***word***');
+    expect(
+      _field(tester).controller.selection,
+      const TextSelection(baseOffset: 3, extentOffset: 7),
+    );
+    expect(api.updateCount, 1);
+
+    await _primaryShortcut(tester, LogicalKeyboardKey.keyI);
+    expect(_field(tester).controller.text, '**word**');
+    expect(
+      _field(tester).controller.selection,
+      const TextSelection(baseOffset: 2, extentOffset: 6),
+    );
+    expect(api.updateCount, 2);
+  });
 
   testWidgets('platform Meta is primary on macOS and Control is not', (
     tester,

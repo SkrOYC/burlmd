@@ -1,5 +1,12 @@
 # Stage 3: Technical Implementation Changelog
 
+## v1.6.1
+
+Patch correction from PR #10 review, round 4. No bill-of-materials, PRD, or architecture change.
+
+- ADR-008 now specifies the per-Note tier 1 mutation lock, the lifecycle-to-connection acquisition order, rollback after a refused structural draft write, and authoritative success when tier 2 already published the installed source.
+- `guidelines.md` records the standing lock-order and review rules. The targeted tier 1 measurement recorded a 2.070 ms p95 draft write for a 102,472-byte Note across 25 paced samples, below the 16 ms interaction gate. It does not establish end-to-end UI responsiveness.
+
 ## v1.6.0
 Evolution pass for the remaining Editor Depth contracts. Minor bump: planned
 FFI result/resolution surfaces and one platform-input ownership decision are

@@ -711,7 +711,12 @@ TextEditingValue applyInlineEmphasis(
       selected.startsWith(delimiter) &&
       selected.endsWith(delimiter);
 
-  if (surroundsInner || selectsFullRun) {
+  final canUnwrap =
+      delimiter != '*' ||
+      (surroundsInner && _isOddStarDelimiterPair(text, low - 1, high)) ||
+      (selectsFullRun && _isOddStarDelimiterPair(text, low, high - 1));
+
+  if ((surroundsInner || selectsFullRun) && canUnwrap) {
     final outerStart = surroundsInner ? low - delimiter.length : low;
     final innerStart = outerStart;
     final innerEnd = surroundsInner
@@ -744,6 +749,26 @@ TextEditingValue applyInlineEmphasis(
       extentOffset: reversed ? low + delimiter.length : high + delimiter.length,
     ),
   );
+}
+
+/// A run of two stars is a strong delimiter, not two independent italic
+/// delimiters. Odd runs represent a composed strong+italic boundary, so one
+/// star can be removed from each side to toggle only the italic layer.
+bool _isOddStarDelimiterPair(String text, int opening, int closing) =>
+    _starRunLengthAt(text, opening).isOdd &&
+    _starRunLengthAt(text, closing).isOdd;
+
+int _starRunLengthAt(String text, int offset) {
+  if (offset < 0 || offset >= text.length || text[offset] != '*') return 0;
+  var start = offset;
+  var end = offset + 1;
+  while (start > 0 && text[start - 1] == '*') {
+    start--;
+  }
+  while (end < text.length && text[end] == '*') {
+    end++;
+  }
+  return end - start;
 }
 
 class _PendingResync {
