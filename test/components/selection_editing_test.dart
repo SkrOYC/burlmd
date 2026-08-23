@@ -1,3 +1,4 @@
+import 'package:burlmd/l10n/generated/app_localizations.dart';
 import 'package:burlmd/src/components/editor.dart';
 import 'package:burlmd/src/providers/note_providers.dart';
 import 'package:burlmd/src/providers/rust_api_provider.dart';
@@ -5,6 +6,7 @@ import 'package:burlmd/src/rust/draft.dart';
 import 'package:burlmd/src/rust/markdown/ast.dart';
 import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show RenderParagraph;
 import 'package:flutter/services.dart' show MethodCall, SystemChannels;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart'
@@ -27,6 +29,7 @@ class _RangeApi extends RustApi {
   final List<String> deleteNoteIds = [];
   final List<String> copiedNoteIds = [];
   final List<(List<int>, String)> updates = [];
+  Object? operationError;
 
   late NoteState result;
   late RangeEditCaret caret;
@@ -38,6 +41,7 @@ class _RangeApi extends RustApi {
     BlockRange range,
     String replacement,
   ) {
+    if (operationError case final Object error) throw error;
     replacements.add((range, replacement));
     replacementNoteIds.add(noteId);
     return RangeEditResult(state: result, caret: caret);
@@ -45,6 +49,7 @@ class _RangeApi extends RustApi {
 
   @override
   RangeEditResult deleteRange(String noteId, BlockRange range) {
+    if (operationError case final Object error) throw error;
     deletes.add(range);
     deleteNoteIds.add(noteId);
     return RangeEditResult(state: result, caret: caret);
@@ -52,6 +57,7 @@ class _RangeApi extends RustApi {
 
   @override
   String copyRangeAsMarkdown(String noteId, BlockRange range) {
+    if (operationError case final Object error) throw error;
     copiedNoteIds.add(noteId);
     return 'core markdown';
   }
@@ -138,7 +144,11 @@ Future<ProviderContainer> _pump(
   await tester.pumpWidget(
     UncontrolledProviderScope(
       container: container,
-      child: const MaterialApp(home: Scaffold(body: Editor())),
+      child: const MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(body: Editor()),
+      ),
     ),
   );
   return container;
@@ -150,6 +160,18 @@ Rect _box(WidgetTester tester, String text) {
   );
   final renderBox = tester.renderObject<RenderBox>(finder.first);
   return renderBox.localToGlobal(Offset.zero) & renderBox.size;
+}
+
+Offset _caretPoint(WidgetTester tester, String probe, int utf16Offset) {
+  final finder = find.byWidgetPredicate(
+    (widget) => widget is RichText && widget.text.toPlainText().contains(probe),
+  );
+  final paragraph = tester.renderObject<RenderParagraph>(finder.first);
+  final caret = paragraph.getOffsetForCaret(
+    TextPosition(offset: utf16Offset),
+    Rect.zero,
+  );
+  return paragraph.localToGlobal(caret + Offset(0, paragraph.size.height / 2));
 }
 
 Future<void> _selectAcrossBlocks(WidgetTester tester) async {
@@ -380,6 +402,137 @@ void main() {
     );
     expect(field.controller.text, 'reshaped\n');
     expect(field.controller.selection.baseOffset, 2);
+  });
+
+  testWidgets('exact forward and reverse Block-boundary endpoints retain '
+      'their collapsed edge in the Core range', (tester) async {
+    final cases =
+        <
+          (
+            String name,
+            Offset Function(WidgetTester tester) start,
+            Offset Function(WidgetTester tester) end,
+            int startOffset,
+            int endOffset,
+          )
+        >[
+          (
+            'forward',
+            (tester) =>
+                _caretPoint(tester, 'first block', 'first block'.length),
+            (tester) => _caretPoint(tester, 'middle block', 3),
+            'first block'.length,
+            3,
+          ),
+          (
+            'reverse',
+            (tester) => _caretPoint(tester, 'middle block', 3),
+            (tester) =>
+                _caretPoint(tester, 'first block', 'first block'.length),
+            'first block'.length,
+            3,
+          ),
+        ];
+
+    for (final testCase in cases) {
+      final (name, start, end, startOffset, endOffset) = testCase;
+      final api = _RangeApi()
+        ..result = _note(['$name result'])
+        ..caret = RangeEditCaret.block(
+          blockPath: Uint64List.fromList(const [0]),
+          sourceOffsetUtf16: BigInt.zero,
+        )
+        ..sources['0'] = '$name result\n';
+      await _pump(tester, api);
+
+      final gesture = await tester.startGesture(
+        start(tester),
+        kind: PointerDeviceKind.mouse,
+      );
+      await tester.pump();
+      await gesture.moveTo(end(tester));
+      await tester.pump();
+      await gesture.up();
+      await tester.pump();
+
+      final selected = tester
+          .state<EditorState>(find.byType(Editor))
+          .debugSelectedRange();
+      expect(selected?.startPath, Uint64List.fromList(const [0]), reason: name);
+      expect(selected?.endPath, Uint64List.fromList(const [1]), reason: name);
+
+      tester.testTextInput.enterText(name);
+      await tester.pump();
+      await tester.pump();
+
+      expect(api.replacements, hasLength(1), reason: name);
+      final (range, replacement) = api.replacements.single;
+      expect(replacement, name);
+      expect(range.startPath, Uint64List.fromList(const [0]));
+      expect(range.startOffset, BigInt.from(startOffset));
+      expect(range.endPath, Uint64List.fromList(const [1]));
+      expect(range.endOffset, BigInt.from(endOffset));
+      await tester.pumpWidget(const SizedBox.shrink());
+    }
+  });
+
+  testWidgets('retryable range operation failures keep the Note mounted and '
+      'show a localized dismissible status', (tester) async {
+    final operations = <(String, Future<void> Function(WidgetTester))>[
+      (
+        'replace',
+        (tester) async {
+          tester.testTextInput.enterText('replacement');
+        },
+      ),
+      (
+        'delete',
+        (tester) async {
+          Actions.invoke(
+            tester.element(find.byType(SelectionArea)),
+            const DeleteCharacterIntent(forward: true),
+          );
+        },
+      ),
+      (
+        'copy',
+        (tester) async {
+          Actions.invoke(
+            tester.element(find.byType(SelectionArea)),
+            CopySelectionTextIntent.copy,
+          );
+        },
+      ),
+    ];
+
+    for (final (name, run) in operations) {
+      final api = _RangeApi()
+        ..operationError = StateError('$name refused')
+        ..result = _note(['unused'])
+        ..caret = RangeEditCaret.phantom(insertionIndex: BigInt.zero);
+      final container = await _pump(tester, api);
+      await _selectAcrossBlocks(tester);
+
+      await run(tester);
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('first block'), findsOneWidget, reason: name);
+      expect(find.byType(SnackBar), findsOneWidget, reason: name);
+      expect(
+        find.textContaining('Could not complete the editor operation'),
+        findsOneWidget,
+        reason: name,
+      );
+      expect(
+        find.textContaining('$name refused'),
+        findsOneWidget,
+        reason: name,
+      );
+      expect(container.read(activeNoteProvider), isNotNull, reason: name);
+      expect(container.read(editorErrorProvider), isNull, reason: name);
+      await tester.pumpWidget(const SizedBox.shrink());
+    }
   });
 
   testWidgets('production delete Actions send one atomic delete and adopt '

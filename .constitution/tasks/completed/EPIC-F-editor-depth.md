@@ -530,9 +530,10 @@ production Action delete, and the Core-returned-caret readiness marker are prese
   including a UTF-16 `Block` caret or a `Phantom` insertion index. These two
   Stage 3 records clarify that implemented boundary and its rationale; they do
   not alter any upstream product, architecture, or ticket scope.
-- No other modified implementation, generated-binding, test, smoke, or Rust
-  file is outside EDIT-F007's declared in-scope list. This task-plan entry is
-  the required scope-closeout record for the two documentation files above.
+- Through the original F007 closeout, no other modified implementation,
+  generated-binding, test, smoke, or Rust file is outside EDIT-F007's declared
+  in-scope list. This task-plan entry is the required scope-closeout record for
+  the two documentation files above.
 
 ## Completion notes
 
@@ -561,6 +562,18 @@ findings were fixed in the listed follow-up commits before the next milestone
 continued. This closeout does not claim a pull-request-level comprehensive
 review; that review remains part of the final integration and pull request
 workflow.
+
+### PR #10 review round 6 correction (2026-08-23)
+
+This post-closeout review hardening does not reopen an Epic F ticket or change
+its acceptance criteria. It adds Unicode-normalized title lookup and the schema
+version 1-to-2 migration in `rust/src/db/{connection.rs,schema.sql}` and
+`rust/src/index/{mod.rs,query.rs}`, with direct dependencies in
+`rust/Cargo.{toml,lock}`. It also distinguishes a close refusal from a
+post-close warning across the Rust FFI and persistence surfaces, Dart providers,
+generated FFI bindings, localization, and regression tests. The accompanying
+Stage 3 reconciliation documents the contract and schema. These changes harden
+the completed delivery; they do not revise the historical 25-commit range.
 
 ## Deferred follow-ups and remaining risks
 

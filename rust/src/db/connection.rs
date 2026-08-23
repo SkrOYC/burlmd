@@ -91,28 +91,79 @@ pub(crate) fn open_encrypted_db_with_key(path: &Path, key: &[u8]) -> Result<Conn
 }
 
 const SCHEMA: &str = include_str!("schema.sql");
+const CURRENT_SCHEMA_VERSION: i64 = 2;
 
 /// Applies `schema.sql` to `conn`. Idempotent — every statement is
 /// `CREATE TABLE IF NOT EXISTS` / `CREATE VIRTUAL TABLE IF NOT EXISTS`.
 ///
 /// `schema.sql` deliberately carries no `PRAGMA user_version = ...`
 /// statement, because this function replays the whole batch on every open —
-/// a literal assignment baked into the batch would silently reset a
-/// migrated database's version back to the baseline every time it was
-/// reopened. Instead, the version is handled here, outside the replayed
-/// batch: read first, and written to `1` only when it still reads `0`, i.e.
-/// on a freshly created file. A database whose `user_version` already
-/// reads something other than `0` — because a future migration has run — is
-/// left exactly as it is.
+/// a literal assignment baked into the batch would silently reset a migrated
+/// database's version back to the baseline every time it was reopened.
+///
+/// Version 2 adds the Unicode title lookup key for the prefix queries that
+/// power Find and Link completion. Unlike a fresh index, a v1 index already
+/// has a `notes` table, so `CREATE TABLE IF NOT EXISTS` cannot add the new
+/// column: it must be migrated and backfilled before the v2 index exists.
+/// Any later version remains untouched so a future migration can own it.
 pub fn init_schema(conn: &Connection) -> Result<(), AppError> {
-    conn.execute_batch(SCHEMA)?;
-
     let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    if user_version == 0 {
-        conn.execute_batch("PRAGMA user_version = 1;")?;
+    match user_version {
+        0 => {
+            conn.execute_batch(SCHEMA)?;
+            conn.execute_batch(&format!("PRAGMA user_version = {CURRENT_SCHEMA_VERSION};"))?;
+        }
+        1 => migrate_v1_to_v2(conn)?,
+        _ => conn.execute_batch(SCHEMA)?,
     }
 
     Ok(())
+}
+
+/// Adds and fills the v2 normalized, full-Unicode case-folded title lookup
+/// key. This is one SQLite transaction: a crash or failure cannot leave a v1
+/// index claiming v2 while any row still has no key.
+fn migrate_v1_to_v2(conn: &Connection) -> Result<(), AppError> {
+    let migration = (|| -> Result<(), AppError> {
+        conn.execute_batch(
+            "BEGIN IMMEDIATE;
+             ALTER TABLE notes ADD COLUMN title_lookup_key TEXT NOT NULL DEFAULT '';
+             CREATE INDEX idx_notes_title_lookup
+                 ON notes(workspace_id, title_lookup_key COLLATE NOCASE, title, id);",
+        )?;
+
+        let mut select = conn.prepare("SELECT workspace_id, id, title FROM notes")?;
+        let rows = select.query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+            ))
+        })?;
+        let titles = rows.collect::<Result<Vec<_>, _>>()?;
+        drop(select);
+
+        for (workspace_id, note_id, title) in titles {
+            conn.execute(
+                "UPDATE notes SET title_lookup_key = ?1 WHERE workspace_id = ?2 AND id = ?3",
+                rusqlite::params![
+                    crate::index::title_lookup_key(&title),
+                    workspace_id,
+                    note_id
+                ],
+            )?;
+        }
+
+        conn.execute_batch(&format!(
+            "PRAGMA user_version = {CURRENT_SCHEMA_VERSION}; COMMIT;"
+        ))?;
+        Ok(())
+    })();
+
+    if migration.is_err() {
+        let _ = conn.execute_batch("ROLLBACK;");
+    }
+    migration
 }
 
 /// Opens the encrypted local index at `path` (via the OS Keychain root key)
@@ -579,14 +630,14 @@ mod tests {
     }
 
     #[test]
-    fn schema_sets_a_baseline_user_version_for_future_migrations_to_branch_on() {
+    fn schema_sets_the_current_user_version_for_future_migrations_to_branch_on() {
         let (_dir, conn) = open_test_db();
         init_schema(&conn).unwrap();
 
         let version: i64 = conn
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(version, 1);
+        assert_eq!(version, CURRENT_SCHEMA_VERSION);
     }
 
     /// WSPC-D004: `PRAGMA foreign_keys` must report enabled on any freshly
@@ -620,10 +671,9 @@ mod tests {
         assert_eq!(synchronous, 1, "expected NORMAL (1)");
     }
 
-    /// WSPC-D004: a `user_version` that already reads something other than
-    /// `0` — i.e. a database a future migration has already touched — must
-    /// be left exactly as it is when `init_schema` replays the batch again,
-    /// rather than being reset to the baseline `1`.
+    /// A version beyond this binary's known migration must be left exactly as
+    /// it is when `init_schema` replays the batch again, rather than being
+    /// reset to the current baseline.
     #[test]
     fn schema_batch_replay_leaves_a_nonzero_user_version_untouched() {
         let (_dir, conn) = open_test_db();
@@ -636,6 +686,44 @@ mod tests {
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .unwrap();
         assert_eq!(version, 7, "a non-zero user_version must not be reset");
+    }
+
+    #[test]
+    fn schema_migrates_v1_title_rows_to_the_unicode_lookup_key() {
+        let (_dir, conn) = open_test_db();
+        // Deliberately model the v1 `notes` table directly: v1 lacks the
+        // lookup-key column, so replaying the v2 schema cannot add it.
+        conn.execute_batch(
+            "CREATE TABLE notes (
+                 id TEXT NOT NULL,
+                 workspace_id TEXT NOT NULL,
+                 path TEXT NOT NULL,
+                 title TEXT NOT NULL,
+                 last_modified INTEGER NOT NULL,
+                 content_hash TEXT NOT NULL,
+                 okf_conformant INTEGER NOT NULL DEFAULT 1,
+                 PRIMARY KEY (workspace_id, id)
+             );
+             INSERT INTO notes (id, workspace_id, path, title, last_modified, content_hash)
+                 VALUES ('uber', 'ws', 'uber.md', 'Über', 0, 'hash');
+             PRAGMA user_version = 1;",
+        )
+        .unwrap();
+
+        init_schema(&conn).unwrap();
+
+        let key: String = conn
+            .query_row(
+                "SELECT title_lookup_key FROM notes WHERE workspace_id = 'ws' AND id = 'uber'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(key, crate::index::title_lookup_key("Über"));
+        let version: i64 = conn
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(version, CURRENT_SCHEMA_VERSION);
     }
 
     /// WSPC-D004 review finding #3: after a bootstrap call succeeds,

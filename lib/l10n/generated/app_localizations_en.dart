@@ -57,4 +57,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String noteCloseFailed(String error) {
     return 'Could not switch notes: $error';
   }
+
+  @override
+  String editorOperationFailed(String error) {
+    return 'Could not complete the editor operation: $error';
+  }
 }

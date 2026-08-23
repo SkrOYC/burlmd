@@ -158,8 +158,10 @@ Future<NoteState> reloadNote({required String noteId}) =>
 /// the sync scheduler — which has existed since Epic C with no caller.
 ///
 /// Must also run on application quit and when switching away from a Note, or
-/// the session reaches disk but never enters version history.
-Future<void> closeNote({required String noteId}) =>
+/// the session reaches disk but never enters version history. A post-close
+/// commit or draft-cleanup problem is returned in [CloseNoteResult.warning],
+/// rather than as `Err`, because its session is already gone.
+Future<CloseNoteResult> closeNote({required String noteId}) =>
     RustLib.instance.api.crateApiFfiApiCloseNote(noteId: noteId);
 
 /// Notes with an unflushed draft from a previous session, for surfacing
@@ -529,6 +531,28 @@ class BlockRange {
           startOffset == other.startOffset &&
           endPath == other.endPath &&
           endOffset == other.endOffset;
+}
+
+/// Tier 3's terminal answer for one Note session.
+///
+/// A non-null [warning] means Core **did** retire the session, but could not
+/// record its commit or clear redundant draft bookkeeping after its bytes were
+/// safely written. In contrast, an FFI `Err` is a true refusal: the session is
+/// still open and Dart may restore its writable presentation state.
+class CloseNoteResult {
+  final String? warning;
+
+  const CloseNoteResult({this.warning});
+
+  @override
+  int get hashCode => warning.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is CloseNoteResult &&
+          runtimeType == other.runtimeType &&
+          warning == other.warning;
 }
 
 @freezed

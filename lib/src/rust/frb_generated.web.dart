@@ -62,6 +62,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   TextRun dco_decode_box_autoadd_text_run(dynamic raw);
 
   @protected
+  CloseNoteResult dco_decode_close_note_result(dynamic raw);
+
+  @protected
   PlatformInt64 dco_decode_i_64(dynamic raw);
 
   @protected
@@ -203,6 +206,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   TextRun sse_decode_box_autoadd_text_run(SseDeserializer deserializer);
+
+  @protected
+  CloseNoteResult sse_decode_close_note_result(SseDeserializer deserializer);
 
   @protected
   PlatformInt64 sse_decode_i_64(SseDeserializer deserializer);
@@ -368,6 +374,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_box_autoadd_text_run(TextRun self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_close_note_result(
+    CloseNoteResult self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_i_64(PlatformInt64 self, SseSerializer serializer);

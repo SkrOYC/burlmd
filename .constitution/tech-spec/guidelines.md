@@ -99,6 +99,12 @@ All commands below assume the `devenv` shell (`devenv shell`, or automatic via
    - The rendered and raw presentations of a Block must be typographically identical. Only the text differs (`**bold**` versus bold); font, size, weight, line height, and padding must not, or the Block visibly jumps when it takes focus.
    - **Every error returned across the FFI boundary must reach a user-visible surface.** No call site may swallow a Core error. This rule exists because the editor shipped through Epic B with no error path at all — failures crossed the boundary and were discarded, a gap Epic B's review recorded but could not reach until the editor was mounted (`SHEL-E004`, which landed the shell's error surface).
    - **Shell surfaces coordinate through provider seams, not widget ownership.** Note selection flows through the shared selection seam (`selectedNoteIdProvider`) so the tree, editor and lifecycle actions stay coherent without referencing each other; the Directory tree renders from the Core's single whole-tree payload (one call, children nested) and holds only expansion state as ephemeral UI state. Note switching must close the outgoing Note through the Core before opening the next, so its session reaches the commit tier (`SHEL-E004`).
+   - **Close a Note.** An FFI error refuses the close and keeps the outgoing
+     session writable. `CloseNoteResult.warning` means Core retired the session
+     after a safe write. The UI must continue to the requested Note and show a
+     dismissible status. It must not restore a writable snapshot for a retired
+     session. After an incoming open fails with its ID still selected, another
+     explicit selection of that Note must issue the open request again.
    - **Link-completion grammar is fixed.** A completion is eligible only when a collapsed caret has a last unmatched `[[` on the same line before it; its query is the intervening text. The UI snapshots that exact trigger range and source value, requests no more than 10 Core candidates, and rejects/dismisses the list if a newline, `]]`, focus/selection change, or edit invalidates the snapshot. Core supplies either an existing candidate or a distinguishable prospective ghost when the query is a valid future target. Acceptance replaces the snapshot range with the Core-supplied `LinkCompletion.insert_text`; no Dart code may construct or repair a destination. Follow always re-resolves first, then calls `create_link_target(target_id)` only for a still-missing target.
    - **A cross-Block selection uses one direct `TextInputClient` proxy, not a hidden `TextField`.** Its initial/current proxy value is `TextEditingValue.empty`; after `TextInput.attach`, it calls `setEditingState` with that value before `show`. It owns exactly one `TextInputConnection`, resets the empty platform value after a Core result, and closes before promotion or disposal. `updateEditingValue` handles only ordinary committed text/IME; an `Actions`/`Shortcuts` layer compatible with Flutter 3.44.3 `DefaultTextEditingShortcuts` explicitly handles Delete/Backspace and clipboard copy/cut/paste intents. While `TextEditingValue.composing` is valid and non-collapsed it neither mutates Core nor replaces the platform value. `RangeEditResult` is a present atomic operation, compatible with later undo but not an implementation of deferred CAP-EDIT-08 (ADR-012).
 3. **Nix:**
@@ -154,7 +160,13 @@ Every connection opened against the encrypted index must issue `PRAGMA foreign_k
 
 The ordering is stated that precisely because an earlier revision said *before any other statement*, which is unsatisfiable here: on a SQLCipher connection `rust/src/db/connection.rs` must issue `PRAGMA key` first, then the `SELECT count(*) FROM sqlite_master` unlock probe. An obligation the file it cites cannot meet invites the reader to discount the whole rule. The entire key design in `data-models/schema.sql` depends on it: with the pragma off the `ON UPDATE CASCADE` clauses that make a rename possible do not error, they silently do not fire, and the result is orphaned `links` and `fts_mapping` rows with nothing to signal the loss. Today only `init_schema` reliably runs on the singleton connection, while `open_encrypted_db_with_key` is reachable without it — which is how the tests use it.
 
-`PRAGMA user_version` is the other connection-time concern, in the opposite direction: it must be *read* on open and written only when it reads 0. `init_schema` replays the whole schema batch on every open, so a `user_version` assignment left inside that batch would reset a migrated database to the baseline every time it was opened.
+`PRAGMA user_version` is the other connection-time concern. `init_schema`
+must read it before applying the schema. A fresh index records version 2.
+A version 1 index must add and backfill `notes.title_lookup_key` in one
+transaction before it records version 2. The lookup key uses NFKC, full default
+Unicode case folding, and NFC. It supports Unicode title-prefix matching without
+depending on the ASCII-only `LIKE` and `NOCASE` behavior in the bundled
+SQLCipher build. An index with a later version remains unchanged.
 
 ## Workspace location
 

@@ -211,15 +211,34 @@ pub async fn reload_note(note_id: String) -> Result<NoteState, AppError> {
     open_session(&note_id)?.reload()
 }
 
+/// Tier 3's terminal answer for one Note session.
+///
+/// A non-null [warning] means Core **did** retire the session, but could not
+/// record its commit or clear redundant draft bookkeeping after its bytes were
+/// safely written. In contrast, an FFI `Err` is a true refusal: the session is
+/// still open and Dart may restore its writable presentation state.
+#[frb]
+pub struct CloseNoteResult {
+    pub warning: Option<String>,
+}
+
 /// Tier 3: flushes any pending write, makes one Git commit covering this
 /// editing session for this Note alone, clears the `drafts` row, and notifies
 /// the sync scheduler — which has existed since Epic C with no caller.
 ///
 /// Must also run on application quit and when switching away from a Note, or
-/// the session reaches disk but never enters version history.
+/// the session reaches disk but never enters version history. A post-close
+/// commit or draft-cleanup problem is returned in [CloseNoteResult.warning],
+/// rather than as `Err`, because its session is already gone.
 #[frb]
-pub async fn close_note(note_id: String) -> Result<(), AppError> {
-    open_session(&note_id)?.close()
+pub async fn close_note(note_id: String) -> Result<CloseNoteResult, AppError> {
+    let result = match open_session(&note_id)?.close_with_outcome()? {
+        crate::workspace::persist::CloseOutcome::Closed => CloseNoteResult { warning: None },
+        crate::workspace::persist::CloseOutcome::ClosedWithWarning(error) => CloseNoteResult {
+            warning: Some(format!("{error:?}")),
+        },
+    };
+    Ok(result)
 }
 
 /// Notes with an unflushed draft from a previous session, for surfacing
@@ -874,19 +893,21 @@ mod tests {
     }
 
     // WSPC-D004 brought `db/schema.sql` in line with `data-models/schema.sql`:
-    // `notes.content_hash` and `fts_mapping.workspace_id` are both now
-    // `NOT NULL`, where the pre-existing fixture below inserted into neither.
+    // `notes.content_hash`, `notes.title_lookup_key`, and
+    // `fts_mapping.workspace_id` are all `NOT NULL`, where the pre-existing
+    // fixture below inserted into neither.
     // A throwaway, deterministic-per-call hash stands in for the real
     // content hash `WSPC-D005`'s indexer will compute; nothing in this
     // module's own tests inspects its value.
     fn seed_note(conn: &Connection, id: &str, title: &str, content: &str, last_modified: i64) {
         conn.execute(
-            "INSERT INTO notes (id, workspace_id, path, title, last_modified, content_hash) \
-             VALUES (?1, 'ws', ?2, ?3, ?4, ?5)",
+            "INSERT INTO notes (id, workspace_id, path, title, title_lookup_key, last_modified, content_hash) \
+             VALUES (?1, 'ws', ?2, ?3, ?4, ?5, ?6)",
             rusqlite::params![
                 id,
                 format!("{id}.md"),
                 title,
+                crate::index::title_lookup_key(title),
                 last_modified,
                 format!("hash-{id}")
             ],
@@ -1047,8 +1068,8 @@ mod tests {
         .unwrap();
         seed_note(&conn, "note-1", "Grocery List", "Buy milk and bread", 1000);
         conn.execute(
-            "INSERT INTO notes (id, workspace_id, path, title, last_modified, content_hash) \
-             VALUES ('note-1', 'other-ws', 'note-1.md', 'Also Milk', 1000, 'hash-other')",
+            "INSERT INTO notes (id, workspace_id, path, title, title_lookup_key, last_modified, content_hash) \
+             VALUES ('note-1', 'other-ws', 'note-1.md', 'Also Milk', 'also milk', 1000, 'hash-other')",
             [],
         )
         .unwrap();
