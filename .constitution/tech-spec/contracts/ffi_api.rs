@@ -823,7 +823,9 @@ pub fn replace_selection_and_split_block(
 ///
 /// The slot can be nested in a List or Blockquote. Its fields are transport
 /// data, not a Presentation editing model: return it unchanged to
-/// `continue_block_at_insertion_slot`.
+/// `continue_block_at_insertion_slot`. `note_id` and `source_fingerprint`
+/// bind it to the exact returned authoritative state; Core refuses a stale
+/// capability before it changes source or draft state.
 #[frb]
 pub struct StructuralEditInsertionSlot {
     /// Byte offset in the exact returned working source, never a Flutter
@@ -835,6 +837,12 @@ pub struct StructuralEditInsertionSlot {
     /// Number of line endings that must remain after inserted source to retain
     /// the original tight/loose container seam. Core applies this value.
     pub required_after_newlines: usize,
+    /// Core identity that owned the returned source. A rename or move changes
+    /// it, so Presentation must not rekey this opaque value.
+    pub note_id: String,
+    /// SHA-256 fingerprint of the returned working source. Any authoritative
+    /// rewrite, including a frontmatter-length change, retires this slot.
+    pub source_fingerprint: String,
 }
 
 /// The Core-owned postcondition of a structural edit that preserves editing
@@ -882,7 +890,9 @@ pub fn continue_block_after(
 /// slot may be top-level or nested; Core restores its saved marker prefix and
 /// tight/loose seam before reparsing. Presentation must use this call for
 /// `StructuralEdit::phantom_insertion_slot`, rather than calling
-/// `continue_block_after` with an invented leaf path.
+/// `continue_block_after` with an invented leaf path. A stale capability is
+/// refused without changing source, draft, or edit state, and Presentation
+/// retires/refetches its phantom before retrying from the returned Note.
 #[frb(sync)]
 pub fn continue_block_at_insertion_slot(
     note_id: String,

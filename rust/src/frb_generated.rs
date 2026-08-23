@@ -2280,10 +2280,14 @@ impl SseDecode for crate::workspace::persist::StructuralEditInsertionSlot {
         let mut var_sourceOffset = <usize>::sse_decode(deserializer);
         let mut var_linePrefix = <String>::sse_decode(deserializer);
         let mut var_requiredAfterNewlines = <usize>::sse_decode(deserializer);
+        let mut var_noteId = <String>::sse_decode(deserializer);
+        let mut var_sourceFingerprint = <String>::sse_decode(deserializer);
         return crate::workspace::persist::StructuralEditInsertionSlot {
             source_offset: var_sourceOffset,
             line_prefix: var_linePrefix,
             required_after_newlines: var_requiredAfterNewlines,
+            note_id: var_noteId,
+            source_fingerprint: var_sourceFingerprint,
         };
     }
 }
@@ -3049,6 +3053,8 @@ impl flutter_rust_bridge::IntoDart for crate::workspace::persist::StructuralEdit
             self.source_offset.into_into_dart().into_dart(),
             self.line_prefix.into_into_dart().into_dart(),
             self.required_after_newlines.into_into_dart().into_dart(),
+            self.note_id.into_into_dart().into_dart(),
+            self.source_fingerprint.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -3714,6 +3720,8 @@ impl SseEncode for crate::workspace::persist::StructuralEditInsertionSlot {
         <usize>::sse_encode(self.source_offset, serializer);
         <String>::sse_encode(self.line_prefix, serializer);
         <usize>::sse_encode(self.required_after_newlines, serializer);
+        <String>::sse_encode(self.note_id, serializer);
+        <String>::sse_encode(self.source_fingerprint, serializer);
     }
 }
 

@@ -173,6 +173,8 @@ class _CoreFake extends RustApi {
         sourceOffset: BigInt.from(blockPath.first),
         linePrefix: 'opaque test slot',
         requiredAfterNewlines: BigInt.zero,
+        noteId: noteId,
+        sourceFingerprint: 'opaque test fingerprint',
       );
       _pendingInsertionSlot = insertionSlot;
       _pendingInsertionIndex = blockPath.first;
@@ -1158,6 +1160,58 @@ void main() {
       expect(api.calls, contains('continue-slot:0:typed'));
       expect(api.blocks, ['typed', 'second\n']);
       expect(_field(tester).controller.text, 'typed');
+    },
+  );
+
+  testWidgets(
+    'an authoritative update retires a selected-Enter phantom before it can '
+    'materialize a stale Core slot',
+    (tester) async {
+      const first = 'first\n';
+      final api = _CoreFake([first, 'second\n']);
+      final container = await pumpEditor(tester, [
+        _paragraph('first'),
+        _paragraph('second'),
+      ], api: api);
+
+      await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
+      _field(tester).controller.selection = TextSelection(
+        baseOffset: 0,
+        extentOffset: first.length,
+      );
+      await pressKey(tester, LogicalKeyboardKey.enter);
+      expect(_field(tester).controller.text, '');
+
+      // This models an authoritative lifecycle/reload adoption after Core
+      // returned the slot. The former offset remains numerically valid, but
+      // belongs to the state that just stopped being authoritative.
+      container
+          .read(activeNoteProvider.notifier)
+          .adopt(
+            NoteState(
+              ast: [_paragraph('second changed')],
+              metadata: _CoreFake._meta,
+              baseRevision: 'authoritative-update',
+              restoredFromDraft: false,
+            ),
+          );
+      await tester.pump();
+
+      expect(_writableFields(), findsNothing);
+      expect(
+        api.calls.where((call) => call.startsWith('continue-slot')),
+        isEmpty,
+      );
+      expect(
+        container.read(keystrokeWriteFailureProvider),
+        isA<StateError>(),
+        reason: 'the retry guidance must be visible without replacing the Note',
+      );
+      expect(container.read(activeNoteProvider)!.ast, hasLength(1));
+      expect(
+        blockText(container.read(activeNoteProvider)!.ast.single),
+        'second changed',
+      );
     },
   );
 

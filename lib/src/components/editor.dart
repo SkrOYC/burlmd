@@ -181,13 +181,32 @@ class EditorState extends ConsumerState<Editor> {
     // clear both its selectables and the Note-authoritative Select All marker.
     ref.listen<NoteState?>(activeNoteProvider, (previous, next) {
       if (!identical(previous, next)) _invalidateRenderedRange();
+      final focused = _focused;
+      if (focused?.isPhantom == true &&
+          focused?.phantomInsertionSlot != null &&
+          !identical(previous, next)) {
+        // A selected-Enter slot is a capability for the exact Core state that
+        // returned it. Lifecycle rekeys and authoritative rewrites can leave
+        // its byte offset in range but pointing at another seam, so retire it
+        // before an input callback can send it back. The current Note remains
+        // editable; the notice gives the user a nonfatal retry path.
+        _focused = null;
+        _selectionBrokers.clear();
+        ref
+            .read(keystrokeWriteFailureProvider.notifier)
+            .report(
+              StateError(
+                'The empty editor slot is no longer current. Retry from the updated note.',
+              ),
+            );
+        return;
+      }
       // Provider listeners run at the synchronous adoption boundary, whereas
       // this widget's build can run after the lifecycle future releases its
       // gate. The gate alone is not enough to prove a rekey: create and
       // recovery can replace the active Note while it is held. Preserve focus
       // only when LifecycleActions supplied the exact authoritative old/new
       // identity pair for this provider transition.
-      final focused = _focused;
       if (focused != null &&
           previous?.metadata.id == focused.noteId &&
           next != null &&

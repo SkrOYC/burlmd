@@ -1426,6 +1426,17 @@ impl NoteSession {
 
         self.structural_edit_with_result(
             |working, _, _, _| {
+                if insertion_slot.note_id != self.0.note_id {
+                    return Err(AppError::ParseError(format!(
+                        "phantom insertion slot belongs to {}, not {}",
+                        insertion_slot.note_id, self.0.note_id
+                    )));
+                }
+                if insertion_slot.source_fingerprint != content_hash(working.as_bytes()) {
+                    return Err(AppError::ParseError(
+                        "phantom insertion slot is stale after an authoritative source change; retry from the current Note".to_string(),
+                    ));
+                }
                 let at = insertion_slot.source_offset;
                 if at > working.len() || !working.is_char_boundary(at) {
                     return Err(AppError::ParseError(format!(
@@ -1674,7 +1685,7 @@ impl NoteSession {
         selection_base: usize,
         selection_extent: usize,
     ) -> Result<(NoteState, StructuralEditLocation), AppError> {
-        let (state, location) = self.structural_edit(|working, live_spans, live_ast, retained_spans| {
+        let (state, location) = self.structural_edit_with_result(|working, live_spans, live_ast, retained_spans| {
             let retained = retained_spans.block(block_path).ok_or_else(|| {
                 AppError::ParseError(format!("no Block at block_path {block_path:?}"))
             })?;
@@ -1746,6 +1757,8 @@ impl NoteSession {
                             String::new()
                         },
                         required_after_newlines: trailing_newlines(removed).max(1),
+                        note_id: String::new(),
+                        source_fingerprint: String::new(),
                     }
                 } else {
                     // `retained.source` includes the leaf's terminating line
@@ -1755,6 +1768,8 @@ impl NoteSession {
                         source_offset: delete_start,
                         line_prefix: String::new(),
                         required_after_newlines: 0,
+                        note_id: String::new(),
+                        source_fingerprint: String::new(),
                     }
                 };
                 let replacement = if removes_structural_line || line_prefix.is_empty() {
@@ -1857,6 +1872,21 @@ impl NoteSession {
                     caret_offset: focus.1,
                 },
             ))
+        }, |source, _, _, location| {
+            Ok(match location {
+                StructuralEditLocation::Block {
+                    block_path,
+                    caret_offset,
+                } => StructuralEditLocation::Block {
+                    block_path,
+                    caret_offset,
+                },
+                StructuralEditLocation::Phantom { mut insertion_slot } => {
+                    insertion_slot.note_id = self.0.note_id.clone();
+                    insertion_slot.source_fingerprint = content_hash(source.as_bytes());
+                    StructuralEditLocation::Phantom { insertion_slot }
+                }
+            })
         })?;
         Ok((state, location))
     }
@@ -4262,14 +4292,19 @@ pub enum StructuralEditLocation {
 /// it is intentionally not a Flutter coordinate. `line_prefix` preserves the
 /// structural syntax that was removed with a complete ListItem/Blockquote
 /// line (for example, `"> - "`), and `required_after_newlines` restores the
-/// original seam without guessing a list's tight/loose form. Presentation must
-/// return this value unchanged to [`NoteSession::continue_block_at_insertion_slot`].
+/// original seam without guessing a list's tight/loose form. `note_id` and
+/// `source_fingerprint` bind this opaque capability to that exact authoritative
+/// Note state; Core refuses it after a rekey or source rewrite. Presentation
+/// must return this value unchanged to
+/// [`NoteSession::continue_block_at_insertion_slot`].
 #[frb]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StructuralEditInsertionSlot {
     pub source_offset: usize,
     pub line_prefix: String,
     pub required_after_newlines: usize,
+    pub note_id: String,
+    pub source_fingerprint: String,
 }
 
 /// The complete source extent a whole-Note operation owns. A conformant
@@ -5013,6 +5048,8 @@ mod tests {
     use std::sync::atomic::{AtomicU32, AtomicUsize};
 
     use tempfile::TempDir;
+
+    use crate::workspace::lifecycle::{create_directory, move_note, rename_note};
 
     use super::*;
 
@@ -5828,6 +5865,142 @@ mod tests {
         );
         session.flush().unwrap();
         assert_eq!(f.read("a.md"), "Typed\r\n\r\nSecond\r\n");
+    }
+
+    /// A full-field Enter returns a capability for one exact source snapshot,
+    /// not a reusable byte offset. A concurrent tier-1 edit can leave that
+    /// offset in range while moving the intended structural seam; Core must
+    /// reject rather than insert before whichever sibling now occupies it.
+    #[test]
+    fn selected_enter_phantom_rejects_a_concurrent_edit_without_mutating_state_or_draft() {
+        let f = fixture();
+        f.write("a.md", "First\n\nSecond\n");
+        let session = f.open("a");
+        let field = session.block_source(&[0]).unwrap();
+        let (_, location) = session
+            .replace_selection_and_split_block_from_editor_source(
+                &[0],
+                &field,
+                0,
+                field.encode_utf16().count(),
+            )
+            .unwrap();
+        let StructuralEditLocation::Phantom { insertion_slot } = location else {
+            panic!("complete selected Enter must return an insertion slot");
+        };
+
+        session.update_block(&[0], "Second changed\n").unwrap();
+        let source_before_refusal = session.working_source().unwrap();
+        let state_before_refusal = session.note_state().unwrap();
+        let draft_before_refusal = f.draft("a").unwrap();
+        let sequence_before_refusal = session.edit_seq();
+
+        let refused = session.continue_block_at_insertion_slot(&insertion_slot, "Typed");
+        assert!(
+            matches!(refused, Err(AppError::ParseError(ref message)) if message.contains("slot is stale")),
+            "a source-changed slot must be refused, got {refused:?}"
+        );
+        assert_eq!(*session.working_source().unwrap(), *source_before_refusal);
+        assert_eq!(session.note_state().unwrap(), state_before_refusal);
+        assert_eq!(session.edit_seq(), sequence_before_refusal);
+        let draft_after_refusal = f.draft("a").unwrap();
+        assert_eq!(
+            draft_after_refusal.raw_markdown,
+            draft_before_refusal.raw_markdown
+        );
+        assert_eq!(draft_after_refusal.edit_seq, draft_before_refusal.edit_seq);
+        assert_eq!(
+            draft_after_refusal.updated_at,
+            draft_before_refusal.updated_at
+        );
+        assert!(
+            !session.working_source().unwrap().contains("Typed"),
+            "a stale slot inserted at an in-range but wrong offset"
+        );
+    }
+
+    /// Lifecycle identity remaps can also rewrite frontmatter to a different
+    /// length. The old slot must not be rekeyed, whether the operation is a
+    /// title rename or a move; both refusals preserve the new authoritative
+    /// session and its crash-recovery draft for a visible retry.
+    #[test]
+    fn selected_enter_phantom_rejects_rename_move_and_frontmatter_rewrites_transactionally() {
+        let f = fixture();
+        let original = "---\ntype: Note\ntitle: A\n---\n\nFirst\n\nSecond\n";
+        f.write("a.md", original);
+        f.reindex();
+        let session = f.open("a");
+        let field = session.block_source(&[0]).unwrap();
+        let (_, location) = session
+            .replace_selection_and_split_block_from_editor_source(
+                &[0],
+                &field,
+                0,
+                field.encode_utf16().count(),
+            )
+            .unwrap();
+        let StructuralEditLocation::Phantom { insertion_slot } = location else {
+            panic!("complete selected Enter must return an insertion slot");
+        };
+
+        rename_note(&f.workspace, "a", "A deliberately longer renamed title").unwrap();
+        let renamed_id = "A deliberately longer renamed title";
+        let renamed = lookup(f.workspace.id(), renamed_id)
+            .unwrap()
+            .expect("rename must carry the live session");
+        let renamed_source = renamed.working_source().unwrap();
+        let renamed_state = renamed.note_state().unwrap();
+        let renamed_draft = f.draft(renamed_id).unwrap();
+        let renamed_sequence = renamed.edit_seq();
+        assert!(renamed_source.contains("title: A deliberately longer renamed title"));
+
+        let rename_refused = renamed.continue_block_at_insertion_slot(&insertion_slot, "Wrong");
+        assert!(
+            matches!(rename_refused, Err(AppError::ParseError(ref message)) if message.contains("belongs to")),
+            "a renamed slot must be refused, got {rename_refused:?}"
+        );
+        assert_eq!(*renamed.working_source().unwrap(), *renamed_source);
+        assert_eq!(renamed.note_state().unwrap(), renamed_state);
+        assert_eq!(renamed.edit_seq(), renamed_sequence);
+        let renamed_draft_after_refusal = f.draft(renamed_id).unwrap();
+        assert_eq!(
+            renamed_draft_after_refusal.raw_markdown,
+            renamed_draft.raw_markdown
+        );
+        assert_eq!(renamed_draft_after_refusal.edit_seq, renamed_draft.edit_seq);
+        assert_eq!(
+            renamed_draft_after_refusal.updated_at,
+            renamed_draft.updated_at
+        );
+        assert!(!renamed.working_source().unwrap().contains("Wrong"));
+
+        create_directory(&f.workspace, "Archive").unwrap();
+        move_note(&f.workspace, renamed_id, "Archive").unwrap();
+        let moved_id = "Archive/A deliberately longer renamed title";
+        let moved = lookup(f.workspace.id(), moved_id)
+            .unwrap()
+            .expect("move must carry the live session");
+        let moved_source = moved.working_source().unwrap();
+        let moved_state = moved.note_state().unwrap();
+        let moved_draft = f.draft(moved_id).unwrap();
+        let moved_sequence = moved.edit_seq();
+
+        let move_refused = moved.continue_block_at_insertion_slot(&insertion_slot, "Wrong");
+        assert!(
+            matches!(move_refused, Err(AppError::ParseError(ref message)) if message.contains("belongs to")),
+            "a moved slot must be refused, got {move_refused:?}"
+        );
+        assert_eq!(*moved.working_source().unwrap(), *moved_source);
+        assert_eq!(moved.note_state().unwrap(), moved_state);
+        assert_eq!(moved.edit_seq(), moved_sequence);
+        let moved_draft_after_refusal = f.draft(moved_id).unwrap();
+        assert_eq!(
+            moved_draft_after_refusal.raw_markdown,
+            moved_draft.raw_markdown
+        );
+        assert_eq!(moved_draft_after_refusal.edit_seq, moved_draft.edit_seq);
+        assert_eq!(moved_draft_after_refusal.updated_at, moved_draft.updated_at);
+        assert!(!moved.working_source().unwrap().contains("Wrong"));
     }
 
     /// A complete selected list leaf removes its actual item syntax, not only

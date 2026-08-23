@@ -1,5 +1,16 @@
 # Stage 3: Technical Implementation Changelog
 
+## v1.6.10
+
+Patch correction from PR #10 review, round 21. No bill-of-materials, PRD, or
+architecture change.
+
+- `StructuralEditInsertionSlot` is now an opaque capability bound to the
+  authoritative Note identity and SHA-256 fingerprint of the exact returned
+  working source. `continue_block_at_insertion_slot` refuses rekeyed or
+  rewritten slots before any source, draft, or edit-sequence mutation, so a
+  stale phantom cannot silently materialize at an in-range but wrong offset.
+
 ## v1.6.9
 
 Patch correction from PR #10 review, round 20. No bill-of-materials, PRD, or

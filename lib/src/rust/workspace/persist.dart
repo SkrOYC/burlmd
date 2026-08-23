@@ -48,24 +48,33 @@ class NoteWriteStatus {
 /// it is intentionally not a Flutter coordinate. `line_prefix` preserves the
 /// structural syntax that was removed with a complete ListItem/Blockquote
 /// line (for example, `"> - "`), and `required_after_newlines` restores the
-/// original seam without guessing a list's tight/loose form. Presentation must
-/// return this value unchanged to [`NoteSession::continue_block_at_insertion_slot`].
+/// original seam without guessing a list's tight/loose form. `note_id` and
+/// `source_fingerprint` bind this opaque capability to that exact authoritative
+/// Note state; Core refuses it after a rekey or source rewrite. Presentation
+/// must return this value unchanged to
+/// [`NoteSession::continue_block_at_insertion_slot`].
 class StructuralEditInsertionSlot {
   final BigInt sourceOffset;
   final String linePrefix;
   final BigInt requiredAfterNewlines;
+  final String noteId;
+  final String sourceFingerprint;
 
   const StructuralEditInsertionSlot({
     required this.sourceOffset,
     required this.linePrefix,
     required this.requiredAfterNewlines,
+    required this.noteId,
+    required this.sourceFingerprint,
   });
 
   @override
   int get hashCode =>
       sourceOffset.hashCode ^
       linePrefix.hashCode ^
-      requiredAfterNewlines.hashCode;
+      requiredAfterNewlines.hashCode ^
+      noteId.hashCode ^
+      sourceFingerprint.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -74,5 +83,7 @@ class StructuralEditInsertionSlot {
           runtimeType == other.runtimeType &&
           sourceOffset == other.sourceOffset &&
           linePrefix == other.linePrefix &&
-          requiredAfterNewlines == other.requiredAfterNewlines;
+          requiredAfterNewlines == other.requiredAfterNewlines &&
+          noteId == other.noteId &&
+          sourceFingerprint == other.sourceFingerprint;
 }
