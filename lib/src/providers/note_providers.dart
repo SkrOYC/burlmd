@@ -128,6 +128,52 @@ class LifecycleEditing extends Notifier<int> {
   }
 }
 
+/// The one synchronous provider transition during which [activeNoteProvider]
+/// is carrying the *same* Core session to a new concept id.
+///
+/// The lifecycle gate says that a lifecycle action is in flight; it does not
+/// say that the Note replacing the current editor is a rekey of that session.
+/// Creation and lifecycle-admitted recovery also replace the active Note while
+/// the gate is held. [LifecycleActions] therefore publishes this identity pair
+/// immediately before its authoritative re-anchor adoption and clears it
+/// immediately afterwards. Consumers must match all three values while
+/// handling that provider transition; the token is never navigation state.
+class LifecycleFocusRemap {
+  const LifecycleFocusRemap({
+    required this.generation,
+    required this.oldId,
+    required this.newId,
+  });
+
+  final int generation;
+  final String oldId;
+  final String newId;
+
+  bool matches({
+    required int generation,
+    required String oldId,
+    required String newId,
+  }) =>
+      this.generation == generation &&
+      this.oldId == oldId &&
+      this.newId == newId;
+}
+
+/// Ephemeral proof that an active-Note identity change is a lifecycle rekey.
+final lifecycleFocusRemapProvider =
+    NotifierProvider<LifecycleFocusRemapSignal, LifecycleFocusRemap?>(
+      LifecycleFocusRemapSignal.new,
+    );
+
+class LifecycleFocusRemapSignal extends Notifier<LifecycleFocusRemap?> {
+  @override
+  LifecycleFocusRemap? build() => null;
+
+  void publish(LifecycleFocusRemap remap) => state = remap;
+
+  void clear() => state = null;
+}
+
 /// The single presentation-side admission rule for every editor mutation.
 /// A Note switch retires its outgoing session, while lifecycle work can
 /// atomically rewrite, re-anchor, or delete its current source. In either

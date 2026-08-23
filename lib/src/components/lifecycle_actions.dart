@@ -450,7 +450,15 @@ class LifecycleActions {
     if (returnedState != null &&
         invokedNoteId != null &&
         activeId == invokedNoteId) {
-      _ref.read(activeNoteProvider.notifier).adopt(returnedState);
+      // `rename_note` and `move_note` deliberately leave
+      // `effects.remapped` empty: their returned state is the authoritative
+      // proof that the invoked session moved. Turn that proof into the same
+      // short-lived signal directory rekeys use below.
+      _adoptRekeyedState(
+        operation,
+        oldId: invokedNoteId,
+        newState: returnedState,
+      );
       _ref
           .read(selectedNoteIdProvider.notifier)
           .select(returnedState.metadata.id);
@@ -493,7 +501,7 @@ class LifecycleActions {
           noteId: remap.newId,
         );
         if (reanchored == null) return;
-        _ref.read(activeNoteProvider.notifier).adopt(reanchored);
+        _adoptRekeyedState(operation, oldId: remap.oldId, newState: reanchored);
         _ref.read(selectedNoteIdProvider.notifier).select(remap.newId);
         break;
       }
@@ -517,6 +525,32 @@ class LifecycleActions {
       if (rewritten == null) return;
       _ref.read(activeNoteProvider.notifier).adopt(rewritten);
     }
+  }
+
+  /// Emits a rekey proof only across the synchronous state adoption that
+  /// carries the Core session forward. Clearing it before any subsequent
+  /// selection makes creation, recovery, removal, and later navigation
+  /// ordinary Note replacements from the Editor's point of view.
+  void _adoptRekeyedState(
+    _LifecycleOperation operation, {
+    required String oldId,
+    required NoteState newState,
+  }) {
+    final newId = newState.metadata.id;
+    if (oldId == newId) {
+      _ref.read(activeNoteProvider.notifier).adopt(newState);
+      return;
+    }
+    final signal = _ref.read(lifecycleFocusRemapProvider.notifier);
+    signal.publish(
+      LifecycleFocusRemap(
+        generation: operation.generation,
+        oldId: oldId,
+        newId: newId,
+      ),
+    );
+    _ref.read(activeNoteProvider.notifier).adopt(newState);
+    signal.clear();
   }
 
   /// An awaited post-lifecycle fetch may not outlive the operation and
