@@ -184,6 +184,23 @@ class RustApi {
     offset: BigInt.from(offset),
   );
 
+  /// Atomically deletes a non-collapsed raw-field selection and splits at its
+  /// earlier UTF-16 endpoint. Core validates the replacement, split, and
+  /// returned focus before it installs state or writes the draft row.
+  ffi.StructuralEdit replaceSelectionAndSplitBlock(
+    String noteId,
+    List<int> blockPath,
+    String source,
+    int selectionBase,
+    int selectionExtent,
+  ) => ffi.replaceSelectionAndSplitBlock(
+    noteId: noteId,
+    blockPath: Uint64List.fromList(blockPath),
+    source: source,
+    selectionBase: BigInt.from(selectionBase),
+    selectionExtent: BigInt.from(selectionExtent),
+  );
+
   /// Merges a Block into its predecessor — Backspace at offset 0
   /// (CAP-EDIT-03), returning Core's reparsed predecessor leaf and caret.
   ffi.StructuralEdit mergeBlockWithPrevious(

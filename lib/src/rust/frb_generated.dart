@@ -74,7 +74,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.12.0';
 
   @override
-  int get rustContentHash => -1294523770;
+  int get rustContentHash => -1223171104;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -212,6 +212,14 @@ abstract class RustLibApi extends BaseApi {
     required String noteId,
     required BlockRange range,
     required String replacement,
+  });
+
+  StructuralEdit crateApiFfiApiReplaceSelectionAndSplitBlock({
+    required String noteId,
+    required Uint64List blockPath,
+    required String source,
+    required BigInt selectionBase,
+    required BigInt selectionExtent,
   });
 
   RangeEditResult crateApiFfiApiReplaceWholeNote({
@@ -1280,6 +1288,48 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   );
 
   @override
+  StructuralEdit crateApiFfiApiReplaceSelectionAndSplitBlock({
+    required String noteId,
+    required Uint64List blockPath,
+    required String source,
+    required BigInt selectionBase,
+    required BigInt selectionExtent,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(noteId, serializer);
+          sse_encode_list_prim_usize_strict(blockPath, serializer);
+          sse_encode_String(source, serializer);
+          sse_encode_usize(selectionBase, serializer);
+          sse_encode_usize(selectionExtent, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 35)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_structural_edit,
+          decodeErrorData: sse_decode_app_error,
+        ),
+        constMeta: kCrateApiFfiApiReplaceSelectionAndSplitBlockConstMeta,
+        argValues: [noteId, blockPath, source, selectionBase, selectionExtent],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiFfiApiReplaceSelectionAndSplitBlockConstMeta =>
+      const TaskConstMeta(
+        debugName: "replace_selection_and_split_block",
+        argNames: [
+          "noteId",
+          "blockPath",
+          "source",
+          "selectionBase",
+          "selectionExtent",
+        ],
+      );
+
+  @override
   RangeEditResult crateApiFfiApiReplaceWholeNote({
     required String noteId,
     required String replacement,
@@ -1290,7 +1340,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(noteId, serializer);
           sse_encode_String(replacement, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 35)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 36)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_range_edit_result,
@@ -1322,7 +1372,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           sse_encode_String(noteId, serializer);
           sse_encode_list_prim_usize_strict(topLevelPath, serializer);
           sse_encode_usize(renderedUtf16Offset, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 36)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 37)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_block_caret,
@@ -1353,7 +1403,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 37,
+            funcId: 38,
             port: port_,
           );
         },
@@ -1388,7 +1438,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 38,
+            funcId: 39,
             port: port_,
           );
         },
@@ -1423,7 +1473,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           sse_encode_list_prim_usize_strict(blockPath, serializer);
           sse_encode_String(source, serializer);
           sse_encode_usize(offset, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 39)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 40)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_structural_edit,
@@ -1454,7 +1504,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           sse_encode_String(noteId, serializer);
           sse_encode_list_prim_usize_strict(blockPath, serializer);
           sse_encode_String(newSource, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 40)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 41)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
@@ -1481,7 +1531,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 41,
+            funcId: 42,
             port: port_,
           );
         },

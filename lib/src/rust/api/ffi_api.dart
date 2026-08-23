@@ -343,6 +343,26 @@ StructuralEdit splitBlock({
   offset: offset,
 );
 
+/// Replaces a non-collapsed raw-field selection and then splits at the
+/// selection's earlier UTF-16 endpoint in one Core transaction. Both
+/// endpoints may be supplied in either direction. Core validates the field
+/// source, both UTF-16 boundaries, the resulting structural split, and its
+/// focus before installing state or writing the tier-1 draft row; a refusal
+/// therefore leaves the source, draft, edit sequence, and idle timer intact.
+StructuralEdit replaceSelectionAndSplitBlock({
+  required String noteId,
+  required Uint64List blockPath,
+  required String source,
+  required BigInt selectionBase,
+  required BigInt selectionExtent,
+}) => RustLib.instance.api.crateApiFfiApiReplaceSelectionAndSplitBlock(
+  noteId: noteId,
+  blockPath: blockPath,
+  source: source,
+  selectionBase: selectionBase,
+  selectionExtent: selectionExtent,
+);
+
 /// Merges a Block into its predecessor -- Backspace at offset 0
 /// (CAP-EDIT-03). The returned [`StructuralEdit`] names the actual
 /// predecessor leaf and its raw-source UTF-16 join offset after Core reparses.

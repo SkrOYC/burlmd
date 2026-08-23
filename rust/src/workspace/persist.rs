@@ -1565,6 +1565,127 @@ impl NoteSession {
         Ok((state, block_path, caret_offset))
     }
 
+    /// Atomically replaces one raw editor-field selection with nothing and
+    /// splits at its earlier UTF-16 endpoint. Unlike composing
+    /// `update_block` then `split_block_from_editor_source`, this cannot
+    /// leave the deletion installed when the structural half refuses.
+    pub fn replace_selection_and_split_block_from_editor_source(
+        &self,
+        block_path: &[usize],
+        editor_source: &str,
+        selection_base: usize,
+        selection_extent: usize,
+    ) -> Result<(NoteState, Vec<usize>, usize), AppError> {
+        let (state, (block_path, caret_offset)) = self.structural_edit(|working, _, _, retained_spans| {
+            let retained = retained_spans.block(block_path).ok_or_else(|| {
+                AppError::ParseError(format!("no Block at block_path {block_path:?}"))
+            })?;
+            if !retained.is_leaf() {
+                return Err(AppError::ParseError(format!(
+                    "block_path {block_path:?} does not name an editable leaf"
+                )));
+            }
+
+            let Some(base) = crate::markdown::spans::utf16_to_byte_offset(editor_source, selection_base) else {
+                return Err(AppError::ParseError(format!(
+                    "selection UTF-16 offset {selection_base} is not a character boundary in block_path {block_path:?}"
+                )));
+            };
+            let Some(extent) = crate::markdown::spans::utf16_to_byte_offset(editor_source, selection_extent) else {
+                return Err(AppError::ParseError(format!(
+                    "selection UTF-16 offset {selection_extent} is not a character boundary in block_path {block_path:?}"
+                )));
+            };
+            let (selection_start, selection_end) = if base <= extent {
+                (base, extent)
+            } else {
+                (extent, base)
+            };
+            if selection_start == selection_end {
+                return Err(AppError::ParseError(
+                    "replace-selection split requires a non-collapsed selection".to_string(),
+                ));
+            }
+            let replaced_editor_source = editor_source
+                .get(..selection_start)
+                .zip(editor_source.get(selection_end..))
+                .map(|(before, after)| format!("{before}{after}"))
+                .ok_or_else(|| AppError::ParseError("selection is not addressable in editor source".to_string()))?;
+
+            // Model the complete raw-field replacement against an ephemeral
+            // span map. It supports the buffered paragraph-to-container case
+            // without mutating the live source before every later validation
+            // (including the post-split focus derivation) succeeds.
+            let mut replaced_spans = retained_spans.clone();
+            if replaced_spans
+                .apply_buffered_edit(block_path, replaced_editor_source.len())
+                .is_none()
+            {
+                return Err(AppError::ParseError(format!(
+                    "block_path {block_path:?} addresses a container Block, whose child spans a buffered edit cannot maintain"
+                )));
+            }
+            let replaced = replaced_spans.block(block_path).ok_or_else(|| {
+                AppError::ParseError(format!("no Block at block_path {block_path:?}"))
+            })?;
+            let source_with_replacement = splice::splice_source(
+                working,
+                retained.source.clone(),
+                &replaced_editor_source,
+            )
+            .map_err(splice_error)?;
+            let ParsedNote {
+                spans: replacement_live_spans,
+                ..
+            } = parse_note(&source_with_replacement, containing_dir(&self.0.note_id));
+            let live_path = editable_live_path(
+                &replacement_live_spans,
+                &replaced_spans,
+                block_path,
+            )?;
+            let span = block_span(&replacement_live_spans, &live_path)?;
+            let field_relative_start = span.start.checked_sub(replaced.source.start).ok_or_else(|| {
+                AppError::ParseError(format!(
+                    "live leaf {live_path:?} lies outside the editor source for block_path {block_path:?}"
+                ))
+            })?;
+            let field_relative_end = span.end.checked_sub(replaced.source.start).ok_or_else(|| {
+                AppError::ParseError(format!(
+                    "live leaf {live_path:?} lies outside the editor source for block_path {block_path:?}"
+                ))
+            })?;
+            if selection_start < field_relative_start || selection_start > field_relative_end {
+                return Err(AppError::ParseError(format!(
+                    "selection UTF-16 offset {selection_base} is outside the current editable leaf for block_path {block_path:?}"
+                )));
+            }
+            let at = span.start + (selection_start - field_relative_start);
+            let before = source_with_replacement.get(..at).ok_or_else(|| {
+                AppError::ParseError(format!("offset {at} is not addressable"))
+            })?;
+            let newline = if before.contains('\n') {
+                newline_style(before)
+            } else {
+                newline_style(&source_with_replacement)
+            };
+            let separator = newline.repeat(2);
+            let new_source = splice::splice_source(
+                &source_with_replacement,
+                at..at,
+                &separator,
+            )
+            .map_err(splice_error)?;
+            let reparsed = parse_note(&new_source, containing_dir(&self.0.note_id));
+            let focus = editable_leaf_at_or_after_source_offset(
+                &new_source,
+                &reparsed.spans,
+                at + separator.len(),
+            )?;
+            Ok((new_source, focus))
+        })?;
+        Ok((state, block_path, caret_offset))
+    }
+
     /// Merges a Block into its predecessor — Backspace at offset 0.
     ///
     /// The returned path and caret are authoritative after the reparse. A
@@ -5197,6 +5318,111 @@ mod tests {
             wait_until(Duration::from_millis(300), || f.draft("a").is_none()),
             "tier 2 did not clear the retry's draft row"
         );
+    }
+
+    /// Selected Enter is one transaction, not a buffered deletion followed by
+    /// a best-effort split. A refused tier-1 write must leave no deletion for
+    /// a later blur or idle flush to persist.
+    #[test]
+    fn a_selected_enter_draft_failure_keeps_source_draft_and_idle_persistence_unchanged() {
+        let f = fixture_with_idle(Duration::from_millis(40));
+        let original = note("A", "First paragraph.\n\nSecond paragraph.");
+        f.write("a.md", &original);
+        let session = f.open("a");
+        let state_before = session.note_state().unwrap();
+        let sequence_before = session.edit_seq();
+        let field = session.block_source(&[0]).unwrap();
+
+        f.inject_failure(
+            "CREATE TRIGGER injected_selected_enter_draft_failure BEFORE INSERT ON drafts \
+             BEGIN SELECT RAISE(ABORT, 'injected selected Enter draft failure'); END;",
+        );
+        let refused =
+            session.replace_selection_and_split_block_from_editor_source(&[0], &field, 6, 15);
+
+        assert!(refused.is_err(), "the injected tier-1 failure must refuse");
+        assert_eq!(*session.working_source().unwrap(), original);
+        assert_eq!(session.note_state().unwrap(), state_before);
+        assert_eq!(session.edit_seq(), sequence_before);
+        assert!(
+            f.draft("a").is_none(),
+            "the refused transaction wrote a draft"
+        );
+
+        // A blur-equivalent reparse and time past the idle deadline may follow
+        // the refusal. Neither may publish the deletion that never committed.
+        session.commit_block(&[0]).unwrap();
+        assert!(
+            !wait_until(Duration::from_millis(180), || f.read("a.md") != original),
+            "a refused selected Enter armed a timer that wrote its deletion"
+        );
+        assert!(f.draft("a").is_none(), "blur created a draft row");
+
+        f.inject_failure("DROP TRIGGER injected_selected_enter_draft_failure;");
+        let (state, focus, caret) = session
+            .replace_selection_and_split_block_from_editor_source(&[0], &field, 6, 15)
+            .unwrap();
+        let expected = note("A", "First \n\n.\n\nSecond paragraph.");
+        assert_eq!(*session.working_source().unwrap(), expected);
+        assert_eq!(focus, vec![1]);
+        assert_eq!(caret, 0);
+        assert_eq!(state, session.note_state().unwrap());
+        assert_eq!(
+            f.draft("a").as_ref().map(|row| row.raw_markdown.as_str()),
+            Some(expected.as_str()),
+            "the successful selected Enter did not persist its full result"
+        );
+        assert!(
+            wait_until(Duration::from_secs(3), || f.read("a.md") == expected),
+            "the successful selected Enter did not arm tier 2"
+        );
+    }
+
+    #[test]
+    fn selected_enter_accepts_reverse_utf16_multiline_delimiter_selection_and_preserves_crlf() {
+        let f = fixture();
+        let source = "😀 **remove\r\nthis** omega\r\n";
+        f.write("a.md", source);
+        let session = f.open("a");
+        let field = session.block_source(&[0]).unwrap();
+        let start = "😀 ".encode_utf16().count();
+        let end = start + "**remove\r\nthis**".encode_utf16().count();
+
+        let (_, focus, caret) = session
+            .replace_selection_and_split_block_from_editor_source(&[0], &field, end, start)
+            .unwrap();
+
+        assert_eq!(*session.working_source().unwrap(), "😀 \r\n\r\n omega\r\n");
+        assert_eq!(focus, vec![1]);
+        assert_eq!(caret, 0);
+        assert!(
+            !session
+                .working_source()
+                .unwrap()
+                .replace("\r\n", "")
+                .contains('\n'),
+            "selected Enter welded a bare LF into a CRLF Note"
+        );
+    }
+
+    #[test]
+    fn selected_enter_rejects_a_utf16_surrogate_interior_without_mutating() {
+        let f = fixture();
+        let source = "😀 keep\n";
+        f.write("a.md", source);
+        let session = f.open("a");
+        let field = session.block_source(&[0]).unwrap();
+        let state_before = session.note_state().unwrap();
+
+        let refused =
+            session.replace_selection_and_split_block_from_editor_source(&[0], &field, 1, 2);
+
+        assert!(
+            matches!(refused, Err(AppError::ParseError(message)) if message.contains("character boundary"))
+        );
+        assert_eq!(*session.working_source().unwrap(), source);
+        assert_eq!(session.note_state().unwrap(), state_before);
+        assert!(f.draft("a").is_none());
     }
 
     /// If a pre-existing idle write publishes a structural mutation while its
