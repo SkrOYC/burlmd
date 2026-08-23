@@ -10,14 +10,18 @@ while their dependency topology stays unchanged.
   preserved, active composition is immutable, and the smoke is required to be
   `BURLMD_SMOKE_F005=1` readiness-gated.
 - `EDIT-F006` grows 5 → 8 points and now owns the Rust/FFI/index/provider/
-  generated/UI/rendered-Link/smoke path. Its trigger grammar, immutable
-  snapshot rejection, 10-result bound, Core insertion text, and follow-time
-  Core re-resolution/create path all trace to Stage 3 v1.6.0.
+  generated/UI/rendered-Link/l10n/smoke path. Its trigger grammar, immutable
+  snapshot rejection, 10-result bound, Core existing-or-prospective-ghost
+  insertion text, keyboard/semantics behavior, and follow-time re-resolution/
+  exact-target creation path all trace to Stage 3 v1.6.0. Its l10n output is
+  explicit, repository-owned `lib/l10n/generated/` Dart rather than the
+  unavailable synthetic package.
 - `EDIT-F007` grows 3 → 8 points and now owns the Rust/FFI/provider/generated
   bindings/editor/direct `TextInputClient` proxy/tests/smoke path. Its gates
-  require one atomic Core range operation for type, delete/backspace and paste;
-  Core-returned Block-or-Phantom caret; partial remainders; UTF-16 emoji; and
-  composition lifecycle behavior.
+  require set-state-before-show, explicit desktop edit Actions, one atomic Core
+  range operation for type, delete/backspace and paste; Core-returned
+  Block-or-Phantom caret; partial remainders; UTF-16 emoji; and composition
+  lifecycle behavior. This is not an undo implementation.
 - Recomputed the active Epic F total to **38 points** and its critical path to
   **23 points**: `EDIT-F001` → `EDIT-F002` → `EDIT-F003` → `EDIT-F007` (the
   F004 branch ties F003). Completed ticket rows stay in the active Epic and

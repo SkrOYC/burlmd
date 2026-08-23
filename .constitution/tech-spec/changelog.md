@@ -1,16 +1,16 @@
 # Stage 3: Technical Implementation Changelog
 
 ## v1.6.0
-Evolution pass for the remaining Editor Depth contracts. Minor bump: two
-shipped FFI result/resolution surfaces and one platform-input ownership decision
-are added; no PRD capability, architecture boundary, storage shape, or product
+Evolution pass for the remaining Editor Depth contracts. Minor bump: planned
+FFI result/resolution surfaces and one platform-input ownership decision are
+added; no PRD capability, architecture boundary, storage shape, or product
 scope changes.
 
-- `LinkTargetResolution = Existing { note_id } | Missing { target_id, directory_path, title }` and `resolve_link_target(target_id)` make follow-time resolution a Core query scoped to the active Workspace/index. Core derives ghost creation fields; Dart does not parse target identities. The AST `InlineElement::Link.exists` field remains render-only advisory state and is never trusted at activation.
-- The completion grammar is now normative in the FFI contract and guidelines: the last unmatched same-line `[[` before a collapsed caret defines the query, candidates are limited to 10, a mutable source invalidates the saved trigger snapshot, and only Core supplies replacement Markdown.
-- `delete_range` and `replace_range` return `RangeEditResult { state, caret }`, where the caret is either a UTF-16 raw-source `Block` location or the empty-editor `Phantom` insertion index. Replacing, deleting, typing over, and pasting over a cross-Block selection are one Core operation; Presentation consumes the returned caret rather than predicting a path.
-- Added ADR-012, choosing a direct Flutter `TextInputClient` proxy for cross-Block selection editing. It records ownership of the one `TextInputConnection`, composition lifecycle, keyboard/clipboard/IME dispatch, and the atomic Core-returned-caret boundary. The Flutter surface was verified against the pinned Flutter 3.44.3 / Dart 3.12.2 SDK source (`packages/flutter/lib/src/services/text_input.dart`); `stack.md` now carries the matching Stage 3 version and re-verification rule.
-- `guidelines.md` now supplies the exact F005–F007 Rust, FRB generation, Flutter, env-prefixed smoke, analyze, diff, and debug-marker gates that Stage 4 quotes.
+- `LinkTargetResolution = Existing { note_id } | Missing { target_id, directory_path, title }` and `resolve_link_target(target_id)` plan follow-time resolution as a Core query scoped to the active Workspace/index. The AST `InlineElement::Link.exists` field remains render-only advisory state and is never trusted at activation. A still-missing Link is created through new `create_link_target(target_id)`, which preserves the exact identity and creates parents atomically rather than routing through ordinary `create_note`.
+- The completion grammar is now normative in the planned FFI contract and guidelines: the last unmatched same-line `[[` before a collapsed caret defines the query, candidates are limited to 10, a mutable source invalidates the saved trigger snapshot, and only Core supplies replacement Markdown. Core supplies a distinguishable prospective ghost candidate for a valid future target, closing CAP-GRAPH-04's forward-link creation path without Dart target construction.
+- Planned `delete_range` and `replace_range` return `RangeEditResult { state, caret }`, where the caret is either a UTF-16 raw-source `Block` location or the empty-editor `Phantom` insertion index. Replacing, deleting, typing over, and pasting over a cross-Block selection are one Core operation; Presentation consumes the returned caret rather than predicting a path. Atomicity is compatible with the deferred CAP-EDIT-08 undo stack; it does not claim to implement it.
+- Added ADR-012, choosing a direct Flutter `TextInputClient` proxy for cross-Block selection editing. It now records the empty initial value, mandatory `setEditingState` before show, all required client members and their no-op/dispatch behavior, explicit desktop Actions for Delete/Backspace and clipboard operations, composition lifecycle, and the Core-returned-caret boundary. The Flutter surface was verified against the pinned Flutter 3.44.3 / Dart 3.12.2 SDK source (`packages/flutter/lib/src/services/text_input.dart` and `widgets/actions.dart`); `stack.md` now carries the matching Stage 3 version and re-verification rule.
+- `guidelines.md` now supplies the exact F005–F007 Rust, FRB generation, Flutter, env-prefixed smoke, analyze, diff, and debug-marker gates that Stage 4 quotes. The F006 correction pins non-synthetic Flutter localization output to repository-owned `lib/l10n/generated/`, following the 3.44.3 CLI's documented behavior.
 
 ## v1.5.2
 Patch correction for F002's structural split and quoted-list seams.
