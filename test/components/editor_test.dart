@@ -363,8 +363,89 @@ RenderEditable _renderEditable(WidgetTester tester) {
   return found!;
 }
 
+void _expectAlignedMarkerX(
+  WidgetTester tester,
+  Finder markerFinder,
+  int markerCount,
+) {
+  expect(markerFinder, findsNWidgets(markerCount));
+  final markerXs = [
+    for (var index = 0; index < markerCount; index++)
+      tester.getTopLeft(markerFinder.at(index)).dx,
+  ];
+  expect(markerXs.skip(1), everyElement(markerXs.first));
+}
+
 void main() {
   // -- CAP-EDIT-01: formatted when unfocused, raw when focused ------------
+
+  testWidgets('interactive multi-item lists keep sibling markers aligned', (
+    tester,
+  ) async {
+    await pumpEditor(tester, [
+      AstNode.list(
+        ordered: false,
+        items: [
+          AstNode.listItem(
+            content: [
+              _plainParagraph('outer one'),
+              AstNode.list(
+                ordered: false,
+                items: [
+                  AstNode.listItem(content: [_plainParagraph('inner one')]),
+                  AstNode.listItem(content: [_plainParagraph('inner two')]),
+                ],
+              ),
+            ],
+          ),
+          AstNode.listItem(content: [_plainParagraph('outer two')]),
+        ],
+      ),
+      AstNode.list(
+        ordered: true,
+        items: [
+          AstNode.listItem(content: [_plainParagraph('one')]),
+          AstNode.listItem(content: [_plainParagraph('two')]),
+          AstNode.listItem(content: [_plainParagraph('three')]),
+        ],
+      ),
+      AstNode.list(
+        ordered: false,
+        items: [
+          AstNode.listItem(
+            checked: false,
+            content: [_plainParagraph('unchecked')],
+          ),
+          AstNode.listItem(
+            checked: true,
+            content: [_plainParagraph('checked')],
+          ),
+        ],
+      ),
+    ]);
+
+    final bullets = find.text('•');
+    // The nested bullets still indent inside the outer item body, while the
+    // outer siblings remain peer rows.
+    expect(
+      tester.getTopLeft(bullets.at(1)).dx,
+      greaterThan(tester.getTopLeft(bullets.first).dx),
+    );
+    expect(
+      tester.getTopLeft(bullets.at(3)).dx,
+      tester.getTopLeft(bullets.first).dx,
+    );
+    _expectAlignedMarkerX(tester, find.text('1.'), 1);
+    _expectAlignedMarkerX(tester, find.text('2.'), 1);
+    _expectAlignedMarkerX(tester, find.text('3.'), 1);
+    final orderedXs = [
+      tester.getTopLeft(find.text('1.')).dx,
+      tester.getTopLeft(find.text('2.')).dx,
+      tester.getTopLeft(find.text('3.')).dx,
+    ];
+    expect(orderedXs.skip(1), everyElement(orderedXs.first));
+    _expectAlignedMarkerX(tester, find.byType(Checkbox), 2);
+  });
 
   testWidgets('a bold run renders styled with no delimiters while the '
       'paragraph is unfocused', (tester) async {

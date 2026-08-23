@@ -387,7 +387,10 @@ void main() {
               style: const TextStyle(fontSize: 16),
               focusToken: 1,
               phantom: true,
-              onPhantomInsert: (_) => phantomInsertions++,
+              onPhantomInsert: (_) {
+                phantomInsertions++;
+                return true;
+              },
               onFocusLost: (_) {},
               onCommitEligibilityChanged: (_, _) {},
             ),

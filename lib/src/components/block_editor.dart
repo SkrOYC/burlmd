@@ -111,8 +111,11 @@ class BlockEditor extends ConsumerStatefulWidget {
 
   /// A character was typed while this field is the empty phantom Block
   /// (`EDIT-F004`): the full field text, which becomes the new Block's
-  /// `insert_block` source. When non-null, [phantom] must be true.
-  final void Function(String text)? onPhantomInsert;
+  /// `insert_block` source. Returns true only after the parent has adopted
+  /// Core's returned state and replaced this phantom with the real Block.
+  /// Returning false leaves the raw text mounted so the next edit can retry.
+  /// When non-null, [phantom] must be true.
+  final bool Function(String text)? onPhantomInsert;
 
   /// This field represents a not-yet-existing empty Block — the sanctioned
   /// UI-side caret position CommonMark cannot represent (`EDIT-F004`). While
@@ -245,8 +248,11 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
       if (!_phantomMaterialized &&
           !_hasLiveComposition &&
           value.text.isNotEmpty) {
-        _phantomMaterialized = true;
-        widget.onPhantomInsert?.call(value.text);
+        // The phantom is only materialized once Core has accepted the
+        // continuation and its authoritative result has been adopted. A
+        // rejected first insertion must leave this raw field retryable.
+        _phantomMaterialized =
+            widget.onPhantomInsert?.call(value.text) ?? false;
       }
       return;
     }

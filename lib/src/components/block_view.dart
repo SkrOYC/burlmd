@@ -67,9 +67,9 @@ TextStyle blockTextStyle(AstNode node) => switch (node) {
 ///   without it a focused code Block paints white glyphs on the light pane.
 /// - Blockquote: the 3px grey left border + 12px left padding — without them
 ///   the quoted glyphs jump horizontally when the Block gains focus.
-/// - List: the first item's marker column — without it the item body shifts
-///   left by the marker's width on promotion. [renderBlock] draws markers for
-///   any further items itself, so each unfocused item keeps its own.
+/// - List items own their marker columns. This keeps every sibling marker at
+///   the same x-coordinate, while a nested List naturally starts inside its
+///   parent's body column.
 ///
 /// Heading and Paragraph paint no container on either path, so [child] is
 /// returned as-is; ThematicBreak's rule-to-`---` change is intrinsic content
@@ -87,16 +87,6 @@ Widget blockContainer(AstNode node, Widget child) => switch (node) {
       border: Border(left: BorderSide(width: 3, color: Colors.grey)),
     ),
     child: child,
-  ),
-  AstNode_List(:final ordered, :final items) => Row(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      _markerWidget(switch (items.firstOrNull) {
-        AstNode_ListItem(:final checked) => checked,
-        _ => null,
-      }, ordered ? '1.' : '•'),
-      Expanded(child: child),
-    ],
   ),
   _ => child,
 };
@@ -147,29 +137,19 @@ Widget renderBlock(AstNode node) => switch (node) {
     TextSpan(children: content.map(renderInline).toList()),
     style: blockTextStyle(node),
   ),
-  // The first item's marker is drawn once by blockContainer (so the focused
-  // field sits in the same marker row); every further item carries its own.
-  AstNode_List(:final ordered, :final items) => blockContainer(
-    node,
-    Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        for (final (index, item) in items.indexed)
-          switch (item) {
-            AstNode_ListItem(:final content, :final checked) when index > 0 =>
-              _renderListItem(
-                content,
-                checked,
-                ordered ? '${index + 1}.' : '•',
-              ),
-            AstNode_ListItem(:final content) => Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: content.map(renderBlock).toList(),
-            ),
-            _ => renderBlock(item),
-          },
-      ],
-    ),
+  AstNode_List(:final ordered, :final items) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      for (final (index, item) in items.indexed)
+        switch (item) {
+          AstNode_ListItem(:final content, :final checked) => _renderListItem(
+            content,
+            checked,
+            ordered ? '${index + 1}.' : '•',
+          ),
+          _ => renderBlock(item),
+        },
+    ],
   ),
   // A ListItem reached outside of a List (not produced by the parser today,
   // but a reachable case for the exhaustiveness check) falls back to an
@@ -226,37 +206,21 @@ Widget _renderBlockForView(
     TextSpan(children: _interactiveInlines(content, linkSpan)),
     style: blockTextStyle(node),
   ),
-  AstNode_List(:final ordered, :final items) => blockContainer(
-    node,
-    Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        for (final (index, item) in items.indexed)
-          switch (item) {
-            AstNode_ListItem(:final content) when index == 0 => Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: content
-                  .map((child) => _renderBlockForView(child, linkSpan))
-                  .toList(),
+  AstNode_List(:final ordered, :final items) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      for (final (index, item) in items.indexed)
+        switch (item) {
+          AstNode_ListItem(:final content, :final checked) =>
+            _renderListItemForView(
+              content,
+              checked,
+              ordered ? '${index + 1}.' : '•',
+              linkSpan,
             ),
-            AstNode_ListItem(:final content, :final checked) => Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _markerWidget(checked, ordered ? '${index + 1}.' : '•'),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: content
-                        .map((child) => _renderBlockForView(child, linkSpan))
-                        .toList(),
-                  ),
-                ),
-              ],
-            ),
-            _ => _renderBlockForView(item, linkSpan),
-          },
-      ],
-    ),
+          _ => _renderBlockForView(item, linkSpan),
+        },
+    ],
   ),
   AstNode_ListItem(:final content, :final checked) => Row(
     crossAxisAlignment: CrossAxisAlignment.start,
@@ -327,58 +291,36 @@ Widget renderBlockWithFocusedLeaf(
   return switch (node) {
     AstNode_List(:final ordered, :final items)
         when childIndex >= 0 && childIndex < items.length =>
-      blockContainer(
-        node,
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            for (final (index, item) in items.indexed)
-              index == childIndex
-                  ? switch (item) {
-                      AstNode_ListItem(:final content) when index == 0 =>
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            for (final (contentIndex, child) in content.indexed)
-                              contentIndex == remaining.first
-                                  ? renderBlockWithFocusedLeaf(
-                                      child,
-                                      remaining.sublist(1),
-                                      buildEditor,
-                                    )
-                                  : renderBlock(child),
-                          ],
-                        ),
-                      AstNode_ListItem(:final content, :final checked) =>
-                        _renderFocusedListItem(
-                          content,
-                          checked,
-                          ordered ? '${index + 1}.' : '•',
-                          remaining,
-                          buildEditor,
-                        ),
-                      _ => renderBlockWithFocusedLeaf(
-                        item,
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final (index, item) in items.indexed)
+            index == childIndex
+                ? switch (item) {
+                    AstNode_ListItem(:final content, :final checked) =>
+                      _renderFocusedListItem(
+                        content,
+                        checked,
+                        ordered ? '${index + 1}.' : '•',
                         remaining,
                         buildEditor,
                       ),
-                    }
-                  : switch (item) {
-                      AstNode_ListItem(:final content, :final checked)
-                          when index > 0 =>
-                        _renderListItem(
-                          content,
-                          checked,
-                          ordered ? '${index + 1}.' : '•',
-                        ),
-                      AstNode_ListItem(:final content) => Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: content.map(renderBlock).toList(),
+                    _ => renderBlockWithFocusedLeaf(
+                      item,
+                      remaining,
+                      buildEditor,
+                    ),
+                  }
+                : switch (item) {
+                    AstNode_ListItem(:final content, :final checked) =>
+                      _renderListItem(
+                        content,
+                        checked,
+                        ordered ? '${index + 1}.' : '•',
                       ),
-                      _ => renderBlock(item),
-                    },
-          ],
-        ),
+                    _ => renderBlock(item),
+                  },
+        ],
       ),
     AstNode_ListItem(:final content, :final checked)
         when childIndex >= 0 && childIndex < content.length =>
@@ -459,6 +401,27 @@ Widget _renderListItem(List<AstNode> content, bool? checked, String marker) =>
         ),
       ],
     );
+
+Widget _renderListItemForView(
+  List<AstNode> content,
+  bool? checked,
+  String marker,
+  TextSpan Function(String targetId, bool exists, List<InlineElement> content)
+  linkSpan,
+) => Row(
+  crossAxisAlignment: CrossAxisAlignment.start,
+  children: [
+    _markerWidget(checked, marker),
+    Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: content
+            .map((child) => _renderBlockForView(child, linkSpan))
+            .toList(),
+      ),
+    ),
+  ],
+);
 
 TextSpan renderInline(InlineElement element) => switch (element) {
   // A field left `null` here (rather than an explicit "off" value like
@@ -770,6 +733,7 @@ class BlockView extends StatefulWidget {
     required this.onFocusRequested,
     this.onLinkActivated,
     this.selectionRegistrar,
+    this.recognizerFactory = TapGestureRecognizer.new,
   });
 
   final AstNode node;
@@ -785,6 +749,11 @@ class BlockView extends StatefulWidget {
   /// offsets, without the region knowing anything about Blocks. The
   /// forwarding preserves the region's own registration unchanged.
   final SelectionRegistrar? selectionRegistrar;
+
+  /// Creates recognizers for rendered internal Links. Exposed for lifecycle
+  /// tests so they can observe that stale recognizers are disposed.
+  @visibleForTesting
+  final TapGestureRecognizer Function() recognizerFactory;
 
   @override
   State<BlockView> createState() => _BlockViewState();
@@ -802,11 +771,29 @@ class _BlockViewState extends State<BlockView> {
     super.dispose();
   }
 
+  @override
+  void didUpdateWidget(covariant BlockView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _pruneLinkRecognizers();
+  }
+
+  void _pruneLinkRecognizers() {
+    final activeTargetIds = widget.onLinkActivated == null
+        ? const <String>{}
+        : _internalLinks(widget.node).map((link) => link.targetId).toSet();
+    final obsoleteTargetIds = _linkRecognizers.keys
+        .where((targetId) => !activeTargetIds.contains(targetId))
+        .toList();
+    for (final targetId in obsoleteTargetIds) {
+      _linkRecognizers.remove(targetId)!.dispose();
+    }
+  }
+
   TapGestureRecognizer _recognizerFor(String targetId) =>
       _linkRecognizers.putIfAbsent(
         targetId,
         () =>
-            TapGestureRecognizer()
+            widget.recognizerFactory()
               ..onTap = () => widget.onLinkActivated?.call(targetId),
       );
 
