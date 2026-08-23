@@ -2,6 +2,7 @@ import 'package:burlmd/src/components/editor.dart';
 import 'package:burlmd/src/providers/note_providers.dart';
 import 'package:burlmd/src/providers/rust_api_provider.dart';
 import 'package:burlmd/src/rust/draft.dart';
+import 'package:burlmd/src/rust/error.dart';
 import 'package:burlmd/src/rust/markdown/ast.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -47,6 +48,7 @@ class _CoreFake extends RustApi {
   int updateCount = 0;
   List<int>? lastUpdatePath;
   String? lastUpdateSource;
+  Object? mergeFailure;
 
   static const _meta = NoteMetadata(
     id: 'f004-note',
@@ -134,6 +136,8 @@ class _CoreFake extends RustApi {
   @override
   StructuralEdit mergeBlockWithPrevious(String noteId, List<int> blockPath) {
     calls.add('merge:${blockPath.first}');
+    final failure = mergeFailure;
+    if (failure != null) throw failure;
     // The Core splices out the gap between the two Blocks — the
     // predecessor's terminating newline and any blank line between them —
     // so the join is content-to-content.
@@ -904,6 +908,42 @@ void main() {
     expect(_field(tester).controller.selection.baseOffset, 'alpha'.length);
     expect(_field(tester).focusNode.hasFocus, isTrue);
   });
+
+  testWidgets(
+    'a refused Backspace merge across preserved raw HTML and reference '
+    'definitions keeps the focused field mounted with a nonfatal notice',
+    (tester) async {
+      final api =
+          _CoreFake([
+              '<span>preserved raw HTML</span>\n',
+              '[preserved]: /reference-definition\n',
+            ])
+            ..mergeFailure = const AppError.parseError(
+              'cannot merge preserved raw HTML with a reference definition',
+            );
+      final container = await pumpEditor(tester, [
+        _paragraph('preserved raw HTML'),
+        _paragraph('preserved'),
+      ], api: api);
+
+      await promoteByTap(tester, find.byKey(const ValueKey('block-1')));
+      await placeCaret(tester, 0);
+      await pressKey(tester, LogicalKeyboardKey.backspace);
+
+      expect(api.calls.where((c) => c.startsWith('merge')), ['merge:1']);
+      expect(_writableFields(), findsOneWidget);
+      expect(
+        _field(tester).controller.text,
+        '[preserved]: /reference-definition\n',
+      );
+      expect(_field(tester).focusNode.hasFocus, isTrue);
+      expect(
+        container.read(keystrokeWriteFailureProvider),
+        isA<AppError_ParseError>(),
+      );
+      expect(container.read(editorErrorProvider), isNull);
+    },
+  );
 
   testWidgets('Backspace at the start of the first Block changes nothing', (
     tester,

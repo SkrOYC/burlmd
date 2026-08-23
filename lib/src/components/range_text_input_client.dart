@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:burlmd/src/providers/rust_api_provider.dart' show BlockRange;
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart'
+    show Actions, intentForMacOSSelector, primaryFocus;
 
 /// Ephemeral platform-input proxy for one rendered, cross-Block selection.
 ///
@@ -176,7 +178,14 @@ class RangeTextInputClient implements TextInputClient {
   void removeTextPlaceholder() {}
 
   @override
-  void performSelector(String selectorName) {}
+  void performSelector(String selectorName) {
+    if (!isAttached) return;
+    final intent = intentForMacOSSelector(selectorName);
+    final primaryContext = primaryFocus?.context;
+    if (intent != null && primaryContext != null) {
+      Actions.invoke(primaryContext, intent);
+    }
+  }
 
   @override
   void connectionClosed() {

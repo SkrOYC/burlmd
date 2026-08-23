@@ -5,7 +5,7 @@ import 'package:burlmd/src/rust/draft.dart';
 import 'package:burlmd/src/rust/markdown/ast.dart';
 import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show SystemChannels;
+import 'package:flutter/services.dart' show MethodCall, SystemChannels;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart'
     show Uint64List;
@@ -143,6 +143,19 @@ Future<void> _selectAcrossBlocks(WidgetTester tester) async {
   await tester.pump();
 }
 
+Future<void> _performMacOSSelector(WidgetTester tester, String selector) =>
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .handlePlatformMessage(
+          SystemChannels.textInput.name,
+          SystemChannels.textInput.codec.encodeMethodCall(
+            MethodCall('TextInputClient.performSelectors', <dynamic>[
+              -1,
+              <String>[selector],
+            ]),
+          ),
+          (_) {},
+        );
+
 /// Tests own the platform clipboard boundary so Action paste/copy never waits
 /// on a desktop host clipboard implementation.
 ValueNotifier<String?> _mockClipboard(WidgetTester tester, [String? initial]) {
@@ -240,6 +253,29 @@ void main() {
       expect(field.controller.selection.baseOffset, 3, reason: name);
       await tester.pumpWidget(const SizedBox.shrink());
     }
+  });
+
+  testWidgets('a macOS delete selector reaches the range deletion Action', (
+    tester,
+  ) async {
+    final api = _RangeApi()
+      ..result = _note(['selector result'])
+      ..caret = RangeEditCaret.block(
+        blockPath: Uint64List.fromList(const [0]),
+        sourceOffsetUtf16: BigInt.zero,
+      )
+      ..sources['0'] = 'selector result\n';
+    await _pump(tester, api);
+    await _selectAcrossBlocks(tester);
+
+    await _performMacOSSelector(tester, 'deleteForward:');
+    await tester.pump();
+    await tester.pump();
+
+    expect(api.deletes, hasLength(1));
+    expect(api.deleteNoteIds, ['range-note']);
+    expect(api.replacements, isEmpty);
+    expect(api.updates, isEmpty);
   });
 
   testWidgets('PasteTextIntent reaches one replacement and adopts the Core '

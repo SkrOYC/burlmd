@@ -10,8 +10,32 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 Future<void> main() async {
+  _rejectUnisolatedSmokeScenario();
   await RustLib.init();
   runApp(const ProviderScope(child: MyApp()));
+}
+
+/// Fixture staging can create and delete Notes. Refuse a direct scenario
+/// launch before Rust opens the default Workspace unless smoke-shot.sh has
+/// supplied its private HOME/XDG/database state.
+void _rejectUnisolatedSmokeScenario() {
+  const scenarioVariables = {
+    'BURLMD_SMOKE_F001',
+    'BURLMD_SMOKE_F002',
+    'BURLMD_SMOKE_F003',
+    'BURLMD_SMOKE_F004',
+    'BURLMD_SMOKE_F005',
+    'BURLMD_SMOKE_F006',
+    'BURLMD_SMOKE_F007',
+  };
+  final environment = Platform.environment;
+  final scenarioRequested = scenarioVariables.any(environment.containsKey);
+  if (scenarioRequested && environment['BURLMD_SMOKE_ISOLATED'] != '1') {
+    stderr.writeln(
+      'BURLMD smoke scenarios must be launched through scripts/smoke-shot.sh.',
+    );
+    exit(64);
+  }
 }
 
 class MyApp extends StatelessWidget {
