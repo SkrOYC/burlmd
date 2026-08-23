@@ -8,7 +8,7 @@ import 'package:burlmd/src/rust/draft.dart';
 import 'package:burlmd/src/rust/markdown/ast.dart';
 import 'package:burlmd/src/screens/workspace.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart' show RenderParagraph;
+import 'package:flutter/rendering.dart' show RenderBox, RenderParagraph;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -249,6 +249,22 @@ Future<void> blurFocusedField(WidgetTester tester) async {
 EditableText _field(WidgetTester tester) =>
     tester.widget<EditableText>(find.byType(EditableText).first);
 
+/// The rendered [RenderBox] of the Block's text surface — the [RichText] of
+/// a formatted Block or the promoted writable field — located by a probe
+/// string its painted text contains. Returns global top-left and size, the
+/// numbers SPK-EDIT-F001 §5 measures promotion stability with.
+Rect _textBoxContaining(WidgetTester tester, String probe) {
+  final finder = find.byWidgetPredicate(
+    (widget) =>
+        (widget is RichText && widget.text.toPlainText().contains(probe)) ||
+        (widget is EditableText &&
+            !widget.readOnly &&
+            widget.controller.text.contains(probe)),
+  );
+  final box = tester.renderObject<RenderBox>(finder.first);
+  return box.localToGlobal(Offset.zero) & box.size;
+}
+
 RichText _firstRichText(WidgetTester tester) =>
     tester.widget<RichText>(find.byType(RichText).first);
 
@@ -454,6 +470,96 @@ void main() {
     expect(after, before, reason: 'blur restores the exact pre-focus geometry');
     expect(api.commitCount, 1);
     expect(api.committedPaths.single, [0]);
+  });
+
+  // -- Promotion fidelity: container decorations replicated (P1/P2) --------
+
+  testWidgets('a focused code Block keeps its dark pane and white ink', (
+    tester,
+  ) async {
+    final api = _FakeRustApi()..sources['0'] = '```\nprint(1);\n```';
+    await pumpEditor(tester, [AstNode.codeBlock(code: 'print(1);')], api: api);
+
+    await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
+
+    // The dark container decoration the unfocused render draws is
+    // replicated around the promoted field (SPK-EDIT-F001 §3b), so the
+    // white ink stays visible instead of painting white-on-white.
+    final darkPane = find.ancestor(
+      of: _writableFields(),
+      matching: find.byWidgetPredicate(
+        (widget) => widget is Container && widget.color == Colors.black87,
+      ),
+    );
+    expect(darkPane, findsOneWidget);
+    expect(_field(tester).style.color, Colors.white);
+
+    // Rendered geometry, not a property guess: the field sits inset by the
+    // pane's 8px padding on both axes — exactly where the formatted code
+    // text painted before promotion.
+    final fieldBox = tester.renderObject<RenderBox>(_writableFields().first);
+    final paneBox = tester.renderObject<RenderBox>(darkPane.first);
+    expect(
+      fieldBox.localToGlobal(Offset.zero) - paneBox.localToGlobal(Offset.zero),
+      const Offset(8, 8),
+    );
+  });
+
+  testWidgets('focusing a blockquote keeps its glyphs in place — the 3px '
+      'left border and 12px left padding are replicated', (tester) async {
+    final api = _FakeRustApi()..sources['0'] = '> quoted line';
+    await pumpEditor(tester, [
+      AstNode.blockquote(nodes: [_plainParagraph('quoted line')]),
+    ], api: api);
+
+    Rect surface() => _textBoxContaining(tester, 'quoted line');
+    final before = surface();
+
+    await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
+    final focused = surface();
+
+    expect(
+      focused.topLeft,
+      before.topLeft,
+      reason:
+          'promotion must not move '
+          'the quoted glyphs horizontally or vertically',
+    );
+    expect(
+      focused.height,
+      before.height,
+      reason:
+          'the pinned height/leading-distribution styles must hold inside the '
+          'replicated quote container too',
+    );
+  });
+
+  testWidgets('focusing a list item keeps its glyphs in place — the marker '
+      'column is replicated', (tester) async {
+    final api = _FakeRustApi()..sources['0'] = '- item one';
+    await pumpEditor(tester, [
+      AstNode.list(
+        ordered: false,
+        items: [
+          AstNode.listItem(content: [_plainParagraph('item one')]),
+        ],
+      ),
+    ], api: api);
+
+    Rect surface() => _textBoxContaining(tester, 'item one');
+    final before = surface();
+
+    await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
+    final focused = surface();
+
+    expect(
+      focused.topLeft,
+      before.topLeft,
+      reason:
+          'the marker column must '
+          'survive promotion so the item body does not shift left',
+    );
+    expect(focused.height, before.height);
   });
 
   // -- Blur commits, focus re-derived from the returned state --------------

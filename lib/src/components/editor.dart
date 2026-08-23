@@ -108,15 +108,23 @@ class _EditorState extends ConsumerState<Editor> {
   Widget _buildEntryInner(NoteState note, List<int> path, int index) {
     final focused = _focused;
     if (focused != null && _pathEquals(focused.path, path)) {
-      return BlockEditor(
-        key: ValueKey('edit-$index'),
-        noteId: note.metadata.id,
-        blockPath: path,
-        source: focused.source,
-        initialCaret: focused.caret,
-        style: blockTextStyle(note.ast[index]),
-        resyncToken: focused.resyncToken,
-        onFocusLost: _handleFieldBlur,
+      // blockContainer replicates the Block's container decoration around
+      // the promoted field (SPK-EDIT-F001 §3b): the dark pane under a code
+      // Block's white ink, the blockquote border/padding, the list marker
+      // column — the same builder the unfocused render uses, so neither
+      // path can drift from the other.
+      return blockContainer(
+        note.ast[index],
+        BlockEditor(
+          key: ValueKey('edit-$index'),
+          noteId: note.metadata.id,
+          blockPath: path,
+          source: focused.source,
+          initialCaret: focused.caret,
+          style: blockTextStyle(note.ast[index]),
+          resyncToken: focused.resyncToken,
+          onFocusLost: _handleFieldBlur,
+        ),
       );
     }
     return BlockView(
