@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:burlmd/src/components/block_editor.dart';
 import 'package:burlmd/src/components/block_view.dart';
@@ -6,7 +8,12 @@ import 'package:burlmd/src/providers/note_providers.dart';
 import 'package:burlmd/src/providers/rust_api_provider.dart';
 import 'package:burlmd/src/rust/draft.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart'
+    show SelectedContentRange, Selectable, SelectionRegistrar;
+import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart'
+    show Uint64List;
 
 /// Renders the currently open note's AST as Live Preview (`EDIT-F002`,
 /// CAP-EDIT-01): every Block renders formatted, except the one holding the
@@ -19,25 +26,47 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 /// re-derived — never retained across a commit, because a splice can change
 /// a Block's node shape (a paragraph gaining a leading list marker reparses
 /// as a list). The only content-adjacent state held here is the focused
-/// path, its fetched source text, and the clicked caret offset — selection
-/// coordinates, which ADR-006 decision 4 sanctions as ephemeral UI state.
+/// path, its fetched source text, and the clicked caret offset. Selection
+/// coordinates are ephemeral UI state (`EDIT-F003`, CAP-EDIT-04) and are
+/// held by Flutter's [SelectionArea] itself, not by this container at all;
+/// this widget reads them only transiently to build a [BlockRange] for a
+/// copy request.
 class Editor extends ConsumerStatefulWidget {
   const Editor({super.key});
 
   @override
-  ConsumerState<Editor> createState() => _EditorState();
+  ConsumerState<Editor> createState() => EditorState();
 }
 
-class _EditorState extends ConsumerState<Editor> {
+class EditorState extends ConsumerState<Editor> {
   /// The currently promoted Block, or null while every Block renders
   /// formatted.
   _Focus? _focused;
+
+  /// Per-Block pass-through registrars (`EDIT-F003`): each unfocused Block's
+  /// painted text registers with its own broker so this container can read
+  /// that Block's selection offsets without the selection system knowing
+  /// anything about Blocks. Keyed by block index; entries whose selectables
+  /// dispose unregister themselves.
+  final Map<int, _BlockSelectionBroker> _selectionBrokers = {};
+
+  /// Overrides the region's default copy with the Core-produced Markdown
+  /// path (CAP-EDIT-04); see [_CopyRangeAsMarkdownAction].
+  late final Action<CopySelectionTextIntent> _copyAction =
+      _CopyRangeAsMarkdownAction(this);
+
+  /// A context inside the [SelectionArea], captured during build; lets the
+  /// smoke hook invoke select-all the way the keyboard shortcut does.
+  BuildContext? _areaContext;
 
   @override
   void initState() {
     super.initState();
     if (Platform.environment.containsKey('BURLMD_SMOKE_F002')) {
       _runSmokePromote();
+    }
+    if (Platform.environment.containsKey('BURLMD_SMOKE_F003')) {
+      unawaited(_runSmokeF003());
     }
   }
 
@@ -54,6 +83,7 @@ class _EditorState extends ConsumerState<Editor> {
     final note = ref.watch(activeNoteProvider);
     if (note == null) {
       _focused = null;
+      _selectionBrokers.clear();
       return const SizedBox.shrink();
     }
     // A different Note opened while a Block was focused: drop focus rather
@@ -63,7 +93,11 @@ class _EditorState extends ConsumerState<Editor> {
     // buffered keystrokes of one Note at another's source row.
     if (_focused != null && _focused!.noteId != note.metadata.id) {
       _focused = null;
+      _selectionBrokers.clear();
     }
+    // Brokers past the end of the AST (a commit shrank the Note) are dead
+    // weight; their selectables unregister themselves on dispose.
+    _selectionBrokers.removeWhere((index, _) => index >= note.ast.length);
     // An external change to provider state while a Block is focused (a
     // lifecycle operation adopting rewritten Links, a reload) refetches that
     // Block's source so the field can never keep pre-rewrite bytes whose
@@ -89,23 +123,50 @@ class _EditorState extends ConsumerState<Editor> {
     // actually scrolled into view get built — a note with hundreds of blocks
     // shouldn't rebuild every one of them just because a blur-commit returns
     // the full AST (see architecture/risks.md #1/#3).
-    return ListView.builder(
-      itemCount: note.ast.length,
-      itemBuilder: (context, i) => _buildEntry(note, i),
+    //
+    // The list sits inside ONE SelectionArea (`EDIT-F003`, CAP-EDIT-04): the
+    // unfocused Blocks participate in a single selection region, so a drag
+    // can span them and select-all covers the whole Note. Per
+    // SPK-EDIT-F001 §3c a focused EditableText does NOT participate in the
+    // region at all (verified on Flutter 3.44.3), so a cross-Block selection
+    // exists only while no Block holds focus — which is exactly why every
+    // `BlockRange` offset is a rendered offset over unfocused Blocks and no
+    // focused-endpoint case is needed. The Actions wrapper above the area
+    // overrides its default copy with the Core-produced Markdown path.
+    return Actions(
+      actions: <Type, Action<Intent>>{CopySelectionTextIntent: _copyAction},
+      child: SelectionArea(
+        child: Builder(
+          builder: (areaContext) {
+            // Captured for the smoke hook's select-all invocation; reading
+            // it during build keeps it current across rebuilds.
+            _areaContext = areaContext;
+            return ListView.builder(
+              itemCount: note.ast.length,
+              itemBuilder: (context, i) => _buildEntry(context, note, i),
+            );
+          },
+        ),
+      ),
     );
   }
 
-  Widget _buildEntry(NoteState note, int index) {
+  Widget _buildEntry(BuildContext context, NoteState note, int index) {
     final path = [index];
     // One stable wrapper per entry so tests (and the layout) can address a
     // Block's slot regardless of which presentation currently fills it.
     return KeyedSubtree(
       key: ValueKey('entry-$index'),
-      child: _buildEntryInner(note, path, index),
+      child: _buildEntryInner(context, note, path, index),
     );
   }
 
-  Widget _buildEntryInner(NoteState note, List<int> path, int index) {
+  Widget _buildEntryInner(
+    BuildContext context,
+    NoteState note,
+    List<int> path,
+    int index,
+  ) {
     final focused = _focused;
     if (focused != null && _pathEquals(focused.path, path)) {
       // blockContainer replicates the Block's container decoration around
@@ -127,11 +188,22 @@ class _EditorState extends ConsumerState<Editor> {
         ),
       );
     }
+    // Unfocused Blocks join the shared selection region through their own
+    // pass-through registrar, so this container knows exactly which painted
+    // selectables belong to THIS Block (`EDIT-F003`). While a Block IS
+    // focused, its field does not register with the region at all
+    // (SPK-EDIT-F001 §3c), which is what keeps a focused endpoint impossible.
+    final broker = _selectionBrokers.putIfAbsent(
+      index,
+      _BlockSelectionBroker.new,
+    );
+    broker.parent = SelectionContainer.maybeOf(context);
     return BlockView(
       key: ValueKey('block-$index'),
       node: note.ast[index],
       blockPath: path,
       onFocusRequested: _promote,
+      selectionRegistrar: broker,
     );
   }
 
@@ -198,6 +270,105 @@ class _EditorState extends ConsumerState<Editor> {
 
   static bool _pathEquals(List<int> a, List<int> b) =>
       a.length == b.length && a.indexed.every((e) => b[e.$1] == e.$2);
+  // -- Cross-Block selection and copy (EDIT-F003, CAP-EDIT-04) -------------
+  //
+  // Selection COORDINATES live in Flutter's SelectionArea — ephemeral UI
+  // state this container never stores. What it does hold is a transient
+  // reading of those coordinates, translated into a BlockRange (rendered
+  // offsets per the contract) only for the duration of one copy request;
+  // the Markdown itself comes back from `copy_range_as_markdown` because
+  // the Core alone owns both the AST and the source text (ADR-007 decision
+  // 8). Nothing here serializes Markdown in Dart.
+
+  /// Testing/QA hook: the range the container would currently send to the
+  /// Core for a copy request — a direct read of the live selection state of
+  /// each Block's registered selectables (SPK-EDIT-F001 §5: rendered-state
+  /// inspection, not widget-property guesses).
+  @visibleForTesting
+  BlockRange? debugSelectedRange() => selectedBlockRange();
+
+  /// Reads the region's current selection and expresses it as a [BlockRange]
+  /// with rendered offsets into each endpoint Block, or null when there is
+  /// no uncollapsed cross-Block selection right now. Per-Block offsets are
+  /// mapped from painted text onto the Core's canonical rendered string via
+  /// [blockCoreRenderedOffset].
+  BlockRange? selectedBlockRange() {
+    final note = ref.read(activeNoteProvider);
+    if (note == null) return null;
+    int? startIndex;
+    int? endIndex;
+    var startOffset = 0;
+    var endOffset = 0;
+    for (var index = 0; index < note.ast.length; index++) {
+      final broker = _selectionBrokers[index];
+      if (broker == null || broker.selectables.isEmpty) continue;
+      final node = note.ast[index];
+      int? low;
+      int? high;
+      // Selectables register in paint order, which is the order of
+      // [node]'s text leaves in block_view.dart's leaf model.
+      for (var leaf = 0; leaf < broker.selectables.length; leaf++) {
+        final SelectedContentRange? selection = broker.selectables[leaf]
+            .getSelection();
+        if (selection == null || selection.startOffset == selection.endOffset) {
+          continue;
+        }
+        final mappedLow = blockCoreRenderedOffset(
+          node,
+          leafIndex: leaf,
+          renderedOffset: math.min(selection.startOffset, selection.endOffset),
+        );
+        final mappedHigh = blockCoreRenderedOffset(
+          node,
+          leafIndex: leaf,
+          renderedOffset: math.max(selection.startOffset, selection.endOffset),
+        );
+        low = low == null ? mappedLow : math.min(low, mappedLow);
+        high = high == null ? mappedHigh : math.max(high, mappedHigh);
+      }
+      if (low == null || high == null) continue;
+      startIndex ??= index;
+      if (startIndex == index) startOffset = low;
+      endIndex = index;
+      endOffset = high;
+    }
+    if (startIndex == null || endIndex == null) return null;
+    return BlockRange(
+      startPath: Uint64List.fromList([startIndex]),
+      startOffset: BigInt.from(startOffset),
+      endPath: Uint64List.fromList([endIndex]),
+      endOffset: BigInt.from(endOffset),
+    );
+  }
+
+  /// Entry point of [_CopyRangeAsMarkdownAction]. [fallback] is whatever
+  /// default copy behaviour was being invoked — the focused field's own
+  /// raw-source copy, or the region's no-op when nothing is selected.
+  Object? handleCopyRequest(Action<CopySelectionTextIntent>? fallback) {
+    // While a Block holds focus its selection belongs to the platform field
+    // (raw source text), and no cross-Block selection can exist (SPK-EDIT-F001
+    // §4b): fall through to the default so the focused Block behaves normally.
+    if (_focused != null) {
+      // ignore: invalid_use_of_protected_member
+      return fallback?.invoke(CopySelectionTextIntent.copy);
+    }
+    final range = selectedBlockRange();
+    if (range == null) {
+      // ignore: invalid_use_of_protected_member
+      return fallback?.invoke(CopySelectionTextIntent.copy);
+    }
+    final note = ref.read(activeNoteProvider);
+    if (note == null) return null;
+    try {
+      final markdown = ref
+          .read(rustApiProvider)
+          .copyRangeAsMarkdown(note.metadata.id, range);
+      unawaited(Clipboard.setData(ClipboardData(text: markdown)));
+    } catch (error) {
+      ref.read(editorErrorProvider.notifier).report(error);
+    }
+    return null;
+  }
 
   // -- BURLMD_SMOKE_F002 ---------------------------------------------------
   //
@@ -223,6 +394,35 @@ class _EditorState extends ConsumerState<Editor> {
         _focused == null &&
         (ref.read(activeNoteProvider)?.ast.isNotEmpty ?? false)) {
       _promote([0], 'Intro with **bo'.length);
+    }
+  }
+
+  // -- BURLMD_SMOKE_F003 ---------------------------------------------------
+  //
+  // Select-all half of the `scripts/smoke-shot.sh f003-selection` hook: the
+  // demo Note (code block + list + paragraph — heterogeneous, because
+  // BlockRange offsets are defined per AstNode variant) is built and
+  // selected by the staging half in `main.dart`, which runs before this
+  // editor mounts. Once the Note is open under the SelectionArea, this
+  // invokes select-all through the same intent the keyboard shortcut fires,
+  // so the screenshot shows one visible highlight spanning every Block.
+  // Gated behind an environment variable set only by the QA harness; inert
+  // in normal use.
+
+  Future<void> _runSmokeF003() async {
+    final deadline = DateTime.now().add(const Duration(seconds: 30));
+    while (DateTime.now().isBefore(deadline)) {
+      if (!mounted) return;
+      if (ref.read(activeNoteProvider) != null && _areaContext != null) break;
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    }
+    await WidgetsBinding.instance.endOfFrame;
+    final areaContext = _areaContext;
+    if (areaContext != null && areaContext.mounted) {
+      Actions.invoke(
+        areaContext,
+        const SelectAllTextIntent(SelectionChangedCause.keyboard),
+      );
     }
   }
 }
@@ -299,4 +499,55 @@ class _ErrorSurface extends StatelessWidget {
       ),
     ),
   );
+}
+
+/// A pass-through selection registrar, one per Block (`EDIT-F003`): the
+/// Block's painted text registers here instead of directly with the
+/// [SelectionArea]'s registrar, and every registration is forwarded
+/// unchanged — the region's own bookkeeping is untouched. What this buys is
+/// a public, per-Block handle on exactly which [Selectable]s belong to that
+/// Block and what each one's current selection is ([Selectable.getSelection]),
+/// from which [EditorState.selectedBlockRange] builds a `BlockRange`.
+class _BlockSelectionBroker implements SelectionRegistrar {
+  _BlockSelectionBroker();
+
+  /// The region's registrar (the enclosing `SelectionContainer` delegate),
+  /// wired up during build; null while the broker is outside an area.
+  SelectionRegistrar? parent;
+
+  /// This Block's selectables in paint order — which is the order of the
+  /// Block's text leaves in block_view.dart's leaf model.
+  final List<Selectable> selectables = [];
+
+  @override
+  void add(Selectable selectable) {
+    selectables.add(selectable);
+    parent?.add(selectable);
+  }
+
+  @override
+  void remove(Selectable selectable) {
+    selectables.remove(selectable);
+    parent?.remove(selectable);
+  }
+}
+
+/// Overrides the selection system's default copy (`CopySelectionTextIntent`)
+/// for cross-Block selections (CAP-EDIT-04): the Markdown is fetched from
+/// the Core's `copy_range_as_markdown` — the Core owns both the AST and the
+/// source text, so a Dart-side serializer is exactly what ADR-007 forbids.
+///
+/// Registered on an ancestor [Actions] of the [SelectionArea]. The framework
+/// invokes it with [callingAction] set to the overridden default (the
+/// region's or the focused field's own), so behaviour this ticket does not
+/// own falls straight through: a focused Block copying its raw source, and
+/// a copy with nothing selected.
+class _CopyRangeAsMarkdownAction extends Action<CopySelectionTextIntent> {
+  _CopyRangeAsMarkdownAction(this._state);
+
+  final EditorState _state;
+
+  @override
+  Object? invoke(CopySelectionTextIntent intent, [BuildContext? context]) =>
+      _state.handleCopyRequest(callingAction);
 }

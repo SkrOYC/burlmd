@@ -145,6 +145,9 @@ When text within it is selected
 Then the selection behaves normally within that Block
 ```
 
+##### [EDIT-F003] Deviations & Justifications
+- `lib/main.dart` — adds an env-gated (`BURLMD_SMOKE_F003`) staging half that builds the heterogeneous demo Note through the Core (create_note + insert_block) and selects it so the editor pane mounts. Strictly forced: the Editor only mounts once a Note is selected, so it cannot stage its own Note — the same structural reason EDIT-F002's staging half lives there. The select-all half of the hook stays in `editor.dart` (in scope). Inert without the QA-harness variable.
+
 #### EDIT-F004 Block Creation, Splitting and Merging
 - **Type:** Feature
 - **Effort:** 5
