@@ -1,6 +1,7 @@
 import 'package:burlmd/src/providers/note_providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 
 /// The focused Block's raw editable field (`EDIT-F002`, ADR-006 decision 2):
 /// a plain text field over the Block's raw Markdown source — `**bold**`, not
@@ -35,8 +36,13 @@ class BlockEditor extends ConsumerStatefulWidget {
     required this.source,
     required this.initialCaret,
     required this.style,
+    required this.focusToken,
     required this.onFocusLost,
     this.resyncToken = 0,
+    this.phantom = false,
+    this.onEnter,
+    this.onBackspaceAtStart,
+    this.onPhantomInsert,
   });
 
   final String noteId;
@@ -62,8 +68,42 @@ class BlockEditor extends ConsumerStatefulWidget {
 
   /// Called when the platform reports the field lost primary focus. The
   /// parent commits the Block through `commit_block` and re-renders it
-  /// formatted from the returned state.
-  final void Function(List<int> blockPath) onFocusLost;
+  /// formatted from the returned state — unless [focusToken] no longer names
+  /// the parent's current focus session, in which case this field is a stale
+  /// generation being replaced (a phantom converting to a real Block, a
+  /// split's second half) and the blur must commit nothing.
+  final void Function(int focusToken) onFocusLost;
+
+  /// Identifies the focus session this field belongs to (`EDIT-F004`). The
+  /// parent mints a fresh token for every `_Focus` generation; echoing it
+  /// back through [onFocusLost] lets the parent tell "the user blurred this
+  /// field" from "this field was replaced by a newer generation", which a
+  /// path comparison alone cannot distinguish when both share a path.
+  final int focusToken;
+
+  /// Enter pressed in this field (`EDIT-F004`, CAP-EDIT-03): the caret's
+  /// source offset at press time. The parent decides between splitting the
+  /// Block mid-text and opening an empty phantom Block at its end. Only
+  /// fired for a collapsed selection; a non-collapsed selection lets the
+  /// platform delete it first.
+  final void Function(int caret)? onEnter;
+
+  /// Backspace pressed with a collapsed caret at source offset 0
+  /// (`EDIT-F004`, CAP-EDIT-03): the parent merges this Block into its
+  /// predecessor, or no-ops on the first Block.
+  final VoidCallback? onBackspaceAtStart;
+
+  /// A character was typed while this field is the empty phantom Block
+  /// (`EDIT-F004`): the full field text, which becomes the new Block's
+  /// `insert_block` source. When non-null, [phantom] must be true.
+  final void Function(String text)? onPhantomInsert;
+
+  /// This field represents a not-yet-existing empty Block — the sanctioned
+  /// UI-side caret position CommonMark cannot represent (`EDIT-F004`). While
+  /// true, keystrokes do NOT go to `update_block` (there is no `block_path`
+  /// to address); the first typed character routes through [onPhantomInsert]
+  /// instead.
+  final bool phantom;
 
   @override
   ConsumerState<BlockEditor> createState() => _BlockEditorState();
@@ -118,7 +158,38 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
   }
 
   void _onFocusChanged() {
-    if (!_focusNode.hasFocus) widget.onFocusLost(widget.blockPath);
+    if (!_focusNode.hasFocus) widget.onFocusLost(widget.focusToken);
+  }
+
+  /// Intercepts the two structural keys before the text-editing shortcuts
+  /// see them (`EDIT-F004`): this Focus sits between the editable field's
+  /// node and `DefaultTextEditingShortcuts`, so returning
+  /// [KeyEventResult.handled] here prevents Enter from inserting a newline
+  /// byte and Backspace-at-start from deleting into this Block alone —
+  /// both become Core structural operations decided by the parent.
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    final selection = _controller.selection;
+    if (event.logicalKey == LogicalKeyboardKey.enter ||
+        event.logicalKey == LogicalKeyboardKey.numpadEnter) {
+      // A non-collapsed selection is the platform's to delete first; the
+      // user pressing Enter again then hits the collapsed path below.
+      if (!selection.isCollapsed || widget.onEnter == null) {
+        return KeyEventResult.ignored;
+      }
+      widget.onEnter!(selection.baseOffset.clamp(0, _controller.text.length));
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.backspace &&
+        selection.isCollapsed &&
+        selection.baseOffset == 0 &&
+        widget.onBackspaceAtStart != null) {
+      widget.onBackspaceAtStart!();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
   }
 
   TextSelection _initialSelection(String source, int caret) =>
@@ -138,25 +209,40 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
     // SPK-EDIT-F001 §3b forbids. The decorator adds nothing this editor
     // wants (no label, hint, border or counter), so the field goes straight
     // to the text-painting render object and inherits no minimum.
-    child: EditableText(
-      controller: _controller,
-      focusNode: _focusNode,
-      autofocus: true,
-      style: widget.style,
-      cursorColor: Theme.of(context).colorScheme.primary,
-      backgroundCursorColor: Colors.grey,
-      maxLines: null,
-      keyboardType: TextInputType.multiline,
-      onChanged: (text) {
-        // The Block's raw source text, not a reconstructed AstNode — this
-        // is the per-keystroke buffering call (`update_block`, ADR-007
-        // decision 4): no parse, no AST round trip, draft-row write only.
-        // Refusals surface through keystrokeWriteFailureProvider beside the
-        // content, never by replacing it (flow-edit-note.md).
-        ref
-            .read(activeNoteProvider.notifier)
-            .updateBlock(widget.blockPath, text);
-      },
+    // The key-event intercept sits directly above the field so Enter and
+    // Backspace-at-start reach [_handleKeyEvent] before any text-editing
+    // shortcut (`EDIT-F004`).
+    child: Focus(
+      onKeyEvent: _handleKeyEvent,
+      child: EditableText(
+        controller: _controller,
+        focusNode: _focusNode,
+        autofocus: true,
+        style: widget.style,
+        cursorColor: Theme.of(context).colorScheme.primary,
+        backgroundCursorColor: Colors.grey,
+        maxLines: null,
+        keyboardType: TextInputType.multiline,
+        onChanged: (text) {
+          if (widget.phantom) {
+            // The empty phantom Block has no `block_path` to buffer into:
+            // CommonMark has no empty paragraph, so there is nothing the
+            // Core holds yet. The first typed character BECOMES the Block —
+            // the parent calls `insert_block` with it and re-derives focus
+            // from the returned state (`EDIT-F004`).
+            widget.onPhantomInsert?.call(text);
+            return;
+          }
+          // The Block's raw source text, not a reconstructed AstNode — this
+          // is the per-keystroke buffering call (`update_block`, ADR-007
+          // decision 4): no parse, no AST round trip, draft-row write only.
+          // Refusals surface through keystrokeWriteFailureProvider beside the
+          // content, never by replacing it (flow-edit-note.md).
+          ref
+              .read(activeNoteProvider.notifier)
+              .updateBlock(widget.blockPath, text);
+        },
+      ),
     ),
   );
 }

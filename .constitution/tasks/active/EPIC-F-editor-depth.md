@@ -197,6 +197,9 @@ When text is typed and Enter is pressed twice
 Then the Note contains the expected Blocks in order
 ```
 
+##### [EDIT-F004] Deviations & Justifications
+- `lib/main.dart` — adds an env-gated (`BURLMD_SMOKE_F004`) staging half that builds the three-paragraph demo Note through the Core (create_note + insert_block) and selects it. Strictly forced by the same structural reason as EDIT-F002's and EDIT-F003's staging halves: the Editor only mounts once a Note is selected, so it cannot stage its own Note; the promote-and-Enter half of the hook stays in `editor.dart` (in scope). `scripts/smoke-shot.sh` itself needed no extension — it already forwards caller-exported `BURLMD_SMOKE_*` variables from F002/F003. Inert without the QA-harness variable.
+
 #### EDIT-F005 Inline Emphasis Shortcuts
 - **Type:** Feature
 - **Effort:** 2
