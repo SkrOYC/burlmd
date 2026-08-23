@@ -52,11 +52,63 @@ TextStyle blockTextStyle(AstNode node) => switch (node) {
   _ => const TextStyle(fontSize: 14, height: 1.45, color: _blockInk),
 };
 
+/// The container decoration around a Block's text surface, shared by BOTH
+/// presentations (`SPK-EDIT-F001` §3b, "replicate the exact container widget
+/// around the promoted field"): [child] is either the formatted rendering of
+/// the Block's content (unfocused, via [renderBlock]) or the promoted raw
+/// editable field (focused, via `editor.dart`). Because one builder draws the
+/// decoration for both states, they cannot drift.
+///
+/// - CodeBlock: the dark pane + 8px padding the white monospace ink needs —
+///   without it a focused code Block paints white glyphs on the light pane.
+/// - Blockquote: the 3px grey left border + 12px left padding — without them
+///   the quoted glyphs jump horizontally when the Block gains focus.
+/// - List: the first item's marker column — without it the item body shifts
+///   left by the marker's width on promotion. [renderBlock] draws markers for
+///   any further items itself, so each unfocused item keeps its own.
+///
+/// Heading and Paragraph paint no container on either path, so [child] is
+/// returned as-is; ThematicBreak's rule-to-`---` change is intrinsic content
+/// movement CAP-EDIT-01 sanctions (`SPK-EDIT-F001` §4), not decoration drift.
+Widget blockContainer(AstNode node, Widget child) => switch (node) {
+  AstNode_CodeBlock() => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.all(8),
+    color: Colors.black87,
+    child: child,
+  ),
+  AstNode_Blockquote() => Container(
+    padding: const EdgeInsets.only(left: 12),
+    decoration: const BoxDecoration(
+      border: Border(left: BorderSide(width: 3, color: Colors.grey)),
+    ),
+    child: child,
+  ),
+  AstNode_List(:final ordered, :final items) => Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      _markerWidget(switch (items.firstOrNull) {
+        AstNode_ListItem(:final checked) => checked,
+        _ => null,
+      }, ordered ? '1.' : '•'),
+      Expanded(child: child),
+    ],
+  ),
+  _ => child,
+};
+
+/// One list marker cell: a checkbox for task items, otherwise the marker
+/// glyph with the same right padding both paths must draw.
+Widget _markerWidget(bool? checked, String marker) => checked != null
+    ? Checkbox(value: checked, onChanged: null)
+    : Padding(padding: const EdgeInsets.only(right: 4), child: Text(marker));
+
 /// Renders one Block formatted (read-only). Moved verbatim from
 /// `editor.dart` by `EDIT-F002` so both presentations live beside the style
-/// factory they must agree on; the Paragraph/Heading branches now take their
-/// outer style from [blockTextStyle] instead of ad-hoc literals so the two
-/// paths cannot diverge.
+/// factory and container builder they must agree on; the Paragraph/Heading
+/// branches now take their outer style from [blockTextStyle] instead of
+/// ad-hoc literals so the two paths cannot diverge, and every decorated type
+/// routes through [blockContainer], which the focused path reuses unchanged.
 Widget renderBlock(AstNode node) => switch (node) {
   AstNode_Heading(:final content) => Text.rich(
     TextSpan(children: content.map(renderInline).toList()),
@@ -66,19 +118,29 @@ Widget renderBlock(AstNode node) => switch (node) {
     TextSpan(children: content.map(renderInline).toList()),
     style: blockTextStyle(node),
   ),
-  AstNode_List(:final ordered, :final items) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      for (final (index, item) in items.indexed)
-        switch (item) {
-          AstNode_ListItem(:final content, :final checked) => _renderListItem(
-            content,
-            checked,
-            ordered ? '${index + 1}.' : '•',
-          ),
-          _ => renderBlock(item),
-        },
-    ],
+  // The first item's marker is drawn once by blockContainer (so the focused
+  // field sits in the same marker row); every further item carries its own.
+  AstNode_List(:final ordered, :final items) => blockContainer(
+    node,
+    Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final (index, item) in items.indexed)
+          switch (item) {
+            AstNode_ListItem(:final content, :final checked) when index > 0 =>
+              _renderListItem(
+                content,
+                checked,
+                ordered ? '${index + 1}.' : '•',
+              ),
+            AstNode_ListItem(:final content) => Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: content.map(renderBlock).toList(),
+            ),
+            _ => renderBlock(item),
+          },
+      ],
+    ),
   ),
   // A ListItem reached outside of a List (not produced by the parser today,
   // but a reachable case for the exhaustiveness check) falls back to an
@@ -88,21 +150,16 @@ Widget renderBlock(AstNode node) => switch (node) {
     checked,
     '•',
   ),
-  AstNode_Blockquote(:final nodes) => Container(
-    padding: const EdgeInsets.only(left: 12),
-    decoration: const BoxDecoration(
-      border: Border(left: BorderSide(width: 3, color: Colors.grey)),
-    ),
-    child: Column(
+  AstNode_Blockquote(:final nodes) => blockContainer(
+    node,
+    Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: nodes.map(renderBlock).toList(),
     ),
   ),
-  AstNode_CodeBlock(:final code) => Container(
-    width: double.infinity,
-    padding: const EdgeInsets.all(8),
-    color: Colors.black87,
-    child: Text(code, style: blockTextStyle(node)),
+  AstNode_CodeBlock(:final code) => blockContainer(
+    node,
+    Text(code, style: blockTextStyle(node)),
   ),
   AstNode_ThematicBreak() => const Divider(),
   // `urlOrPath` is a real filesystem path or URL from the Markdown source,
@@ -128,12 +185,7 @@ Widget _renderListItem(List<AstNode> content, bool? checked, String marker) =>
     Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        checked != null
-            ? Checkbox(value: checked, onChanged: null)
-            : Padding(
-                padding: const EdgeInsets.only(right: 4),
-                child: Text(marker),
-              ),
+        _markerWidget(checked, marker),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
