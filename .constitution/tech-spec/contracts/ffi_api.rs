@@ -818,19 +818,38 @@ pub fn replace_selection_and_split_block(
     unimplemented!()
 }
 
+/// The opaque Core-owned insertion position used when a selected Enter removed
+/// the entire raw field.
+///
+/// The slot can be nested in a List or Blockquote. Its fields are transport
+/// data, not a Presentation editing model: return it unchanged to
+/// `continue_block_at_insertion_slot`.
+#[frb]
+pub struct StructuralEditInsertionSlot {
+    /// Byte offset in the exact returned working source, never a Flutter
+    /// coordinate. Core validates it again when materializing the slot.
+    pub source_offset: usize,
+    /// Structural syntax removed with the complete line, such as `"> - "`.
+    /// Empty when Core retained the container syntax for untouched siblings.
+    pub line_prefix: String,
+    /// Number of line endings that must remain after inserted source to retain
+    /// the original tight/loose container seam. Core applies this value.
+    pub required_after_newlines: usize,
+}
+
 /// The Core-owned postcondition of a structural edit that preserves editing
 /// focus. `state` is the authoritative reparse result. Ordinarily
 /// `block_path` names an editable leaf and `caret_offset` is Flutter UTF-16.
 /// When a selected Enter removed the entire raw field,
-/// `phantom_insertion_index` instead names the empty editor slot at the
-/// deleted top-level position; `block_path` is empty and Presentation must not
-/// substitute a surviving sibling path.
+/// `phantom_insertion_slot` instead names the deleted structural position;
+/// `block_path` is empty and Presentation must not substitute a surviving
+/// sibling path or infer Markdown markers.
 #[frb]
 pub struct StructuralEdit {
     pub state: NoteState,
     pub block_path: Vec<usize>,
     pub caret_offset: usize,
-    pub phantom_insertion_index: Option<usize>,
+    pub phantom_insertion_slot: Option<StructuralEditInsertionSlot>,
 }
 
 /// Continues after an editable leaf. The returned [StructuralEdit] is
@@ -859,15 +878,15 @@ pub fn continue_block_after(
     unimplemented!()
 }
 
-/// Materializes first text in a Core-returned empty editor slot. The index is
-/// an insertion position in the returned state's top-level AST, so it can be
-/// zero before a surviving sibling or zero in a sole empty Note. Presentation
-/// must use this call for `StructuralEdit::phantom_insertion_index`, rather
-/// than calling `continue_block_after` with an invented leaf path.
+/// Materializes first text in a Core-returned empty editor slot. The opaque
+/// slot may be top-level or nested; Core restores its saved marker prefix and
+/// tight/loose seam before reparsing. Presentation must use this call for
+/// `StructuralEdit::phantom_insertion_slot`, rather than calling
+/// `continue_block_after` with an invented leaf path.
 #[frb(sync)]
 pub fn continue_block_at_insertion_slot(
     note_id: String,
-    insertion_index: usize,
+    insertion_slot: StructuralEditInsertionSlot,
     source: String,
 ) -> Result<StructuralEdit, AppError> {
     unimplemented!()

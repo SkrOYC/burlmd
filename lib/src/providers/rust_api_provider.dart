@@ -37,6 +37,8 @@ export 'package:burlmd/src/rust/workspace/lifecycle.dart'
         LifecycleWarning,
         LifecycleWarningStage;
 export 'package:burlmd/src/rust/workspace/persist.dart' show NoteWriteStatus;
+export 'package:burlmd/src/rust/workspace/persist.dart'
+    show StructuralEditInsertionSlot;
 
 /// Thin, app-owned wrapper around the generated FRB free functions. This is
 /// the seam application code depends on instead of importing `ffi_api.dart`
@@ -201,15 +203,15 @@ class RustApi {
     selectionExtent: BigInt.from(selectionExtent),
   );
 
-  /// Materializes a Core-returned empty editor slot at its authoritative
-  /// top-level index, rather than continuing after an unrelated sibling.
+  /// Materializes a Core-returned opaque editor slot at its authoritative
+  /// structural location, rather than continuing after an unrelated sibling.
   ffi.StructuralEdit continueBlockAtInsertionSlot(
     String noteId,
-    int insertionIndex,
+    StructuralEditInsertionSlot insertionSlot,
     String source,
   ) => ffi.continueBlockAtInsertionSlot(
     noteId: noteId,
-    insertionIndex: BigInt.from(insertionIndex),
+    insertionSlot: insertionSlot,
     source: source,
   );
 

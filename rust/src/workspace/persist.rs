@@ -90,6 +90,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, OnceLock, PoisonError, Weak};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+use flutter_rust_bridge::frb;
 use rusqlite::{Connection, OptionalExtension};
 
 use crate::db::connection::assert_no_io_under_the_connection;
@@ -1012,9 +1013,26 @@ impl NoteSession {
                 .clone();
             check_span(&state.source, &span)?;
 
-            // The arithmetic is applied *first*, so that a refused edit leaves
-            // the buffer and the map both untouched rather than the buffer
-            // spliced against a map that never moved.
+            // A failed draft statement is a refusal, not permission to leave
+            // the only copy of this edit in RAM until tier 2. Capture every
+            // field this mutator can change *before* `apply_buffered_edit`:
+            // that method mutates the span map in place, so taking this
+            // snapshot after it would restore source bytes against spans for
+            // the refused replacement.
+            //
+            // `update_block` does not reparse, so its AST and metadata remain
+            // untouched and need not be part of this smaller snapshot.
+            let previous = BufferedEditRollback {
+                source: Arc::clone(&state.source),
+                spans: Arc::clone(&state.spans),
+                edit_seq: state.edit_seq,
+                revision: state.revision.clone(),
+                session_edited: state.session_edited,
+                unwritten: state.unwritten,
+            };
+            // The arithmetic is applied after the rollback snapshot, so a
+            // refusal restores both the buffer and its original map rather
+            // than splicing source against a map that already moved.
             if Arc::make_mut(&mut state.spans)
                 .apply_buffered_edit(block_path, new_source.len())
                 .is_none()
@@ -1025,18 +1043,6 @@ impl NoteSession {
                      that holds the text, or use a reparsing call"
                 )));
             }
-            // A failed draft statement is a refusal, not permission to leave
-            // the only copy of this edit in RAM until tier 2. `update_block`
-            // does not reparse, so its rollback need retain only its changed
-            // source/map fields and persistence flags.
-            let previous = BufferedEditRollback {
-                source: Arc::clone(&state.source),
-                spans: Arc::clone(&state.spans),
-                edit_seq: state.edit_seq,
-                revision: state.revision.clone(),
-                session_edited: state.session_edited,
-                unwritten: state.unwritten,
-            };
             // One writer of the working source for this text, and it is here.
             Arc::make_mut(&mut state.source).replace_range(span.clone(), new_source);
 
@@ -1407,11 +1413,11 @@ impl NoteSession {
 
     /// Materializes text in a Core-returned empty editor slot. This is distinct
     /// from continuing after a leaf: when selected Enter removed a complete
-    /// non-final Block, the slot sits *before* the surviving sibling and no
-    /// leaf remains that Presentation may use as an anchor.
+    /// field, the slot may sit inside a List or Blockquote and no surviving
+    /// leaf is a safe anchor for Presentation to infer.
     pub fn continue_block_at_insertion_slot(
         &self,
-        insertion_index: usize,
+        insertion_slot: &StructuralEditInsertionSlot,
         source: &str,
     ) -> Result<(NoteState, Vec<usize>), AppError> {
         struct SlotContinuation {
@@ -1419,18 +1425,13 @@ impl NoteSession {
         }
 
         self.structural_edit_with_result(
-            |working, spans, ast, _| {
-                if insertion_index > ast.len() {
+            |working, _, _, _| {
+                let at = insertion_slot.source_offset;
+                if at > working.len() || !working.is_char_boundary(at) {
                     return Err(AppError::ParseError(format!(
-                        "phantom insertion index {insertion_index} is outside the {} top-level Blocks",
-                        ast.len()
+                        "phantom source offset {at} is not addressable in this Note"
                     )));
                 }
-                let at = if insertion_index < ast.len() {
-                    block_span(spans, &[insertion_index])?.start
-                } else {
-                    working.len()
-                };
                 let before = working.get(..at).ok_or_else(|| {
                     AppError::ParseError(format!("offset {at} is not addressable"))
                 })?;
@@ -1442,18 +1443,14 @@ impl NoteSession {
                 } else {
                     newline_style(working)
                 };
-                let prefix = separator_before(before, BLOCK_SEPARATOR_NEWLINES);
-                let content_start = at.saturating_add(prefix.len());
-                let mut text = prefix;
+                let content_start = at.saturating_add(insertion_slot.line_prefix.len());
+                let mut text = insertion_slot.line_prefix.clone();
                 text.push_str(source);
-                let required_after = if after.is_empty() {
-                    1
-                } else {
-                    BLOCK_SEPARATOR_NEWLINES
-                };
-                text.push_str(&newline.repeat(required_after.saturating_sub(
-                    trailing_newlines(source).saturating_add(leading_newlines(after)),
-                )));
+                text.push_str(&newline.repeat(
+                    insertion_slot.required_after_newlines.saturating_sub(
+                        trailing_newlines(source).saturating_add(leading_newlines(after)),
+                    ),
+                ));
                 Ok((
                     splice::splice_source(working, at..at, &text).map_err(splice_error)?,
                     SlotContinuation {
@@ -1461,14 +1458,7 @@ impl NoteSession {
                     },
                 ))
             },
-            |_, spans, ast, result| {
-                first_editable_leaf_inserted_under(
-                    spans,
-                    ast,
-                    &[insertion_index],
-                    &result.inserted,
-                )
-            },
+            |_, spans, _, result| first_editable_leaf_overlapping(spans, &result.inserted),
         )
     }
 
@@ -1684,7 +1674,7 @@ impl NoteSession {
         selection_base: usize,
         selection_extent: usize,
     ) -> Result<(NoteState, StructuralEditLocation), AppError> {
-        let (state, location) = self.structural_edit(|working, _, _, retained_spans| {
+        let (state, location) = self.structural_edit(|working, live_spans, live_ast, retained_spans| {
             let retained = retained_spans.block(block_path).ok_or_else(|| {
                 AppError::ParseError(format!("no Block at block_path {block_path:?}"))
             })?;
@@ -1717,16 +1707,24 @@ impl NoteSession {
             let selected_entire_field = selection_start == 0 && selection_end == editor_source.len();
             if selected_entire_field {
                 // This is an empty editor slot, not an empty Markdown Block.
-                // Remove the field and its following separator rather than
-                // storing blank lines that typing would have to guess how to
-                // normalize around. The returned slot retains its exact
-                // top-level position independently of the surviving parse.
-                let insertion_index = block_path.first().copied().ok_or_else(|| {
-                    AppError::ParseError(
-                        "selected Enter's editable field has no top-level insertion slot"
-                            .to_string(),
-                    )
-                })?;
+                // A nested leaf cannot be assigned a top-level phantom index.
+                // Either remove its complete structural line (and retain the
+                // exact marker in the Core-owned slot), or leave the marker
+                // and one required line ending in place for a container whose
+                // untouched children still depend on it.
+                let live_path = editable_live_path(live_spans, retained_spans, block_path)?;
+                let line_prefix = line_prefix_before(working, retained.source.start)?;
+                let removes_structural_line = !line_prefix.is_empty()
+                    && removable_structural_line(live_ast, &live_path);
+                let delete_start = if removes_structural_line {
+                    retained.source.start.checked_sub(line_prefix.len()).ok_or_else(|| {
+                        AppError::ParseError(format!(
+                            "line prefix before block_path {live_path:?} lies outside the Note"
+                        ))
+                    })?
+                } else {
+                    retained.source.start
+                };
                 let after = working.get(retained.source.end..).ok_or_else(|| {
                     AppError::ParseError(format!(
                         "source range {}..{} is not addressable in this Note",
@@ -1734,10 +1732,47 @@ impl NoteSession {
                     ))
                 })?;
                 let end = retained.source.end.saturating_add(newline_run_len(after));
+                let removed = working.get(delete_start..end).ok_or_else(|| {
+                    AppError::ParseError(format!(
+                        "selected field range {delete_start}..{end} is not addressable in this Note"
+                    ))
+                })?;
+                let insertion_slot = if removes_structural_line || line_prefix.is_empty() {
+                    StructuralEditInsertionSlot {
+                        source_offset: delete_start,
+                        line_prefix: if removes_structural_line {
+                            line_prefix.to_string()
+                        } else {
+                            String::new()
+                        },
+                        required_after_newlines: trailing_newlines(removed).max(1),
+                    }
+                } else {
+                    // `retained.source` includes the leaf's terminating line
+                    // ending. Put one back after the marker before returning
+                    // so sibling child syntax remains byte-for-byte anchored.
+                    StructuralEditInsertionSlot {
+                        source_offset: delete_start,
+                        line_prefix: String::new(),
+                        required_after_newlines: 0,
+                    }
+                };
+                let replacement = if removes_structural_line || line_prefix.is_empty() {
+                    String::new()
+                } else {
+                    let before = working.get(..delete_start).ok_or_else(|| {
+                        AppError::ParseError(format!("offset {delete_start} is not addressable"))
+                    })?;
+                    if before.contains('\n') {
+                        newline_style(before).to_string()
+                    } else {
+                        newline_style(working).to_string()
+                    }
+                };
                 return Ok((
-                    splice::splice_source(working, retained.source.start..end, "")
+                    splice::splice_source(working, delete_start..end, &replacement)
                         .map_err(splice_error)?,
-                    StructuralEditLocation::Phantom { insertion_index },
+                    StructuralEditLocation::Phantom { insertion_slot },
                 ));
             }
             let replaced_editor_source = editor_source
@@ -4137,6 +4172,62 @@ fn first_editable_leaf_inserted_under(
         })
 }
 
+/// Finds an editable leaf made by an opaque insertion slot. Unlike a normal
+/// continuation, the slot need not have a surviving AST parent: its ListItem
+/// or Blockquote syntax may have been removed together with the selected
+/// field. The inserted source range is therefore the only safe authority.
+fn first_editable_leaf_overlapping(
+    spans: &SpanMap,
+    inserted: &std::ops::Range<usize>,
+) -> Result<Vec<usize>, AppError> {
+    spans
+        .blocks()
+        .filter(|block| {
+            block.is_leaf()
+                && block.source.start < inserted.end
+                && inserted.start < block.source.end
+        })
+        .map(|block| block.path.clone())
+        .min()
+        .ok_or_else(|| {
+            AppError::ParseError(
+                "materializing the phantom insertion slot created no editable leaf".to_string(),
+            )
+        })
+}
+
+/// Whether deleting this leaf's complete source line may also delete the
+/// ListItem/Blockquote syntax before it. A List itself is a boundary: its
+/// sibling items may remain, but deleting one complete item is safe. A
+/// ListItem or Blockquote with another child is not a boundary — its marker
+/// must stay, otherwise its untouched child would be promoted or corrupted.
+fn removable_structural_line(nodes: &[AstNode], path: &[usize]) -> bool {
+    fn walk(nodes: &[AstNode], path: &[usize]) -> Option<bool> {
+        let (head, rest) = path.split_first()?;
+        let node = nodes.get(*head)?;
+        if rest.is_empty() {
+            return Some(true);
+        }
+        match node {
+            // A List is the boundary: sibling items are independent complete
+            // structural lines, so they need no single-child condition.
+            AstNode::List { items, .. } => walk(items, rest),
+            AstNode::ListItem { content, .. } => {
+                (content.len() == 1).then(|| walk(content, rest)).flatten()
+            }
+            AstNode::Blockquote { nodes } => {
+                (nodes.len() == 1).then(|| walk(nodes, rest)).flatten()
+            }
+            AstNode::Suggestion { local_content, .. } => (local_content.len() == 1)
+                .then(|| walk(local_content, rest))
+                .flatten(),
+            _ => Some(false),
+        }
+    }
+
+    walk(nodes, path).unwrap_or(false)
+}
+
 /// The Core-owned postcondition of a range replacement. It deliberately lives
 /// in the persistence domain rather than the FFI module, which is only a
 /// wrapper over this transaction.
@@ -4161,8 +4252,24 @@ pub enum StructuralEditLocation {
         caret_offset: usize,
     },
     Phantom {
-        insertion_index: usize,
+        insertion_slot: StructuralEditInsertionSlot,
     },
+}
+
+/// An opaque Core-owned insertion slot for a full-field selected Enter.
+///
+/// `source_offset` is a byte position in the exact returned working source;
+/// it is intentionally not a Flutter coordinate. `line_prefix` preserves the
+/// structural syntax that was removed with a complete ListItem/Blockquote
+/// line (for example, `"> - "`), and `required_after_newlines` restores the
+/// original seam without guessing a list's tight/loose form. Presentation must
+/// return this value unchanged to [`NoteSession::continue_block_at_insertion_slot`].
+#[frb]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StructuralEditInsertionSlot {
+    pub source_offset: usize,
+    pub line_prefix: String,
+    pub required_after_newlines: usize,
 }
 
 /// The complete source extent a whole-Note operation owns. A conformant
@@ -5191,7 +5298,7 @@ mod tests {
     /// and write state; a crash-equivalent idle pause must still leave disk
     /// untouched, while a later retry persists exactly once.
     #[test]
-    fn an_update_block_draft_insert_failure_rolls_back_before_crash_equivalent_and_retries_once() {
+    fn an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries() {
         let f = fixture_with_idle(Duration::from_millis(40));
         let original = note("A", "First paragraph.\n\nSecond paragraph.");
         f.write("a.md", &original);
@@ -5199,19 +5306,27 @@ mod tests {
         let state_before = session.note_state().unwrap();
         let sequence_before = session.edit_seq();
         let status_before = session.write_status().unwrap();
-        let replacement = "First revised.\n";
+        let first_span_before = session.span_of(&[0]);
+        let second_span_before = session.span_of(&[1]);
+        let longer = "First paragraph, revised and substantially longer.\n";
+        let expected_longer = note(
+            "A",
+            "First paragraph, revised and substantially longer.\n\nSecond paragraph.",
+        );
 
         f.inject_failure(
             "CREATE TRIGGER injected_update_block_draft_insert_failure BEFORE INSERT ON drafts \
              BEGIN SELECT RAISE(ABORT, 'injected update_block draft failure'); END;",
         );
-        let refused = session.update_block(&[0], replacement);
+        let refused = session.update_block(&[0], longer);
 
         assert!(refused.is_err(), "the injected draft write must refuse");
         assert_eq!(*session.working_source().unwrap(), original);
         assert_eq!(session.note_state().unwrap(), state_before);
         assert_eq!(session.edit_seq(), sequence_before);
         assert_eq!(session.write_status().unwrap(), status_before);
+        assert_eq!(session.span_of(&[0]), first_span_before);
+        assert_eq!(session.span_of(&[1]), second_span_before);
         assert!(f.draft("a").is_none(), "the refused edit wrote a draft row");
         assert!(
             !wait_until(Duration::from_millis(180), || f.read("a.md") != original),
@@ -5219,23 +5334,57 @@ mod tests {
         );
 
         f.inject_failure("DROP TRIGGER injected_update_block_draft_insert_failure;");
-        session.update_block(&[0], replacement).unwrap();
-        let expected = (*session.working_source().unwrap()).clone();
-        assert_ne!(expected, original, "the successful retry changed nothing");
-        assert_eq!(
-            expected.matches("First revised.").count(),
-            1,
-            "the retry applied the keystroke more than once"
-        );
-        assert_eq!(*session.working_source().unwrap(), expected);
+        session.update_block(&[0], longer).unwrap();
+        assert_eq!(*session.working_source().unwrap(), expected_longer);
         assert_eq!(
             f.draft("a").as_ref().map(|row| row.raw_markdown.as_str()),
-            Some(expected.as_str()),
+            Some(expected_longer.as_str()),
             "the successful retry did not persist the complete working source"
         );
+        session.commit_block(&[0]).unwrap();
         assert!(
-            wait_until(Duration::from_secs(3), || f.read("a.md") == expected),
+            wait_until(Duration::from_secs(3), || f.read("a.md") == expected_longer),
             "the successful retry did not arm tier 2"
+        );
+        assert!(
+            wait_until(Duration::from_millis(300), || f.draft("a").is_none()),
+            "tier 2 did not clear the longer retry's draft row"
+        );
+
+        let state_before_shorter = session.note_state().unwrap();
+        let sequence_before_shorter = session.edit_seq();
+        let first_span_before_shorter = session.span_of(&[0]);
+        let second_span_before_shorter = session.span_of(&[1]);
+        let shorter = "Short.\n";
+        let expected_shorter = note("A", "Short.\n\nSecond paragraph.");
+        f.inject_failure(
+            "CREATE TRIGGER injected_update_block_shorter_draft_failure BEFORE INSERT ON drafts \
+             BEGIN SELECT RAISE(ABORT, 'injected shorter update_block draft failure'); END;",
+        );
+        assert!(session.update_block(&[0], shorter).is_err());
+        assert_eq!(*session.working_source().unwrap(), expected_longer);
+        assert_eq!(session.note_state().unwrap(), state_before_shorter);
+        assert_eq!(session.edit_seq(), sequence_before_shorter);
+        assert_eq!(session.span_of(&[0]), first_span_before_shorter);
+        assert_eq!(session.span_of(&[1]), second_span_before_shorter);
+        assert!(f.draft("a").is_none());
+
+        f.inject_failure("DROP TRIGGER injected_update_block_shorter_draft_failure;");
+        session.update_block(&[0], shorter).unwrap();
+        assert_eq!(*session.working_source().unwrap(), expected_shorter);
+        assert_eq!(
+            f.draft("a").as_ref().map(|row| row.raw_markdown.as_str()),
+            Some(expected_shorter.as_str()),
+        );
+        session.commit_block(&[0]).unwrap();
+        assert!(
+            wait_until(Duration::from_secs(3), || f.read("a.md")
+                == expected_shorter),
+            "the shorter retry did not publish its literal bytes"
+        );
+        assert!(
+            wait_until(Duration::from_millis(300), || f.draft("a").is_none()),
+            "tier 2 did not clear the shorter retry's draft row"
         );
     }
 
@@ -5647,11 +5796,11 @@ mod tests {
             )
             .unwrap();
 
-        assert_eq!(
-            location,
-            StructuralEditLocation::Phantom { insertion_index: 0 },
-            "selected Enter focused the surviving sibling instead of its deleted slot"
-        );
+        let StructuralEditLocation::Phantom { insertion_slot } = location else {
+            panic!("selected Enter focused the surviving sibling instead of its deleted slot");
+        };
+        assert_eq!(insertion_slot.source_offset, 0);
+        assert!(insertion_slot.line_prefix.is_empty());
         assert_eq!(state.ast.len(), 1, "the following Block must survive");
         assert_eq!(session.block_source(&[0]).unwrap(), "Second\r\n");
         assert!(
@@ -5660,7 +5809,7 @@ mod tests {
         );
 
         let (_, path) = session
-            .continue_block_at_insertion_slot(0, "Typed")
+            .continue_block_at_insertion_slot(&insertion_slot, "Typed")
             .unwrap();
         assert_eq!(path, vec![0]);
         assert_eq!(session.block_source(&path).unwrap(), "Typed\r\n");
@@ -5679,6 +5828,269 @@ mod tests {
         );
         session.flush().unwrap();
         assert_eq!(f.read("a.md"), "Typed\r\n\r\nSecond\r\n");
+    }
+
+    /// A complete selected list leaf removes its actual item syntax, not only
+    /// the paragraph bytes after the marker. The opaque slot then restores the
+    /// exact marker and tight/loose seam when typing starts, so siblings stay
+    /// byte-identical before and after the materialized item.
+    #[test]
+    fn selected_enter_complete_list_items_keep_tight_loose_and_crlf_siblings_in_place() {
+        let cases = [
+            (
+                "tight first",
+                "- first\n- middle\n- last\n",
+                0,
+                "- middle\n- last\n",
+                "- Typed\n- middle\n- last\n",
+                "- ",
+                1,
+            ),
+            (
+                "tight middle",
+                "- first\n- middle\n- last\n",
+                1,
+                "- first\n- last\n",
+                "- first\n- Typed\n- last\n",
+                "- ",
+                1,
+            ),
+            (
+                "tight last",
+                "- first\n- middle\n- last\n",
+                2,
+                "- first\n- middle\n",
+                "- first\n- middle\n- Typed\n",
+                "- ",
+                1,
+            ),
+            (
+                "loose first",
+                "- first\n\n- middle\n\n- last\n",
+                0,
+                "- middle\n\n- last\n",
+                "- Typed\n\n- middle\n\n- last\n",
+                "- ",
+                2,
+            ),
+            (
+                "loose middle",
+                "- first\n\n- middle\n\n- last\n",
+                1,
+                "- first\n\n- last\n",
+                "- first\n\n- Typed\n\n- last\n",
+                "- ",
+                2,
+            ),
+            (
+                "loose last",
+                "- first\n\n- middle\n\n- last\n",
+                2,
+                "- first\n\n- middle\n\n",
+                "- first\n\n- middle\n\n- Typed\n",
+                "- ",
+                1,
+            ),
+            (
+                "CRLF middle",
+                "- first\r\n- middle\r\n- last\r\n",
+                1,
+                "- first\r\n- last\r\n",
+                "- first\r\n- Typed\r\n- last\r\n",
+                "- ",
+                1,
+            ),
+        ];
+
+        for (name, original, item, after_selection, materialized, marker, seam) in cases {
+            let f = fixture();
+            f.write("a.md", original);
+            let session = f.open("a");
+            let path = vec![0, item, 0];
+            let field = session.block_source(&path).unwrap();
+            let (_, location) = session
+                .replace_selection_and_split_block_from_editor_source(
+                    &path,
+                    &field,
+                    0,
+                    field.encode_utf16().count(),
+                )
+                .unwrap_or_else(|error| panic!("{name}: selected Enter refused: {error:?}"));
+            let StructuralEditLocation::Phantom { insertion_slot } = location else {
+                panic!("{name}: selected Enter focused a sibling rather than its slot");
+            };
+            assert_eq!(
+                insertion_slot.line_prefix, marker,
+                "{name}: wrong list marker"
+            );
+            assert_eq!(
+                insertion_slot.required_after_newlines, seam,
+                "{name}: wrong tight/loose seam"
+            );
+            assert_eq!(
+                *session.working_source().unwrap(),
+                after_selection,
+                "{name}: selection changed a surviving sibling"
+            );
+            assert_eq!(
+                f.draft("a").as_ref().map(|row| row.raw_markdown.as_str()),
+                Some(after_selection),
+                "{name}: empty slot was not draft durable"
+            );
+
+            let (_, typed_path) = session
+                .continue_block_at_insertion_slot(&insertion_slot, "Typed")
+                .unwrap_or_else(|error| panic!("{name}: typing in slot refused: {error:?}"));
+            assert!(
+                session
+                    .block_source(&typed_path)
+                    .unwrap()
+                    .starts_with("Typed"),
+                "{name}: slot did not focus the materialized field"
+            );
+            assert_eq!(
+                *session.working_source().unwrap(),
+                materialized,
+                "{name}: materialization changed a sibling or marker"
+            );
+            session.flush().unwrap();
+            assert_eq!(
+                f.read("a.md"),
+                materialized,
+                "{name}: disk differs from slot result"
+            );
+        }
+    }
+
+    /// A Blockquote with multiple paragraphs retains the quote's structural
+    /// path while a selected field is empty. The slot is placed *after* that
+    /// retained marker, so typing cannot turn a nested paragraph into a
+    /// top-level sibling; the CRLF case proves its seam remains faithful too.
+    #[test]
+    fn selected_enter_complete_blockquote_paragraphs_materialize_inside_the_quote() {
+        let cases = [
+            (
+                "first",
+                "> first\n>\n> middle\n>\n> last\n",
+                0,
+                "> \n>\n> middle\n>\n> last\n",
+                "> Typed\n>\n> middle\n>\n> last\n",
+            ),
+            (
+                "middle",
+                "> first\n>\n> middle\n>\n> last\n",
+                1,
+                "> first\n>\n> \n>\n> last\n",
+                "> first\n>\n> Typed\n>\n> last\n",
+            ),
+            (
+                "last CRLF",
+                "> first\r\n>\r\n> middle\r\n>\r\n> last\r\n",
+                2,
+                "> first\r\n>\r\n> middle\r\n>\r\n> \r\n",
+                "> first\r\n>\r\n> middle\r\n>\r\n> Typed\r\n",
+            ),
+        ];
+
+        for (name, original, paragraph, after_selection, materialized) in cases {
+            let f = fixture();
+            f.write("a.md", original);
+            let session = f.open("a");
+            let path = vec![0, paragraph];
+            let field = session.block_source(&path).unwrap();
+            let (_, location) = session
+                .replace_selection_and_split_block_from_editor_source(
+                    &path,
+                    &field,
+                    0,
+                    field.encode_utf16().count(),
+                )
+                .unwrap_or_else(|error| panic!("{name}: selected Enter refused: {error:?}"));
+            let StructuralEditLocation::Phantom { insertion_slot } = location else {
+                panic!("{name}: selected Enter focused a sibling rather than its nested slot");
+            };
+            assert!(
+                insertion_slot.line_prefix.is_empty(),
+                "{name}: quote marker was removed despite sibling paragraphs"
+            );
+            assert_eq!(insertion_slot.required_after_newlines, 0);
+            assert_eq!(*session.working_source().unwrap(), after_selection);
+            let (_, typed_path) = session
+                .continue_block_at_insertion_slot(&insertion_slot, "Typed")
+                .unwrap_or_else(|error| panic!("{name}: quote slot typing refused: {error:?}"));
+            assert_eq!(
+                typed_path, path,
+                "{name}: typed paragraph escaped its quote"
+            );
+            assert_eq!(*session.working_source().unwrap(), materialized);
+            assert_eq!(
+                f.draft("a").as_ref().map(|row| row.raw_markdown.as_str()),
+                Some(materialized),
+                "{name}: typed nested paragraph was not draft durable"
+            );
+            session.flush().unwrap();
+            assert_eq!(f.read("a.md"), materialized);
+        }
+    }
+
+    /// A nested full-field selection has the same all-or-nothing tier-1
+    /// boundary as every structural edit: a rejected draft write cannot leave
+    /// its removed list marker only in memory for a later idle write to leak.
+    #[test]
+    fn selected_enter_nested_slot_draft_failure_rolls_back_then_persists_literal_retry() {
+        let f = fixture_with_idle(Duration::from_millis(40));
+        let original = "- first\n- second\n";
+        f.write("a.md", original);
+        let session = f.open("a");
+        let path = vec![0, 0, 0];
+        let field = session.block_source(&path).unwrap();
+        let state_before = session.note_state().unwrap();
+        let sequence_before = session.edit_seq();
+        f.inject_failure(
+            "CREATE TRIGGER injected_nested_selected_enter_draft_failure BEFORE INSERT ON drafts \
+             BEGIN SELECT RAISE(ABORT, 'injected nested selected Enter draft failure'); END;",
+        );
+        assert!(session
+            .replace_selection_and_split_block_from_editor_source(
+                &path,
+                &field,
+                0,
+                field.encode_utf16().count(),
+            )
+            .is_err());
+        assert_eq!(*session.working_source().unwrap(), original);
+        assert_eq!(session.note_state().unwrap(), state_before);
+        assert_eq!(session.edit_seq(), sequence_before);
+        assert!(f.draft("a").is_none());
+        assert!(
+            !wait_until(Duration::from_millis(180), || f.read("a.md") != original),
+            "the refused nested selection armed an idle write"
+        );
+
+        f.inject_failure("DROP TRIGGER injected_nested_selected_enter_draft_failure;");
+        let (_, location) = session
+            .replace_selection_and_split_block_from_editor_source(
+                &path,
+                &field,
+                0,
+                field.encode_utf16().count(),
+            )
+            .unwrap();
+        let StructuralEditLocation::Phantom { insertion_slot } = location else {
+            panic!("nested retry must return its Core insertion slot");
+        };
+        assert_eq!(*session.working_source().unwrap(), "- second\n");
+        assert_eq!(
+            f.draft("a").as_ref().map(|row| row.raw_markdown.as_str()),
+            Some("- second\n")
+        );
+        session
+            .continue_block_at_insertion_slot(&insertion_slot, "Retried")
+            .unwrap();
+        let expected = "- Retried\n- second\n";
+        assert_eq!(*session.working_source().unwrap(), expected);
+        session.flush().unwrap();
+        assert_eq!(f.read("a.md"), expected);
     }
 
     /// The sole-Block form has the same phantom result, but there is no
@@ -5724,15 +6136,18 @@ mod tests {
                 field.encode_utf16().count(),
             )
             .unwrap();
+        let StructuralEditLocation::Phantom { insertion_slot } = location else {
+            panic!("sole selected Enter must return an insertion slot");
+        };
         assert_eq!(
-            location,
-            StructuralEditLocation::Phantom { insertion_index: 0 }
+            insertion_slot.source_offset,
+            original.find("Only block.").unwrap()
         );
         assert!(state.ast.is_empty());
         assert!(f.draft("a").is_some());
 
         let (_, path) = session
-            .continue_block_at_insertion_slot(0, "Retried")
+            .continue_block_at_insertion_slot(&insertion_slot, "Retried")
             .unwrap();
         assert_eq!(path, vec![0]);
         assert_eq!(session.block_source(&path).unwrap(), "Retried\n");

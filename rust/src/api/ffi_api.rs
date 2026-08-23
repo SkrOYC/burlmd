@@ -21,6 +21,7 @@ pub use crate::workspace::WorkspaceInfo;
 // Same reason again for the persistence tier: `workspace::persist` owns
 // ADR-008's machinery and the type it reports through, and the `#[frb]`
 // functions below are wrappers over it.
+pub use crate::workspace::persist::StructuralEditInsertionSlot;
 pub use crate::workspace::NoteWriteStatus;
 // Same reason again for the lifecycle domain: `workspace::lifecycle` owns the
 // atomic create/rename/move/delete machinery and the two shapes it reports
@@ -426,10 +427,11 @@ pub struct StructuralEdit {
     pub state: NoteState,
     pub block_path: Vec<usize>,
     pub caret_offset: usize,
-    /// Present only when the edit removed the raw field entirely. The slot is
-    /// Core-owned and may sit before a surviving sibling, so Presentation must
-    /// materialize it through `continue_block_at_insertion_slot`.
-    pub phantom_insertion_index: Option<usize>,
+    /// Present only when the edit removed the raw field entirely. This opaque
+    /// Core-owned slot can sit inside a List or Blockquote as well as before a
+    /// surviving top-level sibling; Presentation returns it unchanged to
+    /// `continue_block_at_insertion_slot`.
+    pub phantom_insertion_slot: Option<StructuralEditInsertionSlot>,
 }
 
 /// Resolves a rendered pointer position synchronously through the Core span
@@ -521,7 +523,7 @@ pub fn split_block(
         state,
         block_path,
         caret_offset,
-        phantom_insertion_index: None,
+        phantom_insertion_slot: None,
     })
 }
 
@@ -547,20 +549,20 @@ pub fn replace_selection_and_split_block(
             selection_extent,
         )
     })?;
-    let (block_path, caret_offset, phantom_insertion_index) = match location {
+    let (block_path, caret_offset, phantom_insertion_slot) = match location {
         crate::workspace::persist::StructuralEditLocation::Block {
             block_path,
             caret_offset,
         } => (block_path, caret_offset, None),
-        crate::workspace::persist::StructuralEditLocation::Phantom { insertion_index } => {
-            (Vec::new(), 0, Some(insertion_index))
+        crate::workspace::persist::StructuralEditLocation::Phantom { insertion_slot } => {
+            (Vec::new(), 0, Some(insertion_slot))
         }
     };
     Ok(StructuralEdit {
         state,
         block_path,
         caret_offset,
-        phantom_insertion_index,
+        phantom_insertion_slot,
     })
 }
 
@@ -570,17 +572,17 @@ pub fn replace_selection_and_split_block(
 #[frb(sync)]
 pub fn continue_block_at_insertion_slot(
     note_id: String,
-    insertion_index: usize,
+    insertion_slot: StructuralEditInsertionSlot,
     source: String,
 ) -> Result<StructuralEdit, AppError> {
     let (state, block_path) = with_open_session_edit(&note_id, |session| {
-        session.continue_block_at_insertion_slot(insertion_index, &source)
+        session.continue_block_at_insertion_slot(&insertion_slot, &source)
     })?;
     Ok(StructuralEdit {
         state,
         block_path,
         caret_offset: source.encode_utf16().count(),
-        phantom_insertion_index: None,
+        phantom_insertion_slot: None,
     })
 }
 
@@ -600,7 +602,7 @@ pub fn merge_block_with_previous(
         state,
         block_path,
         caret_offset,
-        phantom_insertion_index: None,
+        phantom_insertion_slot: None,
     })
 }
 
@@ -622,7 +624,7 @@ pub fn continue_block_after(
         state,
         block_path,
         caret_offset: source.encode_utf16().count(),
-        phantom_insertion_index: None,
+        phantom_insertion_slot: None,
     })
 }
 

@@ -368,11 +368,11 @@ StructuralEdit replaceSelectionAndSplitBlock({
 /// cannot append after its surviving sibling.
 StructuralEdit continueBlockAtInsertionSlot({
   required String noteId,
-  required BigInt insertionIndex,
+  required StructuralEditInsertionSlot insertionSlot,
   required String source,
 }) => RustLib.instance.api.crateApiFfiApiContinueBlockAtInsertionSlot(
   noteId: noteId,
-  insertionIndex: insertionIndex,
+  insertionSlot: insertionSlot,
   source: source,
 );
 
@@ -652,16 +652,17 @@ class StructuralEdit {
   final Uint64List blockPath;
   final BigInt caretOffset;
 
-  /// Present only when the edit removed the raw field entirely. The slot is
-  /// Core-owned and may sit before a surviving sibling, so Presentation must
-  /// materialize it through `continue_block_at_insertion_slot`.
-  final BigInt? phantomInsertionIndex;
+  /// Present only when the edit removed the raw field entirely. This opaque
+  /// Core-owned slot can sit inside a List or Blockquote as well as before a
+  /// surviving top-level sibling; Presentation returns it unchanged to
+  /// `continue_block_at_insertion_slot`.
+  final StructuralEditInsertionSlot? phantomInsertionSlot;
 
   const StructuralEdit({
     required this.state,
     required this.blockPath,
     required this.caretOffset,
-    this.phantomInsertionIndex,
+    this.phantomInsertionSlot,
   });
 
   @override
@@ -669,7 +670,7 @@ class StructuralEdit {
       state.hashCode ^
       blockPath.hashCode ^
       caretOffset.hashCode ^
-      phantomInsertionIndex.hashCode;
+      phantomInsertionSlot.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -679,5 +680,5 @@ class StructuralEdit {
           state == other.state &&
           blockPath == other.blockPath &&
           caretOffset == other.caretOffset &&
-          phantomInsertionIndex == other.phantomInsertionIndex;
+          phantomInsertionSlot == other.phantomInsertionSlot;
 }

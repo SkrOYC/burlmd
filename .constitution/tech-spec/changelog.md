@@ -1,5 +1,22 @@
 # Stage 3: Technical Implementation Changelog
 
+## v1.6.9
+
+Patch correction from PR #10 review, round 20. No bill-of-materials, PRD, or
+architecture change.
+
+- `update_block` snapshots source, span map, edit sequence, and write flags
+  before it applies its in-place span arithmetic. A refused tier-1 draft write
+  therefore restores a byte-for-byte usable buffer and map for both longer and
+  shorter retries; the retry remains durable through commit and tier 2.
+- A complete selected Enter now returns an opaque
+  `StructuralEditInsertionSlot`, replacing the top-level-only phantom index.
+  Core owns its exact source position, removed list/blockquote marker prefix,
+  and tight/loose newline seam. Materialization can therefore restore a nested
+  ListItem or Blockquote paragraph in its original structural position without
+  Flutter predicting paths or Markdown punctuation. Where a container has
+  untouched children, Core retains the required marker path instead.
+
 ## v1.6.8
 
 Patch correction from PR #10 review, round 19. No bill-of-materials, PRD, or

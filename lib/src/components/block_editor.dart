@@ -48,6 +48,7 @@ class BlockEditor extends ConsumerStatefulWidget {
     required this.focusToken,
     required this.onFocusLost,
     required this.onCommitEligibilityChanged,
+    this.onPendingWriteChanged,
     this.resyncToken = 0,
     this.phantom = false,
     this.onEnter,
@@ -94,6 +95,12 @@ class BlockEditor extends ConsumerStatefulWidget {
   final void Function(int focusToken, bool canCommit)
   onCommitEligibilityChanged;
 
+  /// Keeps the parent-side focus session aware of a controller value Core has
+  /// not acknowledged yet. That lets a pointer-driven focus transition retry
+  /// the complete value before it commits the outgoing Block.
+  final void Function(int focusToken, String? pendingSource)?
+  onPendingWriteChanged;
+
   /// Identifies the focus session this field belongs to (`EDIT-F004`). The
   /// parent mints a fresh token for every `_Focus` generation; echoing it
   /// back through [onFocusLost] lets the parent tell "the user blurred this
@@ -123,7 +130,7 @@ class BlockEditor extends ConsumerStatefulWidget {
   /// Carries complete platform values that arrive after a phantom's first
   /// insertion reaches Core but before Flutter rebuilds this field as the
   /// returned real Block.
-  final void Function(String text, TextSelection selection)?
+  final bool Function(String text, TextSelection selection)?
   onPhantomMaterializedUpdate;
 
   /// This field represents a not-yet-existing empty Block — the sanctioned
@@ -159,6 +166,7 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
   bool _pendingResolutionScheduled = false;
   bool _inputGateReconciliationScheduled = false;
   bool _hasResyncConflict = false;
+  bool _hasRejectedWrite = false;
   bool _phantomMaterialized = false;
   final OverlayPortalController _completionOverlayController =
       OverlayPortalController();
@@ -238,6 +246,7 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
     if (widget.source == _controller.text) {
       _clearPendingResync();
       _lastSettledText = widget.source;
+      _acknowledgeRejectedWrite();
       return;
     }
     _applyExternalResync(widget.source);
@@ -268,6 +277,7 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
       );
     }
     _lastSettledText = source;
+    _acknowledgeRejectedWrite();
     _clearPendingResync();
   }
 
@@ -332,7 +342,15 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
       // The controller listener, rather than onChanged, also observes the
       // common completion event that changes only `composing`.
       if (_phantomMaterialized) {
-        widget.onPhantomMaterializedUpdate?.call(value.text, value.selection);
+        _recordBufferResult(
+          value.text,
+          widget.onPhantomMaterializedUpdate?.call(
+                value.text,
+                value.selection,
+              ) ??
+              false,
+          settle: !_hasLiveComposition,
+        );
       } else if (!_hasLiveComposition && value.text.isNotEmpty) {
         // The phantom is only materialized once Core has accepted the
         // continuation and its authoritative result has been adopted. A
@@ -377,8 +395,7 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
       return;
     }
 
-    _bufferSource(_controller.text);
-    _lastSettledText = _controller.text;
+    _bufferSource(_controller.text, settle: true);
     _compositionBaseText = null;
   }
 
@@ -455,8 +472,12 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
     // [merged] equal to the field's local text while Core still holds the
     // composition base; buffering only when the controller changes would
     // silently lose those completed IME bytes.
-    if (merged != pending.source) _bufferSource(merged);
-    _lastSettledText = merged;
+    if (merged != pending.source) {
+      _bufferSource(merged, settle: true);
+    } else {
+      _lastSettledText = merged;
+      _acknowledgeRejectedWrite();
+    }
   }
 
   void _clearPendingResync() {
@@ -503,8 +524,61 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
     return null;
   }
 
-  void _bufferSource(String source) {
-    ref.read(activeNoteProvider.notifier).updateBlock(widget.blockPath, source);
+  bool _bufferSource(String source, {required bool settle}) =>
+      _recordBufferResult(
+        source,
+        ref
+            .read(activeNoteProvider.notifier)
+            .updateBlock(widget.blockPath, source),
+        settle: settle,
+      );
+
+  bool _recordBufferResult(
+    String source,
+    bool accepted, {
+    required bool settle,
+  }) {
+    if (accepted) {
+      if (settle) _lastSettledText = source;
+      _acknowledgeRejectedWrite();
+      return true;
+    }
+    _hasRejectedWrite = true;
+    widget.onPendingWriteChanged?.call(widget.focusToken, source);
+    // A controller-only value is not safe for a later reparse. Keep it
+    // mounted, but prevent the parent from committing or replacing this focus
+    // session until a complete retry reaches Core.
+    widget.onCommitEligibilityChanged(widget.focusToken, false);
+    return false;
+  }
+
+  void _acknowledgeRejectedWrite() {
+    if (!_hasRejectedWrite) return;
+    _hasRejectedWrite = false;
+    widget.onPendingWriteChanged?.call(widget.focusToken, null);
+    widget.onCommitEligibilityChanged(widget.focusToken, true);
+  }
+
+  /// Before focus can leave or a structural operation can reparse the Note,
+  /// retry the exact full controller value Core previously refused. A failed
+  /// retry deliberately leaves both focus and text in place rather than
+  /// letting `commit_block` reparse Core's older working source.
+  bool _retryRejectedWrite() {
+    if (!_hasRejectedWrite) return true;
+    if (ref.read(editorInputBlockedProvider) || _hasLiveComposition) {
+      return false;
+    }
+    return _bufferSource(_controller.text, settle: true);
+  }
+
+  void _restoreRejectedFocus() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted &&
+          _hasRejectedWrite &&
+          !ref.read(editorInputBlockedProvider)) {
+        _focusNode.requestFocus();
+      }
+    });
   }
 
   @override
@@ -523,6 +597,10 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
   void _onFocusChanged() {
     _scheduleCompletionOverlay();
     if (!_focusNode.hasFocus && !_hasResyncConflict) {
+      if (!_retryRejectedWrite()) {
+        _restoreRejectedFocus();
+        return;
+      }
       widget.onFocusLost(widget.focusToken);
     }
   }
@@ -591,6 +669,7 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
         (event.logicalKey == LogicalKeyboardKey.enter ||
             event.logicalKey == LogicalKeyboardKey.numpadEnter)) {
       if (widget.onEnter == null) return KeyEventResult.ignored;
+      if (!_retryRejectedWrite()) return KeyEventResult.handled;
       widget.onEnter!(_controller.text, selection);
       return KeyEventResult.handled;
     }
@@ -598,6 +677,7 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
         selection.isCollapsed &&
         selection.baseOffset == 0 &&
         widget.onBackspaceAtStart != null) {
+      if (!_retryRejectedWrite()) return KeyEventResult.handled;
       widget.onBackspaceAtStart!();
       return KeyEventResult.handled;
     }
@@ -640,8 +720,7 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
     // for buffering here: [EditableText.onChanged] only reports platform text
     // edits, while this source transformation needs exactly one Core update.
     _controller.value = result;
-    _bufferSource(result.text);
-    _lastSettledText = result.text;
+    _bufferSource(result.text, settle: true);
   }
 
   /// Applies a Core-provided completion as one controller update and exactly
@@ -654,8 +733,7 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
       return;
     }
     _controller.value = TextEditingValue(text: source, selection: selection);
-    _bufferSource(source);
-    _lastSettledText = source;
+    _bufferSource(source, settle: true);
   }
 
   /// Stages a real focused raw selection, then dispatches the exact source
@@ -806,8 +884,7 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
               // listener, including a composing-only completion. Do not race it
               // here by replaying the stale external source over this input.
               if (_pendingResync != null && !_hasLiveComposition) return;
-              _bufferSource(text);
-              if (!_hasLiveComposition) _lastSettledText = text;
+              _bufferSource(text, settle: !_hasLiveComposition);
             },
           ),
         ),

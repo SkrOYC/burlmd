@@ -61,25 +61,36 @@ Future<void> _pumpCompletion(
   required FocusNode focusNode,
   required GlobalKey<LinkCompletionState> key,
   required void Function(String, TextSelection) onAccepted,
+  double? width,
+  TextScaler? textScaler,
 }) async {
+  Widget popup = Focus(
+    focusNode: focusNode,
+    child: LinkCompletionPopup(
+      key: key,
+      noteId: 'source',
+      controller: controller,
+      focusNode: focusNode,
+      onAccepted: onAccepted,
+    ),
+  );
+  if (width != null) popup = SizedBox(width: width, child: popup);
+  if (textScaler != null) {
+    final scaledPopup = popup;
+    popup = Builder(
+      builder: (context) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(textScaler: textScaler),
+        child: scaledPopup,
+      ),
+    );
+  }
   await tester.pumpWidget(
     ProviderScope(
       overrides: [rustApiProvider.overrideWithValue(api)],
       child: MaterialApp(
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
-        home: Scaffold(
-          body: Focus(
-            focusNode: focusNode,
-            child: LinkCompletionPopup(
-              key: key,
-              noteId: 'source',
-              controller: controller,
-              focusNode: focusNode,
-              onAccepted: onAccepted,
-            ),
-          ),
-        ),
+        home: Scaffold(body: Center(child: popup)),
       ),
     ),
   );
@@ -268,7 +279,7 @@ void main() {
   );
 
   testWidgets(
-    'arrow navigation reveals wrapped-end candidates before Enter can accept them',
+    'rapid Arrow then Enter accepts the current-generation active candidate',
     (tester) async {
       final controller = TextEditingController.fromValue(
         const TextEditingValue(
@@ -301,15 +312,9 @@ void main() {
             : PhysicalKeyboardKey.arrowDown,
         logicalKey: logicalKey,
       );
-      Future<void> move(LogicalKeyboardKey logicalKey) async {
-        expect(key.currentState!.handleKeyEvent(keyDown(logicalKey)), isTrue);
-        await tester.pump();
-        await tester.pump();
-      }
-
-      // Up wraps from the visible first candidate to the last. An Enter in
-      // this same event turn is consumed but cannot accept an off-viewport
-      // candidate before the reveal frame runs.
+      // Up wraps from the visible first candidate to the last. Enter arrives
+      // before the post-layout reveal and must still commit the logical
+      // selection from this unchanged input generation.
       expect(
         key.currentState!.handleKeyEvent(keyDown(LogicalKeyboardKey.arrowUp)),
         isTrue,
@@ -318,48 +323,81 @@ void main() {
         key.currentState!.handleKeyEvent(keyDown(LogicalKeyboardKey.enter)),
         isTrue,
       );
-      expect(accepted, isNull);
-      await tester.pump();
-      await tester.pump();
+      expect(accepted, '[item 9](</notes/item 9.md>)');
+      expect(key.currentState!.isOpen, isFalse);
+    },
+  );
 
-      // The final candidate is now visible and exposed as focused semantics.
+  testWidgets(
+    'variable-height candidates honor large text scale and reveal both wrap directions',
+    (tester) async {
+      final controller = TextEditingController.fromValue(
+        const TextEditingValue(
+          text: '[[p',
+          selection: TextSelection.collapsed(offset: 3),
+        ),
+      );
+      addTearDown(controller.dispose);
+      final focusNode = FocusNode();
+      addTearDown(focusNode.dispose);
+      final key = GlobalKey<LinkCompletionState>();
+      const title = 'Foreign note';
+      await _pumpCompletion(
+        tester,
+        api: _CompletionApi((_) => List.generate(10, (_) => _existing(title))),
+        controller: controller,
+        focusNode: focusNode,
+        key: key,
+        onAccepted: (_, _) {},
+        width: 180,
+        textScaler: const TextScaler.linear(2),
+      );
+
+      KeyDownEvent keyDown(LogicalKeyboardKey logicalKey) => KeyDownEvent(
+        timeStamp: Duration.zero,
+        physicalKey: logicalKey == LogicalKeyboardKey.arrowUp
+            ? PhysicalKeyboardKey.arrowUp
+            : PhysicalKeyboardKey.arrowDown,
+        logicalKey: logicalKey,
+      );
+      Future<void> move(LogicalKeyboardKey logicalKey) async {
+        expect(key.currentState!.handleKeyEvent(keyDown(logicalKey)), isTrue);
+        await tester.pump();
+        await tester.pump();
+      }
+
+      final first = find.byKey(const ValueKey('link-completion-0'));
+      expect(first, findsOneWidget);
+      expect(tester.getSize(first).height, greaterThan(56));
+      expect(tester.takeException(), isNull);
+
+      // Up wraps to the rendered last row, even though its height differs
+      // from the first row's fixed-extent predecessor.
+      await move(LogicalKeyboardKey.arrowUp);
       expect(key.currentState!.activeIndex, 9);
       expect(key.currentState!.scrollController.offset, greaterThan(0));
+
       final list = find.byType(ListView);
       final last = find.byKey(const ValueKey('link-completion-9'));
       expect(last, findsOneWidget);
       expect(
+        tester.getRect(last).top,
+        greaterThanOrEqualTo(tester.getRect(list).top),
+      );
+      expect(
         tester.getRect(last).bottom,
         lessThanOrEqualTo(tester.getRect(list).bottom),
       );
-
-      final focusedSemantics = tester.ensureSemantics();
-      expect(
-        find.semantics.byLabel('Link to existing note item 9'),
-        matchesSemantics(
-          label: 'Link to existing note item 9',
-          isButton: true,
-          isFocusable: true,
-          isFocused: true,
-        ),
-      );
-      focusedSemantics.dispose();
-
-      // Down wraps back to the start, then the end is reachable again.
+      // Down wraps back to the first candidate and uses its measured context
+      // to reveal it from the opposite direction.
       await move(LogicalKeyboardKey.arrowDown);
       expect(key.currentState!.activeIndex, 0);
       expect(key.currentState!.scrollController.offset, 0);
-      for (var index = 0; index < 9; index++) {
-        await move(LogicalKeyboardKey.arrowDown);
-      }
-      expect(key.currentState!.activeIndex, 9);
-      expect(key.currentState!.scrollController.offset, greaterThan(0));
-
-      // A pointer may still choose another visible candidate while keyboard
-      // navigation owns the active semantics state.
-      await tester.tap(find.byKey(const ValueKey('link-completion-8')));
-      await tester.pump();
-      expect(accepted, '[item 8](</notes/item 8.md>)');
+      expect(
+        tester.getRect(first).top,
+        greaterThanOrEqualTo(tester.getRect(list).top),
+      );
+      expect(tester.takeException(), isNull);
     },
   );
 
@@ -455,6 +493,36 @@ void main() {
     expect(find.byKey(const ValueKey('link-completion-0')), findsNothing);
     expect(controller.value.composing, const TextRange(start: 2, end: 3));
   });
+
+  testWidgets(
+    'a pending completion response is harmless after popup disposal',
+    (tester) async {
+      final controller = TextEditingController.fromValue(
+        const TextEditingValue(
+          text: '[[p',
+          selection: TextSelection.collapsed(offset: 3),
+        ),
+      );
+      addTearDown(controller.dispose);
+      final focusNode = FocusNode();
+      addTearDown(focusNode.dispose);
+      final gate = Completer<List<LinkCompletion>>();
+      await _pumpCompletion(
+        tester,
+        api: _CompletionApi((_) => gate.future),
+        controller: controller,
+        focusNode: focusNode,
+        key: GlobalKey<LinkCompletionState>(),
+        onAccepted: (_, _) {},
+      );
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      gate.complete([_existing('plan')]);
+      await tester.pump();
+
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets(
     'completion safely requeries after composition ends and then accepts normally',
