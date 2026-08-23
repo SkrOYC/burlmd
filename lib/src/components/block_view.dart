@@ -3,7 +3,7 @@ import 'package:burlmd/src/rust/markdown/ast.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart'
-    show RenderParagraph, SelectionRegistrar;
+    show BoxHitTestResult, RenderParagraph, RenderProxyBox, SelectionRegistrar;
 import 'package:flutter/services.dart';
 
 /// Formatted rendering for one Block, shared by every state a Block can be
@@ -907,8 +907,15 @@ class BlockView extends StatefulWidget {
 }
 
 class _BlockViewState extends State<BlockView> {
-  final Map<String, TapGestureRecognizer> _linkRecognizers = {};
+  // A target ID is not sufficient here: one Block may paint the same internal
+  // Link more than once. The occurrence keeps each visual Link's semantics
+  // geometry independent while retaining a recognizer across unrelated
+  // sibling insertions/removals.
+  final Map<_LinkRecognizerIdentity, TapGestureRecognizer> _linkRecognizers =
+      {};
   final GlobalKey _textSurfaceKey = GlobalKey();
+  List<_LinkSemanticBox> _linkSemanticBoxes = const [];
+  int _linkSemanticsGeneration = 0;
 
   @override
   void dispose() {
@@ -925,23 +932,23 @@ class _BlockViewState extends State<BlockView> {
   }
 
   void _pruneLinkRecognizers() {
-    final activeTargetIds = widget.onLinkActivated == null
-        ? const <String>{}
-        : _activeLinks().map((link) => link.targetId).toSet();
-    final obsoleteTargetIds = _linkRecognizers.keys
-        .where((targetId) => !activeTargetIds.contains(targetId))
+    final activeIdentities = widget.onLinkActivated == null
+        ? const <_LinkRecognizerIdentity>{}
+        : _linkIdentities(_activeLinks()).toSet();
+    final obsoleteIdentities = _linkRecognizers.keys
+        .where((identity) => !activeIdentities.contains(identity))
         .toList();
-    for (final targetId in obsoleteTargetIds) {
-      _linkRecognizers.remove(targetId)!.dispose();
+    for (final identity in obsoleteIdentities) {
+      _linkRecognizers.remove(identity)!.dispose();
     }
   }
 
-  TapGestureRecognizer _recognizerFor(String targetId) =>
+  TapGestureRecognizer _recognizerFor(_LinkRecognizerIdentity identity) =>
       _linkRecognizers.putIfAbsent(
-        targetId,
+        identity,
         () =>
             widget.recognizerFactory()
-              ..onTap = () => widget.onLinkActivated?.call(targetId),
+              ..onTap = () => widget.onLinkActivated?.call(identity.targetId),
       );
 
   List<_InternalLink> _activeLinks() {
@@ -956,10 +963,14 @@ class _BlockViewState extends State<BlockView> {
     final onLinkActivated = widget.onLinkActivated;
     final l10n = AppLocalizations.of(context);
     final links = _activeLinks();
+    final linkIdentities = _linkIdentities(links);
+    var renderedLinkIndex = 0;
     Widget renderInteractive(AstNode node) =>
         onLinkActivated == null || l10n == null
         ? renderBlock(node)
         : _renderBlockForView(node, (targetId, exists, content) {
+            final identity = linkIdentities[renderedLinkIndex++];
+            assert(identity.targetId == targetId);
             return TextSpan(
               style: TextStyle(
                 color: exists ? Colors.blue : Colors.deepOrange,
@@ -973,7 +984,7 @@ class _BlockViewState extends State<BlockView> {
               // SelectableRegion's rendered-text shape.
               children: _linkContentWithRecognizer(
                 content,
-                _recognizerFor(targetId),
+                _recognizerFor(identity),
               ),
             );
           });
@@ -993,6 +1004,7 @@ class _BlockViewState extends State<BlockView> {
         child: child,
       );
     }
+    _scheduleLinkSemanticsLayout(links, linkIdentities, l10n);
     return Focus(
       canRequestFocus: true,
       onKeyEvent: (_, event) {
@@ -1030,6 +1042,22 @@ class _BlockViewState extends State<BlockView> {
                           ? l10n.internalLinkExisting(link.title)
                           : l10n.internalLinkMissing(link.title),
                       onActivated: () => onLinkActivated(link.targetId),
+                    ),
+                for (final identity in linkIdentities)
+                  for (final (boxIndex, semanticBox)
+                      in _linkSemanticBoxes
+                          .where((box) => box.identity == identity)
+                          .indexed)
+                    _InternalLinkSemanticTarget(
+                      key: ValueKey(
+                        'internal-link-semantics-'
+                        '${semanticBox.identity.targetId}-'
+                        '${semanticBox.identity.occurrence}-$boxIndex',
+                      ),
+                      rect: semanticBox.rect,
+                      label: semanticBox.label,
+                      onActivated: () =>
+                          onLinkActivated?.call(semanticBox.identity.targetId),
                     ),
               ],
             ),
@@ -1082,7 +1110,174 @@ class _BlockViewState extends State<BlockView> {
     }
     object.visitChildren((child) => _collectParagraphs(child, out));
   }
+
+  /// Measures the text glyphs after layout, so semantics hits exactly the
+  /// rendered Link runs rather than the entire Block stack. A wrapped Link
+  /// produces one target for each painted line box; that avoids making the
+  /// whitespace between its lines an accidental activation target.
+  void _scheduleLinkSemanticsLayout(
+    List<_InternalLink> links,
+    List<_LinkRecognizerIdentity> identities,
+    AppLocalizations? l10n,
+  ) {
+    final generation = ++_linkSemanticsGeneration;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || generation != _linkSemanticsGeneration) return;
+      final surface = _textSurfaceKey.currentContext?.findRenderObject();
+      if (surface == null || l10n == null || links.isEmpty) {
+        if (_linkSemanticBoxes.isNotEmpty) {
+          setState(() => _linkSemanticBoxes = const []);
+        }
+        return;
+      }
+      final recognizerIdentities =
+          <TapGestureRecognizer, _LinkRecognizerIdentity>{
+            for (final entry in _linkRecognizers.entries)
+              entry.value: entry.key,
+          };
+      final labels = <_LinkRecognizerIdentity, String>{
+        for (final (index, link) in links.indexed)
+          identities[index]: link.exists
+              ? l10n.internalLinkExisting(link.title)
+              : l10n.internalLinkMissing(link.title),
+      };
+      final paragraphs = <RenderParagraph>[];
+      _collectParagraphs(surface, paragraphs);
+      final boxesByIdentity = <_LinkRecognizerIdentity, List<Rect>>{};
+      for (final paragraph in paragraphs) {
+        for (final range in _linkTextRanges(
+          paragraph.text,
+          recognizerIdentities,
+        )) {
+          final boxes = paragraph.getBoxesForSelection(
+            TextSelection(baseOffset: range.start, extentOffset: range.end),
+          );
+          for (final box in boxes) {
+            final rect = MatrixUtils.transformRect(
+              paragraph.getTransformTo(surface),
+              box.toRect(),
+            );
+            boxesByIdentity.putIfAbsent(range.identity, () => []).add(rect);
+          }
+        }
+      }
+      final measured = <_LinkSemanticBox>[
+        for (final identity in identities)
+          for (final rect in _mergeAdjacentTextBoxes(
+            boxesByIdentity[identity] ?? const [],
+          ))
+            _LinkSemanticBox(identity, labels[identity]!, rect),
+      ];
+      if (!_sameSemanticBoxes(_linkSemanticBoxes, measured)) {
+        setState(() => _linkSemanticBoxes = measured);
+      }
+    });
+  }
 }
+
+typedef _LinkRecognizerIdentity = ({String targetId, int occurrence});
+
+List<_LinkRecognizerIdentity> _linkIdentities(List<_InternalLink> links) {
+  final occurrences = <String, int>{};
+  return [
+    for (final link in links)
+      (
+        targetId: link.targetId,
+        occurrence: occurrences.update(
+          link.targetId,
+          (count) => count + 1,
+          ifAbsent: () => 0,
+        ),
+      ),
+  ];
+}
+
+class _LinkTextRange {
+  const _LinkTextRange(this.identity, this.start, this.end);
+
+  final _LinkRecognizerIdentity identity;
+  final int start;
+  final int end;
+}
+
+List<_LinkTextRange> _linkTextRanges(
+  InlineSpan root,
+  Map<TapGestureRecognizer, _LinkRecognizerIdentity> recognizerIdentities,
+) {
+  final ranges = <_LinkTextRange>[];
+  var offset = 0;
+
+  void visit(InlineSpan span, [_LinkRecognizerIdentity? inheritedIdentity]) {
+    switch (span) {
+      case TextSpan(:final text, :final children, :final recognizer):
+        final identity = recognizer is TapGestureRecognizer
+            ? recognizerIdentities[recognizer] ?? inheritedIdentity
+            : inheritedIdentity;
+        if (text case final text? when text.isNotEmpty) {
+          if (identity != null) {
+            ranges.add(_LinkTextRange(identity, offset, offset + text.length));
+          }
+          offset += text.length;
+        }
+        for (final child in children ?? const <InlineSpan>[]) {
+          visit(child, identity);
+        }
+      default:
+        // A placeholder is one UTF-16 code unit in RenderParagraph's text.
+        offset += span.toPlainText().length;
+    }
+  }
+
+  visit(root);
+  return ranges;
+}
+
+List<Rect> _mergeAdjacentTextBoxes(List<Rect> boxes) {
+  if (boxes.length < 2) return boxes;
+  final sorted = [...boxes]
+    ..sort(
+      (left, right) => switch (left.top.compareTo(right.top)) {
+        0 => left.left.compareTo(right.left),
+        final comparison => comparison,
+      },
+    );
+  final merged = <Rect>[];
+  for (final box in sorted) {
+    final previous = merged.isEmpty ? null : merged.last;
+    if (previous != null &&
+        (previous.overlaps(box) ||
+            (previous.top == box.top &&
+                previous.bottom == box.bottom &&
+                box.left <= previous.right + 0.5))) {
+      merged
+        ..removeLast()
+        ..add(previous.expandToInclude(box));
+    } else {
+      merged.add(box);
+    }
+  }
+  return merged;
+}
+
+class _LinkSemanticBox {
+  const _LinkSemanticBox(this.identity, this.label, this.rect);
+
+  final _LinkRecognizerIdentity identity;
+  final String label;
+  final Rect rect;
+}
+
+bool _sameSemanticBoxes(
+  List<_LinkSemanticBox> first,
+  List<_LinkSemanticBox> second,
+) =>
+    first.length == second.length &&
+    Iterable<int>.generate(first.length).every(
+      (index) =>
+          first[index].identity == second[index].identity &&
+          first[index].label == second[index].label &&
+          first[index].rect == second[index].rect,
+    );
 
 /// Applies an internal Link's recognizer to its painted leaves, instead of an
 /// empty wrapper span. Flutter's [TextSpan] hit testing visits the leaves; a
@@ -1115,8 +1310,9 @@ List<TextSpan> _linkContentWithRecognizer(
 /// A Link's visual text remains a [TextSpan] so Flutter's text selection and
 /// source-offset mapping retain their established shape. This zero-geometry
 /// focus target adds the separate keyboard-stop and semantic action that a
-/// recognizer on a TextSpan cannot supply. It is [IgnorePointer] so a pointer
-/// always reaches the same TextSpan recognizer and activation callback.
+/// recognizer on a TextSpan cannot supply. Its semantic action is deliberately
+/// provided by [_InternalLinkSemanticTarget], whose bounds follow the painted
+/// glyphs instead of this layout-neutral focus node.
 class _InternalLinkFocusTarget extends StatelessWidget {
   const _InternalLinkFocusTarget({
     super.key,
@@ -1130,28 +1326,63 @@ class _InternalLinkFocusTarget extends StatelessWidget {
   final VoidCallback onActivated;
 
   @override
-  Widget build(BuildContext context) => Positioned.fill(
-    child: IgnorePointer(
-      child: FocusTraversalOrder(
-        order: NumericFocusOrder(order.toDouble()),
-        child: Focus(
-          canRequestFocus: true,
-          onKeyEvent: (_, event) {
-            if (event is KeyDownEvent &&
-                (event.logicalKey == LogicalKeyboardKey.enter ||
-                    event.logicalKey == LogicalKeyboardKey.space)) {
-              onActivated();
-              return KeyEventResult.handled;
-            }
-            return KeyEventResult.ignored;
-          },
-          child: Semantics(
-            button: true,
-            label: label,
-            child: const SizedBox.shrink(),
-          ),
-        ),
+  Widget build(BuildContext context) => FocusTraversalOrder(
+    order: NumericFocusOrder(order.toDouble()),
+    child: Focus(
+      canRequestFocus: true,
+      onKeyEvent: (_, event) {
+        if (event is KeyDownEvent &&
+            (event.logicalKey == LogicalKeyboardKey.enter ||
+                event.logicalKey == LogicalKeyboardKey.space)) {
+          onActivated();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: const SizedBox.shrink(),
+    ),
+  );
+}
+
+/// Semantics overlay for one physical Link text box. Its custom render proxy
+/// opts out of pointer hit testing, preserving TextSpan recognizers and text
+/// selection beneath it while retaining [Semantics.onTap] for assistive input.
+class _InternalLinkSemanticTarget extends StatelessWidget {
+  const _InternalLinkSemanticTarget({
+    super.key,
+    required this.rect,
+    required this.label,
+    required this.onActivated,
+  });
+
+  final Rect rect;
+  final String label;
+  final VoidCallback onActivated;
+
+  @override
+  Widget build(BuildContext context) => Positioned.fromRect(
+    rect: rect,
+    child: _PassThroughPointer(
+      child: Semantics(
+        container: true,
+        button: true,
+        label: label,
+        onTap: onActivated,
+        child: const SizedBox.expand(),
       ),
     ),
   );
+}
+
+class _PassThroughPointer extends SingleChildRenderObjectWidget {
+  const _PassThroughPointer({super.child});
+
+  @override
+  RenderProxyBox createRenderObject(BuildContext context) =>
+      _PassThroughPointerRenderBox();
+}
+
+class _PassThroughPointerRenderBox extends RenderProxyBox {
+  @override
+  bool hitTest(BoxHitTestResult result, {required Offset position}) => false;
 }

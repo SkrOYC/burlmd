@@ -1,5 +1,6 @@
 import 'package:burlmd/src/components/lifecycle_actions.dart';
 import 'package:burlmd/src/components/status_message.dart';
+import 'package:burlmd/src/providers/note_providers.dart';
 import 'package:burlmd/src/providers/rust_api_provider.dart';
 import 'package:burlmd/src/providers/workspace_provider.dart';
 import 'package:burlmd/l10n/generated/app_localizations.dart';
@@ -76,13 +77,20 @@ class _WorkspaceTreeState extends ConsumerState<WorkspaceTree> {
     // tap (the P2 carried over from E003's review) — with a watch, a
     // selection change rebuilds the rows and moves the highlight.
     final selectedId = ref.watch(selectedNoteIdProvider);
+    // A lifecycle result can atomically replace the active Note's identity
+    // or source. Keep navigation and every lifecycle menu behind the same
+    // admission boundary until that result has settled, rather than letting a
+    // tree tap race an old-id rekey or an in-flight close.
+    final lifecycleActive = ref.watch(lifecycleEditingProvider) > 0;
 
     if (treeError != null) return const _TreeErrorState();
 
     return tree.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (_, _) => const _TreeErrorState(),
-      data: (root) => ListView(children: _rows(root, selectedId)),
+      data: (root) => ListView(
+        children: _rows(root, selectedId, lifecycleActive: lifecycleActive),
+      ),
     );
   }
 
@@ -90,6 +98,7 @@ class _WorkspaceTreeState extends ConsumerState<WorkspaceTree> {
     List<TreeNode> nodes,
     String? selectedId, {
     int depth = 0,
+    required bool lifecycleActive,
   }) {
     // Defensive ordering: the Core contract already returns Directories
     // before Notes sorted by name at each level, but the rendered tree owns
@@ -105,20 +114,29 @@ class _WorkspaceTreeState extends ConsumerState<WorkspaceTree> {
           node: directory,
           depth: depth,
           expanded: _expanded.contains(directory.path),
-          onTap: () => _toggle(directory.path),
+          onTap: lifecycleActive ? null : () => _toggle(directory.path),
+          lifecycleActive: lifecycleActive,
         ),
         if (_expanded.contains(directory.path))
-          ..._rows(directory.children, selectedId, depth: depth + 1),
+          ..._rows(
+            directory.children,
+            selectedId,
+            depth: depth + 1,
+            lifecycleActive: lifecycleActive,
+          ),
       ],
       for (final note in notes)
         _NoteRow(
           node: note,
           depth: depth,
           selected: selectedId == note.id,
-          onTap: () {
-            ref.read(selectedNoteIdProvider.notifier).select(note.id);
-            widget.onNoteSelected?.call(note.id);
-          },
+          lifecycleActive: lifecycleActive,
+          onTap: lifecycleActive
+              ? null
+              : () {
+                  ref.read(selectedNoteIdProvider.notifier).select(note.id);
+                  widget.onNoteSelected?.call(note.id);
+                },
         ),
     ];
   }
@@ -159,12 +177,14 @@ class _DirectoryRow extends ConsumerWidget {
     required this.depth,
     required this.expanded,
     required this.onTap,
+    required this.lifecycleActive,
   });
 
   final TreeNode_Directory node;
   final int depth;
   final bool expanded;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
+  final bool lifecycleActive;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -177,6 +197,7 @@ class _DirectoryRow extends ConsumerWidget {
       title: Text(node.name, overflow: TextOverflow.ellipsis),
       trailing: PopupMenuButton<String>(
         tooltip: 'Actions for directory ${node.name}',
+        enabled: !lifecycleActive,
         onSelected: (action) => switch (action) {
           'new-note' => _createNote(context, ref),
           'new-directory' => _createDirectory(context, ref),
@@ -268,12 +289,14 @@ class _NoteRow extends ConsumerWidget {
     required this.depth,
     required this.selected,
     required this.onTap,
+    required this.lifecycleActive,
   });
 
   final TreeNode_Note node;
   final int depth;
   final bool selected;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
+  final bool lifecycleActive;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -284,6 +307,7 @@ class _NoteRow extends ConsumerWidget {
       selected: selected,
       trailing: PopupMenuButton<String>(
         tooltip: 'Actions for note ${node.title}',
+        enabled: !lifecycleActive,
         onSelected: (action) => switch (action) {
           'rename' => _rename(context, ref),
           'move' => _move(context, ref),

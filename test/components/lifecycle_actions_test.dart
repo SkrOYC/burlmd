@@ -49,6 +49,7 @@ class _LifecycleApi extends RustApi {
   List<String>? deleteDirectoryResult;
   Completer<void>? deleteDirectoryGate;
   LifecycleWarning? lifecycleWarning;
+  Object? closeNoteError;
 
   /// What `open_note` returns per id — for already-open Notes the live
   /// session state (post-rewrite, post-remap), which is exactly what the
@@ -135,6 +136,8 @@ class _LifecycleApi extends RustApi {
   @override
   Future<void> closeNote(String noteId) async {
     calls.add('closeNote:$noteId');
+    final error = closeNoteError;
+    if (error != null) throw error;
   }
 
   @override
@@ -661,8 +664,8 @@ void main() {
       expect(container.read(editorInputBlockedProvider), isFalse);
     });
 
-    testWidgets('a delayed remap fetch cannot resurrect a Note deleted by a '
-        'newer lifecycle operation', (tester) async {
+    testWidgets('an overlapping lifecycle action waits for the authoritative '
+        'remap to settle before it reaches Core', (tester) async {
       final delayedOpen = Completer<NoteState>();
       final api = _LifecycleApi()
         ..renameDirectoryResult = effects(
@@ -681,19 +684,26 @@ void main() {
       await tester.pump();
       expect(api.openNoteCalls, ['New/Note']);
 
-      await container.read(lifecycleActionsProvider).deleteNote('Old/Note');
-      expect(container.read(activeNoteProvider), isNull);
+      final delete = container
+          .read(lifecycleActionsProvider)
+          .deleteNote('Old/Note');
+      await tester.pump();
+      // The second request reserves the same input/navigation gate but does
+      // not advance the generation or call Core until the remap has adopted
+      // its authoritative state.
+      expect(api.calls, ['renameDirectory:Old:New']);
+      expect(container.read(lifecycleEditingProvider), 2);
 
       delayedOpen.complete(stateFor('New/Note'));
       await remap;
-      expect(container.read(activeNoteProvider), isNull);
-      expect(container.read(selectedNoteIdProvider), isNull);
+      await delete;
+      expect(container.read(activeNoteProvider)!.metadata.id, 'New/Note');
+      expect(container.read(selectedNoteIdProvider), 'New/Note');
       expect(container.read(lifecycleEditingProvider), 0);
     });
 
-    testWidgets('a delayed remap fetch cannot overwrite a newer re-anchor', (
-      tester,
-    ) async {
+    testWidgets('overlapping remap and re-anchor actions settle in Core '
+        'completion order', (tester) async {
       final delayedOpen = Completer<NoteState>();
       final finalState = stateFor('Final/Note');
       final api = _LifecycleApi()
@@ -712,17 +722,80 @@ void main() {
           .read(lifecycleActionsProvider)
           .renameDirectory('Old', 'Middle');
       await tester.pump();
-      await container
+      final rename = container
           .read(lifecycleActionsProvider)
-          .renameNote('Old/Note', 'Final');
-      expect(container.read(activeNoteProvider), same(finalState));
+          .renameNote('Middle/Note', 'Final');
+      await tester.pump();
+      expect(api.calls, ['renameDirectory:Old:Middle']);
 
       delayedOpen.complete(stateFor('Middle/Note'));
       await remap;
+      await rename;
       expect(container.read(activeNoteProvider), same(finalState));
       expect(container.read(selectedNoteIdProvider), 'Final/Note');
       expect(container.read(lifecycleEditingProvider), 0);
     });
+  });
+
+  testWidgets('a stale created session is retired while its completed Core '
+      'warning remains attached to this create outcome', (tester) async {
+    final gate = Completer<void>();
+    final created = stateFor('Created', title: 'Created');
+    final warning = const LifecycleWarning(
+      stage: LifecycleWarningStage.commit,
+      detail: 'created but Git recording was unavailable',
+    );
+    final api = _LifecycleApi()
+      ..createNoteResult = created
+      ..createNoteGate = gate
+      ..lifecycleWarning = warning;
+    late ProviderContainer container;
+    await tester.pumpWidget(_probeHarness(api, (c) => container = c));
+    addTearDown(container.dispose);
+    container.read(activeNoteProvider.notifier).adopt(stateFor('Old'));
+    container.read(selectedNoteIdProvider.notifier).select('Old');
+
+    final create = container
+        .read(lifecycleActionsProvider)
+        .createNote('', 'Created');
+    await tester.pump();
+    // This represents an external selection seam attempt. The rendered tree
+    // is disabled while lifecycle work owns the gate, but the action layer
+    // still cleans up correctly if another presentation host changes it.
+    container.read(selectedNoteIdProvider.notifier).select('Elsewhere');
+    gate.complete();
+
+    final outcome = (await create) as LifecycleCompleted;
+    expect(api.calls, ['createNote::Created', 'closeNote:Created']);
+    expect(outcome.warning, same(warning));
+    expect(container.read(activeNoteProvider)!.metadata.id, 'Old');
+    expect(container.read(selectedNoteIdProvider), 'Elsewhere');
+    expect(container.read(lifecycleEditingProvider), 0);
+  });
+
+  testWidgets('a stale created session reports its terminal close warning '
+      'once through the one-shot close status', (tester) async {
+    final gate = Completer<void>();
+    final api = _LifecycleApi()
+      ..createNoteResult = stateFor('Created')
+      ..createNoteGate = gate
+      ..closeNoteError = const CloseNoteWarning('draft cleanup failed');
+    late ProviderContainer container;
+    await tester.pumpWidget(_probeHarness(api, (c) => container = c));
+    addTearDown(container.dispose);
+    container.read(activeNoteProvider.notifier).adopt(stateFor('Old'));
+    container.read(selectedNoteIdProvider.notifier).select('Old');
+
+    final create = container
+        .read(lifecycleActionsProvider)
+        .createNote('', 'Created');
+    await tester.pump();
+    container.read(selectedNoteIdProvider.notifier).select('Elsewhere');
+    gate.complete();
+
+    expect(await create, isA<LifecycleCompleted>());
+    expect(container.read(noteCloseFailureProvider), isA<CloseNoteWarning>());
+    expect(api.calls, ['createNote::Created', 'closeNote:Created']);
   });
 
   group('deletion', () {
@@ -1280,6 +1353,88 @@ void main() {
     await tester.enterText(field, 'recovered after refusal');
     await tester.pump();
     expect(api.lastUpdateBlockSource, 'recovered after refusal');
+  });
+
+  testWidgets('a lifecycle gate preserves and commits a live IME composition '
+      'after a refused operation', (WidgetTester tester) async {
+    final gate = Completer<void>();
+    final api = _LifecycleApi()
+      ..renameNoteGate = gate
+      ..renameNoteError = StateError('rename refused');
+    late ProviderContainer container;
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [rustApiProvider.overrideWithValue(api)],
+        child: Consumer(
+          builder: (context, ref, _) {
+            container = ProviderScope.containerOf(context);
+            return const MaterialApp(home: Scaffold(body: Editor()));
+          },
+        ),
+      ),
+    );
+    addTearDown(container.dispose);
+    container
+        .read(activeNoteProvider.notifier)
+        .adopt(stateFor('Old', ast: [paragraph('base')]));
+    container.read(selectedNoteIdProvider.notifier).select('Old');
+    api.stagedBlockSources['0'] = ['base'];
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('block-0')));
+    await tester.pumpAndSettle();
+    final field = find.byType(EditableText);
+
+    final action = container
+        .read(lifecycleActionsProvider)
+        .renameNote('Old', 'Renamed');
+    expect(container.read(editorInputBlockedProvider), isTrue);
+
+    // The platform can deliver marked text after the synchronous provider
+    // gate closes but before Flutter paints `readOnly`. It must remain
+    // platform-owned until the IME explicitly clears `composing`.
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(
+        text: 'base中',
+        composing: TextRange(start: 4, end: 5),
+        selection: TextSelection.collapsed(offset: 5),
+      ),
+    );
+    await tester.pump();
+    expect(tester.widget<EditableText>(field).readOnly, isTrue);
+    expect(tester.widget<EditableText>(field).controller.text, 'base中');
+
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(
+        text: 'base中',
+        selection: TextSelection.collapsed(offset: 5),
+      ),
+    );
+    await tester.pump();
+    expect(tester.widget<EditableText>(field).controller.text, 'base中');
+    expect(api.calls.where((call) => call.startsWith('updateBlock:')), isEmpty);
+
+    gate.complete();
+    expect(await action, isA<LifecycleFailed>());
+    await tester.pump();
+    await tester.pump();
+
+    expect(container.read(editorInputBlockedProvider), isFalse);
+    expect(tester.widget<EditableText>(field).readOnly, isFalse);
+    expect(tester.widget<EditableText>(field).controller.text, 'base中');
+
+    // Flutter's read-only test client deliberately leaves its marked range
+    // untouched while the gate is closed. Once the field is writable again,
+    // issue the IME's explicit composition-commit value; this is the
+    // deterministic widget-test equivalent of the platform finishing marked
+    // text after a lifecycle action.
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(
+        text: 'base中',
+        selection: TextSelection.collapsed(offset: 5),
+      ),
+    );
+    await tester.pump();
+    expect(api.lastUpdateBlockSource, 'base中');
   });
 }
 

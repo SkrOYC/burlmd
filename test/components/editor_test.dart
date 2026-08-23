@@ -1938,8 +1938,8 @@ void main() {
     expect(find.textContaining('The change is applied'), findsOneWidget);
   });
 
-  testWidgets('a stale linked-note creation cannot override a newer Note or '
-      'show its warning', (tester) async {
+  testWidgets('a stale linked-note creation cannot override a newer Note and '
+      'still shows its completed Core warning once', (tester) async {
     final gate = Completer<void>();
     final created = _testNoteState([_plainParagraph('created')]);
     final api = _LinkResolutionApi()
@@ -1977,7 +1977,7 @@ void main() {
 
     expect(container.read(activeNoteProvider), same(newer));
     expect(container.read(selectedNoteIdProvider), newer.metadata.id);
-    expect(find.textContaining('stale warning'), findsNothing);
+    expect(find.textContaining('stale warning'), findsOneWidget);
   });
 
   // -- SHEL-E004 ----------------------------------------------------------

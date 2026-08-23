@@ -1,4 +1,5 @@
 import 'package:burlmd/src/components/workspace_tree.dart';
+import 'package:burlmd/src/providers/note_providers.dart';
 import 'package:burlmd/src/providers/rust_api_provider.dart';
 import 'package:burlmd/src/providers/workspace_provider.dart';
 import 'package:flutter/material.dart';
@@ -222,6 +223,46 @@ void main() {
     await tester.pumpAndSettle();
     expect(rowSelected('Note B'), isTrue);
     expect(rowSelected('Note A'), isFalse);
+  });
+
+  testWidgets('lifecycle work disables both note navigation and row menus', (
+    WidgetTester tester,
+  ) async {
+    late ProviderContainer container;
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          rustApiProvider.overrideWithValue(
+            _StubRustApi([note('a', 'Note A', 'Note A.md')]),
+          ),
+        ],
+        child: MaterialApp(
+          home: Scaffold(
+            body: Consumer(
+              builder: (context, ref, _) {
+                container = ProviderScope.containerOf(context);
+                return const SizedBox(width: 300, child: WorkspaceTree());
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+    addTearDown(container.dispose);
+    await tester.pumpAndSettle();
+
+    container.read(lifecycleEditingProvider.notifier).begin();
+    await tester.pump();
+
+    await tester.tap(find.text('Note A'));
+    await tester.pump();
+    expect(container.read(selectedNoteIdProvider), isNull);
+    final menu = tester.widget<PopupMenuButton<String>>(
+      find.byWidgetPredicate((widget) => widget is PopupMenuButton<String>),
+    );
+    expect(menu.enabled, isFalse);
+
+    container.read(lifecycleEditingProvider.notifier).end();
   });
 
   testWidgets('a failed tree query shows an error state whose Retry refetches '

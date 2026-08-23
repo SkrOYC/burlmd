@@ -657,13 +657,13 @@ class EditorState extends ConsumerState<Editor> {
   /// The selection system, rather than the Markdown tree, is authoritative
   /// about which rendered leaves the user visibly selected. A same-top-level
   /// range is eligible only when that live extent crosses multiple leaves.
+  /// A collapsed edge still participates: dragging from exactly the end of
+  /// one List or Blockquote leaf into its sibling leaves the origin leaf with
+  /// a zero-width [SelectedContentRange], but it remains a real endpoint of
+  /// the cross-leaf range.
   int _selectedLeafCount() => _selectionBrokers.values
       .expand((broker) => broker.selectables)
-      .where((selectable) {
-        final selection = selectable.getSelection();
-        return selection != null &&
-            selection.startOffset != selection.endOffset;
-      })
+      .where((selectable) => selectable.getSelection() != null)
       .length;
 
   /// A range edit, copy, or promotion can be refused without invalidating

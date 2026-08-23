@@ -153,6 +153,7 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
   _PendingResync? _pendingResync;
   String _lastSettledText = '';
   String? _compositionBaseText;
+  String? _inputGateCompositionBaseText;
   bool _pendingResolutionScheduled = false;
   bool _hasResyncConflict = false;
   bool _phantomMaterialized = false;
@@ -194,6 +195,23 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
     // lifecycle unmount; another arbitrary source must not silently discard
     // the text the user is being asked to copy before leaving the note.
     if (_hasResyncConflict) return;
+    // A lifecycle action may publish an authoritative replacement while a
+    // platform composition is still finishing. Queue that replacement rather
+    // than assigning a controller value: Flutter documents `composing` as
+    // IME-owned, and clearing it here loses the marked-text commit. The gate
+    // reconciliation below rebases the completed composition against this
+    // exact Core source after the action settles.
+    if (ref.read(editorInputBlockedProvider)) {
+      _queuePendingResync(
+        source: widget.source,
+        token: widget.resyncToken,
+        base:
+            _inputGateCompositionBaseText ??
+            _compositionBaseText ??
+            _lastSettledText,
+      );
+      return;
+    }
     // An external change to provider state (a lifecycle rewrite adopting
     // rewritten Links, a reload) refetched this Block's source; adopt it,
     // but never stomp a live IME composition — Flutter would raise the
@@ -206,14 +224,11 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
       // a second lifecycle rewrite while the IME is still live supersedes the
       // first one. In particular, a latest source equal to the live field
       // must still replace an older, divergent pending source.
-      final pending = _pendingResync;
-      if (pending == null || widget.resyncToken > pending.token) {
-        _pendingResync = _PendingResync(
-          source: widget.source,
-          token: widget.resyncToken,
-          base: _compositionBaseText ?? _lastSettledText,
-        );
-      }
+      _queuePendingResync(
+        source: widget.source,
+        token: widget.resyncToken,
+        base: _compositionBaseText ?? _lastSettledText,
+      );
       return;
     }
     if (widget.source == _controller.text) {
@@ -222,6 +237,20 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
       return;
     }
     _applyExternalResync(widget.source);
+  }
+
+  void _queuePendingResync({
+    required String source,
+    required int token,
+    required String base,
+  }) {
+    // The token is part of the pending value, rather than a separate flag:
+    // a second external rewrite supersedes the first, even when the latest
+    // source matches the field's current text.
+    final pending = _pendingResync;
+    if (pending == null || token > pending.token) {
+      _pendingResync = _PendingResync(source: source, token: token, base: base);
+    }
   }
 
   void _applyExternalResync(String source) {
@@ -247,6 +276,26 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
     _scheduleCompletionOverlay();
     final value = _controller.value;
     if (ref.read(editorInputBlockedProvider)) {
+      // A non-empty marked range is owned by the platform. Do not rewrite the
+      // editing value just because a lifecycle action has closed admission:
+      // assigning [_lastSettledText] clears the range and discards the IME's
+      // eventual commit. Keep its base so that a completed value can be
+      // reconciled once the authoritative lifecycle result is known.
+      if (_hasLiveComposition) {
+        _inputGateCompositionBaseText ??=
+            _compositionBaseText ?? _lastSettledText;
+        return;
+      }
+      final compositionBase = _inputGateCompositionBaseText;
+      if (compositionBase != null) {
+        // Clearing a marked range can mean either commit or cancellation.
+        // The base-identical form is an explicit cancellation; any different
+        // text is a completed platform value retained until the gate opens.
+        if (value.text == compositionBase) {
+          _inputGateCompositionBaseText = null;
+        }
+        return;
+      }
       // A platform callback can be queued before the switch's read-only
       // rebuild. Restore Core-backed text rather than leaving input solely in
       // a controller for a session being closed.
@@ -261,6 +310,13 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
           ),
         );
       }
+      return;
+    }
+    if (_inputGateCompositionBaseText != null) {
+      // The gate may have opened while the IME still held a marked range.
+      // Its completion can change only `composing`, so the controller
+      // listener (rather than EditableText.onChanged) owns this hand-off.
+      if (!_hasLiveComposition) _reconcileInputGateComposition();
       return;
     }
     if (widget.phantom) {
@@ -292,6 +348,32 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
         _resolvePendingResync();
       }
     });
+  }
+
+  /// Re-admits a composition that began before the lifecycle gate took
+  /// effect. A lifecycle refusal restores the same Core session, so the
+  /// completed platform value is buffered exactly once. A successful action
+  /// may have supplied a new source meanwhile; in that case the existing
+  /// contiguous-edit rebase is the only safe way to preserve both changes.
+  void _reconcileInputGateComposition() {
+    final compositionBase = _inputGateCompositionBaseText;
+    if (compositionBase == null || _hasLiveComposition) return;
+    _inputGateCompositionBaseText = null;
+
+    // An explicit cancellation restored the original source. It has no local
+    // edit to replay, but an authoritative lifecycle source still wins.
+    if (_controller.text == compositionBase) {
+      if (_pendingResync != null) _resolvePendingResync();
+      return;
+    }
+    if (_pendingResync != null) {
+      _resolvePendingResync();
+      return;
+    }
+
+    _bufferSource(_controller.text);
+    _lastSettledText = _controller.text;
+    _compositionBaseText = null;
   }
 
   void _resolvePendingResync() {
@@ -630,6 +712,11 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
   @override
   Widget build(BuildContext context) {
     final inputBlocked = ref.watch(editorInputBlockedProvider);
+    ref.listen<bool>(editorInputBlockedProvider, (wasBlocked, isBlocked) {
+      if (wasBlocked == true && !isBlocked) {
+        _reconcileInputGateComposition();
+      }
+    });
     return OverlayPortal.overlayChildLayoutBuilder(
       controller: _completionOverlayController,
       overlayChildBuilder: (context, info) {

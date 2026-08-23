@@ -476,6 +476,65 @@ void main() {
     }
   });
 
+  testWidgets('exact forward and reverse container-leaf boundaries activate '
+      'range input with their collapsed edge retained', (tester) async {
+    final cases = <(String, List<AstNode>, String, String)>[
+      ('list', [_listWithTwoLeaves()], 'first item', 'second item'),
+      (
+        'blockquote',
+        [_blockquoteWithTwoLeaves()],
+        'first quote',
+        'second quote',
+      ),
+    ];
+
+    for (final (containerName, ast, firstLeaf, secondLeaf) in cases) {
+      final firstLength = firstLeaf.length;
+      for (final reverse in [false, true]) {
+        final api = _RangeApi()
+          ..result = _note(['$containerName result'])
+          ..caret = RangeEditCaret.block(
+            blockPath: Uint64List.fromList(const [0]),
+            sourceOffsetUtf16: BigInt.zero,
+          )
+          ..sources['0'] = '$containerName result\n';
+        await _pump(tester, api, ast: ast);
+
+        final start = reverse
+            ? _caretPoint(tester, secondLeaf, 3)
+            : _caretPoint(tester, firstLeaf, firstLength);
+        final end = reverse
+            ? _caretPoint(tester, firstLeaf, firstLength)
+            : _caretPoint(tester, secondLeaf, 3);
+        final gesture = await tester.startGesture(
+          start,
+          kind: PointerDeviceKind.mouse,
+        );
+        await tester.pump();
+        await gesture.moveTo(end);
+        await tester.pump();
+        await gesture.up();
+        await tester.pump();
+
+        final range = tester
+            .state<EditorState>(find.byType(Editor))
+            .debugSelectedRange();
+        expect(range?.startPath, Uint64List.fromList(const [0]));
+        expect(range?.endPath, Uint64List.fromList(const [0]));
+
+        tester.testTextInput.enterText(reverse ? 'reverse' : 'forward');
+        await tester.pump();
+        await tester.pump();
+
+        expect(api.replacements, hasLength(1));
+        expect(api.replacements.single.$2, reverse ? 'reverse' : 'forward');
+        expect(api.deletes, isEmpty);
+        expect(api.updates, isEmpty);
+        await tester.pumpWidget(const SizedBox.shrink());
+      }
+    }
+  });
+
   testWidgets('retryable range operation failures keep the Note mounted and '
       'show a localized dismissible status', (tester) async {
     final operations = <(String, Future<void> Function(WidgetTester))>[
