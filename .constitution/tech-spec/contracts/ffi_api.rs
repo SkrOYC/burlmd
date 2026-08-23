@@ -785,7 +785,12 @@ pub fn merge_block_with_previous(
 /// Contrast `split_block`, whose `offset` is a **source** offset. The two
 /// conventions differ because the Blocks differ: a range spans unfocused
 /// Blocks, which the user sees rendered, while a split happens in the focused
-/// Block, which the user sees as raw source.
+/// Block, which the user sees as raw source. A range operation is invalid
+/// while any Block is focused: the UI must blur first, wait for `commit_block`
+/// to return its reparsed authoritative state, and then establish a new
+/// rendered selection. This makes a focused endpoint and a focused interior
+/// impossible, and ensures the Core never resolves a range against the stale
+/// inline span map that exists between `update_block` and `commit_block`.
 ///
 /// **A range covers everything between its two endpoints, including bytes the
 /// UI never showed.** A range resolves to two source offsets and the Core
@@ -800,24 +805,12 @@ pub fn merge_block_with_previous(
 /// selection UI knowing it, and should decide there whether a selection
 /// crossing invisible content warrants a confirmation.
 ///
-/// **Open: the drag-outward anchor.** ADR-006 accepts that a selection may
-/// begin inside the focused Block and extend past it, and for that one
-/// endpoint the "unfocused, therefore rendered" justification does not hold —
-/// a focused Block displays raw source, so the offset the widget reports is a
-/// source offset. Whether the case is reachable at all depends on something
-/// Flutter's documentation is silent about (whether an `EditableText`
-/// participates in an enclosing `SelectableRegion`), so it is assigned to
-/// `EDIT-F001`, which has both presentations in front of it, rather than
-/// guessed at here.
-///
-/// That assignment also covers the harder variant: a range whose **interior**
-/// contains the focused Block. It fails the rendered-offset rule for the same
-/// reason, and additionally its inline span map is deliberately stale between
-/// `update_block` and `commit_block` (ADR-008 decision 2) — while
-/// `delete_range` and `replace_range` splice using exactly that map. The
-/// likely resolution is that a range operation blurs first and dispatches
-/// after, which dissolves both cases at once; that is cheap, and it is what
-/// `EDIT-F001` should confirm rather than what `EDIT-F003` should discover.
+/// `EDIT-F001` settled the former drag-outward question on Flutter 3.44.3:
+/// a focused `EditableText` does not participate in its enclosing
+/// `SelectionArea`. A gesture in the field is field-local; a region drag that
+/// crosses it selects around the field and omits its content. The mandatory
+/// blur-and-reselect rule above is nevertheless the contract boundary for all
+/// range operations, including future delete and replace entry points.
 #[frb]
 pub struct BlockRange {
     pub start_path: Vec<usize>,

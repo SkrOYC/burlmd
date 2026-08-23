@@ -420,4 +420,61 @@ void main() {
     expect(clipboard, 'hello');
     expect(api.copyRequests, isEmpty);
   });
+
+  testWidgets('a drag crossing a focused Block cannot issue a Core range '
+      'operation; a fresh rendered selection after blur can', (tester) async {
+    final api = _FakeRustApi()
+      ..sources['0'] = 'first block words'
+      ..commitResult = _note([
+        _plainParagraph('first block words'),
+        _plainParagraph('second block words'),
+        _plainParagraph('third block words'),
+      ]);
+    await pumpEditor(tester, [
+      _plainParagraph('first block words'),
+      _plainParagraph('second block words'),
+      _plainParagraph('third block words'),
+    ], api: api);
+
+    await tester.tap(find.byKey(const ValueKey('block-0')), warnIfMissed: true);
+    await tester.pump();
+    await tester.pump();
+
+    final field = tester.getRect(
+      find.byWidgetPredicate(
+        (widget) => widget is EditableText && !widget.readOnly,
+      ),
+    );
+    final third = _textBox(tester, 'third block');
+    await dragSelect(
+      tester,
+      field.topLeft + Offset(4 * 14 + 7, field.height / 2),
+      third.topLeft + Offset(5 * 14 + 7, third.height / 2),
+    );
+    await pressWithControl(tester, LogicalKeyboardKey.keyC);
+    await tester.pumpAndSettle();
+    expect(
+      api.copyRequests,
+      isEmpty,
+      reason:
+          'the focused EditableText owns this gesture; no BlockRange may be '
+          'resolved while its span map is uncommitted',
+    );
+
+    FocusManager.instance.primaryFocus?.unfocus();
+    await tester.pump();
+    await tester.pump();
+    expect(find.byType(EditableText), findsNothing);
+
+    final first = _textBox(tester, 'first block');
+    final renderedThird = _textBox(tester, 'third block');
+    await dragSelect(
+      tester,
+      first.topLeft + Offset(4 * 14 + 7, first.height / 2),
+      renderedThird.topLeft + Offset(5 * 14 + 7, renderedThird.height / 2),
+    );
+    await pressWithControl(tester, LogicalKeyboardKey.keyC);
+    await tester.pumpAndSettle();
+    expect(api.copyRequests, [_matchesRange(0, 4, 2, 5)]);
+  });
 }

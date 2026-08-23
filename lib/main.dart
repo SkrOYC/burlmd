@@ -41,6 +41,9 @@ class _HomeState extends ConsumerState<_Home> {
     if (Platform.environment.containsKey('BURLMD_SMOKE_F002')) {
       _stageSmokeF002();
     }
+    if (Platform.environment.containsKey('BURLMD_SMOKE_F001')) {
+      _stageSmokeF001();
+    }
     if (Platform.environment.containsKey('BURLMD_SMOKE_F003')) {
       _stageSmokeF003();
     }
@@ -97,6 +100,42 @@ class _HomeState extends ConsumerState<_Home> {
     ref.invalidate(workspaceTreeProvider);
     // Selecting drives the shell's editor-pane listener, which opens the
     // Note through [NoteController.open] — the same path a user tap takes.
+    ref.read(selectedNoteIdProvider.notifier).select(state!.metadata.id);
+  }
+
+  /// Production-font fixture for SPK-EDIT-F001's durable visual evidence.
+  /// Each source sits deliberately near a natural wrap boundary in the real
+  /// editor pane; `BURLMD_SMOKE_F001_FOCUSED_INDEX` chooses which one is raw.
+  Future<void> _stageSmokeF001() async {
+    const title = 'F001 promotion wrap evidence';
+    final api = ref.read(rustApiProvider);
+    final deadline = DateTime.now().add(const Duration(seconds: 30));
+    while (DateTime.now().isBefore(deadline)) {
+      if (ref.read(workspaceProvider).hasValue) break;
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    }
+    NoteState? state;
+    try {
+      state = await api.createNote('', title);
+    } catch (_) {
+      try {
+        await api.deleteNote(title);
+        state = await api.createNote('', title);
+      } catch (_) {
+        return;
+      }
+    }
+    const boundaryWords =
+        'word word word word word word word word word word '
+        'word word word word word word word word';
+    for (final source in [
+      '$boundaryWords **tail**',
+      '## $boundaryWords **tail**',
+      '- $boundaryWords **tail**',
+    ]) {
+      state = api.insertBlock(state!.metadata.id, [state.ast.length], source);
+    }
+    ref.invalidate(workspaceTreeProvider);
     ref.read(selectedNoteIdProvider.notifier).select(state!.metadata.id);
   }
 

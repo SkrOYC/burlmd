@@ -44,6 +44,14 @@ class EditorState extends ConsumerState<Editor> {
   /// formatted.
   _Focus? _focused;
 
+  /// Set whenever a raw field is promoted. A pointer sequence that began in
+  /// that field may blur it while being dragged across rendered content; its
+  /// SelectionArea callbacks arrive after blur but still originated in raw
+  /// source. No Core range may use that sequence. The next pointer-down that
+  /// begins with no focused Block explicitly establishes a fresh rendered
+  /// selection epoch.
+  bool _requiresFreshRenderedSelection = false;
+
   /// Per-Block pass-through registrars (`EDIT-F003`): each unfocused Block's
   /// painted text registers with its own broker so this container can read
   /// that Block's selection offsets without the selection system knowing
@@ -65,6 +73,9 @@ class EditorState extends ConsumerState<Editor> {
     super.initState();
     if (Platform.environment.containsKey('BURLMD_SMOKE_F002')) {
       _runSmokePromote();
+    }
+    if (Platform.environment.containsKey('BURLMD_SMOKE_F001')) {
+      _runSmokeF001();
     }
     if (Platform.environment.containsKey('BURLMD_SMOKE_F003')) {
       unawaited(_runSmokeF003());
@@ -162,25 +173,30 @@ class EditorState extends ConsumerState<Editor> {
         : math.min(focusedForSlot?.path.first ?? 0, note.ast.length);
     return Actions(
       actions: <Type, Action<Intent>>{CopySelectionTextIntent: _copyAction},
-      child: SelectionArea(
-        child: Builder(
-          builder: (areaContext) {
-            // Captured for the smoke hook's select-all invocation; reading
-            // it during build keeps it current across rebuilds.
-            _areaContext = areaContext;
-            return ListView.builder(
-              itemCount: note.ast.length + (phantomSlot ? 1 : 0),
-              itemBuilder: (context, i) => phantomSlot && i == phantomAnchor
-                  ? _buildPhantomEntry(note)
-                  // Slots past the phantom shift back by one onto their
-                  // real Block index.
-                  : _buildEntry(
-                      context,
-                      note,
-                      phantomSlot && i > phantomAnchor ? i - 1 : i,
-                    ),
-            );
-          },
+      child: Listener(
+        onPointerDown: (_) {
+          if (_focused == null) _requiresFreshRenderedSelection = false;
+        },
+        child: SelectionArea(
+          child: Builder(
+            builder: (areaContext) {
+              // Captured for the smoke hook's select-all invocation; reading
+              // it during build keeps it current across rebuilds.
+              _areaContext = areaContext;
+              return ListView.builder(
+                itemCount: note.ast.length + (phantomSlot ? 1 : 0),
+                itemBuilder: (context, i) => phantomSlot && i == phantomAnchor
+                    ? _buildPhantomEntry(note)
+                    // Slots past the phantom shift back by one onto their
+                    // real Block index.
+                    : _buildEntry(
+                        context,
+                        note,
+                        phantomSlot && i > phantomAnchor ? i - 1 : i,
+                      ),
+              );
+            },
+          ),
         ),
       ),
     );
@@ -217,18 +233,21 @@ class EditorState extends ConsumerState<Editor> {
       // path can drift from the other.
       return blockContainer(
         note.ast[index],
-        BlockEditor(
-          key: ValueKey('edit-$index'),
-          noteId: note.metadata.id,
-          blockPath: path,
-          source: focused.source,
-          initialCaret: focused.caret,
-          style: blockTextStyle(note.ast[index]),
-          resyncToken: focused.resyncToken,
-          focusToken: focused.token,
-          onEnter: (caret) => _handleEnterRequested(path, caret),
-          onBackspaceAtStart: () => _handleBackspaceAtStart(path),
-          onFocusLost: _handleFieldBlur,
+        blockPromotionSlot(
+          note.ast[index],
+          BlockEditor(
+            key: ValueKey('edit-$index'),
+            noteId: note.metadata.id,
+            blockPath: path,
+            source: focused.source,
+            initialCaret: focused.caret,
+            style: blockTextStyle(note.ast[index]),
+            resyncToken: focused.resyncToken,
+            focusToken: focused.token,
+            onEnter: (caret) => _handleEnterRequested(path, caret),
+            onBackspaceAtStart: () => _handleBackspaceAtStart(path),
+            onFocusLost: _handleFieldBlur,
+          ),
         ),
       );
     }
@@ -273,6 +292,12 @@ class EditorState extends ConsumerState<Editor> {
           .read(rustApiProvider)
           .getBlockSource(note.metadata.id, blockPath);
       setState(() {
+        // A SelectionArea can retain its last registered selection while this
+        // entry is being replaced. It described the old rendered tree, so it
+        // cannot become a BlockRange after promotion; a range must be dragged
+        // anew after the next blur+commit cycle.
+        _selectionBrokers.clear();
+        _requiresFreshRenderedSelection = true;
         _focused = _Focus(
           noteId: note.metadata.id,
           path: blockPath,
@@ -308,7 +333,14 @@ class EditorState extends ConsumerState<Editor> {
   void _commitFocused() {
     final focused = _focused;
     if (focused == null) return;
-    setState(() => _focused = null);
+    setState(() {
+      _focused = null;
+      // Do not retain a range that crossed the field while it was focused.
+      // `commit_block` reparses its source and this empty broker set requires
+      // a fresh rendered SelectionArea gesture before a range can be sent to
+      // the Core (ADR-006 / SPK-EDIT-F001).
+      _selectionBrokers.clear();
+    });
     if (focused.isPhantom) {
       // The sanctioned phantom Block is UI-side caret state ONLY (`EDIT-F004`):
       // CommonMark has no empty paragraph, so there is nothing to commit and
@@ -549,6 +581,7 @@ class EditorState extends ConsumerState<Editor> {
   /// mapped from painted text onto the Core's canonical rendered string via
   /// [blockCoreRenderedOffset].
   BlockRange? selectedBlockRange() {
+    if (_requiresFreshRenderedSelection) return null;
     final note = ref.read(activeNoteProvider);
     if (note == null) return null;
     int? startIndex;
@@ -651,6 +684,24 @@ class EditorState extends ConsumerState<Editor> {
         (ref.read(activeNoteProvider)?.ast.isNotEmpty ?? false)) {
       _promote([0], 'Intro with **bo'.length);
     }
+  }
+
+  /// Promotes one production-font wrap-boundary fixture for the F001 visual
+  /// evidence. An absent index intentionally leaves all three formatted.
+  Future<void> _runSmokeF001() async {
+    final index = int.tryParse(
+      Platform.environment['BURLMD_SMOKE_F001_FOCUSED_INDEX'] ?? '',
+    );
+    if (index == null) return;
+    final deadline = DateTime.now().add(const Duration(seconds: 30));
+    while (DateTime.now().isBefore(deadline)) {
+      if (!mounted) return;
+      final note = ref.read(activeNoteProvider);
+      if (note != null && index >= 0 && index < note.ast.length) break;
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    }
+    await WidgetsBinding.instance.endOfFrame;
+    if (mounted && _focused == null) _promote([index], 0);
   }
 
   // -- BURLMD_SMOKE_F003 ---------------------------------------------------

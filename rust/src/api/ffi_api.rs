@@ -427,8 +427,11 @@ pub fn merge_block_with_previous(
     open_session(&note_id)?.merge_block_with_previous(&block_path)
 }
 
-/// A selection spanning one or more Blocks, expressed as character offsets
-/// into each Block's **rendered** text (ADR-006 decision 3). See
+/// A selection spanning one or more unfocused Blocks, expressed as character
+/// offsets into each Block's **rendered** text (ADR-006 decision 3). A caller
+/// must blur and commit any focused Block, then establish a fresh rendered
+/// selection before calling a range operation; this API never accepts raw
+/// focused-field offsets or a range over an uncommitted span map. See
 /// `contracts/ffi_api.rs` for the per-`AstNode`-variant definition of
 /// "rendered text" these offsets are into.
 #[frb]

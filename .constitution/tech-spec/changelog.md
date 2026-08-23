@@ -1,5 +1,12 @@
 # Stage 3: Technical Implementation Changelog
 
+## v1.4.2
+Independent-review correction to **SPK-EDIT-F001**. Patch bump: no decision or FFI signature changed.
+
+- Reconciled ADR-006, the FFI contract, and the live FFI documentation: no Core range operation may run while any Block is focused; blur commits and reparses first, and a new rendered pointer sequence must establish the range.
+- Added rendered wrap-boundary coverage and production-font captures for paragraph, heading, and list. Raw Markdown can take an extra line solely because its delimiters/prefixes are visible, so `blockPromotionSlot` now preserves the formatted footprint and scrolls the focused raw source within it.
+- Preserved the original one-commit Spike history while explicitly allowing this separately committed independent-review correction; the Epic records every out-of-scope code, test, ADR, changelog, and evidence touch.
+
 ## v1.4.1
 Review follow-ups to **SPK-EDIT-F001** at the start of **Epic F (Editor Depth)**. Patch bump: two documentation corrections, no decision reversed, no contract signature changed.
 
