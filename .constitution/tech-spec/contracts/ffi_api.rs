@@ -905,8 +905,10 @@ pub fn delete_range(note_id: String, range: BlockRange) -> Result<RangeEditResul
 
 /// Replaces a multi-Block selection with text -- typing or pasting over a
 /// selection that crosses Blocks. This and `delete_range` are one atomic Core
-/// operation each: one source replacement, reparse, draft-row write, undo
-/// entry and authoritative caret result. A UI loop over Blocks is forbidden.
+/// operation each: one source replacement, reparse, draft-row write, and
+/// authoritative caret result. A UI loop over Blocks is forbidden. The
+/// operation is shaped to become one undo command when CAP-EDIT-08 lands, but
+/// this surface does not implement an undo stack.
 /// The caller must apply the returned caret rather than retaining a pre-edit
 /// path or deriving one from the replacement length.
 #[frb(sync)]
@@ -1109,10 +1111,20 @@ pub async fn find_notes_by_title(query: String, limit: u32) -> Result<Vec<NoteMe
     unimplemented!()
 }
 
-/// One candidate for the in-editor Link completion (CAP-GRAPH-02).
+/// Whether a completion targets an indexed Note or is a prospective ghost.
+/// The distinction is Core-provided so Presentation can label and announce the
+/// create affordance without constructing a target identity itself.
+#[frb]
+pub enum LinkCompletionKind {
+    Existing { note_id: String },
+    ProspectiveGhost { target_id: String },
+}
+
+/// One candidate for the in-editor Link completion (CAP-GRAPH-02 and the
+/// forward-link half of CAP-GRAPH-04).
 #[frb]
 pub struct LinkCompletion {
-    pub note_id: String,
+    pub kind: LinkCompletionKind,
     pub title: String,
     /// The exact text to splice at the cursor, already in bundle-absolute
     /// Markdown form with the destination angle-bracket wrapped and `\\`,
@@ -1132,20 +1144,29 @@ pub struct LinkCompletion {
     pub insert_text: String,
 }
 
-/// Candidates for the completion triggered by `[[` (CAP-GRAPH-02). The
-/// trigger is a UI affordance; what gets inserted is `insert_text`.
+/// Candidates for the completion triggered by `[[`. The trigger is a UI
+/// affordance; what gets inserted is `insert_text`.
 ///
 /// Completion is eligible only for a **collapsed** caret when the last
 /// unmatched `[[` before it is on the same line. Its query is precisely the
 /// text after those brackets and before the caret. Any `]]`, newline, focus
 /// loss, selection expansion, or source change making that saved trigger
 /// snapshot false dismisses the UI list; accepting a stale candidate is
-/// forbidden. The caller requests at most 10 candidates and Core clamps a
-/// larger `limit` to 10. The UI replaces exactly the immutable trigger range
-/// with this Core-supplied `insert_text`; it neither constructs nor repairs a
-/// link destination.
+/// forbidden. `note_id` scopes both lookup and ghost derivation to the active
+/// Workspace and identifies the current Note's Directory. The caller requests
+/// at most 10 candidates and Core clamps a larger `limit` to 10. Existing
+/// matches are `LinkCompletionKind::Existing`. If the query is a valid future
+/// title/target in that Directory, Core may include one clearly marked
+/// `ProspectiveGhost` within the same limit, with the exact `target_id` and
+/// standard-Markdown `insert_text` already derived. The UI replaces exactly
+/// the immutable trigger range with this Core-supplied text; it neither
+/// constructs nor repairs a link destination.
 #[frb]
-pub async fn link_completions(query: String, limit: u32) -> Result<Vec<LinkCompletion>, AppError> {
+pub async fn link_completions(
+    note_id: String,
+    query: String,
+    limit: u32,
+) -> Result<Vec<LinkCompletion>, AppError> {
     unimplemented!()
 }
 
@@ -1154,10 +1175,10 @@ pub async fn link_completions(query: String, limit: u32) -> Result<Vec<LinkCompl
 /// an AST Link is render-only advisory state and is never an input to this
 /// decision.
 ///
-/// For `Missing`, Core derives the complete ordinary-creation fields from the
-/// Link's target identity; Presentation must present the create affordance and
-/// pass these fields to `create_note` unchanged. This avoids a second
-/// target-id parser in Dart and makes following a ghost deterministic.
+/// For `Missing`, Core derives the complete identity fields for display. This
+/// avoids a second target-id parser in Dart. Presentation must re-resolve at
+/// activation and, only if the result remains `Missing`, call
+/// `create_link_target(target_id)` rather than ordinary `create_note`.
 #[frb]
 pub enum LinkTargetResolution {
     Existing {
@@ -1172,6 +1193,19 @@ pub enum LinkTargetResolution {
 
 #[frb]
 pub async fn resolve_link_target(target_id: String) -> Result<LinkTargetResolution, AppError> {
+    unimplemented!()
+}
+
+/// Creates the Note at the **exact** internal Link identity it carries
+/// (CAP-GRAPH-04). The Core derives title and Directory from `target_id`,
+/// creates missing parent Directories and the conformant Note atomically, then
+/// indexes and opens it. It refuses a file or path collision rather than
+/// silently choosing a different identity, and returns the opened state.
+///
+/// Callers must first invoke `resolve_link_target`: an `Existing` result opens
+/// that Note; only a still-`Missing` target reaches this operation.
+#[frb]
+pub async fn create_link_target(target_id: String) -> Result<NoteState, AppError> {
     unimplemented!()
 }
 
