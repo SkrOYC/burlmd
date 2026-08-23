@@ -45,6 +45,7 @@ class _FakeRustApi extends RustApi {
   static const coreMarkdown = '::CORE-SERIALIZED-MARKDOWN::';
 
   final List<BlockRange> copyRequests = [];
+  final List<String> wholeNoteCopyRequests = [];
 
   String copyResult = coreMarkdown;
 
@@ -67,6 +68,12 @@ class _FakeRustApi extends RustApi {
   @override
   String copyRangeAsMarkdown(String noteId, BlockRange range) {
     copyRequests.add(range);
+    return copyResult;
+  }
+
+  @override
+  String copyWholeNoteAsMarkdown(String noteId) {
+    wholeNoteCopyRequests.add(noteId);
     return copyResult;
   }
 
@@ -495,12 +502,8 @@ void main() {
     await pressWithControl(tester, LogicalKeyboardKey.keyC);
     await tester.pumpAndSettle();
 
-    expect(api.copyRequests, hasLength(1));
-    expect(
-      api.copyRequests.single,
-      _matchesRange(0, 0, 2, 'third block words'.length),
-      reason: 'select-all must cover every Block of the Note end to end',
-    );
+    expect(api.copyRequests, isEmpty);
+    expect(api.wholeNoteCopyRequests, [_testMetadata.id]);
     expect(clipboard, _FakeRustApi.coreMarkdown);
   });
 
@@ -540,9 +543,8 @@ void main() {
     await pressWithControl(tester, LogicalKeyboardKey.keyC);
     await tester.pumpAndSettle();
 
-    expect(api.copyRequests, [
-      _matchesRange(0, 0, blockCount - 1, 'block ${blockCount - 1}'.length),
-    ]);
+    expect(api.copyRequests, isEmpty);
+    expect(api.wholeNoteCopyRequests, [_testMetadata.id]);
     expect(clipboard, expectedMarkdown);
   });
 

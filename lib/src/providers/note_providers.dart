@@ -87,15 +87,29 @@ final lifecycleEditingProvider = NotifierProvider<LifecycleEditing, int>(
   LifecycleEditing.new,
 );
 
-/// Advances as soon as a lifecycle action claims the editing boundary. Async
-/// consumers capture this before their own FFI call; a different lifecycle
-/// action invalidates that capture even while the reference-counted gate is
-/// still held by both operations.
+/// Advances as a lifecycle action reaches the serialized queue head. Async
+/// lifecycle consumers capture it before their own FFI call; the next action
+/// invalidates that capture once it becomes authoritative.
 final lifecycleGenerationProvider = NotifierProvider<LifecycleGeneration, int>(
   LifecycleGeneration.new,
 );
 
+/// Advances at lifecycle admission, before an action waits for an ordinary
+/// note switch already in flight. This is distinct from the lifecycle action
+/// generation: queued lifecycle work must fence ordinary opens immediately
+/// without invalidating the action currently settling ahead of it.
+final lifecycleAdmissionProvider = NotifierProvider<LifecycleAdmission, int>(
+  LifecycleAdmission.new,
+);
+
 class LifecycleGeneration extends Notifier<int> {
+  @override
+  int build() => 0;
+
+  int next() => state = state + 1;
+}
+
+class LifecycleAdmission extends Notifier<int> {
   @override
   int build() => 0;
 
@@ -160,14 +174,20 @@ class NoteController extends Notifier<NoteState?> {
   /// one makes close/open strictly sequential; a ticket overtaken by a
   /// newer selection ([_openRequests]) returns without acting at all, so
   /// intermediate notes are neither closed nor opened redundantly.
-  Future<void> open(String noteId) {
+  Future<void> open(String noteId) => _open(noteId);
+
+  Future<void> _open(String noteId, {bool admittedByLifecycle = false}) {
     final ticket = ++_openRequests;
     final previous = _pendingOpen ?? Future<void>.value();
     late final Future<void> mine;
     mine = () async {
       await previous;
       try {
-        await _openExclusive(ticket, noteId);
+        await _openExclusive(
+          ticket,
+          noteId,
+          admittedByLifecycle: admittedByLifecycle,
+        );
       } finally {
         // Drop the chain once the tail catches up so completed work can be
         // collected instead of growing an unbounded await chain.
@@ -185,9 +205,14 @@ class NoteController extends Notifier<NoteState?> {
   /// before the authoritative Note is mounted. The caller publishes the
   /// selection only after this method reports success.
   Future<bool> openForLifecycle(String noteId) async {
-    await open(noteId);
+    await _open(noteId, admittedByLifecycle: true);
     return ref.mounted && state?.metadata.id == noteId;
   }
+
+  /// Waits for the selection chain that was already admitted to settle.
+  /// Lifecycle actions call this after fencing ordinary open outcomes and
+  /// before snapshotting the active Note for an identity-changing operation.
+  Future<void> settlePendingOpen() => _pendingOpen ?? Future<void>.value();
 
   /// The tail of the serialized [open] chain, or `null` when no switch is
   /// in flight or queued. Every request awaits this before touching the
@@ -199,11 +224,19 @@ class NoteController extends Notifier<NoteState?> {
   /// nothing.
   int _openRequests = 0;
 
-  Future<void> _openExclusive(int ticket, String noteId) async {
+  Future<void> _openExclusive(
+    int ticket,
+    String noteId, {
+    required bool admittedByLifecycle,
+  }) async {
     // A newer selection arrived while this one sat in the queue: skip it
     // entirely rather than churning closes/opens for Notes the user has
     // already navigated past.
     if (ticket != _openRequests) return;
+    if (!admittedByLifecycle && ref.read(lifecycleEditingProvider) > 0) {
+      return;
+    }
+    final lifecycleAdmission = ref.read(lifecycleAdmissionProvider);
     final api = ref.read(rustApiProvider);
     final current = state;
     if (current != null && current.metadata.id == noteId) {
@@ -245,9 +278,30 @@ class NoteController extends Notifier<NoteState?> {
           return;
         }
       }
+      if (!_isOpenAdmissionCurrent(
+        lifecycleAdmission,
+        admittedByLifecycle: admittedByLifecycle,
+      )) {
+        // Core accepted the close, but lifecycle work claimed the replacement
+        // boundary while it was pending. This snapshot names a retired
+        // session, so do not retain it or continue into the selected id.
+        state = null;
+        ref.read(keystrokeWriteFailureProvider.notifier).report(null);
+        return;
+      }
     }
     try {
-      state = await api.openNote(noteId);
+      final opened = await api.openNote(noteId);
+      if (!_isOpenAdmissionCurrent(
+        lifecycleAdmission,
+        admittedByLifecycle: admittedByLifecycle,
+      )) {
+        // Lifecycle work may have deleted, renamed, or rekeyed this target
+        // while `open_note` was in flight. Its stale success cannot mount it.
+        if (switching) state = null;
+        return;
+      }
+      state = opened;
       // A successful open clears any earlier failure so the surface
       // reflects the present, not the last thing that went wrong — both
       // surfaces: the old Note's keystroke-write failure belongs to a
@@ -280,6 +334,14 @@ class NoteController extends Notifier<NoteState?> {
       if (switching) ref.read(noteSwitchingProvider.notifier).set(false);
     }
   }
+
+  bool _isOpenAdmissionCurrent(
+    int expectedAdmission, {
+    required bool admittedByLifecycle,
+  }) =>
+      ref.mounted &&
+      (admittedByLifecycle || ref.read(lifecycleEditingProvider) == 0) &&
+      ref.read(lifecycleAdmissionProvider) == expectedAdmission;
 
   /// The per-keystroke call (ADR-007 decision 4): buffers `source` — the
   /// Block's raw Markdown text, not an `AstNode` — into the Note's working

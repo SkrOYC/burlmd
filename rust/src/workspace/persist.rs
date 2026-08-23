@@ -1747,6 +1747,14 @@ impl NoteSession {
         self.replace_range(range, "")
     }
 
+    /// Deletes every rendered top-level Block in the Note through one source
+    /// splice. Unlike [`Self::delete_range`], this does not manufacture a
+    /// rendered endpoint for an empty-rendering Block such as a thematic
+    /// break; Core derives the source extent from its authoritative spans.
+    pub fn delete_whole_note(&self) -> Result<(NoteState, RangeEditLocation), AppError> {
+        self.replace_whole_note("")
+    }
+
     /// Replaces a multi-Block selection with text and derives the caret from
     /// the resulting parse, never from the source tree the replacement
     /// invalidates.
@@ -1776,6 +1784,34 @@ impl NoteSession {
         )
     }
 
+    /// Replaces every rendered top-level Block in the Note through one source
+    /// splice. The range starts at the first top-level Block span and ends at
+    /// the final one, so frontmatter remains outside this rendered Note
+    /// operation while terminal zero-width renderings retain their source.
+    pub fn replace_whole_note(
+        &self,
+        replacement: &str,
+    ) -> Result<(NoteState, RangeEditLocation), AppError> {
+        self.structural_edit_with_result(
+            |working, spans, _, _| {
+                let resolved = whole_note_source_range(spans)?;
+                let join = resolved
+                    .start
+                    .checked_add(replacement.len())
+                    .ok_or_else(|| {
+                        AppError::ParseError(
+                            "whole-Note replacement join overflowed source offset".to_string(),
+                        )
+                    })?;
+                Ok((
+                    splice::splice_source(working, resolved, replacement).map_err(splice_error)?,
+                    join,
+                ))
+            },
+            |source, spans, _, join| range_edit_caret(source, spans, join),
+        )
+    }
+
     /// The Markdown a multi-Block selection covers — a slice of the Note, never
     /// a reconstruction of one.
     ///
@@ -1788,6 +1824,18 @@ impl NoteSession {
         Ok(splice::extract_range(&state.source, &state.spans, range)
             .map_err(splice_error)?
             .to_string())
+    }
+
+    /// The source covering every rendered top-level Block in the Note. Core
+    /// owns this boundary because a terminal Block may render no text at all;
+    /// no Flutter UTF-16 offset can express its source end.
+    pub fn copy_whole_note_as_markdown(&self) -> Result<String, AppError> {
+        let state = self.lock_state()?;
+        state.refuse_while_conflicted(&self.0.note_id, "copying the whole Note")?;
+        let range = whole_note_source_range(&state.spans)?;
+        state.source.get(range).map(str::to_string).ok_or_else(|| {
+            AppError::ParseError("whole-Note source range is not addressable".to_string())
+        })
     }
 
     /// The shared shape of every structural mutator: snapshot under the state
@@ -3839,6 +3887,35 @@ pub enum RangeEditLocation {
     Phantom {
         insertion_index: usize,
     },
+}
+
+/// The source extent of the rendered Note: all top-level Block spans, from
+/// the first through the last. This is intentionally not a `RenderedRange`:
+/// a thematic break and an empty fenced code Block both have a valid rendered
+/// offset of zero, but that offset resolves at their source start rather than
+/// at the end of their source span.
+fn whole_note_source_range(spans: &SpanMap) -> Result<std::ops::Range<usize>, AppError> {
+    let start = spans
+        .blocks()
+        .filter(|block| block.path.len() == 1)
+        .map(|block| block.source.start)
+        .min()
+        .ok_or_else(|| {
+            AppError::ParseError(
+                "whole-Note operation requires at least one rendered Block".to_string(),
+            )
+        })?;
+    let end = spans
+        .blocks()
+        .filter(|block| block.path.len() == 1)
+        .map(|block| block.source.end)
+        .max()
+        .ok_or_else(|| {
+            AppError::ParseError(
+                "whole-Note operation requires at least one rendered Block".to_string(),
+            )
+        })?;
+    Ok(start..end)
 }
 
 /// Resolves the exact source join after a range replacement against the span

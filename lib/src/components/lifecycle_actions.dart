@@ -183,6 +183,7 @@ class LifecycleActions {
         }
         for (final removed in result.removed) {
           _closeIfOpen(removed);
+          _clearIfSelected(removed);
         }
         return LifecycleCompleted('Deleted', warning: result.warning);
       });
@@ -233,6 +234,7 @@ class LifecycleActions {
     }
     for (final noteId in result.removed) {
       _closeIfOpen(noteId);
+      _clearIfSelected(noteId);
     }
     return LifecycleCompleted('Deleted directory', warning: result.warning);
   });
@@ -320,6 +322,11 @@ class LifecycleActions {
     // a queued future must not invalidate the action still settling ahead of
     // it.
     editing.begin();
+    // Fence an ordinary `open_note` before this request waits behind the
+    // lifecycle queue. This epoch is intentionally not the per-action
+    // lifecycle generation: a queued request must stop stale open outcomes
+    // immediately without invalidating the action currently settling.
+    _ref.read(lifecycleAdmissionProvider.notifier).next();
     final previous = _pendingAction;
     final Future<LifecycleOutcome> queued;
     late final Future<void> tail;
@@ -347,20 +354,38 @@ class LifecycleActions {
           StateError('Lifecycle action outlived its ProviderContainer.'),
         );
       }
+      // A selection might have started A -> B immediately before the gate
+      // closed. Its open result is now fenced by the admission epoch above;
+      // wait for that chain to drop the stale outcome before snapshotting
+      // active/selected state for a delete, rename, or rekey.
+      await _ref.read(activeNoteProvider.notifier).settlePendingOpen();
+      if (!_ref.mounted) {
+        return LifecycleFailed(
+          StateError('Lifecycle action outlived its ProviderContainer.'),
+        );
+      }
       final operation = _LifecycleOperation(
         generation: _ref.read(lifecycleGenerationProvider.notifier).next(),
         active: _ref.read(activeNoteProvider),
         selectedId: _ref.read(selectedNoteIdProvider),
       );
       try {
-        return await action(operation);
+        final outcome = await action(operation);
+        if (outcome is LifecycleRefused) {
+          await _restoreRefusedSelection(operation);
+        }
+        return outcome;
       } on AppError catch (error) {
-        return switch (error) {
+        final outcome = switch (error) {
           AppError_PathUnavailable(:final field0) => LifecycleRefused(
             'That name cannot be used: $field0',
           ),
           _ => LifecycleFailed(error),
         };
+        if (outcome is LifecycleRefused) {
+          await _restoreRefusedSelection(operation);
+        }
+        return outcome;
       } catch (error) {
         return LifecycleFailed(error);
       }
@@ -398,17 +423,18 @@ class LifecycleActions {
 
     if (returnedState != null &&
         invokedNoteId != null &&
-        activeId == invokedNoteId) {
+        (activeId == invokedNoteId || operation.selectedId == invokedNoteId)) {
       _ref.read(activeNoteProvider.notifier).adopt(returnedState);
       _ref
           .read(selectedNoteIdProvider.notifier)
           .select(returnedState.metadata.id);
-    } else if (activeId != null) {
+    } else if (activeId != null || operation.selectedId != null) {
       // A directory operation remapped the open Note onto a new id. Its
       // Core session was carried forward under that id, so fetching the
       // live state is a plain read — not a close/reopen of a dead id.
+      final anchoredId = activeId ?? operation.selectedId;
       for (final remap in effects.remapped) {
-        if (remap.oldId != activeId) continue;
+        if (remap.oldId != anchoredId) continue;
         final reanchored = await _openForExpectedSession(
           operation,
           expectedActive: operation.active,
@@ -477,6 +503,24 @@ class LifecycleActions {
       identical(_ref.read(activeNoteProvider), expectedActive) &&
       _ref.read(selectedNoteIdProvider) == expectedSelectedId;
 
+  /// A refused lifecycle request did not alter Core. If it intercepted a
+  /// selection that had closed A and was still opening B, the admission fence
+  /// correctly dropped B's stale pending result — but B remains a valid,
+  /// selected Note. Re-open it through the lifecycle-admitted path so the
+  /// selection does not strand the editor with no active session. This is
+  /// intentionally limited to [LifecycleRefused]: a generic failure may have
+  /// happened after Core changed state and must not resurrect an old id.
+  Future<void> _restoreRefusedSelection(_LifecycleOperation operation) async {
+    final selected = operation.selectedId;
+    if (selected == null ||
+        !_isExpectedSession(operation, operation.active, selected)) {
+      return;
+    }
+    final active = _ref.read(activeNoteProvider);
+    if (active?.metadata.id == selected) return;
+    await _ref.read(activeNoteProvider.notifier).openForLifecycle(selected);
+  }
+
   /// Closes `noteId` in the editor if it is the open one: clears both the
   /// active-note state and the selection. No `close_note` crosses the
   /// boundary — the deletion already discarded the session Core-side, and
@@ -485,6 +529,14 @@ class LifecycleActions {
     final active = _ref.read(activeNoteProvider);
     if (active == null || active.metadata.id != noteId) return;
     _ref.read(activeNoteProvider.notifier).clear();
+    _ref.read(selectedNoteIdProvider.notifier).clear();
+  }
+
+  /// An intercepted A -> B open can leave B selected but not mounted when B
+  /// is deleted. Clear that dead selection as well as the normal open session
+  /// case handled by [_closeIfOpen].
+  void _clearIfSelected(String noteId) {
+    if (_ref.read(selectedNoteIdProvider) != noteId) return;
     _ref.read(selectedNoteIdProvider.notifier).clear();
   }
 }

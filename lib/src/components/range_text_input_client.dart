@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:burlmd/src/providers/rust_api_provider.dart' show BlockRange;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart'
     show Actions, intentForMacOSSelector, primaryFocus;
@@ -10,7 +9,7 @@ import 'package:flutter/widgets.dart'
 /// This deliberately holds neither a Note id nor document text. Its empty
 /// [TextEditingValue] is only the platform's IME/clipboard handshake; Core
 /// owns the frozen [range], source splice, parse, and resulting caret.
-class RangeTextInputClient implements TextInputClient {
+class RangeTextInputClient<T> implements TextInputClient {
   RangeTextInputClient({
     required this.range,
     required this.onReplace,
@@ -19,7 +18,7 @@ class RangeTextInputClient implements TextInputClient {
     required this.onError,
   });
 
-  final BlockRange range;
+  final T range;
   final Future<void> Function(String replacement) onReplace;
   final Future<void> Function() onDelete;
   final Future<String> Function() copyMarkdown;
