@@ -44,6 +44,9 @@ class _HomeState extends ConsumerState<_Home> {
     if (Platform.environment.containsKey('BURLMD_SMOKE_F003')) {
       _stageSmokeF003();
     }
+    if (Platform.environment.containsKey('BURLMD_SMOKE_F004')) {
+      _stageSmokeF004();
+    }
   }
 
   @override
@@ -124,6 +127,43 @@ class _HomeState extends ConsumerState<_Home> {
       '```rust\nlet answer = 42;\nprintln!("{answer}");\n```',
       '- gather notes\n- link ideas\n- review draft',
       'A closing **paragraph** across Blocks',
+    ];
+    for (final source in sources) {
+      if (!mounted) return;
+      state = api.insertBlock(state!.metadata.id, [state.ast.length], source);
+    }
+    ref.invalidate(workspaceTreeProvider);
+    ref.read(selectedNoteIdProvider.notifier).select(state!.metadata.id);
+  }
+
+  /// Staging half of the `scripts/smoke-shot.sh f004-block-editing` hook
+  /// (`EDIT-F004`); the promote-and-Enter half lives in the editor. Builds
+  /// the demo Note through the Core and selects it — same structural reason
+  /// as the F002/F003 halves above. Inert without the QA-harness variable.
+  Future<void> _stageSmokeF004() async {
+    const title = 'F004 block editing';
+    final api = ref.read(rustApiProvider);
+    final deadline = DateTime.now().add(const Duration(seconds: 30));
+    while (DateTime.now().isBefore(deadline)) {
+      if (ref.read(workspaceProvider).hasValue) break;
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    }
+    NoteState? state;
+    try {
+      state = await api.createNote('', title);
+    } catch (_) {
+      // A previous smoke run left the Note behind: delete and recreate.
+      try {
+        await api.deleteNote(title);
+        state = await api.createNote('', title);
+      } catch (_) {
+        return;
+      }
+    }
+    final sources = [
+      'First paragraph with a **bold** run inside',
+      'Second paragraph stays formatted',
+      'Third paragraph for company',
     ];
     for (final source in sources) {
       if (!mounted) return;

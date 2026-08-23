@@ -7,6 +7,7 @@ import 'package:burlmd/src/components/block_view.dart';
 import 'package:burlmd/src/providers/note_providers.dart';
 import 'package:burlmd/src/providers/rust_api_provider.dart';
 import 'package:burlmd/src/rust/draft.dart';
+import 'package:burlmd/src/rust/markdown/ast.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart'
     show SelectedContentRange, Selectable, SelectionRegistrar;
@@ -68,6 +69,9 @@ class EditorState extends ConsumerState<Editor> {
     if (Platform.environment.containsKey('BURLMD_SMOKE_F003')) {
       unawaited(_runSmokeF003());
     }
+    if (Platform.environment.containsKey('BURLMD_SMOKE_F004')) {
+      unawaited(_runSmokeF004());
+    }
   }
 
   @override
@@ -105,18 +109,24 @@ class EditorState extends ConsumerState<Editor> {
     // does not own (see LifecycleEffects.rewritten's contract note).
     final focused = _focused; // re-read: the id check above may have cleared it
     if (focused != null && !identical(focused.lastSeenState, note)) {
-      try {
-        focused.source = ref
-            .read(rustApiProvider)
-            .getBlockSource(note.metadata.id, focused.path);
-        focused.resyncToken++;
+      if (focused.isPhantom) {
+        // A phantom Block holds no Core-side source row to refetch
+        // (`EDIT-F004`) — it exists nowhere but here. Re-anchor only.
         focused.lastSeenState = note;
-      } catch (_) {
-        // The refetch failed (the path may no longer exist after a
-        // structural change). Drop focus rather than edit against a dead
-        // path; the failure itself surfaces through the next boundary error
-        // report.
-        _focused = null;
+      } else {
+        try {
+          focused.source = ref
+              .read(rustApiProvider)
+              .getBlockSource(note.metadata.id, focused.path);
+          focused.resyncToken++;
+          focused.lastSeenState = note;
+        } catch (_) {
+          // The refetch failed (the path may no longer exist after a
+          // structural change). Drop focus rather than edit against a dead
+          // path; the failure itself surfaces through the next boundary error
+          // report.
+          _focused = null;
+        }
       }
     }
     // ListView.builder rather than a `children:` list, so only the blocks
@@ -133,6 +143,12 @@ class EditorState extends ConsumerState<Editor> {
     // `BlockRange` offset is a rendered offset over unfocused Blocks and no
     // focused-endpoint case is needed. The Actions wrapper above the area
     // overrides its default copy with the Core-produced Markdown path.
+    //
+    // One extra slot past the AST when a phantom Block is open (`EDIT-F004`,
+    // CAP-EDIT-03): the empty Block Enter created and CommonMark cannot
+    // represent. An EMPTY Note gets the same slot permanently — otherwise
+    // there would be nothing to click or type into to start composing.
+    final phantomSlot = note.ast.isEmpty || (_focused?.isPhantom ?? false);
     return Actions(
       actions: <Type, Action<Intent>>{CopySelectionTextIntent: _copyAction},
       child: SelectionArea(
@@ -142,8 +158,10 @@ class EditorState extends ConsumerState<Editor> {
             // it during build keeps it current across rebuilds.
             _areaContext = areaContext;
             return ListView.builder(
-              itemCount: note.ast.length,
-              itemBuilder: (context, i) => _buildEntry(context, note, i),
+              itemCount: note.ast.length + (phantomSlot ? 1 : 0),
+              itemBuilder: (context, i) => i < note.ast.length
+                  ? _buildEntry(context, note, i)
+                  : _buildPhantomEntry(note),
             );
           },
         ),
@@ -168,7 +186,11 @@ class EditorState extends ConsumerState<Editor> {
     int index,
   ) {
     final focused = _focused;
-    if (focused != null && _pathEquals(focused.path, path)) {
+    // A phantom's path names the slot PAST the AST (`EDIT-F004`); it never
+    // matches a rendered Block's path, even when the numbers coincide.
+    if (focused != null &&
+        !focused.isPhantom &&
+        _pathEquals(focused.path, path)) {
       // blockContainer replicates the Block's container decoration around
       // the promoted field (SPK-EDIT-F001 §3b): the dark pane under a code
       // Block's white ink, the blockquote border/padding, the list marker
@@ -184,6 +206,9 @@ class EditorState extends ConsumerState<Editor> {
           initialCaret: focused.caret,
           style: blockTextStyle(note.ast[index]),
           resyncToken: focused.resyncToken,
+          focusToken: focused.token,
+          onEnter: (caret) => _handleEnterRequested(path, caret),
+          onBackspaceAtStart: () => _handleBackspaceAtStart(path),
           onFocusLost: _handleFieldBlur,
         ),
       );
@@ -210,7 +235,14 @@ class EditorState extends ConsumerState<Editor> {
   /// Promotes [blockPath] to the raw editable field with the caret at
   /// [caret] — the source offset the user clicked, resolved by [BlockView].
   void _promote(List<int> blockPath, int caret) {
-    if (_focused != null && _pathEquals(_focused!.path, blockPath)) return;
+    // A phantom focus shares its numeric path with a real Block (both name
+    // the same index), so the phantom must never satisfy this early-out —
+    // clicking a Block while a phantom is open promotes that Block.
+    if (_focused != null &&
+        !_focused!.isPhantom &&
+        _pathEquals(_focused!.path, blockPath)) {
+      return;
+    }
     // Moving focus between Blocks commits the outgoing one first: its last
     // buffered text must reach the working source before anything else
     // reads the Note, and blur is the commit point (ADR-006, ADR-008).
@@ -236,9 +268,14 @@ class EditorState extends ConsumerState<Editor> {
   }
 
   /// Blur handler from the promoted field: commits unless focus already
-  /// moved elsewhere (in which case [_promote]'s commit already ran).
-  void _handleFieldBlur(List<int> blockPath) {
-    if (_focused == null || !_pathEquals(_focused!.path, blockPath)) return;
+  /// moved elsewhere — including the case where this field is a stale
+  /// generation being REPLACED (a phantom converting to a real Block after
+  /// its first character, a split's second half). A path comparison cannot
+  /// tell those apart when both generations share a path, so the field
+  /// echoes back the focus-session token it was created with; only a match
+  /// against the current session commits.
+  void _handleFieldBlur(int focusToken) {
+    if (_focused == null || _focused!.token != focusToken) return;
     _commitFocused();
   }
 
@@ -253,6 +290,13 @@ class EditorState extends ConsumerState<Editor> {
     final focused = _focused;
     if (focused == null) return;
     setState(() => _focused = null);
+    if (focused.isPhantom) {
+      // The sanctioned phantom Block is UI-side caret state ONLY (`EDIT-F004`):
+      // CommonMark has no empty paragraph, so there is nothing to commit and
+      // no `block_path` to address. Focus leaving it without anything typed
+      // simply discards it; the Note is unchanged.
+      return;
+    }
     final note = ref.read(activeNoteProvider);
     if (note == null) return;
     try {
@@ -270,6 +314,195 @@ class EditorState extends ConsumerState<Editor> {
 
   static bool _pathEquals(List<int> a, List<int> b) =>
       a.length == b.length && a.indexed.every((e) => b[e.$1] == e.$2);
+
+  // -- Block creation, splitting and merging (EDIT-F004, CAP-EDIT-03) ------
+  //
+  // Every structural change goes through a Core mutator and the returned
+  // state is adopted wholesale — the same rule blur-commit already follows.
+  // The single sanctioned exception is the empty phantom Block: CommonMark
+  // has no empty paragraph, so `insert_block("")` would splice only blank
+  // lines and the reparse would drop them, leaving no `block_path` for the
+  // first keystroke to address. It lives as UI-side caret position until the
+  // first character arrives, at which point that character IS the Block's
+  // `insert_block` source.
+
+  /// The phantom slot past the AST: an empty raw-editable field styled as a
+  /// paragraph. Also the permanent first line of an EMPTY Note, which is the
+  /// only way composing can begin there.
+  Widget _buildPhantomEntry(NoteState note) {
+    final index = _focused?.path.first ?? 0;
+    const node = AstNode.paragraph(content: []);
+    return KeyedSubtree(
+      key: const ValueKey('entry-phantom'),
+      child: BlockEditor(
+        key: const ValueKey('edit-phantom'),
+        noteId: note.metadata.id,
+        blockPath: [index],
+        source: '',
+        initialCaret: 0,
+        style: blockTextStyle(node),
+        focusToken: _focused?.token ?? -1,
+        phantom: true,
+        // Enter in a still-empty phantom cannot be represented in CommonMark
+        // (no empty paragraph), so it does nothing; Backspace at its start
+        // has nothing behind it. Both are explicit no-ops.
+        onEnter: (_) {},
+        onBackspaceAtStart: () {},
+        onPhantomInsert: _handlePhantomInsert,
+        onFocusLost: _handleFieldBlur,
+      ),
+    );
+  }
+
+  /// Enter pressed in the focused Block at source offset [caret]. At the
+  /// Block's end this opens the empty phantom Block after it — no Core call;
+  /// mid-Block it splits through `split_block`, adopting the returned state
+  /// and re-deriving focus onto the second half with the caret at its start.
+  void _handleEnterRequested(List<int> blockPath, int caret) {
+    final focused = _focused;
+    if (focused == null ||
+        focused.isPhantom ||
+        !_pathEquals(focused.path, blockPath)) {
+      return;
+    }
+    final note = ref.read(activeNoteProvider);
+    if (note == null) return;
+    final clamped = caret.clamp(0, focused.source.length);
+    // "End of the Block" means only whitespace remains after the caret —
+    // covering both caret-at-length and a Core-side trailing newline the
+    // field displays as invisible trailing space.
+    if (focused.source.substring(clamped).trim().isEmpty) {
+      setState(() {
+        _focused = _Focus(
+          noteId: focused.noteId,
+          path: [blockPath.first + 1],
+          source: '',
+          caret: 0,
+          lastSeenState: note,
+          isPhantom: true,
+        );
+      });
+      return;
+    }
+    try {
+      final api = ref.read(rustApiProvider);
+      final newState = api.splitBlock(note.metadata.id, blockPath, clamped);
+      ref.read(activeNoteProvider.notifier).adopt(newState);
+      final secondHalf = api.getBlockSource(note.metadata.id, [
+        blockPath.first + 1,
+      ]);
+      setState(() {
+        _focused = _Focus(
+          noteId: note.metadata.id,
+          path: [blockPath.first + 1],
+          source: secondHalf,
+          caret: 0,
+          lastSeenState: newState,
+        );
+      });
+    } catch (error) {
+      ref.read(editorErrorProvider.notifier).report(error);
+    }
+  }
+
+  /// The first character(s) typed into the empty phantom Block: [text]
+  /// BECOMES the new Block's `insert_block` source. The returned state is
+  /// adopted, the Block's real source is fetched against the returned path,
+  /// and focus converts to an ordinary editing session over it — subsequent
+  /// keystrokes then flow through `update_block` like any other Block.
+  void _handlePhantomInsert(String text) {
+    final focused = _focused;
+    final note = ref.read(activeNoteProvider);
+    if (note == null) return;
+    // Two legitimate entry points: an Enter-created phantom holding focus
+    // (its path names the slot past the AST), or the empty Note's
+    // ever-present first line, where no focus session exists yet.
+    if (focused != null &&
+        (!focused.isPhantom || !_pathEquals(focused.path, [note.ast.length]))) {
+      return;
+    }
+    if (focused == null && note.ast.isNotEmpty) return;
+    final index = focused?.path.first ?? 0;
+    try {
+      final api = ref.read(rustApiProvider);
+      final newState = api.insertBlock(note.metadata.id, [index], text);
+      ref.read(activeNoteProvider.notifier).adopt(newState);
+      final source = api.getBlockSource(note.metadata.id, [index]);
+      setState(() {
+        _focused = _Focus(
+          noteId: note.metadata.id,
+          path: [index],
+          source: source,
+          caret: text.length.clamp(0, source.length),
+          lastSeenState: newState,
+        );
+      });
+    } catch (error) {
+      ref.read(editorErrorProvider.notifier).report(error);
+    }
+  }
+
+  /// Backspace pressed at source offset 0 of [blockPath]. The first Block
+  /// has no predecessor, so nothing changes; any other Block merges into the
+  /// one above it through `merge_block_with_previous`, with focus re-derived
+  /// from the returned state and the caret placed at the join — where the
+  /// predecessor's own content ends, measured BEFORE the merge so a trailing
+  /// newline the Core keeps in its source rows never shifts it.
+  void _handleBackspaceAtStart(List<int> blockPath) {
+    if (blockPath.first == 0) return;
+    final note = ref.read(activeNoteProvider);
+    if (note == null) return;
+    final index = blockPath.first;
+    try {
+      final api = ref.read(rustApiProvider);
+      final previous = api.getBlockSource(note.metadata.id, [index - 1]);
+      var join = previous.length;
+      if (join > 0 && previous.endsWith('\n')) join--;
+      final newState = api.mergeBlockWithPrevious(note.metadata.id, [index]);
+      ref.read(activeNoteProvider.notifier).adopt(newState);
+      final merged = api.getBlockSource(note.metadata.id, [index - 1]);
+      setState(() {
+        _focused = _Focus(
+          noteId: note.metadata.id,
+          path: [index - 1],
+          source: merged,
+          caret: join.clamp(0, merged.length),
+          lastSeenState: newState,
+        );
+      });
+    } catch (error) {
+      ref.read(editorErrorProvider.notifier).report(error);
+    }
+  }
+
+  /// Manual-QA hook for `scripts/smoke-shot.sh f004-block-editing`
+  /// (`BURLMD_SMOKE_F004`; the demo Note is staged in `main.dart`). Promotes
+  /// the first Block with the caret at its end and presses Enter, so the
+  /// screenshot shows CAP-EDIT-03's signature state: a raw-source focused
+  /// Block with the empty new Block line beneath it. Gated behind an
+  /// environment variable set only by the QA harness; inert in normal use.
+  Future<void> _runSmokeF004() async {
+    final deadline = DateTime.now().add(const Duration(seconds: 30));
+    while (DateTime.now().isBefore(deadline)) {
+      if (!mounted) return;
+      if (ref.read(activeNoteProvider)?.ast.isNotEmpty ?? false) break;
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    }
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted || _focused != null) return;
+    try {
+      final api = ref.read(rustApiProvider);
+      final note = ref.read(activeNoteProvider)!;
+      final source = api.getBlockSource(note.metadata.id, [0]);
+      _promote([0], source.length);
+      await WidgetsBinding.instance.endOfFrame;
+      _handleEnterRequested([0], source.length);
+    } catch (_) {
+      // A staging failure must never take the app down; the shot just
+      // shows whatever state was reached.
+    }
+  }
+
   // -- Cross-Block selection and copy (EDIT-F003, CAP-EDIT-04) -------------
   //
   // Selection COORDINATES live in Flutter's SelectionArea — ephemeral UI
@@ -439,7 +672,14 @@ class _Focus {
     required this.source,
     required this.caret,
     required this.lastSeenState,
-  });
+    this.isPhantom = false,
+  }) : token = _nextFocusToken++;
+
+  /// Identifies this focus session (`EDIT-F004`). Echoed back by a blurring
+  /// field so [_handleFieldBlur] can tell "the user blurred" from "this
+  /// field's generation was replaced", which matters when both generations
+  /// share a path — a phantom converting to a real Block at the same index.
+  final int token;
 
   /// The Note this focus belongs to. Focus never survives an open-note
   /// switch: paths address Blocks within one Note, and a new Note's
@@ -455,7 +695,16 @@ class _Focus {
   NoteState lastSeenState;
 
   int resyncToken = 0;
+
+  /// True while this focus names the sanctioned empty phantom Block
+  /// (`EDIT-F004`): UI-side caret state only, never committed, never
+  /// addressed through `update_block`; its first typed character becomes an
+  /// `insert_block` source instead.
+  final bool isPhantom;
 }
+
+/// Monotonic source of [_Focus.token] values.
+int _nextFocusToken = 0;
 
 /// The editor's error surface (`SHEL-E004`): a persistent, readable panel
 /// naming what the Core reported, shown in place of note content until the
