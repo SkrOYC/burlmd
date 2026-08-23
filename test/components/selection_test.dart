@@ -421,10 +421,12 @@ void main() {
     expect(api.copyRequests, isEmpty);
   });
 
-  testWidgets('a drag crossing a focused Block cannot issue a Core range '
-      'operation; a fresh rendered selection after blur can', (tester) async {
+  testWidgets('a focused middle Block is skipped by a cross-region drag, but '
+      'that pointer epoch cannot copy until a fresh rendered selection', (
+    tester,
+  ) async {
     final api = _FakeRustApi()
-      ..sources['0'] = 'first block words'
+      ..sources['1'] = 'second block words'
       ..commitResult = _note([
         _plainParagraph('first block words'),
         _plainParagraph('second block words'),
@@ -436,45 +438,51 @@ void main() {
       _plainParagraph('third block words'),
     ], api: api);
 
-    await tester.tap(find.byKey(const ValueKey('block-0')), warnIfMissed: true);
+    await tester.tap(find.byKey(const ValueKey('block-1')), warnIfMissed: true);
     await tester.pump();
     await tester.pump();
 
-    final field = tester.getRect(
-      find.byWidgetPredicate(
-        (widget) => widget is EditableText && !widget.readOnly,
-      ),
-    );
+    var clipboard = 'unchanged';
+    mockClipboard(tester, (text) => clipboard = text);
+    final first = _textBox(tester, 'first block');
     final third = _textBox(tester, 'third block');
-    await dragSelect(
-      tester,
-      field.topLeft + Offset(4 * 14 + 7, field.height / 2),
-      third.topLeft + Offset(5 * 14 + 7, third.height / 2),
+    final gesture = await tester.startGesture(
+      first.topLeft + Offset(4 * 14 + 7, first.height / 2),
+      kind: PointerDeviceKind.mouse,
     );
+    await tester.pump();
+    // This crosses the focused middle field. The region can select around
+    // that hole, but the pointer began in the focused epoch.
+    await gesture.moveTo(third.topLeft + Offset(5 * 14 + 7, third.height / 2));
+    await tester.pump();
+    // Blur before pointer-up: this is the race the range guard must reject.
+    FocusManager.instance.primaryFocus?.unfocus();
+    await tester.pump();
+    await tester.pump();
+    await gesture.up();
+    await tester.pump();
     await pressWithControl(tester, LogicalKeyboardKey.keyC);
     await tester.pumpAndSettle();
     expect(
       api.copyRequests,
       isEmpty,
       reason:
-          'the focused EditableText owns this gesture; no BlockRange may be '
-          'resolved while its span map is uncommitted',
+          'the drag crossed the focused interior, so no BlockRange may be '
+          'resolved from this stale pointer epoch',
     );
-
-    FocusManager.instance.primaryFocus?.unfocus();
-    await tester.pump();
-    await tester.pump();
+    expect(clipboard, 'unchanged', reason: 'the fallback copy is suppressed');
     expect(find.byType(EditableText), findsNothing);
 
-    final first = _textBox(tester, 'first block');
+    final renderedFirst = _textBox(tester, 'first block');
     final renderedThird = _textBox(tester, 'third block');
     await dragSelect(
       tester,
-      first.topLeft + Offset(4 * 14 + 7, first.height / 2),
+      renderedFirst.topLeft + Offset(4 * 14 + 7, renderedFirst.height / 2),
       renderedThird.topLeft + Offset(5 * 14 + 7, renderedThird.height / 2),
     );
     await pressWithControl(tester, LogicalKeyboardKey.keyC);
     await tester.pumpAndSettle();
     expect(api.copyRequests, [_matchesRange(0, 4, 2, 5)]);
+    expect(clipboard, _FakeRustApi.coreMarkdown);
   });
 }

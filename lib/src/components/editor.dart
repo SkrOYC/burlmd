@@ -226,14 +226,14 @@ class EditorState extends ConsumerState<Editor> {
     if (focused != null &&
         !focused.isPhantom &&
         _pathEquals(focused.path, path)) {
-      // blockContainer replicates the Block's container decoration around
-      // the promoted field (SPK-EDIT-F001 §3b): the dark pane under a code
-      // Block's white ink, the blockquote border/padding, the list marker
-      // column — the same builder the unfocused render uses, so neither
-      // path can drift from the other.
-      return blockContainer(
+      // The invisible baseline is the complete formatted Block (including
+      // any code pane, quote border, or list marker) exactly once. The
+      // positioned editor receives its matching decoration exactly once too;
+      // wrapping the slot itself would decorate the baseline a second time
+      // and reserve the wrong geometry.
+      return blockPromotionSlot(
         note.ast[index],
-        blockPromotionSlot(
+        blockContainer(
           note.ast[index],
           BlockEditor(
             key: ValueKey('edit-$index'),
@@ -641,6 +641,11 @@ class EditorState extends ConsumerState<Editor> {
       // ignore: invalid_use_of_protected_member
       return fallback?.invoke(CopySelectionTextIntent.copy);
     }
+    // A pointer sequence that began in a raw field may have blurred it while
+    // crossing the surrounding region. It has no valid rendered endpoints;
+    // suppress the fallback as well as the Core path so it cannot copy a
+    // misleading partial selection. A new rendered pointer-down clears this.
+    if (_requiresFreshRenderedSelection) return null;
     final range = selectedBlockRange();
     if (range == null) {
       // ignore: invalid_use_of_protected_member
