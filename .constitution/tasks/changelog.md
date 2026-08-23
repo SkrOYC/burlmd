@@ -1,5 +1,33 @@
 # Stage 4: Tasks Changelog
 
+## v1.8.0
+Evolution pass consuming Technical Implementation v1.6.0. Minor bump: the
+remaining active Editor Depth tickets materially expand in scope and effort,
+while their dependency topology stays unchanged.
+
+- `EDIT-F005` remains 2 points but is now implementation-ready: platform-primary
+  B/I/E and platform-primary+Shift+X are explicit, reversed selection is
+  preserved, active composition is immutable, and the smoke is required to be
+  `BURLMD_SMOKE_F005=1` readiness-gated.
+- `EDIT-F006` grows 5 → 8 points and now owns the Rust/FFI/index/provider/
+  generated/UI/rendered-Link/smoke path. Its trigger grammar, immutable
+  snapshot rejection, 10-result bound, Core insertion text, and follow-time
+  Core re-resolution/create path all trace to Stage 3 v1.6.0.
+- `EDIT-F007` grows 3 → 8 points and now owns the Rust/FFI/provider/generated
+  bindings/editor/direct `TextInputClient` proxy/tests/smoke path. Its gates
+  require one atomic Core range operation for type, delete/backspace and paste;
+  Core-returned Block-or-Phantom caret; partial remainders; UTF-16 emoji; and
+  composition lifecycle behavior.
+- Recomputed the active Epic F total to **38 points** and its critical path to
+  **23 points**: `EDIT-F001` → `EDIT-F002` → `EDIT-F003` → `EDIT-F007` (the
+  F004 branch ties F003). Completed ticket rows stay in the active Epic and
+  count until epic closeout, matching the repository's current epic-level
+  archival convention; only completed *epics* are excluded from the active
+  total and graph.
+- Exact ticket gates now quote the Stage 3 guidelines' focused/full Rust tests,
+  FRB codegen, Flutter suites, env-prefixed readiness smoke commands, analyze,
+  diff, and debug-marker checks.
+
 ## v1.7.1
 Independent-review correction to **EDIT-F001**: the original Spike's single-commit STOP remains historical rather than being rewritten. A separately committed correction is explicitly allowed for independent-review findings, with its out-of-scope production/test/ADR/evidence touches documented in the active Epic. It closes the focused-drag range loophole, adds durable production-font `hitl_sil` captures, and stabilizes raw-source wrap-boundary height without changing the Stage 3 model.
 

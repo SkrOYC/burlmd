@@ -1,12 +1,12 @@
 ---
-version: v1.7.0
+version: v1.8.0
 ---
 
 # Active Backlog Summary
 
-**Total Active Story Points:** 30
+**Total Active Story Points:** 38
 
-- Epic F — Editor Depth: 30
+- Epic F — Editor Depth: 38
 
 Epics A through E (126 points — 10, 23, 16, 50 and 27, summed from the ticket efforts in `completed/`) are complete and archived under `completed/`; they contribute nothing to the totals or the graph below.
 
@@ -14,14 +14,16 @@ Epic E is what changed between v1.6.0 and this revision, and it changed the kind
 
 ## Critical Path
 
-The longest dependency chain is **18 of the 30 points**. Everything else can be scheduled around it.
+The longest dependency chain is **23 of the 38 points**. Everything else can be scheduled around it.
 
 1. `EDIT-F001` — Spike: Rendered-to-Raw Promotion Fidelity
 2. `EDIT-F002` — Live Preview Block Promotion
 3. `EDIT-F003` — Cross-Block Selection and Copy
 4. `EDIT-F007` — Editing Across a Multi-Block Selection
 
-With Epic E archived, the chain into `EDIT-F001` is no longer a story worth telling: its remaining dependency, `SHEL-E004`, is done, so the Spike is simply the root of the path, which is now entirely intra-epic. `EDIT-F003` and `EDIT-F004` remain interchangeable at step 3 — both are 5 points, both depend only on `EDIT-F002`, and both feed `EDIT-F007`, so the chain measures 18 either way. `EDIT-F003` stays listed because cross-Block selection is the harder of the two to retrofit.
+With Epic E archived, the chain into `EDIT-F001` is no longer a story worth telling: its remaining dependency, `SHEL-E004`, is done, so the Spike is simply the root of the path, which is now entirely intra-epic. `EDIT-F003` and `EDIT-F004` remain interchangeable at step 3 — both are 5 points, both depend only on `EDIT-F002`, and both feed `EDIT-F007`, so the chain measures 23 either way. `EDIT-F003` stays listed because cross-Block selection is the harder of the two to retrofit. `EDIT-F006` now owns a Core resolver and FRB/provider regeneration, but remains parallel after F002; it adds active scope without changing the dependency topology.
+
+The total deliberately continues to include delivered `EDIT-F001`–`EDIT-F004`: the repository archives an Epic only at epic closeout, so its active-epic convention counts every ticket in that Epic rather than subtracting delivered ticket rows ad hoc. The 38-point figure is therefore the Epic F total (2 + 8 + 5 + 5 + 2 + 8 + 8), while the remaining implementation work is F005–F007.
 
 The scheduling advice carried from the last revision survives as precedent rather than instruction: build the cheapest thing that unblocks the most work first. Here that is still the Spike — five tickets hang off `EDIT-F002`.
 
@@ -50,7 +52,7 @@ flowchart LR
     F004 --> F007
 ```
 
-Every Epic E node and every edge out of one is gone from the graph above, Epic E being archived. One of those edges crossed into the remaining work — `SHEL-E004 → EDIT-F001` — and it is **satisfied**, not dropped: the mounted, navigating editor it named now exists in `lib/src/`. The seven intra-epic edges were removed because their source nodes were, not because the dependencies stopped mattering; each delivered the capability its target consumes, and a ticket in this wave that cannot find what it needs should treat that as a defect to report rather than as scope to invent.
+Every Epic E node and every edge out of one is gone from the graph above, Epic E being archived. One of those edges crossed into the remaining work — `SHEL-E004 → EDIT-F001` — and it is **satisfied**, not dropped: the mounted, navigating editor it named now exists in `lib/src/`. The former Epic E intra-epic edges were removed because their source nodes were archived, not because the dependencies stopped mattering; each delivered the capability its target consumes, and a ticket in this wave that cannot find what it needs should treat that as a defect to report rather than as scope to invent. The seven displayed Epic F edges are unchanged.
 
 ## Phasing Strategy
 

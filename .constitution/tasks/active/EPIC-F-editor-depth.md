@@ -6,6 +6,13 @@ This epic became substantially cheaper and less risky when the editing model cha
 
 It is not gone entirely, and `EDIT-F003`/`EDIT-F007` are where it survives. A `BlockRange` spans *unfocused* Blocks, which the user sees rendered, so its offsets are rendered offsets and the Core must resolve them to source offsets to splice. ADR-007 decision 8 specifies that mapping and establishes that the parser already yields it. The residual risk is far smaller than what it replaced: the dangerous version mapped back from laid-out geometry, which depends on fonts and wrapping, while this one is a pure function of source text and parser output computed where the parser already runs.
 
+`EDIT-F001` through `EDIT-F004` are delivered evidence within this still-open Epic,
+not separately archived epics. They remain here and continue to count until Epic F
+closeout; this repository's active-epic convention makes the epic, rather than an
+individual ticket, the archival unit. The three tickets below are the remaining
+implementation work and are expanded against Stage 3 v1.6.0 so execution need not
+invent either an FFI surface or an input-connection lifecycle.
+
 #### EDIT-F001 Spike: Rendered-to-Raw Promotion Fidelity
 - **Type:** Spike
 - **Effort:** 2
@@ -236,67 +243,101 @@ Then the Note contains the expected Blocks in order
 - **Category:** Correctness
 - **Scope (In-Scope Files):**
   - `lib/src/components/block_editor.dart`
+  - `lib/main.dart`
+  - `scripts/smoke-shot.sh`
   - `test/components/emphasis_shortcuts_test.dart`
 - **Scope (Out-of-Scope Files):**
-  - `lib/src/components/block_view.dart`
-- **Verification Command:** `flutter test test/components/emphasis_shortcuts_test.dart && ./scripts/smoke-shot.sh f005-emphasis`
+  - `rust/src/**` (no Core or FFI contract changes)
+  - `lib/src/components/block_view.dart` (rendered Blocks stay untouched)
+- **Verification Command:** `flutter test test/components/emphasis_shortcuts_test.dart && BURLMD_SMOKE_F005=1 ./scripts/smoke-shot.sh f005-emphasis && dart analyze && git diff --check && ! rg -n '\[DEBUG-' lib rust test scripts`
 - **Expected Success Output:** `exit 0`
 - **STOP Conditions:**
   - "STOP if a shortcut manipulates the AST rather than the focused Block's source text; under this editing model emphasis is delimiter insertion."
-- **Description:** Implement CAP-EDIT-05. Standard shortcuts wrap the current selection in the corresponding Markdown delimiters within the focused Block, and unwrap when the selection is already wrapped. Because editing is raw, this is text manipulation rather than tree manipulation, which is why it is inexpensive here.
+  - "STOP if a non-collapsed `TextEditingValue.composing` range is active; do not mutate source, selection, or the controller until composition commits or cancels."
+  - "STOP if shortcut handling changes a reversed selection into a forward one, or if the smoke harness can capture a generic Workspace without the F005 ready marker."
+- **Description:** Implement CAP-EDIT-05 inside the focused raw Block only. Platform-primary B, I and E wrap/unwrap bold, italic and inline-code delimiters; platform-primary+Shift+X wraps/unwraps strikethrough. The shortcut preserves base/extent direction for a reversed selection, leaves the wrapped text selected, and inserts paired delimiters with the caret inside when collapsed. The F005 smoke stage is env-gated and reports ready only after a focused selection has visibly received a shortcut.
 - **Acceptance:**
   - **Mode:** gherkin
   - **Evidence:**
 ```gherkin
-Given text is selected in the focused Block
-When the bold shortcut is pressed
-Then the selection is wrapped in bold delimiters and remains selected
+Given text is selected forward or reversed in the focused raw Block
+When platform-primary B, I, or E is pressed
+Then the selected source is wrapped or unwrapped with bold, italic, or inline-code delimiters respectively
+And the same base/extent direction remains selected
 
-Given a selection already wrapped in bold delimiters
-When the bold shortcut is pressed
-Then the delimiters are removed
+Given a focused raw Block selection
+When platform-primary+Shift+X is pressed
+Then the selection is wrapped or unwrapped with strikethrough delimiters
 
 Given no text is selected
-When an emphasis shortcut is pressed
-Then delimiters are inserted at the caret with the caret placed between them
+When any supported emphasis shortcut is pressed
+Then its delimiters are inserted at the caret with the caret placed between them
 
-Given the italic, strikethrough and inline-code shortcuts
-When each is pressed with a selection
-Then the selection is wrapped in the corresponding delimiters
+Given an IME composition is active in the focused Block
+When any supported shortcut is pressed
+Then neither Core source nor controller selection is mutated until composition ends
+
+Given `BURLMD_SMOKE_F005=1`
+When the smoke harness captures `f005-emphasis`
+Then it succeeds only after the staged focused-Block shortcut readiness marker is present
 ```
 
 #### EDIT-F006 Link Insertion Completion
 - **Type:** Feature
-- **Effort:** 5
-- **Dependencies:** EDIT-F002, WSPC-D009, WSPC-D006 (**`WSPC-D006` is here for `createNote`, not for `linkCompletions`.** The create-on-follow criterion below calls it, and this ticket scopes no provider file and no Rust, so it cannot land the wrapper itself — the test's `RustApi` override would not compile against a class lacking the method. Recorded because the dependency is invisible from the wrapper table, which lists only `linkCompletions` for this ticket.)
+- **Effort:** 8
+- **Dependencies:** EDIT-F002, WSPC-D009, WSPC-D006
 - **Category:** Correctness
 - **Scope (In-Scope Files):**
   - `lib/src/components/link_completion.dart`
   - `lib/src/components/block_editor.dart`
+  - `lib/src/components/block_view.dart`
+  - `lib/src/components/editor.dart`
+  - `lib/src/providers/rust_api_provider.dart`
+  - `lib/src/rust/**` (generated by `flutter_rust_bridge_codegen generate`)
+  - `lib/main.dart`
+  - `scripts/smoke-shot.sh`
+  - `rust/src/api/ffi_api.rs`
+  - `rust/src/index/mod.rs`
+  - `rust/src/index/query.rs`
+  - `rust/src/okf/concept_id.rs`
+  - `rust/src/frb_generated.rs` (generated by `flutter_rust_bridge_codegen generate`)
   - `test/components/link_completion_test.dart`
+  - `test/components/editor_test.dart`
 - **Scope (Out-of-Scope Files):**
-  - `rust/src/**`
-- **Verification Command:** `flutter test test/components/link_completion_test.dart && ./scripts/smoke-shot.sh f006-link-completion`
+  - `lib/src/components/workspace_tree.dart` (no navigation redesign)
+  - `rust/src/markdown/**` (the existing parsed Link shape remains the render input)
+- **Verification Command:** `cargo test --lib --manifest-path rust/Cargo.toml link_ -- --list | rg -q ': test' && cargo test --lib --manifest-path rust/Cargo.toml link_ && cargo test --lib --manifest-path rust/Cargo.toml resolve_link_target -- --list | rg -q ': test' && cargo test --lib --manifest-path rust/Cargo.toml resolve_link_target && flutter_rust_bridge_codegen generate && flutter test test/components/link_completion_test.dart test/components/editor_test.dart && BURLMD_SMOKE_F006=1 ./scripts/smoke-shot.sh f006-link-completion && dart analyze && git diff --check && ! rg -n '\[DEBUG-' lib rust test scripts`
 - **Expected Success Output:** `exit 0`
 - **STOP Conditions:**
   - "STOP if the UI constructs the inserted link target itself; the Core returns ready-to-insert text so that a non-conformant target cannot be produced."
   - "STOP if the double-bracket trigger is left in the stored text; it is an affordance, not a storage format."
-- **Description:** Implement CAP-GRAPH-02. Typing the double-bracket trigger in a focused Block opens a completion listing Notes by title; accepting a candidate replaces the trigger with the Core-supplied Markdown link. The user never types a link target. Rendered Blocks make Links followable, and a Link whose target does not exist renders distinctly, which is what makes writing forward into an uncreated concept a usable workflow.
+  - "STOP if completion is opened without a collapsed caret and the last unmatched same-line `[[`, if it offers more than 10 candidates, or if it accepts after its immutable trigger snapshot no longer matches the focused source."
+  - "STOP if follow/create branches on stale `InlineElement::Link.exists`; call `resolve_link_target` at activation and use only its `Existing` or `Missing` result."
+  - "STOP if the env-gated smoke does not reject capture before its F006 completion/follow readiness marker."
+- **Description:** Implement CAP-GRAPH-02 through CAP-GRAPH-04 using the v1.6.0 FFI surface. Detect only the last unmatched `[[` before a collapsed caret on its line, snapshot the trigger range and source immutably, and request at most 10 Core candidates. Acceptance replaces exactly that still-valid snapshot with Core-provided Markdown. Rendered internal Links use `resolve_link_target` at activation: `Existing` opens its returned Note, while `Missing` exposes creation using Core-derived `target_id`, `directory_path`, and `title`, then opens the created Note. `exists` remains a visual affordance only.
 - **Acceptance:**
-  - **Mode:** gherkin
+  - **Mode:** contract_test
   - **Evidence:**
 ```gherkin
 Given a focused Block and existing Notes
-When the double-bracket trigger is typed
-Then a completion appears listing Notes matching what follows it
+When a collapsed caret has a last unmatched `[[` on the same line
+Then a completion appears for the text after that trigger with no more than 10 Core candidates
+
+Given `[[` occurs before a newline, is closed by `]]`, or the selection is not collapsed
+When the focused source changes
+Then no completion is eligible
 
 Given the completion is open
-When a candidate is accepted
-Then the trigger is replaced by a Markdown link supplied by the Core and no double brackets remain in the text
+When its saved source and trigger range still match and a candidate is accepted
+Then exactly that range is replaced by the Core-supplied Markdown link and no double brackets remain there
+
+Given the completion is open
+When any edit, selection expansion, focus change, newline, or closing brackets invalidate its immutable snapshot
+Then it dismisses and cannot insert a stale candidate
 
 Given a Block containing a Link to an existing Note
 When the Block is rendered
-Then the Link is followable and opens the target Note (`CAP-GRAPH-03`, whose only home in this wave is this ticket even though its subject is insertion)
+Then following it calls `resolve_link_target` and opens only the returned `Existing.note_id`
 
 Given a Block containing a Link whose target does not exist
 When the Block is rendered
@@ -304,54 +345,90 @@ Then the Link renders distinctly from a resolving Link
 
 Given a Link whose target does not exist
 When it is followed
-Then the target Note is created and opened — the second half of `CAP-GRAPH-04`, which the contract asserts the UI performs and which no criterion previously covered
+Then `resolve_link_target` returns `Missing` with Core-derived creation fields
+And accepting creation passes those fields unchanged to `create_note` and opens the result
 
 Given a Note is open holding a ghost Link, and its target is created elsewhere in the meantime
 When that Link is followed
-Then the existing Note opens rather than the create path running — `InlineElement::Link.exists` is advisory and goes stale the moment any other Note is created or deleted, so the follow path re-resolves against the index rather than trusting the flag; trusting it here calls `create_note` and gets `PathUnavailable` for a Link that resolves perfectly well, which `SHEL-E005`'s STOP then forbids working around
+Then re-resolution returns `Existing` and opens it without creation
 
 Given a Note is open holding a resolving Link, and its target is deleted elsewhere in the meantime
 When that Link is followed
-Then the create-on-follow offer appears rather than a not-found error — the mirror of the case above, from the same stale flag
+Then re-resolution returns `Missing` and presents create-on-follow rather than a not-found error
 
-Given the completion is open
-When it is dismissed without accepting
-Then the typed text is left exactly as entered
+Given `BURLMD_SMOKE_F006=1`
+When the smoke harness captures `f006-link-completion`
+Then it succeeds only after a staged valid completion and rendered-Link follow readiness marker is present
 ```
 
 #### EDIT-F007 Editing Across a Multi-Block Selection
 - **Type:** Feature
-- **Effort:** 3
+- **Effort:** 8
 - **Dependencies:** EDIT-F003, EDIT-F004
 - **Category:** Correctness
 - **Scope (In-Scope Files):**
   - `lib/src/components/editor.dart`
   - `lib/src/components/block_editor.dart`
+  - `lib/src/components/range_text_input_client.dart`
+  - `lib/src/providers/rust_api_provider.dart`
+  - `lib/src/rust/**` (generated by `flutter_rust_bridge_codegen generate`)
+  - `lib/main.dart`
+  - `scripts/smoke-shot.sh`
+  - `rust/src/api/ffi_api.rs`
+  - `rust/src/markdown/splice.rs`
+  - `rust/src/workspace/persist.rs`
+  - `rust/src/frb_generated.rs` (generated by `flutter_rust_bridge_codegen generate`)
   - `test/components/selection_editing_test.dart`
+  - `test/components/text_input_client_test.dart`
+  - `test/components/selection_test.dart`
 - **Scope (Out-of-Scope Files):**
-  - `rust/src/**`
-- **Verification Command:** `flutter test test/components/selection_editing_test.dart && ./scripts/smoke-shot.sh f007-range-editing`
+  - `lib/src/components/block_view.dart` (selection rendering stays F003's surface)
+  - `rust/src/markdown/parser.rs` (no parser grammar change)
+- **Verification Command:** `cargo test --lib --manifest-path rust/Cargo.toml range_ -- --list | rg -q ': test' && cargo test --lib --manifest-path rust/Cargo.toml range_ && cargo test --lib --manifest-path rust/Cargo.toml && flutter_rust_bridge_codegen generate && flutter test test/components/selection_editing_test.dart test/components/text_input_client_test.dart test/components/selection_test.dart && BURLMD_SMOKE_F007=1 ./scripts/smoke-shot.sh f007-range-editing && dart analyze && git diff --check && ! rg -n '\[DEBUG-' lib rust test scripts`
 - **Expected Success Output:** `exit 0`
 - **STOP Conditions:**
   - "STOP if a range operation is implemented as a sequence of per-Block edits; that is not atomic and leaves the Note in intermediate states the Core never sanctioned."
-- **Description:** Close the last gap in ADR-006 — the interaction it identifies as the fiddliest in the design. Typing over, deleting, or pasting into a selection that spans Blocks is dispatched to the Core as one range operation, and the caret is re-derived from the returned state. Doing this per-Block instead would produce intermediate states and lose atomicity.
+  - "STOP if a hidden `TextField`, Dart-owned document buffer, or more than one live `TextInputConnection` replaces the direct `TextInputClient` proxy ADR-012 specifies."
+  - "STOP if an active non-collapsed composing range causes a Core mutation, or if a Core result overwrites it before composition resolves or the connection is cancelled."
+  - "STOP if Dart derives a post-range caret, fails to honor `RangeEditCaret::Phantom`, or the smoke accepts a non-ready generic window."
+- **Description:** Close ADR-006's remaining interaction using ADR-012's direct `TextInputClient` proxy. While an unfocused rendered selection spans Blocks, its one connection forwards complete committed platform edits as exactly one Core range delete or replacement (typing and paste both replace). Core returns `RangeEditResult { state, caret }`; Presentation installs only that state/caret, including the empty-Note phantom. The proxy owns connection close and composition cancellation/commit boundaries so keyboard, clipboard, and IME behavior remain native without Dart owning Note content.
 - **Acceptance:**
-  - **Mode:** gherkin
+  - **Mode:** contract_test
   - **Evidence:**
 ```gherkin
 Given a selection spanning three Blocks
 When a character is typed
-Then the selection is replaced in a single operation and the caret sits after the inserted character
+Then one `replace_range` call is made and its `RangeEditResult.caret` places the caret after the inserted character
 
 Given a selection spanning three Blocks
 When Delete or Backspace is pressed
-Then the selected content is removed in a single operation
+Then exactly one `delete_range` call is made and no per-Block Core calls occur
+
+Given a selection spanning three Blocks
+When clipboard paste replaces it
+Then exactly one `replace_range` call carries the pasted text
 
 Given a selection spanning parts of two Blocks
 When it is replaced
 Then the unselected remainders of both Blocks are preserved and joined correctly
 
-Given a range operation completes
-When the caret position is checked
-Then it was derived from the returned state rather than from a path retained across the call
+Given a range deletion removes the final editable Block
+When Core returns `RangeEditCaret::Phantom(insertion_index)`
+Then Presentation creates no Dart Block and focuses the existing phantom insertion slot at that index
+
+Given a selection or replacement contains an emoji
+When Core returns `RangeEditCaret::Block.source_offset_utf16`
+Then the UTF-16 caret is applied without splitting a surrogate pair
+
+Given an IME composing range is active in the proxy
+When the platform updates the composing value, selection changes, or focus leaves
+Then no Core range mutation occurs until composition commits, or the connection is closed and composition visibly cancels
+
+Given an IME composition commits while a cross-Block selection is active
+When its committed text replaces that selection
+Then exactly one `replace_range` operation carries the committed text
+
+Given `BURLMD_SMOKE_F007=1`
+When the smoke harness captures `f007-range-editing`
+Then it succeeds only after the staged type-over, delete, paste, and Core-returned-caret readiness marker is present
 ```

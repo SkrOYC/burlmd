@@ -899,20 +899,49 @@ pub fn copy_range_as_markdown(note_id: String, range: BlockRange) -> Result<Stri
 }
 
 #[frb(sync)]
-pub fn delete_range(note_id: String, range: BlockRange) -> Result<NoteState, AppError> {
+pub fn delete_range(note_id: String, range: BlockRange) -> Result<RangeEditResult, AppError> {
     unimplemented!()
 }
 
-/// Replaces a multi-Block selection with text -- typing over a selection that
-/// crosses Blocks. The fiddliest interaction in ADR-006; the caller must
-/// re-derive caret position from the returned state.
+/// Replaces a multi-Block selection with text -- typing or pasting over a
+/// selection that crosses Blocks. This and `delete_range` are one atomic Core
+/// operation each: one source replacement, reparse, draft-row write, undo
+/// entry and authoritative caret result. A UI loop over Blocks is forbidden.
+/// The caller must apply the returned caret rather than retaining a pre-edit
+/// path or deriving one from the replacement length.
 #[frb(sync)]
 pub fn replace_range(
     note_id: String,
     range: BlockRange,
     replacement: String,
-) -> Result<NoteState, AppError> {
+) -> Result<RangeEditResult, AppError> {
     unimplemented!()
+}
+
+/// Authoritative caret location after a range replacement or deletion.
+///
+/// `Block` names an editable leaf in the returned state. `source_offset_utf16`
+/// is an offset in that leaf's raw source, in Flutter UTF-16 code units; it
+/// follows `BlockCaret` and `BlockRange`'s surrogate-pair rejection rule.
+/// `Phantom` names the empty-editor insertion slot when no editable Block
+/// remains. Presentation must materialize it through the existing phantom
+/// transition, rather than inventing an empty Block in Dart.
+#[frb]
+pub enum RangeEditCaret {
+    Block {
+        block_path: Vec<usize>,
+        source_offset_utf16: usize,
+    },
+    Phantom {
+        insertion_index: usize,
+    },
+}
+
+/// The indivisible result of `delete_range` and `replace_range`.
+#[frb]
+pub struct RangeEditResult {
+    pub state: NoteState,
+    pub caret: RangeEditCaret,
 }
 
 // ---------------------------------------------------------------------------
@@ -1105,8 +1134,44 @@ pub struct LinkCompletion {
 
 /// Candidates for the completion triggered by `[[` (CAP-GRAPH-02). The
 /// trigger is a UI affordance; what gets inserted is `insert_text`.
+///
+/// Completion is eligible only for a **collapsed** caret when the last
+/// unmatched `[[` before it is on the same line. Its query is precisely the
+/// text after those brackets and before the caret. Any `]]`, newline, focus
+/// loss, selection expansion, or source change making that saved trigger
+/// snapshot false dismisses the UI list; accepting a stale candidate is
+/// forbidden. The caller requests at most 10 candidates and Core clamps a
+/// larger `limit` to 10. The UI replaces exactly the immutable trigger range
+/// with this Core-supplied `insert_text`; it neither constructs nor repairs a
+/// link destination.
 #[frb]
 pub async fn link_completions(query: String, limit: u32) -> Result<Vec<LinkCompletion>, AppError> {
+    unimplemented!()
+}
+
+/// Resolves a rendered internal Link against the index of the active
+/// Workspace at activation time (CAP-GRAPH-03 and CAP-GRAPH-04). `exists` in
+/// an AST Link is render-only advisory state and is never an input to this
+/// decision.
+///
+/// For `Missing`, Core derives the complete ordinary-creation fields from the
+/// Link's target identity; Presentation must present the create affordance and
+/// pass these fields to `create_note` unchanged. This avoids a second
+/// target-id parser in Dart and makes following a ghost deterministic.
+#[frb]
+pub enum LinkTargetResolution {
+    Existing {
+        note_id: String,
+    },
+    Missing {
+        target_id: String,
+        directory_path: String,
+        title: String,
+    },
+}
+
+#[frb]
+pub async fn resolve_link_target(target_id: String) -> Result<LinkTargetResolution, AppError> {
     unimplemented!()
 }
 
@@ -1289,7 +1354,9 @@ pub enum CollisionResolution {
     KeepIncoming,
     /// Keep both: the incoming Note arrives under a renamed identity, and
     /// inbound Links are rewritten per the lifecycle rules.
-    KeepBothRenamed { new_title: String },
+    KeepBothRenamed {
+        new_title: String,
+    },
 }
 
 /// Plans a guided consolidation from a source Workspace directory
