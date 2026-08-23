@@ -5,6 +5,7 @@ import 'dart:math' as math;
 import 'package:burlmd/src/components/block_editor.dart';
 import 'package:burlmd/src/components/block_view.dart';
 import 'package:burlmd/src/components/range_text_input_client.dart';
+import 'package:burlmd/src/components/status_message.dart';
 import 'package:burlmd/src/providers/note_providers.dart';
 import 'package:burlmd/src/providers/rust_api_provider.dart';
 import 'package:burlmd/src/providers/workspace_provider.dart';
@@ -151,15 +152,27 @@ class EditorState extends ConsumerState<Editor> {
     ref.listen<NoteState?>(activeNoteProvider, (previous, next) {
       if (!identical(previous, next)) _invalidateRenderedRange();
     });
+    ref.listen<bool>(noteSwitchingProvider, (_, switching) {
+      if (switching) _closeRangeInput();
+    });
+    ref.listen<Object?>(noteCloseFailureProvider, (_, failure) {
+      if (failure == null) return;
+      final message = AppLocalizations.of(context)!.noteCloseFailed('$failure');
+      // Acknowledge before scheduling the UI update so provider changes cannot
+      // replay this status on a rebuild. The SnackBar stays dismissible.
+      ref.read(noteCloseFailureProvider.notifier).acknowledge();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) showStatusMessage(context, message);
+      });
+    });
     final error = ref.watch(editorErrorProvider);
-    // The Core refused an operation on the active Note (an open failed, or a
-    // close on switch aborted it). Surfaced here rather than swallowed:
-    // before SHEL-E004 this widget had no error surface at all, so every
-    // such failure was invisible to the user. A refused *keystroke* write is
-    // deliberately NOT routed here — it would blank the text the user is
-    // typing; WriteTierNotice surfaces it above the editor instead.
-    if (error != null) return _ErrorSurface(message: '$error');
     final note = ref.watch(activeNoteProvider);
+    // An opening failure has no active session to retain, so it owns the pane.
+    // A close failure is acknowledged above with a nonfatal SnackBar; its old
+    // Core session stays mounted once the switch gate is released. A refused
+    // *keystroke* write is deliberately NOT routed here — it would blank the
+    // text the user is typing; WriteTierNotice surfaces it above the editor.
+    if (error != null && note == null) return _ErrorSurface(message: '$error');
     if (note == null) {
       _invalidateRenderedRange();
       _focused = null;
@@ -406,8 +419,8 @@ class EditorState extends ConsumerState<Editor> {
           );
       }
     } catch (error) {
-      if (_isCurrentLinkRequest(request, origin)) {
-        ref.read(editorErrorProvider.notifier).report(error);
+      if (linkContext.mounted && _isCurrentLinkRequest(request, origin)) {
+        _reportLinkOperationFailure(linkContext, error);
       }
     }
   }
@@ -456,15 +469,27 @@ class EditorState extends ConsumerState<Editor> {
       ref.invalidate(workspaceTreeProvider);
       ref.read(selectedNoteIdProvider.notifier).select(created.metadata.id);
     } catch (error) {
-      if (_isCurrentLinkRequest(request, origin)) {
-        ref.read(editorErrorProvider.notifier).report(error);
+      if (context.mounted && _isCurrentLinkRequest(request, origin)) {
+        _reportLinkOperationFailure(context, error);
       }
     }
+  }
+
+  /// Link resolution and target creation are retryable actions. They do not
+  /// invalidate the source Note, so use the dismissible status surface rather
+  /// than replacing that Note with the fatal open/close error panel.
+  void _reportLinkOperationFailure(BuildContext context, Object error) {
+    if (!context.mounted) return;
+    showStatusMessage(
+      context,
+      AppLocalizations.of(context)!.linkOperationFailed('$error'),
+    );
   }
 
   /// Promotes the Core-resolved editable leaf for a top-level rendered
   /// coordinate. Flutter never estimates source punctuation or nested paths.
   void _promote(List<int> topLevelPath, int renderedUtf16Offset) {
+    if (ref.read(noteSwitchingProvider)) return;
     // A phantom focus shares its numeric path with a real Block (both name
     // the same index), so the phantom must never satisfy this early-out —
     // clicking a Block while a phantom is open promotes that Block.
@@ -745,6 +770,7 @@ class EditorState extends ConsumerState<Editor> {
   /// list), so nothing survives the commit except the returned state
   /// itself.
   bool _commitFocused() {
+    if (ref.read(noteSwitchingProvider)) return false;
     final focused = _focused;
     if (focused == null || !focused.canCommit) return false;
     _closeRangeInput();
@@ -886,6 +912,7 @@ class EditorState extends ConsumerState<Editor> {
         onEnter: (_, _) {},
         onBackspaceAtStart: () {},
         onPhantomInsert: _handlePhantomInsert,
+        onPhantomMaterializedUpdate: _handlePhantomMaterializedUpdate,
         onFocusLost: _handleFieldBlur,
         onCommitEligibilityChanged: _handleCommitEligibilityChanged,
       ),
@@ -899,6 +926,7 @@ class EditorState extends ConsumerState<Editor> {
   /// Mid-Block it splits through `split_block`, adopting the returned state
   /// and re-deriving focus onto the second half with the caret at its start.
   void _handleEnterRequested(List<int> blockPath, String source, int caret) {
+    if (ref.read(noteSwitchingProvider)) return;
     final focused = _focused;
     if (focused == null ||
         !focused.canCommit ||
@@ -1063,6 +1091,7 @@ class EditorState extends ConsumerState<Editor> {
   /// and focus converts to an ordinary editing session over it — subsequent
   /// keystrokes then flow through `update_block` like any other Block.
   bool _handlePhantomInsert(String text) {
+    if (ref.read(noteSwitchingProvider)) return false;
     final focused = _focused;
     final note = ref.read(activeNoteProvider);
     if (note == null) return false;
@@ -1109,12 +1138,30 @@ class EditorState extends ConsumerState<Editor> {
     }
   }
 
+  /// Completes the handoff from the phantom controller to Core's returned
+  /// Block when multiple platform values arrive before Flutter can rebuild.
+  void _handlePhantomMaterializedUpdate(String text, TextSelection selection) {
+    if (ref.read(noteSwitchingProvider)) return;
+    final focused = _focused;
+    final note = ref.read(activeNoteProvider);
+    if (focused == null ||
+        focused.isPhantom ||
+        note == null ||
+        focused.noteId != note.metadata.id) {
+      return;
+    }
+    focused.source = text;
+    focused.caret = selection.extentOffset.clamp(0, text.length);
+    ref.read(activeNoteProvider.notifier).updateBlock(focused.path, text);
+  }
+
   /// Backspace pressed at source offset 0 of [blockPath]. The first Block
   /// has no predecessor, so nothing changes; any other Block merges into the
   /// one above it through `merge_block_with_previous`. Core reparses and
   /// returns the predecessor leaf and raw-source UTF-16 join offset, rather
   /// than asking Flutter to predict either from a tree it just invalidated.
   void _handleBackspaceAtStart(List<int> blockPath) {
+    if (ref.read(noteSwitchingProvider)) return;
     if (!_canReplaceFocusedSession) return;
     final note = ref.read(activeNoteProvider);
     if (note == null) return;
@@ -1817,11 +1864,10 @@ class _Focus {
 int _nextFocusToken = 0;
 
 /// The editor's error surface (`SHEL-E004`): a persistent, readable panel
-/// naming what the Core reported, shown in place of note content until the
-/// next successful open clears [editorErrorProvider]. Scrollable and
-/// soft-wrapped so even a long Rust-side message can neither overflow nor
-/// clip. Public because other components surface Core errors through the
-/// same panel.
+/// naming what the Core reported when there is no active Note session to
+/// retain. Scrollable and soft-wrapped so even a long Rust-side message can
+/// neither overflow nor clip. Public because other components surface Core
+/// errors through the same panel.
 class _ErrorSurface extends StatelessWidget {
   const _ErrorSurface({required this.message});
 

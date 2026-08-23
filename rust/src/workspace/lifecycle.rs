@@ -3505,6 +3505,41 @@ mod tests {
         assert!(session.is_some(), "create_note must register a session");
     }
 
+    /// A newly created Note has conformant frontmatter but no editable Block,
+    /// so the editor addresses its first insertion through the `[0]` phantom
+    /// path. That sentinel must append after the existing bytes rather than
+    /// mistake an empty span map for an empty Note.
+    #[test]
+    fn a_created_note_preserves_its_frontmatter_when_its_first_block_is_inserted() {
+        let f = fixture();
+        create_note(&f.workspace, "", "Fresh").unwrap();
+        let created_source = f.read("Fresh.md");
+        let session = persist::lookup(f.workspace.id(), "Fresh").unwrap().unwrap();
+
+        let (state, focus) = session
+            .continue_block_after(&[0], "First editable Block")
+            .unwrap();
+        let expected = format!("{created_source}First editable Block\n");
+
+        assert_eq!(*session.working_source().unwrap(), expected);
+        assert_eq!(focus, vec![0]);
+        assert!(state.metadata.okf_conformant);
+        assert_eq!(state.metadata.title, "Fresh");
+
+        session.flush().unwrap();
+        let written = f.read("Fresh.md");
+        assert_eq!(written, expected);
+        assert!(
+            crate::okf::read_frontmatter(&written).is_conformant(),
+            "the preserved created frontmatter must remain conformant: {written:?}"
+        );
+        assert_eq!(
+            &written[..created_source.len()],
+            created_source,
+            "the created frontmatter bytes must remain byte-identical"
+        );
+    }
+
     /// A created Note enters version history at creation, like every other
     /// lifecycle operation.
     ///

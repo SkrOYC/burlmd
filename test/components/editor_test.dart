@@ -6,6 +6,7 @@ import 'package:burlmd/src/providers/note_providers.dart';
 import 'package:burlmd/src/providers/rust_api_provider.dart';
 import 'package:burlmd/src/providers/workspace_provider.dart';
 import 'package:burlmd/src/rust/draft.dart';
+import 'package:burlmd/src/rust/error.dart';
 import 'package:burlmd/src/rust/markdown/ast.dart';
 import 'package:burlmd/src/screens/workspace.dart';
 import 'package:flutter/material.dart';
@@ -92,7 +93,25 @@ class _FakeRustApi extends RustApi {
     lastNoteId = noteId;
     lastBlockPath = blockPath;
     lastSource = newSource;
+    sources[blockPath.join('/')] = newSource;
     updateCount++;
+  }
+
+  StructuralEdit? continuationResult;
+  int continuationCount = 0;
+
+  @override
+  StructuralEdit continueBlockAfter(
+    String noteId,
+    List<int> blockPath,
+    String source,
+  ) {
+    continuationCount++;
+    final result =
+        continuationResult ??
+        (throw StateError('no continuation result prepared'));
+    sources[result.blockPath.join('/')] = source;
+    return result;
   }
 
   @override
@@ -106,11 +125,20 @@ class _FakeRustApi extends RustApi {
 class _LinkResolutionApi extends _FakeRustApi {
   final Map<String, Completer<LinkTargetResolution>> resolutions = {};
   final List<String> calls = [];
+  Object? resolveError;
+  Object? createError;
 
   @override
   Future<LinkTargetResolution> resolveLinkTarget(String targetId) {
     calls.add(targetId);
+    if (resolveError case final Object error) return Future.error(error);
     return resolutions[targetId]!.future;
+  }
+
+  @override
+  Future<NoteState> createLinkTarget(String targetId) {
+    if (createError case final Object error) return Future.error(error);
+    return Future.error(StateError('no create result prepared'));
   }
 }
 
@@ -125,6 +153,7 @@ class _ShellRustApi extends RustApi {
     this.failOpenFor = const {},
     this.failCloseFor = const {},
     this.openGates = const {},
+    this.closeGates = const {},
   });
 
   final List<TreeNode> tree;
@@ -141,9 +170,11 @@ class _ShellRustApi extends RustApi {
   /// round trip can be held genuinely in flight while the next selection
   /// races in (the interleaving that used to skip close).
   final Map<String, Completer<void>> openGates;
+  final Map<String, Completer<void>> closeGates;
 
   /// Every open/close call in issue order, as `'open:<id>'` / `'close:<id>'`.
   final List<String> calls = [];
+  final List<String> updatedSources = [];
 
   NoteState _stateFor(String noteId) => NoteState(
     ast: [
@@ -187,7 +218,28 @@ class _ShellRustApi extends RustApi {
   @override
   Future<void> closeNote(String noteId) async {
     calls.add('close:$noteId');
+    final gate = closeGates[noteId];
+    if (gate != null && !gate.isCompleted) await gate.future;
     if (failCloseFor.contains(noteId)) throw Exception('close refused');
+  }
+
+  @override
+  String getBlockSource(String noteId, List<int> blockPath) =>
+      'Rendered $noteId';
+
+  @override
+  BlockCaret resolveBlockCaret(
+    String noteId,
+    List<int> topLevelPath,
+    int renderedUtf16Offset,
+  ) => BlockCaret(
+    blockPath: Uint64List.fromList(topLevelPath),
+    caretOffset: BigInt.from(renderedUtf16Offset),
+  );
+
+  @override
+  void updateBlock(String noteId, List<int> blockPath, String newSource) {
+    updatedSources.add('$noteId:$newSource');
   }
 }
 
@@ -1577,6 +1629,50 @@ void main() {
     );
   });
 
+  testWidgets(
+    'multiple phantom updates before a pump reach the returned Core Block',
+    (tester) async {
+      final materialized = _testNoteState([_plainParagraph('a')]);
+      final api = _FakeRustApi()
+        ..continuationResult = StructuralEdit(
+          state: materialized,
+          blockPath: Uint64List.fromList([0]),
+          caretOffset: BigInt.one,
+        );
+      final container = await pumpEditor(tester, const [], api: api);
+
+      // These are separate platform values in one frame: rebuilding only
+      // after the first used to strand `ab`/`abc` in the phantom controller.
+      tester.testTextInput.updateEditingValue(
+        const TextEditingValue(
+          text: 'a',
+          selection: TextSelection.collapsed(offset: 1),
+        ),
+      );
+      tester.testTextInput.updateEditingValue(
+        const TextEditingValue(
+          text: 'ab',
+          selection: TextSelection.collapsed(offset: 2),
+        ),
+      );
+      tester.testTextInput.updateEditingValue(
+        const TextEditingValue(
+          text: 'abc',
+          selection: TextSelection.collapsed(offset: 3),
+        ),
+      );
+
+      expect(api.continuationCount, 1);
+      expect(api.lastBlockPath, [0]);
+      expect(api.lastSource, 'abc');
+
+      await tester.pump();
+      expect(container.read(activeNoteProvider), same(materialized));
+      expect(_field(tester).controller.text, 'abc');
+      expect(_field(tester).focusNode.hasFocus, isTrue);
+    },
+  );
+
   testWidgets('stale internal-Link resolutions cannot navigate after a '
       'newer activation or source-Note change', (tester) async {
     final first = Completer<LinkTargetResolution>();
@@ -1659,6 +1755,55 @@ void main() {
     expect(container.read(selectedNoteIdProvider), 'latest-target');
   });
 
+  testWidgets('a failed Link resolution keeps the source Note mounted and '
+      'reports a dismissible operation failure', (tester) async {
+    final api = _LinkResolutionApi()..resolveError = StateError('index busy');
+    final container = await pumpEditor(tester, [
+      _linkedParagraph('Broken target', 'broken-target'),
+    ], api: api);
+
+    await activateInternalLink(tester, 0, 'broken-target');
+    await tester.pump();
+
+    expect(container.read(editorErrorProvider), isNull);
+    expect(find.text('Broken target'), findsOneWidget);
+    expect(
+      find.textContaining('Could not complete the linked-note action'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('a PathUnavailable link-target create keeps the source Note '
+      'mounted and retryable', (tester) async {
+    final api = _LinkResolutionApi()
+      ..createError = const AppError.pathUnavailable('target already exists');
+    api.resolutions['missing-target'] = Completer<LinkTargetResolution>()
+      ..complete(
+        const LinkTargetResolution_Missing(
+          targetId: 'missing-target',
+          directoryPath: 'projects',
+          title: 'Missing target',
+        ),
+      );
+    final container = await pumpEditor(tester, [
+      _linkedParagraph('Missing target', 'missing-target'),
+    ], api: api);
+
+    await activateInternalLink(tester, 0, 'missing-target');
+    await tester.pump();
+    await tester.tap(find.text('Create note'));
+    await tester.pump();
+    await tester.pump();
+
+    expect(container.read(editorErrorProvider), isNull);
+    expect(find.text('Missing target'), findsOneWidget);
+    expect(find.textContaining('target already exists'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('internal-link-focus-0-missing-target')),
+      findsOneWidget,
+    );
+  });
+
   // -- SHEL-E004 ----------------------------------------------------------
 
   testWidgets('selecting a note in the tree renders its blocks as output', (
@@ -1708,6 +1853,43 @@ void main() {
     // outgoing session never reaches version history.
     expect(api.calls, ['open:note-a', 'close:note-a', 'open:note-b']);
     expect((container.read(activeNoteProvider)!).metadata.id, 'note-b');
+  });
+
+  testWidgets('typing while a gated switch closes and opens cannot mutate the '
+      'outgoing Note or survive only in its controller', (tester) async {
+    final closeGate = Completer<void>();
+    final api = _ShellRustApi(
+      [
+        TreeNode.note(id: 'note-a', title: 'Note A', path: 'A.md'),
+        TreeNode.note(id: 'note-b', title: 'Note B', path: 'B.md'),
+      ],
+      closeGates: {'note-a': closeGate},
+    );
+    await _pumpShell(tester, api);
+
+    await tester.tap(find.text('Note A'));
+    await tester.pumpAndSettle();
+    await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
+    expect(_field(tester).controller.text, 'Rendered note-a');
+
+    await tester.tap(find.text('Note B'));
+    await tester.pump();
+    expect(api.calls, ['open:note-a', 'close:note-a']);
+
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(
+        text: 'doomed input',
+        selection: TextSelection.collapsed(offset: 12),
+      ),
+    );
+    await tester.pump();
+    expect(api.updatedSources, isEmpty);
+    expect(_field(tester).controller.text, 'Rendered note-a');
+
+    closeGate.complete();
+    await tester.pumpAndSettle();
+    expect(api.calls, ['open:note-a', 'close:note-a', 'open:note-b']);
+    expect(find.text('Rendered note-b'), findsOneWidget);
   });
 
   testWidgets(
@@ -1764,16 +1946,59 @@ void main() {
       // Selection rolled back so the tree highlight names the note actually
       // shown in the editor, not the one the Core refused to reach.
       expect(container.read(selectedNoteIdProvider), 'note-a');
-      // And the failure stays visible on the error surface.
-      expect(
-        '${container.read(editorErrorProvider)}',
-        contains('close refused'),
-      );
+      // Close refusal is nonfatal; a mounted Editor consumes its one-shot
+      // status. This provider-only controller test leaves that value pending.
+      expect(container.read(editorErrorProvider), isNull);
+      expect(container.read(noteCloseFailureProvider), isA<Exception>());
     },
   );
 
-  testWidgets('a failed open of the newly selected note also rolls the tree '
-      'selection back to the still-open note', (tester) async {
+  testWidgets('a failed gated close restores the coherent old raw editor', (
+    tester,
+  ) async {
+    final closeGate = Completer<void>();
+    final api = _ShellRustApi(
+      [
+        TreeNode.note(id: 'note-a', title: 'Note A', path: 'A.md'),
+        TreeNode.note(id: 'note-b', title: 'Note B', path: 'B.md'),
+      ],
+      failCloseFor: {'note-a'},
+      closeGates: {'note-a': closeGate},
+    );
+    await _pumpShell(tester, api);
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(WorkspaceScreen)),
+    );
+
+    await tester.tap(find.text('Note A'));
+    await tester.pumpAndSettle();
+    await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
+    await tester.enterText(_writableFields(), 'saved before switch');
+    await tester.pump();
+
+    await tester.tap(find.text('Note B'));
+    await tester.pump();
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(
+        text: 'doomed input',
+        selection: TextSelection.collapsed(offset: 12),
+      ),
+    );
+    await tester.pump();
+    expect(api.updatedSources, ['note-a:saved before switch']);
+
+    closeGate.complete();
+    await tester.pumpAndSettle();
+    expect(api.calls, ['open:note-a', 'close:note-a']);
+    expect(_field(tester).controller.text, 'saved before switch');
+    expect(_field(tester).readOnly, isFalse);
+    expect(find.textContaining('Could not switch notes'), findsOneWidget);
+    expect(find.textContaining('close refused'), findsOneWidget);
+    expect(container.read(noteCloseFailureProvider), isNull);
+  });
+
+  testWidgets('a failed incoming open leaves no writable snapshot of the '
+      'already-closed Note', (tester) async {
     final api = _ShellRustApi([], failOpenFor: {'note-b'});
     final container = ProviderContainer(
       overrides: [rustApiProvider.overrideWithValue(api)],
@@ -1788,12 +2013,11 @@ void main() {
     container.read(selectedNoteIdProvider.notifier).select('note-b');
     await controller.open('note-b');
 
-    // B never opened; A is still what the editor shows.
+    // B never opened; A was closed successfully, so it must not remain a
+    // writable provider snapshot for a deregistered Core session.
     expect(api.calls, ['open:note-a', 'close:note-a', 'open:note-b']);
-    expect(container.read(activeNoteProvider)!.metadata.id, 'note-a');
-    // Selection rolled back so the highlight names the note actually
-    // shown — same rule as the close-abort branch above.
-    expect(container.read(selectedNoteIdProvider), 'note-a');
+    expect(container.read(activeNoteProvider), isNull);
+    expect(container.read(selectedNoteIdProvider), 'note-b');
   });
 
   testWidgets('a Core error on open surfaces instead of being swallowed', (
@@ -1828,7 +2052,11 @@ Future<void> _pumpShell(WidgetTester tester, _ShellRustApi api) async {
   await tester.pumpWidget(
     ProviderScope(
       overrides: [rustApiProvider.overrideWithValue(api)],
-      child: const MaterialApp(home: WorkspaceScreen()),
+      child: const MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: WorkspaceScreen(),
+      ),
     ),
   );
   await tester.pumpAndSettle();
