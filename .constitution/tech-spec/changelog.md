@@ -1,5 +1,19 @@
 # Stage 3: Technical Implementation Changelog
 
+## v1.6.7
+
+Patch correction from PR #10 review, round 18. No bill-of-materials, PRD, or
+architecture change.
+
+- Selected-text Enter now calls
+  `replace_selection_and_split_block`, one Core-owned structural transaction,
+  rather than composing `update_block` and `split_block` in Presentation. It
+  accepts forward or reverse Flutter UTF-16 raw-field selections, validates
+  both endpoints, replacement, split and post-parse focus before installing
+  state or persisting tier 1. A refusal leaves the working source, `NoteState`,
+  draft row, edit sequence and idle timer unchanged, so Flutter keeps the
+  original field and selection; IME composition remains platform-owned.
+
 ## v1.6.6
 
 Patch correction from PR #10 review, round 11. No bill-of-materials, PRD, or

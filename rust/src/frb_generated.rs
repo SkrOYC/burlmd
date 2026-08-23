@@ -38,7 +38,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.12.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1294523770;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1223171104;
 
 // Section: executor
 
@@ -1237,6 +1237,46 @@ fn wire__crate__api__ffi_api__replace_range_impl(
         },
     )
 }
+fn wire__crate__api__ffi_api__replace_selection_and_split_block_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "replace_selection_and_split_block",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_note_id = <String>::sse_decode(&mut deserializer);
+            let api_block_path = <Vec<usize>>::sse_decode(&mut deserializer);
+            let api_source = <String>::sse_decode(&mut deserializer);
+            let api_selection_base = <usize>::sse_decode(&mut deserializer);
+            let api_selection_extent = <usize>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, crate::error::AppError>((move || {
+                let output_ok = crate::api::ffi_api::replace_selection_and_split_block(
+                    api_note_id,
+                    api_block_path,
+                    api_source,
+                    api_selection_base,
+                    api_selection_extent,
+                )?;
+                Ok(output_ok)
+            })())
+        },
+    )
+}
 fn wire__crate__api__ffi_api__replace_whole_note_impl(
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
@@ -2310,11 +2350,11 @@ fn pde_ffi_dispatcher_primary_impl(
         31 => wire__crate__api__ffi_api__reload_note_impl(port, ptr, rust_vec_len, data_len),
         32 => wire__crate__api__ffi_api__rename_directory_impl(port, ptr, rust_vec_len, data_len),
         33 => wire__crate__api__ffi_api__rename_note_impl(port, ptr, rust_vec_len, data_len),
-        37 => {
+        38 => {
             wire__crate__api__ffi_api__resolve_link_target_impl(port, ptr, rust_vec_len, data_len)
         }
-        38 => wire__crate__api__ffi_api__search_notes_impl(port, ptr, rust_vec_len, data_len),
-        41 => wire__crate__api__ffi_api__workspace_tree_impl(port, ptr, rust_vec_len, data_len),
+        39 => wire__crate__api__ffi_api__search_notes_impl(port, ptr, rust_vec_len, data_len),
+        42 => wire__crate__api__ffi_api__workspace_tree_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -2344,10 +2384,15 @@ fn pde_ffi_dispatcher_sync_impl(
         }
         25 => wire__crate__api__ffi_api__note_write_status_impl(ptr, rust_vec_len, data_len),
         34 => wire__crate__api__ffi_api__replace_range_impl(ptr, rust_vec_len, data_len),
-        35 => wire__crate__api__ffi_api__replace_whole_note_impl(ptr, rust_vec_len, data_len),
-        36 => wire__crate__api__ffi_api__resolve_block_caret_impl(ptr, rust_vec_len, data_len),
-        39 => wire__crate__api__ffi_api__split_block_impl(ptr, rust_vec_len, data_len),
-        40 => wire__crate__api__ffi_api__update_block_impl(ptr, rust_vec_len, data_len),
+        35 => wire__crate__api__ffi_api__replace_selection_and_split_block_impl(
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        36 => wire__crate__api__ffi_api__replace_whole_note_impl(ptr, rust_vec_len, data_len),
+        37 => wire__crate__api__ffi_api__resolve_block_caret_impl(ptr, rust_vec_len, data_len),
+        40 => wire__crate__api__ffi_api__split_block_impl(ptr, rust_vec_len, data_len),
+        41 => wire__crate__api__ffi_api__update_block_impl(ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }

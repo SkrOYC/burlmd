@@ -739,13 +739,13 @@ pub fn update_block(
 ///
 /// That is narrower than it once read here. An earlier revision generalised it
 /// to "there is exactly one writer of the working source" full stop, which is
-/// false for six of the eight mutators: `insert_block`, `delete_block`,
-/// `split_block`, `merge_block_with_previous`, `delete_range` and
-/// `replace_range` are each triggered by a discrete user action with no
-/// preceding `update_block`, so each necessarily writes. The rule that does
-/// hold generally is in the section header: every mutating call writes the
-/// working source and the draft row, and this one is the exception because its
-/// input is already in both.
+/// false for seven of the nine mutators: `insert_block`, `delete_block`,
+/// `split_block`, `replace_selection_and_split_block`,
+/// `merge_block_with_previous`, `delete_range` and `replace_range` are each
+/// triggered by a discrete user action with no preceding `update_block`, so
+/// each necessarily writes. The rule that does hold generally is in the
+/// section header: every mutating call writes the working source and the draft
+/// row, and this one is the exception because its input is already in both.
 ///
 /// Called when the Block loses focus, not on every keystroke. This is where
 /// the reparse cost lands: off the typing path, and *separate from* the tier 2
@@ -796,6 +796,24 @@ pub fn split_block(
     block_path: Vec<usize>,
     source: String,
     offset: usize,
+) -> Result<StructuralEdit, AppError> {
+    unimplemented!()
+}
+
+/// Replaces a non-collapsed raw-field selection with nothing and splits at
+/// the earlier UTF-16 endpoint in one structural transaction. `selection_base`
+/// and `selection_extent` may arrive in either direction; Core validates both
+/// boundaries, the replacement, post-split parse and returned focus before it
+/// installs source/state, advances `edit_seq`, writes the draft, or arms tier
+/// 2. Any refusal therefore leaves the field's source, draft and timer exactly
+/// as they were, so Presentation retains the original selection for retry.
+#[frb(sync)]
+pub fn replace_selection_and_split_block(
+    note_id: String,
+    block_path: Vec<usize>,
+    source: String,
+    selection_base: usize,
+    selection_extent: usize,
 ) -> Result<StructuralEdit, AppError> {
     unimplemented!()
 }

@@ -1080,10 +1080,9 @@ class EditorState extends ConsumerState<Editor> {
   }
 
   /// Enter pressed in the focused Block at [selection]. A non-collapsed raw
-  /// selection is first replaced by the empty string through Core's buffered
-  /// source write, then split through Core at that resulting caret. This is
-  /// deliberately one structural action rather than letting EditableText
-  /// insert a raw soft newline between two Core operations.
+  /// selection is replaced and split in one Core transaction. Core validates
+  /// the raw replacement, structural split, and focus before it publishes any
+  /// state or draft, so a refusal leaves the original field retryable.
   ///
   /// A collapsed Enter at the visual end opens the empty phantom Block after
   /// it. If the raw field changed, it first commits and adopts the preceding
@@ -1111,37 +1110,21 @@ class EditorState extends ConsumerState<Editor> {
     }
     final low = math.min(selection.baseOffset, selection.extentOffset);
     final high = math.max(selection.baseOffset, selection.extentOffset);
-    var resultingSource = source;
     final caret = low;
     final splitAfterReplacement = low != high;
-    if (splitAfterReplacement) {
-      try {
-        // `update_block` is the Core-owned raw replacement seam. Keep the
-        // field untouched until the following split returns an authoritative
-        // focus target, so a refusal remains visibly retryable.
-        resultingSource = source.replaceRange(low, high, '');
-        ref
-            .read(rustApiProvider)
-            .updateBlock(note.metadata.id, blockPath, resultingSource);
-      } catch (error) {
-        ref.read(keystrokeWriteFailureProvider.notifier).report(error);
-        return;
-      }
-    }
     // "End of the Block" means only whitespace remains after the caret.
     // Core sources carry a terminating newline (spans.rs `block_source`
     // contract), so this covers caret-at-length AND the caret sitting just
     // before that invisible trailing newline — both are the visual end of
     // the Block. This holds for EVERY Block, not just the last one, so the
     // phantom below must be able to open mid-document.
-    if (!splitAfterReplacement &&
-        resultingSource.substring(caret).trim().isEmpty) {
+    if (!splitAfterReplacement && source.substring(caret).trim().isEmpty) {
       var committedState = note;
       var continuationPath = List<int>.from(blockPath);
       // `update_block` deliberately leaves the provider AST stale while the
       // field is raw. Before replacing that real field with a phantom, repair
       // it through Core and retain only an address derived from Core state.
-      if (resultingSource != focused.source) {
+      if (source != focused.source) {
         try {
           final api = ref.read(rustApiProvider);
           committedState = api.commitBlock(note.metadata.id, blockPath);
@@ -1151,7 +1134,7 @@ class EditorState extends ConsumerState<Editor> {
             note,
             committedState,
             blockPath,
-            resultingSource,
+            source,
           );
           ref.read(activeNoteProvider.notifier).adopt(committedState);
         } catch (error) {
@@ -1177,12 +1160,15 @@ class EditorState extends ConsumerState<Editor> {
     }
     try {
       final api = ref.read(rustApiProvider);
-      final structural = api.splitBlock(
-        note.metadata.id,
-        blockPath,
-        resultingSource,
-        caret,
-      );
+      final structural = splitAfterReplacement
+          ? api.replaceSelectionAndSplitBlock(
+              note.metadata.id,
+              blockPath,
+              source,
+              selection.baseOffset,
+              selection.extentOffset,
+            )
+          : api.splitBlock(note.metadata.id, blockPath, source, caret);
       final newState = structural.state;
       ref.read(activeNoteProvider.notifier).adopt(newState);
       final secondPath = structural.blockPath

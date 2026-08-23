@@ -140,6 +140,37 @@ class _CoreFake extends RustApi {
   }
 
   @override
+  StructuralEdit replaceSelectionAndSplitBlock(
+    String noteId,
+    List<int> blockPath,
+    String source,
+    int selectionBase,
+    int selectionExtent,
+  ) {
+    final low = selectionBase < selectionExtent
+        ? selectionBase
+        : selectionExtent;
+    final high = selectionBase < selectionExtent
+        ? selectionExtent
+        : selectionBase;
+    calls.add('replace-and-split:${blockPath.first}:$low:$high');
+    final failure = splitFailure;
+    if (failure != null) throw failure;
+    final block = blocks[blockPath.first];
+    if (source != block) {
+      throw StateError('selected Enter source must be the focused raw field');
+    }
+    final replaced = source.replaceRange(low, high, '');
+    blocks[blockPath.first] = replaced.substring(0, low);
+    blocks.insert(blockPath.first + 1, replaced.substring(low));
+    return StructuralEdit(
+      state: state,
+      blockPath: Uint64List.fromList([blockPath.first + 1]),
+      caretOffset: BigInt.zero,
+    );
+  }
+
+  @override
   StructuralEdit mergeBlockWithPrevious(String noteId, List<int> blockPath) {
     calls.add('merge:${blockPath.first}');
     final failure = mergeFailure;
@@ -931,8 +962,8 @@ void main() {
 
   for (final reverse in [false, true]) {
     testWidgets(
-      'Enter deletes a ${reverse ? 'reversed' : 'forward'} multiline raw '
-      'selection through Core before splitting at its resulting caret',
+      'Enter replaces a ${reverse ? 'reversed' : 'forward'} multiline raw '
+      'selection and splits through one Core transaction',
       (tester) async {
         const selected = '**remove\nthis**';
         const source = 'alpha $selected omega\n';
@@ -950,11 +981,11 @@ void main() {
         );
         await pressKey(tester, LogicalKeyboardKey.enter);
 
-        expect(api.updateCount, 1);
-        expect(api.lastUpdateSource, 'alpha  omega\n');
-        expect(api.calls.where((call) => call.startsWith('split')), [
-          'split:0:$start',
-        ]);
+        expect(api.updateCount, 0);
+        expect(
+          api.calls.where((call) => call.startsWith('replace-and-split')),
+          ['replace-and-split:0:$start:$end'],
+        );
         expect(api.blocks, ['alpha ', ' omega\n']);
         expect(
           _field(tester).controller.text,
@@ -969,8 +1000,8 @@ void main() {
     );
   }
 
-  testWidgets('a refused selected-Enter split keeps the original raw range '
-      'visible and retries its Core replacement before splitting', (
+  testWidgets('a refused selected-Enter transaction keeps the original raw '
+      'range visible through blur and retries without a partial Core update', (
     tester,
   ) async {
     const selected = '**remove**';
@@ -989,10 +1020,9 @@ void main() {
     );
     await pressKey(tester, LogicalKeyboardKey.enter);
 
-    expect(api.updateCount, 1);
-    expect(api.lastUpdateSource, 'alpha  omega\n');
-    expect(api.calls.where((call) => call.startsWith('split')), [
-      'split:0:$start',
+    expect(api.updateCount, 0);
+    expect(api.calls.where((call) => call.startsWith('replace-and-split')), [
+      'replace-and-split:0:$start:${start + selected.length}',
     ]);
     expect(_field(tester).controller.text, source);
     expect(_field(tester).focusNode.hasFocus, isTrue);
@@ -1001,13 +1031,24 @@ void main() {
       isA<AppError_ParseError>(),
     );
 
+    FocusManager.instance.primaryFocus?.unfocus();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(api.blocks, [
+      source,
+    ], reason: 'blur cannot persist a refused deletion');
+
     api.splitFailure = null;
+    await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
+    _field(tester).controller.selection = const TextSelection(
+      baseOffset: start,
+      extentOffset: start + selected.length,
+    );
     await pressKey(tester, LogicalKeyboardKey.enter);
 
-    expect(api.updateCount, 2, reason: 'retry replaces the same raw range');
-    expect(api.calls.where((call) => call.startsWith('split')), [
-      'split:0:$start',
-      'split:0:$start',
+    expect(api.updateCount, 0, reason: 'selected Enter has no partial update');
+    expect(api.calls.where((call) => call.startsWith('replace-and-split')), [
+      'replace-and-split:0:$start:${start + selected.length}',
+      'replace-and-split:0:$start:${start + selected.length}',
     ]);
     expect(api.blocks, ['alpha ', ' omega\n']);
     expect(_field(tester).controller.text, ' omega\n');

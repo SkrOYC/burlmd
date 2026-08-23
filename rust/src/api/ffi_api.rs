@@ -520,6 +520,35 @@ pub fn split_block(
     })
 }
 
+/// Replaces a non-collapsed raw-field selection and then splits at the
+/// selection's earlier UTF-16 endpoint in one Core transaction. Both
+/// endpoints may be supplied in either direction. Core validates the field
+/// source, both UTF-16 boundaries, the resulting structural split, and its
+/// focus before installing state or writing the tier-1 draft row; a refusal
+/// therefore leaves the source, draft, edit sequence, and idle timer intact.
+#[frb(sync)]
+pub fn replace_selection_and_split_block(
+    note_id: String,
+    block_path: Vec<usize>,
+    source: String,
+    selection_base: usize,
+    selection_extent: usize,
+) -> Result<StructuralEdit, AppError> {
+    let (state, block_path, caret_offset) = with_open_session_edit(&note_id, |session| {
+        session.replace_selection_and_split_block_from_editor_source(
+            &block_path,
+            &source,
+            selection_base,
+            selection_extent,
+        )
+    })?;
+    Ok(StructuralEdit {
+        state,
+        block_path,
+        caret_offset,
+    })
+}
+
 /// Merges a Block into its predecessor -- Backspace at offset 0
 /// (CAP-EDIT-03). The returned [`StructuralEdit`] names the actual
 /// predecessor leaf and its raw-source UTF-16 join offset after Core reparses.
