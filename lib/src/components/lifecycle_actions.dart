@@ -97,7 +97,9 @@ class LifecycleActions {
   /// (`open_note`'s fast path) — "opens for editing" without a second open.
   Future<LifecycleOutcome> createNote(String directoryPath, String title) =>
       _guard((operation) async {
-        final result = await _api.createNote(directoryPath, title);
+        final result = await _request(
+          () => _api.createNote(directoryPath, title),
+        );
         final created = _requiredState(result, 'create');
         _ref.invalidate(workspaceTreeProvider);
         await _settleCreatedNote(operation, created);
@@ -116,7 +118,7 @@ class LifecycleActions {
   /// its terminal warning to the link surface.
   Future<LifecycleOutcome> createLinkTarget(String targetId) =>
       _guard((operation) async {
-        final result = await _api.createLinkTarget(targetId);
+        final result = await _request(() => _api.createLinkTarget(targetId));
         final created = _requiredState(result, 'create linked note');
         _ref.invalidate(workspaceTreeProvider);
         await _settleCreatedNote(operation, created);
@@ -131,7 +133,7 @@ class LifecycleActions {
   /// republished — see [_adopt]) so the editor never holds the dead id.
   Future<LifecycleOutcome> renameNote(String noteId, String newTitle) =>
       _guard((operation) async {
-        final result = await _api.renameNote(noteId, newTitle);
+        final result = await _request(() => _api.renameNote(noteId, newTitle));
         final state = _requiredState(result, 'rename');
         _ref.invalidate(workspaceTreeProvider);
         await _settleEffects(
@@ -152,7 +154,9 @@ class LifecycleActions {
     String noteId,
     String newDirectoryPath,
   ) => _guard((operation) async {
-    final result = await _api.moveNote(noteId, newDirectoryPath);
+    final result = await _request(
+      () => _api.moveNote(noteId, newDirectoryPath),
+    );
     final state = _requiredState(result, 'move');
     _ref.invalidate(workspaceTreeProvider);
     await _settleEffects(
@@ -172,7 +176,7 @@ class LifecycleActions {
   /// it mounted against a removed file.
   Future<LifecycleOutcome> deleteNote(String noteId) =>
       _guard((operation) async {
-        final result = await _api.deleteNote(noteId);
+        final result = await _request(() => _api.deleteNote(noteId));
         _ref.invalidate(workspaceTreeProvider);
         if (!_isExpectedSession(
           operation,
@@ -190,7 +194,7 @@ class LifecycleActions {
 
   /// Creates a Directory, intermediate levels included.
   Future<LifecycleOutcome> createDirectory(String path) => _guard((_) async {
-    final result = await _api.createDirectory(path);
+    final result = await _request(() => _api.createDirectory(path));
     _ref.invalidate(workspaceTreeProvider);
     return LifecycleCompleted(
       'Created directory $path',
@@ -202,20 +206,19 @@ class LifecycleActions {
   /// open one re-anchors through `effects.remapped`, and open Notes anywhere
   /// in the bundle that held inbound Links into the subtree reload through
   /// `effects.rewritten`.
-  Future<LifecycleOutcome> renameDirectory(String path, String newName) =>
-      _guard((operation) async {
-        final result = await _api.renameDirectory(path, newName);
-        _ref.invalidate(workspaceTreeProvider);
-        await _settleEffects(
-          invokedNoteId: null,
-          effects: result.effects,
-          operation: operation,
-        );
-        return LifecycleCompleted(
-          'Renamed to "$newName"',
-          warning: result.warning,
-        );
-      });
+  Future<LifecycleOutcome> renameDirectory(
+    String path,
+    String newName,
+  ) => _guard((operation) async {
+    final result = await _request(() => _api.renameDirectory(path, newName));
+    _ref.invalidate(workspaceTreeProvider);
+    await _settleEffects(
+      invokedNoteId: null,
+      effects: result.effects,
+      operation: operation,
+    );
+    return LifecycleCompleted('Renamed to "$newName"', warning: result.warning);
+  });
 
   /// Deletes a Directory and everything beneath it, after the caller has
   /// confirmed with the user. The Core returns every removed Note's concept
@@ -223,7 +226,7 @@ class LifecycleActions {
   Future<LifecycleOutcome> deleteDirectory(String path) => _guard((
     operation,
   ) async {
-    final result = await _api.deleteDirectory(path);
+    final result = await _request(() => _api.deleteDirectory(path));
     _ref.invalidate(workspaceTreeProvider);
     if (!_isExpectedSession(
       operation,
@@ -247,6 +250,19 @@ class LifecycleActions {
     throw StateError(
       'Core $operation result omitted its authoritative Note state.',
     );
+  }
+
+  /// Marks errors from the single Core lifecycle request, before its
+  /// authoritative response can have been published. This boundary is
+  /// deliberately narrower than the full action: a later state-adoption or
+  /// `open_note` failure may follow a successful mutation and must not
+  /// restore an identity that Core could have removed or remapped.
+  Future<T> _request<T>(Future<T> Function() request) async {
+    try {
+      return await request();
+    } catch (error) {
+      throw _LifecycleRequestError(error);
+    }
   }
 
   /// Settles a Core-created session before Presentation treats creation as
@@ -372,21 +388,20 @@ class LifecycleActions {
       try {
         final outcome = await action(operation);
         if (outcome is LifecycleRefused) {
-          await _restoreRefusedSelection(operation);
+          await _restoreUnchangedRequestSelection(operation);
         } else if (outcome is LifecycleCompleted) {
           await _reconcileSelectedSession(operation);
         }
         return outcome;
-      } on AppError catch (error) {
+      } on _LifecycleRequestError catch (requestError) {
+        final error = requestError.error;
         final outcome = switch (error) {
           AppError_PathUnavailable(:final field0) => LifecycleRefused(
             'That name cannot be used: $field0',
           ),
           _ => LifecycleFailed(error),
         };
-        if (outcome is LifecycleRefused) {
-          await _restoreRefusedSelection(operation);
-        }
+        await _restoreUnchangedRequestSelection(operation);
         return outcome;
       } catch (error) {
         return LifecycleFailed(error);
@@ -539,14 +554,16 @@ class LifecycleActions {
       identical(_ref.read(activeNoteProvider), expectedActive) &&
       _ref.read(selectedNoteIdProvider) == expectedSelectedId;
 
-  /// A refused lifecycle request did not alter Core. If it intercepted a
-  /// selection that had closed A and was still opening B, the admission fence
-  /// correctly dropped B's stale pending result — but B remains a valid,
-  /// selected Note. Re-open it through the lifecycle-admitted path so the
-  /// selection does not strand the editor with no active session. This is
-  /// intentionally limited to [LifecycleRefused]: a generic failure may have
-  /// happened after Core changed state and must not resurrect an old id.
-  Future<void> _restoreRefusedSelection(_LifecycleOperation operation) async {
+  /// A failed Core lifecycle request did not publish an authoritative
+  /// mutation. If it intercepted a selection that had closed A and was still
+  /// opening B, the admission fence correctly dropped B's stale pending
+  /// result — but B remains a valid, selected Note. Re-open it through the
+  /// lifecycle-admitted path so the selection does not strand the editor with
+  /// no active session. This applies equally to a Core refusal and a generic
+  /// request error, but never to settlement/open errors after a response.
+  Future<void> _restoreUnchangedRequestSelection(
+    _LifecycleOperation operation,
+  ) async {
     final selected = operation.selectedId;
     if (selected == null ||
         !_isExpectedSession(operation, operation.active, selected)) {
@@ -618,4 +635,10 @@ class _LifecycleOperation {
   final int generation;
   final NoteState? active;
   final String? selectedId;
+}
+
+class _LifecycleRequestError implements Exception {
+  const _LifecycleRequestError(this.error);
+
+  final Object error;
 }

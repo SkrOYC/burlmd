@@ -731,6 +731,50 @@ void main() {
       ]);
     });
 
+    testWidgets('an unrelated Core request error restores an intercepted '
+        'selection without replacing the original failure', (tester) async {
+      final delayedB = Completer<NoteState>();
+      final recoveredB = stateFor('B');
+      final next = stateFor('C');
+      const failure = AppError.databaseError('database unavailable');
+      final api = _LifecycleApi()
+        ..createDirectoryError = failure
+        ..openStates['C'] = next;
+      late ProviderContainer container;
+      await tester.pumpWidget(_probeHarness(api, (c) => container = c));
+      addTearDown(container.dispose);
+      final intercepted = await startInterceptedOpen(
+        tester,
+        container,
+        api,
+        delayedB,
+      );
+
+      final creating = container
+          .read(lifecycleActionsProvider)
+          .createDirectory('Archive');
+      delayedB.complete(recoveredB);
+      await intercepted.openingB;
+
+      final outcome = await creating;
+      expect(outcome, isA<LifecycleFailed>());
+      expect((outcome as LifecycleFailed).error, same(failure));
+      expect(container.read(activeNoteProvider), same(recoveredB));
+      expect(container.read(selectedNoteIdProvider), 'B');
+      // B's intercepted result is stale; the lifecycle-admitted retry mounts
+      // Core's existing B session once and does not create another session.
+      expect(api.openNoteCalls, ['A', 'B', 'B']);
+      expect(api.calls, ['closeNote:A', 'createDirectory:Archive']);
+
+      await container.read(activeNoteProvider.notifier).open('C');
+      expect(container.read(activeNoteProvider), same(next));
+      expect(api.calls, [
+        'closeNote:A',
+        'createDirectory:Archive',
+        'closeNote:B',
+      ]);
+    });
+
     testWidgets('an unrelated Note deletion restores an intercepted '
         'selection', (tester) async {
       final delayedB = Completer<NoteState>();

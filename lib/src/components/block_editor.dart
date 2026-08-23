@@ -922,12 +922,24 @@ TextEditingValue applyInlineEmphasis(
 /// transformed source parse back to precisely the selected text.
 TextEditingValue _applyInlineCode(TextEditingValue value) {
   final text = value.text;
-  final base = value.selection.baseOffset.clamp(0, text.length);
-  final extent = value.selection.extentOffset.clamp(0, text.length);
+  final base = value.selection.baseOffset;
+  final extent = value.selection.extentOffset;
+  // Flutter selection offsets are UTF-16 code-unit offsets. Never turn a
+  // malformed range (outside the text or through a surrogate pair) into a
+  // different edit by clamping or splitting its character: there is no
+  // lossless code-span spelling for that selection.
+  if (!_isValidUtf16SelectionBoundary(text, base) ||
+      !_isValidUtf16SelectionBoundary(text, extent)) {
+    return value;
+  }
   if (base == extent) {
     // An empty code span cannot be represented as two adjacent delimiter runs:
     // they form one backtick run. Keep the familiar paired editing placeholder;
     // it becomes a valid span as soon as the user types content between it.
+    // At the edge of an existing backtick run, even that template would merge
+    // with the outside source. There is no equivalent, collapsed UTF-16 edit
+    // that preserves the adjacent literal run, so leave it untouched.
+    if (_hasOutsideAdjacentBacktick(text, base, base)) return value;
     const delimiter = '`';
     return TextEditingValue(
       text: text.replaceRange(base, base, '$delimiter$delimiter'),
@@ -953,6 +965,12 @@ TextEditingValue _applyInlineCode(TextEditingValue value) {
   if (fullSpan != null) {
     return _removeCodeSpan(text, fullSpan, reversed: reversed);
   }
+
+  // A delimiter next to an outside backtick run cannot be a backtick string
+  // (CommonMark 0.31.2 §6.1). Choosing a longer delimiter would still merge
+  // the runs, while inserting a separating character would alter unselected
+  // source and its rendered text. No-op rather than make an unsafe edit.
+  if (_hasOutsideAdjacentBacktick(text, low, high)) return value;
 
   final delimiter = '`' * (_longestBacktickRun(selected) + 1);
   final padding = _needsCodeSpanPadding(selected) ? ' ' : '';
@@ -1001,6 +1019,14 @@ _CodeSpan? _codeSpanAroundSelection(String text, int low, int high) {
         !_isStandaloneBacktickRun(text, closingStart, end)) {
       continue;
     }
+    if (!_isFirstMatchingCodeSpanCloser(
+      text,
+      openingEnd: openingEnd,
+      delimiterLength: openingLength,
+      proposedClosingStart: closingStart,
+    )) {
+      continue;
+    }
     return _CodeSpan(
       start: start,
       end: end,
@@ -1020,6 +1046,14 @@ _CodeSpan? _fullCodeSpan(String text, int low, int high) {
   if (contentStart >= contentEnd ||
       !_isStandaloneBacktickRun(text, low, contentStart) ||
       !_isStandaloneBacktickRun(text, contentEnd, high)) {
+    return null;
+  }
+  if (!_isFirstMatchingCodeSpanCloser(
+    text,
+    openingEnd: contentStart,
+    delimiterLength: openingLength,
+    proposedClosingStart: contentEnd,
+  )) {
     return null;
   }
   return _CodeSpan(
@@ -1072,6 +1106,46 @@ bool _isAllSpaces(String text) {
     if (text[index] != ' ') return false;
   }
   return true;
+}
+
+bool _isValidUtf16SelectionBoundary(String text, int offset) {
+  if (offset < 0 || offset > text.length) return false;
+  if (offset == 0 || offset == text.length) return true;
+  return !_isHighSurrogate(text.codeUnitAt(offset - 1)) ||
+      !_isLowSurrogate(text.codeUnitAt(offset));
+}
+
+bool _isHighSurrogate(int codeUnit) => codeUnit >= 0xD800 && codeUnit <= 0xDBFF;
+
+bool _isLowSurrogate(int codeUnit) => codeUnit >= 0xDC00 && codeUnit <= 0xDFFF;
+
+bool _hasOutsideAdjacentBacktick(String text, int low, int high) =>
+    (low > 0 && text[low - 1] == '`') ||
+    (high < text.length && text[high] == '`');
+
+/// Returns whether [proposedClosingStart] is the closer CommonMark reaches
+/// first for the opening run that ends at [openingEnd].
+bool _isFirstMatchingCodeSpanCloser(
+  String text, {
+  required int openingEnd,
+  required int delimiterLength,
+  required int proposedClosingStart,
+}) {
+  var cursor = openingEnd;
+  while (cursor < text.length) {
+    if (text[cursor] != '`') {
+      cursor++;
+      continue;
+    }
+    final runLength = _backtickRunStartingAt(text, cursor);
+    final runEnd = cursor + runLength;
+    if (runLength == delimiterLength &&
+        _isStandaloneBacktickRun(text, cursor, runEnd)) {
+      return cursor == proposedClosingStart;
+    }
+    cursor = runEnd;
+  }
+  return false;
 }
 
 int _longestBacktickRun(String text) {

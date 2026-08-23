@@ -272,6 +272,40 @@ void main() {
         );
       });
 
+      test('leaves wrapping next to outside backtick runs unchanged', () {
+        // CommonMark 0.31.2 §6.1 defines a backtick string as a complete
+        // run, not merely a chosen substring of one. These raw source forms
+        // were checked against the pinned pulldown-cmark 0.12.2 parser.
+        // Splitting the outside run from the newly inserted delimiter would
+        // require changing unselected source, so every case is a no-op.
+        final left = _value('`word', 1, 5);
+        expect(applyInlineEmphasis(left, delimiter: '`'), left);
+
+        final right = _value('word`', 0, 4);
+        expect(applyInlineEmphasis(right, delimiter: '`'), right);
+
+        // The differing outer run lengths mean this is not a code span to
+        // unwrap, and the selected content contains its own longest run.
+        final both = _value('``a``b```', 2, 6);
+        expect(applyInlineEmphasis(both, delimiter: '`'), both);
+      });
+
+      test(
+        'leaves an empty template next to outside backtick runs unchanged',
+        () {
+          final left = _value('`word', 1, 1);
+          expect(applyInlineEmphasis(left, delimiter: '`'), left);
+
+          final right = _value('word`', 4, 4);
+          expect(applyInlineEmphasis(right, delimiter: '`'), right);
+
+          // The collapsed caret is inside one physical backtick run, so either
+          // inserted template delimiter would merge with that run.
+          final both = _value('``', 1, 1);
+          expect(applyInlineEmphasis(both, delimiter: '`'), both);
+        },
+      );
+
       test(
         'protects edge backticks and spaces from code-span normalization',
         () {
@@ -347,6 +381,35 @@ void main() {
         },
       );
 
+      test('does not unwrap past the parser’s first equal-length closer', () {
+        // pulldown-cmark closes the opening `` at the interior ``. The
+        // final `` is literal text, so treating the outermost runs as one
+        // span would remove source that the parser did not put in code.
+        final source = '``a``b``';
+        final wrapped = applyInlineEmphasis(
+          _value(source, 0, source.length),
+          delimiter: '`',
+        );
+        expect(wrapped.text, '``` ``a``b`` ```');
+        expect(
+          wrapped.selection,
+          const TextSelection(baseOffset: 4, extentOffset: 12),
+        );
+
+        // An interior run with a different length does not close a four-
+        // backtick span; the complete, ordinary span remains unwrap-safe.
+        const ordinarySource = '````a``b````';
+        final ordinary = applyInlineEmphasis(
+          _value(ordinarySource, ordinarySource.length, 0),
+          delimiter: '`',
+        );
+        expect(ordinary.text, 'a``b');
+        expect(
+          ordinary.selection,
+          const TextSelection(baseOffset: 4, extentOffset: 0),
+        );
+      });
+
       test('preserves UTF-16 offsets and keeps the empty-caret template', () {
         final wrapped = applyInlineEmphasis(
           _value('a🙂`b', 1, 4),
@@ -361,6 +424,15 @@ void main() {
         final empty = applyInlineEmphasis(_value('word', 2, 2), delimiter: '`');
         expect(empty.text, 'wo``rd');
         expect(empty.selection, const TextSelection.collapsed(offset: 3));
+
+        // A TextSelection cannot safely slice the middle of Flutter's UTF-16
+        // surrogate pair. Preserve it exactly instead of emitting malformed
+        // source or shifting its code-unit coordinates.
+        final surrogateInterior = _value('a🙂b', 2, 4);
+        expect(
+          applyInlineEmphasis(surrogateInterior, delimiter: '`'),
+          surrogateInterior,
+        );
       });
 
       test(
