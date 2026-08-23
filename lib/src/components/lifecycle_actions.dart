@@ -373,6 +373,8 @@ class LifecycleActions {
         final outcome = await action(operation);
         if (outcome is LifecycleRefused) {
           await _restoreRefusedSelection(operation);
+        } else if (outcome is LifecycleCompleted) {
+          await _reconcileSelectedSession(operation);
         }
         return outcome;
       } on AppError catch (error) {
@@ -553,6 +555,33 @@ class LifecycleActions {
     final active = _ref.read(activeNoteProvider);
     if (active?.metadata.id == selected) return;
     await _ref.read(activeNoteProvider.notifier).openForLifecycle(selected);
+  }
+
+  /// Restores a selected session that a lifecycle admission deliberately
+  /// fenced before its ordinary `open_note` result could mount.
+  ///
+  /// The action itself may not address that Note: creating a Directory or
+  /// deleting an unrelated Note are still successful Core mutations, but an
+  /// A -> B open intercepted while they were admitted leaves B selected with
+  /// no presentation-side session. Re-enter through the lifecycle-admitted
+  /// path only when the exact operation still owns the same selected,
+  /// unmounted identity. A removal, remap, newly selected Note, or newer
+  /// generation changes either state value and therefore wins without an
+  /// extra Core call.
+  Future<void> _reconcileSelectedSession(_LifecycleOperation operation) async {
+    final selected = operation.selectedId;
+    if (selected == null || !_isExpectedSession(operation, null, selected)) {
+      return;
+    }
+    final opened = await _ref
+        .read(activeNoteProvider.notifier)
+        .openForLifecycle(selected);
+    if (!_isExpectedSession(operation, null, selected)) return;
+    if (!opened) {
+      throw StateError(
+        'Core could not restore the selected Note after this lifecycle action.',
+      );
+    }
   }
 
   /// Closes `noteId` in the editor if it is the open one: clears both the

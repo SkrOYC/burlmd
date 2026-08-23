@@ -674,6 +674,161 @@ void main() {
     });
   });
 
+  group('reconciling an intercepted selected Note', () {
+    Future<({Future<void> openingB})> startInterceptedOpen(
+      WidgetTester tester,
+      ProviderContainer container,
+      _LifecycleApi api,
+      Completer<NoteState> delayedB,
+    ) async {
+      api.openStates['A'] = stateFor('A');
+      api.openNoteGates['B'] = delayedB;
+      final controller = container.read(activeNoteProvider.notifier);
+      await controller.open('A');
+      container.read(selectedNoteIdProvider.notifier).select('B');
+      final openingB = controller.open('B');
+      await tester.pump();
+      return (openingB: openingB);
+    }
+
+    testWidgets('a successful directory create restores an intercepted '
+        'selection and later retires that recovered session', (tester) async {
+      final delayedB = Completer<NoteState>();
+      final recoveredB = stateFor('B');
+      final next = stateFor('C');
+      final api = _LifecycleApi()..openStates['C'] = next;
+      late ProviderContainer container;
+      await tester.pumpWidget(_probeHarness(api, (c) => container = c));
+      addTearDown(container.dispose);
+      final intercepted = await startInterceptedOpen(
+        tester,
+        container,
+        api,
+        delayedB,
+      );
+
+      final creating = container
+          .read(lifecycleActionsProvider)
+          .createDirectory('Archive');
+      delayedB.complete(recoveredB);
+      await intercepted.openingB;
+
+      expect(await creating, isA<LifecycleCompleted>());
+      expect(container.read(activeNoteProvider), same(recoveredB));
+      expect(container.read(selectedNoteIdProvider), 'B');
+      // The stale ordinary result cannot mount. The post-action recovery
+      // deliberately asks Core for its existing B session once, rather than
+      // manufacturing a second local session.
+      expect(api.openNoteCalls, ['A', 'B', 'B']);
+      expect(api.calls, ['closeNote:A', 'createDirectory:Archive']);
+
+      await container.read(activeNoteProvider.notifier).open('C');
+      expect(container.read(activeNoteProvider), same(next));
+      expect(api.calls, [
+        'closeNote:A',
+        'createDirectory:Archive',
+        'closeNote:B',
+      ]);
+    });
+
+    testWidgets('an unrelated Note deletion restores an intercepted '
+        'selection', (tester) async {
+      final delayedB = Completer<NoteState>();
+      final recoveredB = stateFor('B');
+      final api = _LifecycleApi();
+      late ProviderContainer container;
+      await tester.pumpWidget(_probeHarness(api, (c) => container = c));
+      addTearDown(container.dispose);
+      final intercepted = await startInterceptedOpen(
+        tester,
+        container,
+        api,
+        delayedB,
+      );
+
+      final deleting = container
+          .read(lifecycleActionsProvider)
+          .deleteNote('unrelated');
+      delayedB.complete(recoveredB);
+      await intercepted.openingB;
+
+      expect(await deleting, isA<LifecycleCompleted>());
+      expect(container.read(activeNoteProvider), same(recoveredB));
+      expect(container.read(selectedNoteIdProvider), 'B');
+      expect(api.openNoteCalls, ['A', 'B', 'B']);
+      expect(api.calls, ['closeNote:A', 'deleteNote:unrelated']);
+    });
+
+    testWidgets('an unrelated Note rename restores an intercepted selection', (
+      tester,
+    ) async {
+      final delayedB = Completer<NoteState>();
+      final recoveredB = stateFor('B');
+      final api = _LifecycleApi()
+        ..renameNoteResult = (stateFor('Renamed/C'), effects());
+      late ProviderContainer container;
+      await tester.pumpWidget(_probeHarness(api, (c) => container = c));
+      addTearDown(container.dispose);
+      final intercepted = await startInterceptedOpen(
+        tester,
+        container,
+        api,
+        delayedB,
+      );
+
+      final renaming = container
+          .read(lifecycleActionsProvider)
+          .renameNote('C', 'Renamed');
+      delayedB.complete(recoveredB);
+      await intercepted.openingB;
+
+      expect(await renaming, isA<LifecycleCompleted>());
+      expect(container.read(activeNoteProvider), same(recoveredB));
+      expect(container.read(selectedNoteIdProvider), 'B');
+      expect(api.openNoteCalls, ['A', 'B', 'B']);
+      expect(api.calls, ['closeNote:A', 'renameNote:C:Renamed']);
+    });
+
+    testWidgets('a failed recovered open remains selected and a later '
+        'successful action retries it', (tester) async {
+      final api = _LifecycleApi();
+      late ProviderContainer container;
+      await tester.pumpWidget(_probeHarness(api, (c) => container = c));
+      addTearDown(container.dispose);
+      final controller = container.read(activeNoteProvider.notifier);
+      api.openStates['A'] = stateFor('A');
+      await controller.open('A');
+      container.read(selectedNoteIdProvider.notifier).select('B');
+      await controller.open('B');
+      expect(container.read(activeNoteProvider), isNull);
+      expect(container.read(selectedNoteIdProvider), 'B');
+
+      final failed = await container
+          .read(lifecycleActionsProvider)
+          .createDirectory('First');
+      expect(failed, isA<LifecycleFailed>());
+      expect(container.read(activeNoteProvider), isNull);
+      expect(container.read(selectedNoteIdProvider), 'B');
+
+      final recoveredB = stateFor('B');
+      api.openStates['B'] = recoveredB;
+      final retried = await container
+          .read(lifecycleActionsProvider)
+          .createDirectory('Second');
+
+      expect(retried, isA<LifecycleCompleted>());
+      expect(container.read(activeNoteProvider), same(recoveredB));
+      expect(container.read(selectedNoteIdProvider), 'B');
+      expect(api.openNoteCalls, ['A', 'B', 'B', 'B']);
+      expect(api.calls, [
+        'closeNote:A',
+        'createDirectory:First',
+        'createDirectory:Second',
+      ]);
+      expect(container.read(editorErrorProvider), isNull);
+    });
+  });
+
   group('directory rename', () {
     testWidgets('an open remapped note re-anchors through the NEW id the '
         'Core returns', (tester) async {

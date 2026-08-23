@@ -846,6 +846,7 @@ TextEditingValue applyInlineEmphasis(
 }) {
   final selection = value.selection;
   if (!selection.isValid || delimiter.isEmpty) return value;
+  if (delimiter == '`') return _applyInlineCode(value);
   final text = value.text;
   final base = selection.baseOffset.clamp(0, text.length);
   final extent = selection.extentOffset.clamp(0, text.length);
@@ -910,6 +911,205 @@ TextEditingValue applyInlineEmphasis(
     ),
   );
 }
+
+/// Applies the code-span variant of CAP-EDIT-05.
+///
+/// CommonMark code spans require equal, standalone backtick runs. Their
+/// contents lose one leading and trailing space when both are present (unless
+/// the contents are all spaces), so source text that begins or ends in a
+/// backtick or space needs one protecting space on *both* sides. The shortcut
+/// chooses a delimiter longer than every selected backtick run, making the
+/// transformed source parse back to precisely the selected text.
+TextEditingValue _applyInlineCode(TextEditingValue value) {
+  final text = value.text;
+  final base = value.selection.baseOffset.clamp(0, text.length);
+  final extent = value.selection.extentOffset.clamp(0, text.length);
+  if (base == extent) {
+    // An empty code span cannot be represented as two adjacent delimiter runs:
+    // they form one backtick run. Keep the familiar paired editing placeholder;
+    // it becomes a valid span as soon as the user types content between it.
+    const delimiter = '`';
+    return TextEditingValue(
+      text: text.replaceRange(base, base, '$delimiter$delimiter'),
+      selection: TextSelection.collapsed(offset: base + delimiter.length),
+    );
+  }
+
+  final low = math.min(base, extent);
+  final high = math.max(base, extent);
+  final reversed = base > extent;
+  final selected = text.substring(low, high);
+  // CommonMark normalizes every line ending in a code span to a space. There
+  // is no code-span delimiter spelling that can preserve the selected source
+  // byte-for-byte, so leave a multiline selection unchanged rather than make
+  // an irreversible-looking shortcut edit with different parsed content.
+  if (selected.contains('\n') || selected.contains('\r')) return value;
+  final unwrapped = _codeSpanAroundSelection(text, low, high);
+  if (unwrapped != null) {
+    return _removeCodeSpan(text, unwrapped, reversed: reversed);
+  }
+
+  final fullSpan = _fullCodeSpan(text, low, high);
+  if (fullSpan != null) {
+    return _removeCodeSpan(text, fullSpan, reversed: reversed);
+  }
+
+  final delimiter = '`' * (_longestBacktickRun(selected) + 1);
+  final padding = _needsCodeSpanPadding(selected) ? ' ' : '';
+  final replacement = '$delimiter$padding$selected$padding$delimiter';
+  final updated = text.replaceRange(low, high, replacement);
+  final selectedStart = low + delimiter.length + padding.length;
+  final selectedEnd = selectedStart + selected.length;
+  return TextEditingValue(
+    text: updated,
+    selection: TextSelection(
+      baseOffset: reversed ? selectedEnd : selectedStart,
+      extentOffset: reversed ? selectedStart : selectedEnd,
+    ),
+  );
+}
+
+/// A span's delimiter runs and the physical contents between them.
+class _CodeSpan {
+  const _CodeSpan({
+    required this.start,
+    required this.end,
+    required this.contentStart,
+    required this.contentEnd,
+  });
+
+  final int start;
+  final int end;
+  final int contentStart;
+  final int contentEnd;
+}
+
+_CodeSpan? _codeSpanAroundSelection(String text, int low, int high) {
+  for (final padded in [false, true]) {
+    final openingEnd = low - (padded ? 1 : 0);
+    final closingStart = high + (padded ? 1 : 0);
+    if (openingEnd < 1 || closingStart >= text.length) continue;
+    if (padded && (text[low - 1] != ' ' || text[high] != ' ')) {
+      continue;
+    }
+    final openingLength = _backtickRunEndingAt(text, openingEnd);
+    final closingLength = _backtickRunStartingAt(text, closingStart);
+    if (openingLength == 0 || openingLength != closingLength) continue;
+    final start = openingEnd - openingLength;
+    final end = closingStart + closingLength;
+    if (!_isStandaloneBacktickRun(text, start, openingEnd) ||
+        !_isStandaloneBacktickRun(text, closingStart, end)) {
+      continue;
+    }
+    return _CodeSpan(
+      start: start,
+      end: end,
+      contentStart: openingEnd,
+      contentEnd: closingStart,
+    );
+  }
+  return null;
+}
+
+_CodeSpan? _fullCodeSpan(String text, int low, int high) {
+  final openingLength = _backtickRunStartingAt(text, low);
+  final closingLength = _backtickRunEndingAt(text, high);
+  if (openingLength == 0 || openingLength != closingLength) return null;
+  final contentStart = low + openingLength;
+  final contentEnd = high - closingLength;
+  if (contentStart >= contentEnd ||
+      !_isStandaloneBacktickRun(text, low, contentStart) ||
+      !_isStandaloneBacktickRun(text, contentEnd, high)) {
+    return null;
+  }
+  return _CodeSpan(
+    start: low,
+    end: high,
+    contentStart: contentStart,
+    contentEnd: contentEnd,
+  );
+}
+
+TextEditingValue _removeCodeSpan(
+  String text,
+  _CodeSpan span, {
+  required bool reversed,
+}) {
+  final physicalContent = text.substring(span.contentStart, span.contentEnd);
+  final content = _normalizedCodeSpanContent(physicalContent);
+  final updated = text.replaceRange(span.start, span.end, content);
+  final selectedStart = span.start;
+  final selectedEnd = selectedStart + content.length;
+  return TextEditingValue(
+    text: updated,
+    selection: TextSelection(
+      baseOffset: reversed ? selectedEnd : selectedStart,
+      extentOffset: reversed ? selectedStart : selectedEnd,
+    ),
+  );
+}
+
+bool _needsCodeSpanPadding(String selected) =>
+    selected.isNotEmpty &&
+    !_isAllSpaces(selected) &&
+    (selected.startsWith(' ') ||
+        selected.endsWith(' ') ||
+        selected.startsWith('`') ||
+        selected.endsWith('`'));
+
+String _normalizedCodeSpanContent(String content) {
+  if (content.length >= 2 &&
+      content.startsWith(' ') &&
+      content.endsWith(' ') &&
+      !_isAllSpaces(content)) {
+    return content.substring(1, content.length - 1);
+  }
+  return content;
+}
+
+bool _isAllSpaces(String text) {
+  for (var index = 0; index < text.length; index++) {
+    if (text[index] != ' ') return false;
+  }
+  return true;
+}
+
+int _longestBacktickRun(String text) {
+  var longest = 0;
+  var current = 0;
+  for (var index = 0; index < text.length; index++) {
+    if (text[index] == '`') {
+      current++;
+      longest = math.max(longest, current);
+    } else {
+      current = 0;
+    }
+  }
+  return longest;
+}
+
+int _backtickRunEndingAt(String text, int end) {
+  var start = end;
+  while (start > 0 && text[start - 1] == '`') {
+    start--;
+  }
+  return end - start;
+}
+
+int _backtickRunStartingAt(String text, int start) {
+  var end = start;
+  while (end < text.length && text[end] == '`') {
+    end++;
+  }
+  return end - start;
+}
+
+bool _isStandaloneBacktickRun(String text, int start, int end) =>
+    start >= 0 &&
+    end <= text.length &&
+    start < end &&
+    (start == 0 || text[start - 1] != '`') &&
+    (end == text.length || text[end] != '`');
 
 /// A run of two stars is a strong delimiter, not two independent italic
 /// delimiters. Odd runs represent a composed strong+italic boundary, so one
