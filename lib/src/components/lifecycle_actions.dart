@@ -72,9 +72,20 @@ class LifecycleFailed extends LifecycleOutcome {
 /// session and draft row by the time the call returns, so no `close_note` is
 /// sent.
 class LifecycleActions {
-  const LifecycleActions(this._ref);
+  LifecycleActions(this._ref);
 
   final Ref _ref;
+
+  /// The tail of the presentation-side lifecycle queue.
+  ///
+  /// Core serializes its own mutations, but Presentation also owns the
+  /// returned-state adoption which rekeys the active editor and reloads
+  /// rewritten Notes. Starting a second action while the first is awaiting
+  /// that adoption used to advance its generation early, turning the first
+  /// action's authoritative result into a no-op. Keep one action admitted at
+  /// a time so Core completion order and presentation settlement order are
+  /// identical.
+  Future<void>? _pendingAction;
 
   RustApi get _api => _ref.read(rustApiProvider);
 
@@ -89,12 +100,14 @@ class LifecycleActions {
         final result = await _api.createNote(directoryPath, title);
         final created = _requiredState(result, 'create');
         _ref.invalidate(workspaceTreeProvider);
-        final settled = await _settleCreatedNote(operation, created);
+        await _settleCreatedNote(operation, created);
         return LifecycleCompleted(
           'Created "${created.metadata.title}"',
-          // A stale create must not attach its terminal warning to another
-          // Note after a newer lifecycle action or selection won the race.
-          warning: settled ? result.warning : null,
+          // The warning belongs to this completed Core operation, rather
+          // than to whichever Note won a later navigation race. Returning it
+          // even when the created session could not be adopted lets the
+          // initiating surface report it exactly once.
+          warning: result.warning,
         );
       });
 
@@ -106,10 +119,10 @@ class LifecycleActions {
         final result = await _api.createLinkTarget(targetId);
         final created = _requiredState(result, 'create linked note');
         _ref.invalidate(workspaceTreeProvider);
-        final settled = await _settleCreatedNote(operation, created);
+        await _settleCreatedNote(operation, created);
         return LifecycleCompleted(
           'Created "${created.metadata.title}"',
-          warning: settled ? result.warning : null,
+          warning: result.warning,
         );
       });
 
@@ -248,6 +261,7 @@ class LifecycleActions {
       operation.active,
       operation.selectedId,
     )) {
+      await _retireUnadoptedCreatedSession(created.metadata.id);
       return false;
     }
     final opened = await _ref
@@ -255,15 +269,35 @@ class LifecycleActions {
         .openForLifecycle(created.metadata.id);
     if (!_isCurrentOperation(operation) ||
         _ref.read(selectedNoteIdProvider) != operation.selectedId) {
+      await _retireUnadoptedCreatedSession(created.metadata.id);
       return false;
     }
     if (!opened) {
+      await _retireUnadoptedCreatedSession(created.metadata.id);
       throw StateError(
         'Core could not open the Note it created for this lifecycle action.',
       );
     }
     _ref.read(selectedNoteIdProvider.notifier).select(created.metadata.id);
     return true;
+  }
+
+  /// `create_note` and `create_link_target` open a Core session before
+  /// returning it. When a stale request cannot publish that session as the
+  /// active editor Note, it must still be retired through tier 3; otherwise
+  /// an invisible session survives without a later navigation path to close
+  /// it. A terminal close warning is intentionally non-fatal: Core has
+  /// already retired the session, so retrying here would address a dead id.
+  Future<void> _retireUnadoptedCreatedSession(String noteId) async {
+    try {
+      await _api.closeNote(noteId);
+    } on CloseNoteWarning catch (warning) {
+      // The create result retains its own lifecycle warning, while this
+      // independently terminal close warning uses the existing one-shot
+      // status seam. Its listener acknowledges before displaying, so a stale
+      // create cannot leak a session or replay this warning on a rebuild.
+      _ref.read(noteCloseFailureProvider.notifier).report(warning);
+    }
   }
 
   bool _isCurrentOperation(_LifecycleOperation operation) =>
@@ -277,30 +311,59 @@ class LifecycleActions {
   /// [LifecycleFailed] so no boundary error is swallowed.
   Future<LifecycleOutcome> _guard(
     Future<LifecycleOutcome> Function(_LifecycleOperation operation) action,
-  ) async {
+  ) {
     final editing = _ref.read(lifecycleEditingProvider.notifier);
-    final operation = _LifecycleOperation(
-      generation: _ref.read(lifecycleGenerationProvider.notifier).next(),
-      active: _ref.read(activeNoteProvider),
-      selectedId: _ref.read(selectedNoteIdProvider),
-    );
-    // Acquire before the first asynchronous Core call. This makes every
-    // lifecycle entry point share one presentation-side admission boundary:
-    // a raw field is read-only and every mutation path rejects queued input
-    // until Core either supplies the authoritative replacement state or
-    // refuses the operation and the old session remains usable.
+    // Reserve the shared gate at submission time, including while this
+    // request waits behind an admitted action. That blocks both editing and
+    // sidebar navigation from racing an old-id rekey. The generation is
+    // deliberately allocated only when the request reaches the queue head:
+    // a queued future must not invalidate the action still settling ahead of
+    // it.
     editing.begin();
+    final previous = _pendingAction;
+    final Future<LifecycleOutcome> queued;
+    late final Future<void> tail;
+    // Preserve the synchronous admission of the queue head: FFI calls start
+    // immediately after the gate closes, while later requests defer both
+    // their generation and their Core call until the predecessor settles.
+    queued = previous == null
+        ? _runQueuedAction(action, editing)
+        : previous.then((_) => _runQueuedAction(action, editing));
+    tail = queued.then<void>((_) {}, onError: (_, _) {});
+    _pendingAction = tail;
+    tail.whenComplete(() {
+      if (identical(_pendingAction, tail)) _pendingAction = null;
+    });
+    return queued;
+  }
+
+  Future<LifecycleOutcome> _runQueuedAction(
+    Future<LifecycleOutcome> Function(_LifecycleOperation operation) action,
+    LifecycleEditing editing,
+  ) async {
     try {
-      return await action(operation);
-    } on AppError catch (error) {
-      return switch (error) {
-        AppError_PathUnavailable(:final field0) => LifecycleRefused(
-          'That name cannot be used: $field0',
-        ),
-        _ => LifecycleFailed(error),
-      };
-    } catch (error) {
-      return LifecycleFailed(error);
+      if (!_ref.mounted) {
+        return LifecycleFailed(
+          StateError('Lifecycle action outlived its ProviderContainer.'),
+        );
+      }
+      final operation = _LifecycleOperation(
+        generation: _ref.read(lifecycleGenerationProvider.notifier).next(),
+        active: _ref.read(activeNoteProvider),
+        selectedId: _ref.read(selectedNoteIdProvider),
+      );
+      try {
+        return await action(operation);
+      } on AppError catch (error) {
+        return switch (error) {
+          AppError_PathUnavailable(:final field0) => LifecycleRefused(
+            'That name cannot be used: $field0',
+          ),
+          _ => LifecycleFailed(error),
+        };
+      } catch (error) {
+        return LifecycleFailed(error);
+      }
     } finally {
       // An outstanding FFI Future may settle after its ProviderContainer has
       // been disposed. The gate belongs to that container, so do not write a

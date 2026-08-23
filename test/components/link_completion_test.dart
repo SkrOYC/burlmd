@@ -10,7 +10,7 @@ import 'package:burlmd/src/rust/index/query.dart';
 import 'package:burlmd/src/rust/markdown/ast.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart' show RenderParagraph;
+import 'package:flutter/rendering.dart' show MatrixUtils, RenderParagraph;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -536,6 +536,9 @@ void main() {
       expect(secondRun.style!.decoration, TextDecoration.lineThrough);
       expect(root.toPlainText(), 'Before Bold italic then code strike');
 
+      // Link semantics use the completed RenderParagraph layout, so their
+      // glyph-bounded targets arrive in the frame after the first paint.
+      await tester.pump();
       final semantics = tester.ensureSemantics();
       expect(
         find.bySemanticsLabel('Open missing linked note Bold italic'),
@@ -584,6 +587,148 @@ void main() {
         const [0],
       ]);
       expect(calls, ['projects/plan', 'projects/second', 'projects/second']);
+    },
+  );
+
+  testWidgets(
+    'internal-Link semantics follow each painted text box without intercepting pointers',
+    (tester) async {
+      final calls = <String>[];
+      const firstTitle = 'first';
+      const wrappedTitle = 'several words that wrap onto another line';
+      final node = AstNode.paragraph(
+        content: [
+          _plainText('Before '),
+          InlineElement.link(
+            targetId: 'first-target',
+            exists: true,
+            content: [_plainText(firstTitle)],
+          ),
+          _plainText(' after the first link, '),
+          InlineElement.link(
+            targetId: 'wrapped-target',
+            exists: false,
+            content: [_plainText(wrappedTitle)],
+          ),
+        ],
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(
+            body: SizedBox(
+              width: 170,
+              child: BlockView(
+                node: node,
+                blockPath: const [0],
+                onFocusRequested: (_, _) {},
+                onLinkActivated: calls.add,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      final paragraph = tester.renderObject<RenderParagraph>(
+        find.byType(RichText),
+      );
+      final firstStart = 'Before '.length;
+      final firstBox = paragraph
+          .getBoxesForSelection(
+            TextSelection(
+              baseOffset: firstStart,
+              extentOffset: firstStart + firstTitle.length,
+            ),
+          )
+          .single
+          .toRect();
+      final firstTarget = find.byKey(
+        const ValueKey('internal-link-semantics-first-target-0-0'),
+      );
+      expect(firstTarget, findsOneWidget);
+      _expectRectClose(
+        tester.getRect(firstTarget),
+        paragraph.localToGlobal(firstBox.topLeft) & firstBox.size,
+      );
+
+      final wrappedStart =
+          firstStart + firstTitle.length + ' after the first link, '.length;
+      final wrappedBoxes = paragraph
+          .getBoxesForSelection(
+            TextSelection(
+              baseOffset: wrappedStart,
+              extentOffset: wrappedStart + wrappedTitle.length,
+            ),
+          )
+          .map((box) => box.toRect())
+          .toList();
+      expect(wrappedBoxes.length, greaterThan(1));
+      for (final (index, box) in wrappedBoxes.indexed) {
+        final target = find.byKey(
+          ValueKey('internal-link-semantics-wrapped-target-0-$index'),
+        );
+        expect(target, findsOneWidget);
+        _expectRectClose(
+          tester.getRect(target),
+          paragraph.localToGlobal(box.topLeft) & box.size,
+        );
+      }
+
+      final semantics = tester.ensureSemantics();
+      final firstLinkSemantics = find.semantics.byLabel(
+        'Open linked note $firstTitle',
+      );
+      final firstLinkNode = firstLinkSemantics.evaluate().single;
+      expect(
+        firstLinkNode,
+        matchesSemantics(
+          label: 'Open linked note $firstTitle',
+          isButton: true,
+          hasTapAction: true,
+        ),
+      );
+      _expectRectClose(
+        _semanticRectInParent(firstLinkNode.rect, firstLinkNode.transform),
+        paragraph.localToGlobal(firstBox.topLeft) & firstBox.size,
+      );
+      final wrappedLinkNodes = find.semantics
+          .byLabel('Open missing linked note $wrappedTitle')
+          .evaluate()
+          .toList();
+      expect(wrappedLinkNodes, hasLength(wrappedBoxes.length));
+      final wrappedSemanticsRects = [
+        for (final node in wrappedLinkNodes)
+          _semanticRectInParent(node.rect, node.transform),
+      ];
+      for (final box in wrappedBoxes) {
+        final expected = paragraph.localToGlobal(box.topLeft) & box.size;
+        expect(
+          wrappedSemanticsRects.any((actual) => _rectsClose(actual, expected)),
+          isTrue,
+          reason: 'each wrapped glyph line needs its own semantics hit box',
+        );
+      }
+      tester.semantics.tap(firstLinkSemantics);
+      await tester.pump();
+      expect(calls, ['first-target']);
+      await tester.tapAt(tester.getRect(firstTarget).center);
+      await tester.pump();
+      expect(calls, ['first-target', 'first-target']);
+      semantics.dispose();
+
+      // The focus stop owns no Block-sized render box; only its glyph-bound
+      // semantics sibling receives assistive hit geometry.
+      final focusTarget = find.byKey(
+        const ValueKey('internal-link-focus-0-first-target'),
+      );
+      expect(
+        tester.getSize(
+          find.descendant(of: focusTarget, matching: find.byType(SizedBox)),
+        ),
+        Size.zero,
+      );
     },
   );
 
@@ -703,6 +848,24 @@ InlineElement _plainText(String content) => InlineElement.text(
 
 AstNode _plainParagraph(String content) =>
     AstNode.paragraph(content: [_plainText(content)]);
+
+void _expectRectClose(Rect actual, Rect expected) {
+  // Semantics coordinates are quantized by the test engine's accessibility
+  // bridge, while RenderParagraph exposes fractional glyph metrics.
+  expect(actual.left, closeTo(expected.left, 0.5));
+  expect(actual.top, closeTo(expected.top, 0.5));
+  expect(actual.right, closeTo(expected.right, 0.5));
+  expect(actual.bottom, closeTo(expected.bottom, 0.5));
+}
+
+bool _rectsClose(Rect actual, Rect expected) =>
+    (actual.left - expected.left).abs() <= 0.5 &&
+    (actual.top - expected.top).abs() <= 0.5 &&
+    (actual.right - expected.right).abs() <= 0.5 &&
+    (actual.bottom - expected.bottom).abs() <= 0.5;
+
+Rect _semanticRectInParent(Rect rect, Matrix4? transform) =>
+    transform == null ? rect : MatrixUtils.transformRect(transform, rect);
 
 void _expectAlignedMarkerX(
   WidgetTester tester,
