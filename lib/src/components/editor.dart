@@ -64,6 +64,18 @@ class EditorState extends ConsumerState<Editor> {
   late final Action<CopySelectionTextIntent> _copyAction =
       _CopyRangeAsMarkdownAction(this);
 
+  /// Overrides Flutter's mounted-selectable-only Select All with a
+  /// Note-authoritative selection. The native SelectionArea action still
+  /// paints every mounted leaf; Core receives the complete Note range when
+  /// copy follows, including blocks a lazy ListView has not materialized.
+  late final Action<SelectAllTextIntent> _selectAllAction =
+      _SelectWholeNoteAction(this);
+
+  /// The Note for which Select All is currently authoritative. This is UI
+  /// interaction state, not retained Note content; a pointer gesture or focus
+  /// promotion clears it and returns range resolution to live selectables.
+  String? _wholeNoteSelectedId;
+
   /// A context inside the [SelectionArea], captured during build; lets the
   /// smoke hook invoke select-all the way the keyboard shortcut does.
   BuildContext? _areaContext;
@@ -174,9 +186,13 @@ class EditorState extends ConsumerState<Editor> {
         ? 0
         : math.min((focusedForSlot?.path.first ?? -1) + 1, note.ast.length);
     return Actions(
-      actions: <Type, Action<Intent>>{CopySelectionTextIntent: _copyAction},
+      actions: <Type, Action<Intent>>{
+        CopySelectionTextIntent: _copyAction,
+        SelectAllTextIntent: _selectAllAction,
+      },
       child: Listener(
         onPointerDown: (_) {
+          _wholeNoteSelectedId = null;
           if (_focused == null) _requiresFreshRenderedSelection = false;
         },
         child: SelectionArea(
@@ -311,6 +327,7 @@ class EditorState extends ConsumerState<Editor> {
         // anew after the next blur+commit cycle.
         _selectionBrokers.clear();
         _requiresFreshRenderedSelection = true;
+        _wholeNoteSelectedId = null;
         _focused = _Focus(
           noteId: note.metadata.id,
           path: path,
@@ -365,6 +382,7 @@ class EditorState extends ConsumerState<Editor> {
       // a fresh rendered SelectionArea gesture before a range can be sent to
       // the Core (ADR-006 / SPK-EDIT-F001).
       _selectionBrokers.clear();
+      _wholeNoteSelectedId = null;
     });
     if (focused.isPhantom) {
       // The sanctioned phantom Block is UI-side caret state ONLY (`EDIT-F004`):
@@ -667,14 +685,22 @@ class EditorState extends ConsumerState<Editor> {
   BlockRange? debugSelectedRange() => selectedBlockRange();
 
   /// Reads the region's current selection and expresses it as a [BlockRange]
-  /// with rendered offsets into each endpoint Block, or null when there is
-  /// no uncollapsed cross-Block selection right now. Per-Block offsets are
+  /// with Flutter UTF-16 rendered offsets into each endpoint Block, or null
+  /// when there is no uncollapsed cross-Block selection right now. Per-Block offsets are
   /// mapped from painted text onto the Core's canonical rendered string via
   /// [blockCoreRenderedOffset].
   BlockRange? selectedBlockRange() {
     if (_requiresFreshRenderedSelection) return null;
     final note = ref.read(activeNoteProvider);
     if (note == null) return null;
+    if (_wholeNoteSelectedId == note.metadata.id && note.ast.isNotEmpty) {
+      return BlockRange(
+        startPath: Uint64List.fromList(const [0]),
+        startOffset: BigInt.zero,
+        endPath: Uint64List.fromList([note.ast.length - 1]),
+        endOffset: BigInt.from(blockCoreRenderedLength(note.ast.last)),
+      );
+    }
     int? startIndex;
     int? endIndex;
     var startOffset = 0;
@@ -719,6 +745,31 @@ class EditorState extends ConsumerState<Editor> {
       endPath: Uint64List.fromList([endIndex]),
       endOffset: BigInt.from(endOffset),
     );
+  }
+
+  /// Handles the standard Select All intent at the editor boundary. Flutter's
+  /// default SelectionArea action can only enumerate mounted selectables in a
+  /// lazy ListView; preserve that action for visible highlights while marking
+  /// the complete Note as the range Core will copy.
+  Object? handleSelectAllRequest(
+    SelectAllTextIntent intent,
+    Action<SelectAllTextIntent>? fallback,
+  ) {
+    if (_focused != null || _requiresFreshRenderedSelection) {
+      // ignore: invalid_use_of_protected_member
+      return fallback?.invoke(intent);
+    }
+    final note = ref.read(activeNoteProvider);
+    if (note == null || note.ast.isEmpty) {
+      // ignore: invalid_use_of_protected_member
+      return fallback?.invoke(intent);
+    }
+    _wholeNoteSelectedId = note.metadata.id;
+    // Keep Flutter's native region selection for currently mounted blocks, so
+    // Select All remains visibly highlighted without forcing ListView to build
+    // a long Note just to represent an interaction Core already owns.
+    // ignore: invalid_use_of_protected_member
+    return fallback?.invoke(intent);
   }
 
   /// Entry point of [_CopyRangeAsMarkdownAction]. [fallback] is whatever
@@ -879,6 +930,37 @@ class EditorState extends ConsumerState<Editor> {
         areaContext,
         const SelectAllTextIntent(SelectionChangedCause.keyboard),
       );
+      await WidgetsBinding.instance.endOfFrame;
+      final note = ref.read(activeNoteProvider);
+      final range = selectedBlockRange();
+      final isStagedHeterogeneousNote =
+          note != null &&
+          note.ast.length == 3 &&
+          note.ast[0] is AstNode_CodeBlock &&
+          note.ast[1] is AstNode_List &&
+          note.ast[2] is AstNode_Paragraph;
+      final hasWholeStagedRange =
+          note != null &&
+          range != null &&
+          range.startPath.length == 1 &&
+          range.startPath.single == BigInt.zero &&
+          range.startOffset == BigInt.zero &&
+          range.endPath.length == 1 &&
+          range.endPath.single == BigInt.from(2) &&
+          range.endOffset == BigInt.from(blockCoreRenderedLength(note.ast[2]));
+      if (isStagedHeterogeneousNote && hasWholeStagedRange) {
+        final readinessPath = Platform.environment['BURLMD_SMOKE_READY_FILE'];
+        if (readinessPath != null) {
+          try {
+            File(
+              readinessPath,
+            ).writeAsStringSync('f003-heterogeneous-cross-block-selection\n');
+          } on FileSystemException {
+            // The marker is QA-only. The harness turns a missing one into a
+            // deterministic failure without changing normal editing.
+          }
+        }
+      }
     }
   }
 }
@@ -1027,4 +1109,17 @@ class _CopyRangeAsMarkdownAction extends Action<CopySelectionTextIntent> {
   @override
   Object? invoke(CopySelectionTextIntent intent, [BuildContext? context]) =>
       _state.handleCopyRequest(callingAction);
+}
+
+/// Captures Select All before the lazy SelectionArea action truncates its
+/// model to mounted selectables. Its [callingAction] is still invoked so the
+/// platform paints selection highlights for the visible part of the Note.
+class _SelectWholeNoteAction extends Action<SelectAllTextIntent> {
+  _SelectWholeNoteAction(this._state);
+
+  final EditorState _state;
+
+  @override
+  Object? invoke(SelectAllTextIntent intent, [BuildContext? context]) =>
+      _state.handleSelectAllRequest(intent, callingAction);
 }

@@ -801,11 +801,13 @@ pub fn merge_block_with_previous(
 
 /// A selection spanning one or more Blocks (ADR-006 decision 3).
 ///
-/// Offsets are character offsets into each Block's **rendered text**, which is
-/// a pure function of that Block's `AstNode` -- of what both sides already
-/// hold, not of whatever the widget laid out. That is what makes the number
-/// well-defined: the Core reproduces the same string the UI selected in
-/// without the UI having to describe its geometry.
+/// Offsets are Flutter **UTF-16 code-unit** offsets into each Block's
+/// **rendered text**, which is a pure function of that Block's `AstNode` -- of
+/// what both sides already hold, not of whatever the widget laid out. Core
+/// converts them to its scalar-offset span map and rejects an offset inside a
+/// surrogate pair. That makes the number well-defined: the Core reproduces
+/// the same string the UI selected without the UI having to describe its
+/// geometry.
 ///
 /// It is defined **per variant**, because a rule phrased only over `TextRun`
 /// does not cover the nine. Three variants hold no `TextRun` under any

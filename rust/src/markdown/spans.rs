@@ -16,15 +16,16 @@
 //! - **Source offsets are byte offsets** into the Note's source text. They are
 //!   what a splice needs, and every [`BlockSpan::source`] and
 //!   [`InlineRun::source`] is one.
-//! - **Rendered offsets are character offsets** — counts of Unicode scalar
-//!   values — into a Block's *rendered* text, the string
+//! - **Core rendered offsets are character offsets** — counts of Unicode
+//!   scalar values — into a Block's *rendered* text, the string
 //!   [`rendered_text`] produces. `BlockRange` (ADR-006 decision 3) is
-//!   expressed in these, because it spans *unfocused* Blocks, which the user
-//!   sees rendered rather than as source.
+//!   converted into these from Flutter's UTF-16 code-unit offsets at the FFI
+//!   boundary, because it spans *unfocused* Blocks, which the user sees
+//!   rendered rather than as source.
 //!
-//! Whether the UI's own offsets are scalar values or UTF-16 code units is a
-//! question about a Flutter widget rather than about this map; `EDIT-F003`
-//! owns proving the two agree.
+//! Flutter's own offsets are UTF-16 code units. The FFI conversion rejects a
+//! surrogate interior before this scalar map is consulted; `EDIT-F003` owns
+//! preserving that boundary.
 //!
 //! # Why a rendered offset does not simply interpolate into a source offset
 //!
@@ -539,7 +540,7 @@ impl SpanMap {
 
 /// Converts an offset in UTF-16 code units to a Unicode scalar offset without
 /// allowing a caller to land inside a surrogate pair.
-fn utf16_to_scalar_offset(text: &str, utf16_offset: usize) -> Option<usize> {
+pub(crate) fn utf16_to_scalar_offset(text: &str, utf16_offset: usize) -> Option<usize> {
     let mut units = 0;
     for (scalar, character) in text.chars().enumerate() {
         if utf16_offset == units {
