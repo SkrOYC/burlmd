@@ -8,6 +8,7 @@ import 'package:burlmd/src/rust/draft.dart';
 import 'package:burlmd/src/rust/markdown/ast.dart';
 import 'package:burlmd/src/screens/workspace.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show RenderParagraph;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -24,26 +25,53 @@ class _FixedNoteController extends NoteController {
   NoteState? build() => _initial;
 }
 
-/// A [RustApi] whose `updateBlock` never touches the real FFI. `update_block`
-/// is the per-keystroke call (ADR-007 decision 4): it buffers raw source
-/// text into the Note's working source and writes the draft row, returning
-/// nothing and reparsing nothing. This fake is therefore a spy rather than a
-/// stand-in that echoes a reparsed state back — recording the arguments it
-/// was called with is enough to prove the Dart-side round trip (keystroke ->
-/// `RustApi.updateBlock`) fires with the right Block path and raw text,
-/// without needing the compiled Rust dylib loaded in a widget test.
+/// A [RustApi] standing in for the Core at the editing surface. Under
+/// `EDIT-F002`'s model the Dart side makes three kinds of call:
+///
+/// - `getBlockSource` when a Block is promoted (populates the editable
+///   field) — answered from a canned map keyed by block path.
+/// - `update_block`, the per-keystroke buffering call — a spy that records
+///   arguments and returns nothing (it parses nothing, exactly like the
+///   contract's version).
+/// - `commit_block` on blur — records the committed path, counts calls, and
+///   returns a caller-supplied authoritative [NoteState].
 class _FakeRustApi extends RustApi {
   _FakeRustApi();
 
   String? lastNoteId;
   List<int>? lastBlockPath;
   String? lastSource;
+  int updateCount = 0;
+
+  final List<List<int>> committedPaths = [];
+  int commitCount = 0;
+
+  /// Raw source returned per block path by [getBlockSource].
+  // Keyed by the '/'-joined block path: Dart lists compare by identity, so
+  // they cannot be map keys.
+  final Map<String, String> sources = {};
+
+  /// The authoritative state [commitBlock] returns.
+  NoteState? commitResult;
 
   @override
-  void updateBlock(String noteId, List<int> blockPath, String source) {
+  String getBlockSource(String noteId, List<int> blockPath) =>
+      sources[blockPath.join('/')] ??
+      (throw Exception('no source for $blockPath'));
+
+  @override
+  void updateBlock(String noteId, List<int> blockPath, String newSource) {
     lastNoteId = noteId;
     lastBlockPath = blockPath;
-    lastSource = source;
+    lastSource = newSource;
+    updateCount++;
+  }
+
+  @override
+  NoteState commitBlock(String noteId, List<int> blockPath) {
+    committedPaths.add(blockPath);
+    commitCount++;
+    return commitResult ?? (throw Exception('no commit result prepared'));
   }
 }
 
@@ -147,260 +175,479 @@ NoteState _testNoteState(List<AstNode> ast) => NoteState(
   restoredFromDraft: false,
 );
 
-Future<void> pumpEditor(WidgetTester tester, List<AstNode> ast) =>
-    tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          activeNoteProvider.overrideWith(
-            () => _FixedNoteController(_testNoteState(ast)),
-          ),
-        ],
-        child: const MaterialApp(home: Scaffold(body: Editor())),
-      ),
-    );
+InlineElement _plainRun(String text) => InlineElement.text(_run(text));
 
-AstNode _paragraphOf(String text) => AstNode.paragraph(
-  content: [
-    InlineElement.text(
-      TextRun(
-        content: text,
-        bold: false,
-        italic: false,
-        strikethrough: false,
-        code: false,
+InlineElement _boldRun(String text) => InlineElement.text(
+  TextRun(
+    content: text,
+    bold: true,
+    italic: false,
+    strikethrough: false,
+    code: false,
+  ),
+);
+
+AstNode _paragraphOf(List<InlineElement> content) =>
+    AstNode.paragraph(content: content);
+
+AstNode _plainParagraph(String text) => _paragraphOf([_plainRun(text)]);
+
+/// Pumps [Editor] against a fixed AST, optionally overriding
+/// [rustApiProvider] with [api] (required by every test that promotes a
+/// Block, since promotion talks to the Core synchronously).
+/// Monotonic key seed so consecutive `pumpEditor` calls hand Flutter
+/// different widget keys (see the comment at the pump site).
+var _pumpSeed = 0;
+
+Future<ProviderContainer> pumpEditor(
+  WidgetTester tester,
+  List<AstNode> ast, {
+  RustApi? api,
+}) async {
+  final container = ProviderContainer(
+    overrides: [
+      activeNoteProvider.overrideWith(
+        () => _FixedNoteController(_testNoteState(ast)),
+      ),
+      if (api != null) rustApiProvider.overrideWithValue(api),
+    ],
+  );
+  addTearDown(container.dispose);
+  // A unique key per pump: consecutive pumpEditor calls would otherwise
+  // hand Flutter an identical widget tree, which updates the existing
+  // elements in place and REUSES the old _EditorState — carrying `_focused`
+  // from one test's container into the next test's fresh one. In production
+  // the container outlives every Editor, so this is a fixture-only hazard.
+  var pumpCounter = _pumpSeed++;
+  await tester.pumpWidget(
+    UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp(
+        home: Scaffold(body: Editor(key: ValueKey('editor-${pumpCounter++}'))),
       ),
     ),
-  ],
+  );
+  return container;
+}
+
+/// Promotes a Block by tapping its rendered form, then lets the promoted
+/// field's autofocus settle.
+Future<void> promoteByTap(WidgetTester tester, Finder what) async {
+  await tester.tap(what, warnIfMissed: false);
+  await tester.pump();
+  await tester.pump();
+}
+
+/// Blurs whatever holds primary focus — the user clicking away — which is
+/// the commit point under ADR-006.
+Future<void> blurFocusedField(WidgetTester tester) async {
+  FocusManager.instance.primaryFocus?.unfocus();
+  await tester.pump();
+  await tester.pump();
+}
+
+EditableText _field(WidgetTester tester) =>
+    tester.widget<EditableText>(find.byType(EditableText).first);
+
+RichText _firstRichText(WidgetTester tester) =>
+    tester.widget<RichText>(find.byType(RichText).first);
+
+/// Matches only WRITABLE editable fields — the promoted Block editor. A bare
+/// `find.byType(EditableText)` would false-positive on `SelectableText`'s
+/// internal read-only EditableText (used by the error surface).
+Finder _writableFields() => find.byWidgetPredicate(
+  (widget) => widget is EditableText && !widget.readOnly,
 );
 
 void main() {
-  testWidgets('renders a bold TextRun as bold text', (tester) async {
-    final ast = [
-      AstNode.paragraph(
-        content: [
-          InlineElement.text(
-            const TextRun(
-              content: 'hello',
-              bold: true,
-              italic: false,
-              strikethrough: false,
-              code: false,
-            ),
-          ),
-        ],
-      ),
-    ];
+  // -- CAP-EDIT-01: formatted when unfocused, raw when focused ------------
 
-    await pumpEditor(tester, ast);
+  testWidgets('a bold run renders styled with no delimiters while the '
+      'paragraph is unfocused', (tester) async {
+    await pumpEditor(tester, [
+      _paragraphOf([_plainRun('before '), _boldRun('bold')]),
+    ]);
 
-    // Paragraphs render as an editable TextField (UIDB-B007), so the bold
-    // run's own styling is visible via the field's underlying EditableText
-    // rather than a plain RichText painted directly by Editor.
-    final editableText = tester.widget<EditableText>(
-      find.byType(EditableText).first,
-    );
-    expect(editableText.controller.text, 'hello');
-    expect(editableText.style.fontWeight, FontWeight.bold);
+    // Live Preview: unfocused Blocks render formatted — no editable field,
+    // no delimiter bytes anywhere on screen.
+    expect(_writableFields(), findsNothing);
+    expect(find.textContaining('**'), findsNothing);
+
+    final wrapperSpan = _firstRichText(tester).text as TextSpan;
+    final paragraphSpan = wrapperSpan.children!.first as TextSpan;
+    final plainSpan = paragraphSpan.children![0] as TextSpan;
+    final boldSpan = paragraphSpan.children![1] as TextSpan;
+    expect(plainSpan.text, 'before ');
+    expect(boldSpan.text, 'bold');
+    expect(boldSpan.style?.fontWeight, FontWeight.bold);
   });
 
+  testWidgets('focusing that paragraph promotes it to its raw Markdown source, '
+      'delimiters included', (tester) async {
+    final api = _FakeRustApi()..sources['0'] = 'before **bold**';
+    await pumpEditor(tester, [
+      _paragraphOf([_plainRun('before '), _boldRun('bold')]),
+    ], api: api);
+    expect(find.textContaining('**'), findsNothing);
+
+    await promoteByTap(tester, find.byType(RichText));
+
+    // The whole point of the model: the user sees and types real Markdown.
+    expect(_field(tester).controller.text, 'before **bold**');
+    expect(find.byType(RichText), findsNothing);
+    // Promotion itself is not an edit: nothing buffered yet, nothing
+    // committed.
+    expect(api.updateCount, 0);
+    expect(api.commitCount, 0);
+  });
+
+  testWidgets('a multi-run paragraph keeps each run\'s distinct styling '
+      'while rendered', (tester) async {
+    await pumpEditor(tester, [
+      _paragraphOf([_plainRun('before '), _boldRun('bold')]),
+    ]);
+
+    final richText = tester.widget<RichText>(find.byType(RichText).first);
+    final wrapperSpan = richText.text as TextSpan;
+    final paragraphSpan = wrapperSpan.children!.first as TextSpan;
+    final firstRun = paragraphSpan.children![0] as TextSpan;
+    final secondRun = paragraphSpan.children![1] as TextSpan;
+
+    expect(firstRun.text, 'before ');
+    expect(firstRun.style?.fontWeight, isNull);
+    expect(secondRun.text, 'bold');
+    expect(secondRun.style?.fontWeight, FontWeight.bold);
+  });
+
+  // -- CAP-EDIT-02: every Block type is editable ---------------------------
+
   testWidgets(
-    'a multi-run paragraph stays read-only and keeps each run\'s distinct '
-    'styling, instead of collapsing to one TextField style',
+    'a heading, a list, a blockquote, a code Block and a thematic break '
+    'each display their own raw source and accept edits when focused',
     (tester) async {
-      final ast = [
-        AstNode.paragraph(
-          content: [
-            InlineElement.text(
-              const TextRun(
-                content: 'before ',
-                bold: false,
-                italic: false,
-                strikethrough: false,
-                code: false,
-              ),
-            ),
-            InlineElement.text(
-              const TextRun(
-                content: 'bold',
-                bold: true,
-                italic: false,
-                strikethrough: false,
-                code: false,
-              ),
-            ),
-          ],
+      final cases = <(AstNode, String)>[
+        (
+          AstNode.heading(level: 2, content: [_plainRun('Head two')]),
+          '## Head two',
         ),
+        (
+          AstNode.list(
+            ordered: false,
+            items: [
+              AstNode.listItem(content: [_plainParagraph('item one')]),
+            ],
+          ),
+          '- item one',
+        ),
+        (
+          AstNode.blockquote(nodes: [_plainParagraph('quoted line')]),
+          '> quoted line',
+        ),
+        (
+          AstNode.codeBlock(code: 'print(1);\nprint(2);'),
+          '```\nprint(1);\nprint(2);\n```',
+        ),
+        // The last member of the CAP-EDIT-02 Block-type list: renders as a
+        // rule unfocused, shows its source focused like any other Block.
+        (const AstNode.thematicBreak(), '---'),
       ];
 
-      await pumpEditor(tester, ast);
+      for (final (node, rawSource) in cases) {
+        final api = _FakeRustApi()..sources['0'] = rawSource;
+        await pumpEditor(tester, [node], api: api);
 
-      // A single TextField can only carry one uniform style, so a multi-run
-      // paragraph must render read-only instead of silently flattening to
-      // the first run's style and dropping the rest (the bug this test
-      // guards: caught via an actual `flutter run`, not a prior test, since
-      // every other test here only ever builds single-run paragraphs).
-      expect(find.byType(TextField), findsNothing);
+        // Thematic breaks render as a rule, not text, until focused.
+        if (node is! AstNode_ThematicBreak) {
+          expect(_writableFields(), findsNothing);
+        }
 
-      final richText = tester.widget<RichText>(find.byType(RichText).first);
-      final wrapperSpan = richText.text as TextSpan;
-      final paragraphSpan = wrapperSpan.children!.first as TextSpan;
-      final firstRun = paragraphSpan.children![0] as TextSpan;
-      final secondRun = paragraphSpan.children![1] as TextSpan;
+        await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
 
-      expect(firstRun.text, 'before ');
-      expect(firstRun.style?.fontWeight, isNull);
-      expect(secondRun.text, 'bold');
-      expect(secondRun.style?.fontWeight, FontWeight.bold);
+        expect(
+          _field(tester).controller.text,
+          rawSource,
+          reason: 'focused $node must show its own raw source',
+        );
+
+        await tester.enterText(find.byType(EditableText), 'edited');
+        await tester.pump();
+
+        // The edit went to the Core's buffering call against this Block.
+        expect(api.lastBlockPath, [0]);
+        expect(api.lastSource, 'edited');
+      }
     },
   );
 
-  testWidgets('a non-bold TextRun inside a Heading still inherits bold', (
+  testWidgets('an unfocused thematic break renders as a rule', (tester) async {
+    await pumpEditor(tester, [const AstNode.thematicBreak()]);
+    expect(find.byType(Divider), findsOneWidget);
+    expect(_writableFields(), findsNothing);
+  });
+
+  // -- Caret placement -----------------------------------------------------
+
+  testWidgets('the caret is placed at the clicked position, not the start', (
     tester,
   ) async {
-    final ast = [
-      AstNode.heading(
-        level: 1,
-        content: [
-          InlineElement.text(
-            const TextRun(
-              content: 'Title',
-              bold: false,
-              italic: false,
-              strikethrough: false,
-              code: false,
-            ),
-          ),
+    final api = _FakeRustApi()..sources['0'] = 'hello world';
+    await pumpEditor(tester, [_plainParagraph('hello world')], api: api);
+
+    // Ahem (the test font) draws every glyph exactly fontSize wide, so the
+    // boundary between characters is deterministic: character 6 ('w') starts
+    // at 6*14 px into the painted paragraph; tap its middle.
+    final paragraph = tester.renderObject<RenderParagraph>(
+      find.byType(RichText),
+    );
+    await tester.tapAt(Offset(6 * 14 + 7, paragraph.size.height / 2));
+    await tester.pump();
+    await tester.pump();
+
+    expect(_field(tester).controller.selection.baseOffset, 6);
+  });
+
+  // -- Typographic stability -----------------------------------------------
+
+  testWidgets('position and size are unchanged across a focus+blur round '
+      'trip', (tester) async {
+    final api = _FakeRustApi()
+      ..sources['0'] = 'first **bold** end'
+      ..sources['1'] = 'second block'
+      ..commitResult = _testNoteState([
+        _paragraphOf([
+          _plainRun('first '),
+          _boldRun('bold'),
+          _plainRun(' end'),
+        ]),
+        _plainParagraph('second block'),
+      ]);
+    await pumpEditor(tester, [
+      _paragraphOf([_plainRun('first '), _boldRun('bold'), _plainRun(' end')]),
+      _plainParagraph('second block'),
+    ], api: api);
+
+    Rect entryRect() => tester.getRect(find.byKey(const ValueKey('entry-0')));
+
+    final before = entryRect();
+
+    // Focused: the raw field replaces the rendering, in the same slot.
+    await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
+    final focused = entryRect();
+
+    // Blur by focusing the neighbouring Block; the first returns to
+    // formatted output through commit_block's returned state.
+    await promoteByTap(tester, find.byKey(const ValueKey('block-1')));
+    final after = entryRect();
+
+    expect(
+      focused.topLeft,
+      before.topLeft,
+      reason: 'promotion must not move the Block',
+    );
+    expect(
+      focused.size,
+      before.size,
+      reason:
+          'SPK-EDIT-F001 §3b: pinned height/leading distribution make '
+          'the two states geometrically identical',
+    );
+    expect(after, before, reason: 'blur restores the exact pre-focus geometry');
+    expect(api.commitCount, 1);
+    expect(api.committedPaths.single, [0]);
+  });
+
+  // -- Blur commits, focus re-derived from the returned state --------------
+
+  testWidgets('editing a paragraph to begin with a list marker reshapes it '
+      'on blur, with focus re-derived from the returned state', (tester) async {
+    final reshaped = _testNoteState([
+      AstNode.list(
+        ordered: false,
+        items: [
+          AstNode.listItem(content: [_plainParagraph('now a list')]),
         ],
       ),
-    ];
+    ]);
+    final api = _FakeRustApi()
+      ..sources['0'] = 'plain words'
+      ..commitResult = reshaped;
+    final container = await pumpEditor(tester, [
+      _plainParagraph('plain words'),
+    ], api: api);
 
-    await pumpEditor(tester, ast);
+    await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
+    await tester.enterText(find.byType(EditableText), '- now a list');
+    await tester.pump();
+    expect(api.lastSource, '- now a list');
 
-    final richText = tester.widget<RichText>(find.byType(RichText).first);
-    // richText.text is the wrapper Text.rich itself creates, carrying the
-    // `style:` we passed to Text.rich (the Heading's bold). Our own heading-
-    // content span sits one level down, and the leaf inline span another
-    // level down still.
-    final wrapperSpan = richText.text as TextSpan;
-    final headingContentSpan = wrapperSpan.children!.first as TextSpan;
-    final leafSpan = headingContentSpan.children!.first as TextSpan;
+    await blurFocusedField(tester);
 
-    expect(
-      wrapperSpan.style?.fontWeight,
-      FontWeight.bold,
-      reason: 'the Heading itself declares bold styling',
+    // commit_block ran once, against the path that was focused...
+    expect(api.commitCount, 1);
+    expect(api.committedPaths.single, [0]);
+    // ...and the returned state is authoritative: the Block is now a list.
+    final adopted = container.read(activeNoteProvider)!;
+    expect(identical(adopted, reshaped), isTrue);
+    expect(adopted.ast.single, isA<AstNode_List>());
+    expect(find.text('•'), findsOneWidget);
+    // Focus was re-derived from the returned state — i.e. nothing retained:
+    // no field survives the commit.
+    expect(_writableFields(), findsNothing);
+  });
+
+  testWidgets('typing uses only the buffering call; the reparse waits for '
+      'blur', (tester) async {
+    final api = _FakeRustApi()
+      ..sources['0'] = 'start'
+      ..commitResult = _testNoteState([_plainParagraph('start typed')]);
+    await pumpEditor(tester, [_plainParagraph('start')], api: api);
+
+    await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
+
+    await tester.enterText(find.byType(EditableText), 'start t');
+    await tester.pump();
+    await tester.enterText(find.byType(EditableText), 'start typ');
+    await tester.pump();
+
+    // Every keystroke went to `update_block`; no reparsing call fired while
+    // focus lasted — that is what keeps the reparse off the typing path.
+    expect(api.updateCount, 2);
+    expect(api.commitCount, 0);
+
+    await blurFocusedField(tester);
+    expect(api.commitCount, 1);
+  });
+
+  // -- IME composition survival ---------------------------------------------
+
+  testWidgets('a live IME composition survives an external resync and a '
+      'blur commit without loss, duplication or reordering', (tester) async {
+    final composed = _testNoteState([
+      _paragraphOf([_plainRun('base中')]),
+    ]);
+    final api = _FakeRustApi()
+      ..sources['0'] = 'base'
+      ..commitResult = composed;
+    final container = await pumpEditor(tester, [
+      _plainParagraph('base'),
+    ], api: api);
+
+    await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
+
+    // A marked, not-yet-committed CJK string arrives over the input
+    // connection with a live composing range.
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(
+        text: 'base中',
+        composing: TextRange(start: 4, end: 5),
+        selection: TextSelection.collapsed(offset: 5),
+      ),
     );
+    await tester.pump();
+
+    // The composing bytes were buffered to the Core as they arrived...
+    expect(api.lastSource, 'base中');
+    expect(_field(tester).controller.text, 'base中');
+
+    // ...and provider state changing underneath the composition (any
+    // external adopt) must NOT stomp the live composing region.
+    container.read(activeNoteProvider.notifier).state = _testNoteState([
+      _plainParagraph('base'),
+    ]);
+    await tester.pump();
     expect(
-      leafSpan.style?.fontWeight,
-      isNull,
+      _field(tester).controller.text,
+      'base中',
       reason:
-          'a non-bold leaf run must leave fontWeight unset so it inherits '
-          'the ancestor Heading style, rather than forcing FontWeight.normal '
-          'and overriding it',
+          'a resync during a live composition would discard or '
+          'duplicate the composing string',
     );
+
+    // Blur commits; the composition completes into the Block's source via
+    // the returned state.
+    await blurFocusedField(tester);
+    expect(
+      container.read(activeNoteProvider)!.ast.single,
+      isA<AstNode_Paragraph>(),
+    );
+    final adoptedParagraph =
+        container.read(activeNoteProvider)!.ast.single as AstNode_Paragraph;
+    final adoptedText =
+        (adoptedParagraph.content.single as InlineElement_Text).field0.content;
+    expect(adoptedText, 'base中');
+
+    // Navigating back: the field reopens holding the composed text exactly
+    // once — never duplicated, reordered, or silently discarded.
+    api.sources['0'] = 'base中';
+    await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
+    expect('base中'.allMatches(_field(tester).controller.text).length, 1);
+    expect(_field(tester).controller.text, 'base中');
   });
 
-  testWidgets('an ordered list numbers its items instead of bulleting them', (
-    tester,
-  ) async {
-    AstNode item(String text) =>
-        AstNode.listItem(content: [_paragraphOf(text)]);
-    final ast = [
-      AstNode.list(ordered: true, items: [item('first'), item('second')]),
-    ];
-
-    await pumpEditor(tester, ast);
-
-    expect(find.text('1.'), findsOneWidget);
-    expect(find.text('2.'), findsOneWidget);
-    expect(find.text('•'), findsNothing);
-  });
+  // -- Keystroke round trip -------------------------------------------------
 
   testWidgets(
-    'typing in a paragraph calls update_block with the raw source text '
+    'typing in a focused paragraph calls update_block with the raw source '
     'within one frame, and does not itself reparse the note',
     (tester) async {
-      final fakeApi = _FakeRustApi();
-      final container = ProviderContainer(
-        overrides: [
-          activeNoteProvider.overrideWith(
-            () =>
-                _FixedNoteController(_testNoteState([_paragraphOf('before')])),
-          ),
-          rustApiProvider.overrideWithValue(fakeApi),
-        ],
-      );
-      addTearDown(container.dispose);
+      final api = _FakeRustApi()
+        ..sources['0'] = 'before'
+        ..commitResult = _testNoteState([_plainParagraph('after')]);
+      final container = await pumpEditor(tester, [
+        _plainParagraph('before'),
+      ], api: api);
 
-      await tester.pumpWidget(
-        UncontrolledProviderScope(
-          container: container,
-          child: const MaterialApp(home: Scaffold(body: Editor())),
-        ),
-      );
-
-      await tester.enterText(find.byType(TextField).first, 'after');
+      await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
+      await tester.enterText(find.byType(EditableText), 'after');
       await tester.pump(); // exactly one frame — no extra async round trip
 
       // `update_block` (ADR-007 decision 4) is the per-keystroke call: it
-      // takes the Block's raw source text, not a reconstructed AstNode, and
-      // this is what proves the field's keystroke reaches it with the right
-      // arguments.
-      expect(fakeApi.lastNoteId, _testMetadata.id);
-      expect(fakeApi.lastBlockPath, [0]);
-      expect(fakeApi.lastSource, 'after');
+      // takes the Block's raw source text, not a reconstructed AstNode.
+      expect(api.lastNoteId, _testMetadata.id);
+      expect(api.lastBlockPath, [0]);
+      expect(api.lastSource, 'after');
+      expect(api.updateCount, 1);
 
       // The field itself already shows the typed text via its own
       // TextEditingController — that is what the user sees.
       expect(find.text('after'), findsOneWidget);
 
-      // `update_block` returns nothing and performs no parse (that is
-      // `commit_block`'s job, on blur — EDIT-F002 territory, not wired up
-      // here), so the provider's own note state is left exactly as it was.
-      final updated = container.read(activeNoteProvider);
-      final paragraph = updated!.ast.single as AstNode_Paragraph;
+      // `update_block` performs no parse, so the provider's own note state
+      // is left exactly as it was until blur commits.
+      final updated = container.read(activeNoteProvider)!;
+      final paragraph = updated.ast.single as AstNode_Paragraph;
       final leaf = paragraph.content.single as InlineElement_Text;
       expect(leaf.field0.content, 'before');
     },
   );
 
-  testWidgets(
-    'swapping to a different note resyncs an untouched, reused field',
-    (tester) async {
-      final container = ProviderContainer(
-        overrides: [
-          activeNoteProvider.overrideWith(
-            () => _FixedNoteController(_testNoteState([_paragraphOf('first')])),
-          ),
-        ],
-      );
-      addTearDown(container.dispose);
+  testWidgets('an external state change resyncs the focused field from the '
+      'Core once the composition is not live', (tester) async {
+    final api = _FakeRustApi()..sources['0'] = 'first';
+    final container = await pumpEditor(tester, [
+      _plainParagraph('first'),
+    ], api: api);
 
-      await tester.pumpWidget(
-        UncontrolledProviderScope(
-          container: container,
-          child: const MaterialApp(home: Scaffold(body: Editor())),
-        ),
-      );
-      expect(find.text('first'), findsOneWidget);
+    await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
+    expect(_field(tester).controller.text, 'first');
 
-      // Swap in a different note's content without the user having typed
-      // anything into the still-mounted field at this same list index.
-      container.read(activeNoteProvider.notifier).state = _testNoteState([
-        _paragraphOf('second'),
-      ]);
-      await tester.pump();
+    // Swap in different content for the same note without the user typing;
+    // the field refetches its source rather than keeping stale bytes whose
+    // next keystroke would revert a Core-side rewrite.
+    api.sources['0'] = 'second source';
+    container.read(activeNoteProvider.notifier).state = _testNoteState([
+      _plainParagraph('second'),
+    ]);
+    await tester.pump();
 
-      expect(
-        find.text('second'),
-        findsOneWidget,
-        reason:
-            'the reused field must resync to the externally-swapped note '
-            'content instead of keeping the previous note\'s stale text',
-      );
-      expect(find.text('first'), findsNothing);
-    },
-  );
+    expect(
+      _field(tester).controller.text,
+      'second source',
+      reason:
+          'the focused field must resync to the externally-swapped note '
+          'content instead of keeping the previous stale text',
+    );
+  });
 
   // -- SHEL-E004 ----------------------------------------------------------
 
@@ -504,7 +751,7 @@ void main() {
       // The switch aborted at close_note: B never opened.
       expect(api.calls, ['open:note-a', 'close:note-a']);
       expect(container.read(activeNoteProvider)!.metadata.id, 'note-a');
-      // Selection rolled back so the highlight names the note actually
+      // Selection rolled back so the tree highlight names the note actually
       // shown in the editor, not the one the Core refused to reach.
       expect(container.read(selectedNoteIdProvider), 'note-a');
       // And the failure stays visible on the error surface.
@@ -557,7 +804,7 @@ void main() {
     expect(find.textContaining('core exploded'), findsOneWidget);
     // And no note content is rendered alongside it — no editable field
     // from the editor's own rendering path.
-    expect(find.byType(TextField), findsNothing);
+    expect(_writableFields(), findsNothing);
   });
 }
 
