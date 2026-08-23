@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:burlmd/l10n/generated/app_localizations.dart';
-import 'package:burlmd/src/providers/note_providers.dart';
 import 'package:burlmd/src/providers/rust_api_provider.dart';
 import 'package:burlmd/src/rust/index/query.dart' as core;
 import 'package:flutter/material.dart';
@@ -173,9 +172,12 @@ class LinkCompletionState extends ConsumerState<LinkCompletionPopup> {
         return;
       }
       setState(() => _candidates = results.take(10).toList(growable: false));
-    } catch (error) {
+    } catch (_) {
       if (mounted && generation == _generation) {
-        ref.read(editorErrorProvider.notifier).report(error);
+        // Completion is an optional query over derived index state. Reporting
+        // it through editorErrorProvider would replace the active Note, while
+        // keystrokeWriteFailureProvider is reserved for failed writes; close
+        // this transient affordance and leave the raw field usable instead.
         _dismiss();
       }
     }

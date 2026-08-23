@@ -75,6 +75,11 @@ class EditorState extends ConsumerState<Editor> {
   NoteState? _rangeState;
   String? _rangeNoteId;
 
+  /// A Link resolution is valid only for the Note and activation that started
+  /// it. The index call is asynchronous, so an older tap must not navigate a
+  /// Note the user has since left (or override a newer Link activation).
+  int _linkRequestGeneration = 0;
+
   /// Overrides the region's default copy with the Core-produced Markdown
   /// path (CAP-EDIT-04); see [_CopyRangeAsMarkdownAction].
   late final Action<CopySelectionTextIntent> _copyAction =
@@ -88,41 +93,12 @@ class EditorState extends ConsumerState<Editor> {
       _SelectWholeNoteAction(this);
 
   late final Action<DeleteCharacterIntent> _deleteCharacterAction =
-      CallbackAction<DeleteCharacterIntent>(
-        onInvoke: (intent) {
-          unawaited(
-            _rangeInputClient?.deleteSelection() ?? Future<void>.value(),
-          );
-          return null;
-        },
-      );
+      _RangeDeleteAction<DeleteCharacterIntent>(this);
   late final Action<DeleteToNextWordBoundaryIntent> _deleteWordAction =
-      CallbackAction<DeleteToNextWordBoundaryIntent>(
-        onInvoke: (intent) {
-          unawaited(
-            _rangeInputClient?.deleteSelection() ?? Future<void>.value(),
-          );
-          return null;
-        },
-      );
+      _RangeDeleteAction<DeleteToNextWordBoundaryIntent>(this);
   late final Action<DeleteToLineBreakIntent> _deleteLineAction =
-      CallbackAction<DeleteToLineBreakIntent>(
-        onInvoke: (intent) {
-          unawaited(
-            _rangeInputClient?.deleteSelection() ?? Future<void>.value(),
-          );
-          return null;
-        },
-      );
-  late final Action<PasteTextIntent> _pasteAction =
-      CallbackAction<PasteTextIntent>(
-        onInvoke: (intent) {
-          unawaited(
-            _rangeInputClient?.pasteSelection() ?? Future<void>.value(),
-          );
-          return null;
-        },
-      );
+      _RangeDeleteAction<DeleteToLineBreakIntent>(this);
+  late final Action<PasteTextIntent> _pasteAction = _RangePasteAction(this);
 
   /// The Note for which Select All is currently authoritative. This is UI
   /// interaction state, not retained Note content; a pointer gesture or focus
@@ -387,10 +363,16 @@ class EditorState extends ConsumerState<Editor> {
   /// and a stale Note can only be followed safely from this fresh sealed
   /// resolution.
   Future<void> _followInternalLink(String targetId) async {
+    final origin = ref.read(activeNoteProvider);
+    if (origin == null) return;
+    final request = ++_linkRequestGeneration;
+    final linkContext = context;
     try {
       final api = ref.read(rustApiProvider);
       final resolution = await api.resolveLinkTarget(targetId);
-      if (!mounted) return;
+      if (!linkContext.mounted || !_isCurrentLinkRequest(request, origin)) {
+        return;
+      }
       switch (resolution) {
         case LinkTargetResolution_Existing(:final noteId):
           ref.read(selectedNoteIdProvider.notifier).select(noteId);
@@ -400,16 +382,28 @@ class EditorState extends ConsumerState<Editor> {
           :final title,
         ):
           await _offerCreateLinkedNote(
-            context,
+            linkContext,
             api,
             targetId: targetId,
             directoryPath: directoryPath,
             title: title,
+            request: request,
+            origin: origin,
           );
       }
     } catch (error) {
-      if (mounted) ref.read(editorErrorProvider.notifier).report(error);
+      if (_isCurrentLinkRequest(request, origin)) {
+        ref.read(editorErrorProvider.notifier).report(error);
+      }
     }
+  }
+
+  bool _isCurrentLinkRequest(int request, NoteState origin) {
+    final current = ref.read(activeNoteProvider);
+    return mounted &&
+        request == _linkRequestGeneration &&
+        identical(current, origin) &&
+        current?.metadata.id == origin.metadata.id;
   }
 
   Future<void> _offerCreateLinkedNote(
@@ -418,6 +412,8 @@ class EditorState extends ConsumerState<Editor> {
     required String targetId,
     required String directoryPath,
     required String title,
+    required int request,
+    required NoteState origin,
   }) async {
     final l10n = AppLocalizations.of(context)!;
     final accepted = await showDialog<bool>(
@@ -437,15 +433,18 @@ class EditorState extends ConsumerState<Editor> {
         ],
       ),
     );
-    if (accepted != true || !mounted) return;
+    if (accepted != true || !_isCurrentLinkRequest(request, origin)) return;
     try {
       // `targetId` comes only from the fresh Core resolution above. Dart does
       // not derive a title, directory, or replacement identity here.
       final created = await api.createLinkTarget(targetId);
+      if (!_isCurrentLinkRequest(request, origin)) return;
       ref.invalidate(workspaceTreeProvider);
       ref.read(selectedNoteIdProvider.notifier).select(created.metadata.id);
     } catch (error) {
-      if (mounted) ref.read(editorErrorProvider.notifier).report(error);
+      if (_isCurrentLinkRequest(request, origin)) {
+        ref.read(editorErrorProvider.notifier).report(error);
+      }
     }
   }
 
@@ -471,7 +470,7 @@ class EditorState extends ConsumerState<Editor> {
     // Moving focus between Blocks commits the outgoing one first: its last
     // buffered text must reach the working source before anything else
     // reads the Note, and blur is the commit point (ADR-006, ADR-008).
-    if (_focused != null) _commitFocused();
+    if (_focused != null && !_commitFocused()) return;
     final note = ref.read(activeNoteProvider);
     if (note == null ||
         topLevelPath.length != 1 ||
@@ -711,10 +710,40 @@ class EditorState extends ConsumerState<Editor> {
   /// the edited Block (a paragraph retyped to begin with `- ` becomes a
   /// list), so nothing survives the commit except the returned state
   /// itself.
-  void _commitFocused() {
+  bool _commitFocused() {
     final focused = _focused;
-    if (focused == null || !focused.canCommit) return;
+    if (focused == null || !focused.canCommit) return false;
     _closeRangeInput();
+    if (focused.isPhantom) {
+      // The sanctioned phantom Block is UI-side caret state ONLY (`EDIT-F004`):
+      // CommonMark has no empty paragraph, so there is nothing to commit and
+      // no `block_path` to address. Focus leaving it without anything typed
+      // simply discards it; the Note is unchanged.
+      _clearFocusedAfterCommit();
+      return true;
+    }
+    final note = ref.read(activeNoteProvider);
+    if (note == null) return false;
+    try {
+      final newState = ref
+          .read(rustApiProvider)
+          .commitBlock(note.metadata.id, focused.path);
+      _clearFocusedAfterCommit();
+      ref.read(activeNoteProvider.notifier).adopt(newState);
+      return true;
+    } catch (error) {
+      // A refused commit leaves the Core's working source holding whatever
+      // `update_block` already buffered. Keep that exact field mounted and
+      // refocus it: clearing focus before the Core accepts would discard the
+      // user's only visible raw source. Selection brokers stay untouched, so
+      // the fresh-rendered-selection rule remains in force.
+      ref.read(keystrokeWriteFailureProvider.notifier).report(error);
+      _restoreFocusedField(focused);
+      return false;
+    }
+  }
+
+  void _clearFocusedAfterCommit() {
     setState(() {
       _focused = null;
       // Do not retain a range that crossed the field while it was focused.
@@ -724,26 +753,25 @@ class EditorState extends ConsumerState<Editor> {
       _selectionBrokers.clear();
       _wholeNoteSelectedId = null;
     });
-    if (focused.isPhantom) {
-      // The sanctioned phantom Block is UI-side caret state ONLY (`EDIT-F004`):
-      // CommonMark has no empty paragraph, so there is nothing to commit and
-      // no `block_path` to address. Focus leaving it without anything typed
-      // simply discards it; the Note is unchanged.
-      return;
-    }
-    final note = ref.read(activeNoteProvider);
-    if (note == null) return;
-    try {
-      final newState = ref
-          .read(rustApiProvider)
-          .commitBlock(note.metadata.id, focused.path);
-      ref.read(activeNoteProvider.notifier).adopt(newState);
-    } catch (error) {
-      // A failed blur commit leaves the Core's working source holding
-      // whatever `update_block` already buffered; surfacing beside the
-      // content beats discarding it. The next successful open clears this.
-      ref.read(keystrokeWriteFailureProvider.notifier).report(error);
-    }
+  }
+
+  void _restoreFocusedField(_Focus focused) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !identical(_focused, focused)) return;
+      FocusNode? fieldFocus;
+      void visit(Element element) {
+        if (fieldFocus != null) return;
+        final widget = element.widget;
+        if (widget is EditableText && !widget.readOnly) {
+          fieldFocus = widget.focusNode;
+          return;
+        }
+        element.visitChildElements(visit);
+      }
+
+      context.visitChildElements(visit);
+      fieldFocus?.requestFocus();
+    });
   }
 
   static bool _pathEquals(List<int> a, List<int> b) =>
@@ -1337,7 +1365,7 @@ class EditorState extends ConsumerState<Editor> {
     // §4b): fall through to the default so the focused Block behaves normally.
     if (_focused != null) {
       // ignore: invalid_use_of_protected_member
-      return fallback?.invoke(CopySelectionTextIntent.copy);
+      return fallback?.invoke(intent);
     }
     // A pointer sequence that began in a raw field may have blurred it while
     // crossing the surrounding region. It has no valid rendered endpoints;
@@ -1790,6 +1818,40 @@ class _CopyRangeAsMarkdownAction extends Action<CopySelectionTextIntent> {
   @override
   Object? invoke(CopySelectionTextIntent intent, [BuildContext? context]) =>
       _state.handleCopyRequest(intent, callingAction);
+}
+
+/// Handles delete intents only while the editor owns a live cross-Block
+/// range. Otherwise this ancestor must delegate to EditableText's overridable
+/// action so a focused raw field keeps Flutter's normal delete semantics.
+class _RangeDeleteAction<T extends Intent> extends Action<T> {
+  _RangeDeleteAction(this._state);
+
+  final EditorState _state;
+
+  @override
+  Object? invoke(T intent, [BuildContext? context]) {
+    final rangeClient = _state._rangeInputClient;
+    if (rangeClient == null) return callingAction?.invoke(intent);
+    unawaited(rangeClient.deleteSelection());
+    return null;
+  }
+}
+
+/// Handles paste only for a live cross-Block range. A raw focused field's
+/// paste is the framework default, including its controller and selection
+/// handling, reached through [callingAction].
+class _RangePasteAction extends Action<PasteTextIntent> {
+  _RangePasteAction(this._state);
+
+  final EditorState _state;
+
+  @override
+  Object? invoke(PasteTextIntent intent, [BuildContext? context]) {
+    final rangeClient = _state._rangeInputClient;
+    if (rangeClient == null) return callingAction?.invoke(intent);
+    unawaited(rangeClient.pasteSelection());
+    return null;
+  }
 }
 
 /// Captures Select All before the lazy SelectionArea action truncates its

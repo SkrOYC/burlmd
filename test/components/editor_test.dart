@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:burlmd/l10n/generated/app_localizations.dart';
 import 'package:burlmd/src/components/editor.dart';
 import 'package:burlmd/src/providers/note_providers.dart';
 import 'package:burlmd/src/providers/rust_api_provider.dart';
@@ -99,6 +100,17 @@ class _FakeRustApi extends RustApi {
     committedPaths.add(blockPath);
     commitCount++;
     return commitResult ?? (throw Exception('no commit result prepared'));
+  }
+}
+
+class _LinkResolutionApi extends _FakeRustApi {
+  final Map<String, Completer<LinkTargetResolution>> resolutions = {};
+  final List<String> calls = [];
+
+  @override
+  Future<LinkTargetResolution> resolveLinkTarget(String targetId) {
+    calls.add(targetId);
+    return resolutions[targetId]!.future;
   }
 }
 
@@ -250,6 +262,8 @@ Future<ProviderContainer> pumpEditor(
     UncontrolledProviderScope(
       container: container,
       child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(body: Editor(key: ValueKey('editor-${pumpCounter++}'))),
       ),
     ),
@@ -270,6 +284,52 @@ Future<void> promoteByTap(WidgetTester tester, Finder what) async {
 Future<void> blurFocusedField(WidgetTester tester) async {
   FocusManager.instance.primaryFocus?.unfocus();
   await tester.pump();
+  await tester.pump();
+}
+
+/// The raw-field intent tests own Flutter's platform clipboard channel so
+/// Paste and Cut exercise the installed framework actions deterministically.
+ValueNotifier<String?> _mockClipboard(WidgetTester tester, [String? initial]) {
+  final text = ValueNotifier<String?>(initial);
+  tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+    SystemChannels.platform,
+    (call) async {
+      switch (call.method) {
+        case 'Clipboard.getData':
+          return text.value == null
+              ? null
+              : <String, String>{'text': text.value!};
+        case 'Clipboard.setData':
+          final args = call.arguments as Map<Object?, Object?>?;
+          text.value = args?['text'] as String?;
+          return null;
+      }
+      return null;
+    },
+  );
+  addTearDown(() {
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      null,
+    );
+    text.dispose();
+  });
+  return text;
+}
+
+Future<void> activateInternalLink(
+  WidgetTester tester,
+  int index,
+  String targetId,
+) async {
+  final target = find.byKey(ValueKey('internal-link-focus-$index-$targetId'));
+  Focus.of(
+    tester.element(
+      find.descendant(of: target, matching: find.byType(Semantics)).first,
+    ),
+  ).requestFocus();
+  await tester.pump();
+  await tester.sendKeyEvent(LogicalKeyboardKey.enter);
   await tester.pump();
 }
 
@@ -864,6 +924,65 @@ void main() {
     expect(api.commitCount, 1);
   });
 
+  testWidgets('a focused raw field delegates Delete, Paste, and Cut to '
+      'EditableText instead of the cross-Block actions', (tester) async {
+    final api = _FakeRustApi()..sources['0'] = 'draft';
+    await pumpEditor(tester, [_plainParagraph('draft')], api: api);
+    final clipboard = _mockClipboard(tester, ' paste ');
+
+    await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
+    final field = _field(tester);
+    field.controller.selection = const TextSelection(
+      baseOffset: 1,
+      extentOffset: 4,
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
+    await tester.pump();
+    expect(field.controller.text, 'dt');
+
+    field.controller.selection = const TextSelection.collapsed(offset: 1);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyV);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pump();
+    await tester.pump();
+    expect(field.controller.text, 'd paste t');
+
+    field.controller.selection = const TextSelection(
+      baseOffset: 1,
+      extentOffset: 8,
+    );
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyX);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pump();
+    await tester.pump();
+    expect(field.controller.text, 'dt');
+    expect(clipboard.value, ' paste ');
+    expect(api.lastSource, 'dt');
+  });
+
+  testWidgets('a refused blur commit retains and refocuses the raw field', (
+    tester,
+  ) async {
+    final api = _FakeRustApi()..sources['0'] = 'draft';
+    final container = await pumpEditor(tester, [
+      _plainParagraph('draft'),
+    ], api: api);
+
+    await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
+    await tester.enterText(_writableFields(), 'edited raw source');
+    await tester.pump();
+
+    await blurFocusedField(tester);
+
+    expect(api.commitCount, 1);
+    expect(_writableFields(), findsOneWidget);
+    expect(_field(tester).controller.text, 'edited raw source');
+    expect(_field(tester).focusNode.hasFocus, isTrue);
+    expect(container.read(keystrokeWriteFailureProvider), isA<Exception>());
+  });
+
   // -- IME composition survival ---------------------------------------------
 
   testWidgets('a live IME composition survives an external resync and a '
@@ -1261,6 +1380,88 @@ void main() {
           'the focused field must resync to the externally-swapped note '
           'content instead of keeping the previous stale text',
     );
+  });
+
+  testWidgets('stale internal-Link resolutions cannot navigate after a '
+      'newer activation or source-Note change', (tester) async {
+    final first = Completer<LinkTargetResolution>();
+    final second = Completer<LinkTargetResolution>();
+    final afterNoteChange = Completer<LinkTargetResolution>();
+    final api = _LinkResolutionApi()
+      ..resolutions['first'] = first
+      ..resolutions['second'] = second
+      ..resolutions['after-note-change'] = afterNoteChange;
+    final container = await pumpEditor(tester, [
+      _paragraphOf([
+        InlineElement.link(
+          targetId: 'first',
+          exists: true,
+          content: [_plainRun('First')],
+        ),
+        _plainRun(' then '),
+        InlineElement.link(
+          targetId: 'second',
+          exists: true,
+          content: [_plainRun('Second')],
+        ),
+      ]),
+    ], api: api);
+    await tester.pump();
+
+    await activateInternalLink(tester, 0, 'first');
+    await activateInternalLink(tester, 1, 'second');
+    expect(api.calls, ['first', 'second']);
+    first.complete(const LinkTargetResolution_Existing(noteId: 'old-target'));
+    await tester.pump();
+    expect(container.read(selectedNoteIdProvider), isNull);
+
+    second.complete(
+      const LinkTargetResolution_Existing(noteId: 'latest-target'),
+    );
+    await tester.pump();
+    expect(container.read(selectedNoteIdProvider), 'latest-target');
+
+    container.read(activeNoteProvider.notifier).state = NoteState(
+      ast: [
+        _paragraphOf([
+          InlineElement.link(
+            targetId: 'after-note-change',
+            exists: true,
+            content: [_plainRun('Stale')],
+          ),
+        ]),
+      ],
+      metadata: const NoteMetadata(
+        id: 'origin-note',
+        path: 'origin.md',
+        title: 'Origin',
+        lastModified: 0,
+        okfConformant: true,
+      ),
+      baseRevision: 'head',
+      restoredFromDraft: false,
+    );
+    await tester.pump();
+    await activateInternalLink(tester, 0, 'after-note-change');
+    container.read(activeNoteProvider.notifier).state = NoteState(
+      ast: [_plainParagraph('replacement')],
+      metadata: const NoteMetadata(
+        id: 'replacement-note',
+        path: 'replacement.md',
+        title: 'Replacement',
+        lastModified: 0,
+        okfConformant: true,
+      ),
+      baseRevision: 'head',
+      restoredFromDraft: false,
+    );
+    await tester.pump();
+    afterNoteChange.complete(
+      const LinkTargetResolution_Existing(noteId: 'stale-target'),
+    );
+    await tester.pump();
+
+    expect(container.read(selectedNoteIdProvider), 'latest-target');
   });
 
   // -- SHEL-E004 ----------------------------------------------------------
