@@ -149,12 +149,14 @@ class RustApi {
       );
 
   /// Merges a Block into its predecessor — Backspace at offset 0
-  /// (CAP-EDIT-03). A no-op on the first Block.
-  NoteState mergeBlockWithPrevious(String noteId, List<int> blockPath) =>
-      ffi.mergeBlockWithPrevious(
-        noteId: noteId,
-        blockPath: Uint64List.fromList(blockPath),
-      );
+  /// (CAP-EDIT-03), returning Core's reparsed predecessor leaf and caret.
+  ffi.StructuralEdit mergeBlockWithPrevious(
+    String noteId,
+    List<int> blockPath,
+  ) => ffi.mergeBlockWithPrevious(
+    noteId: noteId,
+    blockPath: Uint64List.fromList(blockPath),
+  );
 
   /// Continues after a real editable leaf. Core inspects the AST to preserve a
   /// List or exit another container, then returns the actual post-reparse

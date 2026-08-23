@@ -460,13 +460,21 @@ pub fn split_block(
 }
 
 /// Merges a Block into its predecessor -- Backspace at offset 0
-/// (CAP-EDIT-03). A no-op on the first Block.
+/// (CAP-EDIT-03). The returned [`StructuralEdit`] names the actual
+/// predecessor leaf and its raw-source UTF-16 join offset after Core reparses.
+/// A first Block is unchanged and returns itself at offset zero.
 #[frb(sync)]
 pub fn merge_block_with_previous(
     note_id: String,
     block_path: Vec<usize>,
-) -> Result<NoteState, AppError> {
-    open_session(&note_id)?.merge_block_with_previous(&block_path)
+) -> Result<StructuralEdit, AppError> {
+    let (state, block_path, caret_offset) =
+        open_session(&note_id)?.merge_block_with_previous(&block_path)?;
+    Ok(StructuralEdit {
+        state,
+        block_path,
+        caret_offset,
+    })
 }
 
 /// Continues after an editable leaf, returning Core's post-reparse focus
@@ -1151,13 +1159,15 @@ mod tests {
         let session = f.open("a");
         let before = session.note_state().unwrap();
 
-        let after = session.merge_block_with_previous(&[0]).unwrap();
+        let (after, path, caret_offset) = session.merge_block_with_previous(&[0]).unwrap();
 
         assert_eq!(
             after, before,
             "there is no predecessor of the first Block, so this must be a \
              no-op returning the unchanged state"
         );
+        assert_eq!(path, vec![0]);
+        assert_eq!(caret_offset, 0);
     }
 
     /// TDD order 5: a selection spanning three Blocks, copied as Markdown,
@@ -1447,9 +1457,11 @@ mod tests {
         let before = block_on(open_note("flow".to_string())).unwrap();
         let merged = merge_block_with_previous("flow".to_string(), vec![0]).unwrap();
         assert_eq!(
-            merged, before,
+            merged.state, before,
             "merging the first Block with its predecessor must be a no-op"
         );
+        assert_eq!(merged.block_path, vec![0]);
+        assert_eq!(merged.caret_offset, 0);
     }
 
     /// Drives `copy_range_as_markdown`, `delete_range`, `replace_range` and

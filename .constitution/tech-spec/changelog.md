@@ -5,6 +5,17 @@ Contract correction for the F002 structural continuation seam. Patch bump:
 replaces the list-only continuation call with `continue_block_after`, retaining
 `StructuralEdit` and its result shape.
 
+- Structural edits now derive their address map and container classification
+  from the live working source before mutating. This closes the buffered shape
+  change where `update_block([0], "- item\n")` retained a paragraph AST and
+  Enter incorrectly created a top-level Block instead of list sibling
+  `[0, 1, 0]`.
+- `merge_block_with_previous` now returns `StructuralEdit`, not `NoteState`.
+  In particular, Backspace at `[0, 1, 0]` in `- alpha\n- beta\n` preserves the
+  list as `- alphabeta\n` and returns predecessor `[0, 0, 0]` with its actual
+  UTF-16 join caret. Presentation no longer predicts a post-reparse merge
+  path or caret.
+
 - Core now chooses continuation from the parsed AST rather than Flutter's
   nested-path length. A List leaf gets a sibling ListItem; a Blockquote leaf
   exits to an adjacent top-level paragraph. In both cases Core returns the

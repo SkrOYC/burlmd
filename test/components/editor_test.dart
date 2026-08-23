@@ -930,6 +930,150 @@ void main() {
     expect(_field(tester).controller.text, 'base中');
   });
 
+  testWidgets('a completed IME composition rebases the latest deferred '
+      'resync before the next keystroke', (tester) async {
+    final api = _FakeRustApi()..sources['0'] = 'base';
+    final container = await pumpEditor(tester, [
+      _plainParagraph('base'),
+    ], api: api);
+    await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
+
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(
+        text: 'base中',
+        composing: TextRange(start: 4, end: 5),
+        selection: TextSelection.collapsed(offset: 5),
+      ),
+    );
+    await tester.pump();
+
+    // This is the old source from the provider event, not the Core's latest
+    // working bytes after the composing update. It must not be replayed when
+    // the composing range subsequently collapses.
+    container.read(activeNoteProvider.notifier).state = _testNoteState([
+      _plainParagraph('base'),
+    ]);
+    await tester.pump();
+
+    // IMEs commonly commit by clearing only `composing`, so this produces no
+    // onChanged callback. The controller listener must still settle the
+    // deferred source before the next input arrives.
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(
+        text: 'base中',
+        selection: TextSelection.collapsed(offset: 5),
+      ),
+    );
+    await tester.pump();
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(
+        text: 'base中文',
+        selection: TextSelection.collapsed(offset: 6),
+      ),
+    );
+    await tester.pump();
+
+    expect(_field(tester).controller.text, 'base中文');
+    expect(api.lastSource, 'base中文');
+  });
+
+  testWidgets('only the latest external source is rebased with a completed '
+      'IME composition', (tester) async {
+    final api = _FakeRustApi()..sources['0'] = 'base';
+    final container = await pumpEditor(tester, [
+      _plainParagraph('base'),
+    ], api: api);
+    await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
+
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(
+        text: 'base中',
+        composing: TextRange(start: 4, end: 5),
+        selection: TextSelection.collapsed(offset: 5),
+      ),
+    );
+    await tester.pump();
+
+    // Two lifecycle rewrites land while the IME is live. The second one has
+    // a disjoint prefix edit, so the composition can be rebased without
+    // guessing or losing either side's bytes.
+    api.sources['0'] = 'old base';
+    container.read(activeNoteProvider.notifier).state = _testNoteState([
+      _plainParagraph('old base'),
+    ]);
+    await tester.pump();
+    api.sources['0'] = 'fresh base';
+    container.read(activeNoteProvider.notifier).state = _testNoteState([
+      _plainParagraph('fresh base'),
+    ]);
+    await tester.pump();
+
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(
+        text: 'base中',
+        selection: TextSelection.collapsed(offset: 5),
+      ),
+    );
+    await tester.pump();
+
+    expect(_field(tester).controller.text, 'fresh base中');
+    expect(api.lastSource, 'fresh base中');
+  });
+
+  testWidgets('an overlapping external rewrite enters an explicit conflict '
+      'state without discarding IME or later field input', (tester) async {
+    final api = _FakeRustApi()..sources['0'] = 'base';
+    final container = await pumpEditor(tester, [
+      _plainParagraph('base'),
+    ], api: api);
+    await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
+
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(
+        text: 'base中',
+        composing: TextRange(start: 4, end: 5),
+        selection: TextSelection.collapsed(offset: 5),
+      ),
+    );
+    await tester.pump();
+
+    // A distinct insertion at the exact same base offset has no intrinsic
+    // ordering with the IME insertion, so neither result may win silently.
+    api.sources['0'] = 'base!';
+    container.read(activeNoteProvider.notifier).state = _testNoteState([
+      _plainParagraph('base!'),
+    ]);
+    await tester.pump();
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(
+        text: 'base中',
+        selection: TextSelection.collapsed(offset: 5),
+      ),
+    );
+    await tester.pump();
+
+    expect(_field(tester).controller.text, 'base中');
+    expect(container.read(keystrokeWriteFailureProvider), isA<StateError>());
+
+    // The field still accepts the user's next character visually, but does
+    // not write its stale branch over Core's divergent rewrite.
+    final writesBeforeNextKey = api.updateCount;
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(
+        text: 'base中文',
+        selection: TextSelection.collapsed(offset: 6),
+      ),
+    );
+    await tester.pump();
+    expect(_field(tester).controller.text, 'base中文');
+    expect(api.updateCount, writesBeforeNextKey);
+
+    // Blurring cannot commit either branch over the other. The field remains
+    // available for copying until the user leaves the note deliberately.
+    await blurFocusedField(tester);
+    expect(api.commitCount, 0);
+  });
+
   // -- Keystroke round trip -------------------------------------------------
 
   testWidgets(

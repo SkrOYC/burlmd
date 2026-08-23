@@ -421,12 +421,6 @@ class EditorState extends ConsumerState<Editor> {
     return current > 0 ? leaves[current - 1] : null;
   }
 
-  static List<int>? _existingLeafPath(NoteState state, List<int> preferred) =>
-      _leafPaths(state.ast).cast<List<int>?>().firstWhere(
-        (candidate) => candidate != null && _pathEquals(candidate, preferred),
-        orElse: () => null,
-      );
-
   // -- Block creation, splitting and merging (EDIT-F004, CAP-EDIT-03) ------
   //
   // Every structural change goes through a Core mutator and the returned
@@ -578,35 +572,31 @@ class EditorState extends ConsumerState<Editor> {
 
   /// Backspace pressed at source offset 0 of [blockPath]. The first Block
   /// has no predecessor, so nothing changes; any other Block merges into the
-  /// one above it through `merge_block_with_previous`, with focus re-derived
-  /// from the returned state and the caret placed at the join — where the
-  /// predecessor's own content ends, measured BEFORE the merge so a trailing
-  /// newline the Core keeps in its source rows never shifts it.
+  /// one above it through `merge_block_with_previous`. Core reparses and
+  /// returns the predecessor leaf and raw-source UTF-16 join offset, rather
+  /// than asking Flutter to predict either from a tree it just invalidated.
   void _handleBackspaceAtStart(List<int> blockPath) {
     final note = ref.read(activeNoteProvider);
     if (note == null) return;
-    final previousPath = _previousLeafPath(note, blockPath);
-    if (previousPath == null) return;
+    if (_previousLeafPath(note, blockPath) == null) return;
     try {
       final api = ref.read(rustApiProvider);
-      final previous = api.getBlockSource(note.metadata.id, previousPath);
-      var join = previous.length;
-      if (join > 0 && previous.endsWith('\n')) join--;
-      final newState = api.mergeBlockWithPrevious(note.metadata.id, blockPath);
+      final structural = api.mergeBlockWithPrevious(
+        note.metadata.id,
+        blockPath,
+      );
+      final newState = structural.state;
       ref.read(activeNoteProvider.notifier).adopt(newState);
-      final mergedPath = _existingLeafPath(newState, previousPath);
-      if (mergedPath == null) {
-        throw StateError(
-          'Core merge returned no editable predecessor for $blockPath',
-        );
-      }
+      final mergedPath = structural.blockPath
+          .map((part) => part.toInt())
+          .toList();
       final merged = api.getBlockSource(note.metadata.id, mergedPath);
       setState(() {
         _focused = _Focus(
           noteId: note.metadata.id,
           path: mergedPath,
           source: merged,
-          caret: join.clamp(0, merged.length),
+          caret: structural.caretOffset.toInt().clamp(0, merged.length),
           lastSeenState: newState,
         );
       });

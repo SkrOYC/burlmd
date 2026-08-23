@@ -163,7 +163,7 @@ abstract class RustLibApi extends BaseApi {
     required int limit,
   });
 
-  NoteState crateApiFfiApiMergeBlockWithPrevious({
+  StructuralEdit crateApiFfiApiMergeBlockWithPrevious({
     required String noteId,
     required Uint64List blockPath,
   });
@@ -815,7 +815,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
-  NoteState crateApiFfiApiMergeBlockWithPrevious({
+  StructuralEdit crateApiFfiApiMergeBlockWithPrevious({
     required String noteId,
     required Uint64List blockPath,
   }) {
@@ -828,7 +828,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 20)!;
         },
         codec: SseCodec(
-          decodeSuccessData: sse_decode_note_state,
+          decodeSuccessData: sse_decode_structural_edit,
           decodeErrorData: sse_decode_app_error,
         ),
         constMeta: kCrateApiFfiApiMergeBlockWithPreviousConstMeta,

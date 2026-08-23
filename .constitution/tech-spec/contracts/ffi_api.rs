@@ -782,12 +782,18 @@ pub fn continue_block_after(
 }
 
 /// Merges a Block into its predecessor -- pressing Backspace at offset 0
-/// (CAP-EDIT-03). A no-op on the first Block.
+/// (CAP-EDIT-03). The returned [StructuralEdit] is authoritative after the
+/// reparse: it names the predecessor leaf and raw-source UTF-16 caret at the
+/// join, so Flutter must not predict either from the pre-merge tree. For a
+/// ListItem, Core removes only the newline-and-marker seam and keeps the
+/// predecessor marker/container (for example, `- alpha\n- beta\n` becomes
+/// `- alphabeta\n` with path `[0, 0, 0]` and caret `5`). A first Block is a
+/// no-op and returns that same leaf at caret zero.
 #[frb(sync)]
 pub fn merge_block_with_previous(
     note_id: String,
     block_path: Vec<usize>,
-) -> Result<NoteState, AppError> {
+) -> Result<StructuralEdit, AppError> {
     unimplemented!()
 }
 
