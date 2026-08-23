@@ -305,6 +305,11 @@ class EditorState extends ConsumerState<Editor> {
     int index,
   ) {
     final focused = _focused;
+    final broker = _selectionBrokers.putIfAbsent(
+      index,
+      _BlockSelectionBroker.new,
+    );
+    broker.parent = SelectionContainer.maybeOf(context);
     // A phantom's path names its anchor slot (the index a new Block would
     // splice into), which can coincide numerically with a real Block's
     // index — so the phantom must never satisfy this early-out; the
@@ -312,10 +317,19 @@ class EditorState extends ConsumerState<Editor> {
     if (focused != null &&
         !focused.isPhantom &&
         _pathStartsWith(focused.path, path)) {
-      return renderBlockWithFocusedLeaf(
+      final relativeLeafPath = focused.path.sublist(path.length);
+      broker.leafIndices = blockUnfocusedLeafIndices(
         note.ast[index],
-        focused.path.sublist(path.length),
-        (leaf) => BlockEditor(
+        relativeLeafPath,
+      );
+      return BlockView(
+        key: ValueKey('block-$index'),
+        node: note.ast[index],
+        blockPath: path,
+        onFocusRequested: _promote,
+        onLinkActivated: (targetId) => unawaited(_followInternalLink(targetId)),
+        focusedLeafPath: relativeLeafPath,
+        buildFocusedEditor: (leaf) => BlockEditor(
           key: ValueKey('edit-${focused.path.join('-')}'),
           noteId: note.metadata.id,
           blockPath: focused.path,
@@ -336,6 +350,7 @@ class EditorState extends ConsumerState<Editor> {
               Platform.environment.containsKey('BURLMD_SMOKE_F006') &&
               note.metadata.title == 'F006 link completion',
         ),
+        selectionRegistrar: broker,
       );
     }
     // Unfocused Blocks join the shared selection region through their own
@@ -343,11 +358,10 @@ class EditorState extends ConsumerState<Editor> {
     // selectables belong to THIS Block (`EDIT-F003`). While a Block IS
     // focused, its field does not register with the region at all
     // (SPK-EDIT-F001 §3c), which is what keeps a focused endpoint impossible.
-    final broker = _selectionBrokers.putIfAbsent(
-      index,
-      _BlockSelectionBroker.new,
+    broker.leafIndices = List<int>.generate(
+      blockRenderedLeafCount(note.ast[index]),
+      (leafIndex) => leafIndex,
     );
-    broker.parent = SelectionContainer.maybeOf(context);
     return BlockView(
       key: ValueKey('block-$index'),
       node: note.ast[index],
@@ -535,9 +549,16 @@ class EditorState extends ConsumerState<Editor> {
   /// A changed SelectionArea value is the sole activation boundary for the
   /// ephemeral proxy. The snapshot is constructed once and retained verbatim;
   /// no lazy-list re-read can silently shorten Select All or retarget an edit.
+  ///
+  /// A top-level container such as a List or Blockquote can paint several
+  /// selectable leaves. A selection crossing those leaves is a range edit
+  /// even though both Core endpoints have the same top-level path. The
+  /// brokers expose that live, UI-owned extent directly; do not infer it by
+  /// parsing Markdown or by treating every noncollapsed single-leaf selection
+  /// as a range.
   void _handleRenderedSelectionChanged(SelectedContent? _) {
     final range = selectedBlockRange();
-    if (range == null || !_isCrossBlockRange(range)) {
+    if (range == null || !_isRangeInputEligible(range)) {
       _closeRangeInput();
       return;
     }
@@ -571,10 +592,23 @@ class EditorState extends ConsumerState<Editor> {
     client.attach();
   }
 
-  bool _isCrossBlockRange(BlockRange range) =>
+  bool _isRangeInputEligible(BlockRange range) =>
       range.startPath.length == 1 &&
       range.endPath.length == 1 &&
-      range.startPath.single != range.endPath.single;
+      (range.startPath.single != range.endPath.single ||
+          _selectedLeafCount() > 1);
+
+  /// The selection system, rather than the Markdown tree, is authoritative
+  /// about which rendered leaves the user visibly selected. A same-top-level
+  /// range is eligible only when that live extent crosses multiple leaves.
+  int _selectedLeafCount() => _selectionBrokers.values
+      .expand((broker) => broker.selectables)
+      .where((selectable) {
+        final selection = selectable.getSelection();
+        return selection != null &&
+            selection.startOffset != selection.endOffset;
+      })
+      .length;
 
   static bool _sameRange(BlockRange a, BlockRange b) =>
       a.startPath.length == b.startPath.length &&
@@ -1340,6 +1374,8 @@ class EditorState extends ConsumerState<Editor> {
       // Selectables register in paint order, which is the order of
       // [node]'s text leaves in block_view.dart's leaf model.
       for (var leaf = 0; leaf < broker.selectables.length; leaf++) {
+        final leafIndex = broker.leafIndices.elementAtOrNull(leaf);
+        if (leafIndex == null) continue;
         final SelectedContentRange? selection = broker.selectables[leaf]
             .getSelection();
         if (selection == null || selection.startOffset == selection.endOffset) {
@@ -1347,12 +1383,12 @@ class EditorState extends ConsumerState<Editor> {
         }
         final mappedLow = blockCoreRenderedOffset(
           node,
-          leafIndex: leaf,
+          leafIndex: leafIndex,
           renderedOffset: math.min(selection.startOffset, selection.endOffset),
         );
         final mappedHigh = blockCoreRenderedOffset(
           node,
-          leafIndex: leaf,
+          leafIndex: leafIndex,
           renderedOffset: math.max(selection.startOffset, selection.endOffset),
         );
         low = low == null ? mappedLow : math.min(low, mappedLow);
@@ -1838,9 +1874,14 @@ class _BlockSelectionBroker implements SelectionRegistrar {
   /// wired up during build; null while the broker is outside an area.
   SelectionRegistrar? parent;
 
-  /// This Block's selectables in paint order — which is the order of the
-  /// Block's text leaves in block_view.dart's leaf model.
+  /// This Block's selectables in paint order — which is the order of its
+  /// unfocused text leaves in block_view.dart's leaf model.
   final List<Selectable> selectables = [];
+
+  /// Maps each registered selectable back to its original rendered-leaf
+  /// index. A raw focused leaf has no selectable, so siblings must not be
+  /// renumbered onto that leaf's Core-owned rendered coordinate.
+  List<int> leafIndices = const [];
 
   @override
   void add(Selectable selectable) {

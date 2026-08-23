@@ -298,10 +298,11 @@ fn canonicalize_workspace_dir(dir: &Path) -> Result<PathBuf, AppError> {
 /// operation touches, and a repository has to exist before there is anything to
 /// commit into.
 ///
-/// The order holds. This is the topmost of `workspace::persist`'s four locks,
-/// and the only lock taken *beneath* it here is the connection, the bottom one.
-/// The row resolution above takes and releases the connection before this is
-/// acquired, so nothing lower is ever held at the moment it is taken.
+/// The order holds. This is the topmost of `workspace::persist`'s five locks:
+/// lifecycle → tier 2 write → tier 1 → state → connection. The only lock taken
+/// beneath it here is the connection, at the bottom. The row resolution above
+/// takes and releases the connection before this is acquired, so nothing lower
+/// is ever held at the moment it is taken.
 fn converge(index: &IndexHandle, dir: &Path) -> Result<WorkspaceInfo, AppError> {
     let ignore_written = crate::git::operations::init_repo(dir)?;
 

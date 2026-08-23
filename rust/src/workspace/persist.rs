@@ -23,7 +23,7 @@
 //! 4. **That commit notifies the sync scheduler**, giving Epic C's
 //!    `notify_activity()` its first caller.
 //!
-//! # The locks, and why there are four of them
+//! # The locks, and why there are five of them
 //!
 //! `SPK-WSPC-D001` §4.4 measured four shapes. Under one process-wide mutex a
 //! keystroke waits a p95 of 10.4ms (WAL) or 55.9ms (SQLite defaults) in front
@@ -37,6 +37,10 @@
 //!   land inside. It is the one lock no *editing* path ever takes, and it is
 //!   coarse on purpose — see its own documentation for the races it closes and
 //!   why the other three could not close them.
+//! - A per-Note **tier 1 lock** serializes source mutations through their draft
+//!   writes. It is held across SQLite but never filesystem I/O, so a failed
+//!   structural mutation can either roll back before another edit observes it
+//!   or return the installed state as authoritative.
 //! - A per-Note **state lock** guards the working source, the span map, the
 //!   AST, the edit sequence and the recorded revision. **No thread ever holds
 //!   it across I/O.** Both sides snapshot under it — an `Arc::clone`, which is
@@ -55,11 +59,13 @@
 //!   time, as `db::connection` has always been.
 //!
 //! The only permitted acquisition order is **lifecycle lock → tier 2 write
-//! lock → state lock → connection**, and no two of the last three are held at
-//! once except the write lock over a snapshot. The keystroke path takes a
-//! suffix of that order (state, then connection), so no cycle exists and
+//! lock → tier 1 lock → state lock → connection**. The state lock and the
+//! connection are never held together; the tier 1 lock deliberately surrounds
+//! either short phase, and the tier 2 write lock spans its snapshot. The
+//! keystroke path takes a suffix of that order (tier 1, state, then
+//! connection), so no cycle exists and
 //! deadlock is unrepresentable rather than merely unobserved. The session
-//! registry lock is above all four and is never held while any of them is
+//! registry lock is above all five and is never held while any of them is
 //! acquired.
 //!
 //! Nothing below the lifecycle lock ever reaches back up for it, which is what
@@ -115,6 +121,8 @@ pub struct Workspace {
     root: PathBuf,
     db: DbHandle,
     idle_interval: Duration,
+    #[cfg(test)]
+    before_draft_write: Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
 }
 
 enum DbHandle {
@@ -141,6 +149,8 @@ impl Workspace {
             root,
             db: DbHandle::Process,
             idle_interval: DEFAULT_IDLE_INTERVAL,
+            #[cfg(test)]
+            before_draft_write: Mutex::new(None),
         }))
     }
 
@@ -376,7 +386,13 @@ impl Workspace {
             root,
             db: DbHandle::Owned(Mutex::new(conn)),
             idle_interval,
+            before_draft_write: Mutex::new(None),
         })
+    }
+
+    #[cfg(test)]
+    fn set_before_draft_write(&self, hook: Option<Arc<dyn Fn() + Send + Sync>>) {
+        *self.before_draft_write.lock().unwrap() = hook;
     }
 }
 
@@ -477,6 +493,9 @@ struct SessionInner {
     relative_path: String,
     absolute_path: PathBuf,
     state: Mutex<SessionState>,
+    /// Serializes source mutations across their tier-1 draft writes. Unlike
+    /// `write_lock`, it never covers filesystem I/O.
+    tier_one_lock: Mutex<()>,
     /// Held across the whole OCC sequence — revision check, atomic write,
     /// re-record — and taken by tier 2 writers only.
     write_lock: Mutex<()>,
@@ -492,6 +511,20 @@ pub struct NoteSession(Arc<SessionInner>);
 struct WrittenThrough {
     revision: String,
     seq: i64,
+}
+
+/// The state a structural tier-1 mutation replaces. It is retained only while
+/// its draft row is being written, so a database refusal can restore the exact
+/// pre-mutation session without holding the state lock across I/O.
+struct StructuralEditRollback {
+    source: Arc<String>,
+    spans: Arc<SpanMap>,
+    ast: Arc<Vec<AstNode>>,
+    metadata: NoteMetadata,
+    edit_seq: i64,
+    revision: String,
+    session_edited: bool,
+    unwritten: bool,
 }
 
 /// The open Notes of this process, keyed by Workspace and concept id.
@@ -585,7 +618,7 @@ pub fn lookup(workspace_id: &str, note_id: &str) -> Result<Option<NoteSession>, 
 /// file and draft reads below the re-verification they have to be: they cannot
 /// have been invalidated by a concurrent lifecycle operation, because no such
 /// operation can be running. The order is unviolated — the lifecycle lock is the
-/// topmost of the four and this function takes only the state lock and the
+/// topmost of the five and this function takes only the state lock and the
 /// connection beneath it — and nothing here calls a `workspace::lifecycle` entry
 /// point, so there is no path back up. The cost is that opening a Note waits
 /// behind a rename or a delete in the same Workspace, which is a user-scale
@@ -682,6 +715,7 @@ pub(super) fn open_note_serialized(
         relative_path: concept_id_to_path(note_id),
         absolute_path,
         state: Mutex::new(state),
+        tier_one_lock: Mutex::new(()),
         write_lock: Mutex::new(()),
         timer: IdleTimer::new(workspace.idle_interval),
     }));
@@ -727,15 +761,28 @@ impl NoteSession {
             .map_err(|_| AppError::DatabaseError("note state lock poisoned".to_string()))
     }
 
-    /// The current state, as it crosses the FFI boundary.
-    pub fn note_state(&self) -> Result<NoteState, AppError> {
-        let state = self.lock_state()?;
-        Ok(NoteState {
+    /// Serializes tier-1 source mutations through their SQLite draft writes.
+    /// It deliberately does not cover tier-2 filesystem I/O.
+    fn lock_tier_one(&self) -> Result<MutexGuard<'_, ()>, AppError> {
+        self.0
+            .tier_one_lock
+            .lock()
+            .map_err(|_| AppError::DatabaseError("tier 1 lock poisoned".to_string()))
+    }
+
+    fn note_state_from(state: &SessionState) -> NoteState {
+        NoteState {
             ast: state.ast.as_ref().clone(),
             metadata: state.metadata.clone(),
             base_revision: state.revision.clone(),
             restored_from_draft: state.restored_from_draft,
-        })
+        }
+    }
+
+    /// The current state, as it crosses the FFI boundary.
+    pub fn note_state(&self) -> Result<NoteState, AppError> {
+        let state = self.lock_state()?;
+        Ok(Self::note_state_from(&state))
     }
 
     /// The working source, for tests and for callers that need the buffer
@@ -768,14 +815,17 @@ impl NoteSession {
     /// working buffer, adjust the spans arithmetically, and write the draft
     /// row. No parse, no file, no AST returned.
     ///
-    /// The ordering is `SPK-WSPC-D001` §6.2.2 exactly — acquire, mutate, bump
-    /// the sequence, snapshot, **release**, then write the row. The row write
-    /// is not cheap: 7.96ms at 102 KiB and 22.79ms at 1 MiB against the
+    /// The ordering is `SPK-WSPC-D001` §6.2.2 with one per-Note extension:
+    /// acquire tier 1, mutate, bump the sequence, snapshot, release the state
+    /// lock, then write the row while retaining tier 1. The row write is not
+    /// cheap: 7.96ms at 102 KiB and 22.79ms at 1 MiB against the
     /// encrypted index on real storage, measured with content that actually
     /// changes (a benchmark rewriting a constant string reports 0.22ms and is
     /// wrong by a factor of 36). It is roughly a thousand times the cost of the
-    /// buffer and span work it accompanies, which is exactly why no lock is
-    /// held across it.
+    /// buffer and span work it accompanies. The tier-1 lock is per Note, so it
+    /// only serializes concurrent calls targeting that same buffer; the normal
+    /// synchronous input path remains one unchanged draft statement, measured
+    /// by `a_block_edit_on_a_hundred_kilobyte_note_writes_its_draft_row_within_the_frame_budget`.
     ///
     /// Addresses a **leaf** Block only. A path naming a `List`, `ListItem` or
     /// `Blockquote` is refused with `ParseError` rather than served, because
@@ -784,6 +834,7 @@ impl NoteSession {
     /// user focused, or routes a genuinely structural change through a
     /// reparsing mutator.
     pub fn update_block(&self, block_path: &[usize], new_source: &str) -> Result<(), AppError> {
+        let _tier_one_guard = self.lock_tier_one()?;
         let (snapshot, seq) = {
             let mut guard = self.lock_state()?;
             let state = &mut *guard;
@@ -1409,6 +1460,60 @@ impl NoteSession {
                     }
                 }
 
+                // The first editable leaf of a top-level List or Blockquote
+                // follows its predecessor through visible container syntax
+                // (`- ` or `> `). That syntax is a seam the merge consumes,
+                // not hidden content. Treat it like the sibling-list seam
+                // above, while requiring an exact source match so raw HTML and
+                // reference definitions in the gap remain refusals.
+                if let Some(top_level_index) = live_path.first().copied() {
+                    if top_level_index > 0
+                        && matches!(
+                            ast.get(top_level_index),
+                            Some(AstNode::List { .. } | AstNode::Blockquote { .. })
+                        )
+                        && first_editable_leaf(spans, &[top_level_index])
+                            .is_some_and(|first| first.path == live_path)
+                    {
+                        let previous_leaf = last_editable_leaf(spans, &[top_level_index - 1])
+                            .ok_or_else(|| {
+                                AppError::ParseError(format!(
+                                    "top-level Block {} has no editable predecessor",
+                                    top_level_index - 1
+                                ))
+                            })?;
+                        let prefix = line_prefix_before(working, span.start)?;
+                        let gap = working
+                            .get(previous_leaf.source.end..span.start)
+                            .ok_or_else(|| {
+                                AppError::ParseError(format!(
+                                    "source range {}..{} is not addressable in this Note",
+                                    previous_leaf.source.end, span.start
+                                ))
+                            })?;
+                        let expected_gap = format!("{}{prefix}", newline_style(working));
+                        if gap == expected_gap {
+                            let caret_offset = source_caret_before_trailing_newline(
+                                working.get(previous_leaf.source.clone()).ok_or_else(|| {
+                                    AppError::ParseError(format!(
+                                        "source range {}..{} is not addressable in this Note",
+                                        previous_leaf.source.start, previous_leaf.source.end
+                                    ))
+                                })?,
+                            );
+                            return Ok((
+                                splice::splice_source(
+                                    working,
+                                    previous_leaf.source.end..span.start,
+                                    "",
+                                )
+                                .map_err(splice_error)?,
+                                (previous_leaf.path.clone(), caret_offset),
+                            ));
+                        }
+                    }
+                }
+
                 let Some(previous_end) = previous_block_end(spans, &span) else {
                     return Ok((working.to_string(), (live_path, 0)));
                 };
@@ -1502,7 +1607,8 @@ impl NoteSession {
     /// The shared shape of every structural mutator: snapshot under the state
     /// lock, reparse that live source for the operation's address map, compute
     /// the new source and reparse **off** it, install under an edit-sequence
-    /// check, then write the draft row with no lock held.
+    /// check, then write the draft row while retaining the per-Note tier-1
+    /// lock. The state lock is still released before SQLite.
     ///
     /// Each of these is a discrete user action rather than a keystroke, which
     /// is what keeps the reparse off the typing path — and each writes its
@@ -1524,6 +1630,10 @@ impl NoteSession {
         edit: impl Fn(&str, &SpanMap, &[AstNode], &SpanMap) -> Result<(String, T), AppError>,
         derive_result: impl Fn(&str, &SpanMap, &[AstNode], T) -> Result<U, AppError>,
     ) -> Result<(NoteState, U), AppError> {
+        // This stays held until the draft write either succeeds or rolls the
+        // mutation back. No later tier-1 edit can make our caller's result
+        // stale between installation and this method's return.
+        let _tier_one_guard = self.lock_tier_one()?;
         loop {
             let (source, retained_spans, seq) = {
                 let state = self.lock_state()?;
@@ -1548,12 +1658,27 @@ impl NoteSession {
             self.resolve_links(&mut ast)?;
             let result = derive_result(&new_source, &spans, &ast, result)?;
 
-            let (snapshot, new_seq) = {
+            let (snapshot, new_seq, previous) = {
                 let mut guard = self.lock_state()?;
                 let state = &mut *guard;
                 if state.edit_seq != seq {
                     continue;
                 }
+                // Tier 1 writes after releasing the state lock. Keep the
+                // complete part of state this mutation replaces so a failed
+                // draft write can put the session back exactly where it was
+                // rather than leaving a change installed with no crash-safe
+                // copy and no timer.
+                let previous = StructuralEditRollback {
+                    source: Arc::clone(&state.source),
+                    spans: Arc::clone(&state.spans),
+                    ast: Arc::clone(&state.ast),
+                    metadata: state.metadata.clone(),
+                    edit_seq: state.edit_seq,
+                    revision: state.revision.clone(),
+                    session_edited: state.session_edited,
+                    unwritten: state.unwritten,
+                };
                 // Re-derived for the same reason `commit_block` re-derives it:
                 // metadata is read off the frontmatter span, and these
                 // mutators install a new span map — including for an edit at
@@ -1571,10 +1696,44 @@ impl NoteSession {
                 state.edit_seq += 1;
                 state.session_edited = true;
                 state.unwritten = true;
-                (Arc::clone(&state.source), state.edit_seq)
+                (Arc::clone(&state.source), state.edit_seq, previous)
             };
 
-            self.write_draft(&snapshot, new_seq)?;
+            if let Err(error) = self.write_draft(&snapshot, new_seq) {
+                let (reverted, state) = {
+                    let mut guard = self.lock_state()?;
+                    let state = &mut *guard;
+                    // The tier-1 lock prevents another source mutation here,
+                    // but retain the sequence check as a defensive boundary.
+                    // A tier-2 writer may have published this source while a
+                    // previously armed timer was firing; its advanced revision
+                    // makes the same rollback unsafe.
+                    if state.edit_seq != new_seq || state.revision != previous.revision {
+                        (false, Self::note_state_from(state))
+                    } else {
+                        state.source = previous.source;
+                        state.spans = previous.spans;
+                        state.ast = previous.ast;
+                        state.metadata = previous.metadata;
+                        state.edit_seq = previous.edit_seq;
+                        state.session_edited = previous.session_edited;
+                        state.unwritten = previous.unwritten;
+                        (true, Self::note_state_from(state))
+                    }
+                };
+                if !reverted {
+                    // We cannot safely undo a source that another mutation or
+                    // tier-2 writer has observed. Keep that authoritative
+                    // state recoverable instead of stranding it in memory.
+                    self.arm_idle_timer();
+                    // The source remains the one this call installed; the
+                    // tier-1 lock prevents a later edit sequence from making
+                    // `result` stale. A tier-2 revision advance merely means
+                    // these same bytes have already reached disk.
+                    return Ok((state, result));
+                }
+                return Err(error);
+            }
             self.arm_idle_timer();
             return Ok((self.note_state()?, result));
         }
@@ -1603,6 +1762,10 @@ impl NoteSession {
     /// clear* — the one combination that both loses an edit and hides that it
     /// did.
     fn write_draft(&self, source: &str, edit_seq: i64) -> Result<(), AppError> {
+        #[cfg(test)]
+        if let Some(hook) = self.0.workspace.before_draft_write.lock().unwrap().clone() {
+            hook();
+        }
         let workspace_id = self.0.workspace.id().to_string();
         let note_id = self.0.note_id.clone();
         let now = unix_now();
@@ -1955,16 +2118,6 @@ impl NoteSession {
         let revision = content_hash(&bytes);
         let source = decode_source(&self.0.absolute_path, bytes)?;
 
-        let workspace_id = self.0.workspace.id().to_string();
-        let note_id = self.0.note_id.clone();
-        self.0.workspace.with_db(|conn| {
-            conn.execute(
-                "DELETE FROM drafts WHERE workspace_id = ?1 AND note_id = ?2",
-                rusqlite::params![workspace_id, note_id],
-            )?;
-            Ok(())
-        })?;
-
         let dir = containing_dir(&self.0.note_id);
         let ParsedNote { ast, spans } = parse_note(&source, dir);
         let collapsed = conflict_suggestions(&source, dir);
@@ -1977,6 +2130,22 @@ impl NoteSession {
             &spans,
             file_mtime(&self.0.absolute_path),
         );
+
+        // Reload linearizes with tier-1 source mutations at its draft clear
+        // and state install, not over the file read and parse above. Holding
+        // this lock across filesystem work would put reload on the typing
+        // path, while taking it here ensures no structural caller can return a
+        // result for source this reload then replaces.
+        let _tier_one_guard = self.lock_tier_one()?;
+        let workspace_id = self.0.workspace.id().to_string();
+        let note_id = self.0.note_id.clone();
+        self.0.workspace.with_db(|conn| {
+            conn.execute(
+                "DELETE FROM drafts WHERE workspace_id = ?1 AND note_id = ?2",
+                rusqlite::params![workspace_id, note_id],
+            )?;
+            Ok(())
+        })?;
 
         let mut state = self.lock_state()?;
         state.source = Arc::new(source);
@@ -2509,8 +2678,8 @@ fn lifecycle_locks() -> &'static Mutex<LifecycleLocks> {
 ///
 /// # Ordering
 ///
-/// This is the **topmost** of the four locks in this module's order (lifecycle
-/// → tier 2 write → state → connection): it is acquired before
+/// This is the **topmost** of the five locks in this module's order (lifecycle
+/// → tier 2 write → tier 1 → state → connection): it is acquired before
 /// [`with_write_locks`] and released after it, and nothing that runs beneath it
 /// reaches back for it. The debug assert below pins the one direction that
 /// would be easy to violate silently — taking it from inside a connection
@@ -2549,7 +2718,7 @@ pub(crate) fn with_lifecycle_lock_id<T>(
     debug_assert!(
         !crate::db::connection::in_connection_closure(),
         "a lifecycle operation was started inside a connection closure: the lifecycle lock \
-         is the topmost of this module's four locks and the connection is the bottom one, \
+         is the topmost of this module's five locks and the connection is the bottom one, \
          so this inverts the acquisition order and holds the process-wide connection mutex \
          across a whole lifecycle operation, `git` commit included"
     );
@@ -2585,8 +2754,8 @@ pub(crate) fn with_lifecycle_lock_id<T>(
 /// other — a property [`with_lifecycle_lock`] now makes moot for two lifecycle
 /// operations, and which still holds for a lifecycle operation racing anything
 /// else that takes these locks. The order against the other locks is unchanged
-/// and is the one the module documentation states: lifecycle lock, then write
-/// lock, then state, then connection.
+/// and is the one the module documentation states: lifecycle lock, then tier
+/// 2 write lock, tier 1 lock, state, then connection.
 /// Acquiring the registry lock *while* holding a write lock (which
 /// [`carry_session_forward`] does, inside `f`) is permitted by that same rule —
 /// what it forbids is holding the registry lock while acquiring any of the
@@ -2638,8 +2807,8 @@ pub(crate) fn with_lifecycle_lock_id<T>(
 /// One window this deliberately does not close: `update_block` never takes this
 /// lock, by design, so that no keystroke can wait on file I/O. A keystroke
 /// landing inside a lifecycle operation therefore still races it. That is
-/// inherent to tier 1 rather than a gap here — the same property the whole
-/// three-lock shape is chosen for.
+/// inherent to tier 1 rather than a gap here — the same property the lock
+/// discipline is chosen for.
 pub(super) fn with_write_locks<T>(
     workspace: &Workspace,
     f: impl FnOnce() -> Result<T, AppError>,
@@ -2830,6 +2999,7 @@ pub(super) fn carry_session_forward(
         relative_path: concept_id_to_path(new_id),
         absolute_path,
         state: Mutex::new(state),
+        tier_one_lock: Mutex::new(()),
         write_lock: Mutex::new(()),
         timer: IdleTimer::new(workspace.idle_interval),
     }));
@@ -2873,6 +3043,7 @@ impl NoteSession {
         new_revision: String,
     ) -> Result<(), AppError> {
         let Some(rewritten) = new_source else {
+            let _tier_one_guard = self.lock_tier_one()?;
             let mut state = self.lock_state()?;
             state.revision = new_revision;
             return Ok(());
@@ -2880,13 +3051,19 @@ impl NoteSession {
 
         // Parsed with no lock held, like every other parse in this module.
         let ParsedNote { mut ast, spans } = parse_note(&rewritten, containing_dir(&self.0.note_id));
-        self.resolve_links(&mut ast)?;
         let metadata = derive_metadata(
             &self.0.note_id,
             &rewritten,
             &spans,
             file_mtime(&self.0.absolute_path),
         );
+
+        // Lifecycle callers already hold the lifecycle and tier-2 write
+        // locks. Taking tier 1 here completes that order before either the
+        // link lookup or state install, so a structural result can never be
+        // paired with a lifecycle-replaced session state.
+        let _tier_one_guard = self.lock_tier_one()?;
+        self.resolve_links(&mut ast)?;
 
         let mut state = self.lock_state()?;
         state.source = Arc::new(rewritten);
@@ -3065,6 +3242,18 @@ pub(crate) fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), AppError> {
 /// `Ok(false)` means the destination appeared before publication. All other
 /// I/O failures retain the normal typed application error.
 pub(crate) fn atomic_create(path: &Path, bytes: &[u8]) -> Result<bool, AppError> {
+    atomic_create_with_cleanup(path, bytes, |temp| std::fs::remove_file(temp))
+}
+
+/// The `hard_link` is the publication point. Scratch cleanup happens only
+/// afterwards, so it is best-effort: reporting an error here would tell a
+/// lifecycle caller creation failed after the Note already exists at its final
+/// path.
+fn atomic_create_with_cleanup(
+    path: &Path,
+    bytes: &[u8],
+    cleanup_temp: impl FnOnce(&Path) -> std::io::Result<()>,
+) -> Result<bool, AppError> {
     static NEXT_TEMP: AtomicU64 = AtomicU64::new(0);
 
     assert_no_io_under_the_connection("an atomic create");
@@ -3094,7 +3283,7 @@ pub(crate) fn atomic_create(path: &Path, bytes: &[u8]) -> Result<bool, AppError>
 
     match std::fs::hard_link(&temp, path) {
         Ok(()) => {
-            std::fs::remove_file(&temp).map_err(|error| io_error(&temp, &error))?;
+            let _ = cleanup_temp(&temp);
             Ok(true)
         }
         Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
@@ -4393,6 +4582,244 @@ mod tests {
         }
     }
 
+    /// A failed tier-1 write is a refusal, not a half-installed structural
+    /// edit. In particular it must not arm a timer that later writes the
+    /// refused buffer, and retrying after the database is healthy must apply
+    /// the edit exactly once.
+    #[test]
+    fn a_structural_draft_failure_rolls_back_source_state_and_timer_before_retry() {
+        let f = fixture_with_idle(Duration::from_millis(40));
+        let original = note("A", "First paragraph.\n\nSecond paragraph.");
+        f.write("a.md", &original);
+        let session = f.open("a");
+        let state_before = session.note_state().unwrap();
+        let sequence_before = session.edit_seq();
+
+        f.inject_failure(
+            "CREATE TRIGGER injected_structural_draft_write BEFORE INSERT ON drafts \
+             BEGIN SELECT RAISE(ABORT, 'injected structural draft failure'); END;",
+        );
+        let refused = session.insert_block(&[1], "Inserted.".to_string());
+
+        assert!(refused.is_err(), "the injected tier-1 failure must refuse");
+        assert_eq!(
+            *session.working_source().unwrap(),
+            original,
+            "a refused structural edit left its source installed"
+        );
+        assert_eq!(
+            session.note_state().unwrap(),
+            state_before,
+            "a refused structural edit left its reparsed state installed"
+        );
+        assert_eq!(
+            session.edit_seq(),
+            sequence_before,
+            "a refused structural edit advanced the draft sequence"
+        );
+        assert!(
+            f.draft("a").is_none(),
+            "the failed statement wrote a draft row"
+        );
+        assert!(
+            !wait_until(Duration::from_millis(180), || f.read("a.md") != original),
+            "the failed structural edit armed a timer that wrote its refused source"
+        );
+
+        f.inject_failure("DROP TRIGGER injected_structural_draft_write;");
+        session.insert_block(&[1], "Inserted.".to_string()).unwrap();
+        let expected = note("A", "First paragraph.\n\nInserted.\n\nSecond paragraph.");
+        assert_eq!(*session.working_source().unwrap(), expected);
+        assert_eq!(
+            f.draft("a").as_ref().map(|row| row.raw_markdown.as_str()),
+            Some(expected.as_str()),
+            "the successful retry did not write its complete draft"
+        );
+        assert!(
+            wait_until(Duration::from_secs(3), || f.read("a.md") == expected),
+            "the successful retry did not arm tier 2"
+        );
+        assert!(
+            wait_until(Duration::from_millis(300), || f.draft("a").is_none()),
+            "tier 2 did not clear the retry's draft row"
+        );
+    }
+
+    /// If a pre-existing idle write publishes a structural mutation while its
+    /// tier-1 draft statement is blocked, rollback would make the session
+    /// disagree with disk. That branch must return the installed state as a
+    /// success, not tell the caller to retry an edit that already happened.
+    #[test]
+    fn a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success() {
+        let f = fixture_with_idle(Duration::from_millis(100));
+        let original = note("A", "First paragraph.\n\nSecond paragraph.");
+        f.write("a.md", &original);
+        let session = f.open("a");
+        session.update_block(&[0], "First edited.\n").unwrap();
+        let revision_before = session.note_state().unwrap().base_revision;
+        let expected = note("A", "First edited.\n\nInserted.\n\nSecond paragraph.");
+
+        f.inject_failure(
+            "CREATE TRIGGER injected_structural_draft_update BEFORE UPDATE ON drafts \
+             WHEN NEW.edit_seq = 2 \
+             BEGIN SELECT RAISE(ABORT, 'injected structural draft failure'); END;",
+        );
+
+        let (entered_tx, entered_rx) = std::sync::mpsc::sync_channel(1);
+        let (release_tx, release_rx) = std::sync::mpsc::sync_channel(0);
+        let seen = Arc::new(AtomicUsize::new(0));
+        let seen_update = Arc::clone(&seen);
+        f.workspace
+            .with_db(|conn| {
+                conn.authorizer(Some(
+                    move |context: rusqlite::hooks::AuthContext<'_>| match context.action {
+                        rusqlite::hooks::AuthAction::Update {
+                            table_name: "drafts",
+                            ..
+                        } if seen_update.fetch_add(1, Ordering::SeqCst) == 0 => {
+                            entered_tx
+                                .send(())
+                                .expect("the test must still await the blocked draft write");
+                            release_rx
+                                .recv()
+                                .expect("the test must release the blocked draft write");
+                            rusqlite::hooks::Authorization::Allow
+                        }
+                        _ => rusqlite::hooks::Authorization::Allow,
+                    },
+                ))?;
+                Ok(())
+            })
+            .unwrap();
+
+        let structural = {
+            let session = session.clone();
+            std::thread::spawn(move || session.insert_block(&[1], "Inserted.".to_string()))
+        };
+        entered_rx
+            .recv_timeout(Duration::from_secs(3))
+            .expect("the structural write never reached the deterministic pause");
+        assert!(
+            wait_until(Duration::from_secs(3), || {
+                session.note_state().unwrap().base_revision != revision_before
+                    && f.read("a.md") == expected
+            }),
+            "tier 2 did not publish the structural source while tier 1 was paused"
+        );
+
+        release_tx
+            .send(())
+            .expect("the paused structural write stopped unexpectedly");
+        let returned = structural
+            .join()
+            .expect("the structural thread must not panic")
+            .expect("a published structural mutation must return success");
+        f.allow_drafts_delete();
+        f.inject_failure("DROP TRIGGER injected_structural_draft_update;");
+
+        assert_eq!(returned, session.note_state().unwrap());
+        assert_eq!(*session.working_source().unwrap(), expected);
+        assert_eq!(f.read("a.md"), expected);
+        assert_ne!(
+            returned.base_revision, revision_before,
+            "the successful result retained the pre-publication revision"
+        );
+        assert!(
+            wait_until(Duration::from_secs(3), || {
+                let timer = session.0.timer.state.lock().unwrap();
+                !timer.running && timer.deadline.is_none()
+            }),
+            "the recovery timer did not finish before the fixture was dropped"
+        );
+    }
+
+    /// Lifecycle rewrites install a new source, AST and revision. They must
+    /// wait behind a structural mutation's tier-1 draft boundary: otherwise a
+    /// failed structural write could return lifecycle state paired with its own
+    /// stale focus/caret result.
+    #[test]
+    fn a_lifecycle_rewrite_waits_for_a_paused_failing_structural_draft_write() {
+        let f = fixture();
+        f.write("a.md", &note("A", "First paragraph.\n\nSecond paragraph."));
+        let session = f.open("a");
+        session.update_block(&[0], "First edited.\n").unwrap();
+
+        f.inject_failure(
+            "CREATE TRIGGER injected_structural_draft_update BEFORE UPDATE ON drafts \
+             WHEN NEW.edit_seq = 2 \
+             BEGIN SELECT RAISE(ABORT, 'injected structural draft failure'); END;",
+        );
+        let (entered_tx, entered_rx) = std::sync::mpsc::sync_channel(1);
+        let (release_tx, release_rx) = std::sync::mpsc::sync_channel(0);
+        let release_rx = Arc::new(Mutex::new(release_rx));
+        let release_for_hook = Arc::clone(&release_rx);
+        f.workspace.set_before_draft_write(Some(Arc::new(move || {
+            entered_tx
+                .send(())
+                .expect("the test must still await the paused draft write");
+            release_for_hook
+                .lock()
+                .unwrap()
+                .recv()
+                .expect("the test must release the paused draft write");
+        })));
+
+        let structural = {
+            let session = session.clone();
+            std::thread::spawn(move || session.insert_block(&[1], "Inserted.".to_string()))
+        };
+        entered_rx
+            .recv_timeout(Duration::from_secs(3))
+            .expect("the structural write never reached its deterministic pause");
+
+        let lifecycle_source = note("A", "Rewritten by lifecycle.");
+        let lifecycle_revision = content_hash(lifecycle_source.as_bytes());
+        let (lifecycle_started_tx, lifecycle_started_rx) = std::sync::mpsc::sync_channel(1);
+        let rewrite = {
+            let session = session.clone();
+            let source = lifecycle_source.clone();
+            std::thread::spawn(move || {
+                lifecycle_started_tx
+                    .send(())
+                    .expect("the test must observe the lifecycle attempt");
+                session.install_rewrite(Some(source), lifecycle_revision)
+            })
+        };
+        lifecycle_started_rx
+            .recv_timeout(Duration::from_secs(3))
+            .expect("the lifecycle rewrite thread never started");
+        assert!(
+            !wait_until(Duration::from_millis(200), || {
+                *session.working_source().unwrap() == lifecycle_source
+            }),
+            "lifecycle rewrote the session while structural tier 1 was paused"
+        );
+
+        release_tx
+            .send(())
+            .expect("the paused structural write stopped unexpectedly");
+        assert!(
+            structural
+                .join()
+                .expect("the structural thread must not panic")
+                .is_err(),
+            "the unpersisted structural edit must roll back rather than return success"
+        );
+        rewrite
+            .join()
+            .expect("the lifecycle thread must not panic")
+            .expect("the lifecycle rewrite must install once tier 1 releases");
+        f.workspace.set_before_draft_write(None);
+        f.inject_failure("DROP TRIGGER injected_structural_draft_update;");
+
+        assert_eq!(*session.working_source().unwrap(), lifecycle_source);
+        assert_eq!(
+            session.note_state().unwrap().base_revision,
+            content_hash(lifecycle_source.as_bytes()),
+            "the session state does not match the lifecycle rewrite"
+        );
+    }
+
     #[test]
     fn range_edit_result_reports_phantom() {
         let f = fixture();
@@ -5211,6 +5638,43 @@ mod tests {
         assert!(matches!(state.ast.as_slice(), [AstNode::List { .. }]));
     }
 
+    /// The marker of the first item is visible container syntax, not an
+    /// unaddressable region. Backspace therefore crosses from a preceding
+    /// top-level paragraph into a top-level List exactly as it crosses between
+    /// ordinary adjacent Blocks.
+    #[test]
+    fn merging_the_first_top_level_list_item_crosses_the_container_boundary() {
+        let f = fixture();
+        f.write("a.md", "Alpha\n\n- beta\n");
+        let session = f.open("a");
+
+        let (state, focus, caret) = session.merge_block_with_previous(&[1, 0, 0]).unwrap();
+
+        assert_eq!(*session.working_source().unwrap(), "Alpha\nbeta\n");
+        assert_eq!(focus, vec![0]);
+        assert_eq!(caret, "Alpha".encode_utf16().count());
+        assert_eq!(session.block_source(&focus).unwrap(), "Alpha\nbeta\n");
+        assert!(matches!(state.ast.as_slice(), [AstNode::Paragraph { .. }]));
+    }
+
+    /// Quotes carry the same visible prefix rule as Lists at a top-level
+    /// boundary. Nested quote/list behavior remains on the list-sibling path
+    /// above, so this covers only the cross-container seam.
+    #[test]
+    fn merging_the_first_top_level_blockquote_leaf_crosses_the_container_boundary() {
+        let f = fixture();
+        f.write("a.md", "Alpha\n\n> beta\n");
+        let session = f.open("a");
+
+        let (state, focus, caret) = session.merge_block_with_previous(&[1, 0]).unwrap();
+
+        assert_eq!(*session.working_source().unwrap(), "Alpha\nbeta\n");
+        assert_eq!(focus, vec![0]);
+        assert_eq!(caret, "Alpha".encode_utf16().count());
+        assert_eq!(session.block_source(&focus).unwrap(), "Alpha\nbeta\n");
+        assert!(matches!(state.ast.as_slice(), [AstNode::Paragraph { .. }]));
+    }
+
     #[test]
     fn continuing_a_list_inside_a_blockquote_repeats_the_full_container_prefix() {
         let f = fixture();
@@ -5542,6 +6006,39 @@ mod tests {
             "temporary files left behind: {leftovers:?}"
         );
         assert_eq!(f.read("a.md"), *session.working_source().unwrap());
+    }
+
+    /// `hard_link` has already published the final path when scratch cleanup
+    /// runs. A cleanup failure is therefore a recoverable leftover, never a
+    /// failed create result that would make lifecycle code compensate for a
+    /// Note that is already visible.
+    #[test]
+    fn atomic_create_reports_publication_success_when_post_publish_cleanup_fails() {
+        let directory = tempfile::tempdir().unwrap();
+        let destination = directory.path().join("published.md");
+        let leftover = Arc::new(Mutex::new(None));
+        let recorded_leftover = Arc::clone(&leftover);
+
+        let published = atomic_create_with_cleanup(&destination, b"published bytes", move |temp| {
+            *recorded_leftover.lock().unwrap() = Some(temp.to_path_buf());
+            Err(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                "injected cleanup failure",
+            ))
+        });
+
+        assert_eq!(published, Ok(true));
+        assert_eq!(std::fs::read(&destination).unwrap(), b"published bytes");
+        let temp = leftover
+            .lock()
+            .unwrap()
+            .clone()
+            .expect("the injected cleanup must receive the scratch path");
+        assert!(
+            temp.exists(),
+            "the failed cleanup unexpectedly removed the scratch file"
+        );
+        std::fs::remove_file(temp).unwrap();
     }
 
     /// A successful write clears the row, so a row present means work not yet

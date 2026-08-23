@@ -1,5 +1,9 @@
 # Stage 4: Tasks Changelog
 
+## v1.9.1
+
+Reviewed for upstream delta; no task changes required.
+
 ## v1.9.0
 **Epic F — Editor Depth completed and archived.** All seven tickets
 (`EDIT-F001` through `EDIT-F007`, 38 story points) are complete. The delivery

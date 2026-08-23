@@ -231,6 +231,14 @@ AstNode _paragraphOf(List<InlineElement> content) =>
 
 AstNode _plainParagraph(String text) => _paragraphOf([_plainRun(text)]);
 
+AstNode _linkedParagraph(String title, String targetId) => _paragraphOf([
+  InlineElement.link(
+    targetId: targetId,
+    exists: true,
+    content: [_plainRun(title)],
+  ),
+]);
+
 /// Pumps [Editor] against a fixed AST, optionally overriding
 /// [rustApiProvider] with [api] (required by every test that promotes a
 /// Block, since promotion talks to the Core synchronously).
@@ -890,6 +898,112 @@ void main() {
 
     expect(api.lastBlockPath, [0, 0]);
     expect(api.lastSource, 'edited quote');
+  });
+
+  testWidgets('focused list leaves retain sibling pointer promotion, marker '
+      'alignment, and Link activation', (tester) async {
+    final list = AstNode.list(
+      ordered: false,
+      items: [
+        AstNode.listItem(content: [_plainParagraph('first item')]),
+        AstNode.listItem(content: [_plainParagraph('plain sibling')]),
+        AstNode.listItem(
+          content: [_linkedParagraph('linked sibling', 'list-target')],
+        ),
+      ],
+    );
+    final api = _LinkResolutionApi()
+      ..sources['0/0/0'] = 'first item'
+      ..sources['0/1/0'] = 'plain sibling'
+      ..resolvedCarets['0'] = BlockCaret(
+        blockPath: Uint64List.fromList([0, 0, 0]),
+        caretOffset: BigInt.zero,
+      )
+      ..commitResult = _testNoteState([list]);
+    api.resolutions['list-target'] = Completer<LinkTargetResolution>()
+      ..complete(const LinkTargetResolution_Existing(noteId: 'list-note'));
+    final container = await pumpEditor(tester, [list], api: api);
+
+    await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
+    _expectAlignedMarkerX(tester, find.text('•'), 3);
+    expect(
+      find.byKey(const ValueKey('internal-link-focus-0-list-target')),
+      findsOneWidget,
+    );
+
+    // The sibling remains in the live BlockView surface, so its own pointer
+    // gesture reaches Core for a fresh leaf path in one action.
+    api.resolvedCarets['0'] = BlockCaret(
+      blockPath: Uint64List.fromList([0, 1, 0]),
+      caretOffset: BigInt.one,
+    );
+    await promoteByTap(tester, find.text('plain sibling'));
+    expect(_field(tester).controller.text, 'plain sibling');
+    expect(_field(tester).controller.selection.baseOffset, 1);
+
+    // The Link target remains available after another leaf is focused; it
+    // resolves at activation time rather than from Dart-owned note data.
+    await activateInternalLink(tester, 0, 'list-target');
+    expect(container.read(selectedNoteIdProvider), 'list-note');
+  });
+
+  testWidgets('focused blockquote leaves retain sibling keyboard promotion '
+      'and Link activation', (tester) async {
+    final quote = AstNode.blockquote(
+      nodes: [
+        _plainParagraph('first quote'),
+        _linkedParagraph('quoted Link', 'quote-target'),
+      ],
+    );
+    final api = _LinkResolutionApi()
+      ..sources['0/0'] = 'first quote'
+      ..sources['0/1'] = '[quoted Link](burlmd:quote-target)'
+      ..resolvedCarets['0'] = BlockCaret(
+        blockPath: Uint64List.fromList([0, 0]),
+        caretOffset: BigInt.zero,
+      )
+      ..commitResult = _testNoteState([quote]);
+    api.resolutions['quote-target'] = Completer<LinkTargetResolution>()
+      ..complete(const LinkTargetResolution_Existing(noteId: 'quote-note'));
+    final container = await pumpEditor(tester, [quote], api: api);
+
+    await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
+    expect(
+      find.byKey(const ValueKey('internal-link-focus-0-quote-target')),
+      findsOneWidget,
+    );
+
+    await activateInternalLink(tester, 0, 'quote-target');
+    expect(container.read(selectedNoteIdProvider), 'quote-note');
+
+    api.resolvedCarets['0'] = BlockCaret(
+      blockPath: Uint64List.fromList([0, 1]),
+      caretOffset: BigInt.one,
+    );
+    Focus.of(
+      tester.element(
+        find
+            .descendant(
+              of: find.byKey(const ValueKey('block-0')),
+              matching: find.byType(Semantics),
+            )
+            .first,
+      ),
+    ).requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+    await tester.pump();
+    expect(
+      _field(tester).controller.text,
+      '[quoted Link](burlmd:quote-target)',
+    );
+    expect(_field(tester).controller.selection.baseOffset, 1);
+    expect(
+      find.byKey(const ValueKey('internal-link-focus-0-quote-target')),
+      findsNothing,
+      reason: 'the raw focused source is editable text, not an active Link',
+    );
   });
 
   testWidgets('a task item maps its text hit to the rendered paragraph, not '

@@ -274,8 +274,10 @@ List<InlineSpan> _interactiveInlines(
 Widget renderBlockWithFocusedLeaf(
   AstNode node,
   List<int> relativeLeafPath,
-  Widget Function(AstNode leaf) buildEditor,
-) {
+  Widget Function(AstNode leaf) buildEditor, {
+  Widget Function(AstNode node)? renderUnfocused,
+}) {
+  final renderSibling = renderUnfocused ?? renderBlock;
   if (relativeLeafPath.isEmpty) {
     final editor = buildEditor(node);
     return switch (node) {
@@ -304,21 +306,24 @@ Widget renderBlockWithFocusedLeaf(
                         ordered ? '${index + 1}.' : '•',
                         remaining,
                         buildEditor,
+                        renderUnfocused: renderUnfocused,
                       ),
                     _ => renderBlockWithFocusedLeaf(
                       item,
                       remaining,
                       buildEditor,
+                      renderUnfocused: renderUnfocused,
                     ),
                   }
                 : switch (item) {
                     AstNode_ListItem(:final content, :final checked) =>
-                      _renderListItem(
+                      _renderListItemWith(
                         content,
                         checked,
                         ordered ? '${index + 1}.' : '•',
+                        renderSibling,
                       ),
-                    _ => renderBlock(item),
+                    _ => renderSibling(item),
                   },
         ],
       ),
@@ -330,6 +335,7 @@ Widget renderBlockWithFocusedLeaf(
         '•',
         relativeLeafPath,
         buildEditor,
+        renderUnfocused: renderUnfocused,
       ),
     AstNode_Blockquote(:final nodes)
         when childIndex >= 0 && childIndex < nodes.length =>
@@ -340,8 +346,13 @@ Widget renderBlockWithFocusedLeaf(
           children: [
             for (final (index, child) in nodes.indexed)
               index == childIndex
-                  ? renderBlockWithFocusedLeaf(child, remaining, buildEditor)
-                  : renderBlock(child),
+                  ? renderBlockWithFocusedLeaf(
+                      child,
+                      remaining,
+                      buildEditor,
+                      renderUnfocused: renderUnfocused,
+                    )
+                  : renderSibling(child),
           ],
         ),
       ),
@@ -352,11 +363,16 @@ Widget renderBlockWithFocusedLeaf(
         children: [
           for (final (index, child) in localContent.indexed)
             index == childIndex
-                ? renderBlockWithFocusedLeaf(child, remaining, buildEditor)
-                : renderBlock(child),
+                ? renderBlockWithFocusedLeaf(
+                    child,
+                    remaining,
+                    buildEditor,
+                    renderUnfocused: renderUnfocused,
+                  )
+                : renderSibling(child),
         ],
       ),
-    _ => renderBlock(node),
+    _ => renderSibling(node),
   };
 }
 
@@ -365,8 +381,9 @@ Widget _renderFocusedListItem(
   bool? checked,
   String marker,
   List<int> relativeLeafPath,
-  Widget Function(AstNode leaf) buildEditor,
-) => Row(
+  Widget Function(AstNode leaf) buildEditor, {
+  Widget Function(AstNode node)? renderUnfocused,
+}) => Row(
   crossAxisAlignment: CrossAxisAlignment.start,
   children: [
     _markerWidget(checked, marker),
@@ -380,8 +397,9 @@ Widget _renderFocusedListItem(
                     child,
                     relativeLeafPath.sublist(1),
                     buildEditor,
+                    renderUnfocused: renderUnfocused,
                   )
-                : renderBlock(child),
+                : (renderUnfocused ?? renderBlock)(child),
         ],
       ),
     ),
@@ -389,18 +407,25 @@ Widget _renderFocusedListItem(
 );
 
 Widget _renderListItem(List<AstNode> content, bool? checked, String marker) =>
-    Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _markerWidget(checked, marker),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: content.map(renderBlock).toList(),
-          ),
-        ),
-      ],
-    );
+    _renderListItemWith(content, checked, marker, renderBlock);
+
+Widget _renderListItemWith(
+  List<AstNode> content,
+  bool? checked,
+  String marker,
+  Widget Function(AstNode node) renderChild,
+) => Row(
+  crossAxisAlignment: CrossAxisAlignment.start,
+  children: [
+    _markerWidget(checked, marker),
+    Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: content.map(renderChild).toList(),
+      ),
+    ),
+  ],
+);
 
 Widget _renderListItemForView(
   List<AstNode> content,
@@ -498,6 +523,71 @@ class _LeafText {
 /// [RenderParagraph], so they deliberately have no pseudo-leaf: otherwise the
 /// paragraph index and this mapping diverge for every checked task item.
 List<_LeafText> _blockLeaves(AstNode node) => _leaves(node, 0);
+
+/// The rendered-leaf indexes that remain selectable while [relativeLeafPath]
+/// is replaced by a raw editor. They stay in the top-level Block's canonical
+/// rendered coordinate system; only Core resolves that rendered coordinate to
+/// a source offset.
+List<int> blockUnfocusedLeafIndices(AstNode node, List<int> relativeLeafPath) {
+  final focusedNode = _nodeAtPath(node, relativeLeafPath);
+  if (focusedNode == null) {
+    return List<int>.generate(_blockLeaves(node).length, (index) => index);
+  }
+  final focusedStart = _leafPrefixForPath(node, relativeLeafPath);
+  final focusedEnd = focusedStart + _blockLeaves(focusedNode).length;
+  return [
+    for (var index = 0; index < _blockLeaves(node).length; index++)
+      if (index < focusedStart || index >= focusedEnd) index,
+  ];
+}
+
+int blockRenderedLeafCount(AstNode node) => _blockLeaves(node).length;
+
+AstNode? _nodeAtPath(AstNode node, List<int> path) {
+  if (path.isEmpty) return node;
+  final index = path.first;
+  final remaining = path.sublist(1);
+  return switch (node) {
+    AstNode_List(:final items) when index >= 0 && index < items.length =>
+      _nodeAtPath(items[index], remaining),
+    AstNode_ListItem(:final content)
+        when index >= 0 && index < content.length =>
+      _nodeAtPath(content[index], remaining),
+    AstNode_Blockquote(:final nodes) when index >= 0 && index < nodes.length =>
+      _nodeAtPath(nodes[index], remaining),
+    AstNode_Suggestion(:final localContent)
+        when index >= 0 && index < localContent.length =>
+      _nodeAtPath(localContent[index], remaining),
+    _ => null,
+  };
+}
+
+int _leafPrefixForPath(AstNode node, List<int> path) {
+  if (path.isEmpty) return 0;
+  final index = path.first;
+  final remaining = path.sublist(1);
+  return switch (node) {
+    AstNode_List(:final items) when index >= 0 && index < items.length =>
+      _leafCountBefore(items, index) +
+          _leafPrefixForPath(items[index], remaining),
+    AstNode_ListItem(:final content, :final checked)
+        when index >= 0 && index < content.length =>
+      (checked == null ? 1 : 0) +
+          _leafCountBefore(content, index) +
+          _leafPrefixForPath(content[index], remaining),
+    AstNode_Blockquote(:final nodes) when index >= 0 && index < nodes.length =>
+      _leafCountBefore(nodes, index) +
+          _leafPrefixForPath(nodes[index], remaining),
+    AstNode_Suggestion(:final localContent)
+        when index >= 0 && index < localContent.length =>
+      _leafCountBefore(localContent, index) +
+          _leafPrefixForPath(localContent[index], remaining),
+    _ => 0,
+  };
+}
+
+int _leafCountBefore(List<AstNode> nodes, int end) =>
+    nodes.take(end).fold(0, (count, node) => count + _blockLeaves(node).length);
 
 List<_LeafText> _leaves(AstNode node, int corePrefix) => switch (node) {
   AstNode_Paragraph(:final content) => [
@@ -692,6 +782,52 @@ List<_InternalLink> _internalLinks(AstNode node) => switch (node) {
   _ => const [],
 };
 
+/// Links in the rendered siblings of a raw-focused leaf. Raw Markdown is an
+/// editable source field, not an activation surface, so only the siblings
+/// that still paint formatted Link text receive recognizers and keyboard
+/// targets.
+List<_InternalLink> _internalLinksOutsideFocusedPath(
+  AstNode node,
+  List<int> relativeLeafPath,
+) {
+  final focusedNode = _nodeAtPath(node, relativeLeafPath);
+  if (focusedNode == null) return _internalLinks(node);
+  final all = _internalLinks(node);
+  final start = _internalLinkPrefixForPath(node, relativeLeafPath);
+  final end = start + _internalLinks(focusedNode).length;
+  return [
+    for (final (index, link) in all.indexed)
+      if (index < start || index >= end) link,
+  ];
+}
+
+int _internalLinkPrefixForPath(AstNode node, List<int> path) {
+  if (path.isEmpty) return 0;
+  final index = path.first;
+  final remaining = path.sublist(1);
+  return switch (node) {
+    AstNode_List(:final items) when index >= 0 && index < items.length =>
+      _internalLinkCountBefore(items, index) +
+          _internalLinkPrefixForPath(items[index], remaining),
+    AstNode_ListItem(:final content)
+        when index >= 0 && index < content.length =>
+      _internalLinkCountBefore(content, index) +
+          _internalLinkPrefixForPath(content[index], remaining),
+    AstNode_Blockquote(:final nodes) when index >= 0 && index < nodes.length =>
+      _internalLinkCountBefore(nodes, index) +
+          _internalLinkPrefixForPath(nodes[index], remaining),
+    AstNode_Suggestion(:final localContent)
+        when index >= 0 && index < localContent.length =>
+      _internalLinkCountBefore(localContent, index) +
+          _internalLinkPrefixForPath(localContent[index], remaining),
+    _ => 0,
+  };
+}
+
+int _internalLinkCountBefore(List<AstNode> nodes, int end) => nodes
+    .take(end)
+    .fold(0, (count, node) => count + _internalLinks(node).length);
+
 List<_InternalLink> _internalLinksInInlines(List<InlineElement> elements) => [
   for (final element in elements)
     if (element case InlineElement_Link(
@@ -732,15 +868,26 @@ class BlockView extends StatefulWidget {
     required this.blockPath,
     required this.onFocusRequested,
     this.onLinkActivated,
+    this.focusedLeafPath,
+    this.buildFocusedEditor,
     this.selectionRegistrar,
     this.recognizerFactory = TapGestureRecognizer.new,
-  });
+  }) : assert(
+         (focusedLeafPath == null) == (buildFocusedEditor == null),
+         'A focused path and its editor builder must be supplied together.',
+       );
 
   final AstNode node;
   final List<int> blockPath;
   final void Function(List<int> topLevelPath, int renderedUtf16Offset)
   onFocusRequested;
   final void Function(String targetId)? onLinkActivated;
+
+  /// The one Core-resolved descendant leaf promoted to raw editing. The
+  /// surrounding [BlockView] remains mounted so its other leaves retain the
+  /// same pointer, keyboard, selection, and Link behaviour.
+  final List<int>? focusedLeafPath;
+  final Widget Function(AstNode leaf)? buildFocusedEditor;
 
   /// When non-null, this Block's painted text registers with it instead of
   /// directly with the enclosing [SelectionArea]'s registrar (`EDIT-F003`):
@@ -780,7 +927,7 @@ class _BlockViewState extends State<BlockView> {
   void _pruneLinkRecognizers() {
     final activeTargetIds = widget.onLinkActivated == null
         ? const <String>{}
-        : _internalLinks(widget.node).map((link) => link.targetId).toSet();
+        : _activeLinks().map((link) => link.targetId).toSet();
     final obsoleteTargetIds = _linkRecognizers.keys
         .where((targetId) => !activeTargetIds.contains(targetId))
         .toList();
@@ -797,14 +944,22 @@ class _BlockViewState extends State<BlockView> {
               ..onTap = () => widget.onLinkActivated?.call(targetId),
       );
 
+  List<_InternalLink> _activeLinks() {
+    final focusedLeafPath = widget.focusedLeafPath;
+    return focusedLeafPath == null
+        ? _internalLinks(widget.node)
+        : _internalLinksOutsideFocusedPath(widget.node, focusedLeafPath);
+  }
+
   @override
   Widget build(BuildContext context) {
     final onLinkActivated = widget.onLinkActivated;
     final l10n = AppLocalizations.of(context);
-    final links = _internalLinks(widget.node);
-    Widget child = onLinkActivated == null || l10n == null
-        ? renderBlock(widget.node)
-        : _renderBlockForView(widget.node, (targetId, exists, content) {
+    final links = _activeLinks();
+    Widget renderInteractive(AstNode node) =>
+        onLinkActivated == null || l10n == null
+        ? renderBlock(node)
+        : _renderBlockForView(node, (targetId, exists, content) {
             return TextSpan(
               style: TextStyle(
                 color: exists ? Colors.blue : Colors.deepOrange,
@@ -822,6 +977,16 @@ class _BlockViewState extends State<BlockView> {
               ),
             );
           });
+    final focusedLeafPath = widget.focusedLeafPath;
+    final buildFocusedEditor = widget.buildFocusedEditor;
+    Widget child = focusedLeafPath == null
+        ? renderInteractive(widget.node)
+        : renderBlockWithFocusedLeaf(
+            widget.node,
+            focusedLeafPath,
+            buildFocusedEditor!,
+            renderUnfocused: renderInteractive,
+          );
     if (widget.selectionRegistrar != null) {
       child = SelectionRegistrarScope(
         registrar: widget.selectionRegistrar!,

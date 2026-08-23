@@ -76,9 +76,10 @@ Future<WorkspaceInfo> openWorkspace({required String path}) =>
 /// never interleave *mid-write*; what needed serializing is scan-against-write,
 /// which is what a lock spanning both gives.
 ///
-/// The order holds: this is the topmost of `workspace::persist`'s four locks,
-/// and the only other lock either phase takes is the connection, which is the
-/// bottom one — `scan_bundle` walks the filesystem with nothing held at all
+/// The order holds: this is the topmost of `workspace::persist`'s five locks
+/// (lifecycle → tier 2 write → tier 1 → state → connection). The only other
+/// lock either phase takes is the connection, at the bottom — `scan_bundle`
+/// walks the filesystem with nothing held at all
 /// (`index::scan`'s own documentation on why it must not run inside a
 /// connection closure), and `write_scanned_bundle` takes the connection
 /// beneath this. Nothing here reaches back up.

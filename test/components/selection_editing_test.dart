@@ -85,6 +85,18 @@ TextRun _run(String text) => TextRun(
 AstNode _paragraph(String text) =>
     AstNode.paragraph(content: [InlineElement.text(_run(text))]);
 
+AstNode _listWithTwoLeaves() => AstNode.list(
+  ordered: false,
+  items: [
+    AstNode.listItem(content: [_paragraph('first item')]),
+    AstNode.listItem(content: [_paragraph('second item')]),
+  ],
+);
+
+AstNode _blockquoteWithTwoLeaves() => AstNode.blockquote(
+  nodes: [_paragraph('first quote'), _paragraph('second quote')],
+);
+
 NoteState _note(List<String> blocks, {String id = 'range-note'}) => NoteState(
   ast: [for (final block in blocks) _paragraph(block)],
   metadata: id == _metadata.id
@@ -100,12 +112,23 @@ NoteState _note(List<String> blocks, {String id = 'range-note'}) => NoteState(
   restoredFromDraft: false,
 );
 
-Future<ProviderContainer> _pump(WidgetTester tester, _RangeApi api) async {
+Future<ProviderContainer> _pump(
+  WidgetTester tester,
+  _RangeApi api, {
+  List<AstNode>? ast,
+}) async {
   final container = ProviderContainer(
     overrides: [
       activeNoteProvider.overrideWith(
         () => _FixedNoteController(
-          _note(['first block', 'middle block', 'tail block']),
+          ast == null
+              ? _note(['first block', 'middle block', 'tail block'])
+              : NoteState(
+                  ast: ast,
+                  metadata: _metadata,
+                  baseRevision: 'head',
+                  restoredFromDraft: false,
+                ),
         ),
       ),
       rustApiProvider.overrideWithValue(api),
@@ -138,6 +161,37 @@ Future<void> _selectAcrossBlocks(WidgetTester tester) async {
   );
   await tester.pump();
   await gesture.moveTo(tail.topLeft + Offset(4 * 14 + 7, tail.height / 2));
+  await tester.pump();
+  await gesture.up();
+  await tester.pump();
+}
+
+Future<void> _selectAcrossLeaves(
+  WidgetTester tester,
+  String firstLeaf,
+  String secondLeaf,
+) async {
+  final first = _box(tester, firstLeaf);
+  final second = _box(tester, secondLeaf);
+  final gesture = await tester.startGesture(
+    first.topLeft + Offset(2 * 14 + 7, first.height / 2),
+    kind: PointerDeviceKind.mouse,
+  );
+  await tester.pump();
+  await gesture.moveTo(second.topLeft + Offset(4 * 14 + 7, second.height / 2));
+  await tester.pump();
+  await gesture.up();
+  await tester.pump();
+}
+
+Future<void> _selectWithinLeaf(WidgetTester tester, String text) async {
+  final box = _box(tester, text);
+  final gesture = await tester.startGesture(
+    box.topLeft + Offset(2 * 14 + 7, box.height / 2),
+    kind: PointerDeviceKind.mouse,
+  );
+  await tester.pump();
+  await gesture.moveTo(box.topLeft + Offset(6 * 14 + 7, box.height / 2));
   await tester.pump();
   await gesture.up();
   await tester.pump();
@@ -187,6 +241,117 @@ ValueNotifier<String?> _mockClipboard(WidgetTester tester, [String? initial]) {
 }
 
 void main() {
+  testWidgets('a multi-leaf list selection activates direct range input for '
+      'type, delete, paste, and cut', (tester) async {
+    final operations = <String>['type', 'delete', 'paste', 'cut'];
+
+    for (final operation in operations) {
+      final api = _RangeApi()
+        ..result = _note(['$operation result'])
+        ..caret = RangeEditCaret.block(
+          blockPath: Uint64List.fromList(const [0]),
+          sourceOffsetUtf16: BigInt.zero,
+        )
+        ..sources['0'] = '$operation result\n';
+      await _pump(tester, api, ast: [_listWithTwoLeaves()]);
+      await _selectAcrossLeaves(tester, 'first item', 'second item');
+
+      final area = tester.element(find.byType(SelectionArea));
+      switch (operation) {
+        case 'type':
+          tester.testTextInput.enterText('typed');
+        case 'delete':
+          Actions.invoke(area, const DeleteCharacterIntent(forward: true));
+        case 'paste':
+          _mockClipboard(tester, 'pasted');
+          Actions.invoke(
+            area,
+            const PasteTextIntent(SelectionChangedCause.keyboard),
+          );
+        case 'cut':
+          _mockClipboard(tester);
+          Actions.invoke(
+            area,
+            const CopySelectionTextIntent.cut(SelectionChangedCause.keyboard),
+          );
+      }
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+
+      expect(
+        api.replacements.length,
+        operation == 'type' || operation == 'paste' ? 1 : 0,
+        reason: operation,
+      );
+      expect(
+        api.deletes.length,
+        operation == 'delete' || operation == 'cut' ? 1 : 0,
+        reason: operation,
+      );
+      expect(
+        api.copiedNoteIds.length,
+        operation == 'cut' ? 1 : 0,
+        reason: operation,
+      );
+      expect(api.updates, isEmpty, reason: operation);
+      await tester.pumpWidget(const SizedBox.shrink());
+    }
+  });
+
+  testWidgets('a multi-leaf blockquote selection activates direct range '
+      'input while both endpoints remain in its top-level Block', (
+    tester,
+  ) async {
+    final api = _RangeApi()
+      ..result = _note(['quote result'])
+      ..caret = RangeEditCaret.block(
+        blockPath: Uint64List.fromList(const [0]),
+        sourceOffsetUtf16: BigInt.zero,
+      )
+      ..sources['0'] = 'quote result\n';
+    await _pump(tester, api, ast: [_blockquoteWithTwoLeaves()]);
+    await _selectAcrossLeaves(tester, 'first quote', 'second quote');
+
+    final range = tester
+        .state<EditorState>(find.byType(Editor))
+        .debugSelectedRange();
+    expect(range?.startPath, Uint64List.fromList(const [0]));
+    expect(range?.endPath, Uint64List.fromList(const [0]));
+
+    tester.testTextInput.enterText('quoted');
+    await tester.pump();
+    await tester.pump();
+
+    expect(api.replacements, hasLength(1));
+    expect(api.replacements.single.$2, 'quoted');
+    expect(api.deletes, isEmpty);
+    expect(api.updates, isEmpty);
+  });
+
+  testWidgets('a selection within one rendered leaf does not claim range '
+      'editing merely because its top-level Block is a container', (
+    tester,
+  ) async {
+    final api = _RangeApi()
+      ..result = _note(['unexpected'])
+      ..caret = RangeEditCaret.phantom(insertionIndex: BigInt.zero);
+    await _pump(tester, api, ast: [_listWithTwoLeaves()]);
+    await _selectWithinLeaf(tester, 'first item');
+
+    tester.testTextInput.enterText('must not replace');
+    Actions.invoke(
+      tester.element(find.byType(SelectionArea)),
+      const DeleteCharacterIntent(forward: true),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(api.replacements, isEmpty);
+    expect(api.deletes, isEmpty);
+    expect(api.updates, isEmpty);
+  });
+
   testWidgets('type-over uses one frozen cross-Block Core replacement and '
       'uses Core returned path and UTF-16 caret', (tester) async {
     final api = _RangeApi()
