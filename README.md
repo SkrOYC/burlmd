@@ -20,12 +20,19 @@ under [`.constitution/`](.constitution/). Start with
 
 ## Status
 
-Epics A–D are complete. The Rust core engine covers local Workspace bootstrap (no account, no network), the OKF v0.2 bundle domain, span-preserving Markdown editing that never rewrites a byte the user did not touch, an encrypted SQLite index with full-text search, the four persistence tiers from draft row to Git commit, and Note and Directory lifecycle with atomic inbound-link rewriting.
+Epics A through F are complete. The application opens directly into a local
+Workspace without a login gate. The shell provides Directory navigation,
+full-text search, and recovery for unpersisted edits. The editor provides
+Live Preview, cross-Block selection and copy, structural editing, emphasis
+shortcuts, Link completion and follow, and atomic multi-Block range edits.
 
-None of it is reachable from the running application yet. The app still opens to the login screen, which Epic E removes when it builds the shell — the Directory tree, the mounted editor, search and draft recovery. Backlog: [`.constitution/tasks/critical-path.md`](.constitution/tasks/critical-path.md).
+The active backlog has zero story points, pending next-wave planning. For the
+deferred work, see [the critical path](.constitution/tasks/critical-path.md).
 
-The current phase targets **desktop only** (Linux and macOS). Mobile
-cross-compilation, graph visualisation and GitLab support are deferred.
+Desktop targets remain Linux and macOS. Remote synchronization and conflict
+handling, the design and preferences work, and quality and portability work
+remain deferred. Mobile targets, multiple simultaneous Workspaces, graph
+visualization, and GitLab support are also deferred.
 
 ## Getting started
 

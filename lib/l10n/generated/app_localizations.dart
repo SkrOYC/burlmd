@@ -153,6 +153,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Cancel'**
   String get createLinkedNoteCancel;
+
+  /// Dismissible status message after resolving or creating a linked note fails while the source note stays open.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not complete the linked-note action: {error}'**
+  String linkOperationFailed(String error);
+
+  /// Dismissible status message when closing the current note fails and its editor remains available.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not switch notes: {error}'**
+  String noteCloseFailed(String error);
 }
 
 class _AppLocalizationsDelegate

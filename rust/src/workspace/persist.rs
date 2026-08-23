@@ -1154,8 +1154,24 @@ impl NoteSession {
                         ))
                     }
                     Continuation::EmptyNote => {
+                        // No editable spans does not mean there are no source
+                        // bytes. Frontmatter, raw HTML blocks and reference
+                        // definitions are intentionally unaddressable, but
+                        // still belong to the Note and must survive the first
+                        // editable Block verbatim. The [0] sentinel therefore
+                        // appends at the end of the working source using the
+                        // same end-of-Note seam as `insert_block`.
                         let newline = newline_style(working);
-                        Ok((format!("{source}{newline}"), vec![0]))
+                        let mut text = separator_before(working, BLOCK_SEPARATOR_NEWLINES);
+                        text.push_str(source);
+                        text.push_str(
+                            &newline.repeat(1usize.saturating_sub(trailing_newlines(source))),
+                        );
+                        Ok((
+                            splice::splice_source(working, working.len()..working.len(), &text)
+                                .map_err(splice_error)?,
+                            vec![0],
+                        ))
                     }
                 }
             })?;
@@ -5764,6 +5780,37 @@ mod tests {
             node_at_path(&state.ast, &focus),
             Some(AstNode::Paragraph { .. })
         ));
+    }
+
+    /// The empty-Note sentinel means that there is no editable Block, not
+    /// that the Note has no bytes. Markdown constructs the parser preserves
+    /// without a Block span must therefore remain ahead of the first editable
+    /// Block, byte-for-byte, after both the in-memory structural edit and its
+    /// tier-2 write.
+    #[test]
+    fn continuing_after_unaddressable_only_source_preserves_it_before_the_first_block() {
+        for (name, original) in [
+            ("html", "<div>\n  raw & unaddressable\n</div>\n"),
+            ("reference", "[ref]: </target.md> \"kept exactly\"\n"),
+        ] {
+            let f = fixture();
+            f.write(&format!("{name}.md"), original);
+            let session = f.open(name);
+
+            let (state, focus) = session.continue_block_after(&[0], "first").unwrap();
+            let expected = format!("{original}\nfirst\n");
+
+            assert_eq!(*session.working_source().unwrap(), expected);
+            assert_eq!(focus, vec![0]);
+            assert_eq!(session.block_source(&focus).unwrap(), "first\n");
+            assert!(matches!(
+                node_at_path(&state.ast, &focus),
+                Some(AstNode::Paragraph { .. })
+            ));
+
+            session.flush().unwrap();
+            assert_eq!(f.read(&format!("{name}.md")), expected);
+        }
     }
 
     /// Deleting the last item of a list must not absorb the paragraph that

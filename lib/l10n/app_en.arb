@@ -55,5 +55,19 @@
   "createLinkedNoteCancel": "Cancel",
   "@createLinkedNoteCancel": {
     "description": "Cancellation action for create-on-follow."
+  },
+  "linkOperationFailed": "Could not complete the linked-note action: {error}",
+  "@linkOperationFailed": {
+    "description": "Dismissible status message after resolving or creating a linked note fails while the source note stays open.",
+    "placeholders": {
+      "error": { "type": "String", "example": "Path unavailable" }
+    }
+  },
+  "noteCloseFailed": "Could not switch notes: {error}",
+  "@noteCloseFailed": {
+    "description": "Dismissible status message when closing the current note fails and its editor remains available.",
+    "placeholders": {
+      "error": { "type": "String", "example": "Could not commit the note" }
+    }
   }
 }

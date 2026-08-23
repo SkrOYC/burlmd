@@ -3,13 +3,9 @@ import 'package:burlmd/src/providers/workspace_provider.dart';
 import 'package:burlmd/src/rust/draft.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-/// The last failure the Core returned across the boundary while opening,
-/// closing or editing the active Note, or `null` when the last operation
-/// succeeded. `SHEL-E004`'s error surface: [Editor] watches this and shows
-/// the failure to the user rather than silently ignoring it — before this
-/// ticket the editor had no error surface at all and every Core refusal
-/// (an unopenable Note, a failed draft write under `update_block`) was
-/// raised into nothing.
+/// The last fatal failure the Core returned while opening an active Note, or
+/// `null` when the last fatal operation succeeded. `SHEL-E004`'s error
+/// surface watches this rather than silently ignoring an unopenable Note.
 final editorErrorProvider = NotifierProvider<EditorError, Object?>(
   EditorError.new,
 );
@@ -21,6 +17,24 @@ class EditorError extends Notifier<Object?> {
   Object? build() => null;
 
   void report(Object? error) => state = error;
+}
+
+/// A one-shot close refusal for an otherwise still-open Note session.
+///
+/// Unlike an open failure, a close refusal leaves the old Core session valid
+/// and retryable. [Editor] acknowledges this value after showing its
+/// dismissible status message, preventing stale errors on later rebuilds.
+final noteCloseFailureProvider = NotifierProvider<NoteCloseFailure, Object?>(
+  NoteCloseFailure.new,
+);
+
+class NoteCloseFailure extends Notifier<Object?> {
+  @override
+  Object? build() => null;
+
+  void report(Object error) => state = error;
+
+  void acknowledge() => state = null;
 }
 
 /// The last refused per-keystroke write (`update_block`, ADR-008 tier 1), or
@@ -45,6 +59,21 @@ class KeystrokeWriteFailure extends Notifier<Object?> {
   Object? build() => null;
 
   void report(Object? error) => state = error;
+}
+
+/// Whether the outgoing Note is closing before its replacement opens.
+///
+/// The old state remains available solely so a failed close can restore that
+/// session, but it no longer grants edit authority once switching begins.
+final noteSwitchingProvider = NotifierProvider<NoteSwitching, bool>(
+  NoteSwitching.new,
+);
+
+class NoteSwitching extends Notifier<bool> {
+  @override
+  bool build() => false;
+
+  void set(bool switching) => state = switching;
 }
 
 /// Holds the currently open note's state. UI widgets must stay stateless
@@ -120,11 +149,21 @@ class NoteController extends Notifier<NoteState?> {
       // explaining why the aborted switch failed, so treat it as done.
       return;
     }
+    var switching = false;
     if (current != null) {
+      // Revoke the old editor before awaiting the close. The old provider
+      // value remains only to restore it when this close itself refuses.
+      switching = true;
+      ref.read(noteSwitchingProvider.notifier).set(true);
       try {
         await api.closeNote(current.metadata.id);
       } catch (error) {
-        ref.read(editorErrorProvider.notifier).report(error);
+        ref.read(noteSwitchingProvider.notifier).set(false);
+        // Closing refused, so the old session remains Core-valid and can be
+        // edited again. It is a nonfatal one-shot outcome, not the persistent
+        // no-session error panel used for a failed open.
+        ref.read(editorErrorProvider.notifier).report(null);
+        ref.read(noteCloseFailureProvider.notifier).report(error);
         // The switch aborts with the old Note still open; point the tree
         // back at it so the selection highlight matches what the editor
         // actually shows. The error stays surfaced above.
@@ -139,19 +178,26 @@ class NoteController extends Notifier<NoteState?> {
       // surfaces: the old Note's keystroke-write failure belongs to a
       // session that just ended.
       ref.read(editorErrorProvider.notifier).report(null);
+      ref.read(noteCloseFailureProvider.notifier).acknowledge();
       ref.read(keystrokeWriteFailureProvider.notifier).report(null);
     } catch (error) {
       ref.read(editorErrorProvider.notifier).report(error);
-      // Mirror the close-abort branch above: when another Note is still
-      // open, point the tree back at it so the selection highlight names
-      // what the editor actually shows (flow-workspace-navigation.md's
-      // "the tree selection reverts"). With no Note previously open there
-      // is nothing to revert to — the selection stays on the failed id so
-      // the editor pane stays mounted and keeps the error surfaced.
-      final stillOpen = state?.metadata.id;
-      if (stillOpen != null) {
-        ref.read(selectedNoteIdProvider.notifier).select(stillOpen);
+      // A failed first open has no session to clean up. After a successful
+      // outgoing close, however, the old provider snapshot names a session
+      // Core already deregistered and must be cleared rather than restored.
+      if (switching) {
+        // The outgoing close completed, so retaining its old state as a live
+        // editor would target a deregistered Core session.
+        state = null;
+        ref.read(keystrokeWriteFailureProvider.notifier).report(null);
+      } else {
+        final stillOpen = state?.metadata.id;
+        if (stillOpen != null) {
+          ref.read(selectedNoteIdProvider.notifier).select(stillOpen);
+        }
       }
+    } finally {
+      if (switching) ref.read(noteSwitchingProvider.notifier).set(false);
     }
   }
 
@@ -167,10 +213,14 @@ class NoteController extends Notifier<NoteState?> {
   /// failed keystroke write: the draft row stays in place, the text stays on
   /// screen, and the failure is surfaced *beside* it. It is published through
   /// [keystrokeWriteFailureProvider] — which [WriteTierNotice] renders above
-  /// the editor — instead. Only open/close boundary errors keep flowing to
-  /// [editorErrorProvider], as today. A subsequent keystroke that succeeds
-  /// clears the notice, as do open/close/reload below.
+  /// the editor — instead. Only an open failure with no remaining session
+  /// reaches [editorErrorProvider]; a close refusal has its retryable status
+  /// surface. A subsequent keystroke that succeeds clears the notice, as do
+  /// open/close/reload below.
   void updateBlock(List<int> blockPath, String source) {
+    // A queued platform callback may arrive before the read-only rebuild
+    // paints, so the switching state is the authority boundary.
+    if (ref.read(noteSwitchingProvider)) return;
     final current = state;
     if (current == null) return;
     try {
@@ -205,7 +255,9 @@ class NoteController extends Notifier<NoteState?> {
   /// an impossibility. This mirrors what a successful open does.
   void clear() {
     state = null;
+    ref.read(noteSwitchingProvider.notifier).set(false);
     ref.read(editorErrorProvider.notifier).report(null);
+    ref.read(noteCloseFailureProvider.notifier).acknowledge();
     ref.read(keystrokeWriteFailureProvider.notifier).report(null);
   }
 

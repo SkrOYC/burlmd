@@ -47,4 +47,14 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get createLinkedNoteCancel => 'Cancel';
+
+  @override
+  String linkOperationFailed(String error) {
+    return 'Could not complete the linked-note action: $error';
+  }
+
+  @override
+  String noteCloseFailed(String error) {
+    return 'Could not switch notes: $error';
+  }
 }
