@@ -1,5 +1,18 @@
 # Stage 3: Technical Implementation Changelog
 
+## v1.6.6
+
+Patch correction from PR #10 review, round 11. No bill-of-materials, PRD, or
+architecture change.
+
+- A rename or move whose filesystem and index publication has completed now
+  returns its authoritative destination `NoteState` with a typed `Settlement`
+  warning if its final Link-existence badge refresh cannot run. Presentation
+  settles the returned ID and effects before reporting the warning; it must not
+  treat this advisory-state failure as a refusal. When a Git commit and a later
+  settlement cleanup both fail, `Commit` remains the primary warning and its
+  detail preserves the cleanup context, matching close-path recovery policy.
+
 ## v1.6.5
 
 Patch correction from PR #10 review, round 10. No bill-of-materials, PRD, or

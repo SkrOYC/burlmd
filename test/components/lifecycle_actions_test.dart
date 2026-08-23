@@ -575,6 +575,105 @@ void main() {
     });
   });
 
+  group('settling a selected Note without an open session', () {
+    Future<void> leaveIncomingOpenFailed(
+      WidgetTester tester,
+      ProviderContainer container,
+      _LifecycleApi api,
+    ) async {
+      final controller = container.read(activeNoteProvider.notifier);
+      api.openStates['A'] = stateFor('A');
+      await controller.open('A');
+      container.read(selectedNoteIdProvider.notifier).select('B');
+      // B deliberately has no open state. Its incoming open closes A, then
+      // leaves selection on B with no mounted Core session.
+      await controller.open('B');
+      expect(container.read(activeNoteProvider), isNull);
+      expect(container.read(selectedNoteIdProvider), 'B');
+      expect(container.read(editorErrorProvider), isNotNull);
+    }
+
+    testWidgets('rename opens the returned identity before publishing its '
+        'selection when the selected source Note is not open', (tester) async {
+      final returned = stateFor('Renamed/B', title: 'returned metadata');
+      final reopened = stateFor('Renamed/B', title: 'opened session');
+      final api = _LifecycleApi()
+        ..renameNoteResult = (returned, effects())
+        ..openStates['Renamed/B'] = reopened;
+      late ProviderContainer container;
+      await tester.pumpWidget(_probeHarness(api, (c) => container = c));
+      addTearDown(container.dispose);
+      await leaveIncomingOpenFailed(tester, container, api);
+
+      final outcome = await container
+          .read(lifecycleActionsProvider)
+          .renameNote('B', 'Renamed');
+
+      expect(outcome, isA<LifecycleCompleted>());
+      // The active state is the actual session returned by open_note, not
+      // direct adoption of lifecycle metadata merely because B was selected.
+      expect(container.read(activeNoteProvider), same(reopened));
+      expect(container.read(selectedNoteIdProvider), 'Renamed/B');
+      expect(api.openNoteCalls, ['A', 'B', 'Renamed/B']);
+      expect(api.calls, ['closeNote:A', 'renameNote:B:Renamed']);
+      expect(container.read(editorErrorProvider), isNull);
+    });
+
+    testWidgets('move opens the returned identity before publishing its '
+        'selection when the selected source Note is not open', (tester) async {
+      final returned = stateFor('Archive/B', title: 'returned metadata');
+      final reopened = stateFor('Archive/B', title: 'opened session');
+      final api = _LifecycleApi()
+        ..moveNoteResult = (returned, effects())
+        ..openStates['Archive/B'] = reopened;
+      late ProviderContainer container;
+      await tester.pumpWidget(_probeHarness(api, (c) => container = c));
+      addTearDown(container.dispose);
+      await leaveIncomingOpenFailed(tester, container, api);
+
+      final outcome = await container
+          .read(lifecycleActionsProvider)
+          .moveNote('B', 'Archive');
+
+      expect(outcome, isA<LifecycleCompleted>());
+      expect(container.read(activeNoteProvider), same(reopened));
+      expect(container.read(selectedNoteIdProvider), 'Archive/B');
+      expect(api.openNoteCalls, ['A', 'B', 'Archive/B']);
+      expect(api.calls, ['closeNote:A', 'moveNote:B:Archive']);
+      expect(container.read(editorErrorProvider), isNull);
+    });
+
+    testWidgets('a failed returned-identity open does not publish a false '
+        'selection and a later open can retry the session', (tester) async {
+      final returned = stateFor('Renamed/B');
+      final retried = stateFor('Renamed/B', title: 'retried session');
+      final api = _LifecycleApi()..renameNoteResult = (returned, effects());
+      late ProviderContainer container;
+      await tester.pumpWidget(_probeHarness(api, (c) => container = c));
+      addTearDown(container.dispose);
+      await leaveIncomingOpenFailed(tester, container, api);
+
+      final outcome = await container
+          .read(lifecycleActionsProvider)
+          .renameNote('B', 'Renamed');
+
+      expect(outcome, isA<LifecycleFailed>());
+      expect(container.read(activeNoteProvider), isNull);
+      expect(container.read(selectedNoteIdProvider), 'B');
+      expect(api.openNoteCalls, ['A', 'B', 'Renamed/B']);
+
+      // The lifecycle gate is released after failure; an explicit retry opens
+      // the returned identity and only then makes it the selected Note.
+      api.openStates['Renamed/B'] = retried;
+      await container.read(activeNoteProvider.notifier).open('Renamed/B');
+      container.read(selectedNoteIdProvider.notifier).select('Renamed/B');
+      expect(container.read(activeNoteProvider), same(retried));
+      expect(container.read(selectedNoteIdProvider), 'Renamed/B');
+      expect(api.openNoteCalls, ['A', 'B', 'Renamed/B', 'Renamed/B']);
+      expect(container.read(editorErrorProvider), isNull);
+    });
+  });
+
   group('directory rename', () {
     testWidgets('an open remapped note re-anchors through the NEW id the '
         'Core returns', (tester) async {
@@ -873,9 +972,11 @@ void main() {
       (tester) async {
         final delayedB = Completer<NoteState>();
         final renamed = stateFor('Renamed/B');
+        final reopened = stateFor('Renamed/B', title: 'opened session');
         final api = _LifecycleApi()
           ..openStates['A'] = stateFor('A')
           ..openNoteGates['B'] = delayedB
+          ..openStates['Renamed/B'] = reopened
           ..renameNoteResult = (renamed, effects());
         late ProviderContainer container;
         await tester.pumpWidget(_probeHarness(api, (c) => container = c));
@@ -893,9 +994,9 @@ void main() {
         await openingB;
         expect(await renamingB, isA<LifecycleCompleted>());
 
-        expect(container.read(activeNoteProvider), same(renamed));
+        expect(container.read(activeNoteProvider), same(reopened));
         expect(container.read(selectedNoteIdProvider), 'Renamed/B');
-        expect(api.openNoteCalls, ['A', 'B']);
+        expect(api.openNoteCalls, ['A', 'B', 'Renamed/B']);
       },
     );
 

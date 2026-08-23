@@ -71,10 +71,12 @@ derive that value before state installation and draft persistence. A source
 fragment that parses only as unaddressable Markdown therefore refuses without
 installing hidden content; retrying with addressable text applies exactly once.
 
-Lifecycle operations distinguish a refusal from a terminal commit-stage
+Lifecycle operations distinguish a refusal from a terminal post-publication
 warning. After the filesystem, index, and sessions settle, a failed Git commit
 returns `LifecycleResult` with the authoritative state, effects, or removed
-ids plus `LifecycleWarningStage::Commit` or `LifecycleWarningStage::Settlement`.
+ids plus `LifecycleWarningStage::Commit`; a later cleanup or advisory state
+refresh returns the same result with `LifecycleWarningStage::Settlement`.
+When both occur, `Commit` remains primary and records the settlement context.
 It does not return `AppError` after publication.
 This includes ordinary create and create-on-follow: once their Note/session is
 authoritative, a failed Git record is a warning and not a rollback trigger.
