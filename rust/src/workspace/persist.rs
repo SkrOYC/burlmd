@@ -3023,6 +3023,62 @@ pub(crate) fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), AppError> {
     Ok(())
 }
 
+/// Publishes a new file without ever replacing an existing destination.
+///
+/// Lifecycle creation has an unavoidable boundary with external tools: even
+/// while burlmd's lifecycle lock serializes its own operations, another
+/// process can create the requested path after the availability check. A
+/// rename would replace that file on Unix, so new Notes publish the durable
+/// private temporary through a hard link instead. `link` creates the final
+/// name iff it does not already exist; its `AlreadyExists` answer is therefore
+/// an honest collision rather than a lossy overwrite.
+///
+/// `Ok(false)` means the destination appeared before publication. All other
+/// I/O failures retain the normal typed application error.
+pub(crate) fn atomic_create(path: &Path, bytes: &[u8]) -> Result<bool, AppError> {
+    static NEXT_TEMP: AtomicU64 = AtomicU64::new(0);
+
+    assert_no_io_under_the_connection("an atomic create");
+
+    let directory = path
+        .parent()
+        .ok_or_else(|| AppError::IoError(format!("{} has no parent directory", path.display())))?;
+    let stem = path
+        .file_name()
+        .map_or_else(|| "note".to_string(), |n| n.to_string_lossy().into_owned());
+    let temp = directory.join(format!(
+        ".{stem}.{}.{}.tmp",
+        std::process::id(),
+        NEXT_TEMP.fetch_add(1, Ordering::Relaxed)
+    ));
+
+    let write = || -> std::io::Result<()> {
+        let mut file = create_private_temp(&temp)?;
+        file.write_all(bytes)?;
+        file.sync_all()?;
+        Ok(())
+    };
+    if let Err(error) = write() {
+        let _ = std::fs::remove_file(&temp);
+        return Err(io_error(&temp, &error));
+    }
+
+    match std::fs::hard_link(&temp, path) {
+        Ok(()) => {
+            std::fs::remove_file(&temp).map_err(|error| io_error(&temp, &error))?;
+            Ok(true)
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+            let _ = std::fs::remove_file(&temp);
+            Ok(false)
+        }
+        Err(error) => {
+            let _ = std::fs::remove_file(&temp);
+            Err(io_error(path, &error))
+        }
+    }
+}
+
 /// Creates the temporary file **already private**, rather than at the process
 /// umask and narrowed afterwards.
 ///

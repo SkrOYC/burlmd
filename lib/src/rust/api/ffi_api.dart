@@ -419,15 +419,31 @@ Future<List<NoteMetadata>> findNotesByTitle({
 
 /// Candidates for the completion triggered by `[[` (CAP-GRAPH-02). The
 /// trigger is a UI affordance; what gets inserted is `LinkCompletion::insert_text`,
-/// built Core-side. `limit` carries [`search_notes`]' semantics, including `0`
-/// returning no candidates.
+/// built Core-side. Results are capped at ten and include a Core-derived
+/// prospective ghost when `query` is a valid, as-yet-unoccupied target in the
+/// current Note's Directory. `limit == 0` returns no candidates.
 Future<List<LinkCompletion>> linkCompletions({
+  required String noteId,
   required String query,
   required int limit,
 }) => RustLib.instance.api.crateApiFfiApiLinkCompletions(
+  noteId: noteId,
   query: query,
   limit: limit,
 );
+
+/// Re-resolves an internal Link target at activation time. The parsed AST's
+/// `exists` flag is intentionally not accepted because it is render-time,
+/// stale-prone advisory state.
+Future<LinkTargetResolution> resolveLinkTarget({required String targetId}) =>
+    RustLib.instance.api.crateApiFfiApiResolveLinkTarget(targetId: targetId);
+
+/// Creates the exact validated identity carried by a still-missing Link.
+/// Parent Directories are materialized under the lifecycle lock; if a burlmd
+/// caller created the target after resolution this opens that Note instead,
+/// while a foreign filesystem collision is refused rather than overwritten.
+Future<NoteState> createLinkTarget({required String targetId}) =>
+    RustLib.instance.api.crateApiFfiApiCreateLinkTarget(targetId: targetId);
 
 /// Notes linking *to* this one (CAP-GRAPH-05).
 Future<List<NoteMetadata>> backlinks({required String noteId}) =>

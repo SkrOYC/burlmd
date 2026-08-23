@@ -1156,8 +1156,9 @@ pub struct LinkCompletion {
 /// Workspace and identifies the current Note's Directory. The caller requests
 /// at most 10 candidates and Core clamps a larger `limit` to 10. Existing
 /// matches are `LinkCompletionKind::Existing`. If the query is a valid future
-/// title/target in that Directory, Core may include one clearly marked
-/// `ProspectiveGhost` within the same limit, with the exact `target_id` and
+/// title/target in that Directory and the exact target is not already indexed,
+/// Core includes one clearly marked `ProspectiveGhost` within the same limit,
+/// with the exact `target_id` and
 /// standard-Markdown `insert_text` already derived. The UI replaces exactly
 /// the immutable trigger range with this Core-supplied text; it neither
 /// constructs nor repairs a link destination.

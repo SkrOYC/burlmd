@@ -75,6 +75,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   LinkCompletion dco_decode_link_completion(dynamic raw);
 
   @protected
+  LinkCompletionKind dco_decode_link_completion_kind(dynamic raw);
+
+  @protected
+  LinkTargetResolution dco_decode_link_target_resolution(dynamic raw);
+
+  @protected
   List<String> dco_decode_list_String(dynamic raw);
 
   @protected
@@ -204,6 +210,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   LinkCompletion sse_decode_link_completion(SseDeserializer deserializer);
+
+  @protected
+  LinkCompletionKind sse_decode_link_completion_kind(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  LinkTargetResolution sse_decode_link_target_resolution(
+    SseDeserializer deserializer,
+  );
 
   @protected
   List<String> sse_decode_list_String(SseDeserializer deserializer);
@@ -357,6 +373,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_link_completion(
     LinkCompletion self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_link_completion_kind(
+    LinkCompletionKind self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_link_target_resolution(
+    LinkTargetResolution self,
     SseSerializer serializer,
   );
 

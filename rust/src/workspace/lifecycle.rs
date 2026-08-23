@@ -164,6 +164,72 @@ pub fn create_note(
     })
 }
 
+/// The lossless identity carried by an internal Link.
+///
+/// `target_id` is the only durable input to create-on-follow. Keeping its
+/// derived title and Directory together prevents the FFI/UI boundary from
+/// reproducing path parsing or accidentally creating a neighbouring Note.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct LinkTargetIdentity {
+    pub target_id: String,
+    pub directory_path: String,
+    pub title: String,
+}
+
+/// Validates a link target id and derives the exact creation identity it
+/// encodes. This deliberately rejects inputs that normalization would change:
+/// the target in a stored Link is an OKF identity, not a request for a nearby
+/// path. In particular, leading/trailing separators, empty segments, escaping
+/// components, reserved names, and non-link-round-trippable line endings are
+/// refused rather than repaired.
+pub(crate) fn link_target_identity(target_id: &str) -> Result<LinkTargetIdentity, AppError> {
+    let Some((directory_path, title)) = target_id.rsplit_once('/') else {
+        validate_title(target_id)?;
+        return Ok(LinkTargetIdentity {
+            target_id: target_id.to_string(),
+            directory_path: String::new(),
+            title: target_id.to_string(),
+        });
+    };
+
+    let directory_path = normalize_directory(directory_path)?;
+    validate_title(title)?;
+    let normalized_id = join_id(&directory_path, title);
+    if normalized_id != target_id {
+        return Err(AppError::PathUnavailable(format!(
+            "{target_id} is not an exact, bundle-relative Link target id"
+        )));
+    }
+    Ok(LinkTargetIdentity {
+        target_id: target_id.to_string(),
+        directory_path,
+        title: title.to_string(),
+    })
+}
+
+/// Creates the exact Note identity carried by a Link. It re-resolves under
+/// the lifecycle lock: if another burlmd operation created the target first,
+/// the existing Note is opened; a foreign file collision is refused by the
+/// exclusive create in [`create_note_serialized`].
+pub(crate) fn create_link_target(
+    workspace: &Arc<Workspace>,
+    target_id: &str,
+) -> Result<NoteState, AppError> {
+    let identity = link_target_identity(target_id)?;
+    persist::with_lifecycle_lock(workspace, || {
+        if workspace
+            .with_db(|conn| index::note_exists(conn, workspace.id(), &identity.target_id))?
+        {
+            return persist::open_note_serialized(workspace, &identity.target_id)
+                .map(|(_, state)| state);
+        }
+        if !identity.directory_path.is_empty() {
+            create_directory_serialized(workspace, &identity.directory_path)?;
+        }
+        create_note_serialized(workspace, &identity.directory_path, &identity.title)
+    })
+}
+
 fn create_note_serialized(
     workspace: &Arc<Workspace>,
     directory_path: &str,
@@ -182,7 +248,12 @@ fn create_note_serialized(
     ensure_path_available(workspace, &new_id, &new_path, None)?;
 
     let source = conformant_frontmatter(title);
-    persist::atomic_write(&new_path, source.as_bytes())?;
+    if !persist::atomic_create(&new_path, source.as_bytes())? {
+        return Err(AppError::PathUnavailable(format!(
+            "{} appeared while creating the Note",
+            concept_id_to_path(&new_id)
+        )));
+    }
 
     let indexed = index::derive_note(
         &new_id,
@@ -2997,6 +3068,55 @@ mod tests {
         );
         assert_eq!(f.note_ids(), vec!["projects/My Great Idea".to_string()]);
         assert_eq!(f.directory_ids(), vec!["projects".to_string()]);
+    }
+
+    /// F006 create-on-follow owns the identity all the way through Core: it
+    /// materializes parents, never substitutes a title or path, and rechecks
+    /// a target after the caller's earlier missing resolution.
+    #[test]
+    fn create_link_target_missing_parents_exact_id_collisions_reserved_escape_and_race() {
+        let f = fixture();
+
+        let created = create_link_target(&f.workspace, "projects/future/Plan A").unwrap();
+        assert_eq!(created.metadata.id, "projects/future/Plan A");
+        assert_eq!(created.metadata.path, "projects/future/Plan A.md");
+        assert!(f.root().join("projects/future/Plan A.md").is_file());
+        assert_eq!(
+            f.directory_ids(),
+            vec!["projects".to_string(), "projects/future".to_string()]
+        );
+
+        // A target created by another burlmd operation between resolve and
+        // create is opened, preserving the exact identity rather than being
+        // treated as a second create.
+        let appeared = create_link_target(&f.workspace, "projects/future/Plan A").unwrap();
+        assert_eq!(appeared.metadata.id, "projects/future/Plan A");
+
+        for invalid in [
+            "index",
+            "log",
+            "../escape",
+            "projects/../escape",
+            "/absolute",
+        ] {
+            assert!(matches!(
+                create_link_target(&f.workspace, invalid),
+                Err(AppError::PathUnavailable(_))
+            ));
+        }
+        assert!(!f.root().parent().unwrap().join("escape.md").exists());
+
+        // This is the resolve/create race from the flow: the identity is
+        // valid and initially missing, then a foreign writer occupies the
+        // exact file before creation. It must be refused, not overwritten or
+        // redirected.
+        let planned = link_target_identity("race/External").unwrap();
+        assert_eq!(planned.target_id, "race/External");
+        f.write("race/External.md", "foreign bytes\n");
+        let collision = create_link_target(&f.workspace, &planned.target_id);
+        assert!(matches!(collision, Err(AppError::PathUnavailable(_))));
+        assert_eq!(f.read("race/External.md"), "foreign bytes\n");
+        assert!(!f.note_ids().contains(&"race/External".to_string()));
     }
 
     /// The filename is the title verbatim plus `.md`, with no slugification,

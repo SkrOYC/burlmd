@@ -143,7 +143,7 @@ SCENARIO_ENV=()
 while IFS='=' read -r entry; do
   SCENARIO_ENV+=("$entry")
 done < <(env | grep '^BURLMD_SMOKE')
-if [[ "${BURLMD_SMOKE_F002:-}" == "1" || "${BURLMD_SMOKE_F003:-}" == "1" || "${BURLMD_SMOKE_F004:-}" == "1" || "${BURLMD_SMOKE_F005:-}" == "1" ]]; then
+if [[ "${BURLMD_SMOKE_F002:-}" == "1" || "${BURLMD_SMOKE_F003:-}" == "1" || "${BURLMD_SMOKE_F004:-}" == "1" || "${BURLMD_SMOKE_F005:-}" == "1" || "${BURLMD_SMOKE_F006:-}" == "1" ]]; then
   READY_FILE="$(mktemp /tmp/burlmd-selection-ready.XXXXXX)"
   rm -f "$READY_FILE"
   SCENARIO_ENV+=("BURLMD_SMOKE_READY_FILE=$READY_FILE")
@@ -205,6 +205,12 @@ if [[ "${BURLMD_SMOKE_F005:-}" == "1" ]]; then
   [[ -s "$READY_FILE" ]] || fail "F005 scenario never reached the focused emphasis-shortcut readiness state"
   [[ "$(<"$READY_FILE")" == "f005-focused-emphasis-shortcut" ]] \
     || fail "F005 scenario readiness marker was invalid"
+fi
+
+if [[ "${BURLMD_SMOKE_F006:-}" == "1" ]]; then
+  [[ -s "$READY_FILE" ]] || fail "F006 scenario never accepted a completion and followed a rendered Link"
+  [[ "$(<"$READY_FILE")" == "f006-completion-accepted-and-internal-link-followed" ]] \
+    || fail "F006 scenario readiness marker was invalid"
 fi
 
 grim "$SHOT" >/dev/null 2>&1 || fail "final grim capture failed"
