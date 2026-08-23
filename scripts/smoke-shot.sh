@@ -155,9 +155,11 @@ SMOKE_DATA_HOME="$SMOKE_STATE_DIR/data"
 SMOKE_DB_PATH="$SMOKE_DATA_HOME/burlmd/index.sqlite3"
 SMOKE_WORKSPACE="$SMOKE_DATA_HOME/burlmd/workspace"
 SMOKE_NONCE_FILE="$SMOKE_STATE_DIR/.burlmd-smoke-nonce"
+READY_FILE="$SMOKE_STATE_DIR/.burlmd-smoke-ready"
 mkdir -p -- "$SMOKE_HOME" "$SMOKE_WORKSPACE" \
   || fail "could not initialize isolated smoke state"
 touch -- "$SMOKE_DB_PATH" || fail "could not initialize isolated smoke database"
+touch -- "$READY_FILE" || fail "could not initialize smoke readiness marker"
 SMOKE_NONCE="$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')"
 [[ "$SMOKE_NONCE" =~ ^[a-f0-9]{64}$ ]] || fail "could not generate smoke nonce"
 (umask 077 && printf '%s\n' "$SMOKE_NONCE" > "$SMOKE_NONCE_FILE") \
@@ -185,11 +187,6 @@ for scenario_var in \
     SCENARIO_ENV+=("$scenario_var=${!scenario_var}")
   fi
 done
-if [[ "${BURLMD_SMOKE_F002:-}" == "1" || "${BURLMD_SMOKE_F003:-}" == "1" || "${BURLMD_SMOKE_F004:-}" == "1" || "${BURLMD_SMOKE_F005:-}" == "1" || "${BURLMD_SMOKE_F006:-}" == "1" || "${BURLMD_SMOKE_F007:-}" == "1" ]]; then
-  READY_FILE="$(mktemp /tmp/burlmd-selection-ready.XXXXXX)"
-  rm -f "$READY_FILE"
-  SCENARIO_ENV+=("BURLMD_SMOKE_READY_FILE=$READY_FILE")
-fi
 if (( ${#SCENARIO_ENV[@]} > 0 )); then
   echo "[smoke-shot] staging scenario env: ${SCENARIO_ENV[*]}"
 fi
@@ -202,6 +199,7 @@ env "${SCENARIO_ENV[@]}" \
   "BURLMD_SMOKE_NONCE=$SMOKE_NONCE" \
   "BURLMD_SMOKE_NONCE_FILE=$SMOKE_NONCE_FILE" \
   "BURLMD_SMOKE_WORKSPACE=$SMOKE_WORKSPACE" \
+  "BURLMD_SMOKE_READY_FILE=$READY_FILE" \
   "HOME=$SMOKE_HOME" \
   "XDG_DATA_HOME=$SMOKE_DATA_HOME" \
   "BURLMD_DB_PATH=$SMOKE_DB_PATH" \

@@ -363,6 +363,19 @@ StructuralEdit replaceSelectionAndSplitBlock({
   selectionExtent: selectionExtent,
 );
 
+/// Materializes a Core-returned empty editor slot. Unlike continuing after a
+/// leaf, this inserts *at* the slot, so full selection in a non-final Block
+/// cannot append after its surviving sibling.
+StructuralEdit continueBlockAtInsertionSlot({
+  required String noteId,
+  required BigInt insertionIndex,
+  required String source,
+}) => RustLib.instance.api.crateApiFfiApiContinueBlockAtInsertionSlot(
+  noteId: noteId,
+  insertionIndex: insertionIndex,
+  source: source,
+);
+
 /// Merges a Block into its predecessor -- Backspace at offset 0
 /// (CAP-EDIT-03). The returned [`StructuralEdit`] names the actual
 /// predecessor leaf and its raw-source UTF-16 join offset after Core reparses.
@@ -639,15 +652,24 @@ class StructuralEdit {
   final Uint64List blockPath;
   final BigInt caretOffset;
 
+  /// Present only when the edit removed the raw field entirely. The slot is
+  /// Core-owned and may sit before a surviving sibling, so Presentation must
+  /// materialize it through `continue_block_at_insertion_slot`.
+  final BigInt? phantomInsertionIndex;
+
   const StructuralEdit({
     required this.state,
     required this.blockPath,
     required this.caretOffset,
+    this.phantomInsertionIndex,
   });
 
   @override
   int get hashCode =>
-      state.hashCode ^ blockPath.hashCode ^ caretOffset.hashCode;
+      state.hashCode ^
+      blockPath.hashCode ^
+      caretOffset.hashCode ^
+      phantomInsertionIndex.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -656,5 +678,6 @@ class StructuralEdit {
           runtimeType == other.runtimeType &&
           state == other.state &&
           blockPath == other.blockPath &&
-          caretOffset == other.caretOffset;
+          caretOffset == other.caretOffset &&
+          phantomInsertionIndex == other.phantomInsertionIndex;
 }

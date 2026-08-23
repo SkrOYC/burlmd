@@ -160,6 +160,15 @@ class _CoreFake extends RustApi {
     if (source != block) {
       throw StateError('selected Enter source must be the focused raw field');
     }
+    if (low == 0 && high == source.length) {
+      blocks.removeAt(blockPath.first);
+      return StructuralEdit(
+        state: state,
+        blockPath: Uint64List(0),
+        caretOffset: BigInt.zero,
+        phantomInsertionIndex: BigInt.from(blockPath.first),
+      );
+    }
     final replaced = source.replaceRange(low, high, '');
     blocks[blockPath.first] = replaced.substring(0, low);
     blocks.insert(blockPath.first + 1, replaced.substring(low));
@@ -167,6 +176,21 @@ class _CoreFake extends RustApi {
       state: state,
       blockPath: Uint64List.fromList([blockPath.first + 1]),
       caretOffset: BigInt.zero,
+    );
+  }
+
+  @override
+  StructuralEdit continueBlockAtInsertionSlot(
+    String noteId,
+    int insertionIndex,
+    String source,
+  ) {
+    calls.add('continue-slot:$insertionIndex:$source');
+    blocks.insert(insertionIndex, source);
+    return StructuralEdit(
+      state: state,
+      blockPath: Uint64List.fromList([insertionIndex]),
+      caretOffset: BigInt.from(source.length),
     );
   }
 
@@ -999,6 +1023,37 @@ void main() {
       },
     );
   }
+
+  testWidgets(
+    'selected Enter over a complete non-final raw field materializes its '
+    'Core phantom before the surviving sibling',
+    (tester) async {
+      const first = 'first\n';
+      final api = _CoreFake([first, 'second\n']);
+      await pumpEditor(tester, [
+        _paragraph('first'),
+        _paragraph('second'),
+      ], api: api);
+
+      await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
+      _field(tester).controller.selection = TextSelection(
+        baseOffset: 0,
+        extentOffset: first.length,
+      );
+      await pressKey(tester, LogicalKeyboardKey.enter);
+
+      expect(api.blocks, ['second\n']);
+      expect(_field(tester).controller.text, '');
+      expect(_field(tester).focusNode.hasFocus, isTrue);
+
+      await tester.enterText(_writableFields().first, 'typed');
+      await tester.pump();
+
+      expect(api.calls, contains('continue-slot:0:typed'));
+      expect(api.blocks, ['typed', 'second\n']);
+      expect(_field(tester).controller.text, 'typed');
+    },
+  );
 
   testWidgets('a refused selected-Enter transaction keeps the original raw '
       'range visible through blur and retries without a partial Core update', (

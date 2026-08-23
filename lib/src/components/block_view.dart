@@ -913,6 +913,7 @@ class _BlockViewState extends State<BlockView> {
   // sibling insertions/removals.
   final Map<_LinkRecognizerIdentity, TapGestureRecognizer> _linkRecognizers =
       {};
+  final Map<_LinkRecognizerIdentity, FocusNode> _linkFocusNodes = {};
   final GlobalKey _textSurfaceKey = GlobalKey();
   List<_LinkSemanticBox> _linkSemanticBoxes = const [];
   int _linkSemanticsGeneration = 0;
@@ -921,6 +922,11 @@ class _BlockViewState extends State<BlockView> {
   void dispose() {
     for (final recognizer in _linkRecognizers.values) {
       recognizer.dispose();
+    }
+    for (final focusNode in _linkFocusNodes.values) {
+      focusNode
+        ..removeListener(_onLinkFocusChanged)
+        ..dispose();
     }
     super.dispose();
   }
@@ -940,6 +946,12 @@ class _BlockViewState extends State<BlockView> {
         .toList();
     for (final identity in obsoleteIdentities) {
       _linkRecognizers.remove(identity)!.dispose();
+      final focusNode = _linkFocusNodes.remove(identity);
+      if (focusNode != null) {
+        focusNode
+          ..removeListener(_onLinkFocusChanged)
+          ..dispose();
+      }
     }
   }
 
@@ -950,6 +962,29 @@ class _BlockViewState extends State<BlockView> {
             widget.recognizerFactory()
               ..onTap = () => widget.onLinkActivated?.call(identity.targetId),
       );
+
+  FocusNode _focusNodeFor(_LinkRecognizerIdentity identity) =>
+      _linkFocusNodes.putIfAbsent(identity, () {
+        final focusNode = FocusNode(
+          debugLabel:
+              'internal-link-${identity.targetId}-${identity.occurrence}',
+          onKeyEvent: (_, event) {
+            if (event is KeyDownEvent &&
+                (event.logicalKey == LogicalKeyboardKey.enter ||
+                    event.logicalKey == LogicalKeyboardKey.space)) {
+              widget.onLinkActivated?.call(identity.targetId);
+              return KeyEventResult.handled;
+            }
+            return KeyEventResult.ignored;
+          },
+        );
+        focusNode.addListener(_onLinkFocusChanged);
+        return focusNode;
+      });
+
+  void _onLinkFocusChanged() {
+    if (mounted) setState(() {});
+  }
 
   List<_InternalLink> _activeLinks() {
     final focusedLeafPath = widget.focusedLeafPath;
@@ -1032,33 +1067,30 @@ class _BlockViewState extends State<BlockView> {
               children: [
                 child,
                 if (onLinkActivated != null && l10n != null)
-                  for (final (index, link) in links.indexed)
-                    _InternalLinkFocusTarget(
-                      key: ValueKey(
-                        'internal-link-focus-$index-${link.targetId}',
+                  for (final (linkIndex, identity) in linkIdentities.indexed)
+                    for (final (boxIndex, semanticBox)
+                        in _linkSemanticBoxes
+                            .where((box) => box.identity == identity)
+                            .indexed)
+                      _InternalLinkSemanticTarget(
+                        key: ValueKey(
+                          boxIndex == 0
+                              ? 'internal-link-focus-'
+                                    '$linkIndex-${links[linkIndex].targetId}'
+                              : 'internal-link-semantics-'
+                                    '${semanticBox.identity.targetId}-'
+                                    '${semanticBox.identity.occurrence}-$boxIndex',
+                        ),
+                        rect: semanticBox.rect,
+                        label: semanticBox.label,
+                        focusNode: boxIndex == 0
+                            ? _focusNodeFor(identity)
+                            : null,
+                        order: linkIndex + 1,
+                        focused: _focusNodeFor(identity).hasFocus,
+                        onActivated: () =>
+                            onLinkActivated.call(semanticBox.identity.targetId),
                       ),
-                      order: index + 1,
-                      label: link.exists
-                          ? l10n.internalLinkExisting(link.title)
-                          : l10n.internalLinkMissing(link.title),
-                      onActivated: () => onLinkActivated(link.targetId),
-                    ),
-                for (final identity in linkIdentities)
-                  for (final (boxIndex, semanticBox)
-                      in _linkSemanticBoxes
-                          .where((box) => box.identity == identity)
-                          .indexed)
-                    _InternalLinkSemanticTarget(
-                      key: ValueKey(
-                        'internal-link-semantics-'
-                        '${semanticBox.identity.targetId}-'
-                        '${semanticBox.identity.occurrence}-$boxIndex',
-                      ),
-                      rect: semanticBox.rect,
-                      label: semanticBox.label,
-                      onActivated: () =>
-                          onLinkActivated?.call(semanticBox.identity.targetId),
-                    ),
               ],
             ),
           ),
@@ -1307,71 +1339,66 @@ List<TextSpan> _linkContentWithRecognizer(
     },
 ];
 
-/// A Link's visual text remains a [TextSpan] so Flutter's text selection and
-/// source-offset mapping retain their established shape. This zero-geometry
-/// focus target adds the separate keyboard-stop and semantic action that a
-/// recognizer on a TextSpan cannot supply. Its semantic action is deliberately
-/// provided by [_InternalLinkSemanticTarget], whose bounds follow the painted
-/// glyphs instead of this layout-neutral focus node.
-class _InternalLinkFocusTarget extends StatelessWidget {
-  const _InternalLinkFocusTarget({
-    super.key,
-    required this.order,
-    required this.label,
-    required this.onActivated,
-  });
-
-  final int order;
-  final String label;
-  final VoidCallback onActivated;
-
-  @override
-  Widget build(BuildContext context) => FocusTraversalOrder(
-    order: NumericFocusOrder(order.toDouble()),
-    child: Focus(
-      canRequestFocus: true,
-      onKeyEvent: (_, event) {
-        if (event is KeyDownEvent &&
-            (event.logicalKey == LogicalKeyboardKey.enter ||
-                event.logicalKey == LogicalKeyboardKey.space)) {
-          onActivated();
-          return KeyEventResult.handled;
-        }
-        return KeyEventResult.ignored;
-      },
-      child: const SizedBox.shrink(),
-    ),
-  );
-}
-
 /// Semantics overlay for one physical Link text box. Its custom render proxy
 /// opts out of pointer hit testing, preserving TextSpan recognizers and text
 /// selection beneath it while retaining [Semantics.onTap] for assistive input.
+/// The first box hosts the Link's focus node, so keyboard focus, its label,
+/// action, focus semantics, and visible focus indication all occupy real
+/// painted glyph geometry. Wrapped boxes share the focused state and outline.
 class _InternalLinkSemanticTarget extends StatelessWidget {
   const _InternalLinkSemanticTarget({
     super.key,
     required this.rect,
     required this.label,
+    required this.focusNode,
+    required this.order,
+    required this.focused,
     required this.onActivated,
   });
 
   final Rect rect;
   final String label;
+  final FocusNode? focusNode;
+  final int order;
+  final bool focused;
   final VoidCallback onActivated;
 
   @override
-  Widget build(BuildContext context) => Positioned.fromRect(
-    rect: rect,
-    child: _PassThroughPointer(
+  Widget build(BuildContext context) {
+    final target = _PassThroughPointer(
       child: Semantics(
         container: true,
         button: true,
+        focusable: true,
+        focused: focused,
         label: label,
         onTap: onActivated,
-        child: const SizedBox.expand(),
+        child: DecoratedBox(
+          decoration: focused
+              ? BoxDecoration(
+                  border: Border.all(
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                )
+              : const BoxDecoration(),
+          child: const SizedBox.expand(),
+        ),
       ),
-    ),
-  );
+    );
+    return Positioned.fromRect(
+      rect: rect,
+      child: focusNode == null
+          ? target
+          : FocusTraversalOrder(
+              order: NumericFocusOrder(order.toDouble()),
+              child: Focus.withExternalFocusNode(
+                focusNode: focusNode!,
+                includeSemantics: false,
+                child: target,
+              ),
+            ),
+    );
+  }
 }
 
 class _PassThroughPointer extends SingleChildRenderObjectWidget {

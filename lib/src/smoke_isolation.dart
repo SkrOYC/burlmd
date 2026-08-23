@@ -33,6 +33,11 @@ Future<String?> validateSmokeIsolation(Map<String, String> environment) async {
     'BURLMD_DB_PATH': '$rootPath/data/burlmd/index.sqlite3',
     'BURLMD_SMOKE_WORKSPACE': '$rootPath/data/burlmd/workspace',
     'BURLMD_SMOKE_NONCE_FILE': '$rootPath/.burlmd-smoke-nonce',
+    // The harness creates this empty marker before launch. Scenarios replace
+    // its contents only after their readiness condition is true. Keeping the
+    // path fixed beneath the capability root prevents a direct launch from
+    // choosing an arbitrary file that a staging hook can overwrite.
+    'BURLMD_SMOKE_READY_FILE': '$rootPath/.burlmd-smoke-ready',
   };
   for (final entry in expected.entries) {
     final supplied = environment[entry.key];
@@ -40,6 +45,18 @@ Future<String?> validateSmokeIsolation(Map<String, String> environment) async {
     if (canonical == null || canonical != entry.value) {
       return '${entry.key} does not resolve inside the private smoke state';
     }
+  }
+
+  // Unlike the other contract paths, the readiness marker is written by a
+  // staged widget after this validation returns. Require its immediate parent
+  // to be the canonical root too: exact target equality rejects a symlinked
+  // marker and this check makes the root-bound placement explicit.
+  final readinessFile = environment['BURLMD_SMOKE_READY_FILE'];
+  final readinessParent = readinessFile == null
+      ? null
+      : await _canonicalDirectory(File(readinessFile).parent.path);
+  if (readinessParent != rootPath) {
+    return 'BURLMD_SMOKE_READY_FILE is not directly inside the private smoke state';
   }
 
   // The Workspace is the Core's default for the supplied XDG_DATA_HOME. This

@@ -201,6 +201,18 @@ class RustApi {
     selectionExtent: BigInt.from(selectionExtent),
   );
 
+  /// Materializes a Core-returned empty editor slot at its authoritative
+  /// top-level index, rather than continuing after an unrelated sibling.
+  ffi.StructuralEdit continueBlockAtInsertionSlot(
+    String noteId,
+    int insertionIndex,
+    String source,
+  ) => ffi.continueBlockAtInsertionSlot(
+    noteId: noteId,
+    insertionIndex: BigInt.from(insertionIndex),
+    source: source,
+  );
+
   /// Merges a Block into its predecessor — Backspace at offset 0
   /// (CAP-EDIT-03), returning Core's reparsed predecessor leaf and caret.
   ffi.StructuralEdit mergeBlockWithPrevious(

@@ -1,5 +1,23 @@
 # Stage 3: Technical Implementation Changelog
 
+## v1.6.8
+
+Patch correction from PR #10 review, round 19. No bill-of-materials, PRD, or
+architecture change.
+
+- `update_block` now has the same tier-1 refusal boundary as structural
+  mutations: if its draft INSERT fails before tier 2 publication, Core restores
+  the source, span map, edit sequence, and unwritten state and leaves no idle
+  write armed. If tier 2 has already published the exact snapshot, Core keeps
+  that state authoritative and schedules recovery rather than rolling disk
+  backward.
+- A selected Enter covering a complete raw field returns a Core-owned phantom
+  insertion index in `StructuralEdit`, never the sibling that shifted into the
+  deleted position. `continue_block_at_insertion_slot` materializes first text
+  at that slot, including before a surviving non-final sibling. Presentation
+  must branch on this result rather than treating its empty `block_path` as a
+  leaf.
+
 ## v1.6.7
 
 Patch correction from PR #10 review, round 18. No bill-of-materials, PRD, or
