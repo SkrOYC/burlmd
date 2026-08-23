@@ -1,6 +1,7 @@
 import 'package:burlmd/src/rust/markdown/ast.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart' show RenderParagraph;
+import 'package:flutter/rendering.dart'
+    show RenderParagraph, SelectionRegistrar;
 
 /// Formatted rendering for one Block, shared by every state a Block can be
 /// in (`EDIT-F002`, CAP-EDIT-01): unfocused Blocks render through
@@ -248,14 +249,32 @@ TextSpan _renderLinkSpan(List<InlineElement> content) => TextSpan(
 /// One selectable text leaf of a Block's rendered output, in paint order:
 /// its rendered string, the number of raw-source bytes preceding it inside
 /// the Block (structural prefixes — heading hashes, list markers, quote
-/// markers, opening fences), and a function mapping a rendered offset within
-/// the leaf to a source offset relative to the leaf's own start.
+/// markers, opening fences), a function mapping a rendered offset within
+/// the leaf to a source offset relative to the leaf's own start — and where
+/// the leaf begins in the Core's canonical rendered string of the Block.
 class _LeafText {
-  const _LeafText(this.rendered, this.sourcePrefix, this.mapOffset);
+  const _LeafText(
+    this.rendered,
+    this.sourcePrefix,
+    this.mapOffset, {
+    required this.corePrefix,
+    required this.coreWidth,
+  });
 
   final String rendered;
   final int sourcePrefix;
   final int Function(int renderedOffset) mapOffset;
+
+  /// Start and width of this leaf's contribution to the Core's canonical
+  /// rendered string of the Block — the per-variant definition the contract
+  /// fixes in the `BlockRange` docs (paragraphs/headings: concatenated runs;
+  /// recursive containers joined with '\n'; code verbatim; thematic break:
+  /// empty). Decoration the widget paints as text but no `AstNode` field
+  /// contains — list bullets, ordered numbers, task checkboxes — occupies
+  /// ZERO width here, because the definition deliberately does not model it;
+  /// a selection over such decoration resolves to the boundary it sits on.
+  final int corePrefix;
+  final int coreWidth;
 }
 
 /// Flattens [node]'s rendered text leaves in paint order, aligning with the
@@ -263,12 +282,18 @@ class _LeafText {
 /// pseudo-leaves for list markers, which are painted as `Text` widgets but
 /// belong to no AST leaf.
 List<_LeafText> _blockLeaves(AstNode node, [int sourcePrefix = 0]) =>
+    _leaves(node, sourcePrefix, 0);
+
+List<_LeafText> _leaves(AstNode node, int sourcePrefix, int corePrefix) =>
     switch (node) {
       AstNode_Paragraph(:final content) => [
         _LeafText(
           _inlineRendered(content),
           sourcePrefix,
           (off) => _inlineSourceOffset(content, off),
+          corePrefix: corePrefix,
+          // A paragraph's canonical rendered text IS its painted text.
+          coreWidth: _inlineRenderedLengthAll(content),
         ),
       ],
       AstNode_Heading(:final level, :final content) => [
@@ -276,6 +301,9 @@ List<_LeafText> _blockLeaves(AstNode node, [int sourcePrefix = 0]) =>
           _inlineRendered(content),
           sourcePrefix + '${'#' * level} '.length,
           (off) => _inlineSourceOffset(content, off),
+          // The '#' prefix is raw-source structure, not rendered text.
+          corePrefix: corePrefix,
+          coreWidth: _inlineRenderedLengthAll(content),
         ),
       ],
       AstNode_List(:final ordered, :final items) => [
@@ -286,24 +314,52 @@ List<_LeafText> _blockLeaves(AstNode node, [int sourcePrefix = 0]) =>
               ordered,
               index,
               sourcePrefix,
+              // The List's children are joined with a single '\n' in the
+              // canonical string, so each sibling's start accumulates the
+              // previous ones' lengths plus that separator.
+              _siblingCoreStart(items, index, corePrefix),
             ),
-            _ => _blockLeaves(item, sourcePrefix),
+            _ => _leaves(
+              item,
+              sourcePrefix,
+              _siblingCoreStart(items, index, corePrefix),
+            ),
           },
       ],
       // A ListItem reached outside of a List mirrors renderBlock's fallback.
-      AstNode_ListItem item => _listItemLeaves(item, false, 0, sourcePrefix),
+      AstNode_ListItem item => _listItemLeaves(
+        item,
+        false,
+        0,
+        sourcePrefix,
+        corePrefix,
+      ),
       AstNode_Blockquote(:final nodes) => [
-        for (final child in nodes) ..._blockLeaves(child, sourcePrefix + 2),
+        for (final (index, child) in nodes.indexed)
+          ..._leaves(
+            child,
+            sourcePrefix + 2,
+            _siblingCoreStart(nodes, index, corePrefix),
+          ),
       ],
       AstNode_CodeBlock(:final language, :final code) => [
         _LeafText(
           code,
           sourcePrefix + '```${language ?? ''}\n'.length,
           (off) => off.clamp(0, code.length),
+          // Canonical text is `code` verbatim — not the fence, not the
+          // language — which is exactly what the unfocused render paints.
+          corePrefix: corePrefix,
+          coreWidth: code.length,
         ),
       ],
       AstNode_Suggestion(:final localContent) => [
-        for (final child in localContent) ..._blockLeaves(child, sourcePrefix),
+        for (final (index, child) in localContent.indexed)
+          ..._leaves(
+            child,
+            sourcePrefix,
+            _siblingCoreStart(localContent, index, corePrefix),
+          ),
       ],
       // ThematicBreak and Image hold no selectable text (the contract gives
       // ThematicBreak the empty rendered string), so they contribute no
@@ -311,11 +367,47 @@ List<_LeafText> _blockLeaves(AstNode node, [int sourcePrefix = 0]) =>
       _ => const [],
     };
 
+/// Where sibling [index] of [siblings] starts in the parent's canonical
+/// rendered string: children concatenate in order, joined with one '\n'.
+int _siblingCoreStart(List<AstNode> siblings, int index, int parentStart) {
+  var start = parentStart;
+  for (var i = 0; i < index; i++) {
+    start += _coreRenderedLength(siblings[i]) + 1;
+  }
+  return start;
+}
+
+/// The length of [node]'s canonical rendered text, per the contract's
+/// per-variant definition (`BlockRange` docs): paragraphs/headings are their
+/// concatenated run contents (descending into links); recursive containers
+/// join children with a single '\n'; CodeBlock is `code` verbatim; Image is
+/// its alt text; ThematicBreak is empty.
+int _coreRenderedLength(AstNode node) => switch (node) {
+  AstNode_Paragraph(:final content) ||
+  AstNode_Heading(:final content) => _inlineRenderedLengthAll(content),
+  AstNode_CodeBlock(:final code) => code.length,
+  AstNode_Image(:final altText) => altText.length,
+  AstNode_ThematicBreak() => 0,
+  AstNode_List(:final items) => _joinedCoreLength(items),
+  AstNode_ListItem(:final content) => _joinedCoreLength(content),
+  AstNode_Blockquote(:final nodes) => _joinedCoreLength(nodes),
+  AstNode_Suggestion(:final localContent) => _joinedCoreLength(localContent),
+};
+
+int _joinedCoreLength(List<AstNode> nodes) {
+  var total = 0;
+  for (final (index, child) in nodes.indexed) {
+    total += (index == 0 ? 0 : 1) + _coreRenderedLength(child);
+  }
+  return total;
+}
+
 List<_LeafText> _listItemLeaves(
   AstNode_ListItem item,
   bool ordered,
   int index,
   int sourcePrefix,
+  int corePrefix,
 ) {
   final marker = ordered ? '${index + 1}. ' : '- ';
   final check = switch (item.checked) {
@@ -325,14 +417,21 @@ List<_LeafText> _listItemLeaves(
   };
   return [
     // The painted marker row itself: clicking the bullet lands before the
-    // item's first content character.
+    // item's first content character. It carries real ink but ZERO width in
+    // the canonical string — the definition does not model decoration.
     _LeafText(
       '$marker$check',
       sourcePrefix,
       (off) => off.clamp(0, marker.length),
+      corePrefix: corePrefix,
+      coreWidth: 0,
     ),
-    for (final child in item.content)
-      ..._blockLeaves(child, sourcePrefix + marker.length + check.length),
+    for (final (childIndex, child) in item.content.indexed)
+      ..._leaves(
+        child,
+        sourcePrefix + marker.length + check.length,
+        _siblingCoreStart(item.content, childIndex, corePrefix),
+      ),
   ];
 }
 
@@ -351,6 +450,24 @@ int blockSourceOffsetForTap(
       leaf.mapOffset(renderedOffset.clamp(0, leaf.rendered.length));
 }
 
+/// Maps a selection position — an index into [node]'s painted text leaves
+/// plus a rendered-character offset within that leaf — into the Core's
+/// canonical rendered string of the Block, the offset space `BlockRange`
+/// is expressed in (ADR-007 decision 8: the Core resolves those to source
+/// offsets for splicing; the UI must map its selection ONTO this space,
+/// never the reverse). Offsets inside decoration the definition does not
+/// model — list markers — collapse onto the boundary they decorate.
+int blockCoreRenderedOffset(
+  AstNode node, {
+  required int leafIndex,
+  required int renderedOffset,
+}) {
+  final leaves = _blockLeaves(node);
+  if (leafIndex < 0 || leafIndex >= leaves.length) return 0;
+  final leaf = leaves[leafIndex];
+  return leaf.corePrefix + renderedOffset.clamp(0, leaf.coreWidth);
+}
+
 String _inlineRendered(List<InlineElement> elements) =>
     elements.map(_inlineRenderedOne).join();
 
@@ -365,6 +482,9 @@ int _inlineRenderedLength(InlineElement element) => switch (element) {
   InlineElement_Link(:final content) => _inlineRendered(content).length,
   InlineElement_ExternalLink(:final content) => _inlineRendered(content).length,
 };
+
+int _inlineRenderedLengthAll(List<InlineElement> elements) =>
+    elements.fold(0, (sum, element) => sum + _inlineRenderedLength(element));
 
 int _openingDelimiters(InlineElement element) => switch (element) {
   InlineElement_Text(:final field0) =>
@@ -449,6 +569,7 @@ class BlockView extends StatelessWidget {
     required this.node,
     required this.blockPath,
     required this.onFocusRequested,
+    this.selectionRegistrar,
   });
 
   final AstNode node;
@@ -456,12 +577,29 @@ class BlockView extends StatelessWidget {
   final void Function(List<int> blockPath, int caretSourceOffset)
   onFocusRequested;
 
+  /// When non-null, this Block's painted text registers with it instead of
+  /// directly with the enclosing [SelectionArea]'s registrar (`EDIT-F003`):
+  /// a pass-through that lets the parent [Editor] know exactly which
+  /// selectables belong to THIS Block and read their per-Block selection
+  /// offsets, without the region knowing anything about Blocks. The
+  /// forwarding preserves the region's own registration unchanged.
+  final SelectionRegistrar? selectionRegistrar;
+
   @override
-  Widget build(BuildContext context) => GestureDetector(
-    behavior: HitTestBehavior.opaque,
-    onTapUp: (details) => _handleTapUp(context, details),
-    child: renderBlock(node),
-  );
+  Widget build(BuildContext context) {
+    Widget child = renderBlock(node);
+    if (selectionRegistrar != null) {
+      child = SelectionRegistrarScope(
+        registrar: selectionRegistrar!,
+        child: child,
+      );
+    }
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTapUp: (details) => _handleTapUp(context, details),
+      child: child,
+    );
+  }
 
   void _handleTapUp(BuildContext context, TapUpDetails details) {
     final renderObject = context.findRenderObject();
