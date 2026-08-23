@@ -55,13 +55,14 @@ class RescanEditing extends Notifier<int> {
   }
 }
 
-/// Whether ordinary note selection is unsafe because a Workspace mutation is
-/// settling. This deliberately excludes [noteSwitchingProvider]: selection
-/// requests already admitted before a switch are serialized by
-/// [NoteController], while lifecycle and rescan work can invalidate the
-/// selected Note itself.
+/// Whether ordinary note selection is unsafe because a source-replacing
+/// operation is settling. This deliberately excludes [noteSwitchingProvider]:
+/// selection requests already admitted before a switch are serialized by
+/// [NoteController], while reload, lifecycle and rescan work can invalidate
+/// the selected Note itself.
 final noteSelectionBlockedProvider = Provider<bool>(
   (ref) =>
+      ref.watch(reloadEditingProvider) > 0 ||
       ref.watch(lifecycleEditingProvider) > 0 ||
       ref.watch(rescanEditingProvider) > 0,
 );

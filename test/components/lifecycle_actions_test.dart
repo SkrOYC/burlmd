@@ -1345,7 +1345,7 @@ void main() {
     );
   });
 
-  group('reload raced by lifecycle', () {
+  group('reload admission controls lifecycle', () {
     Future<ProviderContainer> prepare(
       WidgetTester tester,
       _LifecycleApi api,
@@ -1358,57 +1358,7 @@ void main() {
       return container;
     }
 
-    testWidgets('a delayed reload result cannot overwrite a lifecycle rename', (
-      tester,
-    ) async {
-      final reload = Completer<NoteState>();
-      final renamed = stateFor('Renamed/Note');
-      final api = _LifecycleApi()
-        ..reloadNoteGate = reload
-        ..renameNoteResult = (renamed, effects());
-      final container = await prepare(tester, api);
-
-      final reloadFuture = container
-          .read(activeNoteProvider.notifier)
-          .reloadFromDisk();
-      await tester.pump();
-      await container
-          .read(lifecycleActionsProvider)
-          .renameNote('Old/Note', 'Renamed');
-      reload.complete(stateFor('Old/Note', title: 'stale disk state'));
-      await reloadFuture;
-
-      expect(container.read(activeNoteProvider), same(renamed));
-      expect(container.read(selectedNoteIdProvider), 'Renamed/Note');
-      expect(container.read(editorErrorProvider), isNull);
-    });
-
-    testWidgets('a delayed reload result cannot overwrite a lifecycle move', (
-      tester,
-    ) async {
-      final reload = Completer<NoteState>();
-      final moved = stateFor('Archive/Note');
-      final api = _LifecycleApi()
-        ..reloadNoteGate = reload
-        ..moveNoteResult = (moved, effects());
-      final container = await prepare(tester, api);
-
-      final reloadFuture = container
-          .read(activeNoteProvider.notifier)
-          .reloadFromDisk();
-      await tester.pump();
-      await container
-          .read(lifecycleActionsProvider)
-          .moveNote('Old/Note', 'Archive');
-      reload.complete(stateFor('Old/Note', title: 'stale disk state'));
-      await reloadFuture;
-
-      expect(container.read(activeNoteProvider), same(moved));
-      expect(container.read(selectedNoteIdProvider), 'Archive/Note');
-      expect(container.read(editorErrorProvider), isNull);
-    });
-
-    testWidgets('a delayed reload error is ignored after lifecycle deletion', (
+    testWidgets('a pending reload refuses lifecycle mutation before Core', (
       tester,
     ) async {
       final reload = Completer<NoteState>();
@@ -1419,13 +1369,48 @@ void main() {
           .read(activeNoteProvider.notifier)
           .reloadFromDisk();
       await tester.pump();
-      await container.read(lifecycleActionsProvider).deleteNote('Old/Note');
-      reload.completeError(StateError('stale reload failure'));
+      final outcome = await container
+          .read(lifecycleActionsProvider)
+          .renameNote('Old/Note', 'Renamed');
+      expect(outcome, isA<LifecycleFailed>());
+      expect(api.calls, ['reloadNote:Old/Note']);
+      expect(container.read(activeNoteProvider)!.metadata.id, 'Old/Note');
+      expect(container.read(selectedNoteIdProvider), 'Old/Note');
+
+      reload.complete(stateFor('Old/Note', title: 'disk state'));
       await reloadFuture;
 
-      expect(container.read(activeNoteProvider), isNull);
-      expect(container.read(selectedNoteIdProvider), isNull);
+      expect(container.read(activeNoteProvider)!.metadata.title, 'disk state');
       expect(container.read(editorErrorProvider), isNull);
+    });
+
+    testWidgets('a failed reload releases lifecycle admission for a retry', (
+      tester,
+    ) async {
+      final reload = Completer<NoteState>();
+      final api = _LifecycleApi()
+        ..reloadNoteGate = reload
+        ..renameNoteResult = (stateFor('Renamed/Note'), effects());
+      final container = await prepare(tester, api);
+
+      final reloadFuture = container
+          .read(activeNoteProvider.notifier)
+          .reloadFromDisk();
+      await tester.pump();
+      final blocked = await container
+          .read(lifecycleActionsProvider)
+          .renameNote('Old/Note', 'Renamed');
+      expect(blocked, isA<LifecycleFailed>());
+      reload.completeError(StateError('reload refused'));
+      await reloadFuture;
+
+      expect(container.read(reloadEditingProvider), 0);
+      expect(container.read(editorErrorProvider), isA<StateError>());
+      final retried = await container
+          .read(lifecycleActionsProvider)
+          .renameNote('Old/Note', 'Renamed');
+      expect(retried, isA<LifecycleCompleted>());
+      expect(container.read(activeNoteProvider)!.metadata.id, 'Renamed/Note');
     });
   });
 
@@ -1712,6 +1697,74 @@ void main() {
     expect(container.read(editorInputBlockedProvider), isFalse);
     expect(container.read(activeNoteProvider), same(renamed));
     expect(find.text('authoritative replacement'), findsOneWidget);
+  });
+
+  testWidgets('a pending disk reload makes the raw editor read-only and '
+      'rejects queued typing before its source is replaced', (
+    WidgetTester tester,
+  ) async {
+    final reloadGate = Completer<NoteState>();
+    final reloaded = stateFor(
+      'Old',
+      ast: [paragraph('authoritative disk source')],
+    );
+    final api = _LifecycleApi()..reloadNoteGate = reloadGate;
+    late ProviderContainer container;
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [rustApiProvider.overrideWithValue(api)],
+        child: Consumer(
+          builder: (context, ref, _) {
+            container = ProviderScope.containerOf(context);
+            return const MaterialApp(home: Scaffold(body: Editor()));
+          },
+        ),
+      ),
+    );
+    addTearDown(container.dispose);
+    container
+        .read(activeNoteProvider.notifier)
+        .adopt(stateFor('Old', ast: [paragraph('editable before reload')]));
+    container.read(selectedNoteIdProvider.notifier).select('Old');
+    api.stagedBlockSources['0'] = ['editable before reload'];
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('block-0')));
+    await tester.pumpAndSettle();
+    final field = find.byType(EditableText);
+    expect(tester.widget<EditableText>(field).readOnly, isFalse);
+
+    final reload = container.read(activeNoteProvider.notifier).reloadFromDisk();
+    await tester.pump();
+
+    expect(container.read(reloadEditingProvider), 1);
+    expect(container.read(editorInputBlockedProvider), isTrue);
+    expect(tester.widget<EditableText>(field).readOnly, isTrue);
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(
+        text: 'must not become a draft',
+        selection: TextSelection.collapsed(offset: 23),
+      ),
+    );
+    await tester.pump();
+    expect(
+      tester.widget<EditableText>(field).controller.text,
+      'editable before reload',
+    );
+    expect(api.calls.where((call) => call.startsWith('updateBlock:')), isEmpty);
+
+    api.stagedBlockSources['0'] = ['authoritative disk source'];
+    reloadGate.complete(reloaded);
+    await reload;
+    await tester.pumpAndSettle();
+
+    expect(container.read(reloadEditingProvider), 0);
+    expect(container.read(editorInputBlockedProvider), isFalse);
+    expect(tester.widget<EditableText>(field).readOnly, isFalse);
+    expect(
+      tester.widget<EditableText>(field).controller.text,
+      'authoritative disk source',
+    );
+    expect(api.calls.where((call) => call.startsWith('updateBlock:')), isEmpty);
   });
 
   testWidgets('a refused gated lifecycle restores edit authority without '

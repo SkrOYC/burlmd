@@ -78,6 +78,30 @@ class NoteSwitching extends Notifier<bool> {
   void set(bool switching) => state = switching;
 }
 
+/// Number of disk reloads that currently own the active Note's source.
+///
+/// `reload_note` replaces the working source and clears its draft row. Its
+/// admission must therefore cover the full FFI round trip, not merely the
+/// synchronous check before it starts: a write accepted in that gap could be
+/// persisted and then silently replaced by the returned disk state. This is a
+/// count rather than a boolean so every admitted owner must release only its
+/// own hold.
+final reloadEditingProvider = NotifierProvider<ReloadEditing, int>(
+  ReloadEditing.new,
+);
+
+class ReloadEditing extends Notifier<int> {
+  @override
+  int build() => 0;
+
+  void begin() => state++;
+
+  void end() {
+    assert(state > 0, 'Reload editing gate released without an owner.');
+    if (state > 0) state--;
+  }
+}
+
 /// Number of Core lifecycle operations currently able to replace, re-anchor,
 /// rewrite, or remove a Note. It is a count rather than a boolean because a
 /// second action can legitimately be submitted while the first is settling;
@@ -179,10 +203,12 @@ class LifecycleFocusRemapSignal extends Notifier<LifecycleFocusRemap?> {
 /// atomically rewrite, re-anchor, or delete its current source. In either
 /// case an input callback arriving between frames must neither reach Core nor
 /// remain only in a controller that the authoritative lifecycle result will
-/// replace.
+/// replace. A disk reload has the same replacement authority for its entire
+/// round trip, so it closes this gate before issuing `reload_note`.
 final editorInputBlockedProvider = Provider<bool>(
   (ref) =>
       ref.watch(noteSwitchingProvider) ||
+      ref.watch(reloadEditingProvider) > 0 ||
       ref.watch(lifecycleEditingProvider) > 0 ||
       ref.watch(rescanEditingProvider) > 0,
 );
@@ -480,6 +506,12 @@ class NoteController extends Notifier<NoteState?> {
     if (current == null) return;
     final noteId = current.metadata.id;
     final lifecycleGeneration = ref.read(lifecycleGenerationProvider);
+    final editing = ref.read(reloadEditingProvider.notifier);
+    // Close the shared editor and navigation admissions before the FFI call.
+    // A platform input callback can otherwise write a new draft while this
+    // reload is pending, then have that acknowledged write overwritten by the
+    // disk state below.
+    editing.begin();
     try {
       final reloaded = await ref.read(rustApiProvider).reloadNote(noteId);
       // A lifecycle operation may have renamed, moved, rewritten, or deleted
@@ -493,6 +525,11 @@ class NoteController extends Notifier<NoteState?> {
     } catch (error) {
       if (!_isReloadCurrent(current, noteId, lifecycleGeneration)) return;
       ref.read(editorErrorProvider.notifier).report(error);
+    } finally {
+      // A pending FFI call can outlive ProviderContainer disposal. The
+      // container owns this count, so only release it while its notifier is
+      // still live; disposal itself retires the whole provider graph.
+      if (ref.mounted) editing.end();
     }
   }
 
