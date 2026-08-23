@@ -519,7 +519,8 @@ Then exactly one `replace_range` operation carries the committed text
 
 Given `BURLMD_SMOKE_F007=1`
 When the smoke harness captures `f007-range-editing`
-Then it succeeds only after the staged type-over, delete, paste, and Core-returned-caret readiness marker is present
+Then it succeeds only after staged type input, production Action paste,
+production Action delete, and the Core-returned-caret readiness marker are present
 ```
 
 ##### [EDIT-F007] Deviations & Justifications

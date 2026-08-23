@@ -3884,7 +3884,7 @@ impl NoteSession {
             .clone()
     }
 
-    fn edit_seq(&self) -> i64 {
+    pub(crate) fn edit_seq(&self) -> i64 {
         self.lock_state().unwrap().edit_seq
     }
 
@@ -4509,8 +4509,8 @@ mod tests {
     }
 
     #[test]
-    fn range_delete_is_the_same_operation_as_empty_replacement_and_rejects_stale_ranges_atomically()
-    {
+    fn range_delete_is_the_same_operation_as_empty_replacement_and_rejects_reverse_ranges_atomically(
+    ) {
         let deleted = fixture();
         let source = note("A", "Alpha\n\nBeta");
         deleted.write("a.md", &source);
@@ -4536,7 +4536,72 @@ mod tests {
         assert_eq!(
             *replace_session.working_source().unwrap(),
             *before,
-            "a rejected reverse/stale range changed the working source"
+            "a rejected reverse range changed the working source"
+        );
+    }
+
+    /// A range is a coordinate into the AST that was current when the
+    /// selection was made. A structural edit reparses that AST, so retaining
+    /// the old endpoint paths must fail rather than splice whichever Blocks
+    /// later happen to occupy those indices. The refusal is transactional:
+    /// it cannot add a draft row, advance its sequence, or partly alter the
+    /// frontmatter/source installed by the preceding structural edit.
+    #[test]
+    fn range_replace_rejects_a_stale_path_transactionally() {
+        let f = fixture();
+        let frontmatter = "---\ntype: Note\ntitle: A\nunmanaged: preserve-me\n---";
+        let original = format!("{frontmatter}\n\nfirst\n\nsecond\n\nthird\n");
+        f.write("a.md", &original);
+        let session = f.open("a");
+
+        // Captured while `second` and `third` occupied [1] and [2].
+        let stale = RenderedRange::new(vec![1], 0, vec![2], 5);
+        session.delete_block(&[1]).unwrap();
+
+        let after_reparse = format!("{frontmatter}\n\nfirst\n\nthird\n");
+        assert_eq!(
+            *session.working_source().unwrap(),
+            after_reparse,
+            "the setup structural edit did not install its exact reparsed source"
+        );
+        let state_before_refusal = session.note_state().unwrap();
+        let draft_before_refusal = f.draft("a").expect("the structural edit wrote no draft");
+        let sequence_before_refusal = session.edit_seq();
+
+        let refused = session.replace_range(&stale, "must not splice");
+        assert!(
+            matches!(refused, Err(AppError::ParseError(ref message)) if message.contains("no Block is addressed by block_path [2]")),
+            "a stale endpoint must be a typed refusal, got {refused:?}"
+        );
+
+        assert_eq!(
+            *session.working_source().unwrap(),
+            after_reparse,
+            "the refused stale range partly spliced the current source"
+        );
+        assert_eq!(
+            session.note_state().unwrap(),
+            state_before_refusal,
+            "the refused stale range changed the reparsed Note state"
+        );
+        assert_eq!(
+            session.edit_seq(),
+            sequence_before_refusal,
+            "the refused stale range advanced the edit sequence"
+        );
+        let draft_after_refusal = f.draft("a").expect("the existing draft disappeared");
+        assert_eq!(
+            draft_after_refusal.raw_markdown, draft_before_refusal.raw_markdown,
+            "the refused stale range rewrote the draft source"
+        );
+        assert_eq!(
+            draft_after_refusal.edit_seq, draft_before_refusal.edit_seq,
+            "the refused stale range rewrote the draft sequence"
+        );
+        assert_eq!(
+            f.read("a.md"),
+            original,
+            "a rejected range wrote the on-disk Note instead of only refusing"
         );
     }
 

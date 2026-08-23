@@ -214,8 +214,8 @@ if [[ "${BURLMD_SMOKE_F006:-}" == "1" ]]; then
 fi
 
 if [[ "${BURLMD_SMOKE_F007:-}" == "1" ]]; then
-  [[ -s "$READY_FILE" ]] || fail "F007 scenario never completed type-over, paste, and phantom delete"
-  [[ "$(<"$READY_FILE")" == "f007-type-paste-core-caret-delete-core-phantom" ]] \
+  [[ -s "$READY_FILE" ]] || fail "F007 scenario never completed type input, Action paste, and Action delete to the phantom caret"
+  [[ "$(<"$READY_FILE")" == "f007-type-input-paste-action-delete-action-core-caret-phantom" ]] \
     || fail "F007 scenario readiness marker was invalid"
 fi
 
