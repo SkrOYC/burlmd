@@ -1,5 +1,18 @@
 # Stage 3: Technical Implementation Changelog
 
+## v1.5.2
+Patch correction for F002's structural split and quoted-list seams.
+
+- `split_block` now accepts the focused raw field source together with its
+  Flutter UTF-16 caret and returns `StructuralEdit`. Core validates the
+  buffered source, maps its coordinate to the reparsed editable leaf, and
+  returns the actual post-split leaf/caret. This prevents a paragraph promoted
+  to `- item` from treating marker-inclusive field offsets as leaf offsets.
+- List continuation and list-item merge derive the complete line prefix from
+  source spans. Nested quoted lists therefore retain `> - ` during Enter and
+  Backspace, and errors are resolved before the structural transaction installs
+  new state.
+
 ## v1.5.1
 Contract correction for the F002 structural continuation seam. Patch bump:
 replaces the list-only continuation call with `continue_block_after`, retaining

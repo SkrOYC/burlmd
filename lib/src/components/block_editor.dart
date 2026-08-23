@@ -41,6 +41,7 @@ class BlockEditor extends ConsumerStatefulWidget {
     required this.style,
     required this.focusToken,
     required this.onFocusLost,
+    required this.onCommitEligibilityChanged,
     this.resyncToken = 0,
     this.phantom = false,
     this.onEnter,
@@ -76,6 +77,13 @@ class BlockEditor extends ConsumerStatefulWidget {
   /// generation being replaced (a phantom converting to a real Block, a
   /// split's second half) and the blur must commit nothing.
   final void Function(int focusToken) onFocusLost;
+
+  /// Publishes whether the parent may replace this focus session. A
+  /// composition conflict leaves the local text intentionally unresolved, so
+  /// the parent must not commit or unmount this field in response to a
+  /// separate promotion or structural request.
+  final void Function(int focusToken, bool canCommit)
+  onCommitEligibilityChanged;
 
   /// Identifies the focus session this field belongs to (`EDIT-F004`). The
   /// parent mints a fresh token for every `_Focus` generation; echoing it
@@ -229,6 +237,12 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
       // explicit conflict state, not an implicit last-writer-wins overwrite:
       // it protects both the external Core rewrite and the IME result.
       _hasResyncConflict = true;
+      // The parent owns all paths that can replace this field (promotion,
+      // blur commit, and structural edits), so it needs this narrow bit of
+      // session state as well as this widget's local write suppression.
+      // This is synchronous while mounted; deferred resync resolution above
+      // checks [mounted] before it can reach here.
+      widget.onCommitEligibilityChanged(widget.focusToken, false);
       ref
           .read(keystrokeWriteFailureProvider.notifier)
           .report(

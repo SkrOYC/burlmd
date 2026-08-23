@@ -216,9 +216,10 @@ abstract class RustLibApi extends BaseApi {
     required int limit,
   });
 
-  NoteState crateApiFfiApiSplitBlock({
+  StructuralEdit crateApiFfiApiSplitBlock({
     required String noteId,
     required Uint64List blockPath,
+    required String source,
     required BigInt offset,
   });
 
@@ -1239,9 +1240,10 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   );
 
   @override
-  NoteState crateApiFfiApiSplitBlock({
+  StructuralEdit crateApiFfiApiSplitBlock({
     required String noteId,
     required Uint64List blockPath,
+    required String source,
     required BigInt offset,
   }) {
     return handler.executeSync(
@@ -1250,15 +1252,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(noteId, serializer);
           sse_encode_list_prim_usize_strict(blockPath, serializer);
+          sse_encode_String(source, serializer);
           sse_encode_usize(offset, serializer);
           return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 34)!;
         },
         codec: SseCodec(
-          decodeSuccessData: sse_decode_note_state,
+          decodeSuccessData: sse_decode_structural_edit,
           decodeErrorData: sse_decode_app_error,
         ),
         constMeta: kCrateApiFfiApiSplitBlockConstMeta,
-        argValues: [noteId, blockPath, offset],
+        argValues: [noteId, blockPath, source, offset],
         apiImpl: this,
       ),
     );
@@ -1266,7 +1269,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   TaskConstMeta get kCrateApiFfiApiSplitBlockConstMeta => const TaskConstMeta(
     debugName: "split_block",
-    argNames: ["noteId", "blockPath", "offset"],
+    argNames: ["noteId", "blockPath", "source", "offset"],
   );
 
   @override
