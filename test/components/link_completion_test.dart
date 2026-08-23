@@ -4,6 +4,7 @@ import 'package:burlmd/l10n/generated/app_localizations.dart';
 import 'package:burlmd/src/components/block_editor.dart';
 import 'package:burlmd/src/components/block_view.dart';
 import 'package:burlmd/src/components/link_completion.dart';
+import 'package:burlmd/src/providers/note_providers.dart';
 import 'package:burlmd/src/providers/rust_api_provider.dart';
 import 'package:burlmd/src/rust/index/query.dart';
 import 'package:burlmd/src/rust/markdown/ast.dart';
@@ -297,6 +298,62 @@ void main() {
         tester.widget<EditableText>(find.byType(EditableText)).controller.text,
         '[plan](</notes/plan.md>)',
       );
+    },
+  );
+
+  testWidgets(
+    'a failed completion query closes only the popup and keeps the raw field usable',
+    (tester) async {
+      final api = _CompletionApi(
+        (query) => query == 'p'
+            ? [_existing('plan')]
+            : Future<List<LinkCompletion>>.error(
+                StateError('derived index unavailable'),
+              ),
+      );
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [rustApiProvider.overrideWithValue(api)],
+          child: MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: Scaffold(
+              body: BlockEditor(
+                noteId: 'source',
+                blockPath: const [0],
+                source: '[[p',
+                initialCaret: 3,
+                style: const TextStyle(fontSize: 16),
+                focusToken: 1,
+                onFocusLost: (_) {},
+                onCommitEligibilityChanged: (_, _) {},
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.byKey(const ValueKey('link-completion-0')), findsOneWidget);
+
+      final field = find.byType(EditableText);
+      await tester.enterText(field, '[[pl');
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.byKey(const ValueKey('link-completion-0')), findsNothing);
+      expect(
+        tester
+            .container(of: find.byType(BlockEditor))
+            .read(editorErrorProvider),
+        isNull,
+      );
+
+      await tester.enterText(field, '[[plan');
+      await tester.pump();
+      expect(tester.widget<EditableText>(field).controller.text, '[[plan');
     },
   );
 

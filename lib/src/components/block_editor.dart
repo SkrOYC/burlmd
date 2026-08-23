@@ -434,6 +434,12 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
       // changing text, selection, or composing state behind the IME.
       return KeyEventResult.handled;
     }
+    // A marked, non-collapsed composing range is owned by the platform IME.
+    // In particular, an Enter or Backspace key must reach EditableText rather
+    // than being mistaken for a Core split, continuation, or merge. Keep this
+    // below completion and emphasis handling: those have their own explicit
+    // composition semantics.
+    if (_hasLiveComposition) return KeyEventResult.ignored;
     final selection = _controller.selection;
     if (event is KeyDownEvent &&
         (event.logicalKey == LogicalKeyboardKey.enter ||

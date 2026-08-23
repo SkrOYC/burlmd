@@ -61,6 +61,9 @@ NoteState _note(String text) => NoteState(
 Future<_UpdateSpyApi> _pumpBlockEditor(
   WidgetTester tester, {
   required String source,
+  bool phantom = false,
+  void Function(String source, int caret)? onEnter,
+  VoidCallback? onBackspaceAtStart,
 }) async {
   final api = _UpdateSpyApi();
   final container = ProviderContainer(
@@ -86,6 +89,9 @@ Future<_UpdateSpyApi> _pumpBlockEditor(
             focusToken: 1,
             onFocusLost: (_) {},
             onCommitEligibilityChanged: (_, _) {},
+            phantom: phantom,
+            onEnter: onEnter,
+            onBackspaceAtStart: onBackspaceAtStart,
           ),
         ),
       ),
@@ -258,6 +264,59 @@ void main() {
     } finally {
       debugDefaultTargetPlatformOverride = null;
     }
+  });
+
+  testWidgets('live IME composition leaves structural Enter and Backspace to '
+      'EditableText, including an empty phantom', (tester) async {
+    var realEnters = 0;
+    var realBackspaces = 0;
+    await _pumpBlockEditor(
+      tester,
+      source: 'word',
+      onEnter: (_, _) => realEnters++,
+      onBackspaceAtStart: () => realBackspaces++,
+    );
+
+    // Marked text with its caret at the start is exactly the state that
+    // would otherwise look like a structural Backspace-at-start.
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(
+        text: 'word',
+        composing: TextRange(start: 0, end: 1),
+        selection: TextSelection.collapsed(offset: 0),
+      ),
+    );
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
+    await tester.pump();
+
+    expect(realEnters, 0);
+    expect(realBackspaces, 0);
+
+    var phantomEnters = 0;
+    var phantomBackspaces = 0;
+    await _pumpBlockEditor(
+      tester,
+      source: '',
+      phantom: true,
+      onEnter: (_, _) => phantomEnters++,
+      onBackspaceAtStart: () => phantomBackspaces++,
+    );
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(
+        text: '中',
+        composing: TextRange(start: 0, end: 1),
+        selection: TextSelection.collapsed(offset: 0),
+      ),
+    );
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
+    await tester.pump();
+
+    expect(phantomEnters, 0);
+    expect(phantomBackspaces, 0);
   });
 
   testWidgets('Shift is required only for strikethrough and Alt is ignored', (
