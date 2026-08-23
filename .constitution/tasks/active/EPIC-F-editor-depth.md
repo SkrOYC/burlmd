@@ -98,6 +98,11 @@ Then no composed or committed characters are lost, duplicated, or reordered, and
 
 The last scenario exists because ADR-006 inherits the platform IME inside the focused field and nothing anywhere tested that a mid-composition string survives a commit; losing it is a correctness defect, not an edge case. It rides this ticket because this is where promotion first meets composition.
 
+##### [EDIT-F002] Deviations & Justifications
+- `test/components/lifecycle_actions_test.dart` — its `RustApi` fake needed `getBlockSource`/`commitBlock` overrides and promote-on-focus staging (tap before typing) because EDIT-F002 changed how the editor presents a focused Block, breaking this suite's existing IME-resync scenario; updated to match the new model, no criterion loosened.
+- `lib/main.dart` — adds an env-gated (`BURLMD_SMOKE_F002`) staging hook that builds a demo Note through the Core and selects it, so the smoke-shot scenario can mount the editor pane; inert in normal use.
+- `scripts/smoke-shot.sh` — forwards any caller-exported `BURLMD_SMOKE_*` variables to the launched app so the staging hook above is reachable from the verification harness; no behavior change without them.
+
 #### EDIT-F003 Cross-Block Selection and Copy
 - **Type:** Feature
 - **Effort:** 5

@@ -49,6 +49,32 @@ class _LifecycleApi extends RustApi {
   /// probe for the focus-refresh criterion.
   String? lastUpdateBlockSource;
 
+  /// Staged sources `getBlockSource` returns per `"i,j"` path key, one per
+  /// fetch (consumed front-first), letting a test stage distinct pre- and
+  /// post-rewrite bytes for successive reads of the same Block.
+  final Map<String, List<String>> stagedBlockSources = {};
+
+  /// What [commitBlock] returns; unset means commits are unexpected.
+  NoteState? commitBlockResult;
+
+  @override
+  String getBlockSource(String noteId, List<int> blockPath) {
+    final queue = stagedBlockSources[blockPath.join(',')];
+    if (queue == null || queue.isEmpty) {
+      throw Exception('no staged block source for $noteId$blockPath');
+    }
+    return queue.removeAt(0);
+  }
+
+  @override
+  NoteState commitBlock(String noteId, List<int> blockPath) {
+    final result = commitBlockResult;
+    if (result == null) {
+      throw Exception('unexpected commit_block for $noteId$blockPath');
+    }
+    return result;
+  }
+
   @override
   void updateBlock(String noteId, List<int> blockPath, String newSource) {
     calls.add('updateBlock:$noteId');
@@ -578,13 +604,30 @@ void main() {
 
     // Sanity: the field shows the pre-rewrite source, and typing into it
     // right now would substitute exactly that stale source back — the
-    // failure this criterion exists to prevent.
-    expect(find.byType(TextField), findsOneWidget);
-    expect(find.text('see [[A]] old target'), findsOneWidget);
-    await tester.enterText(find.byType(TextField), 'stale edit');
+    // failure this criterion exists to prevent. Under EDIT-F002's
+    // promote-on-focus model the Block is formatted until tapped, so stage
+    // its working source and tap it into its editable form first.
+    api.stagedBlockSources['0'] = ['see [[A]] old target'];
+    await tester.tap(
+      find.byKey(const ValueKey('block-0')),
+      warnIfMissed: false,
+    );
+    await tester.pumpAndSettle();
+    // A writable EditableText, not the error surface's read-only
+    // SelectableText (which also hosts an internal EditableText).
+    EditableText fieldOf(WidgetTester t) => t
+        .widgetList<EditableText>(
+          find.byWidgetPredicate((w) => w is EditableText && !w.readOnly),
+        )
+        .single;
+    expect(fieldOf(tester).controller.text, 'see [[A]] old target');
+    await tester.enterText(find.byType(EditableText), 'stale edit');
     await tester.pumpAndSettle();
     expect(api.lastUpdateBlockSource, 'stale edit');
 
+    // Stage the post-rewrite bytes the resync will refetch once the reload's
+    // returned state lands.
+    api.stagedBlockSources['0'] = ['see [[A]] new target'];
     await container.read(lifecycleActionsProvider).renameNote('a', 'A renamed');
     await tester.pumpAndSettle();
 
@@ -595,8 +638,11 @@ void main() {
     // The editable field was refreshed from the returned state: it now shows
     // the rewritten source, so the NEXT keystroke goes out based on the
     // Core's post-rewrite bytes rather than substituting the old ones back.
-    expect(find.text('see [[A]] new target'), findsOneWidget);
-    await tester.enterText(find.byType(TextField), 'see [[A]] new target +1');
+    expect(fieldOf(tester).controller.text, 'see [[A]] new target');
+    await tester.enterText(
+      find.byType(EditableText),
+      'see [[A]] new target +1',
+    );
     await tester.pumpAndSettle();
     expect(api.lastUpdateBlockSource, 'see [[A]] new target +1');
     expect(api.lastUpdateBlockSource, isNot(contains('old target')));

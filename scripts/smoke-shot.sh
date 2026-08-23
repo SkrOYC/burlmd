@@ -130,7 +130,23 @@ echo "[smoke-shot] launching $APP_BIN..."
 # so such a loop would detect nothing. A process that dies at startup is
 # caught by the render loop below, whose first `kill -0` fails and reports
 # the exit status.
-"$APP_BIN" &
+#
+# Scenario staging (EDIT-F002): the app can build a demo Note through the
+# Core when launched with a BURLMD_SMOKE_* variable (e.g.
+# BURLMD_SMOKE_F002=1 stages a focused raw-source Block among formatted
+# neighbors). Any such variable the caller exports is forwarded explicitly
+# here, so the hook is visible in this file rather than relying on silent
+# environment inheritance.
+SCENARIO_ENV=()
+while IFS='=' read -r entry; do
+  SCENARIO_ENV+=("$entry")
+done < <(env | grep '^BURLMD_SMOKE')
+if (( ${#SCENARIO_ENV[@]} > 0 )); then
+  echo "[smoke-shot] staging scenario env: ${SCENARIO_ENV[*]}"
+  env "${SCENARIO_ENV[@]}" "$APP_BIN" &
+else
+  "$APP_BIN" &
+fi
 APP_PID=$!
 
 echo "[smoke-shot] waiting for the window to render..."
