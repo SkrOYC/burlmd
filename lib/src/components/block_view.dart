@@ -699,30 +699,49 @@ String _inlineRenderedOne(InlineElement element) => switch (element) {
   InlineElement_ExternalLink(:final content) => _inlineRendered(content),
 };
 
-String? _firstInternalLinkTarget(AstNode node) => switch (node) {
+class _InternalLink {
+  const _InternalLink({
+    required this.targetId,
+    required this.exists,
+    required this.title,
+  });
+
+  final String targetId;
+  final bool exists;
+  final String title;
+}
+
+List<_InternalLink> _internalLinks(AstNode node) => switch (node) {
   AstNode_Paragraph(:final content) ||
-  AstNode_Heading(:final content) => _firstTargetInInlines(content),
-  AstNode_List(:final items) => _firstTargetInNodes(items),
-  AstNode_ListItem(:final content) => _firstTargetInNodes(content),
-  AstNode_Blockquote(:final nodes) => _firstTargetInNodes(nodes),
-  AstNode_Suggestion(:final localContent) => _firstTargetInNodes(localContent),
-  _ => null,
+  AstNode_Heading(:final content) => _internalLinksInInlines(content),
+  AstNode_List(:final items) => [
+    for (final item in items) ..._internalLinks(item),
+  ],
+  AstNode_ListItem(:final content) => [
+    for (final child in content) ..._internalLinks(child),
+  ],
+  AstNode_Blockquote(:final nodes) => [
+    for (final child in nodes) ..._internalLinks(child),
+  ],
+  AstNode_Suggestion(:final localContent) => [
+    for (final child in localContent) ..._internalLinks(child),
+  ],
+  _ => const [],
 };
 
-String? _firstTargetInNodes(List<AstNode> nodes) {
-  for (final node in nodes) {
-    final target = _firstInternalLinkTarget(node);
-    if (target != null) return target;
-  }
-  return null;
-}
-
-String? _firstTargetInInlines(List<InlineElement> elements) {
-  for (final element in elements) {
-    if (element case InlineElement_Link(:final targetId)) return targetId;
-  }
-  return null;
-}
+List<_InternalLink> _internalLinksInInlines(List<InlineElement> elements) => [
+  for (final element in elements)
+    if (element case InlineElement_Link(
+      :final targetId,
+      :final exists,
+      :final content,
+    ))
+      _InternalLink(
+        targetId: targetId,
+        exists: exists,
+        title: _inlineRendered(content),
+      ),
+];
 
 int _inlineRenderedLength(InlineElement element) => switch (element) {
   InlineElement_Text(:final field0) => field0.content.length,
@@ -773,6 +792,7 @@ class BlockView extends StatefulWidget {
 
 class _BlockViewState extends State<BlockView> {
   final Map<String, TapGestureRecognizer> _linkRecognizers = {};
+  final GlobalKey _textSurfaceKey = GlobalKey();
 
   @override
   void dispose() {
@@ -794,22 +814,24 @@ class _BlockViewState extends State<BlockView> {
   Widget build(BuildContext context) {
     final onLinkActivated = widget.onLinkActivated;
     final l10n = AppLocalizations.of(context);
+    final links = _internalLinks(widget.node);
     Widget child = onLinkActivated == null || l10n == null
         ? renderBlock(widget.node)
         : _renderBlockForView(widget.node, (targetId, exists, content) {
-            final title = _inlineRendered(content);
             return TextSpan(
-              text: title,
-              semanticsLabel: exists
-                  ? l10n.internalLinkExisting(title)
-                  : l10n.internalLinkMissing(title),
-              recognizer: _recognizerFor(targetId),
               style: TextStyle(
                 color: exists ? Colors.blue : Colors.deepOrange,
                 decoration: TextDecoration.underline,
                 decorationStyle: exists
                     ? TextDecorationStyle.solid
                     : TextDecorationStyle.dotted,
+              ),
+              // Keep the Link's real nested spans. Flattening this to [title]
+              // discarded bold/italic/strike/code styling and changed the
+              // SelectableRegion's rendered-text shape.
+              children: _linkContentWithRecognizer(
+                content,
+                _recognizerFor(targetId),
               ),
             );
           });
@@ -825,15 +847,10 @@ class _BlockViewState extends State<BlockView> {
         if (event is KeyDownEvent &&
             (event.logicalKey == LogicalKeyboardKey.enter ||
                 event.logicalKey == LogicalKeyboardKey.space)) {
-          // Keyboard promotion uses the same Core-backed top-level coordinate
-          // path as a pointer on the rendered Block. It never synthesizes a
-          // raw source offset or nested leaf path in Presentation.
-          final targetId = _firstInternalLinkTarget(widget.node);
-          if (targetId != null && widget.onLinkActivated != null) {
-            widget.onLinkActivated!(targetId);
-          } else {
-            widget.onFocusRequested(widget.blockPath, 0);
-          }
+          // A focused Block always promotes. Links have their own focus
+          // targets below; Block Enter must never silently follow the first
+          // Link it happens to contain.
+          widget.onFocusRequested(widget.blockPath, 0);
           return KeyEventResult.handled;
         }
         return KeyEventResult.ignored;
@@ -842,16 +859,36 @@ class _BlockViewState extends State<BlockView> {
         button: true,
         focusable: true,
         child: GestureDetector(
+          key: _textSurfaceKey,
           behavior: HitTestBehavior.opaque,
           onTapUp: (details) => _handleTapUp(context, details),
-          child: child,
+          child: FocusTraversalGroup(
+            policy: OrderedTraversalPolicy(),
+            child: Stack(
+              children: [
+                child,
+                if (onLinkActivated != null && l10n != null)
+                  for (final (index, link) in links.indexed)
+                    _InternalLinkFocusTarget(
+                      key: ValueKey(
+                        'internal-link-focus-$index-${link.targetId}',
+                      ),
+                      order: index + 1,
+                      label: link.exists
+                          ? l10n.internalLinkExisting(link.title)
+                          : l10n.internalLinkMissing(link.title),
+                      onActivated: () => onLinkActivated(link.targetId),
+                    ),
+              ],
+            ),
+          ),
         ),
       ),
     );
   }
 
   void _handleTapUp(BuildContext context, TapUpDetails details) {
-    final renderObject = context.findRenderObject();
+    final renderObject = _textSurfaceKey.currentContext?.findRenderObject();
     if (renderObject == null) {
       widget.onFocusRequested(widget.blockPath, 0);
       return;
@@ -893,4 +930,76 @@ class _BlockViewState extends State<BlockView> {
     }
     object.visitChildren((child) => _collectParagraphs(child, out));
   }
+}
+
+/// Applies an internal Link's recognizer to its painted leaves, instead of an
+/// empty wrapper span. Flutter's [TextSpan] hit testing visits the leaves; a
+/// recognizer on each leaf preserves every nested style while making the same
+/// visual text the pointer target.
+List<TextSpan> _linkContentWithRecognizer(
+  List<InlineElement> content,
+  TapGestureRecognizer recognizer,
+) => [
+  for (final element in content)
+    switch (element) {
+      InlineElement_Text(:final field0) => TextSpan(
+        text: field0.content,
+        recognizer: recognizer,
+        style: TextStyle(
+          fontWeight: field0.bold ? FontWeight.bold : null,
+          fontStyle: field0.italic ? FontStyle.italic : null,
+          decoration: field0.strikethrough ? TextDecoration.lineThrough : null,
+          fontFamily: field0.code ? 'monospace' : null,
+        ),
+      ),
+      InlineElement_Link(:final content) ||
+      InlineElement_ExternalLink(:final content) => TextSpan(
+        recognizer: recognizer,
+        children: _linkContentWithRecognizer(content, recognizer),
+      ),
+    },
+];
+
+/// A Link's visual text remains a [TextSpan] so Flutter's text selection and
+/// source-offset mapping retain their established shape. This zero-geometry
+/// focus target adds the separate keyboard-stop and semantic action that a
+/// recognizer on a TextSpan cannot supply. It is [IgnorePointer] so a pointer
+/// always reaches the same TextSpan recognizer and activation callback.
+class _InternalLinkFocusTarget extends StatelessWidget {
+  const _InternalLinkFocusTarget({
+    super.key,
+    required this.order,
+    required this.label,
+    required this.onActivated,
+  });
+
+  final int order;
+  final String label;
+  final VoidCallback onActivated;
+
+  @override
+  Widget build(BuildContext context) => Positioned.fill(
+    child: IgnorePointer(
+      child: FocusTraversalOrder(
+        order: NumericFocusOrder(order.toDouble()),
+        child: Focus(
+          canRequestFocus: true,
+          onKeyEvent: (_, event) {
+            if (event is KeyDownEvent &&
+                (event.logicalKey == LogicalKeyboardKey.enter ||
+                    event.logicalKey == LogicalKeyboardKey.space)) {
+              onActivated();
+              return KeyEventResult.handled;
+            }
+            return KeyEventResult.ignored;
+          },
+          child: Semantics(
+            button: true,
+            label: label,
+            child: const SizedBox.shrink(),
+          ),
+        ),
+      ),
+    ),
+  );
 }

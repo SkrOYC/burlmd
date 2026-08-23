@@ -146,6 +146,8 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
   bool _pendingResolutionScheduled = false;
   bool _hasResyncConflict = false;
   bool _phantomMaterialized = false;
+  final OverlayPortalController _completionOverlayController =
+      OverlayPortalController();
   final GlobalKey<LinkCompletionState> _completionKey =
       GlobalKey<LinkCompletionState>();
 
@@ -168,6 +170,7 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
     _lastSettledText = widget.source;
     _controller.addListener(_onEditingValueChanged);
     _focusNode = FocusNode()..addListener(_onFocusChanged);
+    _scheduleCompletionOverlay();
     if (widget.smokeF005) unawaited(_runSmokeF005Shortcut());
     if (widget.smokeF006) unawaited(_runSmokeF006Completion());
   }
@@ -231,6 +234,7 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
   /// controller so a deferred resync is resolved at the real composition
   /// boundary, before a following keystroke can consume a stale source.
   void _onEditingValueChanged() {
+    _scheduleCompletionOverlay();
     final value = _controller.value;
     if (widget.phantom) {
       // A phantom has no Core Block to update. In particular, do not replace
@@ -360,6 +364,10 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
 
   @override
   void dispose() {
+    // OverlayPortal removes its owned overlay child during unmount. Calling
+    // hide here races that teardown in Flutter 3.44.3; blur has already
+    // revoked eligibility synchronously, and this disposal path leaves no
+    // independently inserted OverlayEntry behind.
     _controller.removeListener(_onEditingValueChanged);
     _focusNode.removeListener(_onFocusChanged);
     _focusNode.dispose();
@@ -368,9 +376,29 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
   }
 
   void _onFocusChanged() {
+    _scheduleCompletionOverlay();
     if (!_focusNode.hasFocus && !_hasResyncConflict) {
       widget.onFocusLost(widget.focusToken);
     }
+  }
+
+  /// Keeps the completion in the route's Overlay, rather than in the fixed
+  /// promotion slot.  Flutter 3.44.3's OverlayPortal layout callback supplies
+  /// the raw field's current paint transform and width, so scrolling and
+  /// resizing keep the popup anchored while neither its height nor hit region
+  /// participates in the Block's ListView geometry.
+  void _scheduleCompletionOverlay() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final eligible =
+          _focusNode.hasFocus &&
+          linkCompletionSnapshot(_controller.value) != null;
+      if (eligible && !_completionOverlayController.isShowing) {
+        _completionOverlayController.show();
+      } else if (!eligible && _completionOverlayController.isShowing) {
+        _completionOverlayController.hide();
+      }
+    });
   }
 
   /// Intercepts the two structural keys before the text-editing shortcuts
@@ -506,13 +534,15 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
     while (mounted && DateTime.now().isBefore(deadline)) {
       await WidgetsBinding.instance.endOfFrame;
       if (_focusNode.hasFocus &&
-          (_completionKey.currentState?.isOpen ?? false)) {
+          (_completionKey.currentState?.isOpen ?? false) &&
+          (_completionKey.currentState?.isVisiblyMounted ?? false)) {
         break;
       }
       await Future<void>.delayed(const Duration(milliseconds: 50));
     }
     if (!mounted ||
         !_focusNode.hasFocus ||
+        !(_completionKey.currentState?.isVisiblyMounted ?? false) ||
         !(_completionKey.currentState?.acceptActiveForSmoke() ?? false)) {
       return;
     }
@@ -550,65 +580,69 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
       TextSelection.collapsed(offset: caret.clamp(0, source.length));
 
   @override
-  Widget build(BuildContext context) => DefaultTextHeightBehavior(
-    // SPK-EDIT-F001 §3b: pin leading distribution to even. RenderParagraph
-    // (the formatted path) defaults to even; RenderEditable defaults to
-    // proportional — unpinned, glyphs wobble ~2px at every promotion.
-    textHeightBehavior: const TextHeightBehavior(
-      leadingDistribution: TextLeadingDistribution.even,
-    ),
-    // A bare EditableText rather than TextField: TextField's InputDecorator
-    // imposes a 48px minimum height on the field, which would make every
-    // single-line Block visibly grow at promotion — precisely the movement
-    // SPK-EDIT-F001 §3b forbids. The decorator adds nothing this editor
-    // wants (no label, hint, border or counter), so the field goes straight
-    // to the text-painting render object and inherits no minimum.
-    // The key-event intercept sits directly above the field so Enter and
-    // Backspace-at-start reach [_handleKeyEvent] before any text-editing
-    // shortcut (`EDIT-F004`).
-    child: Focus(
-      onKeyEvent: _handleKeyEvent,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          EditableText(
-            controller: _controller,
-            focusNode: _focusNode,
-            autofocus: true,
-            style: widget.style,
-            cursorColor: Theme.of(context).colorScheme.primary,
-            backgroundCursorColor: Colors.grey,
-            maxLines: null,
-            keyboardType: TextInputType.multiline,
-            onChanged: (text) {
-              if (widget.phantom) return;
-              if (_hasResyncConflict) return;
-              // The Block's raw source text, not a reconstructed AstNode — this
-              // is the per-keystroke buffering call (`update_block`, ADR-007
-              // decision 4): no parse, no AST round trip, draft-row write only.
-              // Refusals surface through keystrokeWriteFailureProvider beside the
-              // content, never by replacing it (flow-edit-note.md).
-              // A deferred composition resync is resolved by the controller
-              // listener, including a composing-only completion. Do not race it
-              // here by replaying the stale external source over this input.
-              if (_pendingResync != null && !_hasLiveComposition) return;
-              _bufferSource(text);
-              if (!_hasLiveComposition) _lastSettledText = text;
-            },
-          ),
-          Positioned(
-            top: 28,
-            left: 0,
-            right: 0,
-            child: LinkCompletionPopup(
-              key: _completionKey,
-              noteId: widget.noteId,
-              controller: _controller,
-              focusNode: _focusNode,
-              onAccepted: _applyLinkCompletion,
-            ),
-          ),
-        ],
+  Widget build(BuildContext context) => OverlayPortal.overlayChildLayoutBuilder(
+    controller: _completionOverlayController,
+    overlayChildBuilder: (context, info) {
+      final origin = MatrixUtils.transformPoint(
+        info.childPaintTransform,
+        Offset.zero,
+      );
+      return Positioned(
+        left: origin.dx,
+        top: origin.dy + info.childSize.height + 4,
+        width: info.childSize.width,
+        child: LinkCompletionPopup(
+          key: _completionKey,
+          noteId: widget.noteId,
+          controller: _controller,
+          focusNode: _focusNode,
+          onAccepted: _applyLinkCompletion,
+        ),
+      );
+    },
+    child: DefaultTextHeightBehavior(
+      // SPK-EDIT-F001 §3b: pin leading distribution to even. RenderParagraph
+      // (the formatted path) defaults to even; RenderEditable defaults to
+      // proportional — unpinned, glyphs wobble ~2px at every promotion.
+      textHeightBehavior: const TextHeightBehavior(
+        leadingDistribution: TextLeadingDistribution.even,
+      ),
+      // A bare EditableText rather than TextField: TextField's InputDecorator
+      // imposes a 48px minimum height on the field, which would make every
+      // single-line Block visibly grow at promotion — precisely the movement
+      // SPK-EDIT-F001 §3b forbids. The decorator adds nothing this editor
+      // wants (no label, hint, border or counter), so the field goes straight
+      // to the text-painting render object and inherits no minimum.
+      // The key-event intercept sits directly above the field so Enter and
+      // Backspace-at-start reach [_handleKeyEvent] before any text-editing
+      // shortcut (`EDIT-F004`).
+      child: Focus(
+        onKeyEvent: _handleKeyEvent,
+        child: EditableText(
+          controller: _controller,
+          focusNode: _focusNode,
+          autofocus: true,
+          style: widget.style,
+          cursorColor: Theme.of(context).colorScheme.primary,
+          backgroundCursorColor: Colors.grey,
+          maxLines: null,
+          keyboardType: TextInputType.multiline,
+          onChanged: (text) {
+            if (widget.phantom) return;
+            if (_hasResyncConflict) return;
+            // The Block's raw source text, not a reconstructed AstNode — this
+            // is the per-keystroke buffering call (`update_block`, ADR-007
+            // decision 4): no parse, no AST round trip, draft-row write only.
+            // Refusals surface through keystrokeWriteFailureProvider beside the
+            // content, never by replacing it (flow-edit-note.md).
+            // A deferred composition resync is resolved by the controller
+            // listener, including a composing-only completion. Do not race it
+            // here by replaying the stale external source over this input.
+            if (_pendingResync != null && !_hasLiveComposition) return;
+            _bufferSource(text);
+            if (!_hasLiveComposition) _lastSettledText = text;
+          },
+        ),
       ),
     ),
   );

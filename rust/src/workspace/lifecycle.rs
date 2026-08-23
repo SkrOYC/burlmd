@@ -207,6 +207,19 @@ pub(crate) fn link_target_identity(target_id: &str) -> Result<LinkTargetIdentity
     })
 }
 
+/// Derives a future Link target from completion text. Completion is deliberately
+/// narrower than a stored Link target: the user supplies a **title** for a
+/// sibling of the current Note, never a path. Stored Links still use
+/// [`link_target_identity`] because they carry an already-derived, exact
+/// bundle-relative identity.
+pub(crate) fn prospective_link_target_identity(
+    current_directory: &str,
+    title: &str,
+) -> Result<LinkTargetIdentity, AppError> {
+    validate_title(title)?;
+    link_target_identity(&join_id(current_directory, title))
+}
+
 /// Creates the exact Note identity carried by a Link. It re-resolves under
 /// the lifecycle lock: if another burlmd operation created the target first,
 /// the existing Note is opened; a foreign file collision is refused by the
@@ -217,17 +230,285 @@ pub(crate) fn create_link_target(
 ) -> Result<NoteState, AppError> {
     let identity = link_target_identity(target_id)?;
     persist::with_lifecycle_lock(workspace, || {
-        if workspace
-            .with_db(|conn| index::note_exists(conn, workspace.id(), &identity.target_id))?
-        {
-            return persist::open_note_serialized(workspace, &identity.target_id)
-                .map(|(_, state)| state);
-        }
-        if !identity.directory_path.is_empty() {
-            create_directory_serialized(workspace, &identity.directory_path)?;
-        }
-        create_note_serialized(workspace, &identity.directory_path, &identity.title)
+        create_link_target_serialized(workspace, &identity, |_| Ok(()))
     })
+}
+
+/// Link-target creation's one-operation path. Unlike ordinary `create_note`,
+/// this owns materializing absent parent Directories, so an unavailable final
+/// path must not leave a newly visible tree behind. The lifecycle lock covers
+/// the availability check, directory creation, exclusive Note publication,
+/// index write, session registration and commit.
+fn create_link_target_serialized(
+    workspace: &Arc<Workspace>,
+    identity: &LinkTargetIdentity,
+    before_publish: impl FnOnce(&Path) -> Result<(), AppError>,
+) -> Result<NoteState, AppError> {
+    if workspace.with_db(|conn| index::note_exists(conn, workspace.id(), &identity.target_id))? {
+        return persist::open_note_serialized(workspace, &identity.target_id)
+            .map(|(_, state)| state);
+    }
+
+    let directory_rows_to_remove = missing_directory_rows(workspace, &identity.directory_path)?;
+    let mut created_directories = Vec::new();
+    if let Err(error) = materialize_link_target_directories(
+        workspace,
+        &identity.directory_path,
+        &mut created_directories,
+    ) {
+        return finish_link_target_directory_cleanup(&mut created_directories, error);
+    }
+
+    let new_path = workspace.note_path(&identity.target_id)?;
+    if let Err(error) = ensure_path_available(workspace, &identity.target_id, &new_path, None) {
+        return finish_link_target_directory_cleanup(&mut created_directories, error);
+    }
+    if let Err(error) = before_publish(&new_path) {
+        return finish_link_target_directory_cleanup(&mut created_directories, error);
+    }
+
+    let source = conformant_frontmatter(&identity.title);
+    let published = match persist::atomic_create(&new_path, source.as_bytes()) {
+        Ok(true) => true,
+        Ok(false) => {
+            return finish_link_target_directory_cleanup(
+                &mut created_directories,
+                AppError::PathUnavailable(format!(
+                    "{} appeared while creating the Note",
+                    concept_id_to_path(&identity.target_id)
+                )),
+            )
+        }
+        Err(error) => return finish_link_target_directory_cleanup(&mut created_directories, error),
+    };
+
+    let indexed = index::derive_note(
+        &identity.target_id,
+        &source,
+        content_hash(source.as_bytes()),
+        file_mtime(&new_path),
+    );
+    let indexed_result = workspace.with_db(|conn| {
+        in_owned_transaction(conn, |tx| {
+            index::incremental::write_note_rows(tx, workspace.id(), &indexed)?;
+            Ok(())
+        })
+    });
+    if let Err(error) = indexed_result {
+        return rollback_link_target_creation(
+            workspace,
+            &identity.target_id,
+            &new_path,
+            published,
+            &directory_rows_to_remove,
+            &mut created_directories,
+            false,
+            error,
+        );
+    }
+
+    // Register the session before committing. If registration cannot succeed,
+    // nothing has reached version history and every created resource can still
+    // be unwound. A failed commit below likewise retires this unpublished
+    // session before deleting the file and its owned parent Directories.
+    let state = match persist::open_note_serialized(workspace, &identity.target_id) {
+        Ok((_, state)) => state,
+        Err(error) => {
+            return rollback_link_target_creation(
+                workspace,
+                &identity.target_id,
+                &new_path,
+                published,
+                &directory_rows_to_remove,
+                &mut created_directories,
+                true,
+                error,
+            )
+        }
+    };
+
+    let relative = concept_id_to_path(&identity.target_id);
+    let subject = format!("Create {}", identity.title);
+    if let Err(error) = crate::git::operations::commit_paths(
+        workspace.root(),
+        &format!("{subject}\n\n{relative}\n"),
+        std::slice::from_ref(&relative),
+    ) {
+        // `commit_paths` can only report an error after moving HEAD when its
+        // post-commit index refresh failed. In that case removing the Note
+        // would make history lie, so retain the completed creation and report
+        // the established commit-stage failure. Otherwise the failed commit is
+        // fully unwound, including the session that was registered above.
+        if crate::git::operations::path_in_head(workspace.root(), &relative).unwrap_or(false) {
+            return Err(commit_stage_failure(&subject, error, &[]));
+        }
+        return rollback_link_target_creation(
+            workspace,
+            &identity.target_id,
+            &new_path,
+            published,
+            &directory_rows_to_remove,
+            &mut created_directories,
+            true,
+            error,
+        );
+    }
+
+    Ok(state)
+}
+
+/// Creates the missing physical ancestors one at a time, so the rollback path
+/// knows exactly which Directories belong to this operation. A level another
+/// process created first is preserved and is never treated as ours.
+fn materialize_link_target_directories(
+    workspace: &Arc<Workspace>,
+    directory: &str,
+    created: &mut Vec<PathBuf>,
+) -> Result<(), AppError> {
+    let mut ancestor = String::new();
+    for segment in directory.split('/').filter(|segment| !segment.is_empty()) {
+        if !ancestor.is_empty() {
+            ancestor.push('/');
+        }
+        ancestor.push_str(segment);
+        let absolute = directory_absolute(workspace, &ancestor)?;
+        match std::fs::create_dir(&absolute) {
+            Ok(()) => created.push(absolute),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                if !absolute.is_dir() {
+                    return Err(AppError::PathUnavailable(format!(
+                        "{ancestor} is already a file in this Workspace"
+                    )));
+                }
+            }
+            Err(error) => {
+                return Err(AppError::IoError(format!(
+                    "create {}: {error}",
+                    absolute.display()
+                )))
+            }
+        }
+    }
+    Ok(())
+}
+
+/// The rows this operation may remove on rollback. A pre-existing on-disk
+/// Directory can legitimately be absent from the derived index, so recording a
+/// Note under it can add rows without creating any folders; exact rollback must
+/// restore that pre-operation index shape too.
+fn missing_directory_rows(
+    workspace: &Arc<Workspace>,
+    directory: &str,
+) -> Result<Vec<String>, AppError> {
+    let ancestors = directory_ancestors(directory);
+    workspace.with_db(|conn| {
+        ancestors
+            .into_iter()
+            .filter_map(|ancestor| {
+                match conn
+                    .query_row(
+                        "SELECT 1 FROM directories WHERE workspace_id = ?1 AND id = ?2",
+                        rusqlite::params![workspace.id(), ancestor],
+                        |row| row.get::<_, i64>(0),
+                    )
+                    .optional()
+                {
+                    Ok(None) => Some(Ok(ancestor)),
+                    Ok(Some(_)) => None,
+                    Err(error) => Some(Err(AppError::from(error))),
+                }
+            })
+            .collect()
+    })
+}
+
+fn directory_ancestors(directory: &str) -> Vec<String> {
+    let mut ancestors = Vec::new();
+    let mut ancestor = String::new();
+    for segment in directory.split('/').filter(|segment| !segment.is_empty()) {
+        if !ancestor.is_empty() {
+            ancestor.push('/');
+        }
+        ancestor.push_str(segment);
+        ancestors.push(ancestor.clone());
+    }
+    ancestors
+}
+
+fn finish_link_target_directory_cleanup(
+    created_directories: &mut Vec<PathBuf>,
+    error: AppError,
+) -> Result<NoteState, AppError> {
+    cleanup_created_directories(created_directories).map_err(|cleanup| {
+        AppError::IoError(format!(
+            "{error:?}; also could not roll back the Directories created for this Link target: {cleanup:?}"
+        ))
+    })?;
+    Err(error)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn rollback_link_target_creation(
+    workspace: &Arc<Workspace>,
+    note_id: &str,
+    note_path: &Path,
+    published: bool,
+    directory_rows_to_remove: &[String],
+    created_directories: &mut Vec<PathBuf>,
+    discard_session: bool,
+    error: AppError,
+) -> Result<NoteState, AppError> {
+    if discard_session {
+        persist::discard_session(workspace, note_id)?;
+    }
+    workspace
+        .with_db(|conn| {
+            in_owned_transaction(conn, |tx| {
+                index::remove_note_rows(tx, workspace.id(), note_id)?;
+                clear_draft(tx, workspace.id(), note_id)?;
+                for directory in directory_rows_to_remove {
+                    tx.execute(
+                        "DELETE FROM directories WHERE workspace_id = ?1 AND id = ?2",
+                        rusqlite::params![workspace.id(), directory],
+                    )?;
+                }
+                Ok(())
+            })
+        })
+        .and_then(|_| {
+            if published {
+                std::fs::remove_file(note_path).map_err(|remove| {
+                    AppError::IoError(format!("remove {}: {remove}", note_path.display()))
+                })?;
+            }
+            cleanup_created_directories(created_directories)
+        })
+        .map_err(|cleanup| {
+            AppError::IoError(format!(
+                "{error:?}; also could not roll back Link-target creation: {cleanup:?}"
+            ))
+        })?;
+    Err(error)
+}
+
+/// Removes only levels this operation created, deepest first. A concurrent
+/// writer's content makes `remove_dir` report `DirectoryNotEmpty`; preserving
+/// that Directory is the required safe answer.
+fn cleanup_created_directories(created_directories: &mut Vec<PathBuf>) -> Result<(), AppError> {
+    for directory in created_directories.drain(..).rev() {
+        match std::fs::remove_dir(&directory) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) if error.kind() == std::io::ErrorKind::DirectoryNotEmpty => {}
+            Err(error) => {
+                return Err(AppError::IoError(format!(
+                    "remove {}: {error}",
+                    directory.display()
+                )))
+            }
+        }
+    }
+    Ok(())
 }
 
 fn create_note_serialized(
@@ -3117,6 +3398,83 @@ mod tests {
         assert!(matches!(collision, Err(AppError::PathUnavailable(_))));
         assert_eq!(f.read("race/External.md"), "foreign bytes\n");
         assert!(!f.note_ids().contains(&"race/External".to_string()));
+    }
+
+    /// A foreign writer can win only after create-on-follow has created its
+    /// missing parents. The exclusive final create must preserve that file and
+    /// leave the index exactly as it was before this operation: no ghost Note,
+    /// no parent Directory rows, and no session that could recreate anything.
+    #[test]
+    fn create_link_target_final_path_race_leaves_no_link_target_state() {
+        let f = fixture();
+        let identity = link_target_identity("projects/future/Plan A").unwrap();
+
+        let result = persist::with_lifecycle_lock(&f.workspace, || {
+            create_link_target_serialized(&f.workspace, &identity, |path| {
+                std::fs::write(path, "foreign bytes\n").map_err(|error| {
+                    AppError::IoError(format!("write {}: {error}", path.display()))
+                })
+            })
+        });
+
+        assert!(
+            matches!(result, Err(AppError::PathUnavailable(_))),
+            "{result:?}"
+        );
+        assert_eq!(f.read("projects/future/Plan A.md"), "foreign bytes\n");
+        assert!(f.note_ids().is_empty());
+        assert!(f.directory_ids().is_empty());
+        assert!(persist::lookup(f.workspace.id(), "projects/future/Plan A")
+            .unwrap()
+            .is_none());
+    }
+
+    /// When index publication fails after the file is exclusively published,
+    /// a multi-level Link target is completely unwound. The pre-existing
+    /// Directory and unrelated bytes prove the cleanup is ownership-aware.
+    #[test]
+    fn create_link_target_index_failure_restores_exact_pre_operation_tree_and_index() {
+        let f = fixture();
+        f.write("kept/foreign.txt", "do not touch\n");
+        f.reindex();
+        let before_directories = f.directory_ids();
+        f.inject_index_failure(
+            "CREATE TRIGGER injected_link_target_insert BEFORE INSERT ON notes \
+             BEGIN SELECT RAISE(ABORT, 'injected link target index failure'); END;",
+        );
+
+        let result = create_link_target(&f.workspace, "kept/projects/future/Plan A");
+
+        assert!(result.is_err(), "{result:?}");
+        assert_eq!(f.read("kept/foreign.txt"), "do not touch\n");
+        assert!(!f.root().join("kept/projects").exists());
+        assert_eq!(f.note_ids(), Vec::<String>::new());
+        assert_eq!(f.directory_ids(), before_directories);
+        assert!(
+            persist::lookup(f.workspace.id(), "kept/projects/future/Plan A")
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    /// A commit failure happens after both publication stores and session
+    /// registration. Link-target creation is stricter than ordinary creation:
+    /// it unwinds all of those owned resources because it also owns the parent
+    /// Directories it materialized for create-on-follow.
+    #[test]
+    fn create_link_target_commit_failure_removes_owned_note_parents_index_and_session() {
+        let f = fixture();
+        std::fs::remove_dir_all(f.root().join(".git")).unwrap();
+
+        let result = create_link_target(&f.workspace, "projects/future/Plan A");
+
+        assert!(result.is_err(), "{result:?}");
+        assert!(!f.root().join("projects").exists());
+        assert!(f.note_ids().is_empty());
+        assert!(f.directory_ids().is_empty());
+        assert!(persist::lookup(f.workspace.id(), "projects/future/Plan A")
+            .unwrap()
+            .is_none());
     }
 
     /// The filename is the title verbatim plus `.md`, with no slugification,
