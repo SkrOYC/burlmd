@@ -46,11 +46,15 @@ class _CoreFake extends RustApi {
   final List<String> calls = [];
 
   int updateCount = 0;
+  final List<String> updateSources = [];
   List<int>? lastUpdatePath;
   String? lastUpdateSource;
+  Object? updateFailure;
   Object? mergeFailure;
   Object? splitFailure;
   Object? continueFailure;
+  StructuralEditInsertionSlot? _pendingInsertionSlot;
+  int? _pendingInsertionIndex;
 
   static const _meta = NoteMetadata(
     id: 'f004-note',
@@ -90,8 +94,11 @@ class _CoreFake extends RustApi {
   @override
   void updateBlock(String noteId, List<int> blockPath, String newSource) {
     updateCount++;
+    updateSources.add(newSource);
     lastUpdatePath = blockPath;
     lastUpdateSource = newSource;
+    final failure = updateFailure;
+    if (failure != null) throw failure;
     // The contract: `update_block` substitutes the text into the Note's
     // working source (without parsing). The next reparse-producing call
     // returns a state that includes it.
@@ -162,11 +169,18 @@ class _CoreFake extends RustApi {
     }
     if (low == 0 && high == source.length) {
       blocks.removeAt(blockPath.first);
+      final insertionSlot = StructuralEditInsertionSlot(
+        sourceOffset: BigInt.from(blockPath.first),
+        linePrefix: 'opaque test slot',
+        requiredAfterNewlines: BigInt.zero,
+      );
+      _pendingInsertionSlot = insertionSlot;
+      _pendingInsertionIndex = blockPath.first;
       return StructuralEdit(
         state: state,
         blockPath: Uint64List(0),
         caretOffset: BigInt.zero,
-        phantomInsertionIndex: BigInt.from(blockPath.first),
+        phantomInsertionSlot: insertionSlot,
       );
     }
     final replaced = source.replaceRange(low, high, '');
@@ -182,11 +196,17 @@ class _CoreFake extends RustApi {
   @override
   StructuralEdit continueBlockAtInsertionSlot(
     String noteId,
-    int insertionIndex,
+    StructuralEditInsertionSlot insertionSlot,
     String source,
   ) {
+    if (!identical(insertionSlot, _pendingInsertionSlot)) {
+      throw StateError('the Core-owned insertion slot must stay opaque');
+    }
+    final insertionIndex = _pendingInsertionIndex!;
     calls.add('continue-slot:$insertionIndex:$source');
     blocks.insert(insertionIndex, source);
+    _pendingInsertionSlot = null;
+    _pendingInsertionIndex = null;
     return StructuralEdit(
       state: state,
       blockPath: Uint64List.fromList([insertionIndex]),
@@ -780,6 +800,92 @@ void main() {
     expect(_field(tester).controller.text, 'xy');
     expect(_field(tester).focusNode.hasFocus, isTrue);
   });
+
+  testWidgets(
+    'a refused draft write stays retryable through blur until Core accepts '
+    'the complete controller value',
+    (tester) async {
+      const original = 'before\n';
+      const rejected = 'after\n';
+      const recovered = 'after recovery\n';
+      final api = _CoreFake([original])
+        ..updateFailure = const AppError.parseError('draft write refused');
+      final container = await pumpEditor(tester, [
+        _paragraph('before'),
+      ], api: api);
+
+      await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
+      await tester.enterText(_writableFields().first, rejected);
+      await tester.pump();
+
+      expect(api.blocks, [
+        original,
+      ], reason: 'the refused value is not Core state');
+      expect(api.updateSources, [rejected]);
+      expect(_field(tester).controller.text, rejected);
+      expect(
+        container.read(keystrokeWriteFailureProvider),
+        isA<AppError_ParseError>(),
+      );
+
+      // A blur is a structural boundary. It retries the complete controller
+      // value once; a second refusal keeps that exact value and focus instead
+      // of committing Core's old source.
+      FocusManager.instance.primaryFocus?.unfocus();
+      await tester.pump();
+      await tester.pump();
+
+      expect(api.updateSources, [rejected, rejected]);
+      expect(api.calls.where((call) => call == 'commit'), isEmpty);
+      expect(_field(tester).controller.text, rejected);
+      expect(_field(tester).focusNode.hasFocus, isTrue);
+      expect(
+        container.read(keystrokeWriteFailureProvider),
+        isA<AppError_ParseError>(),
+      );
+
+      // A later complete edit retries and acknowledges the full value. The
+      // following blur can now reparse and commit it normally.
+      api.updateFailure = null;
+      await tester.enterText(_writableFields().first, recovered);
+      await tester.pump();
+      FocusManager.instance.primaryFocus?.unfocus();
+      await tester.pump();
+      await tester.pump();
+
+      expect(api.updateSources, [rejected, rejected, recovered]);
+      expect(api.blocks, [recovered]);
+      expect(api.calls.where((call) => call == 'commit'), ['commit']);
+      expect(container.read(keystrokeWriteFailureProvider), isNull);
+    },
+  );
+
+  testWidgets(
+    'a focus transition retries a refused complete value before committing '
+    'the outgoing Block',
+    (tester) async {
+      const rejected = 'updated first\n';
+      final api = _CoreFake(['first\n', 'second\n'])
+        ..updateFailure = const AppError.parseError('draft write refused');
+      await pumpEditor(tester, [
+        _paragraph('first'),
+        _paragraph('second'),
+      ], api: api);
+
+      await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
+      await tester.enterText(_writableFields().first, rejected);
+      await tester.pump();
+      api.updateFailure = null;
+
+      await promoteByTap(tester, find.byKey(const ValueKey('block-1')));
+
+      expect(api.updateSources, [rejected, rejected]);
+      expect(api.calls.where((call) => call == 'commit'), ['commit']);
+      expect(api.blocks, [rejected, 'second\n']);
+      expect(_field(tester).controller.text, 'second\n');
+      expect(_field(tester).focusNode.hasFocus, isTrue);
+    },
+  );
 
   testWidgets('a refused phantom insertion keeps its text visible and retries '
       'on the next edit', (tester) async {

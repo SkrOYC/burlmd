@@ -318,7 +318,12 @@ class EditorState extends ConsumerState<Editor> {
     // phantom beneath the containing top-level Block.
     final phantomAnchor =
         focusedForSlot?.phantomInsertionIndex ??
-        (note.ast.isEmpty && focusedForSlot?.isPhantom != true
+        (focusedForSlot?.phantomInsertionSlot != null
+            // This is presentation placement only. The Core-owned slot stays
+            // opaque and is returned unchanged when text materializes it.
+            // The former focused top-level entry supplies the visual anchor.
+            ? math.min(focusedForSlot!.path.first, note.ast.length)
+            : note.ast.isEmpty && focusedForSlot?.isPhantom != true
             ? 0
             : math.min(
                 (focusedForSlot?.path.first ?? -1) + 1,
@@ -420,6 +425,7 @@ class EditorState extends ConsumerState<Editor> {
           onBackspaceAtStart: () => _handleBackspaceAtStart(focused.path),
           onFocusLost: _handleFieldBlur,
           onCommitEligibilityChanged: _handleCommitEligibilityChanged,
+          onPendingWriteChanged: _handlePendingWriteChanged,
           smokeF005:
               Platform.environment.containsKey('BURLMD_SMOKE_F005') &&
               note.metadata.title == 'F005 emphasis',
@@ -593,7 +599,13 @@ class EditorState extends ConsumerState<Editor> {
     // committing or replacing the session. The only recovery is explicit:
     // copy the local branch, then deliberately leave the note rather than
     // silently choosing either version here.
-    if (!_canReplaceFocusedSession) return;
+    // A composition conflict has no safe source to retry, but a refused draft
+    // write does. Let the latter pass through to [_commitFocused], which
+    // retries the complete controller value before it reparses or changes
+    // focus; otherwise a pointer-driven promotion would strand the retry.
+    if (!_canReplaceFocusedSession && _focused?.pendingWriteSource == null) {
+      return;
+    }
     _closeRangeInput();
     // Moving focus between Blocks commits the outgoing one first: its last
     // buffered text must reach the working source before anything else
@@ -656,6 +668,12 @@ class EditorState extends ConsumerState<Editor> {
     final focused = _focused;
     if (focused == null || focused.token != focusToken) return;
     focused.canCommit = canCommit;
+  }
+
+  void _handlePendingWriteChanged(int focusToken, String? pendingSource) {
+    final focused = _focused;
+    if (focused == null || focused.token != focusToken) return;
+    focused.pendingWriteSource = pendingSource;
   }
 
   bool get _canReplaceFocusedSession => _focused?.canCommit ?? true;
@@ -927,7 +945,7 @@ class EditorState extends ConsumerState<Editor> {
   bool _commitFocused() {
     if (ref.read(editorInputBlockedProvider)) return false;
     final focused = _focused;
-    if (focused == null || !focused.canCommit) return false;
+    if (focused == null) return false;
     _closeRangeInput();
     if (focused.isPhantom) {
       // The sanctioned phantom Block is UI-side caret state ONLY (`EDIT-F004`):
@@ -939,6 +957,22 @@ class EditorState extends ConsumerState<Editor> {
     }
     final note = ref.read(activeNoteProvider);
     if (note == null) return false;
+    if (!focused.canCommit) {
+      final pendingSource = focused.pendingWriteSource;
+      // An IME/external resync conflict supplies no safe source to retry; it
+      // remains deliberately non-committable. A refused draft write does,
+      // and pointer-driven focus moves must retry it before reparsing.
+      if (pendingSource == null) return false;
+      final acknowledged = ref
+          .read(activeNoteProvider.notifier)
+          .updateBlock(focused.path, pendingSource);
+      if (!acknowledged) return false;
+      focused
+        ..source = pendingSource
+        ..caret = focused.caret.clamp(0, pendingSource.length)
+        ..pendingWriteSource = null
+        ..canCommit = true;
+    }
     try {
       final newState = ref
           .read(rustApiProvider)
@@ -1075,6 +1109,7 @@ class EditorState extends ConsumerState<Editor> {
         onPhantomMaterializedUpdate: _handlePhantomMaterializedUpdate,
         onFocusLost: _handleFieldBlur,
         onCommitEligibilityChanged: _handleCommitEligibilityChanged,
+        onPendingWriteChanged: _handlePendingWriteChanged,
       ),
     );
   }
@@ -1171,21 +1206,20 @@ class EditorState extends ConsumerState<Editor> {
           : api.splitBlock(note.metadata.id, blockPath, source, caret);
       final newState = structural.state;
       ref.read(activeNoteProvider.notifier).adopt(newState);
-      final phantomInsertionIndex = structural.phantomInsertionIndex;
-      if (phantomInsertionIndex != null) {
-        final insertionIndex = phantomInsertionIndex.toInt();
+      final phantomInsertionSlot = structural.phantomInsertionSlot;
+      if (phantomInsertionSlot != null) {
         setState(() {
           _focused = _Focus(
             noteId: note.metadata.id,
             // This is an insertion slot, not a path to a surviving Block.
-            // In particular full selection in a non-final field must not
-            // focus or continue after the sibling that shifted into its index.
-            path: [insertionIndex],
+            // Keep the former field path only as a presentation anchor; Core
+            // receives the opaque slot unchanged when materializing it.
+            path: blockPath,
             source: '',
             caret: 0,
             lastSeenState: newState,
             isPhantom: true,
-            phantomInsertionIndex: insertionIndex,
+            phantomInsertionSlot: phantomInsertionSlot,
           );
         });
         return;
@@ -1303,7 +1337,7 @@ class EditorState extends ConsumerState<Editor> {
     if (focused == null && note.ast.isNotEmpty) return false;
     try {
       final api = ref.read(rustApiProvider);
-      final slot = focused?.phantomInsertionIndex;
+      final slot = focused?.phantomInsertionSlot;
       final structural = slot == null
           ? api.continueBlockAfter(
               note.metadata.id,
@@ -1337,19 +1371,24 @@ class EditorState extends ConsumerState<Editor> {
 
   /// Completes the handoff from the phantom controller to Core's returned
   /// Block when multiple platform values arrive before Flutter can rebuild.
-  void _handlePhantomMaterializedUpdate(String text, TextSelection selection) {
-    if (ref.read(editorInputBlockedProvider)) return;
+  bool _handlePhantomMaterializedUpdate(String text, TextSelection selection) {
+    if (ref.read(editorInputBlockedProvider)) return false;
     final focused = _focused;
     final note = ref.read(activeNoteProvider);
     if (focused == null ||
         focused.isPhantom ||
         note == null ||
         focused.noteId != note.metadata.id) {
-      return;
+      return false;
     }
-    focused.source = text;
-    focused.caret = selection.extentOffset.clamp(0, text.length);
-    ref.read(activeNoteProvider.notifier).updateBlock(focused.path, text);
+    final accepted = ref
+        .read(activeNoteProvider.notifier)
+        .updateBlock(focused.path, text);
+    if (accepted) {
+      focused.source = text;
+      focused.caret = selection.extentOffset.clamp(0, text.length);
+    }
+    return accepted;
   }
 
   /// Backspace pressed at source offset 0 of [blockPath]. The first Block
@@ -2036,6 +2075,7 @@ class _Focus {
     required this.lastSeenState,
     this.isPhantom = false,
     this.phantomInsertionIndex,
+    this.phantomInsertionSlot,
   }) : token = _nextFocusToken++;
 
   /// Identifies this focus session (`EDIT-F004`). Echoed back by a blurring
@@ -2060,10 +2100,15 @@ class _Focus {
 
   int resyncToken = 0;
 
-  /// False only after BlockEditor detects an overlapping IME/external resync.
-  /// While false, promotion, blur commit, and structural edits are no-ops so
-  /// the conflicted raw field remains available for the user to copy.
+  /// False after either an overlapping IME/external resync or a refused
+  /// draft write. A conflict has no retry source and remains frozen; a draft
+  /// refusal carries [pendingWriteSource] so the next structural boundary can
+  /// retry the complete controller value before it commits.
   bool canCommit = true;
+
+  /// The full controller value whose `update_block` call Core refused. This
+  /// is retained only until the same focus session retries it or is replaced.
+  String? pendingWriteSource;
 
   /// True while this focus names the sanctioned empty phantom Block
   /// (`EDIT-F004`): UI-side caret state only, never committed, never
@@ -2074,6 +2119,11 @@ class _Focus {
   /// The Core-returned slot for an empty range edit. Enter-created phantoms
   /// still derive their visual anchor from their real predecessor path.
   final int? phantomInsertionIndex;
+
+  /// The opaque Core-owned slot returned after a full-field selected Enter.
+  /// Presentation retains it only to return it unchanged to Core when the
+  /// phantom receives its first text.
+  final StructuralEditInsertionSlot? phantomInsertionSlot;
 }
 
 /// Monotonic source of [_Focus.token] values.

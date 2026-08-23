@@ -440,23 +440,27 @@ class NoteController extends Notifier<NoteState?> {
   /// the editor — instead. Only an open failure with no remaining session
   /// reaches [editorErrorProvider]; a close refusal has its retryable status
   /// surface. A subsequent keystroke that succeeds clears the notice, as do
-  /// open/close/reload below.
-  void updateBlock(List<int> blockPath, String source) {
+  /// open/close/reload below. The boolean acknowledgement is intentionally
+  /// returned to the raw field: only an accepted write may become that
+  /// field's settled source or proceed to a structural reparse.
+  bool updateBlock(List<int> blockPath, String source) {
     // A queued platform callback may arrive before the read-only rebuild
     // paints, so the shared editor admission state is the authority boundary.
     // Lifecycle work can replace this Note's source just as a switch can
     // retire its session; accepting a write in either window would leave a
     // controller-only edit for the next rebuild to discard.
-    if (ref.read(editorInputBlockedProvider)) return;
+    if (ref.read(editorInputBlockedProvider)) return false;
     final current = state;
-    if (current == null) return;
+    if (current == null) return false;
     try {
       ref
           .read(rustApiProvider)
           .updateBlock(current.metadata.id, blockPath, source);
       ref.read(keystrokeWriteFailureProvider.notifier).report(null);
+      return true;
     } catch (error) {
       ref.read(keystrokeWriteFailureProvider.notifier).report(error);
+      return false;
     }
   }
 

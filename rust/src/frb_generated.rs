@@ -281,13 +281,16 @@ fn wire__crate__api__ffi_api__continue_block_at_insertion_slot_impl(
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_note_id = <String>::sse_decode(&mut deserializer);
-            let api_insertion_index = <usize>::sse_decode(&mut deserializer);
+            let api_insertion_slot =
+                <crate::workspace::persist::StructuralEditInsertionSlot>::sse_decode(
+                    &mut deserializer,
+                );
             let api_source = <String>::sse_decode(&mut deserializer);
             deserializer.end();
             transform_result_sse::<_, crate::error::AppError>((move || {
                 let output_ok = crate::api::ffi_api::continue_block_at_insertion_slot(
                     api_note_id,
-                    api_insertion_index,
+                    api_insertion_slot,
                     api_source,
                 )?;
                 Ok(output_ok)
@@ -2189,11 +2192,13 @@ impl SseDecode for Option<crate::draft::NoteState> {
     }
 }
 
-impl SseDecode for Option<usize> {
+impl SseDecode for Option<crate::workspace::persist::StructuralEditInsertionSlot> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         if (<bool>::sse_decode(deserializer)) {
-            return Some(<usize>::sse_decode(deserializer));
+            return Some(
+                <crate::workspace::persist::StructuralEditInsertionSlot>::sse_decode(deserializer),
+            );
         } else {
             return None;
         }
@@ -2257,12 +2262,28 @@ impl SseDecode for crate::api::ffi_api::StructuralEdit {
         let mut var_state = <crate::draft::NoteState>::sse_decode(deserializer);
         let mut var_blockPath = <Vec<usize>>::sse_decode(deserializer);
         let mut var_caretOffset = <usize>::sse_decode(deserializer);
-        let mut var_phantomInsertionIndex = <Option<usize>>::sse_decode(deserializer);
+        let mut var_phantomInsertionSlot = <Option<
+            crate::workspace::persist::StructuralEditInsertionSlot,
+        >>::sse_decode(deserializer);
         return crate::api::ffi_api::StructuralEdit {
             state: var_state,
             block_path: var_blockPath,
             caret_offset: var_caretOffset,
-            phantom_insertion_index: var_phantomInsertionIndex,
+            phantom_insertion_slot: var_phantomInsertionSlot,
+        };
+    }
+}
+
+impl SseDecode for crate::workspace::persist::StructuralEditInsertionSlot {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_sourceOffset = <usize>::sse_decode(deserializer);
+        let mut var_linePrefix = <String>::sse_decode(deserializer);
+        let mut var_requiredAfterNewlines = <usize>::sse_decode(deserializer);
+        return crate::workspace::persist::StructuralEditInsertionSlot {
+            source_offset: var_sourceOffset,
+            line_prefix: var_linePrefix,
+            required_after_newlines: var_requiredAfterNewlines,
         };
     }
 }
@@ -3005,7 +3026,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::ffi_api::StructuralEdit {
             self.state.into_into_dart().into_dart(),
             self.block_path.into_into_dart().into_dart(),
             self.caret_offset.into_into_dart().into_dart(),
-            self.phantom_insertion_index.into_into_dart().into_dart(),
+            self.phantom_insertion_slot.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -3018,6 +3039,28 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::ffi_api::StructuralEdit>
     for crate::api::ffi_api::StructuralEdit
 {
     fn into_into_dart(self) -> crate::api::ffi_api::StructuralEdit {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::workspace::persist::StructuralEditInsertionSlot {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.source_offset.into_into_dart().into_dart(),
+            self.line_prefix.into_into_dart().into_dart(),
+            self.required_after_newlines.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::workspace::persist::StructuralEditInsertionSlot
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::workspace::persist::StructuralEditInsertionSlot>
+    for crate::workspace::persist::StructuralEditInsertionSlot
+{
+    fn into_into_dart(self) -> crate::workspace::persist::StructuralEditInsertionSlot {
         self
     }
 }
@@ -3601,12 +3644,12 @@ impl SseEncode for Option<crate::draft::NoteState> {
     }
 }
 
-impl SseEncode for Option<usize> {
+impl SseEncode for Option<crate::workspace::persist::StructuralEditInsertionSlot> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <bool>::sse_encode(self.is_some(), serializer);
         if let Some(value) = self {
-            <usize>::sse_encode(value, serializer);
+            <crate::workspace::persist::StructuralEditInsertionSlot>::sse_encode(value, serializer);
         }
     }
 }
@@ -3658,7 +3701,19 @@ impl SseEncode for crate::api::ffi_api::StructuralEdit {
         <crate::draft::NoteState>::sse_encode(self.state, serializer);
         <Vec<usize>>::sse_encode(self.block_path, serializer);
         <usize>::sse_encode(self.caret_offset, serializer);
-        <Option<usize>>::sse_encode(self.phantom_insertion_index, serializer);
+        <Option<crate::workspace::persist::StructuralEditInsertionSlot>>::sse_encode(
+            self.phantom_insertion_slot,
+            serializer,
+        );
+    }
+}
+
+impl SseEncode for crate::workspace::persist::StructuralEditInsertionSlot {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <usize>::sse_encode(self.source_offset, serializer);
+        <String>::sse_encode(self.line_prefix, serializer);
+        <usize>::sse_encode(self.required_after_newlines, serializer);
     }
 }
 

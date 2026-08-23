@@ -41,3 +41,38 @@ class NoteWriteStatus {
           lastError == other.lastError &&
           hasUnwrittenEdits == other.hasUnwrittenEdits;
 }
+
+/// An opaque Core-owned insertion slot for a full-field selected Enter.
+///
+/// `source_offset` is a byte position in the exact returned working source;
+/// it is intentionally not a Flutter coordinate. `line_prefix` preserves the
+/// structural syntax that was removed with a complete ListItem/Blockquote
+/// line (for example, `"> - "`), and `required_after_newlines` restores the
+/// original seam without guessing a list's tight/loose form. Presentation must
+/// return this value unchanged to [`NoteSession::continue_block_at_insertion_slot`].
+class StructuralEditInsertionSlot {
+  final BigInt sourceOffset;
+  final String linePrefix;
+  final BigInt requiredAfterNewlines;
+
+  const StructuralEditInsertionSlot({
+    required this.sourceOffset,
+    required this.linePrefix,
+    required this.requiredAfterNewlines,
+  });
+
+  @override
+  int get hashCode =>
+      sourceOffset.hashCode ^
+      linePrefix.hashCode ^
+      requiredAfterNewlines.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is StructuralEditInsertionSlot &&
+          runtimeType == other.runtimeType &&
+          sourceOffset == other.sourceOffset &&
+          linePrefix == other.linePrefix &&
+          requiredAfterNewlines == other.requiredAfterNewlines;
+}

@@ -5,6 +5,7 @@ import 'package:burlmd/src/components/status_message.dart';
 import 'package:burlmd/src/providers/rust_api_provider.dart';
 import 'package:burlmd/src/rust/index/query.dart' as core;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -87,15 +88,15 @@ class LinkCompletionPopup extends ConsumerStatefulWidget {
 }
 
 class LinkCompletionState extends ConsumerState<LinkCompletionPopup> {
-  static const _candidateExtent = 56.0;
-
   final GlobalKey _surfaceKey = GlobalKey();
   final ScrollController _scrollController = ScrollController();
   LinkCompletionSnapshot? _snapshot;
   List<core.LinkCompletion> _candidates = const [];
+  List<GlobalKey> _candidateKeys = const [];
   int _activeIndex = 0;
   int _generation = 0;
   int _scrollRequest = 0;
+  bool _revealTowardsEnd = true;
 
   bool get isOpen => _snapshot != null && _candidates.isNotEmpty;
   int get candidateCount => _candidates.length;
@@ -119,7 +120,7 @@ class LinkCompletionState extends ConsumerState<LinkCompletionPopup> {
   /// QA staging is allowed to invoke the same acceptance path as Enter, but
   /// only after a real candidate list is visibly open.
   bool acceptActiveForSmoke() {
-    if (!_canAcceptActiveCandidate) return false;
+    if (!isVisiblyMounted || !_canAcceptActiveCandidate) return false;
     _acceptActiveCandidate();
     return true;
   }
@@ -174,6 +175,7 @@ class LinkCompletionState extends ConsumerState<LinkCompletionPopup> {
     }
     _snapshot = next;
     _candidates = const [];
+    _candidateKeys = const [];
     _activeIndex = 0;
     _scrollRequest++;
     final generation = ++_generation;
@@ -196,7 +198,14 @@ class LinkCompletionState extends ConsumerState<LinkCompletionPopup> {
         _dismiss();
         return;
       }
-      setState(() => _candidates = results.take(10).toList(growable: false));
+      setState(() {
+        _candidates = results.take(10).toList(growable: false);
+        _candidateKeys = List.generate(
+          _candidates.length,
+          (_) => GlobalKey(),
+          growable: false,
+        );
+      });
       _scheduleActiveCandidateReveal();
     } catch (error) {
       if (mounted && generation == _generation) {
@@ -225,11 +234,13 @@ class LinkCompletionState extends ConsumerState<LinkCompletionPopup> {
       setState(() {
         _snapshot = null;
         _candidates = const [];
+        _candidateKeys = const [];
         _activeIndex = 0;
       });
     } else {
       _snapshot = null;
       _candidates = const [];
+      _candidateKeys = const [];
       _activeIndex = 0;
     }
   }
@@ -259,9 +270,10 @@ class LinkCompletionState extends ConsumerState<LinkCompletionPopup> {
         _dismiss();
         return true;
       case LogicalKeyboardKey.enter || LogicalKeyboardKey.numpadEnter:
-        // Do not commit an option that has not reached the constrained popup
-        // viewport yet. This also means a rapid Arrow/Enter pair cannot
-        // accept an item from a still-pending layout generation.
+        // Active selection changes synchronously, whereas its visual reveal
+        // needs the next layout. The immutable input snapshot, rather than
+        // paint timing, authorizes this acceptance: a rapid Arrow/Enter pair
+        // must commit the logically active current-generation candidate.
         if (_canAcceptActiveCandidate) _acceptActiveCandidate();
         return true;
       default:
@@ -270,55 +282,56 @@ class LinkCompletionState extends ConsumerState<LinkCompletionPopup> {
   }
 
   void _moveActiveCandidate(int delta) {
-    setState(
-      () => _activeIndex =
-          (_activeIndex + delta + _candidates.length) % _candidates.length,
-    );
+    final nextIndex =
+        (_activeIndex + delta + _candidates.length) % _candidates.length;
+    setState(() {
+      _revealTowardsEnd = nextIndex > _activeIndex;
+      _activeIndex = nextIndex;
+    });
     _scheduleActiveCandidateReveal();
   }
 
-  /// The popup has a fixed one-line candidate extent, so reveal the selected
-  /// item directly through the State-owned controller. A post-frame callback
-  /// waits for the constrained viewport dimensions without retaining an async
-  /// animation that could outlive this State.
+  /// Reveals the selected rendered child after it has been laid out. Candidate
+  /// titles are allowed to wrap and honor accessibility scaling, so scroll
+  /// offsets must come from the actual child geometry rather than an assumed
+  /// fixed row extent. The request token prevents a stale callback from
+  /// touching a dismissed or disposed popup.
   void _scheduleActiveCandidateReveal() {
     final request = ++_scrollRequest;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted ||
-          request != _scrollRequest ||
-          !_scrollController.hasClients) {
-        return;
-      }
-      final position = _scrollController.position;
-      final top = _activeIndex * _candidateExtent;
-      final bottom = top + _candidateExtent;
-      final viewportEnd = position.pixels + position.viewportDimension;
-      final desired = switch ((top < position.pixels, bottom > viewportEnd)) {
-        (true, _) => top,
-        (_, true) => bottom - position.viewportDimension,
-        _ => position.pixels,
-      };
-      final clamped = desired
-          .clamp(position.minScrollExtent, position.maxScrollExtent)
-          .toDouble();
-      if (clamped != position.pixels) _scrollController.jumpTo(clamped);
-    });
-  }
+    void reveal(bool afterJump) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || request != _scrollRequest || !isOpen) return;
+        final candidateContext = _candidateKeys[_activeIndex].currentContext;
+        if (candidateContext != null) {
+          Scrollable.ensureVisible(
+            candidateContext,
+            alignment: 0,
+            duration: Duration.zero,
+          );
+          return;
+        }
+        // A variable-height ListView only lays out children near the current
+        // viewport. Move to the relevant edge once to materialize the target,
+        // then use its rendered context on the following frame. At most ten
+        // candidates are retained, so this never scans an unbounded list.
+        if (afterJump || !_scrollController.hasClients) return;
+        final position = _scrollController.position;
+        _scrollController.jumpTo(
+          _revealTowardsEnd
+              ? position.maxScrollExtent
+              : position.minScrollExtent,
+        );
+        reveal(true);
+      });
+    }
 
-  bool get _activeCandidateIsVisible {
-    if (!isVisiblyMounted || !_scrollController.hasClients) return false;
-    final position = _scrollController.position;
-    final top = _activeIndex * _candidateExtent;
-    final bottom = top + _candidateExtent;
-    return top >= position.pixels &&
-        bottom <= position.pixels + position.viewportDimension;
+    reveal(false);
   }
 
   bool get _canAcceptActiveCandidate {
     final snapshot = _snapshot;
     return snapshot != null &&
         isOpen &&
-        _activeCandidateIsVisible &&
         snapshot.matches(widget.controller.value, widget.focusNode.hasFocus);
   }
 
@@ -357,8 +370,11 @@ class LinkCompletionState extends ConsumerState<LinkCompletionPopup> {
           constraints: const BoxConstraints(maxHeight: 216),
           child: ListView.builder(
             controller: _scrollController,
-            itemExtent: _candidateExtent,
             shrinkWrap: true,
+            // Core caps this list at ten entries. Keeping that bounded set
+            // laid out gives keyboard reveal a measured child context even
+            // when titles have unequal heights.
+            scrollCacheExtent: const ScrollCacheExtent.viewport(20),
             itemCount: _candidates.length,
             itemBuilder: (context, index) {
               final candidate = _candidates[index];
@@ -370,6 +386,7 @@ class LinkCompletionState extends ConsumerState<LinkCompletionPopup> {
                   ? l10n.linkCompletionProspective(candidate.title)
                   : l10n.linkCompletionExisting(candidate.title);
               return Semantics(
+                key: _candidateKeys[index],
                 button: true,
                 focused: index == _activeIndex,
                 label: label,

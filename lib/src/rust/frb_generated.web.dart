@@ -65,10 +65,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   NoteState dco_decode_box_autoadd_note_state(dynamic raw);
 
   @protected
-  TextRun dco_decode_box_autoadd_text_run(dynamic raw);
+  StructuralEditInsertionSlot
+  dco_decode_box_autoadd_structural_edit_insertion_slot(dynamic raw);
 
   @protected
-  BigInt dco_decode_box_autoadd_usize(dynamic raw);
+  TextRun dco_decode_box_autoadd_text_run(dynamic raw);
 
   @protected
   CloseNoteResult dco_decode_close_note_result(dynamic raw);
@@ -164,7 +165,8 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   NoteState? dco_decode_opt_box_autoadd_note_state(dynamic raw);
 
   @protected
-  BigInt? dco_decode_opt_box_autoadd_usize(dynamic raw);
+  StructuralEditInsertionSlot?
+  dco_decode_opt_box_autoadd_structural_edit_insertion_slot(dynamic raw);
 
   @protected
   List<AstNode>? dco_decode_opt_list_ast_node(dynamic raw);
@@ -177,6 +179,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   StructuralEdit dco_decode_structural_edit(dynamic raw);
+
+  @protected
+  StructuralEditInsertionSlot dco_decode_structural_edit_insertion_slot(
+    dynamic raw,
+  );
 
   @protected
   TextRun dco_decode_text_run(dynamic raw);
@@ -238,10 +245,13 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   NoteState sse_decode_box_autoadd_note_state(SseDeserializer deserializer);
 
   @protected
-  TextRun sse_decode_box_autoadd_text_run(SseDeserializer deserializer);
+  StructuralEditInsertionSlot
+  sse_decode_box_autoadd_structural_edit_insertion_slot(
+    SseDeserializer deserializer,
+  );
 
   @protected
-  BigInt sse_decode_box_autoadd_usize(SseDeserializer deserializer);
+  TextRun sse_decode_box_autoadd_text_run(SseDeserializer deserializer);
 
   @protected
   CloseNoteResult sse_decode_close_note_result(SseDeserializer deserializer);
@@ -353,7 +363,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
-  BigInt? sse_decode_opt_box_autoadd_usize(SseDeserializer deserializer);
+  StructuralEditInsertionSlot?
+  sse_decode_opt_box_autoadd_structural_edit_insertion_slot(
+    SseDeserializer deserializer,
+  );
 
   @protected
   List<AstNode>? sse_decode_opt_list_ast_node(SseDeserializer deserializer);
@@ -366,6 +379,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   StructuralEdit sse_decode_structural_edit(SseDeserializer deserializer);
+
+  @protected
+  StructuralEditInsertionSlot sse_decode_structural_edit_insertion_slot(
+    SseDeserializer deserializer,
+  );
 
   @protected
   TextRun sse_decode_text_run(SseDeserializer deserializer);
@@ -440,10 +458,13 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
-  void sse_encode_box_autoadd_text_run(TextRun self, SseSerializer serializer);
+  void sse_encode_box_autoadd_structural_edit_insertion_slot(
+    StructuralEditInsertionSlot self,
+    SseSerializer serializer,
+  );
 
   @protected
-  void sse_encode_box_autoadd_usize(BigInt self, SseSerializer serializer);
+  void sse_encode_box_autoadd_text_run(TextRun self, SseSerializer serializer);
 
   @protected
   void sse_encode_close_note_result(
@@ -596,7 +617,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
-  void sse_encode_opt_box_autoadd_usize(BigInt? self, SseSerializer serializer);
+  void sse_encode_opt_box_autoadd_structural_edit_insertion_slot(
+    StructuralEditInsertionSlot? self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_opt_list_ast_node(
@@ -619,6 +643,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_structural_edit(
     StructuralEdit self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_structural_edit_insertion_slot(
+    StructuralEditInsertionSlot self,
     SseSerializer serializer,
   );
 

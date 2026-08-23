@@ -114,7 +114,7 @@ abstract class RustLibApi extends BaseApi {
 
   StructuralEdit crateApiFfiApiContinueBlockAtInsertionSlot({
     required String noteId,
-    required BigInt insertionIndex,
+    required StructuralEditInsertionSlot insertionSlot,
     required String source,
   });
 
@@ -458,7 +458,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   @override
   StructuralEdit crateApiFfiApiContinueBlockAtInsertionSlot({
     required String noteId,
-    required BigInt insertionIndex,
+    required StructuralEditInsertionSlot insertionSlot,
     required String source,
   }) {
     return handler.executeSync(
@@ -466,7 +466,10 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(noteId, serializer);
-          sse_encode_usize(insertionIndex, serializer);
+          sse_encode_box_autoadd_structural_edit_insertion_slot(
+            insertionSlot,
+            serializer,
+          );
           sse_encode_String(source, serializer);
           return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 7)!;
         },
@@ -475,7 +478,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeErrorData: sse_decode_app_error,
         ),
         constMeta: kCrateApiFfiApiContinueBlockAtInsertionSlotConstMeta,
-        argValues: [noteId, insertionIndex, source],
+        argValues: [noteId, insertionSlot, source],
         apiImpl: this,
       ),
     );
@@ -484,7 +487,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   TaskConstMeta get kCrateApiFfiApiContinueBlockAtInsertionSlotConstMeta =>
       const TaskConstMeta(
         debugName: "continue_block_at_insertion_slot",
-        argNames: ["noteId", "insertionIndex", "source"],
+        argNames: ["noteId", "insertionSlot", "source"],
       );
 
   @override
@@ -1745,15 +1748,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  TextRun dco_decode_box_autoadd_text_run(dynamic raw) {
+  StructuralEditInsertionSlot
+  dco_decode_box_autoadd_structural_edit_insertion_slot(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
-    return dco_decode_text_run(raw);
+    return dco_decode_structural_edit_insertion_slot(raw);
   }
 
   @protected
-  BigInt dco_decode_box_autoadd_usize(dynamic raw) {
+  TextRun dco_decode_box_autoadd_text_run(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
-    return dco_decode_usize(raw);
+    return dco_decode_text_run(raw);
   }
 
   @protected
@@ -2047,9 +2051,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  BigInt? dco_decode_opt_box_autoadd_usize(dynamic raw) {
+  StructuralEditInsertionSlot?
+  dco_decode_opt_box_autoadd_structural_edit_insertion_slot(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
-    return raw == null ? null : dco_decode_box_autoadd_usize(raw);
+    return raw == null
+        ? null
+        : dco_decode_box_autoadd_structural_edit_insertion_slot(raw);
   }
 
   @protected
@@ -2096,7 +2103,23 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       state: dco_decode_note_state(arr[0]),
       blockPath: dco_decode_list_prim_usize_strict(arr[1]),
       caretOffset: dco_decode_usize(arr[2]),
-      phantomInsertionIndex: dco_decode_opt_box_autoadd_usize(arr[3]),
+      phantomInsertionSlot:
+          dco_decode_opt_box_autoadd_structural_edit_insertion_slot(arr[3]),
+    );
+  }
+
+  @protected
+  StructuralEditInsertionSlot dco_decode_structural_edit_insertion_slot(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return StructuralEditInsertionSlot(
+      sourceOffset: dco_decode_usize(arr[0]),
+      linePrefix: dco_decode_String(arr[1]),
+      requiredAfterNewlines: dco_decode_usize(arr[2]),
     );
   }
 
@@ -2344,15 +2367,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  TextRun sse_decode_box_autoadd_text_run(SseDeserializer deserializer) {
+  StructuralEditInsertionSlot
+  sse_decode_box_autoadd_structural_edit_insertion_slot(
+    SseDeserializer deserializer,
+  ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
-    return (sse_decode_text_run(deserializer));
+    return (sse_decode_structural_edit_insertion_slot(deserializer));
   }
 
   @protected
-  BigInt sse_decode_box_autoadd_usize(SseDeserializer deserializer) {
+  TextRun sse_decode_box_autoadd_text_run(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
-    return (sse_decode_usize(deserializer));
+    return (sse_decode_text_run(deserializer));
   }
 
   @protected
@@ -2743,11 +2769,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  BigInt? sse_decode_opt_box_autoadd_usize(SseDeserializer deserializer) {
+  StructuralEditInsertionSlot?
+  sse_decode_opt_box_autoadd_structural_edit_insertion_slot(
+    SseDeserializer deserializer,
+  ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
     if (sse_decode_bool(deserializer)) {
-      return (sse_decode_box_autoadd_usize(deserializer));
+      return (sse_decode_box_autoadd_structural_edit_insertion_slot(
+        deserializer,
+      ));
     } else {
       return null;
     }
@@ -2799,14 +2830,28 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_state = sse_decode_note_state(deserializer);
     var var_blockPath = sse_decode_list_prim_usize_strict(deserializer);
     var var_caretOffset = sse_decode_usize(deserializer);
-    var var_phantomInsertionIndex = sse_decode_opt_box_autoadd_usize(
-      deserializer,
-    );
+    var var_phantomInsertionSlot =
+        sse_decode_opt_box_autoadd_structural_edit_insertion_slot(deserializer);
     return StructuralEdit(
       state: var_state,
       blockPath: var_blockPath,
       caretOffset: var_caretOffset,
-      phantomInsertionIndex: var_phantomInsertionIndex,
+      phantomInsertionSlot: var_phantomInsertionSlot,
+    );
+  }
+
+  @protected
+  StructuralEditInsertionSlot sse_decode_structural_edit_insertion_slot(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_sourceOffset = sse_decode_usize(deserializer);
+    var var_linePrefix = sse_decode_String(deserializer);
+    var var_requiredAfterNewlines = sse_decode_usize(deserializer);
+    return StructuralEditInsertionSlot(
+      sourceOffset: var_sourceOffset,
+      linePrefix: var_linePrefix,
+      requiredAfterNewlines: var_requiredAfterNewlines,
     );
   }
 
@@ -3058,15 +3103,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_box_autoadd_text_run(TextRun self, SseSerializer serializer) {
+  void sse_encode_box_autoadd_structural_edit_insertion_slot(
+    StructuralEditInsertionSlot self,
+    SseSerializer serializer,
+  ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_text_run(self, serializer);
+    sse_encode_structural_edit_insertion_slot(self, serializer);
   }
 
   @protected
-  void sse_encode_box_autoadd_usize(BigInt self, SseSerializer serializer) {
+  void sse_encode_box_autoadd_text_run(TextRun self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_usize(self, serializer);
+    sse_encode_text_run(self, serializer);
   }
 
   @protected
@@ -3420,15 +3468,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_opt_box_autoadd_usize(
-    BigInt? self,
+  void sse_encode_opt_box_autoadd_structural_edit_insertion_slot(
+    StructuralEditInsertionSlot? self,
     SseSerializer serializer,
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
     sse_encode_bool(self != null, serializer);
     if (self != null) {
-      sse_encode_box_autoadd_usize(self, serializer);
+      sse_encode_box_autoadd_structural_edit_insertion_slot(self, serializer);
     }
   }
 
@@ -3484,7 +3532,21 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_note_state(self.state, serializer);
     sse_encode_list_prim_usize_strict(self.blockPath, serializer);
     sse_encode_usize(self.caretOffset, serializer);
-    sse_encode_opt_box_autoadd_usize(self.phantomInsertionIndex, serializer);
+    sse_encode_opt_box_autoadd_structural_edit_insertion_slot(
+      self.phantomInsertionSlot,
+      serializer,
+    );
+  }
+
+  @protected
+  void sse_encode_structural_edit_insertion_slot(
+    StructuralEditInsertionSlot self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_usize(self.sourceOffset, serializer);
+    sse_encode_String(self.linePrefix, serializer);
+    sse_encode_usize(self.requiredAfterNewlines, serializer);
   }
 
   @protected
