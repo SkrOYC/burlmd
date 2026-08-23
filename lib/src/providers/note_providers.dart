@@ -78,6 +78,54 @@ class NoteSwitching extends Notifier<bool> {
   void set(bool switching) => state = switching;
 }
 
+/// Number of Core lifecycle operations currently able to replace, re-anchor,
+/// rewrite, or remove a Note. It is a count rather than a boolean because a
+/// second action can legitimately be submitted while the first is settling;
+/// releasing one must not reopen the editor while the other still owns the
+/// Core lifecycle boundary.
+final lifecycleEditingProvider = NotifierProvider<LifecycleEditing, int>(
+  LifecycleEditing.new,
+);
+
+/// Advances as soon as a lifecycle action claims the editing boundary. Async
+/// consumers capture this before their own FFI call; a different lifecycle
+/// action invalidates that capture even while the reference-counted gate is
+/// still held by both operations.
+final lifecycleGenerationProvider = NotifierProvider<LifecycleGeneration, int>(
+  LifecycleGeneration.new,
+);
+
+class LifecycleGeneration extends Notifier<int> {
+  @override
+  int build() => 0;
+
+  int next() => state = state + 1;
+}
+
+class LifecycleEditing extends Notifier<int> {
+  @override
+  int build() => 0;
+
+  void begin() => state++;
+
+  void end() {
+    assert(state > 0, 'Lifecycle editing gate released without an owner.');
+    if (state > 0) state--;
+  }
+}
+
+/// The single presentation-side admission rule for every editor mutation.
+/// A Note switch retires its outgoing session, while lifecycle work can
+/// atomically rewrite, re-anchor, or delete its current source. In either
+/// case an input callback arriving between frames must neither reach Core nor
+/// remain only in a controller that the authoritative lifecycle result will
+/// replace.
+final editorInputBlockedProvider = Provider<bool>(
+  (ref) =>
+      ref.watch(noteSwitchingProvider) ||
+      ref.watch(lifecycleEditingProvider) > 0,
+);
+
 /// Holds the currently open note's state. UI widgets must stay stateless
 /// regarding note content and read it from this provider rather than
 /// caching it themselves.
@@ -128,6 +176,17 @@ class NoteController extends Notifier<NoteState?> {
     }();
     _pendingOpen = mine;
     return mine;
+  }
+
+  /// Opens a lifecycle-created Note and waits until its Core session is the
+  /// active editor session. Unlike ordinary selection, this does not publish
+  /// [selectedNoteIdProvider] first: publishing alone starts an unawaited
+  /// listener-driven switch, so a lifecycle warning could otherwise surface
+  /// before the authoritative Note is mounted. The caller publishes the
+  /// selection only after this method reports success.
+  Future<bool> openForLifecycle(String noteId) async {
+    await open(noteId);
+    return ref.mounted && state?.metadata.id == noteId;
   }
 
   /// The tail of the serialized [open] chain, or `null` when no switch is
@@ -240,8 +299,11 @@ class NoteController extends Notifier<NoteState?> {
   /// open/close/reload below.
   void updateBlock(List<int> blockPath, String source) {
     // A queued platform callback may arrive before the read-only rebuild
-    // paints, so the switching state is the authority boundary.
-    if (ref.read(noteSwitchingProvider)) return;
+    // paints, so the shared editor admission state is the authority boundary.
+    // Lifecycle work can replace this Note's source just as a switch can
+    // retire its session; accepting a write in either window would leave a
+    // controller-only edit for the next rebuild to discard.
+    if (ref.read(editorInputBlockedProvider)) return;
     final current = state;
     if (current == null) return;
     try {
@@ -295,20 +357,36 @@ class NoteController extends Notifier<NoteState?> {
   /// failed round trip is surfaced through [editorErrorProvider] rather than
   /// silently dropped.
   Future<void> reloadFromDisk() async {
+    if (ref.read(editorInputBlockedProvider)) return;
     final current = state;
     if (current == null) return;
+    final noteId = current.metadata.id;
+    final lifecycleGeneration = ref.read(lifecycleGenerationProvider);
     try {
-      final reloaded = await ref
-          .read(rustApiProvider)
-          .reloadNote(current.metadata.id);
+      final reloaded = await ref.read(rustApiProvider).reloadNote(noteId);
+      // A lifecycle operation may have renamed, moved, rewritten, or deleted
+      // this session while reload_note was pending. Its result is no longer
+      // authoritative for the visible Note, even if the id happens to match.
+      if (!_isReloadCurrent(current, noteId, lifecycleGeneration)) return;
       state = reloaded;
       ref.read(editorErrorProvider.notifier).report(null);
       // The reload replaced the buffer whose write was failing.
       ref.read(keystrokeWriteFailureProvider.notifier).report(null);
     } catch (error) {
+      if (!_isReloadCurrent(current, noteId, lifecycleGeneration)) return;
       ref.read(editorErrorProvider.notifier).report(error);
     }
   }
+
+  bool _isReloadCurrent(
+    NoteState expected,
+    String noteId,
+    int lifecycleGeneration,
+  ) =>
+      ref.mounted &&
+      ref.read(lifecycleGenerationProvider) == lifecycleGeneration &&
+      identical(state, expected) &&
+      state?.metadata.id == noteId;
 }
 
 final activeNoteProvider = NotifierProvider<NoteController, NoteState?>(

@@ -34,9 +34,11 @@
 //!   whole `workspace::lifecycle` operations against each other, and [`open_note`]
 //!   against all of them — an open decides whether a concept id exists and then
 //!   installs a session for it, which is the same check-then-act a deletion can
-//!   land inside. It is the one lock no *editing* path ever takes, and it is
-//!   coarse on purpose — see its own documentation for the races it closes and
-//!   why the other three could not close them.
+//!   land inside. It is the one lock no *editing* path ever takes; source calls
+//!   hold a short admission lease from before session lookup through draft
+//!   persistence, and later calls refuse while lifecycle drains those leases.
+//!   It is coarse on purpose — see its own documentation for the races it
+//!   closes and why the other three could not close them.
 //! - A per-Note **tier 1 lock** serializes source mutations through their draft
 //!   writes. It is held across SQLite but never filesystem I/O, so a failed
 //!   structural mutation can either roll back before another edit observes it
@@ -80,6 +82,7 @@
 //! keystroke can contend for may be held across an `fsync`; and no tier 2
 //! write may be issued outside the tier 2 write lock.
 
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
@@ -121,8 +124,24 @@ pub struct Workspace {
     root: PathBuf,
     db: DbHandle,
     idle_interval: Duration,
+    /// Shared with every `Workspace` handle for this id. An edit lease begins
+    /// before FFI session lookup and ends after source mutation/draft
+    /// persistence, so lifecycle snapshots cannot miss or outlive a request.
+    lifecycle: Arc<LifecycleCoordination>,
     #[cfg(test)]
     before_draft_write: Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
+    #[cfg(test)]
+    before_lifecycle_operation: Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
+    #[cfg(test)]
+    after_edit_session_lookup: Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
+    /// Runs after filesystem/index publication and immediately before session
+    /// settlement, letting tests target recovery rather than planning.
+    #[cfg(test)]
+    before_session_settlement: Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
+    /// Drives the deliberately best-effort post-publication Link-badge refresh
+    /// without poisoning a fixture's database connection.
+    #[cfg(test)]
+    fail_link_resolution: Mutex<bool>,
 }
 
 enum DbHandle {
@@ -144,13 +163,23 @@ impl Workspace {
     /// `db::connection::active_workspace`.
     pub fn active() -> Result<Arc<Workspace>, AppError> {
         let (id, root) = crate::db::connection::active_workspace()?;
+        let lifecycle = lifecycle_coordination(&id)?;
         Ok(Arc::new(Workspace {
             id,
             root,
             db: DbHandle::Process,
             idle_interval: DEFAULT_IDLE_INTERVAL,
+            lifecycle,
             #[cfg(test)]
             before_draft_write: Mutex::new(None),
+            #[cfg(test)]
+            before_lifecycle_operation: Mutex::new(None),
+            #[cfg(test)]
+            after_edit_session_lookup: Mutex::new(None),
+            #[cfg(test)]
+            before_session_settlement: Mutex::new(None),
+            #[cfg(test)]
+            fail_link_resolution: Mutex::new(false),
         }))
     }
 
@@ -160,6 +189,37 @@ impl Workspace {
 
     pub fn root(&self) -> &Path {
         &self.root
+    }
+
+    /// Admits one source mutation before it resolves a session. The short
+    /// admission mutex is never held while a caller touches state, SQLite,
+    /// filesystem, or Git; a lifecycle operation only uses it to close the
+    /// gate and wait for already-admitted leases to finish.
+    pub(crate) fn edit_lease(&self, note_id: &str) -> Result<EditLease, AppError> {
+        let key = lifecycle_key(&self.lifecycle);
+        if edit_lease_is_held(key) {
+            edit_lease_enter(key);
+            return Ok(EditLease {
+                lifecycle: Arc::clone(&self.lifecycle),
+                counted: false,
+                _not_send: std::marker::PhantomData,
+            });
+        }
+        let mut admission = self.lifecycle.admission.lock().map_err(|_| {
+            AppError::DatabaseError("lifecycle admission lock poisoned".to_string())
+        })?;
+        if admission.active {
+            return Err(AppError::ParseError(format!(
+                "cannot edit {note_id} while a Workspace lifecycle operation is in progress; retry after it completes"
+            )));
+        }
+        admission.leases += 1;
+        edit_lease_enter(key);
+        Ok(EditLease {
+            lifecycle: Arc::clone(&self.lifecycle),
+            counted: true,
+            _not_send: std::marker::PhantomData,
+        })
     }
 
     /// Acquires the connection and runs `f` against it.
@@ -192,6 +252,18 @@ impl Workspace {
                 f(&conn)
             }
         }
+    }
+
+    /// Resolves presentation-only Link existence badges without making each
+    /// caller decide which database failures are safe to defer.
+    pub(super) fn resolve_link_existence(&self, ast: &mut [AstNode]) -> Result<(), AppError> {
+        #[cfg(test)]
+        if *self.fail_link_resolution.lock().unwrap() {
+            return Err(AppError::DatabaseError(
+                "injected Link badge resolution failure".to_string(),
+            ));
+        }
+        self.with_db(|conn| index::resolve_link_existence(conn, self.id(), ast))
     }
 
     /// The absolute path of one Note's file, **rejecting any concept id that
@@ -381,18 +453,67 @@ impl Workspace {
         root: PathBuf,
         idle_interval: Duration,
     ) -> Arc<Workspace> {
+        let id = id.into();
+        let lifecycle = lifecycle_coordination(&id)
+            .expect("a test Workspace must register its lifecycle coordination");
         Arc::new(Workspace {
-            id: id.into(),
+            id,
             root,
             db: DbHandle::Owned(Mutex::new(conn)),
             idle_interval,
+            lifecycle,
             before_draft_write: Mutex::new(None),
+            before_lifecycle_operation: Mutex::new(None),
+            after_edit_session_lookup: Mutex::new(None),
+            before_session_settlement: Mutex::new(None),
+            fail_link_resolution: Mutex::new(false),
         })
     }
 
     #[cfg(test)]
     fn set_before_draft_write(&self, hook: Option<Arc<dyn Fn() + Send + Sync>>) {
         *self.before_draft_write.lock().unwrap() = hook;
+    }
+
+    #[cfg(test)]
+    fn set_before_lifecycle_operation(&self, hook: Option<Arc<dyn Fn() + Send + Sync>>) {
+        *self.before_lifecycle_operation.lock().unwrap() = hook;
+    }
+
+    #[cfg(test)]
+    fn run_before_lifecycle_operation(&self) {
+        if let Some(hook) = self.before_lifecycle_operation.lock().unwrap().as_ref() {
+            hook();
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn set_after_edit_session_lookup(&self, hook: Option<Arc<dyn Fn() + Send + Sync>>) {
+        *self.after_edit_session_lookup.lock().unwrap() = hook;
+    }
+
+    #[cfg(test)]
+    pub(crate) fn run_after_edit_session_lookup(&self) {
+        if let Some(hook) = self.after_edit_session_lookup.lock().unwrap().as_ref() {
+            hook();
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn set_before_session_settlement(&self, hook: Option<Arc<dyn Fn() + Send + Sync>>) {
+        *self.before_session_settlement.lock().unwrap() = hook;
+    }
+
+    #[cfg(test)]
+    pub(crate) fn run_before_session_settlement(&self) {
+        if let Some(hook) = self.before_session_settlement.lock().unwrap().as_ref() {
+            hook();
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn set_fail_link_resolution_for_test(&self, fail: bool) {
+        *self.fail_link_resolution.lock().unwrap() = fail;
     }
 }
 
@@ -460,7 +581,8 @@ struct SessionState {
 }
 
 impl SessionState {
-    /// Refuses `what` while [`SessionState::conflicted`] stands.
+    /// Refuses `what` while [`SessionState::conflicted`] stands or after this
+    /// handle was retired by a lifecycle operation.
     ///
     /// Called from inside the same critical section as the work it guards, so
     /// that no mutator can pass the check against one state and then mutate
@@ -474,6 +596,11 @@ impl SessionState {
     /// states it — the conflict is resolved in the file, and `reload` picks the
     /// repaired bytes up.
     fn refuse_while_conflicted(&self, note_id: &str, what: &str) -> Result<(), AppError> {
+        if self.closed {
+            return Err(AppError::ParseError(format!(
+                "{note_id} was retired by a Workspace lifecycle operation, so {what} is refused; open its current identity instead"
+            )));
+        }
         if !self.conflicted {
             return Ok(());
         }
@@ -544,9 +671,14 @@ fn sessions() -> &'static Mutex<SessionMap> {
 }
 
 fn registry() -> Result<MutexGuard<'static, SessionMap>, AppError> {
-    sessions()
+    // A lifecycle operation runs after the filesystem/index publication point.
+    // A previous panic must not make its registry retirement fail and leave a
+    // now-dead Note writable. Recovering the guarded map is safe here: the
+    // map mutation itself has no external side effect and all session state is
+    // independently locked.
+    Ok(sessions()
         .lock()
-        .map_err(|_| AppError::DatabaseError("open-note registry poisoned".to_string()))
+        .unwrap_or_else(|poisoned| poisoned.into_inner()))
 }
 
 /// The open session for `note_id` in the active Workspace, if any.
@@ -682,7 +814,7 @@ pub(super) fn open_note_serialized(
     };
 
     let ParsedNote { mut ast, spans } = parse_note(&source, containing_dir(note_id));
-    workspace.with_db(|conn| index::resolve_link_existence(conn, workspace.id(), &mut ast))?;
+    workspace.resolve_link_existence(&mut ast)?;
     let metadata = derive_metadata(note_id, &source, &spans, last_modified);
 
     let state = SessionState {
@@ -761,13 +893,31 @@ impl NoteSession {
             .map_err(|_| AppError::DatabaseError("note state lock poisoned".to_string()))
     }
 
+    /// Lifecycle terminal settlement must never leave a dead registry entry
+    /// writable merely because a prior panic poisoned its state mutex.
+    fn lock_state_for_retirement(&self) -> MutexGuard<'_, SessionState> {
+        match self.0.state.lock() {
+            Ok(state) => state,
+            Err(poisoned) => {
+                // Lifecycle settlement overwrites or retires the only state
+                // that can still be observed. Once that repair path has taken
+                // ownership of the guard, retain neither the panic marker nor
+                // a permanently unusable destination session.
+                let state = poisoned.into_inner();
+                self.0.state.clear_poison();
+                state
+            }
+        }
+    }
+
     /// Serializes tier-1 source mutations through their SQLite draft writes.
     /// It deliberately does not cover tier-2 filesystem I/O.
     fn lock_tier_one(&self) -> Result<MutexGuard<'_, ()>, AppError> {
-        self.0
+        Ok(self
+            .0
             .tier_one_lock
             .lock()
-            .map_err(|_| AppError::DatabaseError("tier 1 lock poisoned".to_string()))
+            .unwrap_or_else(|poisoned| poisoned.into_inner()))
     }
 
     fn note_state_from(state: &SessionState) -> NoteState {
@@ -834,6 +984,7 @@ impl NoteSession {
     /// user focused, or routes a genuinely structural change through a
     /// reparsing mutator.
     pub fn update_block(&self, block_path: &[usize], new_source: &str) -> Result<(), AppError> {
+        let _edit_lease = self.0.workspace.edit_lease(&self.0.note_id)?;
         let _tier_one_guard = self.lock_tier_one()?;
         let (snapshot, seq) = {
             let mut guard = self.lock_state()?;
@@ -1061,6 +1212,11 @@ impl NoteSession {
         block_path: &[usize],
         source: &str,
     ) -> Result<(NoteState, Vec<usize>), AppError> {
+        struct ContinuationResult {
+            focus_parent: Vec<usize>,
+            inserted: std::ops::Range<usize>,
+        }
+
         enum Continuation {
             List {
                 marker: String,
@@ -1074,8 +1230,8 @@ impl NoteSession {
             EmptyNote,
         }
 
-        let (state, focus_parent) =
-            self.structural_edit(|working, spans, ast, retained_spans| {
+        self.structural_edit_with_result(
+            |working, spans, ast, retained_spans| {
                 let continuation = if spans.is_empty() && block_path == [0] {
                     Continuation::EmptyNote
                 } else {
@@ -1116,12 +1272,24 @@ impl NoteSession {
                         // leaf's end is the exact insertion boundary for this
                         // item's visible content.
                         let at = block_span(spans, &leaf_path)?.end;
-                        let new_source =
-                            splice::splice_source(working, at..at, &format!("\n{marker}{source}"))
-                                .map_err(splice_error)?;
+                        let newline = newline_style(working);
+                        let new_source = splice::splice_source(
+                            working,
+                            at..at,
+                            &format!("{newline}{marker}{source}"),
+                        )
+                        .map_err(splice_error)?;
                         let mut item_path = list_path;
                         item_path.push(item_index.saturating_add(1));
-                        Ok((new_source, item_path))
+                        let content_start = at.saturating_add(newline.len() + marker.len());
+                        let inserted = content_start..content_start.saturating_add(source.len());
+                        Ok((
+                            new_source,
+                            ContinuationResult {
+                                focus_parent: item_path,
+                                inserted,
+                            },
+                        ))
                     }
                     Continuation::Independent { top_level_path } => {
                         let next_top_level = top_level_path[0].saturating_add(1);
@@ -1148,9 +1316,14 @@ impl NoteSession {
                         text.push_str(&newline.repeat(required_after.saturating_sub(
                             trailing_newlines(source).saturating_add(existing_after),
                         )));
+                        let content_start = at.saturating_add(text.len() - source.len());
+                        let inserted = content_start..content_start.saturating_add(source.len());
                         Ok((
                             splice::splice_source(working, at..at, &text).map_err(splice_error)?,
-                            vec![next_top_level],
+                            ContinuationResult {
+                                focus_parent: vec![next_top_level],
+                                inserted,
+                            },
                         ))
                     }
                     Continuation::EmptyNote => {
@@ -1167,31 +1340,28 @@ impl NoteSession {
                         text.push_str(
                             &newline.repeat(1usize.saturating_sub(trailing_newlines(source))),
                         );
+                        let content_start = working.len().saturating_add(text.len() - source.len());
+                        let inserted = content_start..content_start.saturating_add(source.len());
                         Ok((
                             splice::splice_source(working, working.len()..working.len(), &text)
                                 .map_err(splice_error)?,
-                            vec![0],
+                            ContinuationResult {
+                                focus_parent: vec![0],
+                                inserted,
+                            },
                         ))
                     }
                 }
-            })?;
-        let focus = self.first_editable_leaf_at(&focus_parent)?;
-        Ok((state, focus))
-    }
-
-    fn first_editable_leaf_at(&self, parent_path: &[usize]) -> Result<Vec<usize>, AppError> {
-        let state = self.lock_state()?;
-        state
-            .spans
-            .blocks()
-            .filter(|block| block.is_leaf() && block.path.starts_with(parent_path))
-            .map(|block| block.path.clone())
-            .min()
-            .ok_or_else(|| {
-                AppError::ParseError(format!(
-                    "continued Block at {parent_path:?} has no editable leaf"
-                ))
-            })
+            },
+            |_, spans, ast, result| {
+                first_editable_leaf_inserted_under(
+                    spans,
+                    ast,
+                    &result.focus_parent,
+                    &result.inserted,
+                )
+            },
+        )
     }
 
     /// Deletes a Block, taking the newline run that immediately followed it
@@ -1646,6 +1816,7 @@ impl NoteSession {
         edit: impl Fn(&str, &SpanMap, &[AstNode], &SpanMap) -> Result<(String, T), AppError>,
         derive_result: impl Fn(&str, &SpanMap, &[AstNode], T) -> Result<U, AppError>,
     ) -> Result<(NoteState, U), AppError> {
+        let _edit_lease = self.0.workspace.edit_lease(&self.0.note_id)?;
         // This stays held until the draft write either succeeds or rolls the
         // mutation back. No later tier-1 edit can make our caller's result
         // stale between installation and this method's return.
@@ -1762,10 +1933,7 @@ impl NoteSession {
     ///
     /// Called with no state lock held, like every other database access here.
     fn resolve_links(&self, ast: &mut [AstNode]) -> Result<(), AppError> {
-        let workspace_id = self.0.workspace.id().to_string();
-        self.0
-            .workspace
-            .with_db(|conn| index::resolve_link_existence(conn, &workspace_id, ast))
+        self.0.workspace.resolve_link_existence(ast)
     }
 
     /// Writes the tier 1 row, never letting it go backwards.
@@ -1936,7 +2104,7 @@ impl NoteSession {
         self.clear_draft_through(seq)?;
         self.index_written_source(source, &new_revision)?;
 
-        let mut state = self.lock_state()?;
+        let mut state = self.lock_state_for_retirement();
         state.metadata.last_modified = unix_now();
         state.last_written_at = Some(unix_now());
         state.last_error = None;
@@ -2659,7 +2827,7 @@ pub(super) fn open_note_ids(workspace_id: &str) -> Result<Vec<String>, AppError>
         .collect())
 }
 
-/// The per-Workspace lifecycle locks, keyed by Workspace id.
+/// The per-Workspace lifecycle coordination, keyed by Workspace id.
 ///
 /// Keyed rather than a single process-wide `Mutex<()>` because two Workspaces
 /// share no bundle, no index rows and no concept-id namespace
@@ -2670,13 +2838,113 @@ pub(super) fn open_note_ids(workspace_id: &str) -> Result<Vec<String>, AppError>
 /// (ADR-005 decision 7 allows exactly one active Workspace) and in the test
 /// harness is one per fixture.
 ///
-/// This lock is a peer of the session registry lock: taken, cloned out of and
-/// released before any lower lock is acquired.
-type LifecycleLocks = HashMap<String, Arc<Mutex<()>>>;
+/// This coordination entry is a peer of the session registry lock: taken,
+/// cloned out of and released before any lower lock is acquired.
+///
+/// The mutex serializes lifecycle operations. `admission` is an admission
+/// gate, not a sixth lock: a source mutation holds a lease from before FFI
+/// session lookup through its draft write. Lifecycle closes the gate, drains
+/// those existing leases, then snapshots. A later source mutation refuses
+/// without waiting behind lifecycle filesystem or Git work.
+struct LifecycleCoordination {
+    lock: Mutex<()>,
+    admission: Mutex<EditAdmission>,
+    admission_changed: Condvar,
+}
+
+struct EditAdmission {
+    active: bool,
+    leases: usize,
+}
+
+/// A source-mutation admission held across lookup, source mutation, and draft
+/// persistence. Dropping it wakes a lifecycle operation waiting to snapshot.
+pub(crate) struct EditLease {
+    lifecycle: Arc<LifecycleCoordination>,
+    counted: bool,
+    // The lease depth is tracked per thread so an outer FFI admission can be
+    // borrowed by a direct session mutator. Moving a lease to another thread
+    // would orphan that depth, so prohibit it at the type level.
+    _not_send: std::marker::PhantomData<std::rc::Rc<()>>,
+}
+
+thread_local! {
+    static EDIT_LEASE_DEPTHS: RefCell<HashMap<usize, usize>> = RefCell::new(HashMap::new());
+}
+
+fn lifecycle_key(lifecycle: &Arc<LifecycleCoordination>) -> usize {
+    Arc::as_ptr(lifecycle) as usize
+}
+
+fn edit_lease_is_held(key: usize) -> bool {
+    EDIT_LEASE_DEPTHS.with(|depths| depths.borrow().contains_key(&key))
+}
+
+fn edit_lease_enter(key: usize) {
+    EDIT_LEASE_DEPTHS.with(|depths| {
+        *depths.borrow_mut().entry(key).or_default() += 1;
+    });
+}
+
+fn edit_lease_exit(key: usize) {
+    EDIT_LEASE_DEPTHS.with(|depths| {
+        let mut depths = depths.borrow_mut();
+        let depth = depths
+            .get_mut(&key)
+            .expect("an edit lease must be dropped on its admitting thread");
+        *depth = depth
+            .checked_sub(1)
+            .expect("an edit lease depth cannot underflow");
+        if *depth == 0 {
+            depths.remove(&key);
+        }
+    });
+}
+
+impl Drop for EditLease {
+    fn drop(&mut self) {
+        edit_lease_exit(lifecycle_key(&self.lifecycle));
+        if !self.counted {
+            return;
+        }
+        let mut admission = self
+            .lifecycle
+            .admission
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        admission.leases = admission
+            .leases
+            .checked_sub(1)
+            .expect("an edit lease must be dropped exactly once");
+        if admission.leases == 0 {
+            self.lifecycle.admission_changed.notify_all();
+        }
+    }
+}
+
+type LifecycleLocks = HashMap<String, Arc<LifecycleCoordination>>;
 
 fn lifecycle_locks() -> &'static Mutex<LifecycleLocks> {
     static LOCKS: OnceLock<Mutex<LifecycleLocks>> = OnceLock::new();
     LOCKS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn lifecycle_coordination(workspace_id: &str) -> Result<Arc<LifecycleCoordination>, AppError> {
+    let mut locks = lifecycle_locks()
+        .lock()
+        .map_err(|_| AppError::DatabaseError("lifecycle lock registry poisoned".to_string()))?;
+    Ok(Arc::clone(
+        locks.entry(workspace_id.to_string()).or_insert_with(|| {
+            Arc::new(LifecycleCoordination {
+                lock: Mutex::new(()),
+                admission: Mutex::new(EditAdmission {
+                    active: false,
+                    leases: 0,
+                }),
+                admission_changed: Condvar::new(),
+            })
+        }),
+    ))
 }
 
 /// Runs `f` as the **only lifecycle operation in this Workspace**, which is
@@ -2741,28 +3009,32 @@ fn lifecycle_locks() -> &'static Mutex<LifecycleLocks> {
 /// A poisoned lifecycle lock is **recovered from rather than propagated**,
 /// which is the opposite of what this module does with every other poisoned
 /// mutex, and deliberately so: the others guard state that a panic may have left
-/// half-written, while this one guards `()`. There is no invariant to protect,
-/// so refusing every subsequent lifecycle operation in the process because one
-/// of them panicked would turn a single failure into a permanently unusable
-/// Workspace. The registry lock above it is still propagated, since a panic
-/// there really can leave the session map inconsistent.
+/// half-written, while this one guards only lifecycle admission. There is no
+/// protected partial state, so refusing every subsequent lifecycle operation in
+/// the process because one of them panicked would turn a single failure into a
+/// permanently unusable Workspace. The registry lock above it is still
+/// propagated, since a panic there really can leave the session map inconsistent.
 pub(crate) fn with_lifecycle_lock<T>(
     workspace: &Workspace,
     f: impl FnOnce() -> Result<T, AppError>,
 ) -> Result<T, AppError> {
-    with_lifecycle_lock_id(workspace.id(), f)
+    with_lifecycle_lock_id(workspace.id(), || {
+        #[cfg(test)]
+        workspace.run_before_lifecycle_operation();
+        f()
+    })
 }
 
 /// [`with_lifecycle_lock`] keyed on a Workspace **id** rather than on a
 /// [`Workspace`].
 ///
-/// The lock is registered per Workspace id and guards `()`, so the id is all it
-/// ever needed. The distinction exists for `workspace::bootstrap::converge`,
-/// which has to take this lock at a point where no `Workspace` value exists yet:
-/// it is the code that establishes the `workspaces` row a `Workspace` is built
-/// from, and `Workspace::active` reads the active-Workspace cell that bootstrap
-/// has not set at that point either. Every other caller has a `Workspace` in
-/// hand and goes through [`with_lifecycle_lock`].
+/// The coordination is registered per Workspace id, so the id is all this
+/// variant needs. The distinction exists for `workspace::bootstrap::converge`,
+/// which has to take it at a point where no `Workspace` value exists yet: it is
+/// the code that establishes the `workspaces` row a `Workspace` is built from,
+/// and `Workspace::active` reads the active-Workspace cell that bootstrap has
+/// not set at that point either. Every other caller has a `Workspace` in hand
+/// and goes through [`with_lifecycle_lock`].
 pub(crate) fn with_lifecycle_lock_id<T>(
     workspace_id: &str,
     f: impl FnOnce() -> Result<T, AppError>,
@@ -2775,13 +3047,36 @@ pub(crate) fn with_lifecycle_lock_id<T>(
          across a whole lifecycle operation, `git` commit included"
     );
 
-    let lock = {
-        let mut locks = lifecycle_locks()
-            .lock()
-            .map_err(|_| AppError::DatabaseError("lifecycle lock registry poisoned".to_string()))?;
-        Arc::clone(locks.entry(workspace_id.to_string()).or_default())
-    };
-    let _guard = lock.lock().unwrap_or_else(PoisonError::into_inner);
+    let lifecycle = lifecycle_coordination(workspace_id)?;
+    let _guard = lifecycle
+        .lock
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
+    struct ActiveEditGate<'a>(&'a LifecycleCoordination);
+    impl Drop for ActiveEditGate<'_> {
+        fn drop(&mut self) {
+            let mut admission = self
+                .0
+                .admission
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner);
+            admission.active = false;
+            self.0.admission_changed.notify_all();
+        }
+    }
+    let mut admission = lifecycle
+        .admission
+        .lock()
+        .map_err(|_| AppError::DatabaseError("lifecycle admission lock poisoned".to_string()))?;
+    admission.active = true;
+    // Own the reopen action before any wait that can return an error.
+    let _active_edit_gate = ActiveEditGate(&lifecycle);
+    while admission.leases != 0 {
+        admission = lifecycle.admission_changed.wait(admission).map_err(|_| {
+            AppError::DatabaseError("lifecycle admission lock poisoned".to_string())
+        })?;
+    }
+    drop(admission);
     f()
 }
 
@@ -2861,7 +3156,7 @@ pub(crate) fn with_lifecycle_lock_id<T>(
 /// landing inside a lifecycle operation therefore still races it. That is
 /// inherent to tier 1 rather than a gap here — the same property the lock
 /// discipline is chosen for.
-pub(super) fn with_write_locks<T>(
+pub(crate) fn with_write_locks<T>(
     workspace: &Workspace,
     f: impl FnOnce() -> Result<T, AppError>,
 ) -> Result<T, AppError> {
@@ -2991,6 +3286,11 @@ pub(super) fn carry_session_forward(
         return session.install_rewrite(new_source, new_revision);
     }
 
+    // Validate the destination before retiring the old registry entry. This is
+    // the last path-derived failure point; after retirement the registry move
+    // itself is deliberately infallible.
+    let absolute_path = workspace.note_path(new_id)?;
+
     // The registry lock is above every other lock in this module's order, so it
     // is taken and released around nothing but the map operation itself.
     let retired = registry()?.remove(&(workspace.id().to_string(), old_id.to_string()));
@@ -2999,7 +3299,7 @@ pub(super) fn carry_session_forward(
     };
 
     let snapshot = {
-        let mut state = session.lock_state()?;
+        let mut state = session.lock_state_for_retirement();
         state.closed = true;
         SessionState {
             source: Arc::clone(&state.source),
@@ -3026,13 +3326,15 @@ pub(super) fn carry_session_forward(
         }
     };
 
-    let absolute_path = workspace.note_path(new_id)?;
     let source = match new_source {
         Some(rewritten) => Arc::new(rewritten),
         None => snapshot.source,
     };
     let ParsedNote { mut ast, spans } = parse_note(&source, containing_dir(new_id));
-    workspace.with_db(|conn| index::resolve_link_existence(conn, workspace.id(), &mut ast))?;
+    // Link existence is advisory render state. The rewritten source, spans,
+    // metadata, and revision are authoritative; an index read failure must not
+    // strand the old registry key after publication.
+    let _ = workspace.resolve_link_existence(&mut ast);
     let metadata = derive_metadata(new_id, &source, &spans, file_mtime(&absolute_path));
 
     let state = SessionState {
@@ -3078,7 +3380,7 @@ pub(super) fn carry_session_forward(
 pub(super) fn discard_session(workspace: &Workspace, note_id: &str) -> Result<(), AppError> {
     let retired = registry()?.remove(&(workspace.id().to_string(), note_id.to_string()));
     if let Some(session) = retired {
-        let mut state = session.lock_state()?;
+        let mut state = session.lock_state_for_retirement();
         state.closed = true;
         state.unwritten = false;
     }
@@ -3096,7 +3398,7 @@ impl NoteSession {
     ) -> Result<(), AppError> {
         let Some(rewritten) = new_source else {
             let _tier_one_guard = self.lock_tier_one()?;
-            let mut state = self.lock_state()?;
+            let mut state = self.lock_state_for_retirement();
             state.revision = new_revision;
             return Ok(());
         };
@@ -3115,9 +3417,11 @@ impl NoteSession {
         // link lookup or state install, so a structural result can never be
         // paired with a lifecycle-replaced session state.
         let _tier_one_guard = self.lock_tier_one()?;
-        self.resolve_links(&mut ast)?;
+        // As above, failure to refresh advisory Link badges cannot make a
+        // post-publication session replacement fail.
+        let _ = self.resolve_links(&mut ast);
 
-        let mut state = self.lock_state()?;
+        let mut state = self.lock_state_for_retirement();
         state.source = Arc::new(rewritten);
         state.spans = Arc::new(spans);
         state.ast = Arc::new(ast);
@@ -3128,6 +3432,49 @@ impl NoteSession {
         // source, so they address the same document again.
         state.conflicted = false;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+static REGISTRY_POISON_TEST_LOCK: Mutex<()> = Mutex::new(());
+
+/// Serializes and then poisons the process-wide registry for one test.
+///
+/// The registry is intentionally global in production, so a raw poison would
+/// otherwise leak into unrelated parallel tests. This guard clears that marker
+/// on drop; the test still exercises the real recovery branch for its entire
+/// lifetime.
+#[cfg(test)]
+pub(crate) struct RegistryPoisonReset {
+    _serialized: MutexGuard<'static, ()>,
+}
+
+#[cfg(test)]
+impl Drop for RegistryPoisonReset {
+    fn drop(&mut self) {
+        sessions().clear_poison();
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn poison_registry_for_test() -> RegistryPoisonReset {
+    let serialized = REGISTRY_POISON_TEST_LOCK
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
+    let poisoned = std::thread::spawn(|| {
+        let _registry = sessions().lock().unwrap_or_else(PoisonError::into_inner);
+        panic!("poisoning the session registry on purpose (test)");
+    });
+    assert!(
+        poisoned.join().is_err(),
+        "the registry poison thread must panic"
+    );
+    assert!(
+        sessions().is_poisoned(),
+        "the registry must be poisoned for this test"
+    );
+    RegistryPoisonReset {
+        _serialized: serialized,
     }
 }
 
@@ -3448,6 +3795,38 @@ fn check_span(source: &str, span: &std::ops::Range<usize>) -> Result<(), AppErro
     Ok(())
 }
 
+/// Finds the editable leaf newly created by a structural continuation in a
+/// freshly parsed result. This runs before `structural_edit_with_result`
+/// installs anything: a continuation whose supplied Markdown parses only as
+/// unaddressable source must refuse atomically, rather than focusing a
+/// pre-existing sibling and persisting hidden content that a retry duplicates.
+fn first_editable_leaf_inserted_under(
+    spans: &SpanMap,
+    ast: &[AstNode],
+    parent_path: &[usize],
+    inserted: &std::ops::Range<usize>,
+) -> Result<Vec<usize>, AppError> {
+    spans
+        .blocks()
+        .filter(|block| {
+            block.is_leaf()
+                && block.path.starts_with(parent_path)
+                && block.source.start < inserted.end
+                && inserted.start < block.source.end
+                && !matches!(
+                    node_at_path(ast, &block.path),
+                    Some(AstNode::ListItem { content, .. }) if content.is_empty()
+                )
+        })
+        .map(|block| block.path.clone())
+        .min()
+        .ok_or_else(|| {
+            AppError::ParseError(format!(
+                "continued Block at {parent_path:?} created no editable leaf"
+            ))
+        })
+}
+
 /// The Core-owned postcondition of a range replacement. It deliberately lives
 /// in the persistence domain rather than the FFI module, which is only a
 /// wrapper over this transaction.
@@ -3621,7 +4000,6 @@ fn live_path(
     editable_live_path(live_spans, retained_spans, requested_path)
 }
 
-#[cfg(test)]
 fn node_at_path<'a>(nodes: &'a [AstNode], path: &[usize]) -> Option<&'a AstNode> {
     let (head, rest) = path.split_first()?;
     let node = nodes.get(*head)?;
@@ -4373,6 +4751,33 @@ mod tests {
             std::thread::sleep(Duration::from_millis(5));
         }
         condition()
+    }
+
+    /// Pauses the next lifecycle operation after its edit-admission gate is
+    /// active and before it can snapshot any session. The tests use the real
+    /// public lifecycle calls around this seam; no timing sleep is relied on.
+    fn pause_next_lifecycle(
+        fixture: &Fixture,
+    ) -> (
+        std::sync::mpsc::Receiver<()>,
+        std::sync::mpsc::SyncSender<()>,
+    ) {
+        let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::sync_channel(0);
+        let release_rx = Arc::new(Mutex::new(release_rx));
+        fixture
+            .workspace
+            .set_before_lifecycle_operation(Some(Arc::new(move || {
+                entered_tx
+                    .send(())
+                    .expect("the lifecycle test must still observe its gate");
+                release_rx
+                    .lock()
+                    .unwrap()
+                    .recv()
+                    .expect("the lifecycle test must release its gate");
+            })));
+        (entered_rx, release_tx)
     }
 
     // -- tier 1: the buffered edit ------------------------------------------
@@ -5652,6 +6057,32 @@ mod tests {
         ));
     }
 
+    /// A list continuation is a byte-level splice. Its new seam must keep the
+    /// Note's own newline convention rather than smuggling a bare LF into an
+    /// otherwise CRLF-authored document.
+    #[test]
+    fn continuing_a_crlf_list_preserves_crlf_bytes() {
+        let f = fixture();
+        f.write("a.md", "- alpha\r\n- beta\r\n");
+        let session = f.open("a");
+
+        let (_, focus) = session.continue_block_after(&[0, 0, 0], "middle").unwrap();
+
+        let expected = "- alpha\r\n- middle\r\n- beta\r\n";
+        assert_eq!(*session.working_source().unwrap(), expected);
+        assert_eq!(focus, vec![0, 1, 0]);
+        assert!(
+            !session
+                .working_source()
+                .unwrap()
+                .replace("\r\n", "")
+                .contains('\n'),
+            "a bare LF was welded into a CRLF list continuation"
+        );
+        session.flush().unwrap();
+        assert_eq!(f.read("a.md"), expected);
+    }
+
     /// `update_block` deliberately does not reparse while a raw field is
     /// focused. Its retained paragraph path must therefore be resolved through
     /// the live source before Enter decides whether to continue a List.
@@ -5846,6 +6277,119 @@ mod tests {
 
             session.flush().unwrap();
             assert_eq!(f.read(&format!("{name}.md")), expected);
+        }
+    }
+
+    /// The continuation focus is part of the structural transaction. If the
+    /// supplied Markdown creates only an unaddressable construct, returning an
+    /// error after installation would prompt the UI to retry and duplicate
+    /// hidden source. Refuse before state or the draft row moves, then allow a
+    /// later addressable retry exactly once.
+    #[test]
+    fn an_unaddressable_continuation_refuses_before_installation_and_retries_once() {
+        for (name, original, unaddressable) in [
+            (
+                "frontmatter",
+                "---\ntype: Note\ntitle: A\n---\n",
+                "---\ncustom: preserved\n---",
+            ),
+            ("html", "<div>preserved</div>\n", "<aside>hidden</aside>"),
+            ("reference", "[old]: </old.md>\n", "[new]: </new.md>"),
+        ] {
+            let f = fixture();
+            f.write(&format!("{name}.md"), original);
+            let session = f.open(name);
+            let state_before = session.note_state().unwrap();
+            let sequence_before = session.edit_seq();
+
+            let refused = session.continue_block_after(&[0], unaddressable);
+
+            assert!(
+                matches!(refused, Err(AppError::ParseError(_))),
+                "{name}: {refused:?}"
+            );
+            assert_eq!(
+                *session.working_source().unwrap(),
+                original,
+                "{name}: an unaddressable continuation was installed"
+            );
+            assert_eq!(
+                session.note_state().unwrap(),
+                state_before,
+                "{name}: an unaddressable continuation changed NoteState"
+            );
+            assert_eq!(
+                session.edit_seq(),
+                sequence_before,
+                "{name}: an unaddressable continuation advanced edit_seq"
+            );
+            assert!(
+                f.draft(name).is_none(),
+                "{name}: a refused continuation wrote a draft"
+            );
+
+            let (_, focus) = session.continue_block_after(&[0], "first").unwrap();
+            let expected = format!("{original}\nfirst\n");
+            assert_eq!(
+                *session.working_source().unwrap(),
+                expected,
+                "{name}: retry did not append exactly once"
+            );
+            assert_eq!(focus, vec![0]);
+            assert_eq!(
+                f.draft(name).as_ref().map(|row| row.raw_markdown.as_str()),
+                Some(expected.as_str()),
+                "{name}: retry did not persist its authoritative draft"
+            );
+        }
+    }
+
+    /// A post-splice focus must overlap the bytes this call inserted. Merely
+    /// finding a leaf below the intended parent would accept a pre-existing
+    /// sibling, persist an unaddressable fragment, and falsely report success.
+    #[test]
+    fn an_unaddressable_continuation_cannot_focus_a_preexisting_sibling() {
+        for (name, original, path, retry, expected) in [
+            (
+                "paragraph",
+                "Alpha\n\nBeta\n",
+                vec![0],
+                "middle",
+                "Alpha\n\nmiddle\n\nBeta\n",
+            ),
+            (
+                "list",
+                "- Alpha\n- Beta\n",
+                vec![0, 0, 0],
+                "middle",
+                "- Alpha\n- middle\n- Beta\n",
+            ),
+        ] {
+            let f = fixture();
+            f.write(&format!("{name}.md"), original);
+            let session = f.open(name);
+            let state_before = session.note_state().unwrap();
+            let sequence_before = session.edit_seq();
+
+            let refused = session.continue_block_after(&path, "<aside>hidden</aside>");
+
+            assert!(
+                matches!(refused, Err(AppError::ParseError(_))),
+                "{name}: {refused:?}"
+            );
+            assert_eq!(*session.working_source().unwrap(), original);
+            assert_eq!(session.note_state().unwrap(), state_before);
+            assert_eq!(session.edit_seq(), sequence_before);
+            assert!(f.draft(name).is_none(), "{name}: refusal wrote a draft row");
+
+            let (_, focus) = session.continue_block_after(&path, retry).unwrap();
+            assert_eq!(*session.working_source().unwrap(), expected);
+            assert_eq!(session.block_source(&focus).unwrap().trim(), retry);
+            assert_eq!(
+                f.draft(name).as_ref().map(|row| row.raw_markdown.as_str()),
+                Some(expected),
+                "{name}: retry must persist exactly one continuation"
+            );
         }
     }
 
@@ -6867,6 +7411,288 @@ mod tests {
             .draft("a")
             .expect("the racing keystroke's row was destroyed");
         assert_eq!(row.edit_seq, racing_seq);
+    }
+
+    /// Rename, move, and deletion rewrite or retire an open session from a
+    /// snapshot. A keystroke admitted after that snapshot would either be
+    /// overwritten by the rewrite or leave its draft keyed under the retired
+    /// id. The lifecycle admission gate must refuse it deterministically.
+    #[test]
+    fn lifecycle_operations_refuse_racing_edits_before_their_snapshots() {
+        use crate::workspace::lifecycle::{create_directory, delete_note, move_note, rename_note};
+
+        // Rename changes the concept id and the frontmatter title.
+        {
+            let f = fixture();
+            let original = note("Old", "Unchanged body.");
+            f.write("Old.md", &original);
+            f.reindex();
+            let session = f.open("Old");
+            let (entered, release) = pause_next_lifecycle(&f);
+            let workspace = Arc::clone(&f.workspace);
+            let operation = std::thread::spawn(move || rename_note(&workspace, "Old", "New"));
+            entered
+                .recv_timeout(Duration::from_secs(3))
+                .expect("rename did not raise the lifecycle gate");
+
+            let refused = session.update_block(&[0], "Racing text.\n");
+            assert!(
+                matches!(refused, Err(AppError::ParseError(_))),
+                "{refused:?}"
+            );
+
+            release.send(()).unwrap();
+            operation.join().unwrap().unwrap();
+            f.workspace.set_before_lifecycle_operation(None);
+            assert!(lookup(f.workspace.id(), "Old").unwrap().is_none());
+            let moved = lookup(f.workspace.id(), "New").unwrap().unwrap();
+            assert!(moved.working_source().unwrap().contains("Unchanged body."));
+            assert!(!moved.working_source().unwrap().contains("Racing text."));
+            assert!(f.draft("Old").is_none());
+            assert!(f.draft("New").is_none());
+        }
+
+        // Move changes only the id, so the unchanged source is especially
+        // sensitive to a stale session overwriting the new path afterwards.
+        {
+            let f = fixture();
+            let original = note("Move me", "Unchanged body.");
+            f.write("Move me.md", &original);
+            f.reindex();
+            create_directory(&f.workspace, "Archive").unwrap();
+            let session = f.open("Move me");
+            let (entered, release) = pause_next_lifecycle(&f);
+            let workspace = Arc::clone(&f.workspace);
+            let operation = std::thread::spawn(move || move_note(&workspace, "Move me", "Archive"));
+            entered
+                .recv_timeout(Duration::from_secs(3))
+                .expect("move did not raise the lifecycle gate");
+
+            let refused = session.update_block(&[0], "Racing text.\n");
+            assert!(
+                matches!(refused, Err(AppError::ParseError(_))),
+                "{refused:?}"
+            );
+
+            release.send(()).unwrap();
+            operation.join().unwrap().unwrap();
+            f.workspace.set_before_lifecycle_operation(None);
+            assert!(lookup(f.workspace.id(), "Move me").unwrap().is_none());
+            let moved = lookup(f.workspace.id(), "Archive/Move me")
+                .unwrap()
+                .unwrap();
+            assert_eq!(*moved.working_source().unwrap(), original);
+            assert!(f.draft("Move me").is_none());
+            assert!(f.draft("Archive/Move me").is_none());
+        }
+
+        // Deletion must leave no late draft row that can resurrect the Note.
+        {
+            let f = fixture();
+            f.write("Doomed.md", &note("Doomed", "Unchanged body."));
+            f.reindex();
+            let session = f.open("Doomed");
+            let (entered, release) = pause_next_lifecycle(&f);
+            let workspace = Arc::clone(&f.workspace);
+            let operation = std::thread::spawn(move || delete_note(&workspace, "Doomed"));
+            entered
+                .recv_timeout(Duration::from_secs(3))
+                .expect("delete did not raise the lifecycle gate");
+
+            let refused = session.update_block(&[0], "Racing text.\n");
+            assert!(
+                matches!(refused, Err(AppError::ParseError(_))),
+                "{refused:?}"
+            );
+
+            release.send(()).unwrap();
+            operation.join().unwrap().unwrap();
+            f.workspace.set_before_lifecycle_operation(None);
+            assert!(!f.root().join("Doomed.md").exists());
+            assert!(lookup(f.workspace.id(), "Doomed").unwrap().is_none());
+            assert!(f.draft("Doomed").is_none());
+        }
+    }
+
+    /// An edit that entered tier 1 just before the lifecycle gate rises is not
+    /// refused retroactively. The lifecycle operation must instead wait for
+    /// its crash-durable draft write, then snapshot and carry that exact text
+    /// forward under the new identifier.
+    #[test]
+    fn a_lifecycle_snapshot_drains_a_pre_admitted_keystroke() {
+        use crate::workspace::lifecycle::rename_note;
+
+        let f = fixture();
+        f.write("Old.md", &note("Old", "Original body."));
+        f.reindex();
+        let session = f.open("Old");
+        let (entered_tx, entered_rx) = std::sync::mpsc::sync_channel(1);
+        let (release_tx, release_rx) = std::sync::mpsc::sync_channel(0);
+        let release_rx = Arc::new(Mutex::new(release_rx));
+        let release_for_hook = Arc::clone(&release_rx);
+        f.workspace.set_before_draft_write(Some(Arc::new(move || {
+            entered_tx
+                .send(())
+                .expect("the pre-admitted edit must reach its draft boundary");
+            release_for_hook
+                .lock()
+                .unwrap()
+                .recv()
+                .expect("the lifecycle test must release its pre-admitted edit");
+        })));
+
+        let editing = {
+            let session = session.clone();
+            std::thread::spawn(move || session.update_block(&[0], "Pre-admitted body.\n"))
+        };
+        entered_rx
+            .recv_timeout(Duration::from_secs(3))
+            .expect("the edit did not enter tier 1");
+
+        let workspace = Arc::clone(&f.workspace);
+        let rename = std::thread::spawn(move || rename_note(&workspace, "Old", "New"));
+
+        // The lifecycle gate is live while the pre-admitted mutation holds
+        // tier 1, so a later keystroke refuses rather than queuing into the
+        // stale snapshot window.
+        assert!(
+            wait_until(Duration::from_secs(3), || {
+                f.workspace
+                    .lifecycle
+                    .admission
+                    .lock()
+                    .map(|admission| admission.active)
+                    .unwrap_or(false)
+            }),
+            "rename did not raise the lifecycle gate while waiting for tier 1"
+        );
+        let rejected = {
+            let session = session.clone();
+            std::thread::spawn(move || session.update_block(&[0], "Too late.\n"))
+        };
+        assert!(matches!(
+            rejected.join().unwrap(),
+            Err(AppError::ParseError(_))
+        ));
+
+        release_tx.send(()).unwrap();
+        editing.join().unwrap().unwrap();
+        rename.join().unwrap().unwrap();
+        f.workspace.set_before_draft_write(None);
+
+        let carried = lookup(f.workspace.id(), "New").unwrap().unwrap();
+        assert!(
+            carried
+                .working_source()
+                .unwrap()
+                .contains("Pre-admitted body."),
+            "rename overwrote the source mutation it was required to drain"
+        );
+        assert!(
+            !carried.working_source().unwrap().contains("Too late."),
+            "a post-gate mutation reached the renamed session"
+        );
+        let draft = f
+            .draft("New")
+            .expect("the pre-admitted draft was not re-keyed");
+        assert!(draft.raw_markdown.contains("Pre-admitted body."));
+        assert!(f.draft("Old").is_none());
+    }
+
+    /// The FFI owns one counted lease across lookup and persistence; the
+    /// session mutator borrows that lease. Repeating the handoff while a
+    /// lifecycle operation has already closed admission proves a pre-admitted
+    /// request cannot reject itself by attempting a second admission.
+    #[test]
+    fn a_pre_admitted_lease_is_reentrant_while_lifecycle_drains_it() {
+        let f = fixture();
+        f.write("a.md", "Initial\n");
+        let session = f.open("a");
+
+        for iteration in 0..64 {
+            let lease = f.workspace.edit_lease("a").unwrap();
+            let workspace = Arc::clone(&f.workspace);
+            let lifecycle = std::thread::spawn(move || {
+                with_lifecycle_lock(&workspace, || Ok::<(), AppError>(()))
+            });
+            assert!(
+                wait_until(Duration::from_secs(3), || {
+                    f.workspace
+                        .lifecycle
+                        .admission
+                        .lock()
+                        .map(|admission| admission.active)
+                        .unwrap_or(false)
+                }),
+                "iteration {iteration}: lifecycle did not close admission"
+            );
+
+            session
+                .update_block(&[0], &format!("Pre-admitted {iteration}\n"))
+                .unwrap_or_else(|error| {
+                    panic!("iteration {iteration}: nested session mutation rejected: {error:?}")
+                });
+            drop(lease);
+            lifecycle
+                .join()
+                .expect("lifecycle thread must not panic")
+                .unwrap_or_else(|error| panic!("iteration {iteration}: {error:?}"));
+        }
+
+        assert!(session
+            .working_source()
+            .unwrap()
+            .contains("Pre-admitted 63"));
+    }
+
+    /// Closing admission must be rolled back if its Condvar wait errors. This
+    /// poisons that wait deliberately and checks the RAII guard reopened the
+    /// Workspace before the lifecycle error escaped.
+    #[test]
+    fn a_poisoned_admission_wait_reopens_the_lifecycle_gate() {
+        let f = fixture();
+        let lease = f.workspace.edit_lease("a").unwrap();
+        let workspace = Arc::clone(&f.workspace);
+        let lifecycle =
+            std::thread::spawn(move || with_lifecycle_lock(&workspace, || Ok::<(), AppError>(())));
+        assert!(
+            wait_until(Duration::from_secs(3), || {
+                f.workspace
+                    .lifecycle
+                    .admission
+                    .lock()
+                    .map(|admission| admission.active)
+                    .unwrap_or(false)
+            }),
+            "lifecycle did not close admission before the forced poison"
+        );
+
+        let coordination = Arc::clone(&f.workspace.lifecycle);
+        let poison = std::thread::spawn(move || {
+            let _admission = coordination.admission.lock().unwrap();
+            coordination.admission_changed.notify_all();
+            panic!("poison lifecycle admission wait on purpose");
+        });
+        assert!(poison.join().is_err(), "the test must poison admission");
+        assert!(
+            lifecycle
+                .join()
+                .expect("lifecycle thread must not panic")
+                .is_err(),
+            "a poisoned wait must surface as a lifecycle error"
+        );
+        let admission = f
+            .workspace
+            .lifecycle
+            .admission
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        assert!(
+            !admission.active,
+            "the RAII guard left the Workspace permanently closed to edits"
+        );
+        drop(admission);
+        drop(lease);
     }
 
     /// A Note deleted by something outside this application must not trap the

@@ -2,6 +2,7 @@ import 'package:burlmd/src/components/lifecycle_actions.dart';
 import 'package:burlmd/src/components/status_message.dart';
 import 'package:burlmd/src/providers/rust_api_provider.dart';
 import 'package:burlmd/src/providers/workspace_provider.dart';
+import 'package:burlmd/l10n/generated/app_localizations.dart';
 // The generated `TreeNode` variant types (`TreeNode_Directory`,
 // `TreeNode_Note`) are not re-exported by `rust_api_provider.dart`, which
 // only shows the sealed base — so the component imports the generated file
@@ -484,7 +485,17 @@ Future<String?> pickDirectory(BuildContext context, WidgetRef ref) async {
 /// after the user asked for something is how boundary errors get swallowed.
 void report(BuildContext context, LifecycleOutcome outcome) {
   final message = switch (outcome) {
-    LifecycleCompleted() => null,
+    LifecycleCompleted(:final warning) => switch (warning) {
+      null => null,
+      LifecycleWarning(:final stage, :final detail) => switch (stage) {
+        LifecycleWarningStage.commit => AppLocalizations.of(
+          context,
+        )!.lifecycleCommitWarning(detail),
+        LifecycleWarningStage.settlement => AppLocalizations.of(
+          context,
+        )!.lifecycleSettlementWarning(detail),
+      },
+    },
     LifecycleRefused(:final reason) => reason,
     LifecycleFailed(:final error) => 'The action failed: $error',
   };

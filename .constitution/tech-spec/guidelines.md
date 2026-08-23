@@ -105,6 +105,13 @@ All commands below assume the `devenv` shell (`devenv shell`, or automatic via
      dismissible status. It must not restore a writable snapshot for a retired
      session. After an incoming open fails with its ID still selected, another
      explicit selection of that Note must issue the open request again.
+   - **Settle lifecycle results before warnings.** `LifecycleResult.warning`
+     is not an FFI error. When it is populated, Presentation must adopt the
+     returned state, apply `LifecycleEffects`, and clear each removed editor
+     before it shows one localized dismissible status selected by the typed
+     warning stage. It must not parse `detail` or restore the previous editor.
+     An `AppError` remains a true refusal, so only that path retains the prior
+     Core-valid session.
    - **Link-completion grammar is fixed.** A completion is eligible only when a collapsed caret has a last unmatched `[[` on the same line before it; its query is the intervening text. The UI snapshots that exact trigger range and source value, requests no more than 10 Core candidates, and rejects/dismisses the list if a newline, `]]`, focus/selection change, or edit invalidates the snapshot. Core supplies either an existing candidate or a distinguishable prospective ghost when the query is a valid future target. Acceptance replaces the snapshot range with the Core-supplied `LinkCompletion.insert_text`; no Dart code may construct or repair a destination. Follow always re-resolves first, then calls `create_link_target(target_id)` only for a still-missing target.
    - **A cross-Block selection uses one direct `TextInputClient` proxy, not a hidden `TextField`.** Its initial/current proxy value is `TextEditingValue.empty`; after `TextInput.attach`, it calls `setEditingState` with that value before `show`. It owns exactly one `TextInputConnection`, resets the empty platform value after a Core result, and closes before promotion or disposal. `updateEditingValue` handles only ordinary committed text/IME; an `Actions`/`Shortcuts` layer compatible with Flutter 3.44.3 `DefaultTextEditingShortcuts` explicitly handles Delete/Backspace and clipboard copy/cut/paste intents. While `TextEditingValue.composing` is valid and non-collapsed it neither mutates Core nor replaces the platform value. `RangeEditResult` is a present atomic operation, compatible with later undo but not an implementation of deferred CAP-EDIT-08 (ADR-012).
 3. **Nix:**
@@ -128,6 +135,8 @@ All commands below assume the `devenv` shell (`devenv shell`, or automatic via
 `rust/src/workspace/persist.rs` uses this acquisition order: lifecycle, tier 2 write, tier 1, state, then connection. A caller can take a suffix of this order, but it must not acquire these locks in reverse order.
 
 - The per-Note tier 1 lock serializes a source mutation through its draft write and serializes lifecycle state installation with that mutation.
+- A source mutation obtains a Workspace edit lease before open-session lookup and retains it through its draft write. Lifecycle closes admission and drains those leases before snapshotting Notes; later source mutations refuse unchanged and retry after the lifecycle call. Admission state is not a lock and must not make a keystroke wait behind filesystem or Git work.
+- The FFI owns one counted lease. A direct internal session mutator borrows an existing same-thread lease rather than attempting a second admission; lifecycle must install its reopen guard immediately after closing admission, before any fallible wait.
 - The state lock protects the in-memory snapshot and must not span database or filesystem I/O.
 - No closure passed to `with_connection` may perform file I/O.
 - No lock that a keystroke can contend for may span an `fsync`.

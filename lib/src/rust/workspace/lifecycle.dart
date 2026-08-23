@@ -3,7 +3,9 @@
 
 // ignore_for_file: invalid_use_of_internal_member, unused_import, unnecessary_import
 
+import '../draft.dart';
 import '../frb_generated.dart';
+import '../markdown/ast.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 /// One Note whose concept id changed as a side effect of an operation on its
@@ -58,3 +60,65 @@ class LifecycleEffects {
           remapped == other.remapped &&
           rewritten == other.rewritten;
 }
+
+/// The authoritative outcome of any Note or Directory lifecycle operation.
+///
+/// FRB cannot express the operation-specific generic result shape here, so
+/// all lifecycle calls use this one record. `state` is populated for create,
+/// rename, and move; `effects` names reanchored and rewritten Notes;
+/// `removed` names deleted Notes. A populated `warning` never reverses any of
+/// those effects: Presentation must settle them first, then report it.
+class LifecycleResult {
+  final NoteState? state;
+  final LifecycleEffects effects;
+  final List<String> removed;
+  final LifecycleWarning? warning;
+
+  const LifecycleResult({
+    this.state,
+    required this.effects,
+    required this.removed,
+    this.warning,
+  });
+
+  @override
+  int get hashCode =>
+      state.hashCode ^ effects.hashCode ^ removed.hashCode ^ warning.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is LifecycleResult &&
+          runtimeType == other.runtimeType &&
+          state == other.state &&
+          effects == other.effects &&
+          removed == other.removed &&
+          warning == other.warning;
+}
+
+/// A non-fatal lifecycle warning, carried with the authoritative result.
+class LifecycleWarning {
+  final LifecycleWarningStage stage;
+  final String detail;
+
+  const LifecycleWarning({required this.stage, required this.detail});
+
+  @override
+  int get hashCode => stage.hashCode ^ detail.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is LifecycleWarning &&
+          runtimeType == other.runtimeType &&
+          stage == other.stage &&
+          detail == other.detail;
+}
+
+/// The post-publication stage that completed with a recoverable warning.
+///
+/// This is deliberately a closed type rather than a sentence Dart must
+/// inspect. A lifecycle `Err(AppError)` means neither authoritative mutation
+/// nor its presentation settlement took place; a warning means the mutation
+/// did take place and only its history record is missing.
+enum LifecycleWarningStage { commit, settlement }

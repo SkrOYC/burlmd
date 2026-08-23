@@ -20,9 +20,10 @@ sealed class LifecycleOutcome {
 /// the refreshed tree is usually the visible outcome, so surfacing this is
 /// optional.
 class LifecycleCompleted extends LifecycleOutcome {
-  const LifecycleCompleted(this.detail);
+  const LifecycleCompleted(this.detail, {this.warning});
 
   final String detail;
+  final LifecycleWarning? warning;
 }
 
 /// The Core refused without changing anything — a name collision or reserved
@@ -84,26 +85,52 @@ class LifecycleActions {
   /// through the commit tier and then adopts the already-open created session
   /// (`open_note`'s fast path) — "opens for editing" without a second open.
   Future<LifecycleOutcome> createNote(String directoryPath, String title) =>
-      _guard(() async {
-        final created = await _api.createNote(directoryPath, title);
+      _guard((operation) async {
+        final result = await _api.createNote(directoryPath, title);
+        final created = _requiredState(result, 'create');
         _ref.invalidate(workspaceTreeProvider);
-        _ref.read(selectedNoteIdProvider.notifier).select(created.metadata.id);
-        return LifecycleCompleted('Created "${created.metadata.title}"');
+        final settled = await _settleCreatedNote(operation, created);
+        return LifecycleCompleted(
+          'Created "${created.metadata.title}"',
+          // A stale create must not attach its terminal warning to another
+          // Note after a newer lifecycle action or selection won the race.
+          warning: settled ? result.warning : null,
+        );
+      });
+
+  /// Creates the exact Core-resolved target for create-on-follow and waits
+  /// for the created session to become the active editor Note before returning
+  /// its terminal warning to the link surface.
+  Future<LifecycleOutcome> createLinkTarget(String targetId) =>
+      _guard((operation) async {
+        final result = await _api.createLinkTarget(targetId);
+        final created = _requiredState(result, 'create linked note');
+        _ref.invalidate(workspaceTreeProvider);
+        final settled = await _settleCreatedNote(operation, created);
+        return LifecycleCompleted(
+          'Created "${created.metadata.title}"',
+          warning: settled ? result.warning : null,
+        );
       });
 
   /// Renames a Note. The returned state carries the new concept id; when the
   /// renamed Note was open, it is adopted directly (before the selection is
   /// republished — see [_adopt]) so the editor never holds the dead id.
   Future<LifecycleOutcome> renameNote(String noteId, String newTitle) =>
-      _guard(() async {
-        final (state, effects) = await _api.renameNote(noteId, newTitle);
+      _guard((operation) async {
+        final result = await _api.renameNote(noteId, newTitle);
+        final state = _requiredState(result, 'rename');
         _ref.invalidate(workspaceTreeProvider);
         await _settleEffects(
           invokedNoteId: noteId,
           returnedState: state,
-          effects: effects,
+          effects: result.effects,
+          operation: operation,
         );
-        return LifecycleCompleted('Renamed to "${state.metadata.title}"');
+        return LifecycleCompleted(
+          'Renamed to "${state.metadata.title}"',
+          warning: result.warning,
+        );
       });
 
   /// Moves a Note to another Directory. Same identity semantics as
@@ -111,34 +138,50 @@ class LifecycleActions {
   Future<LifecycleOutcome> moveNote(
     String noteId,
     String newDirectoryPath,
-  ) => _guard(() async {
-    final (state, effects) = await _api.moveNote(noteId, newDirectoryPath);
+  ) => _guard((operation) async {
+    final result = await _api.moveNote(noteId, newDirectoryPath);
+    final state = _requiredState(result, 'move');
     _ref.invalidate(workspaceTreeProvider);
     await _settleEffects(
       invokedNoteId: noteId,
       returnedState: state,
-      effects: effects,
+      effects: result.effects,
+      operation: operation,
     );
     return LifecycleCompleted(
       'Moved to ${newDirectoryPath.isEmpty ? 'the workspace root' : newDirectoryPath}',
+      warning: result.warning,
     );
   });
 
   /// Deletes a Note after the caller has confirmed with the user. When the
   /// deleted Note was the open one, the editor closes it instead of keeping
   /// it mounted against a removed file.
-  Future<LifecycleOutcome> deleteNote(String noteId) => _guard(() async {
-    await _api.deleteNote(noteId);
-    _ref.invalidate(workspaceTreeProvider);
-    _closeIfOpen(noteId);
-    return const LifecycleCompleted('Deleted');
-  });
+  Future<LifecycleOutcome> deleteNote(String noteId) =>
+      _guard((operation) async {
+        final result = await _api.deleteNote(noteId);
+        _ref.invalidate(workspaceTreeProvider);
+        if (!_isExpectedSession(
+          operation,
+          operation.active,
+          operation.selectedId,
+        )) {
+          return LifecycleCompleted('Deleted', warning: result.warning);
+        }
+        for (final removed in result.removed) {
+          _closeIfOpen(removed);
+        }
+        return LifecycleCompleted('Deleted', warning: result.warning);
+      });
 
   /// Creates a Directory, intermediate levels included.
-  Future<LifecycleOutcome> createDirectory(String path) => _guard(() async {
-    await _api.createDirectory(path);
+  Future<LifecycleOutcome> createDirectory(String path) => _guard((_) async {
+    final result = await _api.createDirectory(path);
     _ref.invalidate(workspaceTreeProvider);
-    return LifecycleCompleted('Created directory $path');
+    return LifecycleCompleted(
+      'Created directory $path',
+      warning: result.warning,
+    );
   });
 
   /// Renames a Directory. Every Note beneath it gets a new concept id; an
@@ -146,26 +189,86 @@ class LifecycleActions {
   /// in the bundle that held inbound Links into the subtree reload through
   /// `effects.rewritten`.
   Future<LifecycleOutcome> renameDirectory(String path, String newName) =>
-      _guard(() async {
-        final effects = await _api.renameDirectory(path, newName);
+      _guard((operation) async {
+        final result = await _api.renameDirectory(path, newName);
         _ref.invalidate(workspaceTreeProvider);
-        await _settleEffects(invokedNoteId: null, effects: effects);
-        return LifecycleCompleted('Renamed to "$newName"');
+        await _settleEffects(
+          invokedNoteId: null,
+          effects: result.effects,
+          operation: operation,
+        );
+        return LifecycleCompleted(
+          'Renamed to "$newName"',
+          warning: result.warning,
+        );
       });
 
   /// Deletes a Directory and everything beneath it, after the caller has
   /// confirmed with the user. The Core returns every removed Note's concept
   /// id precisely so a caller holding one open can close it.
-  Future<LifecycleOutcome> deleteDirectory(String path) => _guard(() async {
-    final removed = await _api.deleteDirectory(path);
+  Future<LifecycleOutcome> deleteDirectory(String path) => _guard((
+    operation,
+  ) async {
+    final result = await _api.deleteDirectory(path);
     _ref.invalidate(workspaceTreeProvider);
-    for (final noteId in removed) {
+    if (!_isExpectedSession(
+      operation,
+      operation.active,
+      operation.selectedId,
+    )) {
+      return LifecycleCompleted('Deleted directory', warning: result.warning);
+    }
+    for (final noteId in result.removed) {
       _closeIfOpen(noteId);
     }
-    return const LifecycleCompleted('Deleted directory');
+    return LifecycleCompleted('Deleted directory', warning: result.warning);
   });
 
   // -- internals ------------------------------------------------------------
+
+  NoteState _requiredState(LifecycleResult result, String operation) {
+    final state = result.state;
+    if (state != null) return state;
+    throw StateError(
+      'Core $operation result omitted its authoritative Note state.',
+    );
+  }
+
+  /// Settles a Core-created session before Presentation treats creation as
+  /// complete. Selection stays on the prior Note while [openForLifecycle]
+  /// runs, avoiding the normal listener's fire-and-forget open path. A newer
+  /// lifecycle generation or user selection wins without this create
+  /// replacing it or reporting its terminal warning.
+  Future<bool> _settleCreatedNote(
+    _LifecycleOperation operation,
+    NoteState created,
+  ) async {
+    if (!_isExpectedSession(
+      operation,
+      operation.active,
+      operation.selectedId,
+    )) {
+      return false;
+    }
+    final opened = await _ref
+        .read(activeNoteProvider.notifier)
+        .openForLifecycle(created.metadata.id);
+    if (!_isCurrentOperation(operation) ||
+        _ref.read(selectedNoteIdProvider) != operation.selectedId) {
+      return false;
+    }
+    if (!opened) {
+      throw StateError(
+        'Core could not open the Note it created for this lifecycle action.',
+      );
+    }
+    _ref.read(selectedNoteIdProvider.notifier).select(created.metadata.id);
+    return true;
+  }
+
+  bool _isCurrentOperation(_LifecycleOperation operation) =>
+      _ref.mounted &&
+      _ref.read(lifecycleGenerationProvider) == operation.generation;
 
   /// Runs `action`, translating what the Core threw into the outcome shapes:
   /// `PathUnavailable` becomes [LifecycleRefused] carrying the Core's own
@@ -173,10 +276,22 @@ class LifecycleActions {
   /// a disambiguated name (the STOP condition) — and everything else becomes
   /// [LifecycleFailed] so no boundary error is swallowed.
   Future<LifecycleOutcome> _guard(
-    Future<LifecycleOutcome> Function() action,
+    Future<LifecycleOutcome> Function(_LifecycleOperation operation) action,
   ) async {
+    final editing = _ref.read(lifecycleEditingProvider.notifier);
+    final operation = _LifecycleOperation(
+      generation: _ref.read(lifecycleGenerationProvider.notifier).next(),
+      active: _ref.read(activeNoteProvider),
+      selectedId: _ref.read(selectedNoteIdProvider),
+    );
+    // Acquire before the first asynchronous Core call. This makes every
+    // lifecycle entry point share one presentation-side admission boundary:
+    // a raw field is read-only and every mutation path rejects queued input
+    // until Core either supplies the authoritative replacement state or
+    // refuses the operation and the old session remains usable.
+    editing.begin();
     try {
-      return await action();
+      return await action(operation);
     } on AppError catch (error) {
       return switch (error) {
         AppError_PathUnavailable(:final field0) => LifecycleRefused(
@@ -186,6 +301,11 @@ class LifecycleActions {
       };
     } catch (error) {
       return LifecycleFailed(error);
+    } finally {
+      // An outstanding FFI Future may settle after its ProviderContainer has
+      // been disposed. The gate belongs to that container, so do not write a
+      // retired notifier while unwinding its operation.
+      if (_ref.mounted) editing.end();
     }
   }
 
@@ -202,7 +322,15 @@ class LifecycleActions {
     required String? invokedNoteId,
     NoteState? returnedState,
     required LifecycleEffects effects,
+    required _LifecycleOperation operation,
   }) async {
+    if (!_isExpectedSession(
+      operation,
+      operation.active,
+      operation.selectedId,
+    )) {
+      return;
+    }
     final activeId = _ref.read(activeNoteProvider)?.metadata.id;
 
     if (returnedState != null &&
@@ -218,9 +346,14 @@ class LifecycleActions {
       // live state is a plain read — not a close/reopen of a dead id.
       for (final remap in effects.remapped) {
         if (remap.oldId != activeId) continue;
-        _ref
-            .read(activeNoteProvider.notifier)
-            .adopt(await _api.openNote(remap.newId));
+        final reanchored = await _openForExpectedSession(
+          operation,
+          expectedActive: operation.active,
+          expectedSelectedId: operation.selectedId,
+          noteId: remap.newId,
+        );
+        if (reanchored == null) return;
+        _ref.read(activeNoteProvider.notifier).adopt(reanchored);
         _ref.read(selectedNoteIdProvider.notifier).select(remap.newId);
         break;
       }
@@ -233,11 +366,53 @@ class LifecycleActions {
     // back through update_block.
     final openAfter = _ref.read(activeNoteProvider)?.metadata.id;
     if (openAfter != null && effects.rewritten.contains(openAfter)) {
-      _ref
-          .read(activeNoteProvider.notifier)
-          .adopt(await _api.openNote(openAfter));
+      final expectedActive = _ref.read(activeNoteProvider);
+      final expectedSelectedId = _ref.read(selectedNoteIdProvider);
+      final rewritten = await _openForExpectedSession(
+        operation,
+        expectedActive: expectedActive,
+        expectedSelectedId: expectedSelectedId,
+        noteId: openAfter,
+      );
+      if (rewritten == null) return;
+      _ref.read(activeNoteProvider.notifier).adopt(rewritten);
     }
   }
+
+  /// An awaited post-lifecycle fetch may not outlive the operation and
+  /// session it was issued for. Stale success and stale failure both become
+  /// no-ops; neither may resurrect a removed Note nor obscure a newer action.
+  Future<NoteState?> _openForExpectedSession(
+    _LifecycleOperation operation, {
+    required NoteState? expectedActive,
+    required String? expectedSelectedId,
+    required String noteId,
+  }) async {
+    if (!_isExpectedSession(operation, expectedActive, expectedSelectedId)) {
+      return null;
+    }
+    try {
+      final opened = await _api.openNote(noteId);
+      return _isExpectedSession(operation, expectedActive, expectedSelectedId)
+          ? opened
+          : null;
+    } catch (_) {
+      if (!_isExpectedSession(operation, expectedActive, expectedSelectedId)) {
+        return null;
+      }
+      rethrow;
+    }
+  }
+
+  bool _isExpectedSession(
+    _LifecycleOperation operation,
+    NoteState? expectedActive,
+    String? expectedSelectedId,
+  ) =>
+      _ref.mounted &&
+      _ref.read(lifecycleGenerationProvider) == operation.generation &&
+      identical(_ref.read(activeNoteProvider), expectedActive) &&
+      _ref.read(selectedNoteIdProvider) == expectedSelectedId;
 
   /// Closes `noteId` in the editor if it is the open one: clears both the
   /// active-note state and the selection. No `close_note` crosses the
@@ -254,3 +429,15 @@ class LifecycleActions {
 final lifecycleActionsProvider = Provider<LifecycleActions>(
   (ref) => LifecycleActions(ref),
 );
+
+class _LifecycleOperation {
+  const _LifecycleOperation({
+    required this.generation,
+    required this.active,
+    required this.selectedId,
+  });
+
+  final int generation;
+  final NoteState? active;
+  final String? selectedId;
+}

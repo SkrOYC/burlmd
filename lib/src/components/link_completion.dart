@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:burlmd/l10n/generated/app_localizations.dart';
+import 'package:burlmd/src/components/status_message.dart';
 import 'package:burlmd/src/providers/rust_api_provider.dart';
 import 'package:burlmd/src/rust/index/query.dart' as core;
 import 'package:flutter/material.dart';
@@ -172,13 +173,21 @@ class LinkCompletionState extends ConsumerState<LinkCompletionPopup> {
         return;
       }
       setState(() => _candidates = results.take(10).toList(growable: false));
-    } catch (_) {
+    } catch (error) {
       if (mounted && generation == _generation) {
         // Completion is an optional query over derived index state. Reporting
         // it through editorErrorProvider would replace the active Note, while
         // keystrokeWriteFailureProvider is reserved for failed writes; close
         // this transient affordance and leave the raw field usable instead.
+        // A current failure is still actionable, so use the Editor's shared
+        // dismissible status surface. A stale request must remain silent:
+        // neither an old query nor an old Note may report after input moved
+        // on.
         _dismiss();
+        showStatusMessage(
+          context,
+          AppLocalizations.of(context)!.editorOperationFailed('$error'),
+        );
       }
     }
   }

@@ -30,7 +30,12 @@ export 'package:burlmd/src/rust/index/query.dart'
         TreeNode;
 export 'package:burlmd/src/rust/workspace/bootstrap.dart' show WorkspaceInfo;
 export 'package:burlmd/src/rust/workspace/lifecycle.dart'
-    show IdRemap, LifecycleEffects;
+    show
+        IdRemap,
+        LifecycleEffects,
+        LifecycleResult,
+        LifecycleWarning,
+        LifecycleWarningStage;
 export 'package:burlmd/src/rust/workspace/persist.dart' show NoteWriteStatus;
 
 /// Thin, app-owned wrapper around the generated FRB free functions. This is
@@ -253,7 +258,7 @@ class RustApi {
       ffi.resolveLinkTarget(targetId: targetId);
 
   /// Creates only the exact target identity Core re-resolves from a Link.
-  Future<NoteState> createLinkTarget(String targetId) =>
+  Future<LifecycleResult> createLinkTarget(String targetId) =>
       ffi.createLinkTarget(targetId: targetId);
 
   /// Notes linking *to* `noteId` (CAP-GRAPH-05).
@@ -276,47 +281,45 @@ class RustApi {
   // the old target.
 
   /// Creates a Note in `directoryPath` (empty string for the bundle root)
-  /// with a conformant frontmatter block and **opens it** — the returned
-  /// state is the state of an open Note, so editing can begin immediately.
+  /// with a conformant frontmatter block and **opens it**. The authoritative
+  /// [LifecycleResult] carries that state and any post-publication warning.
   ///
   /// The filename is the title verbatim plus `.md`, with no slugification. A
   /// collision, or a title deriving to a reserved OKF filename, throws
   /// `PathUnavailable`; the UI must surface that rather than retrying with a
   /// disambiguated name.
-  Future<NoteState> createNote(String directoryPath, String title) =>
+  Future<LifecycleResult> createNote(String directoryPath, String title) =>
       ffi.createNote(directoryPath: directoryPath, title: title);
 
   /// Renames a Note, rewriting its frontmatter title, its filename and every
   /// inbound Link, atomically (CAP-LIFE-02).
-  Future<(NoteState, LifecycleEffects)> renameNote(
-    String noteId,
-    String newTitle,
-  ) => ffi.renameNote(noteId: noteId, newTitle: newTitle);
+  Future<LifecycleResult> renameNote(String noteId, String newTitle) =>
+      ffi.renameNote(noteId: noteId, newTitle: newTitle);
 
   /// Moves a Note to another Directory, rewriting every inbound Link
   /// (CAP-LIFE-03). Changes the Note's concept id, as [renameNote] does.
-  Future<(NoteState, LifecycleEffects)> moveNote(
-    String noteId,
-    String newDirectoryPath,
-  ) => ffi.moveNote(noteId: noteId, newDirectoryPath: newDirectoryPath);
+  Future<LifecycleResult> moveNote(String noteId, String newDirectoryPath) =>
+      ffi.moveNote(noteId: noteId, newDirectoryPath: newDirectoryPath);
 
   /// Deletes a Note and commits the deletion, so it stays recoverable from
   /// local version history (CAP-LIFE-04).
-  Future<void> deleteNote(String noteId) => ffi.deleteNote(noteId: noteId);
+  Future<LifecycleResult> deleteNote(String noteId) =>
+      ffi.deleteNote(noteId: noteId);
 
   /// Creates a Directory, including intermediate levels (CAP-LIFE-05).
-  Future<void> createDirectory(String path) => ffi.createDirectory(path: path);
+  Future<LifecycleResult> createDirectory(String path) =>
+      ffi.createDirectory(path: path);
 
   /// Renames a Directory, moving its contents and rewriting inbound Links to
   /// every Note beneath it (CAP-LIFE-06). The Notes holding rewritten Links
   /// are not confined to the renamed subtree.
-  Future<LifecycleEffects> renameDirectory(String path, String newName) =>
+  Future<LifecycleResult> renameDirectory(String path, String newName) =>
       ffi.renameDirectory(path: path, newName: newName);
 
   /// Deletes a Directory and everything beneath it, in one commit
   /// (CAP-LIFE-06), returning the concept ids of every Note removed so a
   /// caller holding one open can close it.
-  Future<List<String>> deleteDirectory(String path) =>
+  Future<LifecycleResult> deleteDirectory(String path) =>
       ffi.deleteDirectory(path: path);
 
   /// Starts an OAuth PKCE flow (SYNC-C002): Core generates the PKCE

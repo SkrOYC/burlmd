@@ -127,6 +127,8 @@ class _LinkResolutionApi extends _FakeRustApi {
   final List<String> calls = [];
   Object? resolveError;
   Object? createError;
+  LifecycleResult? createResult;
+  Completer<void>? createGate;
 
   @override
   Future<LinkTargetResolution> resolveLinkTarget(String targetId) {
@@ -136,10 +138,25 @@ class _LinkResolutionApi extends _FakeRustApi {
   }
 
   @override
-  Future<NoteState> createLinkTarget(String targetId) {
-    if (createError case final Object error) return Future.error(error);
-    return Future.error(StateError('no create result prepared'));
+  Future<LifecycleResult> createLinkTarget(String targetId) async {
+    final gate = createGate;
+    if (gate != null && !gate.isCompleted) await gate.future;
+    if (createError case final Object error) throw error;
+    final result = createResult;
+    if (result == null) throw StateError('no create result prepared');
+    return result;
   }
+
+  @override
+  Future<NoteState> openNote(String noteId) {
+    final created = createResult?.state;
+    return created != null && created.metadata.id == noteId
+        ? Future.value(created)
+        : Future.error(StateError('no open state for $noteId'));
+  }
+
+  @override
+  Future<void> closeNote(String noteId) async {}
 }
 
 /// A [RustApi] standing in for the Core at the workspace-shell level:
@@ -1366,6 +1383,52 @@ void main() {
     expect(api.lastSource, 'base中文');
   });
 
+  testWidgets('a completed IME composition is buffered when its deferred '
+      'Core resync still holds the composition base', (tester) async {
+    final api = _FakeRustApi()..sources['0'] = 'base';
+    final container = await pumpEditor(tester, [
+      _plainParagraph('base'),
+    ], api: api);
+    await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
+
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(
+        text: 'base中',
+        composing: TextRange(start: 4, end: 5),
+        selection: TextSelection.collapsed(offset: 5),
+      ),
+    );
+    await tester.pump();
+    final updatesBeforeResync = api.updateCount;
+
+    // Simulate a lifecycle refetch racing the composing write. The refetched
+    // Core source is the composition base, while the field already holds the
+    // completed candidate. Clearing `composing` changes no text, so the
+    // controller listener is the only place that can restore those bytes.
+    api.sources['0'] = 'base';
+    container.read(activeNoteProvider.notifier).state = _testNoteState([
+      _plainParagraph('base'),
+    ]);
+    await tester.pump();
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(
+        text: 'base中',
+        selection: TextSelection.collapsed(offset: 5),
+      ),
+    );
+    await tester.pump();
+
+    expect(_field(tester).controller.text, 'base中');
+    expect(api.lastSource, 'base中');
+    expect(
+      api.updateCount,
+      updatesBeforeResync + 1,
+      reason:
+          'the successful pending rebase must rewrite Core even when it does '
+          'not change the controller value',
+    );
+  });
+
   testWidgets('only the latest external source is rebased with a completed '
       'IME composition', (tester) async {
     final api = _FakeRustApi()..sources['0'] = 'base';
@@ -1825,6 +1888,96 @@ void main() {
       find.byKey(const ValueKey('internal-link-focus-0-missing-target')),
       findsOneWidget,
     );
+  });
+
+  testWidgets('a commit warning after linked-note creation selects the '
+      'authoritative session and shows one nonfatal status', (tester) async {
+    final created = NoteState(
+      ast: [_plainParagraph('created')],
+      metadata: NoteMetadata(
+        id: 'projects/Missing target',
+        path: 'projects/Missing target.md',
+        title: 'Missing target',
+        lastModified: 0,
+        okfConformant: true,
+      ),
+      baseRevision: 'head',
+      restoredFromDraft: false,
+    );
+    final api = _LinkResolutionApi()
+      ..createResult = LifecycleResult(
+        state: created,
+        effects: const LifecycleEffects(remapped: [], rewritten: []),
+        removed: const [],
+        warning: const LifecycleWarning(
+          stage: LifecycleWarningStage.commit,
+          detail: 'commit unavailable',
+        ),
+      );
+    api.resolutions['missing-target'] = Completer<LinkTargetResolution>()
+      ..complete(
+        const LinkTargetResolution_Missing(
+          targetId: 'missing-target',
+          directoryPath: 'projects',
+          title: 'Missing target',
+        ),
+      );
+    final container = await pumpEditor(tester, [
+      _linkedParagraph('Missing target', 'missing-target'),
+    ], api: api);
+
+    await activateInternalLink(tester, 0, 'missing-target');
+    await tester.pump();
+    await tester.tap(find.text('Create note'));
+    await tester.pumpAndSettle();
+
+    expect(container.read(selectedNoteIdProvider), created.metadata.id);
+    expect(container.read(activeNoteProvider), same(created));
+    expect(find.text('created'), findsOneWidget);
+    expect(_writableFields(), findsNothing);
+    expect(find.textContaining('The change is applied'), findsOneWidget);
+  });
+
+  testWidgets('a stale linked-note creation cannot override a newer Note or '
+      'show its warning', (tester) async {
+    final gate = Completer<void>();
+    final created = _testNoteState([_plainParagraph('created')]);
+    final api = _LinkResolutionApi()
+      ..createGate = gate
+      ..createResult = LifecycleResult(
+        state: created,
+        effects: const LifecycleEffects(remapped: [], rewritten: []),
+        removed: const [],
+        warning: const LifecycleWarning(
+          stage: LifecycleWarningStage.commit,
+          detail: 'stale warning',
+        ),
+      );
+    api.resolutions['missing-target'] = Completer<LinkTargetResolution>()
+      ..complete(
+        const LinkTargetResolution_Missing(
+          targetId: 'missing-target',
+          directoryPath: 'projects',
+          title: 'Missing target',
+        ),
+      );
+    final container = await pumpEditor(tester, [
+      _linkedParagraph('Missing target', 'missing-target'),
+    ], api: api);
+
+    await activateInternalLink(tester, 0, 'missing-target');
+    await tester.pump();
+    await tester.tap(find.text('Create note'));
+    await tester.pump();
+    final newer = _testNoteState([_plainParagraph('newer')]);
+    container.read(activeNoteProvider.notifier).adopt(newer);
+    container.read(selectedNoteIdProvider.notifier).select(newer.metadata.id);
+    gate.complete();
+    await tester.pumpAndSettle();
+
+    expect(container.read(activeNoteProvider), same(newer));
+    expect(container.read(selectedNoteIdProvider), newer.metadata.id);
+    expect(find.textContaining('stale warning'), findsNothing);
   });
 
   // -- SHEL-E004 ----------------------------------------------------------

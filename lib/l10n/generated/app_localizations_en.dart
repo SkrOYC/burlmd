@@ -59,6 +59,16 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String lifecycleCommitWarning(String detail) {
+    return 'The change is applied, but its Git commit failed: $detail';
+  }
+
+  @override
+  String lifecycleSettlementWarning(String detail) {
+    return 'The change is applied, but cleanup could not finish: $detail';
+  }
+
+  @override
   String editorOperationFailed(String error) {
     return 'Could not complete the editor operation: $error';
   }

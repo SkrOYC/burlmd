@@ -49,6 +49,39 @@ A structural mutation saves its complete prior state before installation. If its
 
 The targeted tier 1 test recorded a 2.070 ms p95 draft write for a 102,472-byte Note across 25 paced samples, below the 16 ms interaction gate. This measurement covers that draft-write path only; it does not establish end-to-end UI responsiveness.
 
+## Amendment — PR #10 review, round 7
+
+A source-mutating FFI call takes a Workspace edit lease before it looks up an
+open session and retains it through the tier-1 draft write. A lifecycle
+operation closes admission, drains every pre-existing lease, then plans from
+open-session and `drafts` snapshots. Later source mutations refuse unchanged
+while the lifecycle operation is active. The admission state is not a sixth
+lock and is never held across source state, SQLite, filesystem, or Git work.
+This closes the stale-handle race where a request paused after lookup could
+outlive a rename, move, deletion, or same-id inbound-link rewrite.
+
+The FFI owns the one counted lease. Direct `NoteSession` mutation methods
+remain safe for internal callers by borrowing that same thread-local lease when
+one already exists; they do not attempt a second admission after lifecycle has
+closed the gate. A lifecycle reopen guard is constructed immediately after it
+closes admission, so even a poisoned wait restores future admission.
+
+Structural operations whose return value must name a post-splice editable leaf
+derive that value before state installation and draft persistence. A source
+fragment that parses only as unaddressable Markdown therefore refuses without
+installing hidden content; retrying with addressable text applies exactly once.
+
+Lifecycle operations distinguish a refusal from a terminal commit-stage
+warning. After the filesystem, index, and sessions settle, a failed Git commit
+returns `LifecycleResult` with the authoritative state, effects, or removed
+ids plus `LifecycleWarningStage::Commit` or `LifecycleWarningStage::Settlement`.
+It does not return `AppError` after publication.
+This includes ordinary create and create-on-follow: once their Note/session is
+authoritative, a failed Git record is a warning and not a rollback trigger.
+Presentation settles that result first and then shows a dismissible warning.
+Only a failure before authoritative lifecycle mutation returns `AppError`, so
+the prior editor remains writable only when its Core session remains valid.
+
 ## Consequences
 - **Positive:** Version history stays readable — approximately one commit per Note per writing session, rather than one per keystroke or one per arbitrary time slice. Timer-based commits were explicitly rejected on the grounds that a 30-second boundary splits a single thought across two commits for no reason a reader of the log could reconstruct.
 - **Positive:** The `drafts` table stops being dead schema, and `notify_activity()` stops being dead code.
@@ -58,7 +91,7 @@ The targeted tier 1 test recorded a 2.070 ms p95 draft write for a 102,472-byte 
 - **Negative, settled by `SPK-WSPC-D001` §6.2 and implemented by `WSPC-D007`:** the tier 2 timer is Core-owned and fires on its own thread, while `update_block` and `commit_block` are `#[frb(sync)]` and run on the Dart caller's thread. Both touch the same working source and span map, and the timer side additionally performs an encrypted SQLite write and an atomic file write. Reusing `db::connection`'s process-wide `Mutex<Connection>` naively means a keystroke blocks on a lock held across a disk write — reproduced as a number: a keystroke p95 of 90.4ms at 1 MiB under SQLite's defaults, with the buffer mutation alone, work that does no I/O at all, waiting a p95 of 55.9ms for the lock. The shape that replaces it, and the discipline it imposes:
 
   1. **A per-Note state lock over an `Arc<String>` working source, never held across I/O.** The lock guards {working source, span map, edit sequence, recorded revision}; every writer takes an `Arc::clone` snapshot under it and releases it before touching the connection or the filesystem, mutating through `Arc::make_mut`. Measured: the tier 2 side holds the state lock for a median, p95, and maximum of 0.000 / 0.000 / 0.001ms at both 102 KiB and 1 MiB, and the keystroke's own buffer-and-span work never waits.
-  2. **A per-Note tier 1 mutation lock spans source mutation, draft persistence, and lifecycle installation.** It is acquired after lifecycle and tier 2 and before state. It may remain held for the draft statement, but the state lock must be released first.
+  2. **A per-Note tier 1 mutation lock spans source mutation, draft persistence, and lifecycle installation.** It is acquired after lifecycle and tier 2 and before state. It may remain held for the draft statement, but the state lock must be released first. A Workspace edit lease starts before source-mutation session lookup; lifecycle drains those leases before snapshotting, while later calls refuse without waiting on lifecycle I/O.
   3. **One total acquisition order is lifecycle → tier 2 write → tier 1 → state → connection.** The keystroke path takes tier 1, state, and connection. Tier 2 and lifecycle callers take longer prefixes. No caller may invert this order.
   4. **The edit sequence is persisted in the `drafts` row, and tier 2's clear is conditional on it.** Every tier 1 mutator increments the sequence in the same critical section as the buffer mutation and stores that value in the row it writes. `commit_block` must **not** increment it, since it writes no row and an increment there would suppress every later clear. The timer clears with `DELETE FROM drafts WHERE note_id = ?1 AND edit_seq <= ?2`, bound to its snapshot's sequence, so the comparison is against the row rather than against an in-memory counter that leads it. `<=` rather than `=` because a row lagging the snapshot is redundant once the newer bytes are on disk. The residual case is benign and asymmetric by design: failing to clear costs one spurious "restored from draft" notice, clearing wrongly costs the user's work, so every ambiguous case resolves toward keeping the row.
   5. **A dedicated per-Note tier 2 write lock spans OCC check → write → re-record.** Tier 2 has more than one writer — the idle timer and `close_note` — so two writes for one Note can be in flight at once. The Optimistic Concurrency Control check is a time-of-check-to-time-of-use bug unless one lock spans the whole sequence. This lock is held across the file write because no keystroke path takes it. It also requires uniquely named temporary files per write.

@@ -15,7 +15,7 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 part 'ffi_api.freezed.dart';
 
-// These functions are ignored because they are not marked as `pub`: `fts5_phrase_query`, `into_rendered_range`, `open_session`, `range_edit_caret_from_persist`, `rendered_utf16_to_scalar_offset`, `search_notes_impl`
+// These functions are ignored because they are not marked as `pub`: `fts5_phrase_query`, `into_rendered_range`, `open_session`, `range_edit_caret_from_persist`, `rendered_utf16_to_scalar_offset`, `search_notes_impl`, `with_open_session_edit_in_workspace`, `with_open_session_edit`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `clone`, `eq`, `fmt`
 
 /// Opens the local Workspace, creating and initializing it if absent
@@ -170,17 +170,17 @@ Future<List<NoteMetadata>> pendingDrafts() =>
     RustLib.instance.api.crateApiFfiApiPendingDrafts();
 
 /// Creates a Note in `directory_path` (empty string for the bundle root) with
-/// an OKF-conformant frontmatter block, and **opens it**: the returned state is
-/// the state of an open Note, so the working source, span map and recorded
-/// revision are all established before this returns and `note_write_status`
-/// reports on it immediately.
+/// an OKF-conformant frontmatter block, and **opens it**. Its
+/// [`LifecycleResult::state`] is the authoritative open state, so the working
+/// source, span map and recorded revision are established before this returns.
+/// A populated warning means the create completed but its Git record failed.
 ///
 /// The filename is the title **verbatim** plus `.md`
 /// (`data-models/okf-bundle.md`) — no slugification, because CAP-GRAPH-04's
 /// create-on-follow has to invert the derivation. A collision, or a title
 /// deriving to a reserved OKF filename, returns `PathUnavailable` rather than
 /// silently disambiguating.
-Future<NoteState> createNote({
+Future<LifecycleResult> createNote({
   required String directoryPath,
   required String title,
 }) => RustLib.instance.api.crateApiFfiApiCreateNote(
@@ -192,7 +192,7 @@ Future<NoteState> createNote({
 /// version history (CAP-LIFE-04). Clears the `drafts` row and the `notes_fts`
 /// row explicitly — neither is reached by the `notes` cascade, and the FTS row
 /// must go first or it is stranded permanently (`data-models/schema.sql`).
-Future<void> deleteNote({required String noteId}) =>
+Future<LifecycleResult> deleteNote({required String noteId}) =>
     RustLib.instance.api.crateApiFfiApiDeleteNote(noteId: noteId);
 
 /// Renames a Note, rewriting its frontmatter `title`, its filename, and every
@@ -202,7 +202,7 @@ Future<void> deleteNote({required String noteId}) =>
 /// and callers must not retain the old. The returned `LifecycleEffects` names
 /// every *other* Note whose bytes moved, which the caller must reload — an open
 /// one still holds an `InlineElement::Link` carrying the old `target_id`.
-Future<(NoteState, LifecycleEffects)> renameNote({
+Future<LifecycleResult> renameNote({
   required String noteId,
   required String newTitle,
 }) => RustLib.instance.api.crateApiFfiApiRenameNote(
@@ -214,7 +214,7 @@ Future<(NoteState, LifecycleEffects)> renameNote({
 /// (CAP-LIFE-03). Changes the Note's id, as `rename_note` does. Returns
 /// `PathUnavailable` when the destination already holds a Note of that
 /// filename, or when the destination path does not exist.
-Future<(NoteState, LifecycleEffects)> moveNote({
+Future<LifecycleResult> moveNote({
   required String noteId,
   required String newDirectoryPath,
 }) => RustLib.instance.api.crateApiFfiApiMoveNote(
@@ -226,14 +226,14 @@ Future<(NoteState, LifecycleEffects)> moveNote({
 /// Directory has no file to represent it, so it exists in the `directories`
 /// table until it holds a Note — and makes no commit, since Git tracks no
 /// empty directory.
-Future<void> createDirectory({required String path}) =>
+Future<LifecycleResult> createDirectory({required String path}) =>
     RustLib.instance.api.crateApiFfiApiCreateDirectory(path: path);
 
 /// Renames a Directory, moving its contents and rewriting inbound Links to
 /// every Note beneath it (CAP-LIFE-06). The Notes holding rewritten Links are
 /// **not** confined to that subtree, which is why both halves of
 /// `LifecycleEffects` are populated here.
-Future<LifecycleEffects> renameDirectory({
+Future<LifecycleResult> renameDirectory({
   required String path,
   required String newName,
 }) => RustLib.instance.api.crateApiFfiApiRenameDirectory(
@@ -244,7 +244,7 @@ Future<LifecycleEffects> renameDirectory({
 /// Deletes a Directory and everything beneath it, in one commit (CAP-LIFE-06).
 /// Returns the concept ids of every Note removed, so a caller with one of them
 /// open can close it rather than discovering it is gone on next access.
-Future<List<String>> deleteDirectory({required String path}) =>
+Future<LifecycleResult> deleteDirectory({required String path}) =>
     RustLib.instance.api.crateApiFfiApiDeleteDirectory(path: path);
 
 /// The raw Markdown source of one Block, for populating the editable field
@@ -458,7 +458,7 @@ Future<LinkTargetResolution> resolveLinkTarget({required String targetId}) =>
 /// burlmd caller created the target after resolution this opens that Note
 /// instead, while a foreign filesystem collision is refused rather than
 /// overwritten.
-Future<NoteState> createLinkTarget({required String targetId}) =>
+Future<LifecycleResult> createLinkTarget({required String targetId}) =>
     RustLib.instance.api.crateApiFfiApiCreateLinkTarget(targetId: targetId);
 
 /// Notes linking *to* this one (CAP-GRAPH-05).

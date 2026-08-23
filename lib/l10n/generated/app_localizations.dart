@@ -166,6 +166,18 @@ abstract class AppLocalizations {
   /// **'Could not switch notes: {error}'**
   String noteCloseFailed(String error);
 
+  /// Dismissible status message after a Note or Directory lifecycle operation completes but Git cannot record it.
+  ///
+  /// In en, this message translates to:
+  /// **'The change is applied, but its Git commit failed: {detail}'**
+  String lifecycleCommitWarning(String detail);
+
+  /// Dismissible status message after a lifecycle operation completes but Core cannot finish a post-publication cleanup step.
+  ///
+  /// In en, this message translates to:
+  /// **'The change is applied, but cleanup could not finish: {detail}'**
+  String lifecycleSettlementWarning(String detail);
+
   /// Dismissible status message when a retryable editor operation fails while the current note stays open.
   ///
   /// In en, this message translates to:

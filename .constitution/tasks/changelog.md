@@ -1,5 +1,16 @@
 # Stage 4: Tasks Changelog
 
+## v1.9.3
+
+Bounded PR #10 review round 7 correction to archived Epic F. The correction
+hardens the existing editor-depth persistence and continuation behavior; it
+does not reopen scope, estimates, dependencies, acceptance criteria, active
+backlog, or the critical path.
+
+The correction also carries authoritative lifecycle outcomes across the Rust
+FFI. A commit-stage warning no longer causes Dart to restore a renamed, moved,
+or deleted editor. The completed Epic remains archived.
+
 ## v1.9.2
 
 PR #10 review round 6 corrected the archived Epic F scope-closeout statement

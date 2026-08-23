@@ -313,7 +313,8 @@ void main() {
   );
 
   testWidgets(
-    'a failed completion query closes only the popup and keeps the raw field usable',
+    'a failed current completion query closes only the popup, keeps the raw '
+    'field usable, and shows a localized status',
     (tester) async {
       final api = _CompletionApi(
         (query) => query == 'p'
@@ -361,12 +362,62 @@ void main() {
             .read(editorErrorProvider),
         isNull,
       );
+      expect(
+        find.text(
+          'Could not complete the editor operation: '
+          'Bad state: derived index unavailable',
+        ),
+        findsOneWidget,
+      );
 
       await tester.enterText(field, '[[plan');
       await tester.pump();
       expect(tester.widget<EditableText>(field).controller.text, '[[plan');
     },
   );
+
+  testWidgets('a stale completion failure stays silent after a newer query '
+      'has rendered', (tester) async {
+    final stale = Completer<List<LinkCompletion>>();
+    final fresh = Completer<List<LinkCompletion>>();
+    var requests = 0;
+    final api = _CompletionApi(
+      (_) => requests++ == 0 ? stale.future : fresh.future,
+    );
+    final controller = TextEditingController.fromValue(
+      const TextEditingValue(
+        text: '[[p',
+        selection: TextSelection.collapsed(offset: 3),
+      ),
+    );
+    addTearDown(controller.dispose);
+    final focusNode = FocusNode();
+    addTearDown(focusNode.dispose);
+    final key = GlobalKey<LinkCompletionState>();
+    await _pumpCompletion(
+      tester,
+      api: api,
+      controller: controller,
+      focusNode: focusNode,
+      key: key,
+      onAccepted: (_, _) {},
+    );
+
+    controller.value = const TextEditingValue(
+      text: '[[pl',
+      selection: TextSelection.collapsed(offset: 4),
+    );
+    await tester.pump();
+    fresh.complete([_existing('plan')]);
+    await tester.pump();
+    expect(key.currentState!.candidateCount, 1);
+
+    stale.completeError(StateError('stale index failure'));
+    await tester.pump();
+
+    expect(key.currentState!.candidateCount, 1);
+    expect(find.textContaining('stale index failure'), findsNothing);
+  });
 
   testWidgets(
     'an Enter repeat after completion acceptance does not trigger structural Enter',

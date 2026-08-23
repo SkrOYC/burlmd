@@ -227,7 +227,7 @@ pub struct NoteMetadata {
 
 /// Creates a Note in `directory_path` (empty string for the bundle root) with
 /// an OKF-conformant frontmatter block (`type: Note`, `title`), and **opens
-/// it**: the returned `NoteState` is a state of an open Note, so the working
+/// it**: `LifecycleResult.state` is a state of an open Note, so the working
 /// source buffer, the span map and the recorded revision are all established
 /// before this returns, and `note_write_status` reports on it immediately.
 /// Stated because the alternative reading — create the file, return a state,
@@ -240,7 +240,10 @@ pub struct NoteMetadata {
 /// because CAP-GRAPH-04's create-on-follow has to invert it; a collision, or a title deriving to a reserved
 /// filename, returns `PathUnavailable` rather than silently disambiguating.
 #[frb]
-pub async fn create_note(directory_path: String, title: String) -> Result<NoteState, AppError> {
+pub async fn create_note(
+    directory_path: String,
+    title: String,
+) -> Result<LifecycleResult, AppError> {
     unimplemented!()
 }
 
@@ -257,7 +260,7 @@ pub async fn create_note(directory_path: String, title: String) -> Result<NoteSt
 ///   undeletable — leaving the deleted Note's full text searchable in the
 ///   encrypted index indefinitely. See `data-models/schema.sql`.
 #[frb]
-pub async fn delete_note(note_id: String) -> Result<(), AppError> {
+pub async fn delete_note(note_id: String) -> Result<LifecycleResult, AppError> {
     unimplemented!()
 }
 
@@ -317,14 +320,15 @@ pub async fn delete_note(note_id: String) -> Result<(), AppError> {
 pub async fn rename_note(
     note_id: String,
     new_title: String,
-) -> Result<(NoteState, LifecycleEffects), AppError> {
+) -> Result<LifecycleResult, AppError> {
     unimplemented!()
 }
 
 /// Moves a Note to another Directory, rewriting every inbound Link
 /// (CAP-LIFE-03). Changes the Note's id, as `rename_note` does.
-/// Returns `PathUnavailable` when the destination already holds a Note of
-/// that filename, or when the destination path does not exist.
+/// Returns `PathUnavailable` when the destination already holds a Note,
+/// unflushed draft, or live session for that concept id, or when the
+/// destination path does not exist.
 ///
 /// Carries the same obligations as `rename_note` for every affected Note,
 /// minus the frontmatter substitution on the moved Note itself: a move changes
@@ -341,7 +345,7 @@ pub async fn rename_note(
 pub async fn move_note(
     note_id: String,
     new_directory_path: String,
-) -> Result<(NoteState, LifecycleEffects), AppError> {
+) -> Result<LifecycleResult, AppError> {
     unimplemented!()
 }
 
@@ -349,7 +353,7 @@ pub async fn move_note(
 /// Directory has no file to represent it, so it exists only in the
 /// `directories` table until it holds a Note.
 #[frb]
-pub async fn create_directory(path: String) -> Result<(), AppError> {
+pub async fn create_directory(path: String) -> Result<LifecycleResult, AppError> {
     unimplemented!()
 }
 
@@ -391,6 +395,41 @@ pub struct LifecycleEffects {
     pub rewritten: Vec<String>,
 }
 
+/// The post-publication stage that has an incomplete record. The closed enum
+/// prevents Presentation from extracting a stage from an error sentence.
+#[frb]
+pub enum LifecycleWarningStage {
+    Commit,
+    Settlement,
+}
+
+/// A nonfatal report accompanying an authoritative lifecycle result.
+#[frb]
+pub struct LifecycleWarning {
+    pub stage: LifecycleWarningStage,
+    pub detail: String,
+}
+
+/// The non-generic lifecycle result shape FRB transports for every Note and
+/// Directory operation. `state` is populated by create, create-on-follow
+/// (`create_link_target`), rename, and move.
+/// `effects` carries reidentification and rewritten-source effects.
+/// `removed` carries every deleted concept id.
+///
+/// A populated `warning` means the filesystem, index, and session state have
+/// already settled. Presentation must first adopt `state`, process `effects`,
+/// and clear every `removed` editor, then show one localized, dismissible
+/// warning selected by `warning.stage`. It must not restore the prior editor.
+/// `Err(AppError)` is reserved for a true refusal before authoritative
+/// lifecycle mutation, so Presentation retains the valid prior session.
+#[frb]
+pub struct LifecycleResult {
+    pub state: Option<NoteState>,
+    pub effects: LifecycleEffects,
+    pub removed: Vec<String>,
+    pub warning: Option<LifecycleWarning>,
+}
+
 /// Renames a Directory, moving its contents and rewriting inbound Links to
 /// every Note beneath it (CAP-LIFE-06). Returns `LifecycleEffects` for the
 /// same reason `rename_note` does: positional identity means the caller's
@@ -401,7 +440,7 @@ pub struct LifecycleEffects {
 pub async fn rename_directory(
     path: String,
     new_name: String,
-) -> Result<LifecycleEffects, AppError> {
+) -> Result<LifecycleResult, AppError> {
     unimplemented!()
 }
 
@@ -409,7 +448,7 @@ pub async fn rename_directory(
 /// Returns the concept ids of every Note removed, so a caller with one of them
 /// open can close it rather than discovering it is gone on next access.
 #[frb]
-pub async fn delete_directory(path: String) -> Result<Vec<String>, AppError> {
+pub async fn delete_directory(path: String) -> Result<LifecycleResult, AppError> {
     unimplemented!()
 }
 
@@ -561,16 +600,22 @@ pub struct NoteState {
 // Two kinds of call, and the distinction is load-bearing for the frame
 // budget.
 //
-// **Every mutating call below writes the Note's working source and its draft
-// row.** That is the tier 1 obligation in ADR-008 decision 1, and it belongs to
-// all of them, not only to `update_block`: a split, a merge, a Block insertion
-// and a range replace are each triggered by a discrete user action with no
+// **Every source-mutating call below writes the Note's working source and its
+// draft row.** That is the tier 1 obligation in ADR-008 decision 1, and it
+// belongs to all of them, not only to `update_block`: a split, a merge, a Block
+// insertion and a range replace are each triggered by a discrete user action with no
 // preceding `update_block`, so if they skipped the draft write the edit would
 // live only in memory until the ~1s tier 2 timer fired. A kill in that window
 // loses it, which CAP-WS-03 and `architecture/resilience.md`'s SQLite Draft
 // Persistence guarantee both forbid — and it would make "no draft row" mean
 // "nothing unwritten" falsely, which is the under-reporting direction of the
 // invariant tier 2's draft-clearing establishes.
+//
+// A source-mutating call obtains its Core edit lease before looking up the open
+// session. A lifecycle operation closes admission, drains all already-admitted
+// leases, then snapshots/reconciles Notes. Later calls refuse with `ParseError`
+// unchanged until that operation settles. The short admission step never waits
+// behind lifecycle filesystem or Git work.
 //
 // What distinguishes the calls is **parsing**, not writing:
 //
@@ -774,6 +819,12 @@ pub struct StructuralEdit {
 /// the empty-Note sentinel and creates the first top-level Block. Presentation
 /// supplies only the actual editable leaf path and source; it must never
 /// select a structural behavior from the path length.
+///
+/// Core derives the returned leaf from the post-splice parse before it installs
+/// or persists the structural state. If `source` yields only unaddressable
+/// Markdown (for example a reference definition or raw HTML), the call refuses
+/// unchanged rather than persisting hidden content and inviting a duplicate
+/// retry.
 #[frb(sync)]
 pub fn continue_block_after(
     note_id: String,
@@ -1229,16 +1280,19 @@ pub async fn resolve_link_target(target_id: String) -> Result<LinkTargetResoluti
 /// (CAP-GRAPH-04). The Core derives title and Directory from `target_id`,
 /// creates missing parent Directories and the conformant Note atomically, then
 /// indexes, opens, and commits it. It refuses a file or path collision rather
-/// than silently choosing a different identity, and returns the opened state.
-/// If final-path publication, indexing, session registration, or commit fails
-/// before history records the Note, it removes the Note and only the parent
+/// than silently choosing a different identity, and returns a
+/// `LifecycleResult` containing the opened state. A commit-stage failure after
+/// publication retains that authoritative Note and session and is a typed
+/// warning, not an error. Rollback applies only before publication settles:
+/// if final-path publication, indexing, or session registration fails, it
+/// removes the Note and only the parent
 /// Directories when they remain empty, and directory-index rows this operation
 /// created; pre-existing Directories and foreign content are preserved.
 ///
 /// Callers must first invoke `resolve_link_target`: an `Existing` result opens
 /// that Note; only a still-`Missing` target reaches this operation.
 #[frb]
-pub async fn create_link_target(target_id: String) -> Result<NoteState, AppError> {
+pub async fn create_link_target(target_id: String) -> Result<LifecycleResult, AppError> {
     unimplemented!()
 }
 

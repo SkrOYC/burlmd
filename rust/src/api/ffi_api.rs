@@ -25,7 +25,9 @@ pub use crate::workspace::NoteWriteStatus;
 // Same reason again for the lifecycle domain: `workspace::lifecycle` owns the
 // atomic create/rename/move/delete machinery and the two shapes it reports
 // through, and the `#[frb]` functions below are wrappers over it.
-pub use crate::workspace::{IdRemap, LifecycleEffects};
+pub use crate::workspace::{
+    IdRemap, LifecycleEffects, LifecycleResult, LifecycleWarning, LifecycleWarningStage,
+};
 // `LinkCompletion` and `TreeNode` are owned by `index::query` (WSPC-D009),
 // the discovery-domain module, for the same reason as every re-export above:
 // the logic that fills them lives there, tested directly against an injected
@@ -261,10 +263,10 @@ pub async fn pending_drafts() -> Result<Vec<NoteMetadata>, AppError> {
 // ---------------------------------------------------------------------------
 
 /// Creates a Note in `directory_path` (empty string for the bundle root) with
-/// an OKF-conformant frontmatter block, and **opens it**: the returned state is
-/// the state of an open Note, so the working source, span map and recorded
-/// revision are all established before this returns and `note_write_status`
-/// reports on it immediately.
+/// an OKF-conformant frontmatter block, and **opens it**. Its
+/// [`LifecycleResult::state`] is the authoritative open state, so the working
+/// source, span map and recorded revision are established before this returns.
+/// A populated warning means the create completed but its Git record failed.
 ///
 /// The filename is the title **verbatim** plus `.md`
 /// (`data-models/okf-bundle.md`) — no slugification, because CAP-GRAPH-04's
@@ -272,9 +274,12 @@ pub async fn pending_drafts() -> Result<Vec<NoteMetadata>, AppError> {
 /// deriving to a reserved OKF filename, returns `PathUnavailable` rather than
 /// silently disambiguating.
 #[frb]
-pub async fn create_note(directory_path: String, title: String) -> Result<NoteState, AppError> {
+pub async fn create_note(
+    directory_path: String,
+    title: String,
+) -> Result<LifecycleResult, AppError> {
     let workspace = crate::workspace::persist::Workspace::active()?;
-    crate::workspace::lifecycle::create_note(&workspace, &directory_path, &title)
+    crate::workspace::lifecycle::create_note_outcome(&workspace, &directory_path, &title)
 }
 
 /// Deletes a Note and commits the deletion, so it stays recoverable from local
@@ -282,9 +287,9 @@ pub async fn create_note(directory_path: String, title: String) -> Result<NoteSt
 /// row explicitly — neither is reached by the `notes` cascade, and the FTS row
 /// must go first or it is stranded permanently (`data-models/schema.sql`).
 #[frb]
-pub async fn delete_note(note_id: String) -> Result<(), AppError> {
+pub async fn delete_note(note_id: String) -> Result<LifecycleResult, AppError> {
     let workspace = crate::workspace::persist::Workspace::active()?;
-    crate::workspace::lifecycle::delete_note(&workspace, &note_id)
+    crate::workspace::lifecycle::delete_note_outcome(&workspace, &note_id)
 }
 
 /// Renames a Note, rewriting its frontmatter `title`, its filename, and every
@@ -295,12 +300,9 @@ pub async fn delete_note(note_id: String) -> Result<(), AppError> {
 /// every *other* Note whose bytes moved, which the caller must reload — an open
 /// one still holds an `InlineElement::Link` carrying the old `target_id`.
 #[frb]
-pub async fn rename_note(
-    note_id: String,
-    new_title: String,
-) -> Result<(NoteState, LifecycleEffects), AppError> {
+pub async fn rename_note(note_id: String, new_title: String) -> Result<LifecycleResult, AppError> {
     let workspace = crate::workspace::persist::Workspace::active()?;
-    crate::workspace::lifecycle::rename_note(&workspace, &note_id, &new_title)
+    crate::workspace::lifecycle::rename_note_outcome(&workspace, &note_id, &new_title)
 }
 
 /// Moves a Note to another Directory, rewriting every inbound Link
@@ -311,9 +313,9 @@ pub async fn rename_note(
 pub async fn move_note(
     note_id: String,
     new_directory_path: String,
-) -> Result<(NoteState, LifecycleEffects), AppError> {
+) -> Result<LifecycleResult, AppError> {
     let workspace = crate::workspace::persist::Workspace::active()?;
-    crate::workspace::lifecycle::move_note(&workspace, &note_id, &new_directory_path)
+    crate::workspace::lifecycle::move_note_outcome(&workspace, &note_id, &new_directory_path)
 }
 
 /// Creates a Directory, including intermediate levels (CAP-LIFE-05). An empty
@@ -321,9 +323,9 @@ pub async fn move_note(
 /// table until it holds a Note — and makes no commit, since Git tracks no
 /// empty directory.
 #[frb]
-pub async fn create_directory(path: String) -> Result<(), AppError> {
+pub async fn create_directory(path: String) -> Result<LifecycleResult, AppError> {
     let workspace = crate::workspace::persist::Workspace::active()?;
-    crate::workspace::lifecycle::create_directory(&workspace, &path)
+    crate::workspace::lifecycle::create_directory_outcome(&workspace, &path)
 }
 
 /// Renames a Directory, moving its contents and rewriting inbound Links to
@@ -331,21 +333,18 @@ pub async fn create_directory(path: String) -> Result<(), AppError> {
 /// **not** confined to that subtree, which is why both halves of
 /// `LifecycleEffects` are populated here.
 #[frb]
-pub async fn rename_directory(
-    path: String,
-    new_name: String,
-) -> Result<LifecycleEffects, AppError> {
+pub async fn rename_directory(path: String, new_name: String) -> Result<LifecycleResult, AppError> {
     let workspace = crate::workspace::persist::Workspace::active()?;
-    crate::workspace::lifecycle::rename_directory(&workspace, &path, &new_name)
+    crate::workspace::lifecycle::rename_directory_outcome(&workspace, &path, &new_name)
 }
 
 /// Deletes a Directory and everything beneath it, in one commit (CAP-LIFE-06).
 /// Returns the concept ids of every Note removed, so a caller with one of them
 /// open can close it rather than discovering it is gone on next access.
 #[frb]
-pub async fn delete_directory(path: String) -> Result<Vec<String>, AppError> {
+pub async fn delete_directory(path: String) -> Result<LifecycleResult, AppError> {
     let workspace = crate::workspace::persist::Workspace::active()?;
-    crate::workspace::lifecycle::delete_directory(&workspace, &path)
+    crate::workspace::lifecycle::delete_directory_outcome(&workspace, &path)
 }
 
 /// The open session for `note_id`, or `NotFound` when the Note is not open.
@@ -356,6 +355,31 @@ fn open_session(note_id: &str) -> Result<crate::workspace::persist::NoteSession,
     let workspace_id = crate::db::connection::active_workspace_id()?;
     crate::workspace::persist::lookup(&workspace_id, note_id)?
         .ok_or_else(|| AppError::NotFound(format!("no open Note with id {note_id}")))
+}
+
+/// Resolves an open session under a source-mutation admission lease. The lease
+/// begins *before* lookup and remains held through the caller's mutation, so a
+/// request paused between those steps cannot revive a retired session after a
+/// rename, move, deletion, or inbound-link rewrite has completed.
+fn with_open_session_edit<T>(
+    note_id: &str,
+    f: impl FnOnce(crate::workspace::persist::NoteSession) -> Result<T, AppError>,
+) -> Result<T, AppError> {
+    let workspace = crate::workspace::persist::Workspace::active()?;
+    with_open_session_edit_in_workspace(&workspace, note_id, f)
+}
+
+fn with_open_session_edit_in_workspace<T>(
+    workspace: &std::sync::Arc<crate::workspace::persist::Workspace>,
+    note_id: &str,
+    f: impl FnOnce(crate::workspace::persist::NoteSession) -> Result<T, AppError>,
+) -> Result<T, AppError> {
+    let _lease = workspace.edit_lease(note_id)?;
+    let session = crate::workspace::persist::lookup(workspace.id(), note_id)?
+        .ok_or_else(|| AppError::NotFound(format!("no open Note with id {note_id}")))?;
+    #[cfg(test)]
+    workspace.run_after_edit_session_lookup();
+    f(session)
 }
 
 // ---------------------------------------------------------------------------
@@ -436,7 +460,9 @@ pub fn update_block(
     block_path: Vec<usize>,
     new_source: String,
 ) -> Result<(), AppError> {
-    open_session(&note_id)?.update_block(&block_path, &new_source)
+    with_open_session_edit(&note_id, |session| {
+        session.update_block(&block_path, &new_source)
+    })
 }
 
 /// Reparses the Note's working source and rebuilds the span map when the
@@ -447,7 +473,12 @@ pub fn update_block(
 /// whatever this reparses, and tier 2 clears the row on a successful write.
 #[frb(sync)]
 pub fn commit_block(note_id: String, block_path: Vec<usize>) -> Result<NoteState, AppError> {
-    open_session(&note_id)?.commit_block(&block_path)
+    let workspace = crate::workspace::persist::Workspace::active()?;
+    crate::workspace::persist::with_write_locks(&workspace, || {
+        with_open_session_edit_in_workspace(&workspace, &note_id, |session| {
+            session.commit_block(&block_path)
+        })
+    })
 }
 
 /// Inserts a new Block at `block_path`, shifting subsequent Blocks down.
@@ -457,12 +488,14 @@ pub fn insert_block(
     block_path: Vec<usize>,
     source: String,
 ) -> Result<NoteState, AppError> {
-    open_session(&note_id)?.insert_block(&block_path, source)
+    with_open_session_edit(&note_id, |session| {
+        session.insert_block(&block_path, source)
+    })
 }
 
 #[frb(sync)]
 pub fn delete_block(note_id: String, block_path: Vec<usize>) -> Result<NoteState, AppError> {
-    open_session(&note_id)?.delete_block(&block_path)
+    with_open_session_edit(&note_id, |session| session.delete_block(&block_path))
 }
 
 /// Splits a Block at a Flutter **UTF-16** offset into the supplied raw editor
@@ -477,8 +510,9 @@ pub fn split_block(
     source: String,
     offset: usize,
 ) -> Result<StructuralEdit, AppError> {
-    let (state, block_path, caret_offset) =
-        open_session(&note_id)?.split_block_from_editor_source(&block_path, &source, offset)?;
+    let (state, block_path, caret_offset) = with_open_session_edit(&note_id, |session| {
+        session.split_block_from_editor_source(&block_path, &source, offset)
+    })?;
     Ok(StructuralEdit {
         state,
         block_path,
@@ -495,8 +529,9 @@ pub fn merge_block_with_previous(
     note_id: String,
     block_path: Vec<usize>,
 ) -> Result<StructuralEdit, AppError> {
-    let (state, block_path, caret_offset) =
-        open_session(&note_id)?.merge_block_with_previous(&block_path)?;
+    let (state, block_path, caret_offset) = with_open_session_edit(&note_id, |session| {
+        session.merge_block_with_previous(&block_path)
+    })?;
     Ok(StructuralEdit {
         state,
         block_path,
@@ -515,7 +550,9 @@ pub fn continue_block_after(
     block_path: Vec<usize>,
     source: String,
 ) -> Result<StructuralEdit, AppError> {
-    let (state, block_path) = open_session(&note_id)?.continue_block_after(&block_path, &source)?;
+    let (state, block_path) = with_open_session_edit(&note_id, |session| {
+        session.continue_block_after(&block_path, &source)
+    })?;
     Ok(StructuralEdit {
         state,
         block_path,
@@ -619,10 +656,11 @@ pub fn copy_range_as_markdown(note_id: String, range: BlockRange) -> Result<Stri
 /// its selection before this boundary rather than silently changing it here.
 #[frb(sync)]
 pub fn delete_range(note_id: String, range: BlockRange) -> Result<RangeEditResult, AppError> {
-    let session = open_session(&note_id)?;
-    let state = session.note_state()?;
-    let range = range.into_rendered_range(&state.ast)?;
-    let (state, caret) = session.delete_range(&range)?;
+    let (state, caret) = with_open_session_edit(&note_id, |session| {
+        let state = session.note_state()?;
+        let range = range.into_rendered_range(&state.ast)?;
+        session.delete_range(&range)
+    })?;
     Ok(RangeEditResult {
         state,
         caret: range_edit_caret_from_persist(caret),
@@ -639,10 +677,11 @@ pub fn replace_range(
     range: BlockRange,
     replacement: String,
 ) -> Result<RangeEditResult, AppError> {
-    let session = open_session(&note_id)?;
-    let state = session.note_state()?;
-    let range = range.into_rendered_range(&state.ast)?;
-    let (state, caret) = session.replace_range(&range, &replacement)?;
+    let (state, caret) = with_open_session_edit(&note_id, |session| {
+        let state = session.note_state()?;
+        let range = range.into_rendered_range(&state.ast)?;
+        session.replace_range(&range, &replacement)
+    })?;
     Ok(RangeEditResult {
         state,
         caret: range_edit_caret_from_persist(caret),
@@ -842,9 +881,9 @@ pub async fn resolve_link_target(target_id: String) -> Result<LinkTargetResoluti
 /// instead, while a foreign filesystem collision is refused rather than
 /// overwritten.
 #[frb]
-pub async fn create_link_target(target_id: String) -> Result<NoteState, AppError> {
+pub async fn create_link_target(target_id: String) -> Result<LifecycleResult, AppError> {
     let workspace = crate::workspace::persist::Workspace::active()?;
-    crate::workspace::lifecycle::create_link_target(&workspace, &target_id)
+    crate::workspace::lifecycle::create_link_target_outcome(&workspace, &target_id)
 }
 
 /// Notes linking *to* this one (CAP-GRAPH-05).
@@ -1183,6 +1222,30 @@ mod tests {
 
     fn note_source(title: &str, body: &str) -> String {
         format!("---\ntype: Note\ntitle: {title}\n---\n\n{body}\n")
+    }
+
+    fn pause_after_edit_lookup(
+        fixture: &EditingFixture,
+    ) -> (
+        std::sync::mpsc::Receiver<()>,
+        std::sync::mpsc::SyncSender<()>,
+    ) {
+        let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::sync_channel(0);
+        let release_rx = std::sync::Arc::new(std::sync::Mutex::new(release_rx));
+        fixture
+            .workspace
+            .set_after_edit_session_lookup(Some(std::sync::Arc::new(move || {
+                entered_tx
+                    .send(())
+                    .expect("the edit request must reach its post-lookup pause");
+                release_rx
+                    .lock()
+                    .unwrap()
+                    .recv()
+                    .expect("the test must release its post-lookup pause");
+            })));
+        (entered_rx, release_tx)
     }
 
     /// TDD order 1: `get_block_source` returns the raw Block source
@@ -1644,7 +1707,13 @@ mod tests {
             }
         );
         let created = block_on(create_link_target("projects/Future Plan".to_string())).unwrap();
-        assert_eq!(created.metadata.id, "projects/Future Plan");
+        assert_eq!(
+            created
+                .state
+                .as_ref()
+                .map(|state| state.metadata.id.as_str()),
+            Some("projects/Future Plan")
+        );
         assert_eq!(
             block_on(resolve_link_target("projects/Future Plan".to_string())).unwrap(),
             LinkTargetResolution::Existing {
@@ -2114,7 +2183,13 @@ mod tests {
             "Meeting Notes".to_string(),
         ))
         .unwrap();
-        assert_eq!(created.metadata.id, "projects/Meeting Notes");
+        assert_eq!(
+            created
+                .state
+                .as_ref()
+                .map(|state| state.metadata.id.as_str()),
+            Some("projects/Meeting Notes")
+        );
         assert!(ws.root.join("projects/Meeting Notes.md").is_file());
 
         // A source Note holding an inbound Link, so the rename has an edge to
@@ -2127,17 +2202,21 @@ mod tests {
         );
         block_on(reindex_workspace()).unwrap();
 
-        let (renamed, effects) = block_on(rename_note(
+        let renamed = block_on(rename_note(
             "projects/Meeting Notes".to_string(),
             "Standup Notes".to_string(),
         ))
         .unwrap();
         assert_eq!(
-            renamed.metadata.id, "projects/Standup Notes",
+            renamed
+                .state
+                .as_ref()
+                .map(|state| state.metadata.id.as_str()),
+            Some("projects/Standup Notes"),
             "rename_note must change the filename and leave the Directory alone"
         );
         assert_eq!(
-            effects.rewritten,
+            renamed.effects.rewritten,
             vec!["src".to_string()],
             "the source Note whose bytes moved must be reported so the shell reloads it"
         );
@@ -2145,13 +2224,14 @@ mod tests {
             .unwrap()
             .contains("</projects/Standup Notes.md>"));
 
-        let (moved, _) = block_on(move_note(
+        let moved = block_on(move_note(
             "projects/Standup Notes".to_string(),
             String::new(),
         ))
         .unwrap();
         assert_eq!(
-            moved.metadata.id, "Standup Notes",
+            moved.state.as_ref().map(|state| state.metadata.id.as_str()),
+            Some("Standup Notes"),
             "move_note must change the Directory and leave the filename alone"
         );
 
@@ -2162,7 +2242,7 @@ mod tests {
         ))
         .unwrap();
         assert_eq!(
-            dir_effects.remapped,
+            dir_effects.effects.remapped,
             vec![IdRemap {
                 old_id: "projects/Kept".to_string(),
                 new_id: "archive/Kept".to_string(),
@@ -2171,7 +2251,7 @@ mod tests {
         );
 
         let removed = block_on(delete_directory("archive".to_string())).unwrap();
-        assert_eq!(removed, vec!["archive/Kept".to_string()]);
+        assert_eq!(removed.removed, vec!["archive/Kept".to_string()]);
         assert!(!ws.root.join("archive").exists());
 
         block_on(delete_note("Standup Notes".to_string())).unwrap();
@@ -2276,12 +2356,13 @@ mod tests {
         // Three functions on this boundary legitimately have it, and no
         // fourth may be added without amending the contract. `open_note`
         // and `reload_note` are the two the previous revision named.
-        // `create_note` and `create_link_target` are the creation entries and
-        // are not exceptions to the rule
+        // `create_link_target` is the creation entry and is not an exception
         // above but an instance of it: `contracts/ffi_api.rs` specifies that
         // it creates the file *and opens it*, precisely so that the first
         // `update_block` after a creation substitutes into a buffer that was
-        // established rather than into nothing. It is still not a second way
+        // established rather than into nothing. `create_note` returns its
+        // state inside `LifecycleResult` for the same reason. Neither is a
+        // second way
         // to open an **existing** Note — it fails with `PathUnavailable` when
         // the path is taken — which is what the rule protects. Every other
         // same-shaped function is one of the per-Block or per-range mutators,
@@ -2290,15 +2371,10 @@ mod tests {
         opener_shaped_names.sort();
         assert_eq!(
             opener_shaped_names,
-            vec![
-                "create_link_target".to_string(),
-                "create_note".to_string(),
-                "open_note".to_string(),
-                "reload_note".to_string()
-            ],
+            vec!["open_note".to_string(), "reload_note".to_string()],
             "the only functions that may return Result<NoteState, AppError> \
              while taking neither a block_path (Vec<usize>) nor a range \
-             (BlockRange) are open_note, reload_note and create_note — any \
+             (BlockRange) are open_note and reload_note — any \
              other name here is an undocumented additional entry point"
         );
 
@@ -2322,6 +2398,78 @@ mod tests {
                      {line:?}"
                 );
             }
+        }
+    }
+
+    /// The edit lease starts before FFI lookup, not at the eventual session
+    /// method. A request paused after lookup must make a lifecycle operation
+    /// wait, so it cannot mutate a retired `SessionInner` once rename/delete
+    /// reconciliation has already completed.
+    #[test]
+    fn an_edit_lease_covers_lookup_before_retirement_and_same_id_rewrite() {
+        use crate::workspace::lifecycle::rename_note;
+
+        // The invoked Note is retired and re-keyed.
+        {
+            let f = editing_fixture();
+            f.write("Old.md", &note_source("Old", "Original."));
+            f.open("Old");
+            let (entered, release) = pause_after_edit_lookup(&f);
+            let workspace = std::sync::Arc::clone(&f.workspace);
+            let edit = std::thread::spawn(move || {
+                with_open_session_edit_in_workspace(&workspace, "Old", |session| {
+                    session.update_block(&[0], "Edited before rename.\n")
+                })
+            });
+            entered
+                .recv_timeout(Duration::from_secs(3))
+                .expect("the request did not pause after lookup");
+            let workspace = std::sync::Arc::clone(&f.workspace);
+            let rename = std::thread::spawn(move || rename_note(&workspace, "Old", "New"));
+
+            release.send(()).unwrap();
+            edit.join().unwrap().unwrap();
+            rename.join().unwrap().unwrap();
+            f.workspace.set_after_edit_session_lookup(None);
+
+            assert!(persist::lookup(f.workspace.id(), "Old").unwrap().is_none());
+            let moved = persist::lookup(f.workspace.id(), "New").unwrap().unwrap();
+            assert!(moved
+                .working_source()
+                .unwrap()
+                .contains("Edited before rename."));
+        }
+
+        // An inbound-Link source retains its id but its bytes/session are
+        // rewritten. The same lease must keep the lookup's session current.
+        {
+            let f = editing_fixture();
+            f.write("Old.md", &note_source("Old", "Target."));
+            f.write("b.md", &note_source("b", "See [old](</Old.md>)."));
+            f.open("b");
+            let (entered, release) = pause_after_edit_lookup(&f);
+            let workspace = std::sync::Arc::clone(&f.workspace);
+            let edit = std::thread::spawn(move || {
+                with_open_session_edit_in_workspace(&workspace, "b", |session| {
+                    session.update_block(&[0], "Edited [old](</Old.md>).\n")
+                })
+            });
+            entered
+                .recv_timeout(Duration::from_secs(3))
+                .expect("the inbound source request did not pause after lookup");
+            let workspace = std::sync::Arc::clone(&f.workspace);
+            let rename = std::thread::spawn(move || rename_note(&workspace, "Old", "New"));
+
+            release.send(()).unwrap();
+            edit.join().unwrap().unwrap();
+            rename.join().unwrap().unwrap();
+            f.workspace.set_after_edit_session_lookup(None);
+
+            let rewritten = persist::lookup(f.workspace.id(), "b").unwrap().unwrap();
+            let source = rewritten.working_source().unwrap();
+            assert!(source.contains("Edited"));
+            assert!(source.contains("</New.md>"));
+            assert!(!source.contains("</Old.md>"));
         }
     }
 }
