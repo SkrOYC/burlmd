@@ -26,6 +26,7 @@ class _RescanRustApi extends RustApi {
   int treeFetches = 0;
   final List<String> calls = [];
   final List<String> blockUpdates = [];
+  Completer<NoteState>? reloadGate;
 
   _RescanRustApi(this.currentTree);
 
@@ -66,6 +67,14 @@ class _RescanRustApi extends RustApi {
       baseRevision: 'head',
       restoredFromDraft: false,
     );
+  }
+
+  @override
+  Future<NoteState> reloadNote(String noteId) {
+    calls.add('reload:$noteId');
+    final gate = reloadGate;
+    if (gate != null) return gate.future;
+    return openNote(noteId);
   }
 
   @override
@@ -289,6 +298,58 @@ void main() {
       container.read(activeNoteProvider.notifier).updateBlock([0], 'retained');
       expect(api.blockUpdates, ['b:0:retained']);
       expect(container.read(activeNoteProvider)!.metadata.id, 'b');
+    },
+  );
+
+  testWidgets(
+    'a pending note reload refuses a rescan without opening a second Core boundary',
+    (tester) async {
+      final api = _RescanRustApi([_note('a', 'Alpha')]);
+      final reloadGate = Completer<NoteState>();
+      api.reloadGate = reloadGate;
+      var reindexCalls = 0;
+      final container = await _pumpShell(
+        tester,
+        api,
+        reindex: () async {
+          reindexCalls++;
+          return 1;
+        },
+      );
+
+      await tester.tap(find.text('Alpha'));
+      await tester.pumpAndSettle();
+      final reload = container
+          .read(activeNoteProvider.notifier)
+          .reloadFromDisk();
+      await tester.pump();
+
+      expect(container.read(reloadEditingProvider), 1);
+      expect(_rescanButton(tester).onPressed, isNull);
+      await container.read(rescanStateProvider.notifier).run();
+      expect(reindexCalls, 0);
+      expect(container.read(rescanStateProvider).refusedReason, isNotNull);
+      expect(container.read(rescanEditingProvider), 0);
+
+      reloadGate.complete(
+        NoteState(
+          ast: const [],
+          metadata: const NoteMetadata(
+            id: 'a',
+            path: 'a.md',
+            title: 'Alpha from disk',
+            lastModified: 0,
+            okfConformant: true,
+          ),
+          baseRevision: 'disk',
+          restoredFromDraft: false,
+        ),
+      );
+      await reload;
+      await tester.pump();
+
+      expect(container.read(reloadEditingProvider), 0);
+      expect(_rescanButton(tester).onPressed, isNotNull);
     },
   );
 

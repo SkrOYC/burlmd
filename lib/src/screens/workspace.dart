@@ -157,10 +157,13 @@ class WorkspaceRescan extends Notifier<RescanState> {
   Future<void> run() async {
     if (state.running) return;
 
-    // Rescan and lifecycle actions both rewrite the Workspace's Core view.
+    // A rescan, lifecycle action, or active-note reload can each replace the
+    // Core view this operation reads. Refuse stale/direct invocations instead
+    // of overlapping their independent admissions.
     // The regular affordance is disabled by the same shared gate, but this
     // direct check protects a stale frame or programmatic caller as well.
-    if (ref.read(lifecycleEditingProvider) > 0) {
+    if (ref.read(lifecycleEditingProvider) > 0 ||
+        ref.read(reloadEditingProvider) > 0) {
       state = const RescanState(
         refusedReason:
             'Rescan unavailable while workspace changes are in progress.',
@@ -263,7 +266,8 @@ class _RescanButton extends ConsumerWidget {
     final blocked =
         rescan.running ||
         blockedByOpenEdits ||
-        ref.watch(lifecycleEditingProvider) > 0;
+        ref.watch(lifecycleEditingProvider) > 0 ||
+        ref.watch(reloadEditingProvider) > 0;
 
     return Tooltip(
       message: 'Re-read the workspace from disk and refresh the note tree',

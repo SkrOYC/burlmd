@@ -332,6 +332,19 @@ class LifecycleActions {
   Future<LifecycleOutcome> _guard(
     Future<LifecycleOutcome> Function(_LifecycleOperation operation) action,
   ) {
+    // A disk reload owns the active session's source until its returned state
+    // lands. Refuse rather than queue a mutation behind it: lifecycle work
+    // may rekey, rewrite, or delete that session, which would make either
+    // operation's source adoption ambiguous.
+    if (_ref.read(reloadEditingProvider) > 0) {
+      return Future.value(
+        LifecycleFailed(
+          StateError(
+            'Workspace lifecycle changes are unavailable while a note reload is in progress.',
+          ),
+        ),
+      );
+    }
     // A reindex owns the same Core data boundary as lifecycle mutations.
     // Refuse a direct/stale lifecycle invocation while it is running instead
     // of allowing two independently admitted mutation paths to overlap.

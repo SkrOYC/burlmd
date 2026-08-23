@@ -62,7 +62,7 @@ Future<_UpdateSpyApi> _pumpBlockEditor(
   WidgetTester tester, {
   required String source,
   bool phantom = false,
-  void Function(String source, int caret)? onEnter,
+  void Function(String source, TextSelection selection)? onEnter,
   VoidCallback? onBackspaceAtStart,
 }) async {
   final api = _UpdateSpyApi();
@@ -246,6 +246,78 @@ void main() {
       expect(
         reversed.selection,
         const TextSelection(baseOffset: 7, extentOffset: 3),
+      );
+    });
+
+    group('CommonMark emphasis delimiter flanking', () {
+      for (final delimiter in const ['*', '**']) {
+        for (final reverse in [false, true]) {
+          test('$delimiter leaves ${reverse ? 'reversed' : 'forward'} leading '
+              'or trailing-whitespace selections unchanged', () {
+            const source = 'before  word  after';
+            const low = 'before '.length;
+            const high = 'before  word '.length;
+            final selected = _value(
+              source,
+              reverse ? high : low,
+              reverse ? low : high,
+            );
+            expect(
+              applyInlineEmphasis(selected, delimiter: delimiter),
+              selected,
+            );
+
+            final literal = '$delimiter word $delimiter';
+            final literalInner = _value(
+              literal,
+              reverse ? literal.length - delimiter.length : delimiter.length,
+              reverse ? delimiter.length : literal.length - delimiter.length,
+            );
+            expect(
+              applyInlineEmphasis(literalInner, delimiter: delimiter),
+              literalInner,
+            );
+            final wholeLiteral = _value(
+              literal,
+              reverse ? literal.length : 0,
+              reverse ? 0 : literal.length,
+            );
+            expect(
+              applyInlineEmphasis(wholeLiteral, delimiter: delimiter),
+              wholeLiteral,
+            );
+          });
+        }
+      }
+
+      test(
+        'accepts Unicode punctuation adjacency and preserves UTF-16 offsets',
+        () {
+          final punctuation = applyInlineEmphasis(
+            _value('«word»', 0, 6),
+            delimiter: '**',
+          );
+          expect(punctuation.text, '**«word»**');
+          expect(
+            punctuation.selection,
+            const TextSelection(baseOffset: 2, extentOffset: 8),
+          );
+          expect(
+            applyInlineEmphasis(punctuation, delimiter: '**').text,
+            '«word»',
+          );
+
+          final utf16 = applyInlineEmphasis(
+            _value('🙂word', 2, 6),
+            delimiter: '*',
+          );
+          expect(utf16.text, '🙂*word*');
+          expect(
+            utf16.selection,
+            const TextSelection(baseOffset: 3, extentOffset: 7),
+          );
+          expect(applyInlineEmphasis(utf16, delimiter: '*').text, '🙂word');
+        },
       );
     });
 

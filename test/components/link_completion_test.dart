@@ -586,7 +586,7 @@ void main() {
   testWidgets(
     'an Enter repeat after completion acceptance does not trigger structural Enter',
     (tester) async {
-      final structuralEnters = <(String, int)>[];
+      final structuralEnters = <(String, TextSelection)>[];
       final api = _CompletionApi((_) => [_existing('plan')]);
       await tester.pumpWidget(
         ProviderScope(
@@ -604,8 +604,8 @@ void main() {
                 focusToken: 1,
                 onFocusLost: (_) {},
                 onCommitEligibilityChanged: (_, _) {},
-                onEnter: (source, caret) =>
-                    structuralEnters.add((source, caret)),
+                onEnter: (source, selection) =>
+                    structuralEnters.add((source, selection)),
               ),
             ),
           ),

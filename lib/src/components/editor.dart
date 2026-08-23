@@ -26,6 +26,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart'
     show Uint64List;
 
+bool _isValidUtf16SelectionBoundary(String text, int offset) {
+  if (offset < 0 || offset > text.length) return false;
+  if (offset == 0 || offset == text.length) return true;
+  final previous = text.codeUnitAt(offset - 1);
+  final next = text.codeUnitAt(offset);
+  return !(previous >= 0xD800 &&
+      previous <= 0xDBFF &&
+      next >= 0xDC00 &&
+      next <= 0xDFFF);
+}
+
 /// A frozen cross-Block target owned by the editor's input proxy. Ordinary
 /// selections retain their public Core [BlockRange] coordinates; Select All
 /// is a distinct Core operation because an empty terminal rendering has no
@@ -404,8 +415,8 @@ class EditorState extends ConsumerState<Editor> {
           style: blockTextStyle(leaf),
           resyncToken: focused.resyncToken,
           focusToken: focused.token,
-          onEnter: (source, caret) =>
-              _handleEnterRequested(focused.path, source, caret),
+          onEnter: (source, selection) =>
+              _handleEnterRequested(focused.path, source, selection),
           onBackspaceAtStart: () => _handleBackspaceAtStart(focused.path),
           onFocusLost: _handleFieldBlur,
           onCommitEligibilityChanged: _handleCommitEligibilityChanged,
@@ -1068,13 +1079,22 @@ class EditorState extends ConsumerState<Editor> {
     );
   }
 
-  /// Enter pressed in the focused Block at source offset [caret]. At the
-  /// Block's end this opens the empty phantom Block after it. If the raw field
-  /// changed, it first commits and adopts the preceding real Block exactly
-  /// once, so abandoning the phantom cannot reveal a stale provider AST.
-  /// Mid-Block it splits through `split_block`, adopting the returned state
-  /// and re-deriving focus onto the second half with the caret at its start.
-  void _handleEnterRequested(List<int> blockPath, String source, int caret) {
+  /// Enter pressed in the focused Block at [selection]. A non-collapsed raw
+  /// selection is first replaced by the empty string through Core's buffered
+  /// source write, then split through Core at that resulting caret. This is
+  /// deliberately one structural action rather than letting EditableText
+  /// insert a raw soft newline between two Core operations.
+  ///
+  /// A collapsed Enter at the visual end opens the empty phantom Block after
+  /// it. If the raw field changed, it first commits and adopts the preceding
+  /// real Block exactly once, so abandoning the phantom cannot reveal a stale
+  /// provider AST. Other collapsed entries split through `split_block`,
+  /// adopting the returned state and re-deriving focus onto the second half.
+  void _handleEnterRequested(
+    List<int> blockPath,
+    String source,
+    TextSelection selection,
+  ) {
     if (ref.read(editorInputBlockedProvider)) return;
     final focused = _focused;
     if (focused == null ||
@@ -1085,20 +1105,43 @@ class EditorState extends ConsumerState<Editor> {
     }
     final note = ref.read(activeNoteProvider);
     if (note == null) return;
-    final clamped = caret.clamp(0, source.length);
+    if (!_isValidUtf16SelectionBoundary(source, selection.baseOffset) ||
+        !_isValidUtf16SelectionBoundary(source, selection.extentOffset)) {
+      return;
+    }
+    final low = math.min(selection.baseOffset, selection.extentOffset);
+    final high = math.max(selection.baseOffset, selection.extentOffset);
+    var resultingSource = source;
+    final caret = low;
+    final splitAfterReplacement = low != high;
+    if (splitAfterReplacement) {
+      try {
+        // `update_block` is the Core-owned raw replacement seam. Keep the
+        // field untouched until the following split returns an authoritative
+        // focus target, so a refusal remains visibly retryable.
+        resultingSource = source.replaceRange(low, high, '');
+        ref
+            .read(rustApiProvider)
+            .updateBlock(note.metadata.id, blockPath, resultingSource);
+      } catch (error) {
+        ref.read(keystrokeWriteFailureProvider.notifier).report(error);
+        return;
+      }
+    }
     // "End of the Block" means only whitespace remains after the caret.
     // Core sources carry a terminating newline (spans.rs `block_source`
     // contract), so this covers caret-at-length AND the caret sitting just
     // before that invisible trailing newline — both are the visual end of
     // the Block. This holds for EVERY Block, not just the last one, so the
     // phantom below must be able to open mid-document.
-    if (source.substring(clamped).trim().isEmpty) {
+    if (!splitAfterReplacement &&
+        resultingSource.substring(caret).trim().isEmpty) {
       var committedState = note;
       var continuationPath = List<int>.from(blockPath);
       // `update_block` deliberately leaves the provider AST stale while the
       // field is raw. Before replacing that real field with a phantom, repair
       // it through Core and retain only an address derived from Core state.
-      if (source != focused.source) {
+      if (resultingSource != focused.source) {
         try {
           final api = ref.read(rustApiProvider);
           committedState = api.commitBlock(note.metadata.id, blockPath);
@@ -1108,7 +1151,7 @@ class EditorState extends ConsumerState<Editor> {
             note,
             committedState,
             blockPath,
-            source,
+            resultingSource,
           );
           ref.read(activeNoteProvider.notifier).adopt(committedState);
         } catch (error) {
@@ -1137,8 +1180,8 @@ class EditorState extends ConsumerState<Editor> {
       final structural = api.splitBlock(
         note.metadata.id,
         blockPath,
-        source,
-        clamped,
+        resultingSource,
+        caret,
       );
       final newState = structural.state;
       ref.read(activeNoteProvider.notifier).adopt(newState);
@@ -1444,7 +1487,7 @@ class EditorState extends ConsumerState<Editor> {
       _handleEnterRequested(
         focused.path,
         focused.source,
-        focused.source.length,
+        TextSelection.collapsed(offset: focused.source.length),
       );
       await WidgetsBinding.instance.endOfFrame;
       if (!_hasStagedSmokeF004State()) {

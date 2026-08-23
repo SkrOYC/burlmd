@@ -929,6 +929,90 @@ void main() {
     expect(_field(tester).controller.selection.baseOffset, 0);
   });
 
+  for (final reverse in [false, true]) {
+    testWidgets(
+      'Enter deletes a ${reverse ? 'reversed' : 'forward'} multiline raw '
+      'selection through Core before splitting at its resulting caret',
+      (tester) async {
+        const selected = '**remove\nthis**';
+        const source = 'alpha $selected omega\n';
+        final api = _CoreFake([source]);
+        await pumpEditor(tester, [
+          _paragraph('alpha remove this omega'),
+        ], api: api);
+
+        await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
+        const start = 'alpha '.length;
+        const end = start + selected.length;
+        _field(tester).controller.selection = TextSelection(
+          baseOffset: reverse ? end : start,
+          extentOffset: reverse ? start : end,
+        );
+        await pressKey(tester, LogicalKeyboardKey.enter);
+
+        expect(api.updateCount, 1);
+        expect(api.lastUpdateSource, 'alpha  omega\n');
+        expect(api.calls.where((call) => call.startsWith('split')), [
+          'split:0:$start',
+        ]);
+        expect(api.blocks, ['alpha ', ' omega\n']);
+        expect(
+          _field(tester).controller.text,
+          ' omega\n',
+          reason: 'the authoritative split result replaces the raw field',
+        );
+        expect(
+          _field(tester).controller.selection,
+          const TextSelection.collapsed(offset: 0),
+        );
+      },
+    );
+  }
+
+  testWidgets('a refused selected-Enter split keeps the original raw range '
+      'visible and retries its Core replacement before splitting', (
+    tester,
+  ) async {
+    const selected = '**remove**';
+    const source = 'alpha $selected omega\n';
+    final api = _CoreFake([source])
+      ..splitFailure = const AppError.parseError('split refused');
+    final container = await pumpEditor(tester, [
+      _paragraph('alpha remove omega'),
+    ], api: api);
+
+    await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
+    const start = 'alpha '.length;
+    _field(tester).controller.selection = const TextSelection(
+      baseOffset: start,
+      extentOffset: start + selected.length,
+    );
+    await pressKey(tester, LogicalKeyboardKey.enter);
+
+    expect(api.updateCount, 1);
+    expect(api.lastUpdateSource, 'alpha  omega\n');
+    expect(api.calls.where((call) => call.startsWith('split')), [
+      'split:0:$start',
+    ]);
+    expect(_field(tester).controller.text, source);
+    expect(_field(tester).focusNode.hasFocus, isTrue);
+    expect(
+      container.read(keystrokeWriteFailureProvider),
+      isA<AppError_ParseError>(),
+    );
+
+    api.splitFailure = null;
+    await pressKey(tester, LogicalKeyboardKey.enter);
+
+    expect(api.updateCount, 2, reason: 'retry replaces the same raw range');
+    expect(api.calls.where((call) => call.startsWith('split')), [
+      'split:0:$start',
+      'split:0:$start',
+    ]);
+    expect(api.blocks, ['alpha ', ' omega\n']);
+    expect(_field(tester).controller.text, ' omega\n');
+  });
+
   testWidgets('Enter classifies the live field value, not its stale promoted '
       'source', (tester) async {
     final api = _CoreFake(['a']);

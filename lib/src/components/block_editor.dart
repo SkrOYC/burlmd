@@ -9,6 +9,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 
+final _commonMarkWhitespace = RegExp(r'^[\p{Zs}\t\n\f\r]$', unicode: true);
+final _commonMarkPunctuation = RegExp(r'^[\p{P}\p{S}]$', unicode: true);
+
 /// The focused Block's raw editable field (`EDIT-F002`, ADR-006 decision 2):
 /// a plain text field over the Block's raw Markdown source — `**bold**`, not
 /// bold — which is the whole point of the raw-on-focus model. There is
@@ -98,12 +101,11 @@ class BlockEditor extends ConsumerStatefulWidget {
   /// path comparison alone cannot distinguish when both share a path.
   final int focusToken;
 
-  /// Enter pressed in this field (`EDIT-F004`, CAP-EDIT-03): the caret's
-  /// source offset at press time. The parent decides between splitting the
-  /// Block mid-text and opening an empty phantom Block at its end. Only
-  /// fired for a collapsed selection; a non-collapsed selection lets the
-  /// platform delete it first.
-  final void Function(String source, int caret)? onEnter;
+  /// Enter pressed in this field (`EDIT-F004`, CAP-EDIT-03). The parent owns
+  /// both an exact raw-range deletion/replacement and the following structural
+  /// split, so a selected raw range never falls through to EditableText's
+  /// soft-newline insertion.
+  final void Function(String source, TextSelection selection)? onEnter;
 
   /// Backspace pressed with a collapsed caret at source offset 0
   /// (`EDIT-F004`, CAP-EDIT-03): the parent merges this Block into its
@@ -588,15 +590,8 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
     if (event is KeyDownEvent &&
         (event.logicalKey == LogicalKeyboardKey.enter ||
             event.logicalKey == LogicalKeyboardKey.numpadEnter)) {
-      // A non-collapsed selection is the platform's to delete first; the
-      // user pressing Enter again then hits the collapsed path below.
-      if (!selection.isCollapsed || widget.onEnter == null) {
-        return KeyEventResult.ignored;
-      }
-      widget.onEnter!(
-        _controller.text,
-        selection.baseOffset.clamp(0, _controller.text.length),
-      );
+      if (widget.onEnter == null) return KeyEventResult.ignored;
+      widget.onEnter!(_controller.text, selection);
       return KeyEventResult.handled;
     }
     if (event.logicalKey == LogicalKeyboardKey.backspace &&
@@ -848,8 +843,12 @@ TextEditingValue applyInlineEmphasis(
   if (!selection.isValid || delimiter.isEmpty) return value;
   if (delimiter == '`') return _applyInlineCode(value);
   final text = value.text;
-  final base = selection.baseOffset.clamp(0, text.length);
-  final extent = selection.extentOffset.clamp(0, text.length);
+  final base = selection.baseOffset;
+  final extent = selection.extentOffset;
+  if (!_isValidUtf16SelectionBoundary(text, base) ||
+      !_isValidUtf16SelectionBoundary(text, extent)) {
+    return value;
+  }
   if (base == extent) {
     final updated = text.replaceRange(base, base, '$delimiter$delimiter');
     return TextEditingValue(
@@ -873,9 +872,22 @@ TextEditingValue applyInlineEmphasis(
       selected.endsWith(delimiter);
 
   final canUnwrap =
-      delimiter != '*' ||
-      (surroundsInner && _isOddStarDelimiterPair(text, low - 1, high)) ||
-      (selectsFullRun && _isOddStarDelimiterPair(text, low, high - 1));
+      (surroundsInner &&
+          _isValidEmphasisDelimiterPair(
+            text,
+            delimiter: delimiter,
+            openingStart: low - delimiter.length,
+            closingStart: high,
+          ) &&
+          (delimiter != '*' || _isOddStarDelimiterPair(text, low - 1, high))) ||
+      (selectsFullRun &&
+          _isValidEmphasisDelimiterPair(
+            text,
+            delimiter: delimiter,
+            openingStart: low,
+            closingStart: high - delimiter.length,
+          ) &&
+          (delimiter != '*' || _isOddStarDelimiterPair(text, low, high - 1)));
 
   if ((surroundsInner || selectsFullRun) && canUnwrap) {
     final outerStart = surroundsInner ? low - delimiter.length : low;
@@ -901,6 +913,13 @@ TextEditingValue applyInlineEmphasis(
       ),
     );
   }
+
+  // CommonMark 0.31.2 §6.2 permits an asterisk delimiter only when the
+  // generated opening and closing runs are respectively left- and
+  // right-flanking. Inserting source around ` word ` or punctuation-invalid
+  // adjacency would leave literal asterisks, so preserve the selection rather
+  // than pretend its shortcut toggled formatting.
+  if (!_canWrapWithEmphasisDelimiter(text, low, high, delimiter)) return value;
 
   final updated = text.replaceRange(low, high, '$delimiter$selected$delimiter');
   return TextEditingValue(
@@ -1184,6 +1203,129 @@ bool _isStandaloneBacktickRun(String text, int start, int end) =>
     start < end &&
     (start == 0 || text[start - 1] != '`') &&
     (end == text.length || text[end] != '`');
+
+bool _canWrapWithEmphasisDelimiter(
+  String text,
+  int low,
+  int high,
+  String delimiter,
+) {
+  if (delimiter != '*' && delimiter != '**') return true;
+  final updated = text.replaceRange(
+    low,
+    high,
+    '$delimiter${text.substring(low, high)}$delimiter',
+  );
+  return _isValidEmphasisDelimiterPair(
+    updated,
+    delimiter: delimiter,
+    openingStart: low,
+    closingStart: high + delimiter.length,
+  );
+}
+
+/// Checks the parser-visible delimiter runs rather than merely matching
+/// punctuation text. CommonMark treats the beginning/end of a line as
+/// whitespace and classifies Unicode `P` and `S` as punctuation.
+bool _isValidEmphasisDelimiterPair(
+  String text, {
+  required String delimiter,
+  required int openingStart,
+  required int closingStart,
+}) {
+  if (delimiter != '*' && delimiter != '**') return true;
+  final opening = _starRunAt(text, openingStart);
+  final closing = _starRunAt(text, closingStart);
+  if (opening == null || closing == null || opening.start == closing.start) {
+    return false;
+  }
+  if (_isBackslashEscaped(text, opening.start) ||
+      _isBackslashEscaped(text, closing.start)) {
+    return false;
+  }
+  final openingFlanking = _delimiterFlanking(text, opening);
+  final closingFlanking = _delimiterFlanking(text, closing);
+  if (!openingFlanking.left || !closingFlanking.right) return false;
+
+  // CommonMark rules 9 and 10: an opener/closer pair that can both open and
+  // close observes the modulo-three constraint for its complete runs.
+  if ((openingFlanking.right || closingFlanking.left) &&
+      (opening.length + closing.length) % 3 == 0 &&
+      !(opening.length % 3 == 0 && closing.length % 3 == 0)) {
+    return false;
+  }
+  return true;
+}
+
+class _StarRun {
+  const _StarRun(this.start, this.end);
+
+  final int start;
+  final int end;
+
+  int get length => end - start;
+}
+
+class _DelimiterFlanking {
+  const _DelimiterFlanking({required this.left, required this.right});
+
+  final bool left;
+  final bool right;
+}
+
+_StarRun? _starRunAt(String text, int offset) {
+  if (offset < 0 || offset >= text.length || text[offset] != '*') return null;
+  var start = offset;
+  var end = offset + 1;
+  while (start > 0 && text[start - 1] == '*') {
+    start--;
+  }
+  while (end < text.length && text[end] == '*') {
+    end++;
+  }
+  return _StarRun(start, end);
+}
+
+_DelimiterFlanking _delimiterFlanking(String text, _StarRun run) {
+  final before = _codePointBefore(text, run.start);
+  final after = _codePointAt(text, run.end);
+  final beforeWhitespace =
+      before == null || _commonMarkWhitespace.hasMatch(before);
+  final afterWhitespace =
+      after == null || _commonMarkWhitespace.hasMatch(after);
+  final beforePunctuation =
+      before != null && _commonMarkPunctuation.hasMatch(before);
+  final afterPunctuation =
+      after != null && _commonMarkPunctuation.hasMatch(after);
+  return _DelimiterFlanking(
+    left:
+        !afterWhitespace &&
+        (!afterPunctuation || beforeWhitespace || beforePunctuation),
+    right:
+        !beforeWhitespace &&
+        (!beforePunctuation || afterWhitespace || afterPunctuation),
+  );
+}
+
+String? _codePointBefore(String text, int offset) {
+  if (offset == 0) return null;
+  final iterator = RuneIterator.at(text, offset);
+  return iterator.movePrevious() ? iterator.currentAsString : null;
+}
+
+String? _codePointAt(String text, int offset) {
+  if (offset == text.length) return null;
+  final iterator = RuneIterator.at(text, offset);
+  return iterator.moveNext() ? iterator.currentAsString : null;
+}
+
+bool _isBackslashEscaped(String text, int offset) {
+  var count = 0;
+  for (var index = offset - 1; index >= 0 && text[index] == '\\'; index--) {
+    count++;
+  }
+  return count.isOdd;
+}
 
 /// A run of two stars is a strong delimiter, not two independent italic
 /// delimiters. Odd runs represent a composed strong+italic boundary, so one
