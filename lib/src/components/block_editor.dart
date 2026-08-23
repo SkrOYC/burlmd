@@ -375,6 +375,13 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
     }
     final emphasis = _emphasisShortcutFor(event);
     if (emphasis != null) {
+      // A phantom has no Core-backed source span, and a resync conflict has
+      // deliberately frozen writes to protect two divergent branches. In both
+      // states the shortcut is consumed so EditableText/default actions cannot
+      // mutate the local field or materialize/stomp either branch.
+      if (widget.phantom || _hasResyncConflict) {
+        return KeyEventResult.handled;
+      }
       // Holding a shortcut must not turn a wrap into an immediate unwrap.
       // Flutter 3.44.3 guarantees a down followed by zero or more repeat
       // events, so only its first [KeyDownEvent] changes the raw source.
