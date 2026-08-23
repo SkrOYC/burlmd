@@ -50,6 +50,9 @@ class _HomeState extends ConsumerState<_Home> {
     if (Platform.environment.containsKey('BURLMD_SMOKE_F004')) {
       _stageSmokeF004();
     }
+    if (Platform.environment.containsKey('BURLMD_SMOKE_F005')) {
+      _stageSmokeF005();
+    }
   }
 
   @override
@@ -210,5 +213,34 @@ class _HomeState extends ConsumerState<_Home> {
     }
     ref.invalidate(workspaceTreeProvider);
     ref.read(selectedNoteIdProvider.notifier).select(state!.metadata.id);
+  }
+
+  /// Staging half of the `EDIT-F005` smoke hook. The editor owns promotion
+  /// and the raw-source shortcut itself; this only creates and selects the
+  /// Core-owned fixture required for an honest focused-Block interaction.
+  Future<void> _stageSmokeF005() async {
+    const title = 'F005 emphasis';
+    final api = ref.read(rustApiProvider);
+    final deadline = DateTime.now().add(const Duration(seconds: 30));
+    while (DateTime.now().isBefore(deadline)) {
+      if (ref.read(workspaceProvider).hasValue) break;
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    }
+    NoteState? state;
+    try {
+      state = await api.createNote('', title);
+    } catch (_) {
+      try {
+        await api.deleteNote(title);
+        state = await api.createNote('', title);
+      } catch (_) {
+        return;
+      }
+    }
+    state = api.insertBlock(state.metadata.id, [
+      state.ast.length,
+    ], 'shortcut target');
+    ref.invalidate(workspaceTreeProvider);
+    ref.read(selectedNoteIdProvider.notifier).select(state.metadata.id);
   }
 }

@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:burlmd/src/providers/note_providers.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
@@ -47,6 +49,7 @@ class BlockEditor extends ConsumerStatefulWidget {
     this.onEnter,
     this.onBackspaceAtStart,
     this.onPhantomInsert,
+    this.smokeF005 = false,
   });
 
   final String noteId;
@@ -116,6 +119,11 @@ class BlockEditor extends ConsumerStatefulWidget {
   /// instead.
   final bool phantom;
 
+  /// QA-only trigger for the F005 smoke fixture. It exercises the same raw
+  /// shortcut action after this field has focused and selected its staged
+  /// source; it is inert in normal editing.
+  final bool smokeF005;
+
   @override
   ConsumerState<BlockEditor> createState() => _BlockEditorState();
 }
@@ -151,6 +159,7 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
     _lastSettledText = widget.source;
     _controller.addListener(_onEditingValueChanged);
     _focusNode = FocusNode()..addListener(_onFocusChanged);
+    if (widget.smokeF005) unawaited(_runSmokeF005Shortcut());
   }
 
   @override
@@ -364,6 +373,19 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
     }
+    final emphasis = _emphasisShortcutFor(event);
+    if (emphasis != null) {
+      // Holding a shortcut must not turn a wrap into an immediate unwrap.
+      // Flutter 3.44.3 guarantees a down followed by zero or more repeat
+      // events, so only its first [KeyDownEvent] changes the raw source.
+      if (event is KeyDownEvent && !_hasLiveComposition) {
+        _applyEmphasis(emphasis);
+      }
+      // A live composing range is platform-owned. Treating its shortcut as
+      // handled prevents the editable field or an ancestor action from
+      // changing text, selection, or composing state behind the IME.
+      return KeyEventResult.handled;
+    }
     final selection = _controller.selection;
     if (event.logicalKey == LogicalKeyboardKey.enter ||
         event.logicalKey == LogicalKeyboardKey.numpadEnter) {
@@ -386,6 +408,93 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
       return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
+  }
+
+  /// Returns a shortcut only for the platform-primary combination required
+  /// by CAP-EDIT-05. Alt is intentionally never intercepted (including
+  /// AltGr), and Shift is accepted only for strikethrough.
+  _InlineEmphasis? _emphasisShortcutFor(KeyEvent event) {
+    final keyboard = HardwareKeyboard.instance;
+    final usesMetaPrimary = defaultTargetPlatform == TargetPlatform.macOS;
+    final primaryPressed = usesMetaPrimary
+        ? keyboard.isMetaPressed
+        : keyboard.isControlPressed;
+    final otherPrimaryPressed = usesMetaPrimary
+        ? keyboard.isControlPressed
+        : keyboard.isMetaPressed;
+    if (!primaryPressed || otherPrimaryPressed || keyboard.isAltPressed) {
+      return null;
+    }
+    final shiftPressed = keyboard.isShiftPressed;
+    return switch (event.logicalKey) {
+      LogicalKeyboardKey.keyB when !shiftPressed => _InlineEmphasis.bold,
+      LogicalKeyboardKey.keyI when !shiftPressed => _InlineEmphasis.italic,
+      LogicalKeyboardKey.keyE when !shiftPressed => _InlineEmphasis.code,
+      LogicalKeyboardKey.keyX when shiftPressed => _InlineEmphasis.strike,
+      _ => null,
+    };
+  }
+
+  void _applyEmphasis(_InlineEmphasis emphasis) {
+    final result = applyInlineEmphasis(
+      _controller.value,
+      delimiter: emphasis.delimiter,
+    );
+    if (result == _controller.value) return;
+    // Assign one complete editing value so its text and selection advance as
+    // one observable edit. The controller listener is deliberately not used
+    // for buffering here: [EditableText.onChanged] only reports platform text
+    // edits, while this source transformation needs exactly one Core update.
+    _controller.value = result;
+    _bufferSource(result.text);
+    _lastSettledText = result.text;
+  }
+
+  /// Stages a real focused raw selection, then dispatches the exact source
+  /// operation used by a platform-primary shortcut. It exists solely because
+  /// the smoke harness launches a release desktop application without a test
+  /// binding to synthesize hardware events; readiness is still withheld until
+  /// the resulting focused field and selection are visibly correct.
+  Future<void> _runSmokeF005Shortcut() async {
+    final deadline = DateTime.now().add(const Duration(seconds: 5));
+    while (mounted && DateTime.now().isBefore(deadline)) {
+      await WidgetsBinding.instance.endOfFrame;
+      if (_focusNode.hasFocus) break;
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    }
+    if (!mounted || !_focusNode.hasFocus || _hasLiveComposition) return;
+    _controller.selection = TextSelection(
+      baseOffset: 0,
+      extentOffset: _controller.text.length,
+    );
+    _applyEmphasis(_InlineEmphasis.bold);
+    unawaited(_writeSmokeF005Readiness(_controller.value));
+  }
+
+  Future<void> _writeSmokeF005Readiness(TextEditingValue value) async {
+    // Certify only after this focused raw field has painted the command's
+    // transformed source and selected inner text. The shell rejects every
+    // other window state, including a staged-but-unfocused editor.
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted || !_focusNode.hasFocus || _controller.value != value) return;
+    // Core block sources retain their terminating newline; selecting the raw
+    // Block honestly includes that byte rather than synthesizing a trimmed
+    // presentation string for the smoke fixture.
+    const inner = 'shortcut target\n';
+    final expected = '**$inner**';
+    if (value.text != expected ||
+        value.selection !=
+            TextSelection(baseOffset: 2, extentOffset: inner.length + 2)) {
+      return;
+    }
+    final readinessPath = Platform.environment['BURLMD_SMOKE_READY_FILE'];
+    if (readinessPath == null) return;
+    try {
+      File(readinessPath).writeAsStringSync('f005-focused-emphasis-shortcut\n');
+    } on FileSystemException {
+      // The harness turns a missing marker into a failure; the production
+      // editor remains unaffected when a QA path cannot be written.
+    }
   }
 
   TextSelection _initialSelection(String source, int caret) =>
@@ -435,6 +544,91 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
           if (!_hasLiveComposition) _lastSettledText = text;
         },
       ),
+    ),
+  );
+}
+
+enum _InlineEmphasis {
+  bold('**'),
+  italic('*'),
+  code('`'),
+  strike('~~');
+
+  const _InlineEmphasis(this.delimiter);
+
+  final String delimiter;
+}
+
+/// Applies the raw-source half of CAP-EDIT-05. This deliberately knows
+/// nothing about Markdown AST nodes: the Core receives exactly the selected
+/// source with delimiters inserted or removed on the focused Block's span.
+///
+/// A selected inner run and a selection of its complete delimited run both
+/// unwrap. In either direction, the returned selection covers the inner text
+/// and preserves whether the original base was before or after its extent.
+@visibleForTesting
+TextEditingValue applyInlineEmphasis(
+  TextEditingValue value, {
+  required String delimiter,
+}) {
+  final selection = value.selection;
+  if (!selection.isValid || delimiter.isEmpty) return value;
+  final text = value.text;
+  final base = selection.baseOffset.clamp(0, text.length);
+  final extent = selection.extentOffset.clamp(0, text.length);
+  if (base == extent) {
+    final updated = text.replaceRange(base, base, '$delimiter$delimiter');
+    return TextEditingValue(
+      text: updated,
+      selection: TextSelection.collapsed(offset: base + delimiter.length),
+    );
+  }
+
+  final low = math.min(base, extent);
+  final high = math.max(base, extent);
+  final reversed = base > extent;
+  final selected = text.substring(low, high);
+  final surroundsInner =
+      low >= delimiter.length &&
+      high + delimiter.length <= text.length &&
+      text.substring(low - delimiter.length, low) == delimiter &&
+      text.substring(high, high + delimiter.length) == delimiter;
+  final selectsFullRun =
+      selected.length >= delimiter.length * 2 &&
+      selected.startsWith(delimiter) &&
+      selected.endsWith(delimiter);
+
+  if (surroundsInner || selectsFullRun) {
+    final outerStart = surroundsInner ? low - delimiter.length : low;
+    final innerStart = outerStart;
+    final innerEnd = surroundsInner
+        ? high - delimiter.length
+        : high - delimiter.length * 2;
+    final updated = text.replaceRange(
+      outerStart,
+      high + (surroundsInner ? delimiter.length : 0),
+      text.substring(
+        innerStart + delimiter.length,
+        innerEnd + delimiter.length,
+      ),
+    );
+    final selectedStart = outerStart;
+    final selectedEnd = selectedStart + (innerEnd - innerStart);
+    return TextEditingValue(
+      text: updated,
+      selection: TextSelection(
+        baseOffset: reversed ? selectedEnd : selectedStart,
+        extentOffset: reversed ? selectedStart : selectedEnd,
+      ),
+    );
+  }
+
+  final updated = text.replaceRange(low, high, '$delimiter$selected$delimiter');
+  return TextEditingValue(
+    text: updated,
+    selection: TextSelection(
+      baseOffset: reversed ? high + delimiter.length : low + delimiter.length,
+      extentOffset: reversed ? low + delimiter.length : high + delimiter.length,
     ),
   );
 }
