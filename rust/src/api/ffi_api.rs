@@ -651,10 +651,10 @@ pub fn copy_range_as_markdown(note_id: String, range: BlockRange) -> Result<Stri
     session.copy_range_as_markdown(&range)
 }
 
-/// Markdown for the complete rendered Note. Core derives the source extent
-/// from its root Block spans, rather than accepting a synthetic rendered end
-/// offset: terminal thematic breaks and empty fenced code Blocks render as
-/// empty strings but still own source that Select All must include.
+/// Markdown for the complete editable body of the Note. Core derives the
+/// source extent without rendered offsets: conformant frontmatter stays
+/// outside it, while terminal empty renderings, reference definitions, raw
+/// HTML, and whitespace still belong to Select All.
 #[frb(sync)]
 pub fn copy_whole_note_as_markdown(note_id: String) -> Result<String, AppError> {
     open_session(&note_id)?.copy_whole_note_as_markdown()
@@ -676,8 +676,8 @@ pub fn delete_range(note_id: String, range: BlockRange) -> Result<RangeEditResul
     })
 }
 
-/// Deletes the complete rendered Note in one Core transaction. This is a
-/// distinct operation from [`delete_range`]: it has no rendered endpoints to
+/// Deletes the complete editable body of the Note in one Core transaction.
+/// This is distinct from [`delete_range`]: it has no rendered endpoints to
 /// reinterpret, so ordinary cross-Block UTF-16 range behavior is unchanged.
 #[frb(sync)]
 pub fn delete_whole_note(note_id: String) -> Result<RangeEditResult, AppError> {
@@ -709,8 +709,9 @@ pub fn replace_range(
     })
 }
 
-/// Replaces the complete rendered Note in one Core transaction. The returned
-/// caret is derived from the post-reparse state just like [`replace_range`].
+/// Replaces the complete editable body of the Note in one Core transaction.
+/// The returned caret is derived from the post-reparse state just like
+/// [`replace_range`].
 #[frb(sync)]
 pub fn replace_whole_note(
     note_id: String,
@@ -1973,8 +1974,8 @@ mod tests {
             assert_eq!(replaced.state.ast.len(), 1, "{name}: replacement shape");
             assert_eq!(
                 get_block_source(replace_id, vec![0]).unwrap(),
-                "replacement\n",
-                "{name}: replacement must cover terminal source exactly"
+                "replacement",
+                "{name}: replacement must cover the complete editable body"
             );
         }
     }

@@ -755,10 +755,9 @@ void main() {
     expect(clipboard.value, 'core markdown');
   });
 
-  testWidgets('Select All uses the Core whole-Note boundary for terminal '
-      'empty renderings across copy, delete, cut, and replacement', (
-    tester,
-  ) async {
+  testWidgets('Select All uses the Core whole-Note boundary for empty '
+      'renderings and unaddressable-only bodies across copy, delete, cut, '
+      'and replacement', (tester) async {
     final fixtures = <(String, List<AstNode>)>[
       ('sole thematic break', [const AstNode.thematicBreak()]),
       (
@@ -770,6 +769,7 @@ void main() {
         'terminal empty fenced code Block',
         [_paragraph('before the fence'), AstNode.codeBlock(code: '')],
       ),
+      ('unaddressable-only body', []),
     ];
     const operations = <String>['copy', 'delete', 'cut', 'replace'];
 
