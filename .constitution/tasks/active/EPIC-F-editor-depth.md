@@ -184,7 +184,7 @@ Then the selection behaves normally within that Block
   - `test/components/block_editing_test.dart`
 - **Scope (Out-of-Scope Files):**
   - `rust/src/**` (the Core surface already exists)
-- **Verification Command:** `flutter test test/components/block_editing_test.dart && ./scripts/smoke-shot.sh f004-block-editing`
+- **Verification Command:** `flutter test test/components/block_editing_test.dart && BURLMD_SMOKE_F004=1 ./scripts/smoke-shot.sh f004-block-editing`
 - **Expected Success Output:** `exit 0`
 - **STOP Conditions:**
   - "STOP if a Block is created or removed by mutating a local list in Dart rather than through the Core; the returned state is authoritative."
@@ -195,15 +195,19 @@ Then the selection behaves normally within that Block
 ```gherkin
 Given the caret is at the end of a Block
 When Enter is pressed
-Then a new empty Block receives focus, held as UI-side caret position rather than committed to the Core — CommonMark has no representation of an empty paragraph, so `insert_block("")` splices only blank lines and the reparse returns an AST without it, leaving no `block_path` for the first keystroke to address
+Then a new empty Block receives focus, held as UI-side caret position rather than committed to the Core — CommonMark has no representation of an empty paragraph, so no empty `continue_block_after` call is made and there is no `block_path` for the first keystroke to address
 
 Given that new empty Block
 When the first character is typed
-Then `insert_block` is called with that character as its source, and every subsequent keystroke goes through `update_block` against the returned path
+Then `continue_block_after` is called with that character as its source, and every subsequent keystroke goes through `update_block` against the returned path
 
 Given that new empty Block
 When focus leaves it without anything being typed
-Then nothing is inserted and the Note is unchanged
+Then no continuation is called and the Note is unchanged
+
+Given a real Block was edited before Enter opens its empty successor
+When that empty successor is abandoned
+Then `commit_block` adopts the preceding edit exactly once before it renders formatted again
 
 Given the caret is in the middle of a Block's text
 When Enter is pressed
@@ -223,7 +227,7 @@ Then the Note contains the expected Blocks in order
 ```
 
 ##### [EDIT-F004] Deviations & Justifications
-- `lib/main.dart` — adds an env-gated (`BURLMD_SMOKE_F004`) staging half that builds the three-paragraph demo Note through the Core (create_note + insert_block) and selects it. Strictly forced by the same structural reason as EDIT-F002's and EDIT-F003's staging halves: the Editor only mounts once a Note is selected, so it cannot stage its own Note; the promote-and-Enter half of the hook stays in `editor.dart` (in scope). `scripts/smoke-shot.sh` itself needed no extension — it already forwards caller-exported `BURLMD_SMOKE_*` variables from F002/F003. Inert without the QA-harness variable.
+- `lib/main.dart` — adds an env-gated (`BURLMD_SMOKE_F004`) staging half that builds the three-paragraph demo Note through the Core (create_note + insert_block) and selects it. Strictly forced by the same structural reason as EDIT-F002's and EDIT-F003's staging halves: the Editor only mounts once a Note is selected, so it cannot stage its own Note; the promote-and-Enter half in `editor.dart` writes a `f004-promoted-phantom` readiness marker only after the staged Note has a focused phantom. `scripts/smoke-shot.sh` passes the F004 environment variable and rejects missing or invalid F004 readiness, so a generic window cannot pass. Inert without the QA-harness variable.
 
 #### EDIT-F005 Inline Emphasis Shortcuts
 - **Type:** Feature

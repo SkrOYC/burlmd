@@ -170,8 +170,8 @@ class EditorState extends ConsumerState<Editor> {
     // One extra slot while a phantom Block is open (`EDIT-F004`,
     // CAP-EDIT-03): the empty Block Enter created and CommonMark cannot
     // represent. It renders at the phantom's ANCHOR — directly beneath the
-    // Block Enter was pressed in, exactly where `insert_block` will splice
-    // it — not past the whole AST; only a phantom opened after the last
+    // Block Enter was pressed in, exactly where `continue_block_after` will
+    // splice it — not past the whole AST; only a phantom opened after the last
     // Block lands visually at the bottom. An EMPTY Note gets one slot
     // permanently — otherwise there would be nothing to click or type into
     // to start composing.
@@ -454,11 +454,10 @@ class EditorState extends ConsumerState<Editor> {
   // Every structural change goes through a Core mutator and the returned
   // state is adopted wholesale — the same rule blur-commit already follows.
   // The single sanctioned exception is the empty phantom Block: CommonMark
-  // has no empty paragraph, so `insert_block("")` would splice only blank
-  // lines and the reparse would drop them, leaving no `block_path` for the
-  // first keystroke to address. It lives as UI-side caret position until the
-  // first character arrives, at which point that character IS the Block's
-  // `insert_block` source.
+  // has no empty paragraph, so an empty continuation would leave no
+  // `block_path` for the first keystroke to address. It lives as UI-side caret
+  // position until the first text arrives, at which point that text is passed
+  // to Core's `continue_block_after` boundary.
 
   /// The phantom Block slot: an empty raw-editable field styled as a
   /// paragraph, rendered at its anchor index — directly beneath the Block
@@ -492,8 +491,10 @@ class EditorState extends ConsumerState<Editor> {
   }
 
   /// Enter pressed in the focused Block at source offset [caret]. At the
-  /// Block's end this opens the empty phantom Block after it — no Core call;
-  /// mid-Block it splits through `split_block`, adopting the returned state
+  /// Block's end this opens the empty phantom Block after it. If the raw field
+  /// changed, it first commits and adopts the preceding real Block exactly
+  /// once, so abandoning the phantom cannot reveal a stale provider AST.
+  /// Mid-Block it splits through `split_block`, adopting the returned state
   /// and re-deriving focus onto the second half with the caret at its start.
   void _handleEnterRequested(List<int> blockPath, String source, int caret) {
     final focused = _focused;
@@ -513,6 +514,27 @@ class EditorState extends ConsumerState<Editor> {
     // the Block. This holds for EVERY Block, not just the last one, so the
     // phantom below must be able to open mid-document.
     if (source.substring(clamped).trim().isEmpty) {
+      var committedState = note;
+      var continuationPath = List<int>.from(blockPath);
+      // `update_block` deliberately leaves the provider AST stale while the
+      // field is raw. Before replacing that real field with a phantom, repair
+      // it through Core and retain only an address derived from Core state.
+      if (source != focused.source) {
+        try {
+          final api = ref.read(rustApiProvider);
+          committedState = api.commitBlock(note.metadata.id, blockPath);
+          continuationPath = _rederiveContinuationPath(
+            api,
+            note.metadata.id,
+            committedState,
+            blockPath,
+          );
+          ref.read(activeNoteProvider.notifier).adopt(committedState);
+        } catch (error) {
+          ref.read(keystrokeWriteFailureProvider.notifier).report(error);
+          return;
+        }
+      }
       setState(() {
         _focused = _Focus(
           noteId: focused.noteId,
@@ -520,10 +542,10 @@ class EditorState extends ConsumerState<Editor> {
           // owns the continuation decision: a List leaf gets a sibling item,
           // while a Blockquote leaf exits to a top-level Block. Flutter must
           // not guess from the path's nesting shape.
-          path: List<int>.from(blockPath),
+          path: continuationPath,
           source: '',
           caret: 0,
-          lastSeenState: note,
+          lastSeenState: committedState,
           isPhantom: true,
         );
       });
@@ -557,7 +579,34 @@ class EditorState extends ConsumerState<Editor> {
     }
   }
 
-  /// The first character(s) typed into the empty phantom Block: [text]
+  /// Resolves the real continuation anchor after [commitBlock] reparses a
+  /// buffered edit. Prefer the same address only when it remains an editable
+  /// leaf in Core's returned AST; otherwise let Core resolve the end of its
+  /// top-level Block, which is exactly where Enter was pressed.
+  List<int> _rederiveContinuationPath(
+    RustApi api,
+    String noteId,
+    NoteState state,
+    List<int> previousPath,
+  ) {
+    final paths = _leafPaths(state.ast);
+    if (paths.any((path) => _pathEquals(path, previousPath))) {
+      return List<int>.from(previousPath);
+    }
+    final topLevelIndex = previousPath.first;
+    if (topLevelIndex >= state.ast.length) {
+      throw StateError('Committed Block no longer has a top-level anchor.');
+    }
+    return api
+        .resolveBlockCaret(noteId, [
+          topLevelIndex,
+        ], blockCoreRenderedLength(state.ast[topLevelIndex]))
+        .blockPath
+        .map((part) => part.toInt())
+        .toList();
+  }
+
+  /// The settled first text typed into the empty phantom Block: [text]
   /// BECOMES the new Block's `continue_block_after` source. The returned state
   /// is adopted, the Block's real source is fetched against the returned path,
   /// and focus converts to an ordinary editing session over it — subsequent
@@ -642,8 +691,8 @@ class EditorState extends ConsumerState<Editor> {
   /// Manual-QA hook for `scripts/smoke-shot.sh f004-block-editing`
   /// (`BURLMD_SMOKE_F004`; the demo Note is staged in `main.dart`). Promotes
   /// the first Block with the caret at its end and presses Enter, so the
-  /// screenshot shows CAP-EDIT-03's signature state: a raw-source focused
-  /// Block with the empty new Block line beneath it. Gated behind an
+  /// screenshot shows CAP-EDIT-03's signature state: the staged Note with a
+  /// focused empty phantom immediately below its first Block. Gated behind an
   /// environment variable set only by the QA harness; inert in normal use.
   Future<void> _runSmokeF004() async {
     final deadline = DateTime.now().add(const Duration(seconds: 30));
@@ -655,16 +704,60 @@ class EditorState extends ConsumerState<Editor> {
     await WidgetsBinding.instance.endOfFrame;
     if (!mounted || _focused != null) return;
     try {
-      final api = ref.read(rustApiProvider);
       final note = ref.read(activeNoteProvider)!;
-      final source = api.getBlockSource(note.metadata.id, [0]);
-      _promote([0], source.length);
+      _promote([0], blockCoreRenderedLength(note.ast.first));
       await WidgetsBinding.instance.endOfFrame;
-      _handleEnterRequested([0], source, source.length);
-    } catch (_) {
-      // A staging failure must never take the app down; the shot just
-      // shows whatever state was reached.
+      final focused = _focused;
+      if (focused == null || focused.isPhantom) {
+        throw StateError(
+          'F004 smoke could not promote the staged first Block.',
+        );
+      }
+      _handleEnterRequested(
+        focused.path,
+        focused.source,
+        focused.source.length,
+      );
+      await WidgetsBinding.instance.endOfFrame;
+      if (!_hasStagedSmokeF004State()) {
+        throw StateError(
+          'F004 smoke did not reach the promoted-plus-phantom state.',
+        );
+      }
+      final readinessPath = Platform.environment['BURLMD_SMOKE_READY_FILE'];
+      if (readinessPath != null) {
+        File(readinessPath).writeAsStringSync('f004-promoted-phantom\n');
+      }
+    } catch (error) {
+      // The shell harness requires the marker above, so this visible error
+      // cannot be mistaken for a passing generic window.
+      ref.read(editorErrorProvider.notifier).report(error);
     }
+  }
+
+  bool _hasStagedSmokeF004State() {
+    final note = ref.read(activeNoteProvider);
+    final focused = _focused;
+    var hasFocusedEmptyField = false;
+    void visit(Element element) {
+      final widget = element.widget;
+      if (widget is EditableText &&
+          !widget.readOnly &&
+          widget.focusNode.hasFocus &&
+          widget.controller.text.isEmpty) {
+        hasFocusedEmptyField = true;
+        return;
+      }
+      element.visitChildElements(visit);
+    }
+
+    final root = WidgetsBinding.instance.rootElement;
+    if (root != null) visit(root);
+    return note?.metadata.title == 'F004 block editing' &&
+        note?.ast.length == 3 &&
+        focused?.isPhantom == true &&
+        focused?.path.isNotEmpty == true &&
+        hasFocusedEmptyField;
   }
 
   // -- Cross-Block selection and copy (EDIT-F003, CAP-EDIT-04) -------------
@@ -1009,7 +1102,7 @@ class _Focus {
   /// True while this focus names the sanctioned empty phantom Block
   /// (`EDIT-F004`): UI-side caret state only, never committed, never
   /// addressed through `update_block`; its first typed character becomes an
-  /// `insert_block` source instead.
+  /// `continue_block_after` source instead.
   final bool isPhantom;
 }
 
