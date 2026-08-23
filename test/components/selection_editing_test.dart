@@ -430,6 +430,67 @@ void main() {
     expect(field.controller.selection.baseOffset, 2);
   });
 
+  testWidgets('successful range mutations keep the authoritative result when '
+      'caret source hydration fails', (tester) async {
+    final operations = <(String, Future<void> Function(WidgetTester))>[
+      (
+        'replace',
+        (tester) async => tester.testTextInput.enterText('replacement'),
+      ),
+      (
+        'delete',
+        (tester) async => Actions.invoke(
+          tester.element(find.byType(SelectionArea)),
+          const DeleteCharacterIntent(forward: true),
+        ),
+      ),
+    ];
+
+    for (final (name, run) in operations) {
+      final result = _note(['authoritative $name result']);
+      final api = _RangeApi()
+        ..result = result
+        ..caret = RangeEditCaret.block(
+          blockPath: Uint64List.fromList(const [0]),
+          sourceOffsetUtf16: BigInt.zero,
+        );
+      final container = await _pump(tester, api);
+      await _selectAcrossBlocks(tester);
+
+      await run(tester);
+      await tester.pump();
+      await tester.pump();
+
+      expect(api.replacements, name == 'replace' ? hasLength(1) : isEmpty);
+      expect(api.deletes, name == 'delete' ? hasLength(1) : isEmpty);
+      expect(container.read(activeNoteProvider), same(result));
+      expect(
+        tester.state<EditorState>(find.byType(Editor)).debugSelectedRange(),
+        isNull,
+      );
+      expect(find.byType(EditableText), findsNothing);
+      expect(find.text('authoritative $name result'), findsOneWidget);
+      expect(find.byType(SnackBar), findsOneWidget);
+      expect(
+        find.textContaining('Could not complete the editor operation'),
+        findsOneWidget,
+      );
+
+      // The old frozen proxy was finalized before hydration. Reusing the old
+      // selection context cannot replay the successful Core mutation.
+      Actions.invoke(
+        tester.element(find.byType(SelectionArea)),
+        const DeleteCharacterIntent(forward: true),
+      );
+      tester.testTextInput.enterText('stale platform value');
+      await tester.pump();
+      await tester.pump();
+      expect(api.replacements, name == 'replace' ? hasLength(1) : isEmpty);
+      expect(api.deletes, name == 'delete' ? hasLength(1) : isEmpty);
+      await tester.pumpWidget(const SizedBox.shrink());
+    }
+  });
+
   testWidgets('exact forward and reverse Block-boundary endpoints retain '
       'their collapsed edge in the Core range', (tester) async {
     final cases =

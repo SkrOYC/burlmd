@@ -866,6 +866,24 @@ fn delete_note_locked(
     // that, closed normally, flushes its buffer and recreates the file the
     // deletion just removed.
     let discarded = persist::discard_session(workspace, note_id);
+    // A failed commit remains the primary warning when a later settlement
+    // action also reports trouble. The deletion itself is already
+    // authoritative, but history is the record the user must repair; a trash
+    // retry or an already-retired session is supporting recovery context.
+    if let Err(error) = committed {
+        let mut also = Vec::new();
+        if let Err(error) = &discarded {
+            also.push(format!("retiring the deleted Note session: {error:?}"));
+        }
+        if let Err(error) = &cleanup {
+            also.push(format!("removing the recovery trash artifact: {error:?}"));
+        }
+        return Ok(LifecycleTerminal::AppliedWithWarning {
+            value: vec![note_id.to_string()],
+            stage: LifecycleWarningStage::Commit,
+            detail: format!("{:?}", commit_stage_failure(&subject, error, &also)),
+        });
+    }
     if let Err(error) = discarded {
         return Ok(LifecycleTerminal::AppliedWithWarning {
             value: vec![note_id.to_string()],
@@ -878,13 +896,6 @@ fn delete_note_locked(
             value: vec![note_id.to_string()],
             stage: LifecycleWarningStage::Settlement,
             detail: format!("the deleted Note remains removed, but a recovery trash artifact could not be removed: {error:?}"),
-        });
-    }
-    if let Err(error) = committed {
-        return Ok(LifecycleTerminal::AppliedWithWarning {
-            value: vec![note_id.to_string()],
-            stage: LifecycleWarningStage::Commit,
-            detail: format!("{:?}", commit_stage_failure(&subject, error, &[])),
         });
     }
     Ok(LifecycleTerminal::Applied(vec![note_id.to_string()]))
@@ -1006,8 +1017,8 @@ fn rename_note_serialized(
         ),
     };
     let terminal = apply_reidentify(workspace, &plan)?;
-    let state = settled_state(workspace, &new_id)?;
-    Ok(terminal.map(|effects| (state, effects)))
+    let (state, settlement_warning) = settled_state(workspace, &new_id)?;
+    Ok(with_state_settlement_warning(terminal, settlement_warning).map(|effects| (state, effects)))
 }
 
 /// Moves a Note to another Directory, rewriting every inbound Link
@@ -1127,8 +1138,8 @@ fn move_note_serialized(
         ),
     };
     let terminal = apply_reidentify(workspace, &plan)?;
-    let state = settled_state(workspace, &new_id)?;
-    Ok(terminal.map(|effects| (state, effects)))
+    let (state, settlement_warning) = settled_state(workspace, &new_id)?;
+    Ok(with_state_settlement_warning(terminal, settlement_warning).map(|effects| (state, effects)))
 }
 
 // ---------------------------------------------------------------------------
@@ -1487,6 +1498,22 @@ fn delete_directory_locked(
     removed.extend(orphaned_drafts);
     removed.sort();
     removed.dedup();
+    // Match Note deletion and close: history failure is the actionable warning
+    // and carries any lower-priority post-publication settlement failures.
+    if let Err(error) = committed {
+        let mut also = Vec::new();
+        if let Err(error) = &discarded {
+            also.push(format!("retiring deleted Note sessions: {error:?}"));
+        }
+        if let Err(error) = &cleanup {
+            also.push(format!("removing the recovery trash artifact: {error:?}"));
+        }
+        return Ok(LifecycleTerminal::AppliedWithWarning {
+            value: removed,
+            stage: LifecycleWarningStage::Commit,
+            detail: format!("{:?}", commit_stage_failure(&subject, error, &also)),
+        });
+    }
     if let Err(error) = discarded {
         return Ok(LifecycleTerminal::AppliedWithWarning {
             value: removed,
@@ -1499,13 +1526,6 @@ fn delete_directory_locked(
             value: removed,
             stage: LifecycleWarningStage::Settlement,
             detail: format!("the deleted Directory remains removed, but a recovery trash artifact could not be removed: {error:?}"),
-        });
-    }
-    if let Err(error) = committed {
-        return Ok(LifecycleTerminal::AppliedWithWarning {
-            value: removed,
-            stage: LifecycleWarningStage::Commit,
-            detail: format!("{:?}", commit_stage_failure(&subject, error, &[])),
         });
     }
     Ok(LifecycleTerminal::Applied(removed))
@@ -1786,6 +1806,26 @@ fn apply_reidentify_locked(
             .map(|a| a.new_id.clone())
             .collect(),
     };
+    // Preserve the same primary-error rule used by close and deletion. A Git
+    // failure is the durable recovery concern; session and journal settlement
+    // failures describe work Core has already made authoritative.
+    if let Err(error) = committed {
+        let subject = plan.message.lines().next().unwrap_or("the operation");
+        let mut also = best_effort;
+        if let Err(error) = &carried {
+            also.push(format!("carrying the settled sessions forward: {error:?}"));
+        }
+        if let Err(error) = &cleanup {
+            also.push(format!(
+                "removing the lifecycle recovery artifact: {error:?}"
+            ));
+        }
+        return Ok(LifecycleTerminal::AppliedWithWarning {
+            value: effects,
+            stage: LifecycleWarningStage::Commit,
+            detail: format!("{:?}", commit_stage_failure(subject, error, &also)),
+        });
+    }
     if let Err(error) = carried {
         return Ok(LifecycleTerminal::AppliedWithWarning {
             value: effects,
@@ -1798,14 +1838,6 @@ fn apply_reidentify_locked(
             value: effects,
             stage: LifecycleWarningStage::Settlement,
             detail: format!("a lifecycle recovery artifact could not be removed: {error:?}"),
-        });
-    }
-    if let Err(error) = committed {
-        let subject = plan.message.lines().next().unwrap_or("the operation");
-        return Ok(LifecycleTerminal::AppliedWithWarning {
-            value: effects,
-            stage: LifecycleWarningStage::Commit,
-            detail: format!("{:?}", commit_stage_failure(subject, error, &best_effort)),
         });
     }
     Ok(LifecycleTerminal::Applied(effects))
@@ -2153,9 +2185,18 @@ fn rekey_directories(
 
 /// The state a caller gets back after a re-identification: the open session's,
 /// when the Note is open, and a state derived from the settled file otherwise.
-fn settled_state(workspace: &Arc<Workspace>, note_id: &str) -> Result<NoteState, AppError> {
+///
+/// Link-existence badges are presentation metadata, so an inability to refresh
+/// them after the filesystem and index have already published the operation
+/// cannot turn a completed rename or move into a refusal. The returned state
+/// remains addressable and writable; the caller gets a settlement warning so it
+/// can disclose that the badges may be stale.
+fn settled_state(
+    workspace: &Arc<Workspace>,
+    note_id: &str,
+) -> Result<(NoteState, Option<String>), AppError> {
     if let Some(session) = persist::lookup(workspace.id(), note_id)? {
-        return session.note_state();
+        return session.note_state().map(|state| (state, None));
     }
     let path = workspace.note_path(note_id)?;
     let bytes = std::fs::read(&path)
@@ -2171,13 +2212,48 @@ fn settled_state(workspace: &Arc<Workspace>, note_id: &str) -> Result<NoteState,
     // next tier 2 write. Do not copy this line into one of those.
     let source = String::from_utf8_lossy(&bytes).into_owned();
     let ParsedNote { mut ast, spans } = parse_note(&source, containing_dir(note_id));
-    workspace.resolve_link_existence(&mut ast)?;
-    Ok(NoteState {
-        ast,
-        metadata: metadata_from(note_id, &source, &spans, file_mtime(&path)),
-        base_revision: content_hash(&bytes),
-        restored_from_draft: false,
-    })
+    let link_resolution_warning = workspace.resolve_link_existence(&mut ast).err().map(|error| {
+        format!(
+            "the operation completed, but the returned Note state could not refresh Link-existence badges: {error:?}"
+        )
+    });
+    Ok((
+        NoteState {
+            ast,
+            metadata: metadata_from(note_id, &source, &spans, file_mtime(&path)),
+            base_revision: content_hash(&bytes),
+            restored_from_draft: false,
+        },
+        link_resolution_warning,
+    ))
+}
+
+/// Carries a post-publication state-derivation warning without discarding an
+/// earlier, higher-priority commit warning. The result still describes the
+/// completed operation, including its newly addressable Note state and effects.
+fn with_state_settlement_warning<T>(
+    terminal: LifecycleTerminal<T>,
+    settlement_warning: Option<String>,
+) -> LifecycleTerminal<T> {
+    let Some(settlement_warning) = settlement_warning else {
+        return terminal;
+    };
+    match terminal {
+        LifecycleTerminal::Applied(value) => LifecycleTerminal::AppliedWithWarning {
+            value,
+            stage: LifecycleWarningStage::Settlement,
+            detail: settlement_warning,
+        },
+        LifecycleTerminal::AppliedWithWarning {
+            value,
+            stage,
+            detail,
+        } => LifecycleTerminal::AppliedWithWarning {
+            value,
+            stage,
+            detail: format!("{detail} (also, {settlement_warning})"),
+        },
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -5863,8 +5939,7 @@ mod tests {
 
     /// Link-existence badges are advisory only. Once the filesystem and index
     /// publish a rewrite, a badge lookup failure must not unwind the source,
-    /// spans, revision, or session registry — and it must not be mislabeled as
-    /// a lifecycle warning.
+    /// spans, revision, or session registry.
     #[test]
     fn a_link_badge_failure_after_publication_keeps_sessions_authoritative() {
         let f = fixture();
@@ -5898,6 +5973,76 @@ mod tests {
         assert!(f
             .read("source.md")
             .contains("link rewrite spans remain writable"));
+    }
+
+    /// An unopened target has no session state to carry forward, so its FFI
+    /// result must derive a fresh state after publication. A badge refresh
+    /// failure at that late point is settlement context, not a false refusal:
+    /// the returned state still names the new id and can be opened normally.
+    #[test]
+    fn injected_unopened_final_state_failure_returns_authoritative_rename_and_move_results() {
+        let renamed = fixture();
+        renamed.write("Old.md", &note("Old", "body"));
+        renamed.reindex();
+        renamed.workspace.set_fail_link_resolution_for_test(true);
+
+        let rename = rename_note_outcome(&renamed.workspace, "Old", "Renamed").unwrap();
+        renamed.workspace.set_fail_link_resolution_for_test(false);
+
+        assert_eq!(
+            rename
+                .state
+                .as_ref()
+                .map(|state| state.metadata.id.as_str()),
+            Some("Renamed")
+        );
+        assert_eq!(
+            rename.warning.as_ref().map(|warning| warning.stage),
+            Some(LifecycleWarningStage::Settlement)
+        );
+        assert!(rename
+            .warning
+            .as_ref()
+            .is_some_and(|warning| warning.detail.contains("Link-existence badges")));
+        assert!(renamed.exists("Renamed.md"));
+        assert!(persist::lookup(renamed.workspace.id(), "Renamed")
+            .unwrap()
+            .is_none());
+        let renamed_session = renamed.open("Renamed");
+        renamed_session
+            .update_block(&[0], "renamed remains writable\n")
+            .unwrap();
+        renamed_session.flush().unwrap();
+
+        let moved = fixture();
+        moved.write("Old.md", &note("Old", "body"));
+        moved.reindex();
+        create_directory(&moved.workspace, "Archive").unwrap();
+        moved.workspace.set_fail_link_resolution_for_test(true);
+
+        let move_result = move_note_outcome(&moved.workspace, "Old", "Archive").unwrap();
+        moved.workspace.set_fail_link_resolution_for_test(false);
+
+        assert_eq!(
+            move_result
+                .state
+                .as_ref()
+                .map(|state| state.metadata.id.as_str()),
+            Some("Archive/Old")
+        );
+        assert_eq!(
+            move_result.warning.as_ref().map(|warning| warning.stage),
+            Some(LifecycleWarningStage::Settlement)
+        );
+        assert!(moved.exists("Archive/Old.md"));
+        assert!(persist::lookup(moved.workspace.id(), "Archive/Old")
+            .unwrap()
+            .is_none());
+        let moved_session = moved.open("Archive/Old");
+        moved_session
+            .update_block(&[0], "moved remains writable\n")
+            .unwrap();
+        moved_session.flush().unwrap();
     }
 
     /// A commit-stage failure is terminal success at the FFI boundary: the
@@ -6043,6 +6188,67 @@ mod tests {
         assert!(persist::lookup(f.workspace.id(), "Folder/Inside")
             .unwrap()
             .is_none());
+    }
+
+    /// A failed Git record is the recovery action that matters most. When the
+    /// best-effort trash discard also fails, preserve both facts in the same
+    /// authoritative result rather than hiding the missing commit behind the
+    /// cleanup warning. The open sessions must still be retired in both forms.
+    #[test]
+    fn combined_commit_and_cleanup_failures_keep_commit_primary_for_deletions() {
+        let f = fixture();
+        f.write("Doomed.md", &note("Doomed", "body"));
+        f.write("Folder/Inside.md", &note("Inside", "body"));
+        f.reindex();
+        let note_session = f.open("Doomed");
+        let directory_session = f.open("Folder/Inside");
+
+        fail_next_trash_cleanup_for_test();
+        crate::git::operations::fail_next_commit_paths_for_test();
+        let note = delete_note_outcome(&f.workspace, "Doomed").unwrap();
+        assert_eq!(note.removed, vec!["Doomed"]);
+        assert_eq!(
+            note.warning.as_ref().map(|warning| warning.stage),
+            Some(LifecycleWarningStage::Commit)
+        );
+        let note_detail = &note.warning.unwrap().detail;
+        assert!(note_detail.contains("commit recording it"), "{note_detail}");
+        assert!(
+            note_detail.contains("recovery trash artifact"),
+            "{note_detail}"
+        );
+        assert!(persist::lookup(f.workspace.id(), "Doomed")
+            .unwrap()
+            .is_none());
+        assert!(matches!(
+            note_session.update_block(&[0], "must stay retired\n"),
+            Err(AppError::ParseError(message)) if message.contains("retired")
+        ));
+
+        fail_next_trash_cleanup_for_test();
+        crate::git::operations::fail_next_commit_paths_for_test();
+        let directory = delete_directory_outcome(&f.workspace, "Folder").unwrap();
+        assert_eq!(directory.removed, vec!["Folder/Inside"]);
+        assert_eq!(
+            directory.warning.as_ref().map(|warning| warning.stage),
+            Some(LifecycleWarningStage::Commit)
+        );
+        let directory_detail = &directory.warning.unwrap().detail;
+        assert!(
+            directory_detail.contains("commit recording it"),
+            "{directory_detail}"
+        );
+        assert!(
+            directory_detail.contains("recovery trash artifact"),
+            "{directory_detail}"
+        );
+        assert!(persist::lookup(f.workspace.id(), "Folder/Inside")
+            .unwrap()
+            .is_none());
+        assert!(matches!(
+            directory_session.update_block(&[0], "must stay retired\n"),
+            Err(AppError::ParseError(message)) if message.contains("retired")
+        ));
     }
 
     /// The deletion arm of the same rule: the Note is gone from the bundle and

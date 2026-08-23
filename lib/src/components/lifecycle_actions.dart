@@ -406,6 +406,15 @@ class LifecycleActions {
   /// listener drives [NoteController.open], whose already-open fast path
   /// requires the active state to carry the requested id. Publishing first
   /// would send `open` off to close the old — now dead — identifier.
+  ///
+  /// A selected identity is deliberately not enough to take that direct
+  /// adoption path. An ordinary incoming open can fail after its outgoing
+  /// session closed, leaving the tree selected on the invoked id while no
+  /// Core session is active. In that state the lifecycle result describes a
+  /// rekeyed Note, but it does not prove the presentation has opened its
+  /// returned identity. Re-enter through [NoteController.openForLifecycle]
+  /// first, then publish the new selection only after that admitted open
+  /// succeeds.
   Future<void> _settleEffects({
     required String? invokedNoteId,
     NoteState? returnedState,
@@ -423,8 +432,33 @@ class LifecycleActions {
 
     if (returnedState != null &&
         invokedNoteId != null &&
-        (activeId == invokedNoteId || operation.selectedId == invokedNoteId)) {
+        activeId == invokedNoteId) {
       _ref.read(activeNoteProvider.notifier).adopt(returnedState);
+      _ref
+          .read(selectedNoteIdProvider.notifier)
+          .select(returnedState.metadata.id);
+    } else if (returnedState != null &&
+        invokedNoteId != null &&
+        activeId == null &&
+        operation.selectedId == invokedNoteId) {
+      final opened = await _ref
+          .read(activeNoteProvider.notifier)
+          .openForLifecycle(returnedState.metadata.id);
+      // The lifecycle-admitted open may complete after a newer lifecycle
+      // operation or a new user selection. In either case it must not
+      // republish this operation's selection. A failed open leaves the
+      // selected old id intact and its own no-session error visible, so the
+      // caller receives a retryable [LifecycleFailed] rather than a fake
+      // success that mounted a returned state without a Core session.
+      if (!_isCurrentOperation(operation) ||
+          _ref.read(selectedNoteIdProvider) != invokedNoteId) {
+        return;
+      }
+      if (!opened) {
+        throw StateError(
+          'Core could not open the Note returned by this lifecycle action.',
+        );
+      }
       _ref
           .read(selectedNoteIdProvider.notifier)
           .select(returnedState.metadata.id);

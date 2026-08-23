@@ -817,33 +817,49 @@ class EditorState extends ConsumerState<Editor> {
   /// Applies the Core postcondition by exhaustive caret pattern matching.
   /// Paths and offsets are never derived from the old selected Blocks.
   void _adoptRangeResult(RangeEditResult result) {
-    final api = ref.read(rustApiProvider);
-    final nextFocus = switch (result.caret) {
-      RangeEditCaret_Block(:final blockPath, :final sourceOffsetUtf16) =>
-        _Focus(
-          noteId: result.state.metadata.id,
-          path: blockPath.map((part) => part.toInt()).toList(),
-          source: api.getBlockSource(
-            result.state.metadata.id,
-            blockPath.map((part) => part.toInt()).toList(),
-          ),
-          caret: sourceOffsetUtf16.toInt(),
-          lastSeenState: result.state,
-        ),
-      RangeEditCaret_Phantom(:final insertionIndex) => _Focus(
-        noteId: result.state.metadata.id,
-        path: [insertionIndex.toInt()],
-        source: '',
-        caret: 0,
-        lastSeenState: result.state,
-        isPhantom: true,
-        phantomInsertionIndex: insertionIndex.toInt(),
-      ),
-    };
+    // A successful atomic mutation is already authoritative. Publish it and
+    // revoke the frozen platform proxy before attempting optional source
+    // hydration: otherwise a failed `get_block_source` would strand the old
+    // selection/input client on a mutation that Core has already applied,
+    // making a stale platform callback able to replay the operation.
+    ref.read(activeNoteProvider.notifier).adopt(result.state);
     _clearRenderedSelection();
     _closeRangeInput();
-    ref.read(activeNoteProvider.notifier).adopt(result.state);
-    setState(() => _focused = nextFocus);
+
+    final api = ref.read(rustApiProvider);
+    try {
+      final nextFocus = switch (result.caret) {
+        RangeEditCaret_Block(:final blockPath, :final sourceOffsetUtf16) =>
+          _Focus(
+            noteId: result.state.metadata.id,
+            path: blockPath.map((part) => part.toInt()).toList(),
+            source: api.getBlockSource(
+              result.state.metadata.id,
+              blockPath.map((part) => part.toInt()).toList(),
+            ),
+            caret: sourceOffsetUtf16.toInt(),
+            lastSeenState: result.state,
+          ),
+        RangeEditCaret_Phantom(:final insertionIndex) => _Focus(
+          noteId: result.state.metadata.id,
+          path: [insertionIndex.toInt()],
+          source: '',
+          caret: 0,
+          lastSeenState: result.state,
+          isPhantom: true,
+          phantomInsertionIndex: insertionIndex.toInt(),
+        ),
+      };
+      if (mounted) setState(() => _focused = nextFocus);
+    } catch (error) {
+      // The mutation is durable even when the optional raw-source fetch is
+      // unavailable. Fall back to the authoritative rendered state rather
+      // than leaving an editable field pointed at an unhydrated path.
+      if (mounted) {
+        setState(() => _focused = null);
+        _reportEditorOperationFailure(error);
+      }
+    }
   }
 
   void _clearRenderedSelection() {

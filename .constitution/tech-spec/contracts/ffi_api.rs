@@ -417,9 +417,12 @@ pub struct LifecycleWarning {
 /// `removed` carries every deleted concept id.
 ///
 /// A populated `warning` means the filesystem, index, and session state have
-/// already settled. Presentation must first adopt `state`, process `effects`,
-/// and clear every `removed` editor, then show one localized, dismissible
-/// warning selected by `warning.stage`. It must not restore the prior editor.
+/// already settled. A `Settlement` warning can additionally report an
+/// advisory refresh that could not complete while deriving the returned state;
+/// the state, effects, and removed IDs remain authoritative. Presentation must
+/// first adopt `state`, process `effects`, and clear every `removed` editor,
+/// then show one localized, dismissible warning selected by `warning.stage`.
+/// It must not restore the prior editor.
 /// `Err(AppError)` is reserved for a true refusal before authoritative
 /// lifecycle mutation, so Presentation retains the valid prior session.
 #[frb]
