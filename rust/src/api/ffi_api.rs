@@ -848,7 +848,7 @@ pub async fn workspace_tree() -> Result<Vec<TreeNode>, AppError> {
 
 #[cfg(test)]
 mod tests {
-    use rusqlite::Connection;
+    use rusqlite::{Connection, OptionalExtension as _};
 
     use super::*;
 
@@ -1321,38 +1321,81 @@ mod tests {
         assert!(copied.contains("third block"));
     }
 
-    /// The FFI `BlockRange` uses Flutter UTF-16 offsets while the Core span map
-    /// uses scalar offsets. Conversion preserves boundaries after a non-BMP
-    /// scalar and rejects its surrogate interior rather than shifting a range.
+    /// Flutter sends range endpoints in UTF-16. The public deletion wrapper
+    /// must refuse an endpoint in the interior of a non-BMP scalar before it
+    /// reaches the session transaction: shifting it would delete a different
+    /// source range, while beginning the transaction would create a draft for
+    /// an edit the caller never made.
     #[test]
     fn range_edit_result_rejects_utf16_surrogate() {
-        let parsed = crate::markdown::parse_note("a😀b\n", "");
-        let range = BlockRange {
-            start_path: vec![0],
-            start_offset: 1,
-            end_path: vec![0],
-            // `a😀` is three UTF-16 code units but two Unicode scalars.
-            end_offset: "a😀".encode_utf16().count(),
+        let _guards = wrapper_guards();
+        let ws = wrapper_bootstrap();
+        let original = note_source("UTF-16", "a😀b\n\nuntouched");
+        wrapper_write_note(&ws.root, "utf16-surrogate.md", &original);
+
+        let before_state = block_on(open_note("utf16-surrogate".to_string())).unwrap();
+        let session = open_session("utf16-surrogate").unwrap();
+        let source_before = session.working_source().unwrap();
+        let sequence_before = session.edit_seq();
+        assert_eq!(
+            *source_before, original,
+            "the fixture source changed on open"
+        );
+        assert!(
+            wrapper_draft("utf16-surrogate").is_none(),
+            "opening a clean Note wrote a draft before the invalid edit"
+        );
+
+        let refused = delete_range(
+            "utf16-surrogate".to_string(),
+            BlockRange {
+                start_path: vec![0],
+                // The second UTF-16 code unit of 😀 is not a scalar boundary.
+                start_offset: "a".encode_utf16().count() + 1,
+                end_path: vec![0],
+                end_offset: "a😀b".encode_utf16().count(),
+            },
+        );
+        let refusal_message = match refused {
+            Err(AppError::ParseError(message)) => message,
+            Err(error) => {
+                panic!("a surrogate-interior endpoint returned the wrong error: {error:?}")
+            }
+            Ok(_) => panic!("a surrogate-interior endpoint unexpectedly mutated the Note"),
         };
+        assert!(
+            refusal_message.contains("splits a surrogate pair"),
+            "the public range deletion did not identify the surrogate interior: {refusal_message}"
+        );
 
-        let converted = range.into_rendered_range(&parsed.ast).unwrap();
-
-        assert_eq!(converted.start_path, vec![0]);
-        assert_eq!(converted.start_offset, 1);
-        assert_eq!(converted.end_path, vec![0]);
-        assert_eq!(converted.end_offset, 2);
-
-        let interior = BlockRange {
-            start_path: vec![0],
-            // The second code unit of 😀 is not a scalar boundary.
-            start_offset: 2,
-            end_path: vec![0],
-            end_offset: 3,
-        };
-        assert!(matches!(
-            interior.into_rendered_range(&parsed.ast),
-            Err(AppError::ParseError(message)) if message.contains("splits a surrogate pair")
-        ));
+        assert_eq!(
+            *session.working_source().unwrap(),
+            original,
+            "the refused public range delete changed the working source"
+        );
+        let after_state = session.note_state().unwrap();
+        assert_eq!(
+            after_state.ast, before_state.ast,
+            "the refused public range delete changed the observable AST"
+        );
+        assert_eq!(
+            after_state, before_state,
+            "the refused public range delete changed observable Note state"
+        );
+        assert_eq!(
+            session.edit_seq(),
+            sequence_before,
+            "the refused public range delete advanced the edit sequence"
+        );
+        assert!(
+            wrapper_draft("utf16-surrogate").is_none(),
+            "the refused public range delete wrote a draft row"
+        );
+        assert_eq!(
+            std::fs::read_to_string(ws.root.join("utf16-surrogate.md")).unwrap(),
+            original,
+            "the refused public range delete partially rewrote frontmatter or source"
+        );
     }
 
     // -- WSPC-D008 review finding #1: wrapper-layer coverage -----------------
@@ -1441,6 +1484,24 @@ mod tests {
             std::fs::create_dir_all(parent).unwrap();
         }
         std::fs::write(path, contents).unwrap();
+    }
+
+    /// Reads the one tier-1 row through the real process-wide connection used
+    /// by the wrapper tests. This is test-only observability: the FFI surface
+    /// deliberately does not expose raw drafts to Presentation.
+    fn wrapper_draft(note_id: &str) -> Option<(String, i64)> {
+        let workspace_id = crate::db::connection::active_workspace_id().unwrap();
+        crate::db::connection::with_connection(|conn| {
+            conn.query_row(
+                "SELECT raw_markdown, edit_seq FROM drafts \
+                 WHERE workspace_id = ?1 AND note_id = ?2",
+                rusqlite::params![workspace_id, note_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()
+            .map_err(AppError::from)
+        })
+        .unwrap()
     }
 
     /// Holds every lock a wrapper-layer test needs and, on drop, resets the

@@ -139,4 +139,21 @@ void main() {
     await second;
     expect(deletes, 1);
   });
+
+  testWidgets('a failed Core copy prevents cut deletion', (tester) async {
+    await _pump(tester);
+    var deletes = 0;
+    final client = RangeTextInputClient(
+      range: _range(),
+      onReplace: (_) async {},
+      onDelete: () async => deletes++,
+      copyMarkdown: () async => throw StateError('Core copy failed'),
+      onError: (_) {},
+    )..attach();
+    addTearDown(client.close);
+
+    await client.cutSelection();
+
+    expect(deletes, 0);
+  });
 }

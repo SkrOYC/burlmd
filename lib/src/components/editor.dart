@@ -73,6 +73,7 @@ class EditorState extends ConsumerState<Editor> {
   RangeTextInputClient? _rangeInputClient;
   int _rangeGeneration = 0;
   NoteState? _rangeState;
+  String? _rangeNoteId;
 
   /// Overrides the region's default copy with the Core-produced Markdown
   /// path (CAP-EDIT-04); see [_CopyRangeAsMarkdownAction].
@@ -166,6 +167,14 @@ class EditorState extends ConsumerState<Editor> {
 
   @override
   Widget build(BuildContext context) {
+    // A provider transition can happen before Flutter schedules this widget's
+    // rebuild. Listen at the provider boundary so a queued platform callback
+    // cannot reuse the old rendered selection against the new Note in that
+    // gap. The selection system may retain its own visual range until build;
+    // clear both its selectables and the Note-authoritative Select All marker.
+    ref.listen<NoteState?>(activeNoteProvider, (previous, next) {
+      if (!identical(previous, next)) _invalidateRenderedRange();
+    });
     final error = ref.watch(editorErrorProvider);
     // The Core refused an operation on the active Note (an open failed, or a
     // close on switch aborted it). Surfaced here rather than swallowed:
@@ -176,13 +185,12 @@ class EditorState extends ConsumerState<Editor> {
     if (error != null) return _ErrorSurface(message: '$error');
     final note = ref.watch(activeNoteProvider);
     if (note == null) {
-      _closeRangeInput();
+      _invalidateRenderedRange();
       _focused = null;
-      _selectionBrokers.clear();
       return const SizedBox.shrink();
     }
-    if (_rangeInputClient != null && !identical(_rangeState, note)) {
-      _closeRangeInput();
+    if (_rangeInputClient != null && !_isRangeStateCurrent()) {
+      _invalidateRenderedRange();
     }
     // A different Note opened while a Block was focused: drop focus rather
     // than carry the edit session across. Refetching by path would be wrong
@@ -542,21 +550,25 @@ class EditorState extends ConsumerState<Editor> {
     if (existing != null && _sameRange(existing.range, range)) return;
 
     _closeRangeInput();
+    final state = ref.read(activeNoteProvider);
+    if (state == null) return;
+    final noteId = state.metadata.id;
     final generation = ++_rangeGeneration;
     final client = RangeTextInputClient(
       range: range,
       onReplace: (replacement) =>
-          _replaceFrozenRange(generation, range, replacement),
-      onDelete: () => _deleteFrozenRange(generation, range),
-      copyMarkdown: () => _copyFrozenRange(generation, range),
+          _replaceFrozenRange(generation, range, state, noteId, replacement),
+      onDelete: () => _deleteFrozenRange(generation, range, state, noteId),
+      copyMarkdown: () => _copyFrozenRange(generation, range, state, noteId),
       onError: (error) {
-        if (_isLiveRange(generation, range)) {
+        if (_isLiveRange(generation, range, state, noteId)) {
           ref.read(editorErrorProvider.notifier).report(error);
         }
       },
     );
     _rangeInputClient = client;
-    _rangeState = ref.read(activeNoteProvider);
+    _rangeState = state;
+    _rangeNoteId = noteId;
     client.attach();
   }
 
@@ -573,51 +585,80 @@ class EditorState extends ConsumerState<Editor> {
       a.startOffset == b.startOffset &&
       a.endOffset == b.endOffset;
 
-  bool _isLiveRange(int generation, BlockRange range) =>
+  bool _isLiveRange(
+    int generation,
+    BlockRange range,
+    NoteState state,
+    String noteId,
+  ) =>
       mounted &&
       generation == _rangeGeneration &&
       _rangeInputClient != null &&
-      _sameRange(_rangeInputClient!.range, range);
+      _sameRange(_rangeInputClient!.range, range) &&
+      _isRangeStateCurrent(state, noteId);
+
+  bool _isRangeStateCurrent([NoteState? state, String? noteId]) {
+    final current = ref.read(activeNoteProvider);
+    final capturedState = state ?? _rangeState;
+    final capturedId = noteId ?? _rangeNoteId;
+    return capturedState != null &&
+        capturedId != null &&
+        identical(current, capturedState) &&
+        current?.metadata.id == capturedId;
+  }
 
   void _closeRangeInput() {
     _rangeGeneration++;
     _rangeInputClient?.close();
     _rangeInputClient = null;
     _rangeState = null;
+    _rangeNoteId = null;
   }
 
-  Future<String> _copyFrozenRange(int generation, BlockRange range) async {
-    if (!_isLiveRange(generation, range)) return '';
-    final note = ref.read(activeNoteProvider);
-    if (note == null) return '';
-    return ref
-        .read(rustApiProvider)
-        .copyRangeAsMarkdown(note.metadata.id, range);
+  /// Revokes both sources of selection authority. This is deliberately safe
+  /// before build: old selectables can still be mounted briefly after the
+  /// provider changes, but they can no longer recreate a range or Select All
+  /// marker for the replacement state.
+  void _invalidateRenderedRange() {
+    _closeRangeInput();
+    _clearRenderedSelection();
+    _requiresFreshRenderedSelection = true;
+  }
+
+  Future<String> _copyFrozenRange(
+    int generation,
+    BlockRange range,
+    NoteState state,
+    String noteId,
+  ) async {
+    if (!_isLiveRange(generation, range, state, noteId)) return '';
+    return ref.read(rustApiProvider).copyRangeAsMarkdown(noteId, range);
   }
 
   Future<void> _replaceFrozenRange(
     int generation,
     BlockRange range,
+    NoteState state,
+    String noteId,
     String replacement,
   ) async {
-    if (!_isLiveRange(generation, range)) return;
-    final note = ref.read(activeNoteProvider);
-    if (note == null) return;
+    if (!_isLiveRange(generation, range, state, noteId)) return;
     final result = ref
         .read(rustApiProvider)
-        .replaceRange(note.metadata.id, range, replacement);
-    if (!_isLiveRange(generation, range)) return;
+        .replaceRange(noteId, range, replacement);
+    if (!_isLiveRange(generation, range, state, noteId)) return;
     _adoptRangeResult(result);
   }
 
-  Future<void> _deleteFrozenRange(int generation, BlockRange range) async {
-    if (!_isLiveRange(generation, range)) return;
-    final note = ref.read(activeNoteProvider);
-    if (note == null) return;
-    final result = ref
-        .read(rustApiProvider)
-        .deleteRange(note.metadata.id, range);
-    if (!_isLiveRange(generation, range)) return;
+  Future<void> _deleteFrozenRange(
+    int generation,
+    BlockRange range,
+    NoteState state,
+    String noteId,
+  ) async {
+    if (!_isLiveRange(generation, range, state, noteId)) return;
+    final result = ref.read(rustApiProvider).deleteRange(noteId, range);
+    if (!_isLiveRange(generation, range, state, noteId)) return;
     _adoptRangeResult(result);
   }
 
@@ -1321,11 +1362,11 @@ class EditorState extends ConsumerState<Editor> {
   //
   // The staging half creates two Notes through Core. This QA-only driver
   // supplies explicit complete rendered ranges (rather than relying on screen
-  // coordinates), but every mutation still goes through the live direct
-  // TextInputClient and its production Core callbacks: type is an
-  // `updateEditingValue`, paste reads Clipboard, and delete is its explicit
-  // Action-equivalent proxy method. The final deletion must produce the
-  // existing phantom slot; a generic workspace can therefore never certify.
+  // coordinates), but every mutation still goes through the live production
+  // path: type is a `TextInputClient.updateEditingValue`, while paste and
+  // delete invoke the editor's installed Actions from the captured
+  // SelectionArea context. The final deletion must produce the existing
+  // phantom slot; a generic workspace can therefore never certify readiness.
   Future<void> _runSmokeF007() async {
     const typeTitle = 'F007 range type paste';
     const deleteTitle = 'F007 range delete phantom';
@@ -1359,11 +1400,13 @@ class EditorState extends ConsumerState<Editor> {
       _dismissSmokeFocus();
       await _smokeActivateWholeRange();
       await Clipboard.setData(const ClipboardData(text: 'pasted'));
-      final pasteClient = _rangeInputClient;
-      if (pasteClient == null) {
+      if (_rangeInputClient == null || _areaContext == null) {
         throw StateError('F007 could not attach paste proxy.');
       }
-      await pasteClient.pasteSelection();
+      Actions.invoke(
+        _areaContext!,
+        const PasteTextIntent(SelectionChangedCause.keyboard),
+      );
       if (!await _waitForSmoke(
         () => _rangeInputClient == null && _focused != null,
       )) {
@@ -1381,19 +1424,18 @@ class EditorState extends ConsumerState<Editor> {
         return;
       }
       await _smokeActivateWholeRange();
-      final deleteClient = _rangeInputClient;
-      if (deleteClient == null) {
+      if (_rangeInputClient == null || _areaContext == null) {
         throw StateError('F007 could not attach delete proxy.');
       }
-      await deleteClient.deleteSelection();
+      Actions.invoke(_areaContext!, const DeleteCharacterIntent(forward: true));
       if (!await _waitForSmoke(() => _focused?.isPhantom == true)) {
         throw StateError('F007 delete did not return the Core phantom caret.');
       }
       final readinessPath = Platform.environment['BURLMD_SMOKE_READY_FILE'];
       if (readinessPath != null) {
-        File(
-          readinessPath,
-        ).writeAsStringSync('f007-type-paste-core-caret-delete-core-phantom\n');
+        File(readinessPath).writeAsStringSync(
+          'f007-type-input-paste-action-delete-action-core-caret-phantom\n',
+        );
       }
     } catch (error) {
       if (mounted) ref.read(editorErrorProvider.notifier).report(error);
