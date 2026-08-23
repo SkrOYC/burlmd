@@ -10,6 +10,7 @@ import 'package:burlmd/src/screens/workspace.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart'
     show RenderBox, RenderEditable, RenderObject, RenderParagraph;
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart'
     show Uint64List;
@@ -748,6 +749,57 @@ void main() {
 
     expect(api.lastBlockPath, [0, 0]);
     expect(api.lastSource, 'edited quote');
+  });
+
+  testWidgets('a task item maps its text hit to the rendered paragraph, not '
+      'the checkbox marker', (tester) async {
+    final api = _FakeRustApi(failContainerPaths: true)
+      ..sources['0/0/0'] = 'task text'
+      ..resolvedCarets['0'] = BlockCaret(
+        blockPath: Uint64List.fromList([0, 0, 0]),
+        caretOffset: BigInt.one,
+      );
+    await pumpEditor(tester, [
+      AstNode.list(
+        ordered: false,
+        items: [
+          AstNode.listItem(
+            checked: true,
+            content: [_plainParagraph('task text')],
+          ),
+        ],
+      ),
+    ], api: api);
+
+    expect(find.byType(Checkbox), findsOneWidget);
+    await promoteByTap(tester, find.text('task text'));
+
+    expect(_field(tester).controller.text, 'task text');
+    expect(_field(tester).controller.selection.baseOffset, 1);
+  });
+
+  testWidgets('a traversable rendered Block promotes on Enter through the '
+      'same Core path as a pointer hit', (tester) async {
+    final api = _FakeRustApi()..sources['0'] = 'keyboard raw';
+    await pumpEditor(tester, [_plainParagraph('keyboard raw')], api: api);
+
+    Focus.of(
+      tester.element(
+        find
+            .descendant(
+              of: find.byKey(const ValueKey('block-0')),
+              matching: find.byType(Semantics),
+            )
+            .first,
+      ),
+    ).requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+    await tester.pump();
+
+    expect(_writableFields(), findsOneWidget);
+    expect(_field(tester).controller.text, 'keyboard raw');
   });
 
   // -- Blur commits, focus re-derived from the returned state --------------

@@ -322,6 +322,7 @@ class EditorState extends ConsumerState<Editor> {
   /// against the current session commits.
   void _handleFieldBlur(int focusToken) {
     if (_focused == null || _focused!.token != focusToken) return;
+    _invalidateSmokeF002Readiness();
     _commitFocused();
   }
 
@@ -372,6 +373,57 @@ class EditorState extends ConsumerState<Editor> {
       path.length >= prefix.length &&
       prefix.indexed.every((entry) => path[entry.$1] == entry.$2);
 
+  /// Editable paths are structural addresses, not top-level list indices.
+  /// Re-derive them from the Core-returned AST after any reparsing mutator so
+  /// a list or quote leaf never becomes a synthetic `[index +/- 1]` path.
+  static List<List<int>> _leafPaths(List<AstNode> ast) => [
+    for (final (index, node) in ast.indexed) ..._leafPathsIn(node, [index]),
+  ];
+
+  static List<List<int>> _leafPathsIn(AstNode node, List<int> path) =>
+      switch (node) {
+        AstNode_List(:final items) => [
+          for (final (index, child) in items.indexed)
+            ..._leafPathsIn(child, [...path, index]),
+        ],
+        AstNode_ListItem(:final content) => [
+          for (final (index, child) in content.indexed)
+            ..._leafPathsIn(child, [...path, index]),
+        ],
+        AstNode_Blockquote(:final nodes) => [
+          for (final (index, child) in nodes.indexed)
+            ..._leafPathsIn(child, [...path, index]),
+        ],
+        AstNode_Suggestion(:final localContent) => [
+          for (final (index, child) in localContent.indexed)
+            ..._leafPathsIn(child, [...path, index]),
+        ],
+        _ => [path],
+      };
+
+  static List<int>? _nextLeafPath(NoteState state, List<int> path) {
+    final leaves = _leafPaths(state.ast);
+    final current = leaves.indexWhere(
+      (candidate) => _pathEquals(candidate, path),
+    );
+    if (current >= 0 && current + 1 < leaves.length) return leaves[current + 1];
+    return null;
+  }
+
+  static List<int>? _previousLeafPath(NoteState state, List<int> path) {
+    final leaves = _leafPaths(state.ast);
+    final current = leaves.indexWhere(
+      (candidate) => _pathEquals(candidate, path),
+    );
+    return current > 0 ? leaves[current - 1] : null;
+  }
+
+  static List<int>? _existingLeafPath(NoteState state, List<int> preferred) =>
+      _leafPaths(state.ast).cast<List<int>?>().firstWhere(
+        (candidate) => candidate != null && _pathEquals(candidate, preferred),
+        orElse: () => null,
+      );
+
   // -- Block creation, splitting and merging (EDIT-F004, CAP-EDIT-03) ------
   //
   // Every structural change goes through a Core mutator and the returned
@@ -389,14 +441,14 @@ class EditorState extends ConsumerState<Editor> {
   /// line of an EMPTY Note, which is the only way composing can begin
   /// there.
   Widget _buildPhantomEntry(NoteState note) {
-    final index = _focused?.path.first ?? 0;
+    final path = _focused?.path ?? const [0];
     const node = AstNode.paragraph(content: []);
     return KeyedSubtree(
       key: const ValueKey('entry-phantom'),
       child: BlockEditor(
         key: const ValueKey('edit-phantom'),
         noteId: note.metadata.id,
-        blockPath: [index],
+        blockPath: path,
         source: '',
         initialCaret: 0,
         style: blockTextStyle(node),
@@ -437,7 +489,12 @@ class EditorState extends ConsumerState<Editor> {
       setState(() {
         _focused = _Focus(
           noteId: focused.noteId,
-          path: [blockPath.first + 1],
+          // A top-level leaf's next slot is a real top-level insertion path.
+          // Nested leaves keep their structural address; they must not be
+          // collapsed to `[topLevelIndex + 1]`.
+          path: blockPath.length == 1
+              ? [blockPath.first + 1]
+              : List<int>.from(blockPath),
           source: '',
           caret: 0,
           lastSeenState: note,
@@ -450,13 +507,17 @@ class EditorState extends ConsumerState<Editor> {
       final api = ref.read(rustApiProvider);
       final newState = api.splitBlock(note.metadata.id, blockPath, clamped);
       ref.read(activeNoteProvider.notifier).adopt(newState);
-      final secondHalf = api.getBlockSource(note.metadata.id, [
-        blockPath.first + 1,
-      ]);
+      final secondPath = _nextLeafPath(newState, blockPath);
+      if (secondPath == null) {
+        throw StateError(
+          'Core split returned no editable successor for $blockPath',
+        );
+      }
+      final secondHalf = api.getBlockSource(note.metadata.id, secondPath);
       setState(() {
         _focused = _Focus(
           noteId: note.metadata.id,
-          path: [blockPath.first + 1],
+          path: secondPath,
           source: secondHalf,
           caret: 0,
           lastSeenState: newState,
@@ -483,18 +544,37 @@ class EditorState extends ConsumerState<Editor> {
     // session exists yet.
     if (focused != null && !focused.isPhantom) return;
     if (focused == null && note.ast.isNotEmpty) return;
-    final index = (focused?.path.first ?? 0).clamp(0, note.ast.length);
+    // Empty Notes have no leaf to anchor, so `[0]` is the documented append
+    // sentinel. Every non-empty Note retains the actual Core leaf path.
+    final insertionPath = focused?.path ?? const [0];
     try {
       final api = ref.read(rustApiProvider);
-      final newState = api.insertBlock(note.metadata.id, [index], text);
+      final structural = insertionPath.length > 1
+          ? api.insertListItemAfter(note.metadata.id, insertionPath, text)
+          : null;
+      final newState =
+          structural?.state ??
+          api.insertBlock(note.metadata.id, insertionPath, text);
       ref.read(activeNoteProvider.notifier).adopt(newState);
-      final source = api.getBlockSource(note.metadata.id, [index]);
+      final insertedPath =
+          structural?.blockPath.map((part) => part.toInt()).toList() ??
+          _existingLeafPath(newState, insertionPath) ??
+          _nextLeafPath(newState, insertionPath);
+      if (insertedPath == null) {
+        throw StateError(
+          'Core insert returned no editable leaf for $insertionPath',
+        );
+      }
+      final source = api.getBlockSource(note.metadata.id, insertedPath);
       setState(() {
         _focused = _Focus(
           noteId: note.metadata.id,
-          path: [index],
+          path: insertedPath,
           source: source,
-          caret: text.length.clamp(0, source.length),
+          caret: (structural?.caretOffset.toInt() ?? text.length).clamp(
+            0,
+            source.length,
+          ),
           lastSeenState: newState,
         );
       });
@@ -510,22 +590,28 @@ class EditorState extends ConsumerState<Editor> {
   /// predecessor's own content ends, measured BEFORE the merge so a trailing
   /// newline the Core keeps in its source rows never shifts it.
   void _handleBackspaceAtStart(List<int> blockPath) {
-    if (blockPath.first == 0) return;
     final note = ref.read(activeNoteProvider);
     if (note == null) return;
-    final index = blockPath.first;
+    final previousPath = _previousLeafPath(note, blockPath);
+    if (previousPath == null) return;
     try {
       final api = ref.read(rustApiProvider);
-      final previous = api.getBlockSource(note.metadata.id, [index - 1]);
+      final previous = api.getBlockSource(note.metadata.id, previousPath);
       var join = previous.length;
       if (join > 0 && previous.endsWith('\n')) join--;
-      final newState = api.mergeBlockWithPrevious(note.metadata.id, [index]);
+      final newState = api.mergeBlockWithPrevious(note.metadata.id, blockPath);
       ref.read(activeNoteProvider.notifier).adopt(newState);
-      final merged = api.getBlockSource(note.metadata.id, [index - 1]);
+      final mergedPath = _existingLeafPath(newState, previousPath);
+      if (mergedPath == null) {
+        throw StateError(
+          'Core merge returned no editable predecessor for $blockPath',
+        );
+      }
+      final merged = api.getBlockSource(note.metadata.id, mergedPath);
       setState(() {
         _focused = _Focus(
           noteId: note.metadata.id,
-          path: [index - 1],
+          path: mergedPath,
           source: merged,
           caret: join.clamp(0, merged.length),
           lastSeenState: newState,
@@ -694,15 +780,59 @@ class EditorState extends ConsumerState<Editor> {
         _focused == null &&
         (ref.read(activeNoteProvider)?.ast.isNotEmpty ?? false)) {
       _promote([0], 'Intro with **bo'.length);
+      // Promotion only schedules the editor build. Do not certify the shot
+      // until the next frame contains the mounted, active EditableText and
+      // its raw Markdown delimiters; a generic formatted Workspace can then
+      // never satisfy the shell harness marker.
       final readinessPath = Platform.environment['BURLMD_SMOKE_READY_FILE'];
-      if (_focused != null && readinessPath != null) {
-        try {
-          File(readinessPath).writeAsStringSync('f002-focused-raw-source\n');
-        } on FileSystemException {
-          // The marker is QA-only. The shell harness rejects a missing marker;
-          // normal editing must not fail if an externally supplied path is bad.
+      final readyDeadline = DateTime.now().add(const Duration(seconds: 5));
+      while (mounted && DateTime.now().isBefore(readyDeadline)) {
+        await WidgetsBinding.instance.endOfFrame;
+        if (_hasActiveSmokeRawField()) {
+          if (readinessPath != null) {
+            try {
+              File(
+                readinessPath,
+              ).writeAsStringSync('f002-focused-raw-source\n');
+            } on FileSystemException {
+              // The marker is QA-only. The shell harness rejects a missing
+              // marker; normal editing must not fail if its path is bad.
+            }
+          }
+          return;
         }
+        await Future<void>.delayed(const Duration(milliseconds: 50));
       }
+    }
+  }
+
+  bool _hasActiveSmokeRawField() {
+    var activeRawField = false;
+    void visit(Element element) {
+      final widget = element.widget;
+      if (widget is EditableText &&
+          !widget.readOnly &&
+          widget.focusNode.hasFocus &&
+          widget.controller.text.contains('**')) {
+        activeRawField = true;
+        return;
+      }
+      element.visitChildElements(visit);
+    }
+
+    final root = WidgetsBinding.instance.rootElement;
+    if (root != null) visit(root);
+    return activeRawField;
+  }
+
+  void _invalidateSmokeF002Readiness() {
+    final readinessPath = Platform.environment['BURLMD_SMOKE_READY_FILE'];
+    if (readinessPath == null) return;
+    try {
+      File(readinessPath).deleteSync();
+    } on FileSystemException {
+      // The marker is only a QA assertion. A missing or inaccessible marker
+      // does not alter user editing behaviour; the harness rejects it.
     }
   }
 

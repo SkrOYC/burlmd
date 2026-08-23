@@ -16,6 +16,9 @@ strong `BlockCaret` result; existing calls retain their signatures.
 - The F002 smoke command now requires `BURLMD_SMOKE_F002=1` and verifies a
   readiness signal emitted only after the staged note is open and its raw
   field is promoted; a generic Workspace screenshot cannot satisfy it.
+- `insert_list_item_after` is the narrow structural continuation surface for
+  Enter at a nested list leaf. It preserves the list, then returns an
+  authoritative `StructuralEdit` leaf path and UTF-16 caret after reparse.
 
 ## v1.4.2
 Independent-review correction to **SPK-EDIT-F001**. Patch bump: no decision or FFI signature changed.

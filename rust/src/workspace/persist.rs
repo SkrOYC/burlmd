@@ -992,6 +992,59 @@ impl NoteSession {
         })
     }
 
+    /// Inserts a new sibling item in the nearest containing List. Unlike
+    /// [`insert_block`](Self::insert_block), this deliberately continues the
+    /// Markdown container instead of ending it with a blank-line seam.
+    /// Returns the new state's actual first editable leaf path.
+    pub fn insert_list_item_after(
+        &self,
+        block_path: &[usize],
+        source: &str,
+    ) -> Result<(NoteState, Vec<usize>), AppError> {
+        let marker = {
+            let state = self.lock_state()?;
+            let (list_path, item_index) =
+                nearest_list_item(&state.ast, block_path).ok_or_else(|| {
+                    AppError::ParseError(format!(
+                        "block_path {block_path:?} is not inside a List item"
+                    ))
+                })?;
+            let mut item_path = list_path;
+            item_path.push(item_index);
+            let item_source = state
+                .spans
+                .block_source(&state.source, &item_path)
+                .map(str::to_string)
+                .ok_or_else(|| {
+                    AppError::ParseError(format!("no ListItem at block_path {item_path:?}"))
+                })?;
+            let marker = list_marker(&item_source).ok_or_else(|| {
+                AppError::ParseError(format!(
+                    "ListItem at block_path {item_path:?} has no repeatable Markdown marker"
+                ))
+            })?;
+            marker.to_string()
+        };
+        let state = self.structural_edit(|working, spans| {
+            // The ListItem container span includes its following siblings in
+            // pulldown-cmark's event ranges; the editable leaf's end is the
+            // exact insertion boundary for this item's visible content.
+            let at = block_span(spans, block_path)?.end;
+            splice::splice_source(working, at..at, &format!("\n{marker}{source}"))
+                .map_err(splice_error)
+        })?;
+        let (list_path, item_index) =
+            nearest_list_item(&state.ast, block_path).ok_or_else(|| {
+                AppError::ParseError(
+                    "inserted List item did not preserve its container".to_string(),
+                )
+            })?;
+        let mut focused = list_path;
+        focused.push(item_index.saturating_add(1));
+        focused.push(0);
+        Ok((state, focused))
+    }
+
     /// Deletes a Block, taking the newline run that immediately followed it
     /// with it so the remaining Blocks stay separated by exactly one blank
     /// line.
@@ -1063,25 +1116,18 @@ impl NoteSession {
         })
     }
 
-    /// Splits a Block at a **character** offset into its source — pressing
-    /// Enter mid-Block. The focused Block displays raw source under ADR-006, so
-    /// the caret position the UI reports is an offset into that source rather
-    /// than into rendered text; `contracts/ffi_api.rs` spells that offset in
-    /// characters, and this is the one place the two units can differ.
+    /// Splits a Block at a Flutter **UTF-16** offset into its source — pressing
+    /// Enter mid-Block. The focused Block displays raw source under ADR-006,
+    /// and `TextEditingValue` reports its caret in UTF-16 code units.
     ///
-    /// The offset is therefore converted against the Block's own source before
-    /// anything indexes with it. Everything below this line — spans, splice
-    /// ranges, the whole of `markdown::spans` — stays in **bytes**, which is
-    /// what `SpanMap` records and what `String::replace_range` needs; only the
-    /// boundary converts. Taking the caller's number as a byte offset instead
-    /// silently split multibyte text in the wrong place: `Café x` at offset 5
-    /// landed before the space rather than before the `x`, because `é` is two
-    /// bytes, and every character past the first non-ASCII one in a Block drifts
-    /// by one more.
+    /// The offset is converted against the Block's own source before anything
+    /// indexes with it. Everything below this line — spans, splice ranges, the
+    /// whole of `markdown::spans` — stays in bytes, which is what `SpanMap`
+    /// records and what `String::replace_range` needs. A surrogate interior is
+    /// refused rather than rounded to a neighbouring Unicode scalar.
     ///
-    /// An offset past the Block's last character is refused rather than clamped,
-    /// as it was when it was read as bytes — a caret the Block cannot hold names
-    /// no split point.
+    /// An offset past the Block's last UTF-16 code unit is refused rather than
+    /// clamped — a caret the Block cannot hold names no split point.
     pub fn split_block(&self, block_path: &[usize], offset: usize) -> Result<NoteState, AppError> {
         self.structural_edit(|working, spans| {
             let span = block_span(spans, block_path)?;
@@ -1091,18 +1137,9 @@ impl NoteSession {
                     span.start, span.end
                 ))
             })?;
-            // `char_indices` yields one index per character and stops at the
-            // last one, so the Block's own length is chained on to make the
-            // end-of-Block caret — offset == the character count — addressable
-            // exactly as byte offset `span.end - span.start` used to be.
-            let Some(byte_offset) = block_source
-                .char_indices()
-                .map(|(at, _)| at)
-                .chain(std::iter::once(block_source.len()))
-                .nth(offset)
-            else {
+            let Some(byte_offset) = crate::markdown::spans::utf16_to_byte_offset(block_source, offset) else {
                 return Err(AppError::ParseError(format!(
-                    "split offset {offset} is past the end of block_path {block_path:?}"
+                    "split UTF-16 offset {offset} is not a character boundary in block_path {block_path:?}"
                 )));
             };
             let at = span.start + byte_offset;
@@ -2832,6 +2869,76 @@ fn block_span(spans: &SpanMap, path: &[usize]) -> Result<std::ops::Range<usize>,
         .ok_or_else(|| AppError::ParseError(format!("no Block at block_path {path:?}")))
 }
 
+#[cfg(test)]
+fn node_at_path<'a>(nodes: &'a [AstNode], path: &[usize]) -> Option<&'a AstNode> {
+    let (head, rest) = path.split_first()?;
+    let node = nodes.get(*head)?;
+    if rest.is_empty() {
+        return Some(node);
+    }
+    match node {
+        AstNode::List { items, .. } => node_at_path(items, rest),
+        AstNode::ListItem { content, .. } => node_at_path(content, rest),
+        AstNode::Blockquote { nodes } => node_at_path(nodes, rest),
+        AstNode::Suggestion { local_content, .. } => node_at_path(local_content, rest),
+        _ => None,
+    }
+}
+
+/// The closest ListItem containing `path`, expressed as the List's path and
+/// its item index. A quote or nested list between the outer list and leaf is
+/// traversed, so continuation stays in the innermost list the user is editing.
+fn nearest_list_item(nodes: &[AstNode], path: &[usize]) -> Option<(Vec<usize>, usize)> {
+    fn walk(
+        nodes: &[AstNode],
+        path: &[usize],
+        prefix: &mut Vec<usize>,
+        closest: &mut Option<(Vec<usize>, usize)>,
+    ) -> Option<()> {
+        let (head, rest) = path.split_first()?;
+        let node = nodes.get(*head)?;
+        if let AstNode::List { .. } = node {
+            let item = *rest.first()?;
+            let mut list_path = prefix.clone();
+            list_path.push(*head);
+            *closest = Some((list_path, item));
+        }
+        prefix.push(*head);
+        let result = if rest.is_empty() {
+            Some(())
+        } else {
+            match node {
+                AstNode::List { items, .. } => walk(items, rest, prefix, closest),
+                AstNode::ListItem { content, .. } => walk(content, rest, prefix, closest),
+                AstNode::Blockquote { nodes } => walk(nodes, rest, prefix, closest),
+                AstNode::Suggestion { local_content, .. } => {
+                    walk(local_content, rest, prefix, closest)
+                }
+                _ => None,
+            }
+        };
+        prefix.pop();
+        result
+    }
+    let mut closest = None;
+    walk(nodes, path, &mut Vec::new(), &mut closest)?;
+    closest
+}
+
+fn list_marker(source: &str) -> Option<&str> {
+    let line = source.lines().next()?;
+    let indentation = line.len() - line.trim_start().len();
+    let rest = &line[indentation..];
+    if let Some(marker) = ["- ", "+ ", "* "]
+        .iter()
+        .find(|marker| rest.starts_with(**marker))
+    {
+        return Some(&line[..indentation + marker.len()]);
+    }
+    let digits = rest.find(|character: char| !character.is_ascii_digit())?;
+    (digits > 0 && rest[digits..].starts_with(". ")).then_some(&line[..indentation + digits + 2])
+}
+
 /// How many newlines a Block must be followed by for the next one to be a
 /// separate Block: a blank line, which is two.
 const BLOCK_SEPARATOR_NEWLINES: usize = 2;
@@ -4118,25 +4225,16 @@ mod tests {
         assert!(!source.contains('\r'), "a CR appeared in an LF Note");
     }
 
-    /// `split_block`'s offset is a **character** offset into the Block's
-    /// source, which is what `contracts/ffi_api.rs` specifies and what the Dart
-    /// wrapper documents.
-    ///
-    /// The regression this pins: the offset was used as a byte index
-    /// (`span.start + offset`), so every character after the first multibyte one
-    /// in a Block split one byte early per preceding non-ASCII byte. `Café x`
-    /// split at 5 — the caret before the `x` — put the break before the space
-    /// instead, silently moving a character the user did not select across the
-    /// new Block boundary. Only the boundary converts: spans and splice ranges
-    /// stay in bytes.
+    /// `split_block` accepts the Flutter raw field's **UTF-16** offset. The
+    /// Core converts it at this boundary; spans and splice ranges remain bytes.
     #[test]
-    fn splitting_a_multibyte_block_measures_the_offset_in_characters() {
+    fn splitting_a_multibyte_block_measures_the_offset_in_utf16_code_units() {
         let f = fixture();
         f.write("a.md", "Café x\n");
         let session = f.open("a");
 
-        // C-a-f-é-space is five characters, so offset 5 is the caret sitting
-        // immediately before the `x`.
+        // `é` occupies one UTF-16 code unit, so offset 5 is immediately before
+        // the `x`.
         session.split_block(&[0], 5).unwrap();
 
         let source = session.working_source().unwrap();
@@ -4146,12 +4244,9 @@ mod tests {
         );
     }
 
-    /// The refusal is measured in characters too. `Café x\n` is seven characters
-    /// and eight bytes, so offset 7 is the end-of-Block caret and offset 8 names
-    /// no character at all — where the byte reading accepted 8 as "the end" and
-    /// refused only from 9.
+    /// The end boundary is measured in UTF-16 code units, not Rust bytes.
     #[test]
-    fn a_split_offset_past_the_last_character_is_refused() {
+    fn a_split_offset_past_the_last_utf16_code_unit_is_refused() {
         let f = fixture();
         f.write("a.md", "Café x\n");
         let session = f.open("a");
@@ -4165,8 +4260,29 @@ mod tests {
         let refused = g.open("b").split_block(&[0], 8);
         assert!(
             matches!(refused, Err(AppError::ParseError(ref message))
-                if message.contains("past the end")),
-            "an offset past the Block's last character must be refused, got {refused:?}"
+                if message.contains("not a character boundary")),
+            "an offset past the Block's last UTF-16 code unit must be refused, got {refused:?}"
+        );
+    }
+
+    #[test]
+    fn splitting_a_non_bmp_block_uses_utf16_and_rejects_a_surrogate_interior() {
+        let f = fixture();
+        f.write("a.md", "😀x\n");
+        let session = f.open("a");
+
+        // The emoji occupies two UTF-16 code units; 2 is the caret between the
+        // emoji and x, while 1 is inside the emoji's surrogate pair.
+        session.split_block(&[0], 2).unwrap();
+        assert_eq!(*session.working_source().unwrap(), "😀\n\nx\n");
+
+        let g = fixture();
+        g.write("b.md", "😀x\n");
+        let refused = g.open("b").split_block(&[0], 1);
+        assert!(
+            matches!(refused, Err(AppError::ParseError(ref message))
+                if message.contains("not a character boundary")),
+            "a split may not land inside a UTF-16 surrogate pair, got {refused:?}"
         );
     }
 
@@ -4181,6 +4297,28 @@ mod tests {
         session.split_block(&[0], 5).unwrap();
 
         assert_eq!(*session.working_source().unwrap(), "Alpha\n\n beta\n");
+    }
+
+    #[test]
+    fn inserting_after_a_nested_list_leaf_preserves_the_list_and_returns_its_new_leaf() {
+        let f = fixture();
+        f.write("a.md", "- alpha\n- beta\n");
+        let session = f.open("a");
+
+        let (state, focus) = session
+            .insert_list_item_after(&[0, 0, 0], "middle")
+            .unwrap();
+
+        assert_eq!(
+            *session.working_source().unwrap(),
+            "- alpha\n- middle\n- beta\n"
+        );
+        assert_eq!(focus, vec![0, 1, 0]);
+        assert_eq!(session.block_source(&focus).unwrap(), "middle");
+        assert!(matches!(
+            node_at_path(&state.ast, &focus),
+            Some(AstNode::Paragraph { .. })
+        ));
     }
 
     /// Deleting the last item of a list must not absorb the paragraph that

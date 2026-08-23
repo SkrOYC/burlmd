@@ -736,18 +736,30 @@ pub fn delete_block(note_id: String, block_path: Vec<usize>) -> Result<NoteState
     unimplemented!()
 }
 
-/// Splits a Block at a character offset -- pressing Enter mid-Block
-/// (CAP-EDIT-03). `offset` is an offset into the Block's **source** text, not
-/// its rendered text: this is only ever called on the focused Block, which
-/// under ADR-006 displays raw source, so the caret position the UI reports is
-/// already a source offset. `merge_block_with_previous` needs no such note
-/// because offset 0 is the same position in both spaces.
+/// Splits a Block at a Flutter UTF-16 offset -- pressing Enter mid-Block
+/// (CAP-EDIT-03). `offset` is an offset into the focused Block's **source**
+/// text, not its rendered text. It uses exactly `TextSelection`'s UTF-16
+/// code-unit coordinate space; Core rejects an offset inside a surrogate pair
+/// rather than rounding it or treating it as a Rust byte offset.
 #[frb(sync)]
 pub fn split_block(
     note_id: String,
     block_path: Vec<usize>,
     offset: usize,
 ) -> Result<NoteState, AppError> {
+    unimplemented!()
+}
+
+/// Inserts a sibling item after a leaf inside a List, preserving that List's
+/// Markdown container. The returned [StructuralEdit] is authoritative after
+/// reparse: it names the new editable leaf and its UTF-16 caret, so Flutter
+/// does not infer a nested sibling path.
+#[frb(sync)]
+pub fn insert_list_item_after(
+    note_id: String,
+    block_path: Vec<usize>,
+    source: String,
+) -> Result<StructuralEdit, AppError> {
     unimplemented!()
 }
 

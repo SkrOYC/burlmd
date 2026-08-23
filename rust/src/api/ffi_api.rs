@@ -373,6 +373,17 @@ pub struct BlockCaret {
     pub caret_offset: usize,
 }
 
+/// Authoritative result of a structural edit that keeps the raw editor open.
+/// The Core reparses before returning, then names the editable leaf and
+/// Flutter UTF-16 caret in that resulting tree; Presentation never predicts
+/// a sibling path from the tree shape it just invalidated.
+#[frb]
+pub struct StructuralEdit {
+    pub state: NoteState,
+    pub block_path: Vec<usize>,
+    pub caret_offset: usize,
+}
+
 /// Resolves a rendered pointer position synchronously through the Core span
 /// map. `top_level_path` contains exactly one top-level Block index and
 /// `rendered_utf16_offset` is Flutter's `TextPosition.offset` in the Core's
@@ -434,11 +445,11 @@ pub fn delete_block(note_id: String, block_path: Vec<usize>) -> Result<NoteState
     open_session(&note_id)?.delete_block(&block_path)
 }
 
-/// Splits a Block at a **character** offset into its source -- pressing Enter
-/// mid-Block (CAP-EDIT-03). The focused Block displays raw source under
+/// Splits a Block at a Flutter **UTF-16** offset into its source -- pressing
+/// Enter mid-Block (CAP-EDIT-03). The focused Block displays raw source under
 /// ADR-006, so the caret position the UI reports is an offset into the Block's
-/// source rather than into its rendered text; it is counted in characters, not
-/// bytes, so a Block containing multibyte text splits where the caller pointed.
+/// source rather than into its rendered text. A surrogate interior is refused;
+/// Core converts valid UTF-16 boundaries to its internal byte spans.
 #[frb(sync)]
 pub fn split_block(
     note_id: String,
@@ -456,6 +467,25 @@ pub fn merge_block_with_previous(
     block_path: Vec<usize>,
 ) -> Result<NoteState, AppError> {
     open_session(&note_id)?.merge_block_with_previous(&block_path)
+}
+
+/// Inserts a sibling list item after an editable descendant. This is the
+/// nested-Enter counterpart to `insert_block`: unlike a general new Block it
+/// deliberately preserves the containing list and returns Core's post-reparse
+/// focus target.
+#[frb(sync)]
+pub fn insert_list_item_after(
+    note_id: String,
+    block_path: Vec<usize>,
+    source: String,
+) -> Result<StructuralEdit, AppError> {
+    let (state, block_path) =
+        open_session(&note_id)?.insert_list_item_after(&block_path, &source)?;
+    Ok(StructuralEdit {
+        state,
+        block_path,
+        caret_offset: source.encode_utf16().count(),
+    })
 }
 
 /// A selection spanning one or more unfocused Blocks, expressed as character

@@ -2,6 +2,7 @@ import 'package:burlmd/src/rust/markdown/ast.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart'
     show RenderParagraph, SelectionRegistrar;
+import 'package:flutter/services.dart';
 
 /// Formatted rendering for one Block, shared by every state a Block can be
 /// in (`EDIT-F002`, CAP-EDIT-01): unfocused Blocks render through
@@ -427,8 +428,10 @@ class _LeafText {
 
 /// Flattens [node]'s rendered text leaves in paint order, aligning with the
 /// `RenderParagraph`s [BlockView] collects from its subtree — including the
-/// pseudo-leaves for list markers, which are painted as `Text` widgets but
-/// belong to no AST leaf.
+/// pseudo-leaves for textual list markers, which are painted as `Text`
+/// widgets but belong to no AST leaf. Task markers are a [Checkbox], not a
+/// [RenderParagraph], so they deliberately have no pseudo-leaf: otherwise the
+/// paragraph index and this mapping diverge for every checked task item.
 List<_LeafText> _blockLeaves(AstNode node) => _leaves(node, 0);
 
 List<_LeafText> _leaves(AstNode node, int corePrefix) => switch (node) {
@@ -536,10 +539,12 @@ List<_LeafText> _listItemLeaves(
     false => '[ ] ',
   };
   return [
-    // The painted marker row itself: clicking the bullet lands before the
-    // item's first content character. It carries real ink but ZERO width in
-    // the canonical string — the definition does not model decoration.
-    _LeafText('$marker$check', corePrefix: corePrefix, coreWidth: 0),
+    // A normal marker is a Text/RenderParagraph and must have a matching
+    // zero-width pseudo-leaf. A task marker is a Checkbox RenderObject, which
+    // BlockView never collects as a text paragraph, so omitting it keeps the
+    // logical leaves and rendered objects one-to-one.
+    if (item.checked == null)
+      _LeafText('$marker$check', corePrefix: corePrefix, coreWidth: 0),
     for (final (childIndex, child) in item.content.indexed)
       ..._leaves(
         child,
@@ -625,10 +630,29 @@ class BlockView extends StatelessWidget {
         child: child,
       );
     }
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTapUp: (details) => _handleTapUp(context, details),
-      child: child,
+    return Focus(
+      canRequestFocus: true,
+      onKeyEvent: (_, event) {
+        if (event is KeyDownEvent &&
+            (event.logicalKey == LogicalKeyboardKey.enter ||
+                event.logicalKey == LogicalKeyboardKey.space)) {
+          // Keyboard promotion uses the same Core-backed top-level coordinate
+          // path as a pointer on the rendered Block. It never synthesizes a
+          // raw source offset or nested leaf path in Presentation.
+          onFocusRequested(blockPath, 0);
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: Semantics(
+        button: true,
+        focusable: true,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTapUp: (details) => _handleTapUp(context, details),
+          child: child,
+        ),
+      ),
     );
   }
 
