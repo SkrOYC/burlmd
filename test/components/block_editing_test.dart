@@ -127,7 +127,7 @@ class _CoreFake extends RustApi {
   }
 
   @override
-  NoteState mergeBlockWithPrevious(String noteId, List<int> blockPath) {
+  StructuralEdit mergeBlockWithPrevious(String noteId, List<int> blockPath) {
     calls.add('merge:${blockPath.first}');
     // The Core splices out the gap between the two Blocks — the
     // predecessor's terminating newline and any blank line between them —
@@ -138,7 +138,11 @@ class _CoreFake extends RustApi {
         : previous;
     blocks[blockPath.first - 1] = stripped + blocks[blockPath.first];
     blocks.removeAt(blockPath.first);
-    return state;
+    return StructuralEdit(
+      state: state,
+      blockPath: Uint64List.fromList([blockPath.first - 1]),
+      caretOffset: BigInt.from(stripped.codeUnits.length),
+    );
   }
 
   @override
@@ -180,6 +184,20 @@ class _NestedListFake extends RustApi {
     restoredFromDraft: false,
   );
 
+  NoteState get _mergedState => NoteState(
+    ast: [
+      AstNode.list(
+        ordered: false,
+        items: [
+          AstNode.listItem(content: [_paragraph('alphabeta')]),
+        ],
+      ),
+    ],
+    metadata: _CoreFake._meta,
+    baseRevision: 'head',
+    restoredFromDraft: false,
+  );
+
   @override
   BlockCaret resolveBlockCaret(
     String noteId,
@@ -211,10 +229,15 @@ class _NestedListFake extends RustApi {
   }
 
   @override
-  NoteState mergeBlockWithPrevious(String noteId, List<int> path) {
+  StructuralEdit mergeBlockWithPrevious(String noteId, List<int> path) {
     calls.add('merge:${path.join('/')}');
     sources['0/0/0'] = 'alphabeta';
-    return _state(1);
+    sources.remove('0/1/0');
+    return StructuralEdit(
+      state: _mergedState,
+      blockPath: Uint64List.fromList([0, 0, 0]),
+      caretOffset: BigInt.from('alpha'.codeUnits.length),
+    );
   }
 
   @override
@@ -223,6 +246,81 @@ class _NestedListFake extends RustApi {
       throw StateError('container write requested at $path');
     }
     sources[path.join('/')] = source;
+  }
+}
+
+/// Models the one deliberate stale view between [RustApi.updateBlock] and a
+/// structural reparse: the editor still holds a paragraph AST while the Core
+/// working source has become a List. Enter must send the retained leaf path to
+/// Core, which resolves it against that live source and returns the new list
+/// sibling path.
+class _LiveShapeListFake extends RustApi {
+  final calls = <String>[];
+  var workingSource = 'plain\n';
+  final sources = <String, String>{'0': 'plain\n'};
+
+  NoteState get continuedState => NoteState(
+    ast: [
+      AstNode.list(
+        ordered: false,
+        items: [
+          AstNode.listItem(content: [_paragraph('item')]),
+          AstNode.listItem(content: [_paragraph('next')]),
+        ],
+      ),
+    ],
+    metadata: _CoreFake._meta,
+    baseRevision: 'head',
+    restoredFromDraft: false,
+  );
+
+  @override
+  BlockCaret resolveBlockCaret(
+    String noteId,
+    List<int> topLevelPath,
+    int offset,
+  ) =>
+      BlockCaret(blockPath: Uint64List.fromList([0]), caretOffset: BigInt.zero);
+
+  @override
+  String getBlockSource(String noteId, List<int> path) {
+    final source = sources[path.join('/')];
+    if (source == null) {
+      throw StateError('no source at $path');
+    }
+    return source;
+  }
+
+  @override
+  void updateBlock(String noteId, List<int> path, String source) {
+    calls.add('update:${path.join('/')}:$source');
+    if (path.join('/') != '0') {
+      throw StateError('the stale paragraph leaf must remain the edit address');
+    }
+    workingSource = source;
+    sources['0'] = source;
+  }
+
+  @override
+  StructuralEdit continueBlockAfter(
+    String noteId,
+    List<int> path,
+    String source,
+  ) {
+    calls.add('continue:${path.join('/')}:$source');
+    if (path.join('/') != '0' || workingSource != '- item\n') {
+      throw StateError('Core must receive the stale leaf path and live source');
+    }
+    workingSource = '- item\n- $source\n';
+    sources
+      ..remove('0')
+      ..['0/0/0'] = 'item'
+      ..['0/1/0'] = source;
+    return StructuralEdit(
+      state: continuedState,
+      blockPath: Uint64List.fromList([0, 1, 0]),
+      caretOffset: BigInt.from(source.codeUnits.length),
+    );
   }
 }
 
@@ -698,6 +796,25 @@ void main() {
     expect(_field(tester).controller.selection.baseOffset, 'middle'.length);
   });
 
+  testWidgets('Enter at the end of a live-edited paragraph-to-list source '
+      'uses Core’s returned list sibling path', (tester) async {
+    final api = _LiveShapeListFake();
+    await pumpEditor(tester, [_paragraph('plain')], api: api);
+
+    await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
+    await tester.enterText(_writableFields().first, '- item\n');
+    await tester.pump();
+    await placeCaret(tester, '- item\n'.codeUnits.length);
+    await pressKey(tester, LogicalKeyboardKey.enter);
+    await tester.enterText(_writableFields().first, 'next');
+    await tester.pump();
+
+    expect(api.calls, ['update:0:- item\n', 'continue:0:next']);
+    expect(api.workingSource, '- item\n- next\n');
+    expect(_field(tester).controller.text, 'next');
+    expect(_field(tester).controller.selection.baseOffset, 'next'.length);
+  });
+
   testWidgets('Enter at a nested blockquote leaf lets Core exit the quote and '
       'focus its returned top-level leaf', (tester) async {
     final api = _NestedBlockquoteFake();
@@ -715,7 +832,9 @@ void main() {
   });
 
   testWidgets('Backspace at a nested second list item calls Core with the '
-      'real leaf path and focuses its returned predecessor', (tester) async {
+      'real leaf path and focuses Core’s returned predecessor/caret', (
+    tester,
+  ) async {
     final api = _NestedListFake()..promotedPath = [0, 1, 0];
     await pumpEditor(tester, api._state(2).ast, api: api);
 
@@ -725,5 +844,6 @@ void main() {
 
     expect(api.calls, ['merge:0/1/0']);
     expect(_field(tester).controller.text, 'alphabeta');
+    expect(_field(tester).controller.selection.baseOffset, 'alpha'.length);
   });
 }

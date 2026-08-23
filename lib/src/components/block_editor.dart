@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:math' as math;
+
 import 'package:burlmd/src/providers/note_providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -114,8 +117,11 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
   // rebuild. Ephemeral edit-widget presentation state, not note content.
   late final TextEditingController _controller;
   late final FocusNode _focusNode;
-  String? _pendingResyncSource;
-  int _pendingResyncToken = -1;
+  _PendingResync? _pendingResync;
+  String _lastSettledText = '';
+  String? _compositionBaseText;
+  bool _pendingResolutionScheduled = false;
+  bool _hasResyncConflict = false;
 
   @override
   void initState() {
@@ -125,6 +131,8 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
       widget.source,
       widget.initialCaret,
     );
+    _lastSettledText = widget.source;
+    _controller.addListener(_onEditingValueChanged);
     _focusNode = FocusNode()..addListener(_onFocusChanged);
   }
 
@@ -132,6 +140,11 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
   void didUpdateWidget(covariant BlockEditor oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.resyncToken == oldWidget.resyncToken) return;
+    // An overlapping rewrite has no lossless automatic resolution. Keep its
+    // two versions isolated until this field is replaced by the surrounding
+    // lifecycle unmount; another arbitrary source must not silently discard
+    // the text the user is being asked to copy before leaving the note.
+    if (_hasResyncConflict) return;
     // An external change to provider state (a lifecycle rewrite adopting
     // rewritten Links, a reload) refetched this Block's source; adopt it,
     // but never stomp a live IME composition — Flutter would raise the
@@ -139,10 +152,24 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
     // or duplicating exactly the characters the composition criterion
     // forbids losing. The in-flight composition completes into the field
     // first, and the next resync picks up whatever the Core then holds.
-    if (widget.source == _controller.text) return;
     if (_controller.value.composing != TextRange.empty) {
-      _pendingResyncSource = widget.source;
-      _pendingResyncToken = widget.resyncToken;
+      // The token is part of the pending value, rather than a separate flag:
+      // a second lifecycle rewrite while the IME is still live supersedes the
+      // first one. In particular, a latest source equal to the live field
+      // must still replace an older, divergent pending source.
+      final pending = _pendingResync;
+      if (pending == null || widget.resyncToken > pending.token) {
+        _pendingResync = _PendingResync(
+          source: widget.source,
+          token: widget.resyncToken,
+          base: _compositionBaseText ?? _lastSettledText,
+        );
+      }
+      return;
+    }
+    if (widget.source == _controller.text) {
+      _clearPendingResync();
+      _lastSettledText = widget.source;
       return;
     }
     _applyExternalResync(widget.source);
@@ -158,12 +185,126 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
         ),
       );
     }
-    _pendingResyncSource = null;
-    _pendingResyncToken = -1;
+    _lastSettledText = source;
+    _clearPendingResync();
+  }
+
+  /// [EditableText.onChanged] is deliberately insufficient here: in Flutter
+  /// 3.44.3 it fires only when the text changes, whereas an IME can end a
+  /// composition by changing only [TextEditingValue.composing]. Observe the
+  /// controller so a deferred resync is resolved at the real composition
+  /// boundary, before a following keystroke can consume a stale source.
+  void _onEditingValueChanged() {
+    final value = _controller.value;
+    if (value.composing != TextRange.empty) {
+      _compositionBaseText ??= _lastSettledText;
+      return;
+    }
+    if (_pendingResync == null || _pendingResolutionScheduled) return;
+    _pendingResolutionScheduled = true;
+    scheduleMicrotask(() {
+      _pendingResolutionScheduled = false;
+      if (mounted && _controller.value.composing == TextRange.empty) {
+        _resolvePendingResync();
+      }
+    });
+  }
+
+  void _resolvePendingResync() {
+    final pending = _pendingResync;
+    if (pending == null) return;
+
+    final local = _controller.text;
+    final merged = _rebaseComposition(
+      base: pending.base,
+      local: local,
+      external: pending.source,
+    );
+    _clearPendingResync();
+
+    if (merged == null) {
+      // Neither side can be discarded safely. Keep the user's exact field
+      // text in place and decline all later writes until a surrounding
+      // lifecycle action gives this session a fresh source. This is an
+      // explicit conflict state, not an implicit last-writer-wins overwrite:
+      // it protects both the external Core rewrite and the IME result.
+      _hasResyncConflict = true;
+      ref
+          .read(keystrokeWriteFailureProvider.notifier)
+          .report(
+            StateError(
+              'An external rewrite overlaps the active text composition. '
+              'The edit remains in the field; copy it before leaving the '
+              'note.',
+            ),
+          );
+      return;
+    }
+
+    if (merged != local) {
+      final caret = _controller.selection.baseOffset;
+      _controller.value = TextEditingValue(
+        text: merged,
+        selection: TextSelection.collapsed(
+          offset: caret.clamp(0, merged.length),
+        ),
+      );
+      _bufferSource(merged);
+    }
+    _lastSettledText = merged;
+  }
+
+  void _clearPendingResync() {
+    _pendingResync = null;
+    _compositionBaseText = null;
+  }
+
+  /// Applies the one contiguous local edit made from [base] to [external].
+  /// The edit is accepted only when the two edits are disjoint (or already
+  /// identical), which is the boundary at which reordering is provably
+  /// avoidable. Overlapping rewrites are left to the explicit conflict path
+  /// above rather than guessing which bytes to overwrite.
+  String? _rebaseComposition({
+    required String base,
+    required String local,
+    required String external,
+  }) {
+    if (local == external || local == base) return external;
+    if (external == base) return local;
+
+    final localChange = _TextChange.between(base, local);
+    final externalChange = _TextChange.between(base, external);
+    if (localChange == externalChange) return external;
+
+    if (localChange.end <= externalChange.start &&
+        !(localChange.isInsertionAtSameOffsetAs(externalChange))) {
+      return external.replaceRange(
+        localChange.start,
+        localChange.end,
+        localChange.replacement,
+      );
+    }
+    if (externalChange.end <= localChange.start &&
+        !(localChange.isInsertionAtSameOffsetAs(externalChange))) {
+      final offsetDelta =
+          externalChange.replacement.length -
+          (externalChange.end - externalChange.start);
+      return external.replaceRange(
+        localChange.start + offsetDelta,
+        localChange.end + offsetDelta,
+        localChange.replacement,
+      );
+    }
+    return null;
+  }
+
+  void _bufferSource(String source) {
+    ref.read(activeNoteProvider.notifier).updateBlock(widget.blockPath, source);
   }
 
   @override
   void dispose() {
+    _controller.removeListener(_onEditingValueChanged);
     _focusNode.removeListener(_onFocusChanged);
     _focusNode.dispose();
     _controller.dispose();
@@ -171,7 +312,9 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
   }
 
   void _onFocusChanged() {
-    if (!_focusNode.hasFocus) widget.onFocusLost(widget.focusToken);
+    if (!_focusNode.hasFocus && !_hasResyncConflict) {
+      widget.onFocusLost(widget.focusToken);
+    }
   }
 
   /// Intercepts the two structural keys before the text-editing shortcuts
@@ -250,22 +393,82 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
             widget.onPhantomInsert?.call(text);
             return;
           }
+          if (_hasResyncConflict) return;
           // The Block's raw source text, not a reconstructed AstNode — this
           // is the per-keystroke buffering call (`update_block`, ADR-007
           // decision 4): no parse, no AST round trip, draft-row write only.
           // Refusals surface through keystrokeWriteFailureProvider beside the
           // content, never by replacing it (flow-edit-note.md).
-          ref
-              .read(activeNoteProvider.notifier)
-              .updateBlock(widget.blockPath, text);
-          final pending = _pendingResyncSource;
-          if (pending != null &&
-              composing == TextRange.empty &&
-              _pendingResyncToken <= widget.resyncToken) {
-            _applyExternalResync(pending);
-          }
+          // A deferred composition resync is resolved by the controller
+          // listener, including a composing-only completion. Do not race it
+          // here by replaying the stale external source over this input.
+          if (_pendingResync != null && composing == TextRange.empty) return;
+          _bufferSource(text);
+          if (composing == TextRange.empty) _lastSettledText = text;
         },
       ),
     ),
   );
+}
+
+class _PendingResync {
+  const _PendingResync({
+    required this.source,
+    required this.token,
+    required this.base,
+  });
+
+  final String source;
+  final int token;
+  final String base;
+}
+
+class _TextChange {
+  const _TextChange({
+    required this.start,
+    required this.end,
+    required this.replacement,
+  });
+
+  factory _TextChange.between(String before, String after) {
+    var start = 0;
+    final sharedLength = math.min(before.length, after.length);
+    while (start < sharedLength &&
+        before.codeUnitAt(start) == after.codeUnitAt(start)) {
+      start++;
+    }
+
+    var beforeEnd = before.length;
+    var afterEnd = after.length;
+    while (beforeEnd > start &&
+        afterEnd > start &&
+        before.codeUnitAt(beforeEnd - 1) == after.codeUnitAt(afterEnd - 1)) {
+      beforeEnd--;
+      afterEnd--;
+    }
+    return _TextChange(
+      start: start,
+      end: beforeEnd,
+      replacement: after.substring(start, afterEnd),
+    );
+  }
+
+  final int start;
+  final int end;
+  final String replacement;
+
+  bool get isInsertion => start == end;
+
+  bool isInsertionAtSameOffsetAs(_TextChange other) =>
+      isInsertion && other.isInsertion && start == other.start;
+
+  @override
+  bool operator ==(Object other) =>
+      other is _TextChange &&
+      start == other.start &&
+      end == other.end &&
+      replacement == other.replacement;
+
+  @override
+  int get hashCode => Object.hash(start, end, replacement);
 }

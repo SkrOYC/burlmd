@@ -337,8 +337,10 @@ NoteState splitBlock({
 );
 
 /// Merges a Block into its predecessor -- Backspace at offset 0
-/// (CAP-EDIT-03). A no-op on the first Block.
-NoteState mergeBlockWithPrevious({
+/// (CAP-EDIT-03). The returned [`StructuralEdit`] names the actual
+/// predecessor leaf and its raw-source UTF-16 join offset after Core reparses.
+/// A first Block is unchanged and returns itself at offset zero.
+StructuralEdit mergeBlockWithPrevious({
   required String noteId,
   required Uint64List blockPath,
 }) => RustLib.instance.api.crateApiFfiApiMergeBlockWithPrevious(
