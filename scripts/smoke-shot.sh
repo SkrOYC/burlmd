@@ -57,6 +57,9 @@ SMOKE_STATE_DIR=""
 SMOKE_HOME=""
 SMOKE_DATA_HOME=""
 SMOKE_DB_PATH=""
+SMOKE_WORKSPACE=""
+SMOKE_NONCE=""
+SMOKE_NONCE_FILE=""
 NOISE_A="$(mktemp /tmp/smoke-shot-noise-a.XXXXXX.ppm)"
 NOISE_B="$(mktemp /tmp/smoke-shot-noise-b.XXXXXX.ppm)"
 CANDIDATE="$(mktemp /tmp/smoke-shot-candidate.XXXXXX.ppm)"
@@ -137,20 +140,28 @@ DIFF_THRESHOLD=$(( noise_pixels * 3 + 20000 ))
 echo "[smoke-shot] desktop noise floor: ${noise_pixels} px; render threshold: ${DIFF_THRESHOLD} px"
 
 echo "[smoke-shot] launching $APP_BIN..."
-# Every smoke process gets a new, private home, XDG data tree, and index
-# database. Scenario staging deliberately creates/deletes fixture Notes, so
-# inheriting the developer's normal paths could otherwise alter a real
-# Workspace. Use a fixed absolute mktemp template and validate its result
-# before any recursive cleanup is ever allowed to target it.
+# Every smoke process gets a new, private home, XDG data tree, index database,
+# and default Workspace. Scenario staging creates/deletes fixture Notes, so the
+# app requires this exact canonical tree plus a per-run nonce capability before
+# F002--F007 can run. A copied BURLMD_SMOKE_ISOLATED=1 is deliberately useless.
+# Use a fixed absolute mktemp template and validate its result before any
+# recursive cleanup is ever allowed to target it.
 SMOKE_STATE_DIR="$(mktemp -d /tmp/burlmd-smoke-state.XXXXXX)" \
   || fail "could not create an isolated smoke state directory"
 [[ -d "$SMOKE_STATE_DIR" && "$SMOKE_STATE_DIR" == /tmp/burlmd-smoke-state.* ]] \
   || fail "isolated smoke state directory failed validation"
 SMOKE_HOME="$SMOKE_STATE_DIR/home"
 SMOKE_DATA_HOME="$SMOKE_STATE_DIR/data"
-SMOKE_DB_PATH="$SMOKE_STATE_DIR/index.sqlite3"
-mkdir -p -- "$SMOKE_HOME" "$SMOKE_DATA_HOME" \
+SMOKE_DB_PATH="$SMOKE_DATA_HOME/burlmd/index.sqlite3"
+SMOKE_WORKSPACE="$SMOKE_DATA_HOME/burlmd/workspace"
+SMOKE_NONCE_FILE="$SMOKE_STATE_DIR/.burlmd-smoke-nonce"
+mkdir -p -- "$SMOKE_HOME" "$SMOKE_WORKSPACE" \
   || fail "could not initialize isolated smoke state"
+touch -- "$SMOKE_DB_PATH" || fail "could not initialize isolated smoke database"
+SMOKE_NONCE="$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')"
+[[ "$SMOKE_NONCE" =~ ^[a-f0-9]{64}$ ]] || fail "could not generate smoke nonce"
+(umask 077 && printf '%s\n' "$SMOKE_NONCE" > "$SMOKE_NONCE_FILE") \
+  || fail "could not write smoke nonce capability"
 
 # No separate "did it start" wait exists here, deliberately: `kill -0` on a
 # freshly backgrounded PID succeeds immediately whether or not exec worked,
@@ -163,11 +174,17 @@ mkdir -p -- "$SMOKE_HOME" "$SMOKE_DATA_HOME" \
 # BURLMD_SMOKE_F002=1 stages a focused raw-source Block among formatted
 # neighbors). Any such variable the caller exports is forwarded explicitly
 # here, so the hook is visible in this file rather than relying on silent
-# environment inheritance.
+# environment inheritance. Do not forward caller-supplied isolation-contract
+# keys: the values below are the only authoritative per-run capability.
 SCENARIO_ENV=()
-while IFS='=' read -r entry; do
-  SCENARIO_ENV+=("$entry")
-done < <(env | grep '^BURLMD_SMOKE')
+for scenario_var in \
+  BURLMD_SMOKE_F001 BURLMD_SMOKE_F001_FOCUSED_INDEX \
+  BURLMD_SMOKE_F002 BURLMD_SMOKE_F003 BURLMD_SMOKE_F004 \
+  BURLMD_SMOKE_F005 BURLMD_SMOKE_F006 BURLMD_SMOKE_F007; do
+  if [[ -v "$scenario_var" ]]; then
+    SCENARIO_ENV+=("$scenario_var=${!scenario_var}")
+  fi
+done
 if [[ "${BURLMD_SMOKE_F002:-}" == "1" || "${BURLMD_SMOKE_F003:-}" == "1" || "${BURLMD_SMOKE_F004:-}" == "1" || "${BURLMD_SMOKE_F005:-}" == "1" || "${BURLMD_SMOKE_F006:-}" == "1" || "${BURLMD_SMOKE_F007:-}" == "1" ]]; then
   READY_FILE="$(mktemp /tmp/burlmd-selection-ready.XXXXXX)"
   rm -f "$READY_FILE"
@@ -176,12 +193,15 @@ fi
 if (( ${#SCENARIO_ENV[@]} > 0 )); then
   echo "[smoke-shot] staging scenario env: ${SCENARIO_ENV[*]}"
 fi
-# Specify the isolated paths after the caller-provided scenario variables so
-# they cannot be overridden by inherited state. BURLMD_SMOKE_ISOLATED also
-# makes main.dart refuse direct scenario launches that would touch a real
-# Workspace before Rust initialization.
+# The app validates all of these paths by canonical resolution before Rust
+# initializes. The Workspace path is the Core's XDG default; it is explicit so
+# a direct launch cannot substitute a real default Workspace by stealth.
 env "${SCENARIO_ENV[@]}" \
   "BURLMD_SMOKE_ISOLATED=1" \
+  "BURLMD_SMOKE_ROOT=$SMOKE_STATE_DIR" \
+  "BURLMD_SMOKE_NONCE=$SMOKE_NONCE" \
+  "BURLMD_SMOKE_NONCE_FILE=$SMOKE_NONCE_FILE" \
+  "BURLMD_SMOKE_WORKSPACE=$SMOKE_WORKSPACE" \
   "HOME=$SMOKE_HOME" \
   "XDG_DATA_HOME=$SMOKE_DATA_HOME" \
   "BURLMD_DB_PATH=$SMOKE_DB_PATH" \

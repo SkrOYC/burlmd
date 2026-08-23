@@ -172,16 +172,32 @@ class EditorState extends ConsumerState<Editor> {
       if (!identical(previous, next)) _invalidateRenderedRange();
       // Provider listeners run at the synchronous adoption boundary, whereas
       // this widget's build can run after the lifecycle future releases its
-      // gate. Capture a same-session rekey here while the gate still names
-      // the lifecycle owner; waiting until the build below would make a
-      // successful rename indistinguishable from ordinary navigation.
+      // gate. The gate alone is not enough to prove a rekey: create and
+      // recovery can replace the active Note while it is held. Preserve focus
+      // only when LifecycleActions supplied the exact authoritative old/new
+      // identity pair for this provider transition.
       final focused = _focused;
       if (focused != null &&
           previous?.metadata.id == focused.noteId &&
           next != null &&
           next.metadata.id != focused.noteId &&
-          ref.read(lifecycleEditingProvider) > 0) {
+          (ref
+                  .read(lifecycleFocusRemapProvider)
+                  ?.matches(
+                    generation: ref.read(lifecycleGenerationProvider),
+                    oldId: focused.noteId,
+                    newId: next.metadata.id,
+                  ) ??
+              false)) {
         focused.noteId = next.metadata.id;
+      } else if (focused != null &&
+          previous?.metadata.id == focused.noteId &&
+          (next == null || next.metadata.id != focused.noteId)) {
+        // This is a genuine replacement/removal. In particular, discard an
+        // empty-note phantom and any live or completed IME value so neither
+        // can materialize into the incoming Note at the same numeric path.
+        _focused = null;
+        _selectionBrokers.clear();
       }
     });
     ref.listen<bool>(editorInputBlockedProvider, (_, inputBlocked) {
@@ -217,13 +233,8 @@ class EditorState extends ConsumerState<Editor> {
     // refetching by path would be wrong here — a same-indexed Block in the
     // new Note is not the Block the user was editing, and silently retargeting
     // focus at it would point buffered keystrokes at another Note's source
-    // row. A lifecycle rekey is the narrow exception. Rename, move, and a
-    // containing-directory rename carry this exact Core session forward under
-    // a new concept id while the lifecycle gate remains held. Keep the field
-    // mounted through that transition so its IME composition and deferred
-    // resync can reconcile with the authoritative source below; rekeying the
-    // focus before that refetch also ensures every subsequent buffer write
-    // addresses the new Core session rather than the dead id.
+    // row. A lifecycle rekey is handled synchronously by the provider listener
+    // above, which sees its short-lived identity proof before it is cleared.
     if (_focused != null && _focused!.noteId != note.metadata.id) {
       _closeRangeInput();
       if (ref.read(lifecycleEditingProvider) > 0) {
@@ -1031,7 +1042,12 @@ class EditorState extends ConsumerState<Editor> {
     return KeyedSubtree(
       key: const ValueKey('entry-phantom'),
       child: BlockEditor(
-        key: const ValueKey('edit-phantom'),
+        // An empty Note has no `_Focus` yet, so its permanent phantom must be
+        // keyed by the Note identity. A create/open replacement can otherwise
+        // reuse this controller and carry marked or completed IME text into a
+        // different empty Note. Once an explicit phantom focus exists, its
+        // focus token is the session identity and survives a proven rekey.
+        key: ValueKey('edit-phantom-${_focused?.token ?? note.metadata.id}'),
         noteId: note.metadata.id,
         blockPath: path,
         source: '',

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:burlmd/l10n/generated/app_localizations.dart';
 import 'package:burlmd/src/components/editor.dart';
+import 'package:burlmd/src/components/lifecycle_actions.dart';
 import 'package:burlmd/src/providers/note_providers.dart';
 import 'package:burlmd/src/providers/rust_api_provider.dart';
 import 'package:burlmd/src/providers/workspace_provider.dart';
@@ -120,6 +121,46 @@ class _FakeRustApi extends RustApi {
     commitCount++;
     return commitResult ?? (throw Exception('no commit result prepared'));
   }
+}
+
+/// Lifecycle-capable editing fake. It keeps the editor tests on the real
+/// [LifecycleActions] adoption path, where the focus-remap token is emitted.
+class _LifecycleEditorApi extends _FakeRustApi {
+  LifecycleResult? createResult;
+  LifecycleResult? renameResult;
+  LifecycleResult? moveResult;
+  LifecycleResult? renameDirectoryResult;
+  Completer<void>? createGate;
+  final Map<String, NoteState> openStates = {};
+
+  @override
+  Future<LifecycleResult> createNote(String directoryPath, String title) async {
+    final gate = createGate;
+    if (gate != null && !gate.isCompleted) await gate.future;
+    return createResult ?? (throw StateError('no create result prepared'));
+  }
+
+  @override
+  Future<LifecycleResult> renameNote(String noteId, String newTitle) async =>
+      renameResult ?? (throw StateError('no rename result prepared'));
+
+  @override
+  Future<LifecycleResult> moveNote(
+    String noteId,
+    String newDirectoryPath,
+  ) async => moveResult ?? (throw StateError('no move result prepared'));
+
+  @override
+  Future<LifecycleResult> renameDirectory(String path, String newName) async =>
+      renameDirectoryResult ??
+      (throw StateError('no directory rename result prepared'));
+
+  @override
+  Future<NoteState> openNote(String noteId) async =>
+      openStates[noteId] ?? (throw StateError('no open state for $noteId'));
+
+  @override
+  Future<void> closeNote(String noteId) async {}
 }
 
 class _LinkResolutionApi extends _FakeRustApi {
@@ -281,6 +322,32 @@ NoteState _testNoteState(List<AstNode> ast) => NoteState(
   metadata: _testMetadata,
   baseRevision: 'head',
   restoredFromDraft: false,
+);
+
+NoteState _noteState(String id, List<AstNode> ast) => NoteState(
+  ast: ast,
+  metadata: NoteMetadata(
+    id: id,
+    path: '$id.md',
+    title: id,
+    lastModified: 0,
+    okfConformant: true,
+  ),
+  baseRevision: 'head',
+  restoredFromDraft: false,
+);
+
+LifecycleResult _lifecycleResult(
+  NoteState state, {
+  LifecycleEffects effects = const LifecycleEffects(
+    remapped: [],
+    rewritten: [],
+  ),
+}) => LifecycleResult(
+  state: state,
+  effects: effects,
+  removed: const [],
+  warning: null,
 );
 
 InlineElement _plainRun(String text) => InlineElement.text(_run(text));
@@ -1852,6 +1919,154 @@ void main() {
       expect(_field(tester).focusNode.hasFocus, isTrue);
     },
   );
+
+  testWidgets('an empty-note phantom cannot carry live or completed IME text '
+      'into a lifecycle-created Note', (tester) async {
+    final created = _noteState('Created', const []);
+    final createGate = Completer<void>();
+    final api = _LifecycleEditorApi()
+      ..createGate = createGate
+      ..createResult = _lifecycleResult(created)
+      ..openStates[created.metadata.id] = created;
+    final container = await pumpEditor(tester, const [], api: api);
+
+    expect(_writableFields(), findsOneWidget);
+    final create = container
+        .read(lifecycleActionsProvider)
+        .createNote('', 'Created');
+
+    // Both values arrive after the lifecycle gate closes but before the
+    // authoritative created session replaces the empty Note. Neither the
+    // live marked text nor its composing-only completion may materialize the
+    // phantom under Created's same numerical first-block slot.
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(
+        text: 'draft中',
+        composing: TextRange(start: 5, end: 6),
+        selection: TextSelection.collapsed(offset: 6),
+      ),
+    );
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(
+        text: 'draft中',
+        selection: TextSelection.collapsed(offset: 6),
+      ),
+    );
+    await tester.pump();
+    createGate.complete();
+    await create;
+    await tester.pumpAndSettle();
+
+    expect(container.read(activeNoteProvider), same(created));
+    // The new empty Note owns a fresh phantom, not the old controller or its
+    // completed IME value.
+    expect(_writableFields(), findsOneWidget);
+    expect(_field(tester).controller.text, isEmpty);
+    expect(api.continuationCount, 0);
+    expect(api.updateCount, 0);
+  });
+
+  testWidgets('create and lifecycle-admitted recovery replace a focused real '
+      'Block instead of rekeying it', (tester) async {
+    final old = _noteState('Old', [_plainParagraph('old source')]);
+    final created = _noteState('Created', [_plainParagraph('created')]);
+    final recovered = _noteState('Recovered', [_plainParagraph('recovered')]);
+    final api = _LifecycleEditorApi()
+      ..createResult = _lifecycleResult(created)
+      ..openStates.addAll({
+        created.metadata.id: created,
+        recovered.metadata.id: recovered,
+      })
+      ..sources['0'] = 'old source';
+    final container = await pumpEditor(tester, old.ast, api: api);
+    container.read(activeNoteProvider.notifier).adopt(old);
+    await tester.pump();
+    await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
+
+    await container.read(lifecycleActionsProvider).createNote('', 'Created');
+    await tester.pumpAndSettle();
+    expect(container.read(activeNoteProvider), same(created));
+    expect(_writableFields(), findsNothing);
+    expect(api.updateCount, 0);
+
+    // Recovery uses the same lifecycle-admitted open mechanism but has no
+    // rekey proof. A focused Block in the outgoing created Note is therefore
+    // never carried into the recovered session.
+    container.read(activeNoteProvider.notifier).adopt(old);
+    await tester.pump();
+    await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
+    final editing = container.read(lifecycleEditingProvider.notifier)..begin();
+    await container
+        .read(activeNoteProvider.notifier)
+        .openForLifecycle(recovered.metadata.id);
+    editing.end();
+    await tester.pumpAndSettle();
+    expect(container.read(activeNoteProvider), same(recovered));
+    expect(_writableFields(), findsNothing);
+    expect(api.updateCount, 0);
+  });
+
+  testWidgets('authoritative rename, move, and directory remaps preserve '
+      'focus, but a later navigation clears it', (tester) async {
+    final old = _noteState('Old', [_plainParagraph('old source')]);
+    final renamed = _noteState('Renamed', [_plainParagraph('renamed source')]);
+    final moved = _noteState('Archive/Renamed', [
+      _plainParagraph('moved source'),
+    ]);
+    final directoryRenamed = _noteState('NewArchive/Renamed', [
+      _plainParagraph('directory source'),
+    ]);
+    final unrelated = _noteState('Elsewhere', [_plainParagraph('elsewhere')]);
+    final api = _LifecycleEditorApi()
+      ..renameResult = _lifecycleResult(renamed)
+      ..moveResult = _lifecycleResult(moved)
+      ..renameDirectoryResult = _lifecycleResult(
+        directoryRenamed,
+        effects: const LifecycleEffects(
+          remapped: [
+            IdRemap(oldId: 'Archive/Renamed', newId: 'NewArchive/Renamed'),
+          ],
+          rewritten: [],
+        ),
+      )
+      ..openStates[directoryRenamed.metadata.id] = directoryRenamed
+      ..sources.addAll({'0': 'old source'});
+    final container = await pumpEditor(tester, old.ast, api: api);
+    container.read(activeNoteProvider.notifier).adopt(old);
+    container.read(selectedNoteIdProvider.notifier).select(old.metadata.id);
+    await tester.pump();
+    await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
+
+    await container.read(lifecycleActionsProvider).renameNote('Old', 'Renamed');
+    await tester.pumpAndSettle();
+    expect(_writableFields(), findsOneWidget);
+    expect(_field(tester).controller.text, 'old source');
+
+    await container
+        .read(lifecycleActionsProvider)
+        .moveNote('Renamed', 'Archive');
+    await tester.pumpAndSettle();
+    expect(_writableFields(), findsOneWidget);
+
+    await container
+        .read(lifecycleActionsProvider)
+        .renameDirectory('Archive', 'NewArchive');
+    await tester.pumpAndSettle();
+    expect(_writableFields(), findsOneWidget);
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(
+        text: 'post-rekey',
+        selection: TextSelection.collapsed(offset: 10),
+      ),
+    );
+    expect(api.lastNoteId, directoryRenamed.metadata.id);
+
+    // The token was cleared immediately after directory adoption, so this
+    // later ordinary navigation cannot accidentally reuse it.
+    container.read(activeNoteProvider.notifier).adopt(unrelated);
+    await tester.pumpAndSettle();
+    expect(_writableFields(), findsNothing);
+  });
 
   testWidgets('stale internal-Link resolutions cannot navigate after a '
       'newer activation or source-Note change', (tester) async {
