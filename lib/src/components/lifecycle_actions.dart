@@ -296,7 +296,9 @@ class LifecycleActions {
         'Core could not open the Note it created for this lifecycle action.',
       );
     }
-    _ref.read(selectedNoteIdProvider.notifier).select(created.metadata.id);
+    _ref
+        .read(selectedNoteIdProvider.notifier)
+        .selectForLifecycle(created.metadata.id);
     return true;
   }
 
@@ -330,6 +332,18 @@ class LifecycleActions {
   Future<LifecycleOutcome> _guard(
     Future<LifecycleOutcome> Function(_LifecycleOperation operation) action,
   ) {
+    // A reindex owns the same Core data boundary as lifecycle mutations.
+    // Refuse a direct/stale lifecycle invocation while it is running instead
+    // of allowing two independently admitted mutation paths to overlap.
+    if (_ref.read(rescanEditingProvider) > 0) {
+      return Future.value(
+        LifecycleFailed(
+          StateError(
+            'Workspace lifecycle changes are unavailable during a rescan.',
+          ),
+        ),
+      );
+    }
     final editing = _ref.read(lifecycleEditingProvider.notifier);
     // Reserve the shared gate at submission time, including while this
     // request waits behind an admitted action. That blocks both editing and
@@ -461,7 +475,7 @@ class LifecycleActions {
       );
       _ref
           .read(selectedNoteIdProvider.notifier)
-          .select(returnedState.metadata.id);
+          .selectForLifecycle(returnedState.metadata.id);
     } else if (returnedState != null &&
         invokedNoteId != null &&
         activeId == null &&
@@ -486,7 +500,7 @@ class LifecycleActions {
       }
       _ref
           .read(selectedNoteIdProvider.notifier)
-          .select(returnedState.metadata.id);
+          .selectForLifecycle(returnedState.metadata.id);
     } else if (activeId != null || operation.selectedId != null) {
       // A directory operation remapped the open Note onto a new id. Its
       // Core session was carried forward under that id, so fetching the
@@ -502,7 +516,9 @@ class LifecycleActions {
         );
         if (reanchored == null) return;
         _adoptRekeyedState(operation, oldId: remap.oldId, newState: reanchored);
-        _ref.read(selectedNoteIdProvider.notifier).select(remap.newId);
+        _ref
+            .read(selectedNoteIdProvider.notifier)
+            .selectForLifecycle(remap.newId);
         break;
       }
     }

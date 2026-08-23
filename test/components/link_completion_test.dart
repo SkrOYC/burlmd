@@ -120,6 +120,21 @@ void main() {
         }
       },
     );
+
+    test('does not create a snapshot while an IME owns a composing range', () {
+      const composing = TextEditingValue(
+        text: '[[ka',
+        selection: TextSelection.collapsed(offset: 4),
+        composing: TextRange(start: 2, end: 4),
+      );
+      expect(linkCompletionSnapshot(composing), isNull);
+      expect(
+        linkCompletionSnapshot(
+          composing.copyWith(composing: TextRange.empty),
+        )?.query,
+        'ka',
+      );
+    });
   });
 
   testWidgets(
@@ -249,6 +264,155 @@ void main() {
       );
       expect(accepted, contains('second'));
       expect(key.currentState!.isOpen, isFalse);
+    },
+  );
+
+  testWidgets(
+    'CJK composition revokes pointer and Enter completion acceptance',
+    (tester) async {
+      final controller = TextEditingController.fromValue(
+        const TextEditingValue(
+          text: '[[p',
+          selection: TextSelection.collapsed(offset: 3),
+        ),
+      );
+      addTearDown(controller.dispose);
+      final focusNode = FocusNode();
+      addTearDown(focusNode.dispose);
+      final key = GlobalKey<LinkCompletionState>();
+      String? accepted;
+      await _pumpCompletion(
+        tester,
+        api: _CompletionApi((_) => [_existing('plan')]),
+        controller: controller,
+        focusNode: focusNode,
+        key: key,
+        onAccepted: (source, _) => accepted = source,
+      );
+
+      final option = find.byKey(const ValueKey('link-completion-0'));
+      expect(option, findsOneWidget);
+      final gesture = await tester.startGesture(tester.getCenter(option));
+      controller.value = const TextEditingValue(
+        text: '[[漢',
+        selection: TextSelection.collapsed(offset: 3),
+        composing: TextRange(start: 2, end: 3),
+      );
+      await gesture.up();
+      await tester.pump();
+
+      expect(accepted, isNull);
+      expect(controller.value.text, '[[漢');
+      expect(controller.value.composing, const TextRange(start: 2, end: 3));
+      expect(find.byKey(const ValueKey('link-completion-0')), findsNothing);
+
+      // The same guard is synchronous for an Enter arriving before the
+      // scheduled rebuild that removes a completion surface.
+      expect(
+        key.currentState!.handleKeyEvent(
+          const KeyDownEvent(
+            timeStamp: Duration.zero,
+            physicalKey: PhysicalKeyboardKey.enter,
+            logicalKey: LogicalKeyboardKey.enter,
+          ),
+        ),
+        isFalse,
+      );
+      expect(accepted, isNull);
+      expect(controller.value.text, '[[漢');
+      expect(controller.value.composing, const TextRange(start: 2, end: 3));
+    },
+  );
+
+  testWidgets('a stale async completion cannot reopen during IME composition', (
+    tester,
+  ) async {
+    final controller = TextEditingController.fromValue(
+      const TextEditingValue(
+        text: '[[p',
+        selection: TextSelection.collapsed(offset: 3),
+      ),
+    );
+    addTearDown(controller.dispose);
+    final focusNode = FocusNode();
+    addTearDown(focusNode.dispose);
+    final gate = Completer<List<LinkCompletion>>();
+    final key = GlobalKey<LinkCompletionState>();
+    await _pumpCompletion(
+      tester,
+      api: _CompletionApi((_) => gate.future),
+      controller: controller,
+      focusNode: focusNode,
+      key: key,
+      onAccepted: (_, _) {},
+    );
+
+    controller.value = const TextEditingValue(
+      text: '[[漢',
+      selection: TextSelection.collapsed(offset: 3),
+      composing: TextRange(start: 2, end: 3),
+    );
+    gate.complete([_existing('plan')]);
+    await tester.pump();
+
+    expect(key.currentState!.candidateCount, 0);
+    expect(find.byKey(const ValueKey('link-completion-0')), findsNothing);
+    expect(controller.value.composing, const TextRange(start: 2, end: 3));
+  });
+
+  testWidgets(
+    'completion safely requeries after composition ends and then accepts normally',
+    (tester) async {
+      final controller = TextEditingController.fromValue(
+        const TextEditingValue(
+          text: '[[漢',
+          selection: TextSelection.collapsed(offset: 3),
+          composing: TextRange(start: 2, end: 3),
+        ),
+      );
+      addTearDown(controller.dispose);
+      final focusNode = FocusNode();
+      addTearDown(focusNode.dispose);
+      final key = GlobalKey<LinkCompletionState>();
+      final api = _CompletionApi((_) => [_existing('漢字')]);
+      String? accepted;
+      await _pumpCompletion(
+        tester,
+        api: api,
+        controller: controller,
+        focusNode: focusNode,
+        key: key,
+        onAccepted: (source, selection) {
+          accepted = source;
+          controller.value = TextEditingValue(
+            text: source,
+            selection: selection,
+          );
+        },
+      );
+      expect(api.calls, isEmpty);
+
+      controller.value = const TextEditingValue(
+        text: '[[漢',
+        selection: TextSelection.collapsed(offset: 3),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(api.calls, [('漢', 10)]);
+      expect(find.byKey(const ValueKey('link-completion-0')), findsOneWidget);
+      expect(
+        key.currentState!.handleKeyEvent(
+          const KeyDownEvent(
+            timeStamp: Duration.zero,
+            physicalKey: PhysicalKeyboardKey.enter,
+            logicalKey: LogicalKeyboardKey.enter,
+          ),
+        ),
+        isTrue,
+      );
+      expect(accepted, '[漢字](</notes/漢字.md>)');
+      expect(controller.value.composing, TextRange.empty);
     },
   );
 

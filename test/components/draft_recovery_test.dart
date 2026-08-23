@@ -209,6 +209,41 @@ void main() {
     expect(api.calls.contains('open:n-crash'), isTrue);
   });
 
+  testWidgets(
+    'lifecycle admission disables recovered-draft selection and allows it again after settlement',
+    (tester) async {
+      final api = _RecoveryRustApi(
+        pendingDraftsResult: [_metadata('n-crash', 'Crash Journal')],
+      );
+      api.openStates['n-crash'] = _state(
+        'n-crash',
+        'Drafted line',
+        restoredFromDraft: true,
+      );
+      final container = await _pumpSurface(tester, api);
+
+      container.read(lifecycleEditingProvider.notifier).begin();
+      await tester.pump();
+      final blockedRow = tester.widget<ListTile>(
+        find.byKey(const ValueKey('recovered-n-crash')),
+      );
+      expect(blockedRow.onTap, isNull);
+      await tester.tap(find.text('Crash Journal'));
+      await tester.pump();
+      expect(container.read(selectedNoteIdProvider), isNull);
+      expect(container.read(activeNoteProvider), isNull);
+      expect(api.calls.where((call) => call == 'open:n-crash'), isEmpty);
+
+      container.read(lifecycleEditingProvider.notifier).end();
+      await tester.pump();
+      await tester.tap(find.text('Crash Journal'));
+      await tester.pumpAndSettle();
+      expect(container.read(selectedNoteIdProvider), 'n-crash');
+      expect(container.read(activeNoteProvider)!.metadata.id, 'n-crash');
+      expect(find.text('Drafted line'), findsOneWidget);
+    },
+  );
+
   testWidgets('dismissing the recovery notice hides only the notice — the '
       'recovered content stays present', (tester) async {
     final api = _RecoveryRustApi(

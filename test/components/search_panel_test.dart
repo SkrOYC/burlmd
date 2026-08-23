@@ -1,4 +1,5 @@
 import 'package:burlmd/src/components/search_panel.dart';
+import 'package:burlmd/src/providers/note_providers.dart';
 import 'package:burlmd/src/providers/rust_api_provider.dart';
 import 'package:burlmd/src/providers/workspace_provider.dart';
 import 'package:burlmd/src/rust/draft.dart';
@@ -144,6 +145,41 @@ void main() {
     expect(container.read(selectedNoteIdProvider), 'n-ledger');
     expect(callbackId, 'n-ledger');
   });
+
+  testWidgets(
+    'lifecycle admission disables result selection and the shared seam recovers after it settles',
+    (WidgetTester tester) async {
+      const query = 'ledger';
+      final api = _StubRustApi({
+        query: [hit('n-ledger', 'The Ledger')],
+      });
+      String? callbackId;
+      final container = await _pumpPanel(
+        tester,
+        api,
+        onNoteSelected: (id) => callbackId = id,
+      );
+
+      await _type(tester, query);
+      container.read(lifecycleEditingProvider.notifier).begin();
+      await tester.pump();
+
+      final blockedRow = tester.widget<ListTile>(find.byType(ListTile));
+      expect(blockedRow.onTap, isNull);
+      await tester.tap(find.text('The Ledger'));
+      await tester.pump();
+      expect(container.read(selectedNoteIdProvider), isNull);
+      expect(callbackId, isNull);
+
+      container.read(lifecycleEditingProvider.notifier).end();
+      await tester.pump();
+      expect(tester.widget<ListTile>(find.byType(ListTile)).onTap, isNotNull);
+      await tester.tap(find.text('The Ledger'));
+      await tester.pumpAndSettle();
+      expect(container.read(selectedNoteIdProvider), 'n-ledger');
+      expect(callbackId, 'n-ledger');
+    },
+  );
 
   testWidgets('a query matching nothing shows the empty state, not an error', (
     WidgetTester tester,

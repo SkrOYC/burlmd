@@ -8,6 +8,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+/// A non-empty valid composing range belongs to the platform input method.
+/// Flutter 3.44.3 documents that an IME owns this provisional text, including
+/// during CJK candidate conversion, so completion must not replace it.
+bool _hasLiveComposition(TextEditingValue value) =>
+    value.isComposingRangeValid && !value.composing.isCollapsed;
+
 /// The immutable part of an open `[[` completion.  It deliberately records
 /// the whole source, rather than offsets alone: a same-length edit must be as
 /// unable to accept a stale Core response as an obvious insertion is.
@@ -26,6 +32,7 @@ class LinkCompletionSnapshot {
 
   bool matches(TextEditingValue value, bool hasFocus) =>
       hasFocus &&
+      !_hasLiveComposition(value) &&
       value.selection.isCollapsed &&
       value.selection.baseOffset == caret &&
       value.text == source;
@@ -35,6 +42,7 @@ class LinkCompletionSnapshot {
 /// unmatched *on this line*, so brackets before a newline cannot leak into a
 /// later paragraph and a closing `]]` always dismisses the affordance.
 LinkCompletionSnapshot? linkCompletionSnapshot(TextEditingValue value) {
+  if (_hasLiveComposition(value)) return null;
   if (!value.selection.isCollapsed) return null;
   final caret = value.selection.baseOffset;
   if (caret < 0 || caret > value.text.length) return null;
@@ -101,7 +109,7 @@ class LinkCompletionState extends ConsumerState<LinkCompletionPopup> {
   /// QA staging is allowed to invoke the same acceptance path as Enter, but
   /// only after a real candidate list is visibly open.
   bool acceptActiveForSmoke() {
-    if (!isOpen) return false;
+    if (!isOpen || _hasLiveComposition(widget.controller.value)) return false;
     _accept(_candidates[_activeIndex]);
     return true;
   }
@@ -212,6 +220,13 @@ class LinkCompletionState extends ConsumerState<LinkCompletionPopup> {
   /// what preserves EDIT-F004's structural Enter behavior when no popup is
   /// visible.
   bool handleKeyEvent(KeyEvent event) {
+    // Completion commands must yield to the IME while it owns provisional
+    // text. This synchronous check also covers a pointer/key event that lands
+    // between a controller update and the popup's next build.
+    if (_hasLiveComposition(widget.controller.value)) {
+      _dismiss();
+      return false;
+    }
     if (!isOpen || (event is! KeyDownEvent && event is! KeyRepeatEvent)) {
       return false;
     }
@@ -239,6 +254,7 @@ class LinkCompletionState extends ConsumerState<LinkCompletionPopup> {
   void _accept(core.LinkCompletion candidate) {
     final snapshot = _snapshot;
     if (snapshot == null ||
+        _hasLiveComposition(widget.controller.value) ||
         !snapshot.matches(widget.controller.value, widget.focusNode.hasFocus)) {
       _dismiss();
       return;

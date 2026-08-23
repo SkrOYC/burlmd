@@ -2280,7 +2280,12 @@ void main() {
     await tester.pump();
     final newer = _testNoteState([_plainParagraph('newer')]);
     container.read(activeNoteProvider.notifier).adopt(newer);
-    container.read(selectedNoteIdProvider.notifier).select(newer.metadata.id);
+    // This directly models an authoritative host replacement. User-facing
+    // navigation is rejected while linked-note creation owns lifecycle
+    // admission.
+    container
+        .read(selectedNoteIdProvider.notifier)
+        .selectForLifecycle(newer.metadata.id);
     gate.complete();
     await tester.pumpAndSettle();
 

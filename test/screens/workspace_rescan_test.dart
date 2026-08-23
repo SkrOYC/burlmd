@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:burlmd/src/components/lifecycle_actions.dart';
 import 'package:burlmd/src/providers/note_providers.dart';
 import 'package:burlmd/src/providers/rust_api_provider.dart';
 import 'package:burlmd/src/providers/workspace_provider.dart';
@@ -24,6 +25,7 @@ class _RescanRustApi extends RustApi {
 
   int treeFetches = 0;
   final List<String> calls = [];
+  final List<String> blockUpdates = [];
 
   _RescanRustApi(this.currentTree);
 
@@ -69,6 +71,11 @@ class _RescanRustApi extends RustApi {
   @override
   Future<void> closeNote(String noteId) async {
     calls.add('close:$noteId');
+  }
+
+  @override
+  void updateBlock(String noteId, List<int> blockPath, String newSource) {
+    blockUpdates.add('$noteId:${blockPath.join(',')}:$newSource');
   }
 }
 
@@ -239,6 +246,89 @@ void main() {
       expect(find.text('Beta'), findsNothing);
       // ...and the affordance recovers for another attempt.
       expect(_rescanButton(tester).onPressed, isNotNull);
+    },
+  );
+
+  testWidgets(
+    'a delayed clean rescan blocks typing and navigation, then restores both admissions',
+    (tester) async {
+      final api = _RescanRustApi([_note('a', 'Alpha'), _note('b', 'Beta')]);
+      final reindexGate = Completer<int>();
+      final container = await _pumpShell(
+        tester,
+        api,
+        reindex: () => reindexGate.future,
+      );
+
+      await tester.tap(find.text('Alpha'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Rescan workspace'));
+      await tester.pump();
+
+      expect(container.read(rescanEditingProvider), 1);
+      expect(container.read(editorInputBlockedProvider), isTrue);
+      expect(
+        container.read(selectedNoteIdProvider.notifier).select('b'),
+        isFalse,
+      );
+      container.read(activeNoteProvider.notifier).updateBlock([0], 'blocked');
+      expect(api.blockUpdates, isEmpty);
+      expect(container.read(selectedNoteIdProvider), 'a');
+      expect(container.read(activeNoteProvider)!.metadata.id, 'a');
+
+      reindexGate.complete(2);
+      await tester.pumpAndSettle();
+
+      expect(container.read(rescanEditingProvider), 0);
+      expect(container.read(editorInputBlockedProvider), isFalse);
+      expect(
+        container.read(selectedNoteIdProvider.notifier).select('b'),
+        isTrue,
+      );
+      await container.read(activeNoteProvider.notifier).open('b');
+      container.read(activeNoteProvider.notifier).updateBlock([0], 'retained');
+      expect(api.blockUpdates, ['b:0:retained']);
+      expect(container.read(activeNoteProvider)!.metadata.id, 'b');
+    },
+  );
+
+  testWidgets(
+    'a failed rescan releases input and refuses overlapping lifecycle work without a Core call',
+    (tester) async {
+      final api = _RescanRustApi([_note('a', 'Alpha')]);
+      final reindexGate = Completer<int>();
+      final container = await _pumpShell(
+        tester,
+        api,
+        reindex: () => reindexGate.future,
+      );
+
+      await tester.tap(find.text('Alpha'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Rescan workspace'));
+      await tester.pump();
+      expect(container.read(rescanEditingProvider), 1);
+
+      final lifecycle = await container
+          .read(lifecycleActionsProvider)
+          .createDirectory('during-rescan');
+      expect(lifecycle, isA<LifecycleFailed>());
+      expect(api.calls, ['open:a']);
+      expect(
+        container.read(selectedNoteIdProvider.notifier).select('b'),
+        isFalse,
+      );
+
+      reindexGate.completeError(Exception('disk unavailable'));
+      await tester.pumpAndSettle();
+
+      expect(container.read(rescanEditingProvider), 0);
+      expect(container.read(editorInputBlockedProvider), isFalse);
+      expect(_rescanButton(tester).onPressed, isNotNull);
+      container.read(activeNoteProvider.notifier).updateBlock([
+        0,
+      ], 'after-error');
+      expect(api.blockUpdates, ['a:0:after-error']);
     },
   );
 }
