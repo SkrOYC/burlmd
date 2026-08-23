@@ -21,11 +21,13 @@ class _FixedNoteController extends NoteController {
 class _UpdateSpyApi extends RustApi {
   int updateCount = 0;
   String? source;
+  String? workingSource;
 
   @override
   void updateBlock(String noteId, List<int> blockPath, String newSource) {
     updateCount++;
     source = newSource;
+    workingSource = newSource;
   }
 }
 
@@ -296,6 +298,126 @@ void main() {
     expect(_field(tester).controller.value, composing);
     expect(api.updateCount, 0);
     expect(_field(tester).focusNode.hasFocus, isTrue);
+  });
+
+  testWidgets('a phantom after its predecessor consumes emphasis without '
+      'materializing or buffering it', (tester) async {
+    final api = _UpdateSpyApi();
+    var phantomInsertions = 0;
+    final container = ProviderContainer(
+      overrides: [
+        activeNoteProvider.overrideWith(
+          () => _FixedNoteController(_note('predecessor')),
+        ),
+        rustApiProvider.overrideWithValue(api),
+      ],
+    );
+    addTearDown(container.dispose);
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          home: Scaffold(
+            body: BlockEditor(
+              noteId: 'emphasis-note',
+              // This is the phantom positioned after the real predecessor at
+              // index zero; it is not an addressable Core Block.
+              blockPath: const [1],
+              source: '',
+              initialCaret: 0,
+              style: const TextStyle(fontSize: 16),
+              focusToken: 1,
+              phantom: true,
+              onPhantomInsert: (_) => phantomInsertions++,
+              onFocusLost: (_) {},
+              onCommitEligibilityChanged: (_, _) {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    final before = _field(tester).controller.value;
+
+    await _primaryShortcut(tester, LogicalKeyboardKey.keyB);
+
+    expect(_field(tester).controller.value, before);
+    expect(phantomInsertions, 0);
+    expect(api.updateCount, 0);
+    expect(api.workingSource, isNull);
+  });
+
+  testWidgets('an overlapping resync conflict consumes emphasis without '
+      'changing either branch or its surfaced error', (tester) async {
+    final api = _UpdateSpyApi()..workingSource = 'base';
+    final revisions = ValueNotifier<(String, int)>(('base', 0));
+    addTearDown(revisions.dispose);
+    final container = ProviderContainer(
+      overrides: [
+        activeNoteProvider.overrideWith(
+          () => _FixedNoteController(_note('base')),
+        ),
+        rustApiProvider.overrideWithValue(api),
+      ],
+    );
+    addTearDown(container.dispose);
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          home: Scaffold(
+            body: ValueListenableBuilder<(String, int)>(
+              valueListenable: revisions,
+              builder: (context, revision, child) => BlockEditor(
+                noteId: 'emphasis-note',
+                blockPath: const [0],
+                source: revision.$1,
+                initialCaret: 0,
+                resyncToken: revision.$2,
+                style: const TextStyle(fontSize: 16),
+                focusToken: 1,
+                onFocusLost: (_) {},
+                onCommitEligibilityChanged: (_, _) {},
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(
+        text: 'base中',
+        composing: TextRange(start: 4, end: 5),
+        selection: TextSelection.collapsed(offset: 5),
+      ),
+    );
+    await tester.pump();
+    // This is the same-position external insertion that cannot be ordered
+    // against the composing input, producing BlockEditor's real conflict.
+    api.workingSource = 'base!';
+    revisions.value = ('base!', 1);
+    await tester.pump();
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(
+        text: 'base中',
+        selection: TextSelection.collapsed(offset: 5),
+      ),
+    );
+    await tester.pump();
+
+    final before = _field(tester).controller.value;
+    final error = container.read(keystrokeWriteFailureProvider);
+    final writesAtConflict = api.updateCount;
+    expect(error, isA<StateError>());
+
+    await _primaryShortcut(tester, LogicalKeyboardKey.keyB);
+
+    expect(_field(tester).controller.value, before);
+    expect(api.updateCount, writesAtConflict);
+    expect(api.workingSource, 'base!');
+    expect(container.read(keystrokeWriteFailureProvider), same(error));
   });
 
   testWidgets('a repeated shortcut does not unwrap its initial edit', (
