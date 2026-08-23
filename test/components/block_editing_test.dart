@@ -49,6 +49,8 @@ class _CoreFake extends RustApi {
   List<int>? lastUpdatePath;
   String? lastUpdateSource;
   Object? mergeFailure;
+  Object? splitFailure;
+  Object? continueFailure;
 
   static const _meta = NoteMetadata(
     id: 'f004-note',
@@ -104,6 +106,8 @@ class _CoreFake extends RustApi {
   ) {
     final index = blocks.isEmpty ? 0 : blockPath.first + 1;
     calls.add('continue:$index:$source');
+    final failure = continueFailure;
+    if (failure != null) throw failure;
     blocks.insert(index, source);
     return StructuralEdit(
       state: state,
@@ -120,6 +124,8 @@ class _CoreFake extends RustApi {
     int offset,
   ) {
     calls.add('split:${blockPath.first}:$offset');
+    final failure = splitFailure;
+    if (failure != null) throw failure;
     final block = blocks[blockPath.first];
     if (source != block) {
       throw StateError('split source must be the focused raw field');
@@ -157,6 +163,22 @@ class _CoreFake extends RustApi {
   @override
   NoteState commitBlock(String noteId, List<int> blockPath) {
     calls.add('commit');
+    return state;
+  }
+}
+
+/// Reparse fixture: the buffered leaf becomes two top-level Blocks, while a
+/// later source region remains unchanged. Core's returned AST is the only
+/// authority the editor may use to position the continuation phantom.
+class _TopLevelSplitCommitFake extends _CoreFake {
+  _TopLevelSplitCommitFake() : super(['leaf\n', 'tail\n']);
+
+  @override
+  NoteState commitBlock(String noteId, List<int> blockPath) {
+    calls.add('commit');
+    blocks
+      ..clear()
+      ..addAll(['A\n', 'B\n', 'tail\n']);
     return state;
   }
 }
@@ -704,6 +726,39 @@ void main() {
     expect(_field(tester).focusNode.hasFocus, isTrue);
   });
 
+  testWidgets('a refused phantom insertion keeps its text visible and retries '
+      'on the next edit', (tester) async {
+    final api = _CoreFake(['first\n'])
+      ..continueFailure = const AppError.parseError('continuation refused');
+    final container = await pumpEditor(tester, [_paragraph('first')], api: api);
+
+    await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
+    await placeCaret(tester, 'first\n'.length);
+    await pressKey(tester, LogicalKeyboardKey.enter);
+    await tester.enterText(_writableFields().first, 'x');
+    await tester.pump();
+
+    expect(_field(tester).controller.text, 'x');
+    expect(_field(tester).focusNode.hasFocus, isTrue);
+    expect(
+      container.read(keystrokeWriteFailureProvider),
+      isA<AppError_ParseError>(),
+    );
+    expect(container.read(editorErrorProvider), isNull);
+
+    api.continueFailure = null;
+    await tester.enterText(_writableFields().first, 'xy');
+    await tester.pump();
+
+    expect(api.calls.where((call) => call.startsWith('continue')), [
+      'continue:1:x',
+      'continue:1:xy',
+    ]);
+    expect(api.blocks, ['first\n', 'xy']);
+    expect(_field(tester).controller.text, 'xy');
+    expect(_field(tester).focusNode.hasFocus, isTrue);
+  });
+
   testWidgets('focus leaving the empty Block without typing continues nothing '
       'and leaves the Note unchanged', (tester) async {
     final api = _CoreFake(['first\n', 'second\n']);
@@ -884,6 +939,29 @@ void main() {
     await pressKey(tester, LogicalKeyboardKey.enter);
 
     expect(api.calls.where((call) => call.startsWith('split')), ['split:0:1']);
+  });
+
+  testWidgets('a refused Enter split retains the raw field and focus with a '
+      'nonfatal notice', (tester) async {
+    final api = _CoreFake(['alpha beta\n'])
+      ..splitFailure = const AppError.parseError('split refused');
+    final container = await pumpEditor(tester, [
+      _paragraph('alpha beta'),
+    ], api: api);
+
+    await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
+    await placeCaret(tester, 'alpha'.length);
+    await pressKey(tester, LogicalKeyboardKey.enter);
+
+    expect(api.calls.where((call) => call.startsWith('split')), ['split:0:5']);
+    expect(_writableFields(), findsOneWidget);
+    expect(_field(tester).controller.text, 'alpha beta\n');
+    expect(_field(tester).focusNode.hasFocus, isTrue);
+    expect(
+      container.read(keystrokeWriteFailureProvider),
+      isA<AppError_ParseError>(),
+    );
+    expect(container.read(editorErrorProvider), isNull);
   });
 
   // -- CAP-EDIT-03: Backspace at start merges / no-ops ---------------------
@@ -1123,6 +1201,30 @@ void main() {
     expect(api.workingSource, '- item\n- next\n');
     expect(_field(tester).controller.text, 'next');
     expect(_field(tester).controller.selection.baseOffset, 'next'.length);
+  });
+
+  testWidgets('Enter after commit reparses one leaf into top-level Blocks '
+      'anchors the phantom after the entire emitted source region', (
+    tester,
+  ) async {
+    final api = _TopLevelSplitCommitFake();
+    await pumpEditor(tester, [
+      _paragraph('leaf'),
+      _paragraph('tail\n'),
+    ], api: api);
+
+    await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
+    await tester.enterText(_writableFields().first, 'A\n\nB\n');
+    await tester.pump();
+    await placeCaret(tester, 'A\n\nB\n'.length);
+    await pressKey(tester, LogicalKeyboardKey.enter);
+    await tester.enterText(_writableFields().first, 'x');
+    await tester.pump();
+
+    expect(api.calls, ['commit', 'continue:2:x']);
+    expect(api.blocks, ['A\n', 'B\n', 'x', 'tail\n']);
+    expect(_field(tester).controller.text, 'x');
+    expect(_field(tester).focusNode.hasFocus, isTrue);
   });
 
   testWidgets('Enter mid-source after a paragraph became a List uses Core’s '

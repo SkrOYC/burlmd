@@ -8,6 +8,7 @@ import 'package:burlmd/src/providers/note_providers.dart';
 import 'package:burlmd/src/providers/rust_api_provider.dart';
 import 'package:burlmd/src/rust/index/query.dart';
 import 'package:burlmd/src/rust/markdown/ast.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show RenderParagraph;
 import 'package:flutter/services.dart';
@@ -28,6 +29,16 @@ class _CompletionApi extends RustApi {
   ) async {
     calls.add((query, limit));
     return reply(query);
+  }
+}
+
+class _TrackingTapGestureRecognizer extends TapGestureRecognizer {
+  var disposed = false;
+
+  @override
+  void dispose() {
+    disposed = true;
+    super.dispose();
   }
 }
 
@@ -524,6 +535,109 @@ void main() {
       expect(calls, ['projects/plan', 'projects/second', 'projects/second']);
     },
   );
+
+  testWidgets('renderBlock keeps multi-item list sibling markers aligned', (
+    tester,
+  ) async {
+    AstNode list(bool ordered, List<AstNode> items) =>
+        AstNode.list(ordered: ordered, items: items);
+    AstNode item(String text, {bool? checked}) =>
+        AstNode.listItem(checked: checked, content: [_plainParagraph(text)]);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              renderBlock(list(false, [item('alpha'), item('beta')])),
+              renderBlock(list(true, [item('one'), item('two')])),
+              renderBlock(
+                list(false, [
+                  item('unchecked', checked: false),
+                  item('checked', checked: true),
+                ]),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    _expectAlignedMarkerX(tester, find.text('•'), 2);
+    final orderedXs = [
+      tester.getTopLeft(find.text('1.')).dx,
+      tester.getTopLeft(find.text('2.')).dx,
+    ];
+    expect(orderedXs.last, orderedXs.first);
+    _expectAlignedMarkerX(tester, find.byType(Checkbox), 2);
+  });
+
+  testWidgets('BlockView prunes obsolete link recognizers after an update', (
+    tester,
+  ) async {
+    final calls = <String>[];
+    final created = <_TrackingTapGestureRecognizer>[];
+    AstNode links(String first, String second) => AstNode.paragraph(
+      content: [
+        InlineElement.link(
+          targetId: first,
+          exists: true,
+          content: [_plainText(first)],
+        ),
+        _plainText(' and '),
+        InlineElement.link(
+          targetId: second,
+          exists: true,
+          content: [_plainText(second)],
+        ),
+      ],
+    );
+    Widget build(AstNode node) => MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: Scaffold(
+        body: BlockView(
+          key: const ValueKey('recognizer-lifecycle'),
+          node: node,
+          blockPath: const [0],
+          onFocusRequested: (_, _) {},
+          onLinkActivated: calls.add,
+          recognizerFactory: () {
+            final recognizer = _TrackingTapGestureRecognizer();
+            created.add(recognizer);
+            return recognizer;
+          },
+        ),
+      ),
+    );
+
+    await tester.pumpWidget(build(links('obsolete', 'retained')));
+    expect(created, hasLength(2));
+    final obsolete = created[0];
+    final retained = created[1];
+
+    await tester.pumpWidget(build(links('retained', 'new')));
+
+    expect(obsolete.disposed, isTrue);
+    expect(retained.disposed, isFalse);
+    expect(created, hasLength(3));
+    expect(_linkRecognizers(tester), contains(same(retained)));
+    expect(_linkRecognizers(tester), contains(same(created[2])));
+
+    final paragraph = tester.renderObject<RenderParagraph>(
+      find.byType(RichText),
+    );
+    final retainedBox = paragraph
+        .getBoxesForSelection(
+          TextSelection(baseOffset: 0, extentOffset: 'retained'.length),
+        )
+        .single
+        .toRect();
+    await tester.tapAt(paragraph.localToGlobal(retainedBox.center));
+    await tester.pump();
+    expect(calls, ['retained']);
+  });
 }
 
 InlineElement _plainText(String content) => InlineElement.text(
@@ -535,3 +649,35 @@ InlineElement _plainText(String content) => InlineElement.text(
     code: false,
   ),
 );
+
+AstNode _plainParagraph(String content) =>
+    AstNode.paragraph(content: [_plainText(content)]);
+
+void _expectAlignedMarkerX(
+  WidgetTester tester,
+  Finder markerFinder,
+  int markerCount,
+) {
+  expect(markerFinder, findsNWidgets(markerCount));
+  final markerXs = [
+    for (var index = 0; index < markerCount; index++)
+      tester.getTopLeft(markerFinder.at(index)).dx,
+  ];
+  expect(markerXs.skip(1), everyElement(markerXs.first));
+}
+
+List<TapGestureRecognizer> _linkRecognizers(WidgetTester tester) {
+  final recognizers = <TapGestureRecognizer>[];
+  void visit(InlineSpan span) {
+    if (span case TextSpan(:final recognizer, :final children)) {
+      if (recognizer case TapGestureRecognizer()) recognizers.add(recognizer);
+      for (final child in children ?? const <InlineSpan>[]) {
+        visit(child);
+      }
+    }
+  }
+
+  final root = tester.widget<RichText>(find.byType(RichText)).text;
+  visit(root);
+  return recognizers;
+}

@@ -894,8 +894,10 @@ class EditorState extends ConsumerState<Editor> {
           continuationPath = _rederiveContinuationPath(
             api,
             note.metadata.id,
+            note,
             committedState,
             blockPath,
+            source,
           );
           ref.read(activeNoteProvider.notifier).adopt(committedState);
         } catch (error) {
@@ -943,27 +945,51 @@ class EditorState extends ConsumerState<Editor> {
         );
       });
     } catch (error) {
-      ref.read(editorErrorProvider.notifier).report(error);
+      // A split refusal leaves the focused raw source as the only editable
+      // representation of this operation. Keep it mounted and surface the
+      // failure beside it, just like a refused merge or blur commit.
+      ref.read(keystrokeWriteFailureProvider.notifier).report(error);
     }
   }
 
   /// Resolves the real continuation anchor after [commitBlock] reparses a
-  /// buffered edit. Prefer the same address only when it remains an editable
-  /// leaf in Core's returned AST; otherwise let Core resolve the end of its
-  /// top-level Block, which is exactly where Enter was pressed.
+  /// buffered edit. Retain the old address only when Core still reports that
+  /// exact focused raw source there. A path can survive while its old source
+  /// region expands into several top-level Blocks, so address survival alone
+  /// is not evidence of identity. Otherwise locate the first unchanged
+  /// following top-level region from the authoritative pre/post ASTs, then
+  /// resolve the end of the region before it through Core. This intentionally
+  /// does not inspect or parse Markdown in Dart.
   List<int> _rederiveContinuationPath(
     RustApi api,
     String noteId,
+    NoteState previousState,
     NoteState state,
     List<int> previousPath,
+    String committedSource,
   ) {
     final paths = _leafPaths(state.ast);
     if (paths.any((path) => _pathEquals(path, previousPath))) {
-      return List<int>.from(previousPath);
+      // The source comes from Core's current span map, not from a Dart
+      // Markdown interpretation. A mismatch means the old numeric path now
+      // addresses only one fragment of the focused field's source region.
+      final survivingSource = api.getBlockSource(noteId, previousPath);
+      if (survivingSource == committedSource) {
+        return List<int>.from(previousPath);
+      }
     }
-    final topLevelIndex = previousPath.first;
-    if (topLevelIndex >= state.ast.length) {
-      throw StateError('Committed Block no longer has a top-level anchor.');
+    final originalTopLevelIndex = previousPath.first;
+    if (originalTopLevelIndex >= previousState.ast.length) {
+      throw StateError('Focused Block has no prior top-level region.');
+    }
+    final followingRegionCount = _unchangedFollowingTopLevelRegionCount(
+      previousState.ast,
+      state.ast,
+      originalTopLevelIndex,
+    );
+    final topLevelIndex = state.ast.length - followingRegionCount - 1;
+    if (topLevelIndex < 0) {
+      throw StateError('Committed Block produced no continuation anchor.');
     }
     return api
         .resolveBlockCaret(noteId, [
@@ -974,22 +1000,47 @@ class EditorState extends ConsumerState<Editor> {
         .toList();
   }
 
+  /// Counts the unchanged suffix after the focused top-level region. A
+  /// `commit_block` reparses only the working source; later source regions
+  /// retain their AST projection, so this is a Core-state identity boundary,
+  /// not a Markdown heuristic. The resulting boundary makes the new phantom
+  /// follow every top-level Block emitted from the focused raw field.
+  static int _unchangedFollowingTopLevelRegionCount(
+    List<AstNode> previous,
+    List<AstNode> current,
+    int focusedTopLevelIndex,
+  ) {
+    var unchanged = 0;
+    var previousIndex = previous.length - 1;
+    var currentIndex = current.length - 1;
+    while (previousIndex > focusedTopLevelIndex &&
+        currentIndex >= 0 &&
+        previous[previousIndex] == current[currentIndex]) {
+      unchanged++;
+      previousIndex--;
+      currentIndex--;
+    }
+    return unchanged;
+  }
+
   /// The settled first text typed into the empty phantom Block: [text]
   /// BECOMES the new Block's `continue_block_after` source. The returned state
   /// is adopted, the Block's real source is fetched against the returned path,
   /// and focus converts to an ordinary editing session over it — subsequent
   /// keystrokes then flow through `update_block` like any other Block.
-  void _handlePhantomInsert(String text) {
+  bool _handlePhantomInsert(String text) {
     final focused = _focused;
     final note = ref.read(activeNoteProvider);
-    if (note == null) return;
+    if (note == null) return false;
     // Two legitimate entry points: an Enter-created phantom holding focus
     // (its path names the anchor slot it will splice into — possibly
     // MID-document, when Enter was pressed at the end of a non-final
     // Block), or the empty Note's ever-present first line, where no focus
     // session exists yet.
-    if (focused != null && (!focused.canCommit || !focused.isPhantom)) return;
-    if (focused == null && note.ast.isNotEmpty) return;
+    if (focused != null && (!focused.canCommit || !focused.isPhantom)) {
+      return false;
+    }
+    if (focused == null && note.ast.isNotEmpty) return false;
     // Empty Notes have no leaf to anchor, so `[0]` is the documented append
     // sentinel. Every non-empty Note retains the actual Core leaf path.
     final insertionPath = focused?.path ?? const [0];
@@ -1015,8 +1066,12 @@ class EditorState extends ConsumerState<Editor> {
           lastSeenState: newState,
         );
       });
+      return true;
     } catch (error) {
-      ref.read(editorErrorProvider.notifier).report(error);
+      // A failed first insertion has no Core Block yet, so this raw phantom
+      // is the user's only visible text. Leave it mounted and retryable.
+      ref.read(keystrokeWriteFailureProvider.notifier).report(error);
+      return false;
     }
   }
 
