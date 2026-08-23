@@ -533,3 +533,41 @@ production Action delete, and the Core-returned-caret readiness marker are prese
 - No other modified implementation, generated-binding, test, smoke, or Rust
   file is outside EDIT-F007's declared in-scope list. This task-plan entry is
   the required scope-closeout record for the two documentation files above.
+
+## Completion notes
+
+All seven tickets are complete: `EDIT-F001` through `EDIT-F007` (38 story
+points). The Epic F delivery spans 25 commits, from `a960e34` through
+`1dd94d3`. Feature deliveries and the follow-up corrections are retained in
+that range so the reasoning behind each final behavior remains traceable.
+
+- `EDIT-F001`: `a960e34`, `f0d921f`, `8ac064d`, `1408973`, `b5bca16`.
+- `EDIT-F002`: `55ca20a`, `cfe6de4`, `7945ea5`, `095ba79`, `9985927`,
+  `7dcc2cc`, `c6de0a3`.
+- `EDIT-F003`: `879124f`, `02f48cb`.
+- `EDIT-F004`: `93de3cc`, `42e3260`, `0c83ec9`.
+- Shared F005-F007 contract planning: `938d155`, `895c5f6`.
+- `EDIT-F005`: `6b1af29`, `6bfa1ae`; `EDIT-F006`: `0d80dec`, `8fa130d`;
+  `EDIT-F007`: `4bfc541`, `1dd94d3`.
+
+Each ticket's recorded gate supplies its validation evidence: focused Rust
+tests, Flutter widget tests, Flutter Rust Bridge code generation, readiness-
+gated smoke captures where applicable, `dart analyze`, `git diff --check`,
+and the debug-marker scan. `EDIT-F001` also records its rendered-output
+`hitl_sil` evidence in the Spike report.
+
+Each milestone received one fresh, independent bounded Sol review. Mandatory
+findings were fixed in the listed follow-up commits before the next milestone
+continued. This closeout does not claim a pull-request-level comprehensive
+review; that review remains part of the final integration and pull request
+workflow.
+
+## Deferred follow-ups and remaining risks
+
+No Epic F acceptance criterion remains open. Deferred work is recorded in the
+Wave 3 narrative: synchronization and conflict handling, design tokens plus
+accessibility and string externalization, undo and history, find and replace,
+and quality and portability work. Before merge, the branch still needs the
+final integration pass: update from the declared base, regenerate
+repository-owned artifacts, rerun the required gates, and complete the
+pull-request review.

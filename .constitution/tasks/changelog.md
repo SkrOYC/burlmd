@@ -1,5 +1,30 @@
 # Stage 4: Tasks Changelog
 
+## v1.9.0
+**Epic F — Editor Depth completed and archived.** All seven tickets
+(`EDIT-F001` through `EDIT-F007`, 38 story points) are complete. The delivery
+spans 25 commits (`a960e34` through `1dd94d3`), including the feature work,
+contract reconciliation, and mandatory review corrections. The epic moves from
+`active/` to `completed/` with completion notes and deferred follow-ups.
+
+**Milestone validation and review are recorded at ticket level.** The evidence
+includes the ticket-specific Rust and Flutter tests, Flutter Rust Bridge code
+generation, readiness-gated smoke captures where applicable, `dart analyze`,
+`git diff --check`, and debug-marker scans. Each milestone received one fresh,
+independent bounded Sol review, and mandatory findings were fixed before the
+next milestone. A pull-request-level comprehensive review has not run; it
+remains part of final integration.
+
+**Active planning recomputed from `active/` only.** Archiving Epic F changes
+the active backlog from 38 points to **0 points**. The active critical path and
+build graph are empty. The Wave 3 deferred narrative remains the planning home
+for synchronization and conflict work, design and accessibility work,
+editor-depth follow-ups, and quality and portability work.
+
+**Reconciliation outcome.** The live PRD, architecture, and technical
+implementation layers were reread and remain aligned with the completed Epic F
+work. No upstream mismatch required a downstream documentation patch.
+
 ## v1.8.0
 Evolution pass consuming Technical Implementation v1.6.0. Minor bump: the
 remaining active Editor Depth tickets materially expand in scope and effort,
