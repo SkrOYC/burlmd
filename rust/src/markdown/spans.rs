@@ -553,6 +553,25 @@ fn utf16_to_scalar_offset(text: &str, utf16_offset: usize) -> Option<usize> {
     (utf16_offset == units).then_some(text.chars().count())
 }
 
+/// Converts a Flutter UTF-16 offset to a byte boundary in `text`.
+///
+/// This is deliberately a boundary conversion rather than a lossy index:
+/// an offset in the middle of a non-BMP scalar has no corresponding Rust
+/// string boundary and is rejected.
+pub(crate) fn utf16_to_byte_offset(text: &str, utf16_offset: usize) -> Option<usize> {
+    let mut units = 0;
+    for (byte, character) in text.char_indices() {
+        if utf16_offset == units {
+            return Some(byte);
+        }
+        units += character.len_utf16();
+        if utf16_offset < units {
+            return None;
+        }
+    }
+    (utf16_offset == units).then_some(text.len())
+}
+
 /// Accumulates [`BlockSpan`]s during a parse and derives the tree
 /// relationships once the whole document has been seen.
 #[derive(Debug, Default)]

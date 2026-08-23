@@ -88,6 +88,10 @@ Given a Block is clicked partway through its text
 When it is promoted
 Then the caret is placed at the clicked position rather than at the start
 
+Given a list or blockquote container with an editable descendant leaf
+When it is promoted, split, inserted after, or merged with its predecessor
+Then every Core edit address is that real leaf path (for example `[0, 1, 0]`), never the top-level container path `[0]`, which `update_block` rejects
+
 Given a Block is focused and then blurred
 When it returns to formatted output
 Then its position and size are unchanged from before it was focused
@@ -117,6 +121,8 @@ The last scenario exists because ADR-006 inherits the platform IME inside the fo
 - `rust/src/api/ffi_api.rs`, `rust/src/markdown/spans.rs`, `rust/src/workspace/persist.rs`, `lib/src/providers/rust_api_provider.dart`, and FRB-generated bindings — independent-review P1 correction: the old Dart mapping guessed raw offsets and promoted container paths that Core correctly refuses. `resolve_block_caret` is the Stage-3-sanctioned synchronous contract; it returns the actual editable leaf and its raw UTF-16 caret through the Core span map.
 - `.constitution/tech-spec/{contracts/ffi_api.rs,changelog.md,stack.md}` — records the additive Core contract and Stage 3 minor-version bump. `test/components/editor_test.dart` and Rust span/session tests cover Unicode UTF-16 conversion, entities, escapes, noncanonical links, setext headings, fences, and nested list/quote leaves.
 - `scripts/smoke-shot.sh` and `lib/src/components/editor.dart` — F002 now stages and asserts a readiness marker only after the selected demo Note reaches focused raw-source state. The exact verification command exports `BURLMD_SMOKE_F002=1`; a generic Workspace screenshot cannot pass this gate.
+- `test/components/selection_test.dart` — F002's container-promotion correction touched this otherwise F003-owned suite only to update its `RustApi` fake for the additive `resolve_block_caret` contract and to retain real rendered-selection coverage; no F003 acceptance criterion changed.
+- `test/components/block_editing_test.dart` — F002's structural-focus correction updates its Core fake and regressions because Enter, split, and Backspace now retain or re-derive real leaf paths after Core reparses; it does not change EDIT-F004 behavior or acceptance.
 
 #### EDIT-F003 Cross-Block Selection and Copy
 - **Type:** Feature

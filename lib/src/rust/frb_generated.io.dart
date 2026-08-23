@@ -134,6 +134,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  StructuralEdit dco_decode_structural_edit(dynamic raw);
+
+  @protected
   TextRun dco_decode_text_run(dynamic raw);
 
   @protected
@@ -266,6 +269,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   (NoteState, LifecycleEffects) sse_decode_record_note_state_lifecycle_effects(
     SseDeserializer deserializer,
   );
+
+  @protected
+  StructuralEdit sse_decode_structural_edit(SseDeserializer deserializer);
 
   @protected
   TextRun sse_decode_text_run(SseDeserializer deserializer);
@@ -441,6 +447,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_record_note_state_lifecycle_effects(
     (NoteState, LifecycleEffects) self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_structural_edit(
+    StructuralEdit self,
     SseSerializer serializer,
   );
 

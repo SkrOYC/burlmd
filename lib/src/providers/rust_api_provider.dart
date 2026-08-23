@@ -10,7 +10,8 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart'
     show Uint64List;
 
 export 'package:burlmd/src/rust/api/auth.dart' show OAuthFlowStart;
-export 'package:burlmd/src/rust/api/ffi_api.dart' show BlockCaret, BlockRange;
+export 'package:burlmd/src/rust/api/ffi_api.dart'
+    show BlockCaret, BlockRange, StructuralEdit;
 export 'package:burlmd/src/rust/index/query.dart' show LinkCompletion, TreeNode;
 export 'package:burlmd/src/rust/workspace/bootstrap.dart' show WorkspaceInfo;
 export 'package:burlmd/src/rust/workspace/lifecycle.dart'
@@ -137,8 +138,9 @@ class RustApi {
     blockPath: Uint64List.fromList(blockPath),
   );
 
-  /// Splits a Block at a **source** character offset — pressing Enter
-  /// mid-Block (CAP-EDIT-03).
+  /// Splits a Block at a **source UTF-16** offset — pressing Enter mid-Block
+  /// (CAP-EDIT-03). This is Flutter's [TextSelection] coordinate space; Core
+  /// rejects a surrogate interior rather than treating it as a byte offset.
   NoteState splitBlock(String noteId, List<int> blockPath, int offset) =>
       ffi.splitBlock(
         noteId: noteId,
@@ -153,6 +155,16 @@ class RustApi {
         noteId: noteId,
         blockPath: Uint64List.fromList(blockPath),
       );
+
+  ffi.StructuralEdit insertListItemAfter(
+    String noteId,
+    List<int> blockPath,
+    String source,
+  ) => ffi.insertListItemAfter(
+    noteId: noteId,
+    blockPath: Uint64List.fromList(blockPath),
+    source: source,
+  );
 
   /// Markdown for a multi-Block selection (CAP-EDIT-04), executed Core-side
   /// because the Core owns both the AST and the source text.

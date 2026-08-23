@@ -361,6 +361,40 @@ void main() {
     expect(clipboard, _FakeRustApi.coreMarkdown);
   });
 
+  testWidgets('a task checkbox does not shift the selectable leaf index for '
+      'a range beginning in its text', (tester) async {
+    final api = _FakeRustApi();
+    await pumpEditor(tester, [
+      AstNode.list(
+        ordered: false,
+        items: [
+          AstNode.listItem(
+            checked: true,
+            content: [_plainParagraph('task body')],
+          ),
+        ],
+      ),
+      _plainParagraph('tail text'),
+    ], api: api);
+
+    final task = _textBox(tester, 'task body');
+    final tail = _textBox(tester, 'tail text');
+    await dragSelect(
+      tester,
+      task.topLeft + Offset(2 * 14 + 7, task.height / 2),
+      tail.topLeft + Offset(2 * 14 + 7, tail.height / 2),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.state<EditorState>(find.byType(Editor)).debugSelectedRange(),
+      _matchesRange(0, 2, 1, 2),
+      reason:
+          'Checkbox is not a RenderParagraph, so it must not consume a '
+          'synthetic logical text leaf before task body',
+    );
+  });
+
   testWidgets('select-all selects the whole Note', (tester) async {
     final api = _FakeRustApi();
     await pumpEditor(tester, [

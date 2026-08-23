@@ -321,11 +321,11 @@ NoteState deleteBlock({
   blockPath: blockPath,
 );
 
-/// Splits a Block at a **character** offset into its source -- pressing Enter
-/// mid-Block (CAP-EDIT-03). The focused Block displays raw source under
+/// Splits a Block at a Flutter **UTF-16** offset into its source -- pressing
+/// Enter mid-Block (CAP-EDIT-03). The focused Block displays raw source under
 /// ADR-006, so the caret position the UI reports is an offset into the Block's
-/// source rather than into its rendered text; it is counted in characters, not
-/// bytes, so a Block containing multibyte text splits where the caller pointed.
+/// source rather than into its rendered text. A surrogate interior is refused;
+/// Core converts valid UTF-16 boundaries to its internal byte spans.
 NoteState splitBlock({
   required String noteId,
   required Uint64List blockPath,
@@ -344,6 +344,20 @@ NoteState mergeBlockWithPrevious({
 }) => RustLib.instance.api.crateApiFfiApiMergeBlockWithPrevious(
   noteId: noteId,
   blockPath: blockPath,
+);
+
+/// Inserts a sibling list item after an editable descendant. This is the
+/// nested-Enter counterpart to `insert_block`: unlike a general new Block it
+/// deliberately preserves the containing list and returns Core's post-reparse
+/// focus target.
+StructuralEdit insertListItemAfter({
+  required String noteId,
+  required Uint64List blockPath,
+  required String source,
+}) => RustLib.instance.api.crateApiFfiApiInsertListItemAfter(
+  noteId: noteId,
+  blockPath: blockPath,
+  source: source,
 );
 
 /// Markdown for a multi-Block selection (CAP-EDIT-04), executed Core-side
@@ -479,4 +493,33 @@ class BlockRange {
           startOffset == other.startOffset &&
           endPath == other.endPath &&
           endOffset == other.endOffset;
+}
+
+/// Authoritative result of a structural edit that keeps the raw editor open.
+/// The Core reparses before returning, then names the editable leaf and
+/// Flutter UTF-16 caret in that resulting tree; Presentation never predicts
+/// a sibling path from the tree shape it just invalidated.
+class StructuralEdit {
+  final NoteState state;
+  final Uint64List blockPath;
+  final BigInt caretOffset;
+
+  const StructuralEdit({
+    required this.state,
+    required this.blockPath,
+    required this.caretOffset,
+  });
+
+  @override
+  int get hashCode =>
+      state.hashCode ^ blockPath.hashCode ^ caretOffset.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is StructuralEdit &&
+          runtimeType == other.runtimeType &&
+          state == other.state &&
+          blockPath == other.blockPath &&
+          caretOffset == other.caretOffset;
 }

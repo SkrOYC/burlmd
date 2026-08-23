@@ -6,6 +6,8 @@ import 'package:burlmd/src/rust/markdown/ast.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart'
+    show Uint64List;
 import 'package:flutter_test/flutter_test.dart';
 
 /// A [NoteController] whose initial state is fixed at construction, so tests
@@ -64,6 +66,16 @@ class _CoreFake extends RustApi {
   );
 
   @override
+  BlockCaret resolveBlockCaret(
+    String noteId,
+    List<int> topLevelPath,
+    int renderedUtf16Offset,
+  ) => BlockCaret(
+    blockPath: Uint64List.fromList(topLevelPath),
+    caretOffset: BigInt.from(renderedUtf16Offset),
+  );
+
+  @override
   String getBlockSource(String noteId, List<int> blockPath) {
     if (blockPath.first >= blocks.length) {
       throw Exception('no block at $blockPath');
@@ -117,6 +129,81 @@ class _CoreFake extends RustApi {
   NoteState commitBlock(String noteId, List<int> blockPath) {
     calls.add('commit');
     return state;
+  }
+}
+
+/// Full structural-path fixture for nested List regressions. It deliberately
+/// rejects a top-level substitute for a leaf address.
+class _NestedListFake extends RustApi {
+  final calls = <String>[];
+  List<int> promotedPath = [0, 0, 0];
+  final sources = <String, String>{'0/0/0': 'alpha', '0/1/0': 'beta'};
+
+  NoteState _state(int itemCount) => NoteState(
+    ast: [
+      AstNode.list(
+        ordered: false,
+        items: [
+          for (var i = 0; i < itemCount; i++)
+            AstNode.listItem(
+              content: [
+                _paragraph(
+                  i == 0
+                      ? 'alpha'
+                      : i == 1
+                      ? 'middle'
+                      : 'beta',
+                ),
+              ],
+            ),
+        ],
+      ),
+    ],
+    metadata: _CoreFake._meta,
+    baseRevision: 'head',
+    restoredFromDraft: false,
+  );
+
+  @override
+  BlockCaret resolveBlockCaret(
+    String noteId,
+    List<int> topLevelPath,
+    int offset,
+  ) => BlockCaret(
+    blockPath: Uint64List.fromList(promotedPath),
+    caretOffset: BigInt.zero,
+  );
+
+  @override
+  String getBlockSource(String noteId, List<int> path) =>
+      sources[path.join('/')]!;
+
+  @override
+  StructuralEdit insertListItemAfter(
+    String noteId,
+    List<int> path,
+    String source,
+  ) {
+    calls.add('insert:${path.join('/')}:$source');
+    sources['0/1/0'] = source;
+    sources['0/2/0'] = 'beta';
+    return StructuralEdit(
+      state: _state(3),
+      blockPath: Uint64List.fromList([0, 1, 0]),
+      caretOffset: BigInt.from(source.length),
+    );
+  }
+
+  @override
+  NoteState mergeBlockWithPrevious(String noteId, List<int> path) {
+    calls.add('merge:${path.join('/')}');
+    sources['0/0/0'] = 'alphabeta';
+    return _state(1);
+  }
+
+  @override
+  void updateBlock(String noteId, List<int> path, String source) {
+    sources[path.join('/')] = source;
   }
 }
 
@@ -498,5 +585,34 @@ void main() {
       'entry-1',
       'entry-2',
     ]);
+  });
+
+  testWidgets('Enter at a nested list leaf continues the List through Core '
+      'and focuses its returned leaf path', (tester) async {
+    final api = _NestedListFake();
+    await pumpEditor(tester, api._state(2).ast, api: api);
+
+    await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
+    await placeCaret(tester, 'alpha'.length);
+    await pressKey(tester, LogicalKeyboardKey.enter);
+    await tester.enterText(_writableFields().first, 'middle');
+    await tester.pump();
+
+    expect(api.calls, ['insert:0/0/0:middle']);
+    expect(_field(tester).controller.text, 'middle');
+    expect(_field(tester).controller.selection.baseOffset, 'middle'.length);
+  });
+
+  testWidgets('Backspace at a nested second list item calls Core with the '
+      'real leaf path and focuses its returned predecessor', (tester) async {
+    final api = _NestedListFake()..promotedPath = [0, 1, 0];
+    await pumpEditor(tester, api._state(2).ast, api: api);
+
+    await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
+    await placeCaret(tester, 0);
+    await pressKey(tester, LogicalKeyboardKey.backspace);
+
+    expect(api.calls, ['merge:0/1/0']);
+    expect(_field(tester).controller.text, 'alphabeta');
   });
 }
