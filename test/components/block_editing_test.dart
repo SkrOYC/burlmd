@@ -24,7 +24,7 @@ class _FixedNoteController extends NoteController {
 /// A [RustApi] standing in for the Core's structural editing surface
 /// (`EDIT-F004`). It models the working source as a plain list of Block
 /// sources and mutates it exactly the way the contract says each mutator
-/// does — `insert_block` shifts subsequent Blocks down, `split_block`
+/// does — `continue_block_after` inserts after the anchor, `split_block`
 /// divides one Block at a source offset into two, `merge_block_with_previous`
 /// concatenates onto the predecessor and removes the Block — so every
 /// returned [NoteState] is a faithful "authoritative state" the UI must
@@ -39,7 +39,7 @@ class _CoreFake extends RustApi {
   /// The Core's working source: one raw-source string per Block.
   final List<String> blocks;
 
-  /// Every structural call in issue order, e.g. `'insert:1:x'`,
+  /// Every structural call in issue order, e.g. `'continue:1:x'`,
   /// `'split:0:5'`, `'merge:2'`, `'commit'`. `update_block` is counted
   /// separately because it is the per-keystroke path, not a discrete action.
   final List<String> calls = [];
@@ -95,20 +95,13 @@ class _CoreFake extends RustApi {
   }
 
   @override
-  NoteState insertBlock(String noteId, List<int> blockPath, String source) {
-    calls.add('insert:${blockPath.first}:$source');
-    blocks.insert(blockPath.first, source);
-    return state;
-  }
-
-  @override
   StructuralEdit continueBlockAfter(
     String noteId,
     List<int> blockPath,
     String source,
   ) {
     final index = blocks.isEmpty ? 0 : blockPath.first + 1;
-    calls.add('insert:$index:$source');
+    calls.add('continue:$index:$source');
     blocks.insert(index, source);
     return StructuralEdit(
       state: state,
@@ -230,7 +223,7 @@ class _NestedListFake extends RustApi {
     List<int> path,
     String source,
   ) {
-    calls.add('insert:${path.join('/')}:$source');
+    calls.add('continue:${path.join('/')}:$source');
     sources['0/1/0'] = source;
     sources['0/2/0'] = 'beta';
     return StructuralEdit(
@@ -363,6 +356,20 @@ class _LiveShapeListFake extends RustApi {
     restoredFromDraft: false,
   );
 
+  NoteState get committedListState => NoteState(
+    ast: [
+      AstNode.list(
+        ordered: false,
+        items: [
+          AstNode.listItem(content: [_paragraph('item')]),
+        ],
+      ),
+    ],
+    metadata: _CoreFake._meta,
+    baseRevision: 'head',
+    restoredFromDraft: false,
+  );
+
   NoteState get splitState => NoteState(
     ast: [
       AstNode.list(
@@ -383,8 +390,12 @@ class _LiveShapeListFake extends RustApi {
     String noteId,
     List<int> topLevelPath,
     int offset,
-  ) =>
-      BlockCaret(blockPath: Uint64List.fromList([0]), caretOffset: BigInt.zero);
+  ) => BlockCaret(
+    blockPath: Uint64List.fromList(
+      workingSource == '- item\n' ? [0, 0, 0] : [0],
+    ),
+    caretOffset: BigInt.zero,
+  );
 
   @override
   String getBlockSource(String noteId, List<int> path) {
@@ -403,6 +414,23 @@ class _LiveShapeListFake extends RustApi {
     }
     workingSource = source;
     sources['0'] = source;
+  }
+
+  @override
+  NoteState commitBlock(String noteId, List<int> path) {
+    calls.add('commit:${path.join('/')}');
+    if (workingSource == '- item\n') {
+      sources
+        ..remove('0')
+        ..['0/0/0'] = 'item';
+      return committedListState;
+    }
+    return NoteState(
+      ast: [_paragraph(workingSource)],
+      metadata: _CoreFake._meta,
+      baseRevision: 'head',
+      restoredFromDraft: false,
+    );
   }
 
   @override
@@ -435,8 +463,10 @@ class _LiveShapeListFake extends RustApi {
     String source,
   ) {
     calls.add('continue:${path.join('/')}:$source');
-    if (path.join('/') != '0' || workingSource != '- item\n') {
-      throw StateError('Core must receive the stale leaf path and live source');
+    if (path.join('/') != '0/0/0' || workingSource != '- item\n') {
+      throw StateError(
+        'Core must receive its reparsed leaf path and live source',
+      );
     }
     workingSource = '- item\n- $source\n';
     sources
@@ -629,7 +659,7 @@ void main() {
     expect(_field(tester).controller.text, '');
     expect(_field(tester).focusNode.hasFocus, isTrue);
     // ...but CommonMark has no empty paragraph: nothing reached the Core.
-    expect(api.calls.where((c) => c.startsWith('insert')), isEmpty);
+    expect(api.calls.where((c) => c.startsWith('continue')), isEmpty);
     expect(api.updateCount, 0);
     expect(api.calls.where((c) => c == 'commit'), isEmpty);
     // The adopted state is untouched — the phantom lives UI-side only.
@@ -637,7 +667,7 @@ void main() {
   });
 
   testWidgets('the first character typed in the new empty Block goes through '
-      'insert_block; subsequent keystrokes go through update_block against '
+      'continue_block_after; subsequent keystrokes go through update_block against '
       'the returned path', (tester) async {
     final api = _CoreFake(['first\n']);
     await pumpEditor(tester, [_paragraph('first')], api: api);
@@ -649,8 +679,8 @@ void main() {
     await tester.enterText(_writableFields().first, 'x');
     await tester.pump();
 
-    // insert_block carried the character itself, not an empty Block first.
-    expect(api.calls.where((c) => c.startsWith('insert')), ['insert:1:x']);
+    // continue_block_after carried the character itself, not an empty Block first.
+    expect(api.calls.where((c) => c.startsWith('continue')), ['continue:1:x']);
     // The returned state is authoritative: the Note gained the Block.
     expect(api.blocks, ['first\n', 'x']);
 
@@ -662,15 +692,15 @@ void main() {
     expect(api.lastUpdatePath, [1]);
     expect(api.lastUpdateSource, 'xy');
     expect(
-      api.calls.where((c) => c.startsWith('insert')),
-      ['insert:1:x'],
-      reason: 'exactly one insert_block, on the first character only',
+      api.calls.where((c) => c.startsWith('continue')),
+      ['continue:1:x'],
+      reason: 'exactly one continue_block_after, on the first character only',
     );
     expect(_field(tester).controller.text, 'xy');
     expect(_field(tester).focusNode.hasFocus, isTrue);
   });
 
-  testWidgets('focus leaving the empty Block without typing inserts nothing '
+  testWidgets('focus leaving the empty Block without typing continues nothing '
       'and leaves the Note unchanged', (tester) async {
     final api = _CoreFake(['first\n', 'second\n']);
     await pumpEditor(tester, [
@@ -692,14 +722,127 @@ void main() {
     await tester.pump();
 
     expect(
-      api.calls.where((c) => c.startsWith('insert')),
+      api.calls.where((c) => c.startsWith('continue')),
       isEmpty,
-      reason: 'nothing typed, so nothing inserted',
+      reason: 'nothing typed, so no continuation',
     );
     expect(api.blocks, [
       'first\n',
       'second\n',
     ], reason: 'the Note is byte-for-byte unchanged');
+  });
+
+  testWidgets('abandoning a phantom commits the preceding edited Block once '
+      'before it can render formatted', (tester) async {
+    final api = _CoreFake(['first\n', 'second\n']);
+    final container = await pumpEditor(tester, [
+      _paragraph('first'),
+      _paragraph('second'),
+    ], api: api);
+
+    await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
+    await tester.enterText(_writableFields().first, 'first revised\n');
+    await placeCaret(tester, 'first revised\n'.length);
+    await pressKey(tester, LogicalKeyboardKey.enter);
+
+    expect(api.calls.where((call) => call == 'commit'), ['commit']);
+    expect(
+      blockText(container.read(activeNoteProvider)!.ast.first),
+      'first revised\n',
+    );
+
+    // Blur the still-empty phantom. It owns no Block, so it cannot replay the
+    // preceding commit or replace the newly adopted AST with stale state.
+    await tester.tap(
+      find.byKey(const ValueKey('block-1')),
+      warnIfMissed: false,
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(api.calls.where((call) => call == 'commit'), ['commit']);
+    expect(
+      blockText(container.read(activeNoteProvider)!.ast.first),
+      'first revised\n',
+    );
+    expect(api.calls.where((call) => call.startsWith('continue')), isEmpty);
+  });
+
+  testWidgets('a composing first input in an empty Note stays local until '
+      'composition completes, then continues once with all text', (
+    tester,
+  ) async {
+    final api = _CoreFake([]);
+    await pumpEditor(tester, [], api: api);
+    final initialController = _field(tester).controller;
+
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(
+        text: '中文',
+        composing: TextRange(start: 0, end: 2),
+        selection: TextSelection.collapsed(offset: 2),
+      ),
+    );
+    await tester.pump();
+
+    expect(
+      api.calls,
+      isEmpty,
+      reason: 'a live phantom composition is UI-local',
+    );
+    expect(identical(_field(tester).controller, initialController), isTrue);
+    expect(_field(tester).controller.text, '中文');
+    expect(_field(tester).focusNode.hasFocus, isTrue);
+
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(
+        text: '中文',
+        selection: TextSelection.collapsed(offset: 2),
+      ),
+    );
+    await tester.pump();
+
+    expect(api.calls, ['continue:0:中文']);
+    expect(_field(tester).controller.text, '中文');
+    expect(_field(tester).controller.selection.baseOffset, 2);
+    expect(api.updateCount, 0);
+  });
+
+  testWidgets('a composing first input in an Enter-created phantom stays '
+      'local until composition completes, then continues once', (tester) async {
+    final api = _CoreFake(['first\n']);
+    await pumpEditor(tester, [_paragraph('first')], api: api);
+
+    await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
+    await placeCaret(tester, 'first\n'.length);
+    await pressKey(tester, LogicalKeyboardKey.enter);
+    final initialController = _field(tester).controller;
+
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(
+        text: '漢字',
+        composing: TextRange(start: 0, end: 2),
+        selection: TextSelection.collapsed(offset: 2),
+      ),
+    );
+    await tester.pump();
+
+    expect(api.calls, isEmpty);
+    expect(identical(_field(tester).controller, initialController), isTrue);
+    expect(_field(tester).controller.text, '漢字');
+
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(
+        text: '漢字',
+        selection: TextSelection.collapsed(offset: 2),
+      ),
+    );
+    await tester.pump();
+
+    expect(api.calls, ['continue:1:漢字']);
+    expect(_field(tester).controller.text, '漢字');
+    expect(_field(tester).controller.selection.baseOffset, 2);
+    expect(api.updateCount, 0);
   });
 
   // -- CAP-EDIT-03: Enter mid-Block splits at the caret --------------------
@@ -791,7 +934,7 @@ void main() {
 
     await tester.enterText(_writableFields().first, 'a');
     await tester.pump();
-    expect(api.calls.where((c) => c.startsWith('insert')), ['insert:0:a']);
+    expect(api.calls.where((c) => c.startsWith('continue')), ['continue:0:a']);
 
     await tester.enterText(_writableFields().first, 'alpha');
     await tester.pump();
@@ -804,9 +947,9 @@ void main() {
 
     await tester.enterText(_writableFields().first, 'b');
     await tester.pump();
-    expect(api.calls.where((c) => c.startsWith('insert')), [
-      'insert:0:a',
-      'insert:1:b',
+    expect(api.calls.where((c) => c.startsWith('continue')), [
+      'continue:0:a',
+      'continue:1:b',
     ]);
 
     await tester.enterText(_writableFields().first, 'beta');
@@ -824,7 +967,7 @@ void main() {
     // And the session ends in the same state Enter always leaves: an empty
     // Block holding focus, still uncommitted.
     expect(_field(tester).controller.text, '');
-    expect(api.calls.where((c) => c == 'commit'), isEmpty);
+    expect(api.calls.where((c) => c == 'commit'), ['commit', 'commit']);
   });
 
   // -- Regression (P0): Enter at end of a NON-final Block ------------------
@@ -849,9 +992,9 @@ void main() {
     await tester.enterText(_writableFields().first, 'x');
     await tester.pump();
 
-    // The first keystroke reached the Core as insert_block at index 1,
+    // The first keystroke reached Core's continuation boundary at index 1,
     // shifting the later Blocks down — nothing was swallowed.
-    expect(api.calls.where((c) => c.startsWith('insert')), ['insert:1:x']);
+    expect(api.calls.where((c) => c.startsWith('continue')), ['continue:1:x']);
     expect(api.blocks, ['one\n', 'x', 'two\n', 'three\n']);
 
     await tester.enterText(_writableFields().first, 'xy');
@@ -897,7 +1040,7 @@ void main() {
     await placeCaret(tester, 'one\n'.length);
     await pressKey(tester, LogicalKeyboardKey.enter);
 
-    // The phantom sits between Blocks 0 and 1 — where insert_block would
+    // The phantom sits between Blocks 0 and 1 — where Core continuation will
     // splice it — with the untouched Blocks still below it in view order.
     expect(entryOrder(tester), [
       'entry-0',
@@ -918,7 +1061,7 @@ void main() {
     await tester.enterText(_writableFields().first, 'middle');
     await tester.pump();
 
-    expect(api.calls, ['insert:0/0/0:middle']);
+    expect(api.calls, ['continue:0/0/0:middle']);
     expect(_field(tester).controller.text, 'middle');
     expect(_field(tester).controller.selection.baseOffset, 'middle'.length);
   });
@@ -936,7 +1079,7 @@ void main() {
     await tester.enterText(_writableFields().first, 'next');
     await tester.pump();
 
-    expect(api.calls, ['update:0:- item\n', 'continue:0:next']);
+    expect(api.calls, ['update:0:- item\n', 'commit:0', 'continue:0/0/0:next']);
     expect(api.workingSource, '- item\n- next\n');
     expect(_field(tester).controller.text, 'next');
     expect(_field(tester).controller.selection.baseOffset, 'next'.length);

@@ -130,6 +130,15 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
   String? _compositionBaseText;
   bool _pendingResolutionScheduled = false;
   bool _hasResyncConflict = false;
+  bool _phantomMaterialized = false;
+
+  /// Flutter 3.44.3 exposes [TextEditingValue.isComposingRangeValid], but a
+  /// valid collapsed range is not an active composition. Only a non-empty,
+  /// valid range is still owned by the IME.
+  bool get _hasLiveComposition {
+    final value = _controller.value;
+    return value.isComposingRangeValid && !value.composing.isCollapsed;
+  }
 
   @override
   void initState() {
@@ -160,7 +169,7 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
     // or duplicating exactly the characters the composition criterion
     // forbids losing. The in-flight composition completes into the field
     // first, and the next resync picks up whatever the Core then holds.
-    if (_controller.value.composing != TextRange.empty) {
+    if (_hasLiveComposition) {
       // The token is part of the pending value, rather than a separate flag:
       // a second lifecycle rewrite while the IME is still live supersedes the
       // first one. In particular, a latest source equal to the live field
@@ -204,7 +213,21 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
   /// boundary, before a following keystroke can consume a stale source.
   void _onEditingValueChanged() {
     final value = _controller.value;
-    if (value.composing != TextRange.empty) {
+    if (widget.phantom) {
+      // A phantom has no Core Block to update. In particular, do not replace
+      // this controller while the platform owns a marked composition: doing
+      // so disposes its input connection before the IME can commit the text.
+      // The controller listener, rather than onChanged, also observes the
+      // common completion event that changes only `composing`.
+      if (!_phantomMaterialized &&
+          !_hasLiveComposition &&
+          value.text.isNotEmpty) {
+        _phantomMaterialized = true;
+        widget.onPhantomInsert?.call(value.text);
+      }
+      return;
+    }
+    if (_hasLiveComposition) {
       _compositionBaseText ??= _lastSettledText;
       return;
     }
@@ -212,7 +235,7 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
     _pendingResolutionScheduled = true;
     scheduleMicrotask(() {
       _pendingResolutionScheduled = false;
-      if (mounted && _controller.value.composing == TextRange.empty) {
+      if (mounted && !_hasLiveComposition) {
         _resolvePendingResync();
       }
     });
@@ -397,16 +420,7 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
         maxLines: null,
         keyboardType: TextInputType.multiline,
         onChanged: (text) {
-          final composing = _controller.value.composing;
-          if (widget.phantom) {
-            // The empty phantom Block has no `block_path` to buffer into:
-            // CommonMark has no empty paragraph, so there is nothing the
-            // Core holds yet. The first typed character BECOMES the Block —
-            // the parent calls `insert_block` with it and re-derives focus
-            // from the returned state (`EDIT-F004`).
-            widget.onPhantomInsert?.call(text);
-            return;
-          }
+          if (widget.phantom) return;
           if (_hasResyncConflict) return;
           // The Block's raw source text, not a reconstructed AstNode — this
           // is the per-keystroke buffering call (`update_block`, ADR-007
@@ -416,9 +430,9 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
           // A deferred composition resync is resolved by the controller
           // listener, including a composing-only completion. Do not race it
           // here by replaying the stale external source over this input.
-          if (_pendingResync != null && composing == TextRange.empty) return;
+          if (_pendingResync != null && !_hasLiveComposition) return;
           _bufferSource(text);
-          if (composing == TextRange.empty) _lastSettledText = text;
+          if (!_hasLiveComposition) _lastSettledText = text;
         },
       ),
     ),
