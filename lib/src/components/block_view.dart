@@ -98,6 +98,31 @@ Widget blockContainer(AstNode node, Widget child) => switch (node) {
   _ => child,
 };
 
+/// Holds a promoted raw editor to the formatted Block's measured footprint.
+///
+/// Markdown punctuation is intentionally visible in the focused field, so at
+/// a soft-wrap boundary its source can take one more line than the formatted
+/// output (for example, `**bold**` versus bold). Letting that extra line
+/// resize the ListView entry moves every following Block, violating
+/// CAP-EDIT-01 even though the two paths share identical font metrics. The
+/// invisible formatted baseline supplies the authoritative height and wrap
+/// width; the raw field fills that viewport and scrolls when its source needs
+/// more space. [SelectionContainer.disabled] is essential: this baseline is
+/// layout-only while a Block is focused and must not rejoin the surrounding
+/// SelectionArea.
+Widget blockPromotionSlot(AstNode node, Widget editor) => Stack(
+  children: [
+    SelectionContainer.disabled(
+      child: IgnorePointer(
+        child: ExcludeSemantics(
+          child: Opacity(opacity: 0, child: renderBlock(node)),
+        ),
+      ),
+    ),
+    Positioned.fill(child: editor),
+  ],
+);
+
 /// One list marker cell: a checkbox for task items, otherwise the marker
 /// glyph with the same right padding both paths must draw.
 Widget _markerWidget(bool? checked, String marker) => checked != null

@@ -8,7 +8,8 @@ import 'package:burlmd/src/rust/draft.dart';
 import 'package:burlmd/src/rust/markdown/ast.dart';
 import 'package:burlmd/src/screens/workspace.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart' show RenderBox, RenderParagraph;
+import 'package:flutter/rendering.dart'
+    show RenderBox, RenderEditable, RenderObject, RenderParagraph;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -249,22 +250,6 @@ Future<void> blurFocusedField(WidgetTester tester) async {
 EditableText _field(WidgetTester tester) =>
     tester.widget<EditableText>(find.byType(EditableText).first);
 
-/// The rendered [RenderBox] of the Block's text surface — the [RichText] of
-/// a formatted Block or the promoted writable field — located by a probe
-/// string its painted text contains. Returns global top-left and size, the
-/// numbers SPK-EDIT-F001 §5 measures promotion stability with.
-Rect _textBoxContaining(WidgetTester tester, String probe) {
-  final finder = find.byWidgetPredicate(
-    (widget) =>
-        (widget is RichText && widget.text.toPlainText().contains(probe)) ||
-        (widget is EditableText &&
-            !widget.readOnly &&
-            widget.controller.text.contains(probe)),
-  );
-  final box = tester.renderObject<RenderBox>(finder.first);
-  return box.localToGlobal(Offset.zero) & box.size;
-}
-
 RichText _firstRichText(WidgetTester tester) =>
     tester.widget<RichText>(find.byType(RichText).first);
 
@@ -274,6 +259,23 @@ RichText _firstRichText(WidgetTester tester) =>
 Finder _writableFields() => find.byWidgetPredicate(
   (widget) => widget is EditableText && !widget.readOnly,
 );
+
+/// [EditableText] itself builds a composition callback render object; its
+/// [RenderEditable] is a descendant rather than the widget's direct render
+/// object. Locate the actual laid-out text surface for wrap measurements.
+RenderEditable _renderEditable(WidgetTester tester) {
+  RenderEditable? found;
+  void visit(RenderObject object) {
+    if (object is RenderEditable) {
+      found ??= object;
+      return;
+    }
+    object.visitChildren(visit);
+  }
+
+  visit(tester.renderObject<RenderObject>(_writableFields()));
+  return found!;
+}
 
 void main() {
   // -- CAP-EDIT-01: formatted when unfocused, raw when focused ------------
@@ -310,7 +312,9 @@ void main() {
 
     // The whole point of the model: the user sees and types real Markdown.
     expect(_field(tester).controller.text, 'before **bold**');
-    expect(find.byType(RichText), findsNothing);
+    // The invisible formatted baseline owns only the promoted slot's layout;
+    // it is not painted, hit-testable, semantic, or selectable.
+    expect(find.byType(RichText), findsOneWidget);
     // Promotion itself is not an edit: nothing buffered yet, nothing
     // committed.
     expect(api.updateCount, 0);
@@ -472,6 +476,106 @@ void main() {
     expect(api.committedPaths.single, [0]);
   });
 
+  testWidgets('raw source may wrap an extra line at a boundary without moving '
+      'paragraph, heading, or list entries', (tester) async {
+    // The constrained viewport deliberately exercises real RenderParagraph
+    // and RenderEditable line boxes at soft-wrap boundaries. It does not
+    // inspect TextStyle properties: the source strings differ by Markdown
+    // punctuation, so matching styles alone cannot prove stable geometry.
+    tester.view.physicalSize = const Size(320, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final fixtures =
+        <(String, AstNode Function(String), String Function(String))>[
+          (
+            'paragraph',
+            (text) => _paragraphOf([_plainRun('$text '), _boldRun('tail')]),
+            (text) => '$text **tail**',
+          ),
+          (
+            'heading',
+            (text) => AstNode.heading(
+              level: 2,
+              content: [_plainRun('$text '), _boldRun('tail')],
+            ),
+            (text) => '## $text **tail**',
+          ),
+          (
+            'list item',
+            (text) => AstNode.list(
+              ordered: false,
+              items: [
+                AstNode.listItem(
+                  content: [
+                    _paragraphOf([_plainRun('$text '), _boldRun('tail')]),
+                  ],
+                ),
+              ],
+            ),
+            (text) => '- $text **tail**',
+          ),
+        ];
+
+    for (final (name, makeNode, makeSource) in fixtures) {
+      var witnessedBoundary = false;
+      // Each word count moves the same text through a different actual wrap
+      // boundary. One must make the raw prefix/delimiters take an extra
+      // painted line; the slot must nevertheless retain rendered geometry.
+      for (var wordCount = 2; wordCount <= 50; wordCount++) {
+        final renderedText = List.filled(wordCount, 'word').join(' ');
+        final rawSource = makeSource(renderedText);
+        final api = _FakeRustApi()..sources['0'] = rawSource;
+        await pumpEditor(tester, [makeNode(renderedText)], api: api);
+
+        final formattedFinder = find.byWidgetPredicate(
+          (widget) =>
+              widget is RichText &&
+              widget.text.toPlainText().contains(renderedText),
+        );
+        final formatted = tester.renderObject<RenderParagraph>(
+          formattedFinder.first,
+        );
+        final formattedLines = formatted
+            .getBoxesForSelection(
+              TextSelection(baseOffset: 0, extentOffset: renderedText.length),
+            )
+            .map((box) => box.top)
+            .toSet()
+            .length;
+        final before = tester.getRect(find.byKey(const ValueKey('entry-0')));
+
+        await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
+        final raw = _renderEditable(tester);
+        final rawLines = raw
+            .getBoxesForSelection(
+              TextSelection(baseOffset: 0, extentOffset: rawSource.length),
+            )
+            .map((box) => box.top)
+            .toSet()
+            .length;
+
+        if (rawLines <= formattedLines) continue;
+        witnessedBoundary = true;
+        expect(
+          tester.getRect(find.byKey(const ValueKey('entry-0'))),
+          before,
+          reason:
+              '$name promotion must keep the formatted slot when raw '
+              'Markdown takes an extra rendered line',
+        );
+        break;
+      }
+      expect(
+        witnessedBoundary,
+        isTrue,
+        reason:
+            '$name fixture must exercise a real raw-vs-rendered wrap boundary',
+      );
+    }
+  });
+
   // -- Promotion fidelity: container decorations replicated (P1/P2) --------
 
   testWidgets('a focused code Block keeps its dark pane and white ink', (
@@ -505,37 +609,33 @@ void main() {
     );
   });
 
-  testWidgets('focusing a blockquote keeps its glyphs in place — the 3px '
-      'left border and 12px left padding are replicated', (tester) async {
+  testWidgets('focusing a blockquote preserves its entry geometry while raw '
+      'source shows its quote marker', (tester) async {
     final api = _FakeRustApi()..sources['0'] = '> quoted line';
     await pumpEditor(tester, [
       AstNode.blockquote(nodes: [_plainParagraph('quoted line')]),
     ], api: api);
 
-    Rect surface() => _textBoxContaining(tester, 'quoted line');
-    final before = surface();
+    final before = tester.getRect(find.byKey(const ValueKey('entry-0')));
 
     await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
-    final focused = surface();
+    final focused = tester.getRect(find.byKey(const ValueKey('entry-0')));
 
     expect(
       focused.topLeft,
       before.topLeft,
       reason:
-          'promotion must not move '
-          'the quoted glyphs horizontally or vertically',
+          'the raw `> ` marker may shift its glyphs, but not the Block slot',
     );
     expect(
-      focused.height,
-      before.height,
-      reason:
-          'the pinned height/leading-distribution styles must hold inside the '
-          'replicated quote container too',
+      focused.size,
+      before.size,
+      reason: 'the promoted quote must retain the formatted entry footprint',
     );
   });
 
-  testWidgets('focusing a list item keeps its glyphs in place — the marker '
-      'column is replicated', (tester) async {
+  testWidgets('focusing a list item preserves its entry geometry while raw '
+      'source shows its list marker', (tester) async {
     final api = _FakeRustApi()..sources['0'] = '- item one';
     await pumpEditor(tester, [
       AstNode.list(
@@ -546,20 +646,18 @@ void main() {
       ),
     ], api: api);
 
-    Rect surface() => _textBoxContaining(tester, 'item one');
-    final before = surface();
+    final before = tester.getRect(find.byKey(const ValueKey('entry-0')));
 
     await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
-    final focused = surface();
+    final focused = tester.getRect(find.byKey(const ValueKey('entry-0')));
 
     expect(
       focused.topLeft,
       before.topLeft,
       reason:
-          'the marker column must '
-          'survive promotion so the item body does not shift left',
+          'the raw `- ` marker may shift its glyphs, but not the Block slot',
     );
-    expect(focused.height, before.height);
+    expect(focused.size, before.size);
   });
 
   // -- Blur commits, focus re-derived from the returned state --------------

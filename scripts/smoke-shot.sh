@@ -34,7 +34,7 @@ NAME="$1"
 }
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-QA_DIR="$REPO_ROOT/.qa"
+QA_DIR="${BURLMD_SMOKE_SHOT_DIR:-$REPO_ROOT/.qa}"
 SHOT="$QA_DIR/$NAME.png"
 
 RENDER_TIMEOUT=60         # seconds allowed for the window to appear

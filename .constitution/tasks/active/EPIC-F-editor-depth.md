@@ -19,7 +19,7 @@ It is not gone entirely, and `EDIT-F003`/`EDIT-F007` are where it survives. A `B
 - **Verification Command:** `test -s .constitution/spikes/SPK-EDIT-F001.md && ! grep -q 'Status: placeholder' .constitution/spikes/SPK-EDIT-F001.md && ! grep -q 'To be filled' .constitution/spikes/SPK-EDIT-F001.md && git diff --quiet HEAD~1 HEAD -- lib rust/src`
 - **Expected Success Output:** `exit 0`
 - **STOP Conditions:**
-  - "STOP if this Spike is landed across more than one commit; its gate asserts that the Spike's own commit touched no production code, for the reason recorded on `WSPC-D001`."
+- "STOP if this Spike is landed across more than one commit; its gate asserts that the Spike's own commit touched no production code, for the reason recorded on `WSPC-D001`. This restriction applies to the original Spike delivery only: a separately committed, independent-review correction may add narrowly scoped evidence, contract reconciliation, regression coverage, and the minimum proven stabilization without rewriting history; record the deviation and every out-of-scope touch below."
   - "STOP if the promotion cannot be made typographically stable; that outcome selects the custom-selectable escalation path recorded in ADR-006 decision 6, which is a Stage 3 decision rather than an improvised widget change."
   - "STOP if resolving a rendered offset to a source offset turns out to need anything beyond the parser's own inline ranges; ADR-007 decision 8 asserts it does not, and an escalation there is a Stage 3 decision."
   - "STOP without also settling the case where a selection's INTERIOR contains the focused Block. It fails the rendered-offset rule for the same reason as the anchor, and its inline span map is stale between `update_block` and `commit_block` while `delete_range`/`replace_range` splice using it. Blurring before dispatching a range operation likely dissolves both; confirm it here."
@@ -97,6 +97,13 @@ Then no composed or committed characters are lost, duplicated, or reordered, and
 ```
 
 The last scenario exists because ADR-006 inherits the platform IME inside the focused field and nothing anywhere tested that a mid-composition string survives a commit; losing it is a correctness defect, not an edge case. It rides this ticket because this is where promotion first meets composition.
+
+##### [EDIT-F001] Independent-review correction deviations & justifications
+- `.constitution/tech-spec/adrs/ADR-006-raw-on-focus-editing.md`, `.constitution/tech-spec/contracts/ffi_api.rs`, and `rust/src/api/ffi_api.rs` — reconcile the settled focus/range invariant across ADR, contract, and exposed FFI documentation; no signature changed.
+- `lib/src/components/editor.dart` and `lib/src/components/block_view.dart` — retain the formatted slot while longer raw source scrolls in the focused field, and reject an outward pointer sequence that began while a field was focused until a new rendered selection begins after blur.
+- `test/components/editor_test.dart` and `test/components/selection_test.dart` — interaction and rendered-geometry regression tests, necessary to make the review correction durable.
+- `lib/main.dart`, `scripts/smoke-shot.sh`, `.constitution/evidence/edit-f001/*.png`, and the evidence README — opt-in production-font fixture/capture support and generated `hitl_sil` artifacts. The harness accepts an explicit evidence output directory so normal `.qa/` captures remain ignored; these four PNGs are the documented exception to the normal no-binary-QA rule.
+- `.constitution/tech-spec/changelog.md`, `.constitution/tech-spec/guidelines.md`, and `.constitution/tasks/changelog.md` — record this separately committed correction and its narrowly allowed durable evidence exception.
 
 ##### [EDIT-F002] Deviations & Justifications
 - `test/components/lifecycle_actions_test.dart` — its `RustApi` fake needed `getBlockSource`/`commitBlock` overrides and promote-on-focus staging (tap before typing) because EDIT-F002 changed how the editor presents a focused Block, breaking this suite's existing IME-resync scenario; updated to match the new model, no criterion loosened.

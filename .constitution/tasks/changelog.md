@@ -1,5 +1,8 @@
 # Stage 4: Tasks Changelog
 
+## v1.7.1
+Independent-review correction to **EDIT-F001**: the original Spike's single-commit STOP remains historical rather than being rewritten. A separately committed correction is explicitly allowed for independent-review findings, with its out-of-scope production/test/ADR/evidence touches documented in the active Epic. It closes the focused-drag range loophole, adds durable production-font `hitl_sil` captures, and stabilizes raw-source wrap-boundary height without changing the Stage 3 model.
+
 ## v1.7.0
 **Epic E — Shell & Navigation completed and archived.** All eight tickets (`SHEL-E001` … `E008`, 27 story points) are implemented, independently reviewed and merged across 15 commits (`713de70` … `b3cd66f`: nine feature commits, three docs commits recording deviations, one review-fix commit, one harness hardening, one integration milestone). `EPIC-E-shell-navigation.md` moves from `active/` to `completed/` with Completion Notes appended. The active backlog drops from **57 points to 30** — Epic F alone. Minor bump: scope removed by completion, no restructuring of the stage.
 
