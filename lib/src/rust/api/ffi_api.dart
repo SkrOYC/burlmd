@@ -321,18 +321,20 @@ NoteState deleteBlock({
   blockPath: blockPath,
 );
 
-/// Splits a Block at a Flutter **UTF-16** offset into its source -- pressing
-/// Enter mid-Block (CAP-EDIT-03). The focused Block displays raw source under
-/// ADR-006, so the caret position the UI reports is an offset into the Block's
-/// source rather than into its rendered text. A surrogate interior is refused;
-/// Core converts valid UTF-16 boundaries to its internal byte spans.
-NoteState splitBlock({
+/// Splits a Block at a Flutter **UTF-16** offset into the supplied raw editor
+/// source -- pressing Enter mid-Block (CAP-EDIT-03). `source` is the field's
+/// coordinate authority even when its buffered edit reshaped the live AST;
+/// Core maps that coordinate to the current leaf, reparses, and returns the
+/// authoritative second-half focus. A surrogate interior is refused.
+StructuralEdit splitBlock({
   required String noteId,
   required Uint64List blockPath,
+  required String source,
   required BigInt offset,
 }) => RustLib.instance.api.crateApiFfiApiSplitBlock(
   noteId: noteId,
   blockPath: blockPath,
+  source: source,
   offset: offset,
 );
 

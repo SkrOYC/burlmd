@@ -1023,104 +1023,91 @@ impl NoteSession {
             EmptyNote,
         }
 
-        let (state, focus_parent) = self.structural_edit(|working, spans, ast, retained_spans| {
-            let continuation = if spans.is_empty() && block_path == [0] {
-                Continuation::EmptyNote
-            } else {
-                let live_path = editable_live_path(spans, retained_spans, block_path)?;
-                let leaf = spans.block(&live_path).ok_or_else(|| {
-                    AppError::ParseError(format!("no Block at block_path {live_path:?}"))
-                })?;
-                if !leaf.is_leaf() {
-                    return Err(AppError::ParseError(format!(
-                        "block_path {live_path:?} does not name an editable leaf"
-                    )));
-                }
-                match nearest_list_item(ast, &live_path) {
-                    Some((list_path, item_index)) => {
-                        let mut item_path = list_path.clone();
-                        item_path.push(item_index);
-                        let item_source = spans.block_source(working, &item_path).ok_or_else(|| {
-                            AppError::ParseError(format!(
-                                "no ListItem at block_path {item_path:?}"
-                            ))
-                        })?;
-                        let marker = list_marker(item_source).ok_or_else(|| {
-                            AppError::ParseError(format!(
-                                "ListItem at block_path {item_path:?} has no repeatable Markdown marker"
-                            ))
-                        })?;
-                        Continuation::List {
-                            marker: marker.to_string(),
-                            leaf_path: live_path,
-                            list_path,
-                            item_index,
-                        }
+        let (state, focus_parent) =
+            self.structural_edit(|working, spans, ast, retained_spans| {
+                let continuation = if spans.is_empty() && block_path == [0] {
+                    Continuation::EmptyNote
+                } else {
+                    let live_path = editable_live_path(spans, retained_spans, block_path)?;
+                    let leaf = spans.block(&live_path).ok_or_else(|| {
+                        AppError::ParseError(format!("no Block at block_path {live_path:?}"))
+                    })?;
+                    if !leaf.is_leaf() {
+                        return Err(AppError::ParseError(format!(
+                            "block_path {live_path:?} does not name an editable leaf"
+                        )));
                     }
-                    None => Continuation::Independent {
-                        top_level_path: vec![live_path[0]],
-                    },
-                }
-            };
+                    match nearest_list_item(ast, &live_path) {
+                        Some((list_path, item_index)) => {
+                            let prefix = line_prefix_before(working, leaf.source.start)?;
+                            Continuation::List {
+                                marker: prefix.to_string(),
+                                leaf_path: live_path,
+                                list_path,
+                                item_index,
+                            }
+                        }
+                        None => Continuation::Independent {
+                            top_level_path: vec![live_path[0]],
+                        },
+                    }
+                };
 
-            match continuation {
-                Continuation::List {
-                    marker,
-                    leaf_path,
-                    list_path,
-                    item_index,
-                } => {
-                    // The ListItem container span includes its following
-                    // siblings in pulldown-cmark's event ranges; the editable
-                    // leaf's end is the exact insertion boundary for this
-                    // item's visible content.
-                    let at = block_span(spans, &leaf_path)?.end;
-                    let new_source = splice::splice_source(
-                        working,
-                        at..at,
-                        &format!("\n{marker}{source}"),
-                    )
-                    .map_err(splice_error)?;
-                    let mut item_path = list_path;
-                    item_path.push(item_index.saturating_add(1));
-                    Ok((new_source, item_path))
+                match continuation {
+                    Continuation::List {
+                        marker,
+                        leaf_path,
+                        list_path,
+                        item_index,
+                    } => {
+                        // The ListItem container span includes its following
+                        // siblings in pulldown-cmark's event ranges; the editable
+                        // leaf's end is the exact insertion boundary for this
+                        // item's visible content.
+                        let at = block_span(spans, &leaf_path)?.end;
+                        let new_source =
+                            splice::splice_source(working, at..at, &format!("\n{marker}{source}"))
+                                .map_err(splice_error)?;
+                        let mut item_path = list_path;
+                        item_path.push(item_index.saturating_add(1));
+                        Ok((new_source, item_path))
+                    }
+                    Continuation::Independent { top_level_path } => {
+                        let next_top_level = top_level_path[0].saturating_add(1);
+                        let at = block_span(spans, &top_level_path)?.end;
+                        let before = working.get(..at).ok_or_else(|| {
+                            AppError::ParseError(format!("offset {at} is not addressable"))
+                        })?;
+                        let after = working.get(at..).ok_or_else(|| {
+                            AppError::ParseError(format!("offset {at} is not addressable"))
+                        })?;
+                        let newline = if before.contains('\n') {
+                            newline_style(before)
+                        } else {
+                            newline_style(working)
+                        };
+                        let mut text = separator_before(before, BLOCK_SEPARATOR_NEWLINES);
+                        text.push_str(source);
+                        let required_after = if after.is_empty() {
+                            1
+                        } else {
+                            BLOCK_SEPARATOR_NEWLINES
+                        };
+                        let existing_after = leading_newlines(after);
+                        text.push_str(&newline.repeat(required_after.saturating_sub(
+                            trailing_newlines(source).saturating_add(existing_after),
+                        )));
+                        Ok((
+                            splice::splice_source(working, at..at, &text).map_err(splice_error)?,
+                            vec![next_top_level],
+                        ))
+                    }
+                    Continuation::EmptyNote => {
+                        let newline = newline_style(working);
+                        Ok((format!("{source}{newline}"), vec![0]))
+                    }
                 }
-                Continuation::Independent { top_level_path } => {
-                    let next_top_level = top_level_path[0].saturating_add(1);
-                    let at = block_span(spans, &top_level_path)?.end;
-                    let before = working.get(..at).ok_or_else(|| {
-                        AppError::ParseError(format!("offset {at} is not addressable"))
-                    })?;
-                    let after = working.get(at..).ok_or_else(|| {
-                        AppError::ParseError(format!("offset {at} is not addressable"))
-                    })?;
-                    let newline = if before.contains('\n') {
-                        newline_style(before)
-                    } else {
-                        newline_style(working)
-                    };
-                    let mut text = separator_before(before, BLOCK_SEPARATOR_NEWLINES);
-                    text.push_str(source);
-                    let required_after = if after.is_empty() {
-                        1
-                    } else {
-                        BLOCK_SEPARATOR_NEWLINES
-                    };
-                    let existing_after = leading_newlines(after);
-                    text.push_str(&newline.repeat(required_after.saturating_sub(
-                        trailing_newlines(source).saturating_add(existing_after),
-                    )));
-                    Ok((
-                        splice::splice_source(working, at..at, &text).map_err(splice_error)?,
-                        vec![next_top_level],
-                    ))
-                }
-                Continuation::EmptyNote => {
-                    let newline = newline_style(working);
-                    Ok((format!("{source}{newline}"), vec![0]))
-                }
-            }
-        })?;
+            })?;
         let focus = self.first_editable_leaf_at(&focus_parent)?;
         Ok((state, focus))
     }
@@ -1244,9 +1231,6 @@ impl NoteSession {
                 )));
             };
             let at = span.start + byte_offset;
-            // The same seam consistency `insert_block` keeps, for the same
-            // reason: a blank line spelled `\n\n` inside a CRLF-authored Note is
-            // whitespace noise in a diff the user did not ask for.
             let before = working
                 .get(..at)
                 .ok_or_else(|| AppError::ParseError(format!("offset {at} is not addressable")))?;
@@ -1261,6 +1245,87 @@ impl NoteSession {
             ))
         })
         .map(|(state, ())| state)
+    }
+
+    /// Splits using the raw source and UTF-16 caret coordinate held by the
+    /// editor field. Unlike [`split_block`](Self::split_block), this retains
+    /// the caller's coordinate space when a buffered edit changed the AST
+    /// shape (for example a paragraph became a List). The returned focus path
+    /// and caret name the second half after Core reparses the splice.
+    pub fn split_block_from_editor_source(
+        &self,
+        block_path: &[usize],
+        editor_source: &str,
+        offset: usize,
+    ) -> Result<(NoteState, Vec<usize>, usize), AppError> {
+        let (state, (block_path, caret_offset)) = self.structural_edit(|working, spans, _, retained_spans| {
+            let retained = retained_spans.block(block_path).ok_or_else(|| {
+                AppError::ParseError(format!("no Block at block_path {block_path:?}"))
+            })?;
+            if !retained.is_leaf() {
+                return Err(AppError::ParseError(format!(
+                    "block_path {block_path:?} does not name an editable leaf"
+                )));
+            }
+            let retained_source = working.get(retained.source.clone()).ok_or_else(|| {
+                AppError::ParseError(format!(
+                    "source range {}..{} is not addressable in this Note",
+                    retained.source.start, retained.source.end
+                ))
+            })?;
+            if retained_source != editor_source {
+                return Err(AppError::ParseError(format!(
+                    "editor source no longer matches block_path {block_path:?}; refusing stale split"
+                )));
+            }
+            let Some(editor_byte_offset) = crate::markdown::spans::utf16_to_byte_offset(editor_source, offset) else {
+                return Err(AppError::ParseError(format!(
+                    "split UTF-16 offset {offset} is not a character boundary in block_path {block_path:?}"
+                )));
+            };
+            let live_path = editable_live_path(spans, retained_spans, block_path)?;
+            let span = block_span(spans, &live_path)?;
+            let field_relative_start = span.start.checked_sub(retained.source.start).ok_or_else(|| {
+                AppError::ParseError(format!(
+                    "live leaf {live_path:?} lies outside the editor source for block_path {block_path:?}"
+                ))
+            })?;
+            let field_relative_end = span.end.checked_sub(retained.source.start).ok_or_else(|| {
+                AppError::ParseError(format!(
+                    "live leaf {live_path:?} lies outside the editor source for block_path {block_path:?}"
+                ))
+            })?;
+            if editor_byte_offset < field_relative_start || editor_byte_offset > field_relative_end {
+                return Err(AppError::ParseError(format!(
+                    "split UTF-16 offset {offset} is outside the current editable leaf for block_path {block_path:?}"
+                )));
+            }
+            let at = span.start + (editor_byte_offset - field_relative_start);
+            // The same seam consistency `insert_block` keeps, for the same
+            // reason: a blank line spelled `\n\n` inside a CRLF-authored Note is
+            // whitespace noise in a diff the user did not ask for.
+            let before = working
+                .get(..at)
+                .ok_or_else(|| AppError::ParseError(format!("offset {at} is not addressable")))?;
+            let newline = if before.contains('\n') {
+                newline_style(before)
+            } else {
+                newline_style(working)
+            };
+            let separator = newline.repeat(2);
+            let new_source =
+                splice::splice_source(working, at..at, &separator).map_err(splice_error)?;
+            // Resolve against the post-splice parse before structural_edit
+            // installs anything, preserving its all-or-nothing error boundary.
+            let reparsed = parse_note(&new_source, containing_dir(&self.0.note_id));
+            let focus = editable_leaf_at_or_after_source_offset(
+                &new_source,
+                &reparsed.spans,
+                at + separator.len(),
+            )?;
+            Ok((new_source, focus))
+        })?;
+        Ok((state, block_path, caret_offset))
     }
 
     /// Merges a Block into its predecessor — Backspace at offset 0.
@@ -1312,17 +1377,7 @@ impl NoteSession {
                             "ListItem at block_path {previous_item_path:?} has no editable leaf"
                         ))
                             })?;
-                        let item_source =
-                            spans.block_source(working, &item_path).ok_or_else(|| {
-                                AppError::ParseError(format!(
-                                    "no ListItem at block_path {item_path:?}"
-                                ))
-                            })?;
-                        let marker = list_marker(item_source).ok_or_else(|| {
-                            AppError::ParseError(format!(
-                            "ListItem at block_path {item_path:?} has no repeatable Markdown marker"
-                        ))
-                        })?;
+                        let prefix = line_prefix_before(working, span.start)?;
                         let gap = working
                             .get(previous_leaf.source.end..span.start)
                             .ok_or_else(|| {
@@ -1331,7 +1386,7 @@ impl NoteSession {
                                     previous_leaf.source.end, span.start
                                 ))
                             })?;
-                        let expected_gap = format!("{}{marker}", newline_style(working));
+                        let expected_gap = format!("{}{prefix}", newline_style(working));
                         if gap == expected_gap {
                             let caret_offset = source_caret_before_trailing_newline(
                                 working.get(previous_leaf.source.clone()).ok_or_else(|| {
@@ -3067,6 +3122,38 @@ fn check_span(source: &str, span: &std::ops::Range<usize>) -> Result<(), AppErro
     Ok(())
 }
 
+/// Resolves a post-splice source position to the editable leaf that contains
+/// it, or to the next leaf when Markdown syntax occupies the immediate bytes
+/// before that leaf (for example the indentation after a new blank line).
+fn editable_leaf_at_or_after_source_offset(
+    source: &str,
+    spans: &SpanMap,
+    source_offset: usize,
+) -> Result<(Vec<usize>, usize), AppError> {
+    let leaf = spans
+        .blocks()
+        .filter(|block| block.is_leaf())
+        .filter(|block| {
+            (block.source.start <= source_offset && source_offset < block.source.end)
+                || block.source.start >= source_offset
+        })
+        .min_by_key(|block| block.source.start)
+        .ok_or_else(|| {
+            AppError::ParseError(format!(
+                "no editable leaf follows source offset {source_offset} after structural edit"
+            ))
+        })?;
+    let caret_source_offset = source_offset.max(leaf.source.start);
+    let prefix = source
+        .get(leaf.source.start..caret_source_offset)
+        .ok_or_else(|| {
+            AppError::ParseError(format!(
+                "source offset {caret_source_offset} is not addressable in the resulting leaf"
+            ))
+        })?;
+    Ok((leaf.path.clone(), prefix.encode_utf16().count()))
+}
+
 fn block_span(spans: &SpanMap, path: &[usize]) -> Result<std::ops::Range<usize>, AppError> {
     spans
         .block(path)
@@ -3189,18 +3276,19 @@ fn nearest_list_item(nodes: &[AstNode], path: &[usize]) -> Option<(Vec<usize>, u
     closest
 }
 
-fn list_marker(source: &str) -> Option<&str> {
-    let line = source.lines().next()?;
-    let indentation = line.len() - line.trim_start().len();
-    let rest = &line[indentation..];
-    if let Some(marker) = ["- ", "+ ", "* "]
-        .iter()
-        .find(|marker| rest.starts_with(**marker))
-    {
-        return Some(&line[..indentation + marker.len()]);
-    }
-    let digits = rest.find(|character: char| !character.is_ascii_digit())?;
-    (digits > 0 && rest[digits..].starts_with(". ")).then_some(&line[..indentation + digits + 2])
+/// The complete Markdown prefix on the line that introduces an editable list
+/// leaf. This deliberately includes enclosing blockquote markers and nested
+/// indentation, not merely the ListItem's own `- ` or `1. ` marker.
+fn line_prefix_before(source: &str, content_start: usize) -> Result<&str, AppError> {
+    let before = source.get(..content_start).ok_or_else(|| {
+        AppError::ParseError(format!("source offset {content_start} is not addressable"))
+    })?;
+    let line_start = before.rfind('\n').map_or(0, |newline| newline + 1);
+    source.get(line_start..content_start).ok_or_else(|| {
+        AppError::ParseError(format!(
+            "source line prefix {line_start}..{content_start} is not addressable"
+        ))
+    })
 }
 
 /// How many newlines a Block must be followed by for the next one to be a
@@ -4614,6 +4702,67 @@ mod tests {
     }
 
     #[test]
+    fn splitting_a_buffered_paragraph_promoted_to_a_list_uses_the_raw_field_coordinate() {
+        let f = fixture();
+        f.write("a.md", "plain\n");
+        let session = f.open("a");
+
+        let editor_source = "- alpha beta\n";
+        session.update_block(&[0], editor_source).unwrap();
+        let (state, focus, caret) = session
+            .split_block_from_editor_source(&[0], editor_source, "- alpha".encode_utf16().count())
+            .unwrap();
+
+        assert_eq!(*session.working_source().unwrap(), "- alpha\n\n beta\n");
+        assert_eq!(focus, vec![1]);
+        assert_eq!(caret, 0);
+        assert_eq!(session.block_source(&focus).unwrap(), "beta\n");
+        assert!(matches!(
+            state.ast.as_slice(),
+            [AstNode::List { .. }, AstNode::Paragraph { .. }]
+        ));
+    }
+
+    #[test]
+    fn splitting_a_buffered_list_source_rejects_a_non_bmp_surrogate_without_mutating() {
+        let f = fixture();
+        f.write("a.md", "plain\n");
+        let session = f.open("a");
+
+        let editor_source = "- 😀beta\n";
+        session.update_block(&[0], editor_source).unwrap();
+        let before = session.working_source().unwrap();
+        let refused = session.split_block_from_editor_source(&[0], editor_source, 3);
+
+        assert!(
+            matches!(refused, Err(AppError::ParseError(ref message)) if message.contains("not a character boundary"))
+        );
+        assert_eq!(*session.working_source().unwrap(), *before);
+    }
+
+    #[test]
+    fn splitting_a_buffered_list_source_at_its_non_bmp_boundary_returns_the_second_leaf() {
+        let f = fixture();
+        f.write("a.md", "plain\n");
+        let session = f.open("a");
+
+        let editor_source = "- 😀beta\n";
+        session.update_block(&[0], editor_source).unwrap();
+        let (state, focus, caret) = session
+            .split_block_from_editor_source(&[0], editor_source, 4)
+            .unwrap();
+
+        assert_eq!(*session.working_source().unwrap(), "- 😀\n\nbeta\n");
+        assert_eq!(focus, vec![1]);
+        assert_eq!(caret, 0);
+        assert_eq!(session.block_source(&focus).unwrap(), "beta\n");
+        assert!(matches!(
+            state.ast.as_slice(),
+            [AstNode::List { .. }, AstNode::Paragraph { .. }]
+        ));
+    }
+
+    #[test]
     fn continuing_after_a_nested_list_leaf_preserves_the_list_and_returns_its_new_leaf() {
         let f = fixture();
         f.write("a.md", "- alpha\n- beta\n");
@@ -4669,6 +4818,40 @@ mod tests {
         assert_eq!(caret_offset, "alpha".encode_utf16().count());
         assert_eq!(session.block_source(&focus).unwrap(), "alphabeta");
         assert!(matches!(state.ast.as_slice(), [AstNode::List { .. }]));
+    }
+
+    #[test]
+    fn continuing_a_list_inside_a_blockquote_repeats_the_full_container_prefix() {
+        let f = fixture();
+        f.write("a.md", "> - alpha\n> - beta\n");
+        let session = f.open("a");
+
+        let (state, focus) = session
+            .continue_block_after(&[0, 0, 0, 0], "middle")
+            .unwrap();
+
+        assert_eq!(
+            *session.working_source().unwrap(),
+            "> - alpha\n> - middle\n> - beta\n"
+        );
+        assert_eq!(focus, vec![0, 0, 1, 0]);
+        assert_eq!(session.block_source(&focus).unwrap(), "middle");
+        assert!(matches!(state.ast.as_slice(), [AstNode::Blockquote { .. }]));
+    }
+
+    #[test]
+    fn merging_a_list_inside_a_blockquote_preserves_the_quote_prefix_and_focus() {
+        let f = fixture();
+        f.write("a.md", "> - alpha\n> - beta\n");
+        let session = f.open("a");
+
+        let (state, focus, caret) = session.merge_block_with_previous(&[0, 0, 1, 0]).unwrap();
+
+        assert_eq!(*session.working_source().unwrap(), "> - alphabeta\n");
+        assert_eq!(focus, vec![0, 0, 0, 0]);
+        assert_eq!(caret, "alpha".encode_utf16().count());
+        assert_eq!(session.block_source(&focus).unwrap(), "alphabeta");
+        assert!(matches!(state.ast.as_slice(), [AstNode::Blockquote { .. }]));
     }
 
     #[test]

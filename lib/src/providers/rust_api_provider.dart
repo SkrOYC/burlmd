@@ -138,15 +138,20 @@ class RustApi {
     blockPath: Uint64List.fromList(blockPath),
   );
 
-  /// Splits a Block at a **source UTF-16** offset — pressing Enter mid-Block
-  /// (CAP-EDIT-03). This is Flutter's [TextSelection] coordinate space; Core
-  /// rejects a surrogate interior rather than treating it as a byte offset.
-  NoteState splitBlock(String noteId, List<int> blockPath, int offset) =>
-      ffi.splitBlock(
-        noteId: noteId,
-        blockPath: Uint64List.fromList(blockPath),
-        offset: BigInt.from(offset),
-      );
+  /// Splits a Block at a **source UTF-16** offset — pressing Enter mid-Block.
+  /// [source] is Flutter's raw field coordinate space; Core maps it through a
+  /// live reparse and returns the authoritative second-half focus.
+  ffi.StructuralEdit splitBlock(
+    String noteId,
+    List<int> blockPath,
+    String source,
+    int offset,
+  ) => ffi.splitBlock(
+    noteId: noteId,
+    blockPath: Uint64List.fromList(blockPath),
+    source: source,
+    offset: BigInt.from(offset),
+  );
 
   /// Merges a Block into its predecessor — Backspace at offset 0
   /// (CAP-EDIT-03), returning Core's reparsed predecessor leaf and caret.

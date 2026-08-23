@@ -737,16 +737,18 @@ pub fn delete_block(note_id: String, block_path: Vec<usize>) -> Result<NoteState
 }
 
 /// Splits a Block at a Flutter UTF-16 offset -- pressing Enter mid-Block
-/// (CAP-EDIT-03). `offset` is an offset into the focused Block's **source**
-/// text, not its rendered text. It uses exactly `TextSelection`'s UTF-16
-/// code-unit coordinate space; Core rejects an offset inside a surrogate pair
-/// rather than rounding it or treating it as a Rust byte offset.
+/// (CAP-EDIT-03). `source` and `offset` are the focused raw field's coordinate
+/// space, not rendered text or a reparsed leaf's source. Core validates that
+/// source against its buffered span, maps the coordinate to the current
+/// editable leaf, and rejects an offset inside a surrogate pair rather than
+/// rounding it or treating it as a Rust byte offset.
 #[frb(sync)]
 pub fn split_block(
     note_id: String,
     block_path: Vec<usize>,
+    source: String,
     offset: usize,
-) -> Result<NoteState, AppError> {
+) -> Result<StructuralEdit, AppError> {
     unimplemented!()
 }
 

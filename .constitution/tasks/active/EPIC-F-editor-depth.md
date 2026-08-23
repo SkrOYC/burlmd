@@ -56,7 +56,7 @@ And no file under lib or rust/src is modified by the Spike's own commit — thro
   - `test/components/editor_test.dart`
 - **Scope (Out-of-Scope Files):**
   - `lib/src/components/workspace_tree.dart`
-- **Verification Command:** `cargo test utf16_caret_resolution --lib --manifest-path rust/Cargo.toml && flutter_rust_bridge_codegen generate && flutter test test/components/editor_test.dart test/components/selection_test.dart test/components/lifecycle_actions_test.dart && BURLMD_SMOKE_F002=1 ./scripts/smoke-shot.sh f002-live-preview && dart analyze && git diff --check && ! rg -n '\[DEBUG-' lib rust test scripts`
+- **Verification Command:** `cargo test --lib --manifest-path rust/Cargo.toml && flutter_rust_bridge_codegen generate && flutter test test/components/editor_test.dart test/components/selection_test.dart test/components/lifecycle_actions_test.dart test/components/block_editing_test.dart && BURLMD_SMOKE_F002=1 ./scripts/smoke-shot.sh f002-live-preview && dart analyze && git diff --check && ! rg -n '\[DEBUG-' lib rust test scripts`
 - **Expected Success Output:** `exit 0`
 - **STOP Conditions:**
   - "STOP if the editable field renders formatted text rather than raw source; the whole point of this model is that the user sees and types real Markdown."
@@ -124,6 +124,7 @@ The last scenario exists because ADR-006 inherits the platform IME inside the fo
 - `test/components/selection_test.dart` — F002's container-promotion correction touched this otherwise F003-owned suite only to update its `RustApi` fake for the additive `resolve_block_caret` contract and to retain real rendered-selection coverage; no F003 acceptance criterion changed.
 - `test/components/block_editing_test.dart` — F002's structural-focus correction updates its Core fake and regressions because Enter, split, and Backspace now retain or re-derive real leaf paths after Core reparses; it does not change EDIT-F004 behavior or acceptance.
 - `.constitution/tech-spec/contracts/ffi_api.rs`, `rust/src/api/ffi_api.rs`, `rust/src/workspace/persist.rs`, `lib/src/providers/rust_api_provider.dart`, generated bindings, and `test/components/block_editing_test.dart` — P1 continuation correction: `continue_block_after` replaces the list-only surface. Core now inspects the AST, continues Lists as sibling items, exits Blockquotes into adjacent top-level Blocks, and returns the real leaf/caret in both cases; Flutter no longer dispatches from path length.
+- `.constitution/tech-spec/{contracts/ffi_api.rs,changelog.md}`, `rust/src/api/ffi_api.rs`, `rust/src/workspace/persist.rs`, `lib/src/providers/rust_api_provider.dart`, generated bindings, and `test/components/block_editing_test.dart` — P1 structural split/quoted-list correction: `split_block` now returns `StructuralEdit` and accepts the source string that owns Flutter's UTF-16 caret, so Core maps it through a live reparse and Flutter does not predict a successor path. Quoted-list continuation and merge repeat the complete source prefix (`> - `), with regressions at both Core and widget seams. The F002 gate now runs the full Rust library suite and `block_editing_test.dart` because these cross-layer structural contracts are no longer covered by the old UTF-16-only filter.
 
 #### EDIT-F003 Cross-Block Selection and Copy
 - **Type:** Feature

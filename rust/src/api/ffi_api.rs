@@ -445,18 +445,25 @@ pub fn delete_block(note_id: String, block_path: Vec<usize>) -> Result<NoteState
     open_session(&note_id)?.delete_block(&block_path)
 }
 
-/// Splits a Block at a Flutter **UTF-16** offset into its source -- pressing
-/// Enter mid-Block (CAP-EDIT-03). The focused Block displays raw source under
-/// ADR-006, so the caret position the UI reports is an offset into the Block's
-/// source rather than into its rendered text. A surrogate interior is refused;
-/// Core converts valid UTF-16 boundaries to its internal byte spans.
+/// Splits a Block at a Flutter **UTF-16** offset into the supplied raw editor
+/// source -- pressing Enter mid-Block (CAP-EDIT-03). `source` is the field's
+/// coordinate authority even when its buffered edit reshaped the live AST;
+/// Core maps that coordinate to the current leaf, reparses, and returns the
+/// authoritative second-half focus. A surrogate interior is refused.
 #[frb(sync)]
 pub fn split_block(
     note_id: String,
     block_path: Vec<usize>,
+    source: String,
     offset: usize,
-) -> Result<NoteState, AppError> {
-    open_session(&note_id)?.split_block(&block_path, offset)
+) -> Result<StructuralEdit, AppError> {
+    let (state, block_path, caret_offset) =
+        open_session(&note_id)?.split_block_from_editor_source(&block_path, &source, offset)?;
+    Ok(StructuralEdit {
+        state,
+        block_path,
+        caret_offset,
+    })
 }
 
 /// Merges a Block into its predecessor -- Backspace at offset 0
@@ -1436,9 +1443,9 @@ mod tests {
         // split_block also grows the Note by one, but by dividing an
         // existing Block rather than appending a new one — the combined text
         // of the two halves must still hold everything the original held.
-        let split = split_block("flow".to_string(), vec![1], 2).unwrap();
+        let split = split_block("flow".to_string(), vec![1], "Beta.\n".to_string(), 2).unwrap();
         assert_eq!(
-            split.ast.len(),
+            split.state.ast.len(),
             3,
             "split_block must produce one more Block"
         );

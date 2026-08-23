@@ -118,12 +118,24 @@ class _CoreFake extends RustApi {
   }
 
   @override
-  NoteState splitBlock(String noteId, List<int> blockPath, int offset) {
+  StructuralEdit splitBlock(
+    String noteId,
+    List<int> blockPath,
+    String source,
+    int offset,
+  ) {
     calls.add('split:${blockPath.first}:$offset');
     final block = blocks[blockPath.first];
+    if (source != block) {
+      throw StateError('split source must be the focused raw field');
+    }
     blocks[blockPath.first] = block.substring(0, offset);
     blocks.insert(blockPath.first + 1, block.substring(offset));
-    return state;
+    return StructuralEdit(
+      state: state,
+      blockPath: Uint64List.fromList([blockPath.first + 1]),
+      caretOffset: BigInt.zero,
+    );
   }
 
   @override
@@ -249,6 +261,83 @@ class _NestedListFake extends RustApi {
   }
 }
 
+/// A quoted list fixture: both continuation and merge must preserve the quote
+/// container and use Core's returned nested leaf rather than a guessed path.
+class _QuotedListFake extends RustApi {
+  final calls = <String>[];
+  List<int> promotedPath = [0, 0, 0, 0];
+  final sources = <String, String>{'0/0/0/0': 'alpha', '0/0/1/0': 'beta'};
+
+  NoteState _state(List<String> values) => NoteState(
+    ast: [
+      AstNode.blockquote(
+        nodes: [
+          AstNode.list(
+            ordered: false,
+            items: [
+              for (final value in values)
+                AstNode.listItem(content: [_paragraph(value)]),
+            ],
+          ),
+        ],
+      ),
+    ],
+    metadata: _CoreFake._meta,
+    baseRevision: 'head',
+    restoredFromDraft: false,
+  );
+
+  @override
+  BlockCaret resolveBlockCaret(
+    String noteId,
+    List<int> topLevelPath,
+    int offset,
+  ) => BlockCaret(
+    blockPath: Uint64List.fromList(promotedPath),
+    caretOffset: BigInt.zero,
+  );
+
+  @override
+  String getBlockSource(String noteId, List<int> path) =>
+      sources[path.join('/')]!;
+
+  @override
+  StructuralEdit continueBlockAfter(
+    String noteId,
+    List<int> path,
+    String source,
+  ) {
+    calls.add('continue:${path.join('/')}:$source');
+    if (path.join('/') != '0/0/0/0') {
+      throw StateError('quoted-list continuation must use the leaf path');
+    }
+    sources
+      ..['0/0/1/0'] = source
+      ..['0/0/2/0'] = 'beta';
+    return StructuralEdit(
+      state: _state(['alpha', source, 'beta']),
+      blockPath: Uint64List.fromList([0, 0, 1, 0]),
+      caretOffset: BigInt.from(source.length),
+    );
+  }
+
+  @override
+  StructuralEdit mergeBlockWithPrevious(String noteId, List<int> path) {
+    calls.add('merge:${path.join('/')}');
+    if (path.join('/') != '0/0/1/0') {
+      throw StateError('quoted-list merge must use the second item leaf path');
+    }
+    sources
+      ..['0/0/0/0'] = 'alphabeta'
+      ..remove('0/0/1/0');
+    return StructuralEdit(
+      state: _state(['alphabeta']),
+      blockPath: Uint64List.fromList([0, 0, 0, 0]),
+      caretOffset: BigInt.from('alpha'.length),
+    );
+  }
+}
+
 /// Models the one deliberate stale view between [RustApi.updateBlock] and a
 /// structural reparse: the editor still holds a paragraph AST while the Core
 /// working source has become a List. Enter must send the retained leaf path to
@@ -268,6 +357,21 @@ class _LiveShapeListFake extends RustApi {
           AstNode.listItem(content: [_paragraph('next')]),
         ],
       ),
+    ],
+    metadata: _CoreFake._meta,
+    baseRevision: 'head',
+    restoredFromDraft: false,
+  );
+
+  NoteState get splitState => NoteState(
+    ast: [
+      AstNode.list(
+        ordered: false,
+        items: [
+          AstNode.listItem(content: [_paragraph('alpha')]),
+        ],
+      ),
+      _paragraph('beta'),
     ],
     metadata: _CoreFake._meta,
     baseRevision: 'head',
@@ -299,6 +403,29 @@ class _LiveShapeListFake extends RustApi {
     }
     workingSource = source;
     sources['0'] = source;
+  }
+
+  @override
+  StructuralEdit splitBlock(
+    String noteId,
+    List<int> path,
+    String source,
+    int offset,
+  ) {
+    calls.add('split:${path.join('/')}:$offset:$source');
+    if (path.join('/') != '0' || source != '- alpha beta\n' || offset != 7) {
+      throw StateError('split must retain the stale raw field coordinate');
+    }
+    workingSource = '- alpha\n\n beta\n';
+    sources
+      ..remove('0')
+      ..['0/0/0'] = 'alpha'
+      ..['1'] = 'beta\n';
+    return StructuralEdit(
+      state: splitState,
+      blockPath: Uint64List.fromList([1]),
+      caretOffset: BigInt.zero,
+    );
   }
 
   @override
@@ -815,6 +942,26 @@ void main() {
     expect(_field(tester).controller.selection.baseOffset, 'next'.length);
   });
 
+  testWidgets('Enter mid-source after a paragraph became a List uses Core’s '
+      'authoritative split leaf instead of predicting a stale successor', (
+    tester,
+  ) async {
+    final api = _LiveShapeListFake();
+    await pumpEditor(tester, [_paragraph('plain')], api: api);
+
+    await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
+    await tester.enterText(_writableFields().first, '- alpha beta\n');
+    await tester.pump();
+    await placeCaret(tester, 7);
+    await pressKey(tester, LogicalKeyboardKey.enter);
+
+    expect(api.calls, ['update:0:- alpha beta\n', 'split:0:7:- alpha beta\n']);
+    expect(api.workingSource, '- alpha\n\n beta\n');
+    expect(_field(tester).controller.text, 'beta\n');
+    expect(_field(tester).controller.selection.baseOffset, 0);
+    expect(_field(tester).focusNode.hasFocus, isTrue);
+  });
+
   testWidgets('Enter at a nested blockquote leaf lets Core exit the quote and '
       'focus its returned top-level leaf', (tester) async {
     final api = _NestedBlockquoteFake();
@@ -843,6 +990,37 @@ void main() {
     await pressKey(tester, LogicalKeyboardKey.backspace);
 
     expect(api.calls, ['merge:0/1/0']);
+    expect(_field(tester).controller.text, 'alphabeta');
+    expect(_field(tester).controller.selection.baseOffset, 'alpha'.length);
+  });
+
+  testWidgets('quoted-list continuation focuses Core’s returned nested leaf', (
+    tester,
+  ) async {
+    final api = _QuotedListFake();
+    await pumpEditor(tester, api._state(['alpha', 'beta']).ast, api: api);
+
+    await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
+    await placeCaret(tester, 'alpha'.length);
+    await pressKey(tester, LogicalKeyboardKey.enter);
+    await tester.enterText(_writableFields().first, 'middle');
+    await tester.pump();
+
+    expect(api.calls, ['continue:0/0/0/0:middle']);
+    expect(_field(tester).controller.text, 'middle');
+    expect(_field(tester).controller.selection.baseOffset, 'middle'.length);
+  });
+
+  testWidgets('quoted-list Backspace focuses Core’s merged predecessor leaf', (
+    tester,
+  ) async {
+    final api = _QuotedListFake()..promotedPath = [0, 0, 1, 0];
+    await pumpEditor(tester, api._state(['alpha', 'beta']).ast, api: api);
+    await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
+    await placeCaret(tester, 0);
+    await pressKey(tester, LogicalKeyboardKey.backspace);
+
+    expect(api.calls, ['merge:0/0/1/0']);
     expect(_field(tester).controller.text, 'alphabeta');
     expect(_field(tester).controller.selection.baseOffset, 'alpha'.length);
   });

@@ -244,6 +244,7 @@ class EditorState extends ConsumerState<Editor> {
               _handleEnterRequested(focused.path, source, caret),
           onBackspaceAtStart: () => _handleBackspaceAtStart(focused.path),
           onFocusLost: _handleFieldBlur,
+          onCommitEligibilityChanged: _handleCommitEligibilityChanged,
         ),
       );
     }
@@ -277,6 +278,13 @@ class EditorState extends ConsumerState<Editor> {
         _pathEquals(_focused!.path, topLevelPath)) {
       return;
     }
+    // An overlapping IME/external rewrite has no safe automatic winner.
+    // Keep the conflicted raw field mounted and its exact local bytes
+    // copyable; neither a pointer nor keyboard promotion may erase it by
+    // committing or replacing the session. The only recovery is explicit:
+    // copy the local branch, then deliberately leave the note rather than
+    // silently choosing either version here.
+    if (!_canReplaceFocusedSession) return;
     // Moving focus between Blocks commits the outgoing one first: its last
     // buffered text must reach the working source before anything else
     // reads the Note, and blur is the commit point (ADR-006, ADR-008).
@@ -329,6 +337,17 @@ class EditorState extends ConsumerState<Editor> {
     _commitFocused();
   }
 
+  /// Mirrors [BlockEditor]'s conflict guard at the owner of focus state.
+  /// The token prevents a stale, just-disposed field generation from changing
+  /// the eligibility of a newer session at the same structural path.
+  void _handleCommitEligibilityChanged(int focusToken, bool canCommit) {
+    final focused = _focused;
+    if (focused == null || focused.token != focusToken) return;
+    focused.canCommit = canCommit;
+  }
+
+  bool get _canReplaceFocusedSession => _focused?.canCommit ?? true;
+
   /// Commits the focused Block through `commit_block`: the Core reparses its
   /// working source, rebuilds the span map, and returns the authoritative
   /// state, which is adopted wholesale. Focus is then cleared rather than
@@ -338,7 +357,7 @@ class EditorState extends ConsumerState<Editor> {
   /// itself.
   void _commitFocused() {
     final focused = _focused;
-    if (focused == null) return;
+    if (focused == null || !focused.canCommit) return;
     setState(() {
       _focused = null;
       // Do not retain a range that crossed the field while it was focused.
@@ -404,15 +423,6 @@ class EditorState extends ConsumerState<Editor> {
         _ => [path],
       };
 
-  static List<int>? _nextLeafPath(NoteState state, List<int> path) {
-    final leaves = _leafPaths(state.ast);
-    final current = leaves.indexWhere(
-      (candidate) => _pathEquals(candidate, path),
-    );
-    if (current >= 0 && current + 1 < leaves.length) return leaves[current + 1];
-    return null;
-  }
-
   static List<int>? _previousLeafPath(NoteState state, List<int> path) {
     final leaves = _leafPaths(state.ast);
     final current = leaves.indexWhere(
@@ -458,6 +468,7 @@ class EditorState extends ConsumerState<Editor> {
         onBackspaceAtStart: () {},
         onPhantomInsert: _handlePhantomInsert,
         onFocusLost: _handleFieldBlur,
+        onCommitEligibilityChanged: _handleCommitEligibilityChanged,
       ),
     );
   }
@@ -469,6 +480,7 @@ class EditorState extends ConsumerState<Editor> {
   void _handleEnterRequested(List<int> blockPath, String source, int caret) {
     final focused = _focused;
     if (focused == null ||
+        !focused.canCommit ||
         focused.isPhantom ||
         !_pathEquals(focused.path, blockPath)) {
       return;
@@ -501,21 +513,24 @@ class EditorState extends ConsumerState<Editor> {
     }
     try {
       final api = ref.read(rustApiProvider);
-      final newState = api.splitBlock(note.metadata.id, blockPath, clamped);
+      final structural = api.splitBlock(
+        note.metadata.id,
+        blockPath,
+        source,
+        clamped,
+      );
+      final newState = structural.state;
       ref.read(activeNoteProvider.notifier).adopt(newState);
-      final secondPath = _nextLeafPath(newState, blockPath);
-      if (secondPath == null) {
-        throw StateError(
-          'Core split returned no editable successor for $blockPath',
-        );
-      }
+      final secondPath = structural.blockPath
+          .map((part) => part.toInt())
+          .toList();
       final secondHalf = api.getBlockSource(note.metadata.id, secondPath);
       setState(() {
         _focused = _Focus(
           noteId: note.metadata.id,
           path: secondPath,
           source: secondHalf,
-          caret: 0,
+          caret: structural.caretOffset.toInt().clamp(0, secondHalf.length),
           lastSeenState: newState,
         );
       });
@@ -538,7 +553,7 @@ class EditorState extends ConsumerState<Editor> {
     // MID-document, when Enter was pressed at the end of a non-final
     // Block), or the empty Note's ever-present first line, where no focus
     // session exists yet.
-    if (focused != null && !focused.isPhantom) return;
+    if (focused != null && (!focused.canCommit || !focused.isPhantom)) return;
     if (focused == null && note.ast.isNotEmpty) return;
     // Empty Notes have no leaf to anchor, so `[0]` is the documented append
     // sentinel. Every non-empty Note retains the actual Core leaf path.
@@ -576,6 +591,7 @@ class EditorState extends ConsumerState<Editor> {
   /// returns the predecessor leaf and raw-source UTF-16 join offset, rather
   /// than asking Flutter to predict either from a tree it just invalidated.
   void _handleBackspaceAtStart(List<int> blockPath) {
+    if (!_canReplaceFocusedSession) return;
     final note = ref.read(activeNoteProvider);
     if (note == null) return;
     if (_previousLeafPath(note, blockPath) == null) return;
@@ -902,6 +918,11 @@ class _Focus {
   NoteState lastSeenState;
 
   int resyncToken = 0;
+
+  /// False only after BlockEditor detects an overlapping IME/external resync.
+  /// While false, promotion, blur commit, and structural edits are no-ops so
+  /// the conflicted raw field remains available for the user to copy.
+  bool canCommit = true;
 
   /// True while this focus names the sanctioned empty phantom Block
   /// (`EDIT-F004`): UI-side caret state only, never committed, never

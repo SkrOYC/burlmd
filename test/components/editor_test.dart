@@ -1074,6 +1074,130 @@ void main() {
     expect(api.commitCount, 0);
   });
 
+  testWidgets('a conflicted field survives pointer promotion of another '
+      'Block without committing either branch', (tester) async {
+    final api = _FakeRustApi()
+      ..sources['0'] = 'base'
+      ..sources['1'] = 'other';
+    final container = await pumpEditor(tester, [
+      _plainParagraph('base'),
+      _plainParagraph('other'),
+    ], api: api);
+    await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
+
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(
+        text: 'base中',
+        composing: TextRange(start: 4, end: 5),
+        selection: TextSelection.collapsed(offset: 5),
+      ),
+    );
+    await tester.pump();
+    api.sources['0'] = 'base!';
+    container.read(activeNoteProvider.notifier).state = _testNoteState([
+      _plainParagraph('base!'),
+      _plainParagraph('other'),
+    ]);
+    await tester.pump();
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(
+        text: 'base中',
+        selection: TextSelection.collapsed(offset: 5),
+      ),
+    );
+    await tester.pump();
+    final writesAtConflict = api.updateCount;
+
+    await promoteByTap(tester, find.byKey(const ValueKey('block-1')));
+
+    expect(_writableFields(), findsOneWidget);
+    expect(_field(tester).controller.text, 'base中');
+    expect(api.commitCount, 0);
+    expect(api.updateCount, writesAtConflict);
+    expect(api.sources['0'], 'base!');
+    expect(container.read(keystrokeWriteFailureProvider), isA<StateError>());
+  });
+
+  testWidgets('a conflicted field survives keyboard promotion of another '
+      'rendered Block without committing either branch', (tester) async {
+    final api = _FakeRustApi()
+      ..sources['0'] = 'base'
+      ..sources['1'] = 'other';
+    final container = await pumpEditor(tester, [
+      _plainParagraph('base'),
+      _plainParagraph('other'),
+    ], api: api);
+    await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
+
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(
+        text: 'base中',
+        composing: TextRange(start: 4, end: 5),
+        selection: TextSelection.collapsed(offset: 5),
+      ),
+    );
+    await tester.pump();
+    api.sources['0'] = 'base!';
+    container.read(activeNoteProvider.notifier).state = _testNoteState([
+      _plainParagraph('base!'),
+      _plainParagraph('other'),
+    ]);
+    await tester.pump();
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(
+        text: 'base中',
+        selection: TextSelection.collapsed(offset: 5),
+      ),
+    );
+    await tester.pump();
+    final writesAtConflict = api.updateCount;
+
+    Focus.of(
+      tester.element(
+        find
+            .descendant(
+              of: find.byKey(const ValueKey('block-1')),
+              matching: find.byType(Semantics),
+            )
+            .first,
+      ),
+    ).requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+    await tester.pump();
+
+    expect(_writableFields(), findsOneWidget);
+    expect(_field(tester).controller.text, 'base中');
+    expect(api.commitCount, 0);
+    expect(api.updateCount, writesAtConflict);
+    expect(api.sources['0'], 'base!');
+    expect(container.read(keystrokeWriteFailureProvider), isA<StateError>());
+  });
+
+  testWidgets('an eligible focused Block still commits before pointer '
+      'promotion of another Block', (tester) async {
+    final api = _FakeRustApi()
+      ..sources['0'] = 'first'
+      ..sources['1'] = 'second'
+      ..commitResult = _testNoteState([
+        _plainParagraph('first'),
+        _plainParagraph('second'),
+      ]);
+    await pumpEditor(tester, [
+      _plainParagraph('first'),
+      _plainParagraph('second'),
+    ], api: api);
+    await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
+
+    await promoteByTap(tester, find.byKey(const ValueKey('block-1')));
+
+    expect(api.commitCount, 1);
+    expect(api.committedPaths.single, [0]);
+    expect(_writableFields(), findsOneWidget);
+    expect(_field(tester).controller.text, 'second');
+  });
+
   // -- Keystroke round trip -------------------------------------------------
 
   testWidgets(

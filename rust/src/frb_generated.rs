@@ -1232,11 +1232,16 @@ fn wire__crate__api__ffi_api__split_block_impl(
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_note_id = <String>::sse_decode(&mut deserializer);
             let api_block_path = <Vec<usize>>::sse_decode(&mut deserializer);
+            let api_source = <String>::sse_decode(&mut deserializer);
             let api_offset = <usize>::sse_decode(&mut deserializer);
             deserializer.end();
             transform_result_sse::<_, crate::error::AppError>((move || {
-                let output_ok =
-                    crate::api::ffi_api::split_block(api_note_id, api_block_path, api_offset)?;
+                let output_ok = crate::api::ffi_api::split_block(
+                    api_note_id,
+                    api_block_path,
+                    api_source,
+                    api_offset,
+                )?;
                 Ok(output_ok)
             })())
         },
