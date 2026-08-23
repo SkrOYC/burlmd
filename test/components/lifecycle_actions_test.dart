@@ -65,6 +65,11 @@ class _LifecycleApi extends RustApi {
   /// probe for the focus-refresh criterion.
   String? lastUpdateBlockSource;
 
+  /// Every Core session that received a buffered source update. Rekey tests
+  /// use this to prove a retained IME field never writes through its old,
+  /// dead identity after lifecycle adoption.
+  final List<String> updateBlockNoteIds = [];
+
   /// Staged sources `getBlockSource` returns per `"i,j"` path key, one per
   /// fetch (consumed front-first), letting a test stage distinct pre- and
   /// post-rewrite bytes for successive reads of the same Block.
@@ -104,6 +109,7 @@ class _LifecycleApi extends RustApi {
   @override
   void updateBlock(String noteId, List<int> blockPath, String newSource) {
     calls.add('updateBlock:$noteId');
+    updateBlockNoteIds.add(noteId);
     lastUpdateBlockSource = newSource;
   }
 
@@ -1838,7 +1844,302 @@ void main() {
     await tester.pump();
     expect(api.lastUpdateBlockSource, 'base中');
   });
+
+  // -- IME continuity across lifecycle rekeys ------------------------------
+
+  for (final fixture in _rekeyFixtures) {
+    for (final completion in _ImeCompletion.values) {
+      testWidgets(
+        '${fixture.description} keeps a ${completion.description} IME '
+        'composition on the carried Core session',
+        (tester) async {
+          const base = 'cursor base';
+          const candidate = '中cursor base';
+          const rebased = '中cursor base!';
+          final authoritative = completion == _ImeCompletion.live
+              ? 'cursor base!'
+              : rebased;
+          final returned = stateFor(
+            fixture.newId,
+            ast: [paragraph(authoritative)],
+          );
+          final api = _LifecycleApi();
+          fixture.configure(api, returned);
+          late ProviderContainer container;
+          await tester.pumpWidget(
+            ProviderScope(
+              overrides: [rustApiProvider.overrideWithValue(api)],
+              child: Consumer(
+                builder: (context, ref, _) {
+                  container = ProviderScope.containerOf(context);
+                  return MaterialApp(
+                    localizationsDelegates:
+                        AppLocalizations.localizationsDelegates,
+                    supportedLocales: AppLocalizations.supportedLocales,
+                    home: const Scaffold(body: Editor()),
+                  );
+                },
+              ),
+            ),
+          );
+          addTearDown(container.dispose);
+          container
+              .read(activeNoteProvider.notifier)
+              .adopt(stateFor(fixture.oldId, ast: [paragraph(base)]));
+          container.read(selectedNoteIdProvider.notifier).select(fixture.oldId);
+          api.stagedBlockSources['0'] = [base, authoritative];
+          await tester.pumpAndSettle();
+          await tester.tap(find.byKey(const ValueKey('block-0')));
+          await tester.pumpAndSettle();
+
+          final field = find.byWidgetPredicate(
+            (widget) => widget is EditableText && !widget.readOnly,
+          );
+          tester.testTextInput.updateEditingValue(
+            const TextEditingValue(
+              text: candidate,
+              composing: TextRange(start: 0, end: 1),
+              selection: TextSelection.collapsed(offset: 1),
+            ),
+          );
+          await tester.pump();
+          if (completion == _ImeCompletion.completed) {
+            tester.testTextInput.updateEditingValue(
+              const TextEditingValue(
+                text: candidate,
+                selection: TextSelection.collapsed(offset: 1),
+              ),
+            );
+            await tester.pump();
+          }
+
+          await fixture.invoke(container.read(lifecycleActionsProvider));
+          await tester.pump();
+
+          // A rekey retains the exact same raw field and focus. For a live
+          // candidate, the field still exposes Flutter's non-empty composing
+          // range until the IME explicitly completes it.
+          expect(
+            container.read(activeNoteProvider)!.metadata.id,
+            fixture.newId,
+          );
+          expect(field, findsOneWidget);
+          expect(tester.widget<EditableText>(field).focusNode.hasFocus, isTrue);
+          expect(
+            tester.widget<EditableText>(field).controller.selection,
+            const TextSelection.collapsed(offset: 1),
+          );
+          if (completion == _ImeCompletion.live) {
+            expect(
+              tester.widget<EditableText>(field).controller.value.composing,
+              const TextRange(start: 0, end: 1),
+            );
+            tester.testTextInput.updateEditingValue(
+              const TextEditingValue(
+                text: candidate,
+                selection: TextSelection.collapsed(offset: 1),
+              ),
+            );
+            await tester.pump();
+            await tester.pump();
+          }
+
+          expect(tester.widget<EditableText>(field).controller.text, rebased);
+          expect(
+            tester.widget<EditableText>(field).controller.value.composing,
+            TextRange.empty,
+          );
+          await tester.enterText(field, '$rebased next');
+          await tester.pump();
+          expect(api.lastUpdateBlockSource, '$rebased next');
+          expect(api.updateBlockNoteIds.last, fixture.newId);
+          expect(
+            api.updateBlockNoteIds.skipWhile((id) => id == fixture.oldId),
+            isNot(contains(fixture.oldId)),
+            reason: 'no post-rekey update may address the old Core session',
+          );
+        },
+      );
+    }
+  }
+
+  testWidgets('a lifecycle rekey retains an IME resync conflict for copying', (
+    WidgetTester tester,
+  ) async {
+    const oldId = 'Projects/Note';
+    const newId = 'Projects/Renamed';
+    final api = _LifecycleApi()
+      ..renameNoteResult = (
+        stateFor(newId, ast: [paragraph('base!')]),
+        effects(),
+      );
+    late ProviderContainer container;
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [rustApiProvider.overrideWithValue(api)],
+        child: Consumer(
+          builder: (context, ref, _) {
+            container = ProviderScope.containerOf(context);
+            return MaterialApp(
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: const Scaffold(body: Editor()),
+            );
+          },
+        ),
+      ),
+    );
+    addTearDown(container.dispose);
+    container
+        .read(activeNoteProvider.notifier)
+        .adopt(stateFor(oldId, ast: [paragraph('base')]));
+    container.read(selectedNoteIdProvider.notifier).select(oldId);
+    api.stagedBlockSources['0'] = ['base', 'base!'];
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('block-0')));
+    await tester.pumpAndSettle();
+    final field = find.byWidgetPredicate(
+      (widget) => widget is EditableText && !widget.readOnly,
+    );
+
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(
+        text: 'base中',
+        composing: TextRange(start: 4, end: 5),
+        selection: TextSelection.collapsed(offset: 5),
+      ),
+    );
+    await tester.pump();
+    await container.read(lifecycleActionsProvider).renameNote(oldId, 'Renamed');
+    await tester.pump();
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(
+        text: 'base中',
+        selection: TextSelection.collapsed(offset: 5),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(container.read(activeNoteProvider)!.metadata.id, newId);
+    expect(field, findsOneWidget);
+    expect(tester.widget<EditableText>(field).controller.text, 'base中');
+    expect(tester.widget<EditableText>(field).focusNode.hasFocus, isTrue);
+    expect(container.read(keystrokeWriteFailureProvider), isA<StateError>());
+    expect(api.updateBlockNoteIds, everyElement(oldId));
+  });
+
+  testWidgets('ordinary navigation still discards a focused composition', (
+    WidgetTester tester,
+  ) async {
+    final api = _LifecycleApi();
+    late ProviderContainer container;
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [rustApiProvider.overrideWithValue(api)],
+        child: Consumer(
+          builder: (context, ref, _) {
+            container = ProviderScope.containerOf(context);
+            return MaterialApp(
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: const Scaffold(body: Editor()),
+            );
+          },
+        ),
+      ),
+    );
+    addTearDown(container.dispose);
+    container
+        .read(activeNoteProvider.notifier)
+        .adopt(stateFor('A', ast: [paragraph('base')]));
+    container.read(selectedNoteIdProvider.notifier).select('A');
+    api.stagedBlockSources['0'] = ['base'];
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('block-0')));
+    await tester.pumpAndSettle();
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(
+        text: 'base中',
+        composing: TextRange(start: 4, end: 5),
+        selection: TextSelection.collapsed(offset: 5),
+      ),
+    );
+    await tester.pump();
+
+    container
+        .read(activeNoteProvider.notifier)
+        .adopt(stateFor('B', ast: [paragraph('unrelated note')]));
+    container.read(selectedNoteIdProvider.notifier).select('B');
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byWidgetPredicate(
+        (widget) => widget is EditableText && !widget.readOnly,
+      ),
+      findsNothing,
+    );
+    expect(find.text('unrelated note'), findsOneWidget);
+    expect(api.updateBlockNoteIds, ['A']);
+  });
 }
+
+enum _ImeCompletion {
+  live('live'),
+  completed('completed');
+
+  const _ImeCompletion(this.description);
+
+  final String description;
+}
+
+class _RekeyFixture {
+  const _RekeyFixture({
+    required this.description,
+    required this.oldId,
+    required this.newId,
+    required this.configure,
+    required this.invoke,
+  });
+
+  final String description;
+  final String oldId;
+  final String newId;
+  final void Function(_LifecycleApi api, NoteState returned) configure;
+  final Future<LifecycleOutcome> Function(LifecycleActions actions) invoke;
+}
+
+final _rekeyFixtures = [
+  _RekeyFixture(
+    description: 'a successful note rename',
+    oldId: 'Projects/Note',
+    newId: 'Projects/Renamed',
+    configure: (api, returned) => api.renameNoteResult = (returned, effects()),
+    invoke: (actions) => actions.renameNote('Projects/Note', 'Renamed'),
+  ),
+  _RekeyFixture(
+    description: 'a successful note move',
+    oldId: 'Projects/Note',
+    newId: 'Archive/Note',
+    configure: (api, returned) => api.moveNoteResult = (returned, effects()),
+    invoke: (actions) => actions.moveNote('Projects/Note', 'Archive'),
+  ),
+  _RekeyFixture(
+    description: 'a successful containing-directory rename',
+    oldId: 'Projects/Note',
+    newId: 'Renamed/Note',
+    configure: (api, returned) {
+      api
+        ..renameDirectoryResult = effects(
+          remapped: const [
+            IdRemap(oldId: 'Projects/Note', newId: 'Renamed/Note'),
+          ],
+        )
+        ..openStates = {'Renamed/Note': returned};
+    },
+    invoke: (actions) => actions.renameDirectory('Projects', 'Renamed'),
+  ),
+];
 
 /// Harness exposing the underlying [ProviderContainer] while keeping the
 /// overrides in one place.

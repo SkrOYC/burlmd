@@ -170,6 +170,19 @@ class EditorState extends ConsumerState<Editor> {
     // clear both its selectables and the Note-authoritative Select All marker.
     ref.listen<NoteState?>(activeNoteProvider, (previous, next) {
       if (!identical(previous, next)) _invalidateRenderedRange();
+      // Provider listeners run at the synchronous adoption boundary, whereas
+      // this widget's build can run after the lifecycle future releases its
+      // gate. Capture a same-session rekey here while the gate still names
+      // the lifecycle owner; waiting until the build below would make a
+      // successful rename indistinguishable from ordinary navigation.
+      final focused = _focused;
+      if (focused != null &&
+          previous?.metadata.id == focused.noteId &&
+          next != null &&
+          next.metadata.id != focused.noteId &&
+          ref.read(lifecycleEditingProvider) > 0) {
+        focused.noteId = next.metadata.id;
+      }
     });
     ref.listen<bool>(editorInputBlockedProvider, (_, inputBlocked) {
       if (inputBlocked) _closeRangeInput();
@@ -200,15 +213,25 @@ class EditorState extends ConsumerState<Editor> {
     if (_rangeInputClient != null && !_isRangeStateCurrent()) {
       _invalidateRenderedRange();
     }
-    // A different Note opened while a Block was focused: drop focus rather
-    // than carry the edit session across. Refetching by path would be wrong
-    // here — a same-indexed Block in the new Note is not the Block the user
-    // was editing, and silently retargeting focus at it would point the
-    // buffered keystrokes of one Note at another's source row.
+    // A different Note opened while a Block was focused normally drops focus:
+    // refetching by path would be wrong here — a same-indexed Block in the
+    // new Note is not the Block the user was editing, and silently retargeting
+    // focus at it would point buffered keystrokes at another Note's source
+    // row. A lifecycle rekey is the narrow exception. Rename, move, and a
+    // containing-directory rename carry this exact Core session forward under
+    // a new concept id while the lifecycle gate remains held. Keep the field
+    // mounted through that transition so its IME composition and deferred
+    // resync can reconcile with the authoritative source below; rekeying the
+    // focus before that refetch also ensures every subsequent buffer write
+    // addresses the new Core session rather than the dead id.
     if (_focused != null && _focused!.noteId != note.metadata.id) {
       _closeRangeInput();
-      _focused = null;
-      _selectionBrokers.clear();
+      if (ref.read(lifecycleEditingProvider) > 0) {
+        _focused!.noteId = note.metadata.id;
+      } else {
+        _focused = null;
+        _selectionBrokers.clear();
+      }
     }
     // Brokers past the end of the AST (a commit shrank the Note) are dead
     // weight; their selectables unregister themselves on dispose.
@@ -1957,10 +1980,11 @@ class _Focus {
   /// share a path — a phantom converting to a real Block at the same index.
   final int token;
 
-  /// The Note this focus belongs to. Focus never survives an open-note
-  /// switch: paths address Blocks within one Note, and a new Note's
-  /// same-indexed Block is a different Block.
-  final String noteId;
+  /// The Core session this focus belongs to. It is rekeyed only while a
+  /// lifecycle action carries the same open session through a rename, move,
+  /// or containing-directory rename. Focus never survives ordinary navigation:
+  /// a same-indexed Block in a newly opened Note is a different Block.
+  String noteId;
 
   final List<int> path;
   String source;
