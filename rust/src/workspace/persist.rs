@@ -1449,24 +1449,40 @@ impl NoteSession {
     }
 
     /// Deletes a multi-Block selection (ADR-006 decision 3).
-    pub fn delete_range(&self, range: &RenderedRange) -> Result<NoteState, AppError> {
+    pub fn delete_range(
+        &self,
+        range: &RenderedRange,
+    ) -> Result<(NoteState, RangeEditLocation), AppError> {
         self.replace_range(range, "")
     }
 
-    /// Replaces a multi-Block selection with text.
+    /// Replaces a multi-Block selection with text and derives the caret from
+    /// the resulting parse, never from the source tree the replacement
+    /// invalidates.
     pub fn replace_range(
         &self,
         range: &RenderedRange,
         replacement: &str,
-    ) -> Result<NoteState, AppError> {
-        self.structural_edit(|working, spans, _, _| {
-            let resolved = splice::resolve_range(working, spans, range).map_err(splice_error)?;
-            Ok((
-                splice::splice_source(working, resolved, replacement).map_err(splice_error)?,
-                (),
-            ))
-        })
-        .map(|(state, ())| state)
+    ) -> Result<(NoteState, RangeEditLocation), AppError> {
+        self.structural_edit_with_result(
+            |working, spans, _, _| {
+                let resolved =
+                    splice::resolve_range(working, spans, range).map_err(splice_error)?;
+                let join = resolved
+                    .start
+                    .checked_add(replacement.len())
+                    .ok_or_else(|| {
+                        AppError::ParseError(
+                            "range replacement join overflowed source offset".to_string(),
+                        )
+                    })?;
+                Ok((
+                    splice::splice_source(working, resolved, replacement).map_err(splice_error)?,
+                    join,
+                ))
+            },
+            |source, spans, _, join| range_edit_caret(source, spans, join),
+        )
     }
 
     /// The Markdown a multi-Block selection covers — a slice of the Note, never
@@ -1496,6 +1512,18 @@ impl NoteSession {
         &self,
         edit: impl Fn(&str, &SpanMap, &[AstNode], &SpanMap) -> Result<(String, T), AppError>,
     ) -> Result<(NoteState, T), AppError> {
+        self.structural_edit_with_result(edit, |_, _, _, result| Ok(result))
+    }
+
+    /// The structural transaction with a result derived from the one
+    /// post-splice parse. This is used when a result is meaningful only in the
+    /// new tree (for example the range-edit caret), while preserving the
+    /// snapshot/retry/install/draft sequence shared by every structural edit.
+    fn structural_edit_with_result<T, U>(
+        &self,
+        edit: impl Fn(&str, &SpanMap, &[AstNode], &SpanMap) -> Result<(String, T), AppError>,
+        derive_result: impl Fn(&str, &SpanMap, &[AstNode], T) -> Result<U, AppError>,
+    ) -> Result<(NoteState, U), AppError> {
         loop {
             let (source, retained_spans, seq) = {
                 let state = self.lock_state()?;
@@ -1518,6 +1546,7 @@ impl NoteSession {
             let ParsedNote { mut ast, spans } =
                 parse_note(&new_source, containing_dir(&self.0.note_id));
             self.resolve_links(&mut ast)?;
+            let result = derive_result(&new_source, &spans, &ast, result)?;
 
             let (snapshot, new_seq) = {
                 let mut guard = self.lock_state()?;
@@ -3178,6 +3207,81 @@ fn check_span(source: &str, span: &std::ops::Range<usize>) -> Result<(), AppErro
     Ok(())
 }
 
+/// The Core-owned postcondition of a range replacement. It deliberately lives
+/// in the persistence domain rather than the FFI module, which is only a
+/// wrapper over this transaction.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RangeEditLocation {
+    Block {
+        block_path: Vec<usize>,
+        source_offset_utf16: usize,
+    },
+    Phantom {
+        insertion_index: usize,
+    },
+}
+
+/// Resolves the exact source join after a range replacement against the span
+/// map built from the replacement's resulting source. A join can fall in
+/// Markdown syntax which is not part of an editable leaf (a list marker or a
+/// block separator); in that case the nearest actual leaf is chosen without
+/// inventing a path or source offset. If no editable leaf remains, the caller
+/// must focus the existing phantom insertion slot instead.
+fn range_edit_caret(
+    source: &str,
+    spans: &SpanMap,
+    join: usize,
+) -> Result<RangeEditLocation, AppError> {
+    if join > source.len() || !source.is_char_boundary(join) {
+        return Err(AppError::ParseError(format!(
+            "range replacement join {join} is not a source character boundary"
+        )));
+    }
+
+    let leaves: Vec<_> = spans.blocks().filter(|block| block.is_leaf()).collect();
+    let leaf = leaves
+        .iter()
+        .copied()
+        .filter(|block| block.source.start <= join && join <= block.source.end)
+        .max_by_key(|block| block.source.start)
+        .or_else(|| {
+            leaves
+                .iter()
+                .copied()
+                .filter(|block| block.source.start >= join)
+                .min_by_key(|block| block.source.start)
+        })
+        .or_else(|| {
+            leaves
+                .iter()
+                .copied()
+                .filter(|block| block.source.end <= join)
+                .max_by_key(|block| block.source.end)
+        });
+
+    let Some(leaf) = leaf else {
+        let insertion_index = spans
+            .blocks()
+            .filter(|block| block.path.len() == 1 && block.source.end <= join)
+            .count();
+        return Ok(RangeEditLocation::Phantom { insertion_index });
+    };
+
+    let caret_source_offset = join.clamp(leaf.source.start, leaf.source.end);
+    let prefix = source
+        .get(leaf.source.start..caret_source_offset)
+        .ok_or_else(|| {
+            AppError::ParseError(format!(
+                "range replacement join {caret_source_offset} is not addressable in resulting leaf {:?}",
+                leaf.path
+            ))
+        })?;
+    Ok(RangeEditLocation::Block {
+        block_path: leaf.path.clone(),
+        source_offset_utf16: prefix.encode_utf16().count(),
+    })
+}
+
 /// Resolves a post-splice source position to the editable leaf that contains
 /// it, or to the next leaf when Markdown syntax occupies the immediate bytes
 /// before that leaf (for example the indentation after a new blank line).
@@ -4287,6 +4391,172 @@ mod tests {
                 "{name} touched the file, which is tier 2's job"
             );
         }
+    }
+
+    #[test]
+    fn range_edit_result_reports_phantom() {
+        let f = fixture();
+        let frontmatter = "---\ntype: Note\ntitle: A\nunmanaged: keep-this-byte-for-byte\n---";
+        let original = format!("{frontmatter}\n\nOnly editable text.\n");
+        f.write("a.md", &original);
+        let session = f.open("a");
+
+        let (state, caret) = session
+            .delete_range(&RenderedRange::new(vec![0], 0, vec![0], 19))
+            .unwrap();
+
+        assert_eq!(caret, RangeEditLocation::Phantom { insertion_index: 0 });
+        assert!(state.ast.is_empty(), "the deleted body left an AST node");
+        let edited = session.working_source().unwrap();
+        assert!(
+            edited.starts_with(frontmatter),
+            "deleting the entire body rewrote frontmatter bytes"
+        );
+        assert!(
+            !edited.contains("Only editable text."),
+            "the selected body survived deletion"
+        );
+        assert_eq!(
+            f.draft("a").as_ref().map(|row| row.raw_markdown.as_str()),
+            Some(edited.as_str()),
+            "the one range operation did not persist its complete source as one draft"
+        );
+        assert_eq!(f.read("a.md"), original, "range edit wrote tier 2 eagerly");
+    }
+
+    #[test]
+    fn range_replace_over_three_blocks_returns_the_reparsed_join_caret() {
+        let f = fixture();
+        f.write("a.md", &note("A", "One\n\nTwo\n\nThree"));
+        let session = f.open("a");
+
+        let (state, caret) = session
+            .replace_range(&RenderedRange::new(vec![0], 0, vec![2], 5), "replacement")
+            .unwrap();
+
+        assert_eq!(state.ast.len(), 1, "three Blocks did not become one");
+        assert_eq!(
+            caret,
+            RangeEditLocation::Block {
+                block_path: vec![0],
+                source_offset_utf16: "replacement".encode_utf16().count(),
+            },
+            "the caret was predicted from a former Block rather than returned from the new parse"
+        );
+        assert!(session.working_source().unwrap().ends_with("replacement\n"));
+        assert_eq!(
+            f.draft("a").unwrap().raw_markdown,
+            *session.working_source().unwrap(),
+            "the atomic edit and its draft disagree"
+        );
+    }
+
+    #[test]
+    fn range_replace_preserves_partial_remainders_and_pasted_multiline_text() {
+        let f = fixture();
+        f.write("a.md", &note("A", "Alpha\n\nBravo"));
+        let session = f.open("a");
+
+        let (_, caret) = session
+            .replace_range(&RenderedRange::new(vec![0], 2, vec![1], 3), "X\nY")
+            .unwrap();
+
+        assert!(
+            session.working_source().unwrap().ends_with("AlX\nYvo\n"),
+            "the start/end remainders or pasted newline were reconstructed instead of spliced"
+        );
+        assert_eq!(
+            caret,
+            RangeEditLocation::Block {
+                block_path: vec![0],
+                source_offset_utf16: "AlX\nY".encode_utf16().count(),
+            }
+        );
+    }
+
+    #[test]
+    fn range_replace_reparses_structural_markdown_before_returning_a_caret() {
+        let f = fixture();
+        f.write("a.md", &note("A", "Alpha\n\nBeta"));
+        let session = f.open("a");
+
+        let (state, caret) = session
+            .replace_range(
+                &RenderedRange::new(vec![0], 0, vec![0], 5),
+                "- first\n- second",
+            )
+            .unwrap();
+
+        assert!(matches!(state.ast[0], AstNode::List { .. }));
+        match caret {
+            RangeEditLocation::Block {
+                block_path,
+                source_offset_utf16,
+            } => {
+                assert_ne!(
+                    block_path,
+                    vec![0],
+                    "a List container was returned as editable"
+                );
+                let source = session.block_source(&block_path).unwrap();
+                assert_eq!(
+                    source_offset_utf16,
+                    source_caret_before_trailing_newline(&source)
+                );
+            }
+            RangeEditLocation::Phantom { .. } => panic!("list replacement has editable leaves"),
+        }
+    }
+
+    #[test]
+    fn range_delete_is_the_same_operation_as_empty_replacement_and_rejects_stale_ranges_atomically()
+    {
+        let deleted = fixture();
+        let source = note("A", "Alpha\n\nBeta");
+        deleted.write("a.md", &source);
+        let delete_session = deleted.open("a");
+        let range = RenderedRange::new(vec![0], 1, vec![1], 2);
+        let delete_result = delete_session.delete_range(&range).unwrap();
+
+        let replaced = fixture();
+        replaced.write("a.md", &source);
+        let replace_session = replaced.open("a");
+        let replace_result = replace_session.replace_range(&range, "").unwrap();
+
+        assert_eq!(delete_result.1, replace_result.1);
+        assert_eq!(
+            *delete_session.working_source().unwrap(),
+            *replace_session.working_source().unwrap(),
+            "delete_range diverged from its shared empty-replacement primitive"
+        );
+
+        let before = Arc::clone(&replace_session.working_source().unwrap());
+        let bad = RenderedRange::new(vec![1], 1, vec![0], 1);
+        assert!(replace_session.replace_range(&bad, "x").is_err());
+        assert_eq!(
+            *replace_session.working_source().unwrap(),
+            *before,
+            "a rejected reverse/stale range changed the working source"
+        );
+    }
+
+    #[test]
+    fn range_replace_returns_a_utf16_safe_emoji_caret() {
+        let f = fixture();
+        f.write("a.md", &note("A", "Alpha\n\nBeta"));
+        let session = f.open("a");
+
+        let (_, caret) = session
+            .replace_range(&RenderedRange::new(vec![0], 1, vec![1], 2), "😀")
+            .unwrap();
+
+        assert_eq!(
+            caret,
+            RangeEditLocation::Block {
+                block_path: vec![0],
+                source_offset_utf16: "A😀".encode_utf16().count(),
+            }
+        );
     }
 
     /// The one mutator that writes no row, and the one that must not advance

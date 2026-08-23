@@ -61,6 +61,9 @@ class _HomeState extends ConsumerState<_Home> {
     if (Platform.environment.containsKey('BURLMD_SMOKE_F006')) {
       _stageSmokeF006();
     }
+    if (Platform.environment.containsKey('BURLMD_SMOKE_F007')) {
+      _stageSmokeF007();
+    }
   }
 
   @override
@@ -282,6 +285,43 @@ class _HomeState extends ConsumerState<_Home> {
     } catch (_) {
       // No marker is emitted on a failed stage, so the smoke harness rejects
       // the generic shell window rather than producing misleading evidence.
+    }
+  }
+
+  /// Stages the two Core-backed Notes used by the F007 proxy smoke. The UI
+  /// driver performs type-over and paste on the first, then opens the second
+  /// to prove a complete range deletion receives Core's phantom caret.
+  Future<void> _stageSmokeF007() async {
+    const typeTitle = 'F007 range type paste';
+    const deleteTitle = 'F007 range delete phantom';
+    final api = ref.read(rustApiProvider);
+    final deadline = DateTime.now().add(const Duration(seconds: 30));
+    while (DateTime.now().isBefore(deadline)) {
+      if (ref.read(workspaceProvider).hasValue) break;
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    }
+    try {
+      for (final title in [typeTitle, deleteTitle]) {
+        try {
+          await api.deleteNote(title);
+        } catch (_) {
+          // The fixture may not exist yet.
+        }
+      }
+      var type = await api.createNote('', typeTitle);
+      for (final source in ['first range', 'middle range', 'tail range']) {
+        type = api.insertBlock(type.metadata.id, [type.ast.length], source);
+      }
+      var deletion = await api.createNote('', deleteTitle);
+      for (final source in ['delete first', 'delete middle', 'delete tail']) {
+        deletion = api.insertBlock(deletion.metadata.id, [
+          deletion.ast.length,
+        ], source);
+      }
+      ref.invalidate(workspaceTreeProvider);
+      ref.read(selectedNoteIdProvider.notifier).select(type.metadata.id);
+    } catch (_) {
+      // A missing readiness marker makes the shell reject this run.
     }
   }
 }

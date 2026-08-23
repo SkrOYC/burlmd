@@ -4,6 +4,7 @@ import 'dart:math' as math;
 
 import 'package:burlmd/src/components/block_editor.dart';
 import 'package:burlmd/src/components/block_view.dart';
+import 'package:burlmd/src/components/range_text_input_client.dart';
 import 'package:burlmd/src/providers/note_providers.dart';
 import 'package:burlmd/src/providers/rust_api_provider.dart';
 import 'package:burlmd/src/providers/workspace_provider.dart';
@@ -12,7 +13,12 @@ import 'package:burlmd/src/rust/draft.dart';
 import 'package:burlmd/src/rust/markdown/ast.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart'
-    show SelectedContentRange, Selectable, SelectionRegistrar;
+    show
+        ClearSelectionEvent,
+        SelectedContent,
+        SelectedContentRange,
+        Selectable,
+        SelectionRegistrar;
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart'
@@ -61,6 +67,13 @@ class EditorState extends ConsumerState<Editor> {
   /// dispose unregister themselves.
   final Map<int, _BlockSelectionBroker> _selectionBrokers = {};
 
+  /// The direct platform proxy active only for a rendered cross-Block range.
+  /// The range itself is frozen in the proxy; a subsequent selection, focus,
+  /// source, or Note transition revokes it before any stale callback can edit.
+  RangeTextInputClient? _rangeInputClient;
+  int _rangeGeneration = 0;
+  NoteState? _rangeState;
+
   /// Overrides the region's default copy with the Core-produced Markdown
   /// path (CAP-EDIT-04); see [_CopyRangeAsMarkdownAction].
   late final Action<CopySelectionTextIntent> _copyAction =
@@ -72,6 +85,43 @@ class EditorState extends ConsumerState<Editor> {
   /// copy follows, including blocks a lazy ListView has not materialized.
   late final Action<SelectAllTextIntent> _selectAllAction =
       _SelectWholeNoteAction(this);
+
+  late final Action<DeleteCharacterIntent> _deleteCharacterAction =
+      CallbackAction<DeleteCharacterIntent>(
+        onInvoke: (intent) {
+          unawaited(
+            _rangeInputClient?.deleteSelection() ?? Future<void>.value(),
+          );
+          return null;
+        },
+      );
+  late final Action<DeleteToNextWordBoundaryIntent> _deleteWordAction =
+      CallbackAction<DeleteToNextWordBoundaryIntent>(
+        onInvoke: (intent) {
+          unawaited(
+            _rangeInputClient?.deleteSelection() ?? Future<void>.value(),
+          );
+          return null;
+        },
+      );
+  late final Action<DeleteToLineBreakIntent> _deleteLineAction =
+      CallbackAction<DeleteToLineBreakIntent>(
+        onInvoke: (intent) {
+          unawaited(
+            _rangeInputClient?.deleteSelection() ?? Future<void>.value(),
+          );
+          return null;
+        },
+      );
+  late final Action<PasteTextIntent> _pasteAction =
+      CallbackAction<PasteTextIntent>(
+        onInvoke: (intent) {
+          unawaited(
+            _rangeInputClient?.pasteSelection() ?? Future<void>.value(),
+          );
+          return null;
+        },
+      );
 
   /// The Note for which Select All is currently authoritative. This is UI
   /// interaction state, not retained Note content; a pointer gesture or focus
@@ -103,6 +153,15 @@ class EditorState extends ConsumerState<Editor> {
     if (Platform.environment.containsKey('BURLMD_SMOKE_F006')) {
       unawaited(_runSmokeF006());
     }
+    if (Platform.environment.containsKey('BURLMD_SMOKE_F007')) {
+      unawaited(_runSmokeF007());
+    }
+  }
+
+  @override
+  void dispose() {
+    _closeRangeInput();
+    super.dispose();
   }
 
   @override
@@ -117,9 +176,13 @@ class EditorState extends ConsumerState<Editor> {
     if (error != null) return _ErrorSurface(message: '$error');
     final note = ref.watch(activeNoteProvider);
     if (note == null) {
+      _closeRangeInput();
       _focused = null;
       _selectionBrokers.clear();
       return const SizedBox.shrink();
+    }
+    if (_rangeInputClient != null && !identical(_rangeState, note)) {
+      _closeRangeInput();
     }
     // A different Note opened while a Block was focused: drop focus rather
     // than carry the edit session across. Refetching by path would be wrong
@@ -127,6 +190,7 @@ class EditorState extends ConsumerState<Editor> {
     // was editing, and silently retargeting focus at it would point the
     // buffered keystrokes of one Note at another's source row.
     if (_focused != null && _focused!.noteId != note.metadata.id) {
+      _closeRangeInput();
       _focused = null;
       _selectionBrokers.clear();
     }
@@ -140,6 +204,7 @@ class EditorState extends ConsumerState<Editor> {
     // does not own (see LifecycleEffects.rewritten's contract note).
     final focused = _focused; // re-read: the id check above may have cleared it
     if (focused != null && !identical(focused.lastSeenState, note)) {
+      _closeRangeInput();
       if (focused.isPhantom) {
         // A phantom Block holds no Core-side source row to refetch
         // (`EDIT-F004`) — it exists nowhere but here. Re-anchor only.
@@ -190,20 +255,31 @@ class EditorState extends ConsumerState<Editor> {
     // container. The focus path stays the real leaf for Core continuation;
     // this is presentation-only placement, so a nested leaf still renders its
     // phantom beneath the containing top-level Block.
-    final phantomAnchor = note.ast.isEmpty && focusedForSlot?.isPhantom != true
-        ? 0
-        : math.min((focusedForSlot?.path.first ?? -1) + 1, note.ast.length);
+    final phantomAnchor =
+        focusedForSlot?.phantomInsertionIndex ??
+        (note.ast.isEmpty && focusedForSlot?.isPhantom != true
+            ? 0
+            : math.min(
+                (focusedForSlot?.path.first ?? -1) + 1,
+                note.ast.length,
+              ));
     return Actions(
       actions: <Type, Action<Intent>>{
         CopySelectionTextIntent: _copyAction,
         SelectAllTextIntent: _selectAllAction,
+        DeleteCharacterIntent: _deleteCharacterAction,
+        DeleteToNextWordBoundaryIntent: _deleteWordAction,
+        DeleteToLineBreakIntent: _deleteLineAction,
+        PasteTextIntent: _pasteAction,
       },
       child: Listener(
         onPointerDown: (_) {
+          _closeRangeInput();
           _wholeNoteSelectedId = null;
           if (_focused == null) _requiresFreshRenderedSelection = false;
         },
         child: SelectionArea(
+          onSelectionChanged: _handleRenderedSelectionChanged,
           child: Builder(
             builder: (areaContext) {
               // Captured for the smoke hook's select-all invocation; reading
@@ -383,6 +459,7 @@ class EditorState extends ConsumerState<Editor> {
     // copy the local branch, then deliberately leave the note rather than
     // silently choosing either version here.
     if (!_canReplaceFocusedSession) return;
+    _closeRangeInput();
     // Moving focus between Blocks commits the outgoing one first: its last
     // buffered text must reach the working source before anything else
     // reads the Note, and blur is the commit point (ADR-006, ADR-008).
@@ -448,6 +525,144 @@ class EditorState extends ConsumerState<Editor> {
 
   bool get _canReplaceFocusedSession => _focused?.canCommit ?? true;
 
+  /// A changed SelectionArea value is the sole activation boundary for the
+  /// ephemeral proxy. The snapshot is constructed once and retained verbatim;
+  /// no lazy-list re-read can silently shorten Select All or retarget an edit.
+  void _handleRenderedSelectionChanged(SelectedContent? _) {
+    final range = selectedBlockRange();
+    if (range == null || !_isCrossBlockRange(range)) {
+      _closeRangeInput();
+      return;
+    }
+    _activateRangeInput(range);
+  }
+
+  void _activateRangeInput(BlockRange range) {
+    final existing = _rangeInputClient;
+    if (existing != null && _sameRange(existing.range, range)) return;
+
+    _closeRangeInput();
+    final generation = ++_rangeGeneration;
+    final client = RangeTextInputClient(
+      range: range,
+      onReplace: (replacement) =>
+          _replaceFrozenRange(generation, range, replacement),
+      onDelete: () => _deleteFrozenRange(generation, range),
+      copyMarkdown: () => _copyFrozenRange(generation, range),
+      onError: (error) {
+        if (_isLiveRange(generation, range)) {
+          ref.read(editorErrorProvider.notifier).report(error);
+        }
+      },
+    );
+    _rangeInputClient = client;
+    _rangeState = ref.read(activeNoteProvider);
+    client.attach();
+  }
+
+  bool _isCrossBlockRange(BlockRange range) =>
+      range.startPath.length == 1 &&
+      range.endPath.length == 1 &&
+      range.startPath.single != range.endPath.single;
+
+  static bool _sameRange(BlockRange a, BlockRange b) =>
+      a.startPath.length == b.startPath.length &&
+      a.endPath.length == b.endPath.length &&
+      a.startPath.indexed.every((entry) => entry.$2 == b.startPath[entry.$1]) &&
+      a.endPath.indexed.every((entry) => entry.$2 == b.endPath[entry.$1]) &&
+      a.startOffset == b.startOffset &&
+      a.endOffset == b.endOffset;
+
+  bool _isLiveRange(int generation, BlockRange range) =>
+      mounted &&
+      generation == _rangeGeneration &&
+      _rangeInputClient != null &&
+      _sameRange(_rangeInputClient!.range, range);
+
+  void _closeRangeInput() {
+    _rangeGeneration++;
+    _rangeInputClient?.close();
+    _rangeInputClient = null;
+    _rangeState = null;
+  }
+
+  Future<String> _copyFrozenRange(int generation, BlockRange range) async {
+    if (!_isLiveRange(generation, range)) return '';
+    final note = ref.read(activeNoteProvider);
+    if (note == null) return '';
+    return ref
+        .read(rustApiProvider)
+        .copyRangeAsMarkdown(note.metadata.id, range);
+  }
+
+  Future<void> _replaceFrozenRange(
+    int generation,
+    BlockRange range,
+    String replacement,
+  ) async {
+    if (!_isLiveRange(generation, range)) return;
+    final note = ref.read(activeNoteProvider);
+    if (note == null) return;
+    final result = ref
+        .read(rustApiProvider)
+        .replaceRange(note.metadata.id, range, replacement);
+    if (!_isLiveRange(generation, range)) return;
+    _adoptRangeResult(result);
+  }
+
+  Future<void> _deleteFrozenRange(int generation, BlockRange range) async {
+    if (!_isLiveRange(generation, range)) return;
+    final note = ref.read(activeNoteProvider);
+    if (note == null) return;
+    final result = ref
+        .read(rustApiProvider)
+        .deleteRange(note.metadata.id, range);
+    if (!_isLiveRange(generation, range)) return;
+    _adoptRangeResult(result);
+  }
+
+  /// Applies the Core postcondition by exhaustive caret pattern matching.
+  /// Paths and offsets are never derived from the old selected Blocks.
+  void _adoptRangeResult(RangeEditResult result) {
+    final api = ref.read(rustApiProvider);
+    final nextFocus = switch (result.caret) {
+      RangeEditCaret_Block(:final blockPath, :final sourceOffsetUtf16) =>
+        _Focus(
+          noteId: result.state.metadata.id,
+          path: blockPath.map((part) => part.toInt()).toList(),
+          source: api.getBlockSource(
+            result.state.metadata.id,
+            blockPath.map((part) => part.toInt()).toList(),
+          ),
+          caret: sourceOffsetUtf16.toInt(),
+          lastSeenState: result.state,
+        ),
+      RangeEditCaret_Phantom(:final insertionIndex) => _Focus(
+        noteId: result.state.metadata.id,
+        path: [insertionIndex.toInt()],
+        source: '',
+        caret: 0,
+        lastSeenState: result.state,
+        isPhantom: true,
+        phantomInsertionIndex: insertionIndex.toInt(),
+      ),
+    };
+    _clearRenderedSelection();
+    _closeRangeInput();
+    ref.read(activeNoteProvider.notifier).adopt(result.state);
+    setState(() => _focused = nextFocus);
+  }
+
+  void _clearRenderedSelection() {
+    for (final broker in _selectionBrokers.values) {
+      for (final selectable in broker.selectables) {
+        selectable.dispatchSelectionEvent(const ClearSelectionEvent());
+      }
+    }
+    _selectionBrokers.clear();
+    _wholeNoteSelectedId = null;
+  }
+
   /// Commits the focused Block through `commit_block`: the Core reparses its
   /// working source, rebuilds the span map, and returns the authoritative
   /// state, which is adopted wholesale. Focus is then cleared rather than
@@ -458,6 +673,7 @@ class EditorState extends ConsumerState<Editor> {
   void _commitFocused() {
     final focused = _focused;
     if (focused == null || !focused.canCommit) return;
+    _closeRangeInput();
     setState(() {
       _focused = null;
       // Do not retain a range that crossed the field while it was focused.
@@ -1047,6 +1263,7 @@ class EditorState extends ConsumerState<Editor> {
       return fallback?.invoke(intent);
     }
     _wholeNoteSelectedId = note.metadata.id;
+    _handleRenderedSelectionChanged(null);
     // Keep Flutter's native region selection for currently mounted blocks, so
     // Select All remains visibly highlighted without forcing ListView to build
     // a long Note just to represent an interaction Core already owns.
@@ -1057,7 +1274,19 @@ class EditorState extends ConsumerState<Editor> {
   /// Entry point of [_CopyRangeAsMarkdownAction]. [fallback] is whatever
   /// default copy behaviour was being invoked — the focused field's own
   /// raw-source copy, or the region's no-op when nothing is selected.
-  Object? handleCopyRequest(Action<CopySelectionTextIntent>? fallback) {
+  Object? handleCopyRequest(
+    CopySelectionTextIntent intent,
+    Action<CopySelectionTextIntent>? fallback,
+  ) {
+    final rangeClient = _rangeInputClient;
+    if (rangeClient != null) {
+      unawaited(
+        intent.collapseSelection
+            ? rangeClient.cutSelection()
+            : rangeClient.copySelection(),
+      );
+      return null;
+    }
     // While a Block holds focus its selection belongs to the platform field
     // (raw source text), and no cross-Block selection can exist (SPK-EDIT-F001
     // §4b): fall through to the default so the focused Block behaves normally.
@@ -1086,6 +1315,125 @@ class EditorState extends ConsumerState<Editor> {
       ref.read(editorErrorProvider.notifier).report(error);
     }
     return null;
+  }
+
+  // -- BURLMD_SMOKE_F007 ---------------------------------------------------
+  //
+  // The staging half creates two Notes through Core. This QA-only driver
+  // supplies explicit complete rendered ranges (rather than relying on screen
+  // coordinates), but every mutation still goes through the live direct
+  // TextInputClient and its production Core callbacks: type is an
+  // `updateEditingValue`, paste reads Clipboard, and delete is its explicit
+  // Action-equivalent proxy method. The final deletion must produce the
+  // existing phantom slot; a generic workspace can therefore never certify.
+  Future<void> _runSmokeF007() async {
+    const typeTitle = 'F007 range type paste';
+    const deleteTitle = 'F007 range delete phantom';
+    try {
+      if (!await _waitForSmokeNote(typeTitle)) {
+        return;
+      }
+      await _smokeActivateWholeRange();
+      final typeClient = _rangeInputClient;
+      if (typeClient == null) {
+        throw StateError('F007 could not attach type proxy.');
+      }
+      typeClient.updateEditingValue(
+        const TextEditingValue(
+          text: 'typed\n\nsecond\n\nthird\n\nfourth',
+          selection: TextSelection.collapsed(offset: 28),
+        ),
+      );
+      if (!await _waitForSmoke(
+        () => _rangeInputClient == null && _focused != null,
+      )) {
+        throw StateError('F007 type-over did not return a Core caret.');
+      }
+      final typedState = ref.read(activeNoteProvider);
+      if (typedState == null || typedState.ast.length < 2) {
+        throw StateError(
+          'F007 type-over did not preserve a cross-Block result.',
+        );
+      }
+
+      _dismissSmokeFocus();
+      await _smokeActivateWholeRange();
+      await Clipboard.setData(const ClipboardData(text: 'pasted'));
+      final pasteClient = _rangeInputClient;
+      if (pasteClient == null) {
+        throw StateError('F007 could not attach paste proxy.');
+      }
+      await pasteClient.pasteSelection();
+      if (!await _waitForSmoke(
+        () => _rangeInputClient == null && _focused != null,
+      )) {
+        throw StateError('F007 paste did not return a Core caret.');
+      }
+
+      final matches = await ref
+          .read(rustApiProvider)
+          .findNotesByTitle(deleteTitle, 1);
+      if (matches.isEmpty) {
+        throw StateError('F007 delete fixture is unavailable.');
+      }
+      ref.read(selectedNoteIdProvider.notifier).select(matches.single.id);
+      if (!await _waitForSmokeNote(deleteTitle)) {
+        return;
+      }
+      await _smokeActivateWholeRange();
+      final deleteClient = _rangeInputClient;
+      if (deleteClient == null) {
+        throw StateError('F007 could not attach delete proxy.');
+      }
+      await deleteClient.deleteSelection();
+      if (!await _waitForSmoke(() => _focused?.isPhantom == true)) {
+        throw StateError('F007 delete did not return the Core phantom caret.');
+      }
+      final readinessPath = Platform.environment['BURLMD_SMOKE_READY_FILE'];
+      if (readinessPath != null) {
+        File(
+          readinessPath,
+        ).writeAsStringSync('f007-type-paste-core-caret-delete-core-phantom\n');
+      }
+    } catch (error) {
+      if (mounted) ref.read(editorErrorProvider.notifier).report(error);
+    }
+  }
+
+  Future<bool> _waitForSmoke(bool Function() ready) async {
+    final deadline = DateTime.now().add(const Duration(seconds: 30));
+    while (mounted && DateTime.now().isBefore(deadline)) {
+      if (ready()) return true;
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    }
+    return false;
+  }
+
+  Future<bool> _waitForSmokeNote(String title) => _waitForSmoke(() {
+    final note = ref.read(activeNoteProvider);
+    return note?.metadata.title == title && _focused == null;
+  });
+
+  void _dismissSmokeFocus() {
+    _closeRangeInput();
+    if (_focused != null) setState(() => _focused = null);
+  }
+
+  Future<void> _smokeActivateWholeRange() async {
+    _dismissSmokeFocus();
+    await WidgetsBinding.instance.endOfFrame;
+    final note = ref.read(activeNoteProvider);
+    if (note == null || note.ast.length < 2) {
+      throw StateError('F007 needs a rendered cross-Block fixture.');
+    }
+    _activateRangeInput(
+      BlockRange(
+        startPath: Uint64List.fromList(const [0]),
+        startOffset: BigInt.zero,
+        endPath: Uint64List.fromList([note.ast.length - 1]),
+        endOffset: BigInt.from(blockCoreRenderedLength(note.ast.last)),
+      ),
+    );
   }
 
   // -- BURLMD_SMOKE_F002 ---------------------------------------------------
@@ -1260,6 +1608,7 @@ class _Focus {
     required this.caret,
     required this.lastSeenState,
     this.isPhantom = false,
+    this.phantomInsertionIndex,
   }) : token = _nextFocusToken++;
 
   /// Identifies this focus session (`EDIT-F004`). Echoed back by a blurring
@@ -1293,6 +1642,10 @@ class _Focus {
   /// addressed through `update_block`; its first typed character becomes an
   /// `continue_block_after` source instead.
   final bool isPhantom;
+
+  /// The Core-returned slot for an empty range edit. Enter-created phantoms
+  /// still derive their visual anchor from their real predecessor path.
+  final int? phantomInsertionIndex;
 }
 
 /// Monotonic source of [_Focus.token] values.
@@ -1390,7 +1743,7 @@ class _CopyRangeAsMarkdownAction extends Action<CopySelectionTextIntent> {
 
   @override
   Object? invoke(CopySelectionTextIntent intent, [BuildContext? context]) =>
-      _state.handleCopyRequest(callingAction);
+      _state.handleCopyRequest(intent, callingAction);
 }
 
 /// Captures Select All before the lazy SelectionArea action truncates its

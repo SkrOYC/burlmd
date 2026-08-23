@@ -135,7 +135,7 @@ abstract class RustLibApi extends BaseApi {
 
   Future<void> crateApiFfiApiDeleteNote({required String noteId});
 
-  NoteState crateApiFfiApiDeleteRange({
+  RangeEditResult crateApiFfiApiDeleteRange({
     required String noteId,
     required BlockRange range,
   });
@@ -202,7 +202,7 @@ abstract class RustLibApi extends BaseApi {
     required String newTitle,
   });
 
-  NoteState crateApiFfiApiReplaceRange({
+  RangeEditResult crateApiFfiApiReplaceRange({
     required String noteId,
     required BlockRange range,
     required String replacement,
@@ -639,7 +639,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "delete_note", argNames: ["noteId"]);
 
   @override
-  NoteState crateApiFfiApiDeleteRange({
+  RangeEditResult crateApiFfiApiDeleteRange({
     required String noteId,
     required BlockRange range,
   }) {
@@ -652,7 +652,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 14)!;
         },
         codec: SseCodec(
-          decodeSuccessData: sse_decode_note_state,
+          decodeSuccessData: sse_decode_range_edit_result,
           decodeErrorData: sse_decode_app_error,
         ),
         constMeta: kCrateApiFfiApiDeleteRangeConstMeta,
@@ -1183,7 +1183,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   );
 
   @override
-  NoteState crateApiFfiApiReplaceRange({
+  RangeEditResult crateApiFfiApiReplaceRange({
     required String noteId,
     required BlockRange range,
     required String replacement,
@@ -1198,7 +1198,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 32)!;
         },
         codec: SseCodec(
-          decodeSuccessData: sse_decode_note_state,
+          decodeSuccessData: sse_decode_range_edit_result,
           decodeErrorData: sse_decode_app_error,
         ),
         constMeta: kCrateApiFfiApiReplaceRangeConstMeta,
@@ -1792,6 +1792,34 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  RangeEditCaret dco_decode_range_edit_caret(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    switch (raw[0]) {
+      case 0:
+        return RangeEditCaret_Block(
+          blockPath: dco_decode_list_prim_usize_strict(raw[1]),
+          sourceOffsetUtf16: dco_decode_usize(raw[2]),
+        );
+      case 1:
+        return RangeEditCaret_Phantom(insertionIndex: dco_decode_usize(raw[1]));
+      default:
+        throw Exception("unreachable");
+    }
+  }
+
+  @protected
+  RangeEditResult dco_decode_range_edit_result(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return RangeEditResult(
+      state: dco_decode_note_state(arr[0]),
+      caret: dco_decode_range_edit_caret(arr[1]),
+    );
+  }
+
+  @protected
   (NoteState, LifecycleEffects) dco_decode_record_note_state_lifecycle_effects(
     dynamic raw,
   ) {
@@ -2380,6 +2408,35 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  RangeEditCaret sse_decode_range_edit_caret(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var tag_ = sse_decode_i_32(deserializer);
+    switch (tag_) {
+      case 0:
+        var var_blockPath = sse_decode_list_prim_usize_strict(deserializer);
+        var var_sourceOffsetUtf16 = sse_decode_usize(deserializer);
+        return RangeEditCaret_Block(
+          blockPath: var_blockPath,
+          sourceOffsetUtf16: var_sourceOffsetUtf16,
+        );
+      case 1:
+        var var_insertionIndex = sse_decode_usize(deserializer);
+        return RangeEditCaret_Phantom(insertionIndex: var_insertionIndex);
+      default:
+        throw UnimplementedError('');
+    }
+  }
+
+  @protected
+  RangeEditResult sse_decode_range_edit_result(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_state = sse_decode_note_state(deserializer);
+    var var_caret = sse_decode_range_edit_caret(deserializer);
+    return RangeEditResult(state: var_state, caret: var_caret);
+  }
+
+  @protected
   (NoteState, LifecycleEffects) sse_decode_record_note_state_lifecycle_effects(
     SseDeserializer deserializer,
   ) {
@@ -2932,6 +2989,36 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     if (self != null) {
       sse_encode_list_ast_node(self, serializer);
     }
+  }
+
+  @protected
+  void sse_encode_range_edit_caret(
+    RangeEditCaret self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    switch (self) {
+      case RangeEditCaret_Block(
+        blockPath: final blockPath,
+        sourceOffsetUtf16: final sourceOffsetUtf16,
+      ):
+        sse_encode_i_32(0, serializer);
+        sse_encode_list_prim_usize_strict(blockPath, serializer);
+        sse_encode_usize(sourceOffsetUtf16, serializer);
+      case RangeEditCaret_Phantom(insertionIndex: final insertionIndex):
+        sse_encode_i_32(1, serializer);
+        sse_encode_usize(insertionIndex, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_range_edit_result(
+    RangeEditResult self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_note_state(self.state, serializer);
+    sse_encode_range_edit_caret(self.caret, serializer);
   }
 
   @protected
