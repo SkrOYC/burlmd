@@ -23,12 +23,23 @@ use rusqlite::Connection;
 
 use crate::draft::NoteMetadata;
 use crate::error::AppError;
+use crate::workspace::lifecycle::link_target_identity;
+
+/// Whether a completion points at an existing indexed Note or describes the
+/// valid future Note that the typed title would create in the current
+/// Directory. The Core owns this distinction and the target identity.
+#[frb]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LinkCompletionKind {
+    Existing { note_id: String },
+    ProspectiveGhost { target_id: String },
+}
 
 /// One candidate for the in-editor Link completion (CAP-GRAPH-02).
 #[frb]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LinkCompletion {
-    pub note_id: String,
+    pub kind: LinkCompletionKind,
     pub title: String,
     /// The exact text to splice at the cursor: a bundle-absolute Markdown
     /// link, already angle-bracket wrapped and escaped by
@@ -41,6 +52,22 @@ pub struct LinkCompletion {
     /// folded to a single space, so the two are not always byte-identical —
     /// see [`link_completions_impl`] for why the promise above requires it.
     pub insert_text: String,
+}
+
+/// The activation-time answer for an internal Link. The missing case carries
+/// the exact, validated identity needed to describe the create-on-follow
+/// action without moving target derivation into Dart.
+#[frb]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LinkTargetResolution {
+    Existing {
+        note_id: String,
+    },
+    Missing {
+        target_id: String,
+        directory_path: String,
+        title: String,
+    },
 }
 
 /// One entry in the Workspace tree (CAP-GRAPH-01). Directories carry their
@@ -167,18 +194,82 @@ pub fn find_notes_by_title_impl(
 pub fn link_completions_impl(
     conn: &Connection,
     workspace_id: &str,
+    note_id: &str,
     query: &str,
     limit: u32,
 ) -> Result<Vec<LinkCompletion>, AppError> {
-    let candidates = find_notes_by_title_impl(conn, workspace_id, query, limit)?;
-    Ok(candidates
+    const MAX_COMPLETIONS: u32 = 10;
+
+    let current = link_target_identity(note_id)?;
+    if !crate::index::note_exists(conn, workspace_id, note_id)? {
+        return Err(AppError::NotFound(format!(
+            "no Note with concept id {note_id} in the active Workspace"
+        )));
+    }
+
+    let cap = limit.min(MAX_COMPLETIONS);
+    if cap == 0 {
+        return Ok(Vec::new());
+    }
+
+    let prospective = match link_target_identity(&join_target_id(&current.directory_path, query)) {
+        Ok(identity) if !crate::index::note_exists(conn, workspace_id, &identity.target_id)? => {
+            Some(identity)
+        }
+        Ok(_) | Err(_) => None,
+    };
+    let existing_limit = if prospective.is_some() { cap - 1 } else { cap };
+    let candidates = find_notes_by_title_impl(conn, workspace_id, query, existing_limit)?;
+    let mut completions = candidates
         .into_iter()
         .map(|note| LinkCompletion {
             insert_text: crate::okf::serialize_link(&fold_whitespace(&note.title), &note.id),
-            note_id: note.id,
+            kind: LinkCompletionKind::Existing { note_id: note.id },
             title: note.title,
         })
-        .collect())
+        .collect::<Vec<_>>();
+    if let Some(prospective) = prospective {
+        completions.push(LinkCompletion {
+            insert_text: crate::okf::serialize_link(
+                &fold_whitespace(&prospective.title),
+                &prospective.target_id,
+            ),
+            kind: LinkCompletionKind::ProspectiveGhost {
+                target_id: prospective.target_id,
+            },
+            title: prospective.title,
+        });
+    }
+    Ok(completions)
+}
+
+/// Resolves a Link target against the active Workspace's current index state.
+/// AST `exists` is deliberately absent from this API: it is render-time
+/// advisory data and can go stale after any lifecycle operation.
+pub fn resolve_link_target_impl(
+    conn: &Connection,
+    workspace_id: &str,
+    target_id: &str,
+) -> Result<LinkTargetResolution, AppError> {
+    let identity = link_target_identity(target_id)?;
+    if crate::index::note_exists(conn, workspace_id, &identity.target_id)? {
+        return Ok(LinkTargetResolution::Existing {
+            note_id: identity.target_id,
+        });
+    }
+    Ok(LinkTargetResolution::Missing {
+        target_id: identity.target_id,
+        directory_path: identity.directory_path,
+        title: identity.title,
+    })
+}
+
+fn join_target_id(directory_path: &str, title: &str) -> String {
+    if directory_path.is_empty() {
+        title.to_string()
+    } else {
+        format!("{directory_path}/{title}")
+    }
 }
 
 /// Collapses every run of whitespace in `text` to a single space, leaving
@@ -364,14 +455,145 @@ mod tests {
         );
         reindex_workspace_impl(&f.conn, &f.workspace_id).unwrap();
 
-        let completions = link_completions_impl(&f.conn, &f.workspace_id, "Meeting", 10).unwrap();
+        let completions = link_completions_impl(
+            &f.conn,
+            &f.workspace_id,
+            "projects/Meeting Notes",
+            "Meeting",
+            10,
+        )
+        .unwrap();
 
-        assert_eq!(completions.len(), 1);
-        assert_eq!(completions[0].note_id, "projects/Meeting Notes");
+        assert_eq!(completions.len(), 2);
+        assert_eq!(
+            completions[0].kind,
+            LinkCompletionKind::Existing {
+                note_id: "projects/Meeting Notes".to_string()
+            }
+        );
         assert_eq!(
             completions[0].insert_text,
             "[Meeting Notes](</projects/Meeting Notes.md>)"
         );
+    }
+
+    /// F006's cap is Core-enforced even when a caller bypasses the Dart
+    /// convenience wrapper. A valid prospective target occupies one of the
+    /// ten slots rather than becoming an eleventh result.
+    #[test]
+    fn link_completion_limit_is_ten() {
+        let f = fixture();
+        f.write("Current.md", &conformant("Current", "Body."));
+        for number in 0..12 {
+            f.write(
+                &format!("alpha-{number}.md"),
+                &conformant(&format!("Alpha {number:02}"), "Body."),
+            );
+        }
+        reindex_workspace_impl(&f.conn, &f.workspace_id).unwrap();
+
+        let completions =
+            link_completions_impl(&f.conn, &f.workspace_id, "Current", "Alpha", 100).unwrap();
+
+        assert_eq!(completions.len(), 10);
+        assert!(matches!(
+            completions.last().map(|completion| &completion.kind),
+            Some(LinkCompletionKind::ProspectiveGhost { target_id }) if target_id == "Alpha"
+        ));
+    }
+
+    /// A prospective candidate is a complete Core-derived Markdown insert,
+    /// not a Dart-side suggestion to construct a destination from a title.
+    #[test]
+    fn prospective_ghost_completion() {
+        let f = fixture();
+        f.write("projects/Current.md", &conformant("Current", "Body."));
+        reindex_workspace_impl(&f.conn, &f.workspace_id).unwrap();
+
+        let completions = link_completions_impl(
+            &f.conn,
+            &f.workspace_id,
+            "projects/Current",
+            "Future Plan",
+            10,
+        )
+        .unwrap();
+
+        assert_eq!(completions.len(), 1);
+        assert_eq!(
+            completions[0].kind,
+            LinkCompletionKind::ProspectiveGhost {
+                target_id: "projects/Future Plan".to_string()
+            }
+        );
+        assert_eq!(
+            completions[0].insert_text,
+            "[Future Plan](</projects/Future Plan.md>)"
+        );
+        assert_eq!(
+            links_from_source(
+                "elsewhere/unrelated",
+                &format!("See {}.\n", completions[0].insert_text)
+            ),
+            vec!["projects/Future Plan".to_string()]
+        );
+    }
+
+    #[test]
+    fn resolve_link_target_existing_missing_workspace_isolation_and_stale_transitions() {
+        let f = fixture();
+        f.write("Current.md", &conformant("Current", "Body."));
+        f.write("projects/Existing.md", &conformant("Existing", "Body."));
+        reindex_workspace_impl(&f.conn, &f.workspace_id).unwrap();
+
+        assert_eq!(
+            resolve_link_target_impl(&f.conn, &f.workspace_id, "projects/Existing").unwrap(),
+            LinkTargetResolution::Existing {
+                note_id: "projects/Existing".to_string()
+            }
+        );
+        assert_eq!(
+            resolve_link_target_impl(&f.conn, &f.workspace_id, "projects/Future").unwrap(),
+            LinkTargetResolution::Missing {
+                target_id: "projects/Future".to_string(),
+                directory_path: "projects".to_string(),
+                title: "Future".to_string(),
+            }
+        );
+
+        f.conn
+            .execute(
+                "INSERT INTO workspaces (id, name, provider, remote_url, local_path) \
+                 VALUES ('other', 'Other', 'local', NULL, '/tmp/other')",
+                [],
+            )
+            .unwrap();
+        f.conn
+            .execute(
+                "INSERT INTO notes (id, workspace_id, path, title, last_modified, content_hash) \
+                 VALUES ('isolated/Only', 'other', 'isolated/Only.md', 'Only', 0, 'hash')",
+                [],
+            )
+            .unwrap();
+        assert!(matches!(
+            resolve_link_target_impl(&f.conn, &f.workspace_id, "isolated/Only").unwrap(),
+            LinkTargetResolution::Missing { .. }
+        ));
+
+        f.write("projects/Future.md", &conformant("Future", "Body."));
+        reindex_workspace_impl(&f.conn, &f.workspace_id).unwrap();
+        assert_eq!(
+            resolve_link_target_impl(&f.conn, &f.workspace_id, "projects/Future").unwrap(),
+            LinkTargetResolution::Existing {
+                note_id: "projects/Future".to_string()
+            }
+        );
+        std::fs::remove_file(f.root().join("projects/Future.md")).unwrap();
+        reindex_workspace_impl(&f.conn, &f.workspace_id).unwrap();
+        assert!(matches!(
+            resolve_link_target_impl(&f.conn, &f.workspace_id, "projects/Future").unwrap(),
+            LinkTargetResolution::Missing { .. }
+        ));
     }
 
     /// Gherkin: a matching Note whose title contains a space — the ordinary
@@ -399,8 +621,15 @@ mod tests {
         );
         reindex_workspace_impl(&f.conn, &f.workspace_id).unwrap();
 
-        let completions = link_completions_impl(&f.conn, &f.workspace_id, "Meeting", 10).unwrap();
-        assert_eq!(completions.len(), 1);
+        let completions = link_completions_impl(
+            &f.conn,
+            &f.workspace_id,
+            "projects/Meeting Notes",
+            "Meeting",
+            10,
+        )
+        .unwrap();
+        assert_eq!(completions.len(), 2);
 
         let source = format!("See {} for details.\n", completions[0].insert_text);
         let links = links_from_source("somewhere/else/unrelated", &source);
@@ -420,8 +649,10 @@ mod tests {
         f.write(&format!("{title}.md"), &conformant(title, "Body."));
         reindex_workspace_impl(&f.conn, &f.workspace_id).unwrap();
 
-        let completions = link_completions_impl(&f.conn, &f.workspace_id, "Plan", 10).unwrap();
-        assert_eq!(completions.len(), 1);
+        let completions =
+            link_completions_impl(&f.conn, &f.workspace_id, "Plan [Draft] & Notes", "Plan", 10)
+                .unwrap();
+        assert_eq!(completions.len(), 2);
 
         let source = format!("See {} for details.\n", completions[0].insert_text);
         let links = links_from_source("elsewhere/unrelated", &source);
@@ -453,8 +684,9 @@ mod tests {
         );
         reindex_workspace_impl(&f.conn, &f.workspace_id).unwrap();
 
-        let completions = link_completions_impl(&f.conn, &f.workspace_id, "line", 10).unwrap();
-        assert_eq!(completions.len(), 1);
+        let completions =
+            link_completions_impl(&f.conn, &f.workspace_id, "Foreign", "line", 10).unwrap();
+        assert_eq!(completions.len(), 2);
         assert_eq!(
             completions[0].title, "line one\n\nline two",
             "the fixture must actually carry a newline title, or this test is vacuous"

@@ -1,0 +1,59 @@
+{
+  "@@locale": "en",
+  "linkCompletionLabel": "Link completion",
+  "@linkCompletionLabel": {
+    "description": "Accessible label for the internal link completion results."
+  },
+  "linkCompletionExisting": "Link to existing note {title}",
+  "@linkCompletionExisting": {
+    "description": "Accessible label for an existing-note completion candidate.",
+    "placeholders": {
+      "title": { "type": "String", "example": "Project plan" }
+    }
+  },
+  "linkCompletionProspective": "Create and link new note {title}",
+  "@linkCompletionProspective": {
+    "description": "Accessible label for a prospective, not-yet-created completion candidate.",
+    "placeholders": {
+      "title": { "type": "String", "example": "Project plan" }
+    }
+  },
+  "linkCompletionProspectiveBadge": "New note",
+  "@linkCompletionProspectiveBadge": {
+    "description": "Visible badge identifying a prospective link completion candidate."
+  },
+  "internalLinkExisting": "Open linked note {title}",
+  "@internalLinkExisting": {
+    "description": "Accessible label for an internal link whose cached render state is existing.",
+    "placeholders": {
+      "title": { "type": "String", "example": "Project plan" }
+    }
+  },
+  "internalLinkMissing": "Open missing linked note {title}",
+  "@internalLinkMissing": {
+    "description": "Accessible label for an internal link whose cached render state is missing.",
+    "placeholders": {
+      "title": { "type": "String", "example": "Project plan" }
+    }
+  },
+  "createLinkedNoteTitle": "Create linked note?",
+  "@createLinkedNoteTitle": {
+    "description": "Title of the create-on-follow confirmation dialog."
+  },
+  "createLinkedNoteBody": "Create {title} in {directoryPath}?",
+  "@createLinkedNoteBody": {
+    "description": "Body of the create-on-follow confirmation dialog using Core-derived values.",
+    "placeholders": {
+      "title": { "type": "String", "example": "Project plan" },
+      "directoryPath": { "type": "String", "example": "projects" }
+    }
+  },
+  "createLinkedNoteConfirm": "Create note",
+  "@createLinkedNoteConfirm": {
+    "description": "Confirmation action for creating a missing linked note."
+  },
+  "createLinkedNoteCancel": "Cancel",
+  "@createLinkedNoteCancel": {
+    "description": "Cancellation action for create-on-follow."
+  }
+}

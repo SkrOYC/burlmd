@@ -12,6 +12,594 @@ part of 'query.dart';
 // dart format off
 T _$identity<T>(T value) => value;
 /// @nodoc
+mixin _$LinkCompletionKind {
+
+
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is LinkCompletionKind);
+}
+
+
+@override
+int get hashCode => runtimeType.hashCode;
+
+@override
+String toString() {
+  return 'LinkCompletionKind()';
+}
+
+
+}
+
+/// @nodoc
+class $LinkCompletionKindCopyWith<$Res>  {
+$LinkCompletionKindCopyWith(LinkCompletionKind _, $Res Function(LinkCompletionKind) __);
+}
+
+
+/// Adds pattern-matching-related methods to [LinkCompletionKind].
+extension LinkCompletionKindPatterns on LinkCompletionKind {
+/// A variant of `map` that fallback to returning `orElse`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( LinkCompletionKind_Existing value)?  existing,TResult Function( LinkCompletionKind_ProspectiveGhost value)?  prospectiveGhost,required TResult orElse(),}){
+final _that = this;
+switch (_that) {
+case LinkCompletionKind_Existing() when existing != null:
+return existing(_that);case LinkCompletionKind_ProspectiveGhost() when prospectiveGhost != null:
+return prospectiveGhost(_that);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// Callbacks receives the raw object, upcasted.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case final Subclass2 value:
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( LinkCompletionKind_Existing value)  existing,required TResult Function( LinkCompletionKind_ProspectiveGhost value)  prospectiveGhost,}){
+final _that = this;
+switch (_that) {
+case LinkCompletionKind_Existing():
+return existing(_that);case LinkCompletionKind_ProspectiveGhost():
+return prospectiveGhost(_that);}
+}
+/// A variant of `map` that fallback to returning `null`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( LinkCompletionKind_Existing value)?  existing,TResult? Function( LinkCompletionKind_ProspectiveGhost value)?  prospectiveGhost,}){
+final _that = this;
+switch (_that) {
+case LinkCompletionKind_Existing() when existing != null:
+return existing(_that);case LinkCompletionKind_ProspectiveGhost() when prospectiveGhost != null:
+return prospectiveGhost(_that);case _:
+  return null;
+
+}
+}
+/// A variant of `when` that fallback to an `orElse` callback.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( String noteId)?  existing,TResult Function( String targetId)?  prospectiveGhost,required TResult orElse(),}) {final _that = this;
+switch (_that) {
+case LinkCompletionKind_Existing() when existing != null:
+return existing(_that.noteId);case LinkCompletionKind_ProspectiveGhost() when prospectiveGhost != null:
+return prospectiveGhost(_that.targetId);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// As opposed to `map`, this offers destructuring.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case Subclass2(:final field2):
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( String noteId)  existing,required TResult Function( String targetId)  prospectiveGhost,}) {final _that = this;
+switch (_that) {
+case LinkCompletionKind_Existing():
+return existing(_that.noteId);case LinkCompletionKind_ProspectiveGhost():
+return prospectiveGhost(_that.targetId);}
+}
+/// A variant of `when` that fallback to returning `null`
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( String noteId)?  existing,TResult? Function( String targetId)?  prospectiveGhost,}) {final _that = this;
+switch (_that) {
+case LinkCompletionKind_Existing() when existing != null:
+return existing(_that.noteId);case LinkCompletionKind_ProspectiveGhost() when prospectiveGhost != null:
+return prospectiveGhost(_that.targetId);case _:
+  return null;
+
+}
+}
+
+}
+
+/// @nodoc
+
+
+class LinkCompletionKind_Existing extends LinkCompletionKind {
+  const LinkCompletionKind_Existing({required this.noteId}): super._();
+  
+
+ final  String noteId;
+
+/// Create a copy of LinkCompletionKind
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$LinkCompletionKind_ExistingCopyWith<LinkCompletionKind_Existing> get copyWith => _$LinkCompletionKind_ExistingCopyWithImpl<LinkCompletionKind_Existing>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is LinkCompletionKind_Existing&&(identical(other.noteId, noteId) || other.noteId == noteId));
+}
+
+
+@override
+int get hashCode => Object.hash(runtimeType,noteId);
+
+@override
+String toString() {
+  return 'LinkCompletionKind.existing(noteId: $noteId)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $LinkCompletionKind_ExistingCopyWith<$Res> implements $LinkCompletionKindCopyWith<$Res> {
+  factory $LinkCompletionKind_ExistingCopyWith(LinkCompletionKind_Existing value, $Res Function(LinkCompletionKind_Existing) _then) = _$LinkCompletionKind_ExistingCopyWithImpl;
+@useResult
+$Res call({
+ String noteId
+});
+
+
+
+
+}
+/// @nodoc
+class _$LinkCompletionKind_ExistingCopyWithImpl<$Res>
+    implements $LinkCompletionKind_ExistingCopyWith<$Res> {
+  _$LinkCompletionKind_ExistingCopyWithImpl(this._self, this._then);
+
+  final LinkCompletionKind_Existing _self;
+  final $Res Function(LinkCompletionKind_Existing) _then;
+
+/// Create a copy of LinkCompletionKind
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') $Res call({Object? noteId = null,}) {
+  return _then(LinkCompletionKind_Existing(
+noteId: null == noteId ? _self.noteId : noteId // ignore: cast_nullable_to_non_nullable
+as String,
+  ));
+}
+
+
+}
+
+/// @nodoc
+
+
+class LinkCompletionKind_ProspectiveGhost extends LinkCompletionKind {
+  const LinkCompletionKind_ProspectiveGhost({required this.targetId}): super._();
+  
+
+ final  String targetId;
+
+/// Create a copy of LinkCompletionKind
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$LinkCompletionKind_ProspectiveGhostCopyWith<LinkCompletionKind_ProspectiveGhost> get copyWith => _$LinkCompletionKind_ProspectiveGhostCopyWithImpl<LinkCompletionKind_ProspectiveGhost>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is LinkCompletionKind_ProspectiveGhost&&(identical(other.targetId, targetId) || other.targetId == targetId));
+}
+
+
+@override
+int get hashCode => Object.hash(runtimeType,targetId);
+
+@override
+String toString() {
+  return 'LinkCompletionKind.prospectiveGhost(targetId: $targetId)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $LinkCompletionKind_ProspectiveGhostCopyWith<$Res> implements $LinkCompletionKindCopyWith<$Res> {
+  factory $LinkCompletionKind_ProspectiveGhostCopyWith(LinkCompletionKind_ProspectiveGhost value, $Res Function(LinkCompletionKind_ProspectiveGhost) _then) = _$LinkCompletionKind_ProspectiveGhostCopyWithImpl;
+@useResult
+$Res call({
+ String targetId
+});
+
+
+
+
+}
+/// @nodoc
+class _$LinkCompletionKind_ProspectiveGhostCopyWithImpl<$Res>
+    implements $LinkCompletionKind_ProspectiveGhostCopyWith<$Res> {
+  _$LinkCompletionKind_ProspectiveGhostCopyWithImpl(this._self, this._then);
+
+  final LinkCompletionKind_ProspectiveGhost _self;
+  final $Res Function(LinkCompletionKind_ProspectiveGhost) _then;
+
+/// Create a copy of LinkCompletionKind
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') $Res call({Object? targetId = null,}) {
+  return _then(LinkCompletionKind_ProspectiveGhost(
+targetId: null == targetId ? _self.targetId : targetId // ignore: cast_nullable_to_non_nullable
+as String,
+  ));
+}
+
+
+}
+
+/// @nodoc
+mixin _$LinkTargetResolution {
+
+
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is LinkTargetResolution);
+}
+
+
+@override
+int get hashCode => runtimeType.hashCode;
+
+@override
+String toString() {
+  return 'LinkTargetResolution()';
+}
+
+
+}
+
+/// @nodoc
+class $LinkTargetResolutionCopyWith<$Res>  {
+$LinkTargetResolutionCopyWith(LinkTargetResolution _, $Res Function(LinkTargetResolution) __);
+}
+
+
+/// Adds pattern-matching-related methods to [LinkTargetResolution].
+extension LinkTargetResolutionPatterns on LinkTargetResolution {
+/// A variant of `map` that fallback to returning `orElse`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( LinkTargetResolution_Existing value)?  existing,TResult Function( LinkTargetResolution_Missing value)?  missing,required TResult orElse(),}){
+final _that = this;
+switch (_that) {
+case LinkTargetResolution_Existing() when existing != null:
+return existing(_that);case LinkTargetResolution_Missing() when missing != null:
+return missing(_that);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// Callbacks receives the raw object, upcasted.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case final Subclass2 value:
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( LinkTargetResolution_Existing value)  existing,required TResult Function( LinkTargetResolution_Missing value)  missing,}){
+final _that = this;
+switch (_that) {
+case LinkTargetResolution_Existing():
+return existing(_that);case LinkTargetResolution_Missing():
+return missing(_that);}
+}
+/// A variant of `map` that fallback to returning `null`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( LinkTargetResolution_Existing value)?  existing,TResult? Function( LinkTargetResolution_Missing value)?  missing,}){
+final _that = this;
+switch (_that) {
+case LinkTargetResolution_Existing() when existing != null:
+return existing(_that);case LinkTargetResolution_Missing() when missing != null:
+return missing(_that);case _:
+  return null;
+
+}
+}
+/// A variant of `when` that fallback to an `orElse` callback.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( String noteId)?  existing,TResult Function( String targetId,  String directoryPath,  String title)?  missing,required TResult orElse(),}) {final _that = this;
+switch (_that) {
+case LinkTargetResolution_Existing() when existing != null:
+return existing(_that.noteId);case LinkTargetResolution_Missing() when missing != null:
+return missing(_that.targetId,_that.directoryPath,_that.title);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// As opposed to `map`, this offers destructuring.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case Subclass2(:final field2):
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( String noteId)  existing,required TResult Function( String targetId,  String directoryPath,  String title)  missing,}) {final _that = this;
+switch (_that) {
+case LinkTargetResolution_Existing():
+return existing(_that.noteId);case LinkTargetResolution_Missing():
+return missing(_that.targetId,_that.directoryPath,_that.title);}
+}
+/// A variant of `when` that fallback to returning `null`
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( String noteId)?  existing,TResult? Function( String targetId,  String directoryPath,  String title)?  missing,}) {final _that = this;
+switch (_that) {
+case LinkTargetResolution_Existing() when existing != null:
+return existing(_that.noteId);case LinkTargetResolution_Missing() when missing != null:
+return missing(_that.targetId,_that.directoryPath,_that.title);case _:
+  return null;
+
+}
+}
+
+}
+
+/// @nodoc
+
+
+class LinkTargetResolution_Existing extends LinkTargetResolution {
+  const LinkTargetResolution_Existing({required this.noteId}): super._();
+  
+
+ final  String noteId;
+
+/// Create a copy of LinkTargetResolution
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$LinkTargetResolution_ExistingCopyWith<LinkTargetResolution_Existing> get copyWith => _$LinkTargetResolution_ExistingCopyWithImpl<LinkTargetResolution_Existing>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is LinkTargetResolution_Existing&&(identical(other.noteId, noteId) || other.noteId == noteId));
+}
+
+
+@override
+int get hashCode => Object.hash(runtimeType,noteId);
+
+@override
+String toString() {
+  return 'LinkTargetResolution.existing(noteId: $noteId)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $LinkTargetResolution_ExistingCopyWith<$Res> implements $LinkTargetResolutionCopyWith<$Res> {
+  factory $LinkTargetResolution_ExistingCopyWith(LinkTargetResolution_Existing value, $Res Function(LinkTargetResolution_Existing) _then) = _$LinkTargetResolution_ExistingCopyWithImpl;
+@useResult
+$Res call({
+ String noteId
+});
+
+
+
+
+}
+/// @nodoc
+class _$LinkTargetResolution_ExistingCopyWithImpl<$Res>
+    implements $LinkTargetResolution_ExistingCopyWith<$Res> {
+  _$LinkTargetResolution_ExistingCopyWithImpl(this._self, this._then);
+
+  final LinkTargetResolution_Existing _self;
+  final $Res Function(LinkTargetResolution_Existing) _then;
+
+/// Create a copy of LinkTargetResolution
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') $Res call({Object? noteId = null,}) {
+  return _then(LinkTargetResolution_Existing(
+noteId: null == noteId ? _self.noteId : noteId // ignore: cast_nullable_to_non_nullable
+as String,
+  ));
+}
+
+
+}
+
+/// @nodoc
+
+
+class LinkTargetResolution_Missing extends LinkTargetResolution {
+  const LinkTargetResolution_Missing({required this.targetId, required this.directoryPath, required this.title}): super._();
+  
+
+ final  String targetId;
+ final  String directoryPath;
+ final  String title;
+
+/// Create a copy of LinkTargetResolution
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$LinkTargetResolution_MissingCopyWith<LinkTargetResolution_Missing> get copyWith => _$LinkTargetResolution_MissingCopyWithImpl<LinkTargetResolution_Missing>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is LinkTargetResolution_Missing&&(identical(other.targetId, targetId) || other.targetId == targetId)&&(identical(other.directoryPath, directoryPath) || other.directoryPath == directoryPath)&&(identical(other.title, title) || other.title == title));
+}
+
+
+@override
+int get hashCode => Object.hash(runtimeType,targetId,directoryPath,title);
+
+@override
+String toString() {
+  return 'LinkTargetResolution.missing(targetId: $targetId, directoryPath: $directoryPath, title: $title)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $LinkTargetResolution_MissingCopyWith<$Res> implements $LinkTargetResolutionCopyWith<$Res> {
+  factory $LinkTargetResolution_MissingCopyWith(LinkTargetResolution_Missing value, $Res Function(LinkTargetResolution_Missing) _then) = _$LinkTargetResolution_MissingCopyWithImpl;
+@useResult
+$Res call({
+ String targetId, String directoryPath, String title
+});
+
+
+
+
+}
+/// @nodoc
+class _$LinkTargetResolution_MissingCopyWithImpl<$Res>
+    implements $LinkTargetResolution_MissingCopyWith<$Res> {
+  _$LinkTargetResolution_MissingCopyWithImpl(this._self, this._then);
+
+  final LinkTargetResolution_Missing _self;
+  final $Res Function(LinkTargetResolution_Missing) _then;
+
+/// Create a copy of LinkTargetResolution
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') $Res call({Object? targetId = null,Object? directoryPath = null,Object? title = null,}) {
+  return _then(LinkTargetResolution_Missing(
+targetId: null == targetId ? _self.targetId : targetId // ignore: cast_nullable_to_non_nullable
+as String,directoryPath: null == directoryPath ? _self.directoryPath : directoryPath // ignore: cast_nullable_to_non_nullable
+as String,title: null == title ? _self.title : title // ignore: cast_nullable_to_non_nullable
+as String,
+  ));
+}
+
+
+}
+
+/// @nodoc
 mixin _$TreeNode {
 
  String get path;

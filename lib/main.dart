@@ -5,6 +5,7 @@ import 'package:burlmd/src/rust/frb_generated.dart';
 import 'package:burlmd/src/rust/draft.dart';
 import 'package:burlmd/src/providers/rust_api_provider.dart';
 import 'package:burlmd/src/screens/workspace.dart';
+import 'package:burlmd/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -18,7 +19,11 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(home: _Home());
+    return MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: _Home(),
+    );
   }
 }
 
@@ -52,6 +57,9 @@ class _HomeState extends ConsumerState<_Home> {
     }
     if (Platform.environment.containsKey('BURLMD_SMOKE_F005')) {
       _stageSmokeF005();
+    }
+    if (Platform.environment.containsKey('BURLMD_SMOKE_F006')) {
+      _stageSmokeF006();
     }
   }
 
@@ -242,5 +250,38 @@ class _HomeState extends ConsumerState<_Home> {
     ], 'shortcut target');
     ref.invalidate(workspaceTreeProvider);
     ref.read(selectedNoteIdProvider.notifier).select(state.metadata.id);
+  }
+
+  /// Builds both halves of F006 through Core: a real target Note for the
+  /// completion resolver and a source Note whose only Block ends at a valid
+  /// `[[` query. The Editor performs promotion, completion acceptance, commit
+  /// and re-resolved link follow; the shell rejects all earlier states.
+  Future<void> _stageSmokeF006() async {
+    const targetTitle = 'F006 target';
+    const title = 'F006 link completion';
+    final api = ref.read(rustApiProvider);
+    final deadline = DateTime.now().add(const Duration(seconds: 30));
+    while (DateTime.now().isBefore(deadline)) {
+      if (ref.read(workspaceProvider).hasValue) break;
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    }
+    try {
+      try {
+        await api.deleteNote(targetTitle);
+      } catch (_) {}
+      try {
+        await api.deleteNote(title);
+      } catch (_) {}
+      await api.createNote('', targetTitle);
+      var state = await api.createNote('', title);
+      state = api.insertBlock(state.metadata.id, [
+        state.ast.length,
+      ], '[[$targetTitle');
+      ref.invalidate(workspaceTreeProvider);
+      ref.read(selectedNoteIdProvider.notifier).select(state.metadata.id);
+    } catch (_) {
+      // No marker is emitted on a failed stage, so the smoke harness rejects
+      // the generic shell window rather than producing misleading evidence.
+    }
   }
 }

@@ -12,7 +12,15 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart'
 export 'package:burlmd/src/rust/api/auth.dart' show OAuthFlowStart;
 export 'package:burlmd/src/rust/api/ffi_api.dart'
     show BlockCaret, BlockRange, StructuralEdit;
-export 'package:burlmd/src/rust/index/query.dart' show LinkCompletion, TreeNode;
+export 'package:burlmd/src/rust/index/query.dart'
+    show
+        LinkCompletion,
+        LinkCompletionKind_Existing,
+        LinkCompletionKind_ProspectiveGhost,
+        LinkTargetResolution,
+        LinkTargetResolution_Existing,
+        LinkTargetResolution_Missing,
+        TreeNode;
 export 'package:burlmd/src/rust/workspace/bootstrap.dart' show WorkspaceInfo;
 export 'package:burlmd/src/rust/workspace/lifecycle.dart'
     show IdRemap, LifecycleEffects;
@@ -207,8 +215,28 @@ class RustApi {
   /// (CAP-GRAPH-02). Each result's `insertText` is already a bundle-absolute,
   /// escaped Markdown link built Core-side — the UI splices it verbatim and
   /// must not construct or repair a link target itself.
-  Future<List<LinkCompletion>> linkCompletions(String query, int limit) =>
-      ffi.linkCompletions(query: query, limit: limit);
+  Future<List<LinkCompletion>> linkCompletions(
+    String noteId,
+    String query,
+    int limit,
+  ) => ffi.linkCompletions(
+    noteId: noteId,
+    query: query,
+    limit: switch (limit) {
+      < 0 => 0,
+      > 10 => 10,
+      _ => limit,
+    },
+  );
+
+  /// Resolves an internal Link at activation time. The returned sealed shape
+  /// is Core-derived; callers must not infer state from an AST render flag.
+  Future<LinkTargetResolution> resolveLinkTarget(String targetId) =>
+      ffi.resolveLinkTarget(targetId: targetId);
+
+  /// Creates only the exact target identity Core re-resolves from a Link.
+  Future<NoteState> createLinkTarget(String targetId) =>
+      ffi.createLinkTarget(targetId: targetId);
 
   /// Notes linking *to* `noteId` (CAP-GRAPH-05).
   Future<List<NoteMetadata>> backlinks(String noteId) =>

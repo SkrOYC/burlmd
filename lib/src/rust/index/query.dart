@@ -10,7 +10,7 @@ part 'query.freezed.dart';
 
 /// One candidate for the in-editor Link completion (CAP-GRAPH-02).
 class LinkCompletion {
-  final String noteId;
+  final LinkCompletionKind kind;
   final String title;
 
   /// The exact text to splice at the cursor: a bundle-absolute Markdown
@@ -26,22 +26,46 @@ class LinkCompletion {
   final String insertText;
 
   const LinkCompletion({
-    required this.noteId,
+    required this.kind,
     required this.title,
     required this.insertText,
   });
 
   @override
-  int get hashCode => noteId.hashCode ^ title.hashCode ^ insertText.hashCode;
+  int get hashCode => kind.hashCode ^ title.hashCode ^ insertText.hashCode;
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is LinkCompletion &&
           runtimeType == other.runtimeType &&
-          noteId == other.noteId &&
+          kind == other.kind &&
           title == other.title &&
           insertText == other.insertText;
+}
+
+@freezed
+sealed class LinkCompletionKind with _$LinkCompletionKind {
+  const LinkCompletionKind._();
+
+  const factory LinkCompletionKind.existing({required String noteId}) =
+      LinkCompletionKind_Existing;
+  const factory LinkCompletionKind.prospectiveGhost({
+    required String targetId,
+  }) = LinkCompletionKind_ProspectiveGhost;
+}
+
+@freezed
+sealed class LinkTargetResolution with _$LinkTargetResolution {
+  const LinkTargetResolution._();
+
+  const factory LinkTargetResolution.existing({required String noteId}) =
+      LinkTargetResolution_Existing;
+  const factory LinkTargetResolution.missing({
+    required String targetId,
+    required String directoryPath,
+    required String title,
+  }) = LinkTargetResolution_Missing;
 }
 
 @freezed

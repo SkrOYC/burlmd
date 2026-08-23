@@ -1,5 +1,7 @@
+import 'package:burlmd/l10n/generated/app_localizations.dart';
 import 'package:burlmd/src/rust/markdown/ast.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart'
     show RenderParagraph, SelectionRegistrar;
 import 'package:flutter/services.dart';
@@ -207,6 +209,99 @@ Widget renderBlock(AstNode node) => switch (node) {
     children: localContent.map(renderBlock).toList(),
   ),
 };
+
+/// The formatted variant used by an unfocused [BlockView].  Only internal
+/// links become WidgetSpans; all non-link text stays in the normal RichText
+/// flow, preserving its measured layout and the existing selection broker.
+Widget _renderBlockForView(
+  AstNode node,
+  TextSpan Function(String targetId, bool exists, List<InlineElement> content)
+  linkSpan,
+) => switch (node) {
+  AstNode_Heading(:final content) => Text.rich(
+    TextSpan(children: _interactiveInlines(content, linkSpan)),
+    style: blockTextStyle(node),
+  ),
+  AstNode_Paragraph(:final content) => Text.rich(
+    TextSpan(children: _interactiveInlines(content, linkSpan)),
+    style: blockTextStyle(node),
+  ),
+  AstNode_List(:final ordered, :final items) => blockContainer(
+    node,
+    Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final (index, item) in items.indexed)
+          switch (item) {
+            AstNode_ListItem(:final content) when index == 0 => Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: content
+                  .map((child) => _renderBlockForView(child, linkSpan))
+                  .toList(),
+            ),
+            AstNode_ListItem(:final content, :final checked) => Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _markerWidget(checked, ordered ? '${index + 1}.' : '•'),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: content
+                        .map((child) => _renderBlockForView(child, linkSpan))
+                        .toList(),
+                  ),
+                ),
+              ],
+            ),
+            _ => _renderBlockForView(item, linkSpan),
+          },
+      ],
+    ),
+  ),
+  AstNode_ListItem(:final content, :final checked) => Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      _markerWidget(checked, '•'),
+      Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: content
+              .map((child) => _renderBlockForView(child, linkSpan))
+              .toList(),
+        ),
+      ),
+    ],
+  ),
+  AstNode_Blockquote(:final nodes) => blockContainer(
+    node,
+    Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: nodes
+          .map((child) => _renderBlockForView(child, linkSpan))
+          .toList(),
+    ),
+  ),
+  AstNode_Suggestion(:final localContent) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: localContent
+        .map((child) => _renderBlockForView(child, linkSpan))
+        .toList(),
+  ),
+  _ => renderBlock(node),
+};
+
+List<InlineSpan> _interactiveInlines(
+  List<InlineElement> elements,
+  TextSpan Function(String targetId, bool exists, List<InlineElement> content)
+  linkSpan,
+) => [
+  for (final element in elements)
+    switch (element) {
+      InlineElement_Link(:final targetId, :final exists, :final content) =>
+        linkSpan(targetId, exists, content),
+      _ => renderInline(element),
+    },
+];
 
 /// Renders a top-level container while replacing exactly one descendant leaf
 /// with its raw editor. The container's siblings, marker/border decoration,
@@ -604,6 +699,31 @@ String _inlineRenderedOne(InlineElement element) => switch (element) {
   InlineElement_ExternalLink(:final content) => _inlineRendered(content),
 };
 
+String? _firstInternalLinkTarget(AstNode node) => switch (node) {
+  AstNode_Paragraph(:final content) ||
+  AstNode_Heading(:final content) => _firstTargetInInlines(content),
+  AstNode_List(:final items) => _firstTargetInNodes(items),
+  AstNode_ListItem(:final content) => _firstTargetInNodes(content),
+  AstNode_Blockquote(:final nodes) => _firstTargetInNodes(nodes),
+  AstNode_Suggestion(:final localContent) => _firstTargetInNodes(localContent),
+  _ => null,
+};
+
+String? _firstTargetInNodes(List<AstNode> nodes) {
+  for (final node in nodes) {
+    final target = _firstInternalLinkTarget(node);
+    if (target != null) return target;
+  }
+  return null;
+}
+
+String? _firstTargetInInlines(List<InlineElement> elements) {
+  for (final element in elements) {
+    if (element case InlineElement_Link(:final targetId)) return targetId;
+  }
+  return null;
+}
+
 int _inlineRenderedLength(InlineElement element) => switch (element) {
   InlineElement_Text(:final field0) => field0.content.length,
   InlineElement_Link(:final content) => _inlineRendered(content).length,
@@ -623,12 +743,13 @@ int _inlineRenderedLengthAll(List<InlineElement> elements) =>
 /// painted `RenderParagraph`s — real rendered geometry, not widget-property
 /// guesses — mapped to Core's canonical rendered UTF-16 offset and handed to
 /// the parent ([Editor]), which asks Core for the raw caret and leaf path.
-class BlockView extends StatelessWidget {
+class BlockView extends StatefulWidget {
   const BlockView({
     super.key,
     required this.node,
     required this.blockPath,
     required this.onFocusRequested,
+    this.onLinkActivated,
     this.selectionRegistrar,
   });
 
@@ -636,6 +757,7 @@ class BlockView extends StatelessWidget {
   final List<int> blockPath;
   final void Function(List<int> topLevelPath, int renderedUtf16Offset)
   onFocusRequested;
+  final void Function(String targetId)? onLinkActivated;
 
   /// When non-null, this Block's painted text registers with it instead of
   /// directly with the enclosing [SelectionArea]'s registrar (`EDIT-F003`):
@@ -646,11 +768,54 @@ class BlockView extends StatelessWidget {
   final SelectionRegistrar? selectionRegistrar;
 
   @override
+  State<BlockView> createState() => _BlockViewState();
+}
+
+class _BlockViewState extends State<BlockView> {
+  final Map<String, TapGestureRecognizer> _linkRecognizers = {};
+
+  @override
+  void dispose() {
+    for (final recognizer in _linkRecognizers.values) {
+      recognizer.dispose();
+    }
+    super.dispose();
+  }
+
+  TapGestureRecognizer _recognizerFor(String targetId) =>
+      _linkRecognizers.putIfAbsent(
+        targetId,
+        () =>
+            TapGestureRecognizer()
+              ..onTap = () => widget.onLinkActivated?.call(targetId),
+      );
+
+  @override
   Widget build(BuildContext context) {
-    Widget child = renderBlock(node);
-    if (selectionRegistrar != null) {
+    final onLinkActivated = widget.onLinkActivated;
+    final l10n = AppLocalizations.of(context);
+    Widget child = onLinkActivated == null || l10n == null
+        ? renderBlock(widget.node)
+        : _renderBlockForView(widget.node, (targetId, exists, content) {
+            final title = _inlineRendered(content);
+            return TextSpan(
+              text: title,
+              semanticsLabel: exists
+                  ? l10n.internalLinkExisting(title)
+                  : l10n.internalLinkMissing(title),
+              recognizer: _recognizerFor(targetId),
+              style: TextStyle(
+                color: exists ? Colors.blue : Colors.deepOrange,
+                decoration: TextDecoration.underline,
+                decorationStyle: exists
+                    ? TextDecorationStyle.solid
+                    : TextDecorationStyle.dotted,
+              ),
+            );
+          });
+    if (widget.selectionRegistrar != null) {
       child = SelectionRegistrarScope(
-        registrar: selectionRegistrar!,
+        registrar: widget.selectionRegistrar!,
         child: child,
       );
     }
@@ -663,7 +828,12 @@ class BlockView extends StatelessWidget {
           // Keyboard promotion uses the same Core-backed top-level coordinate
           // path as a pointer on the rendered Block. It never synthesizes a
           // raw source offset or nested leaf path in Presentation.
-          onFocusRequested(blockPath, 0);
+          final targetId = _firstInternalLinkTarget(widget.node);
+          if (targetId != null && widget.onLinkActivated != null) {
+            widget.onLinkActivated!(targetId);
+          } else {
+            widget.onFocusRequested(widget.blockPath, 0);
+          }
           return KeyEventResult.handled;
         }
         return KeyEventResult.ignored;
@@ -683,7 +853,7 @@ class BlockView extends StatelessWidget {
   void _handleTapUp(BuildContext context, TapUpDetails details) {
     final renderObject = context.findRenderObject();
     if (renderObject == null) {
-      onFocusRequested(blockPath, 0);
+      widget.onFocusRequested(widget.blockPath, 0);
       return;
     }
     final paragraphs = <RenderParagraph>[];
@@ -696,10 +866,10 @@ class BlockView extends StatelessWidget {
       if (!globalBounds.contains(details.globalPosition)) continue;
       final local = box.globalToLocal(details.globalPosition);
       final position = box.getPositionForOffset(local);
-      onFocusRequested(
-        blockPath,
+      widget.onFocusRequested(
+        widget.blockPath,
         blockCoreRenderedOffset(
-          node,
+          widget.node,
           leafIndex: index,
           renderedOffset: position.offset,
         ),
@@ -708,7 +878,7 @@ class BlockView extends StatelessWidget {
     }
     // No text leaf under the pointer (a thematic break's rule, whitespace
     // beside a short line): promote with the caret at the Block's start.
-    onFocusRequested(blockPath, 0);
+    widget.onFocusRequested(widget.blockPath, 0);
   }
 
   /// Collects the painted text paragraphs beneath [object] in child order,

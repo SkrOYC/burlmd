@@ -30,7 +30,7 @@ pub use crate::workspace::{IdRemap, LifecycleEffects};
 // the discovery-domain module, for the same reason as every re-export above:
 // the logic that fills them lives there, tested directly against an injected
 // `Connection`, and this module's own job is the thin `#[frb]` wrappers below.
-pub use crate::index::query::{LinkCompletion, TreeNode};
+pub use crate::index::query::{LinkCompletion, LinkCompletionKind, LinkTargetResolution, TreeNode};
 
 /// Opens the local Workspace, creating and initializing it if absent
 /// (ADR-005 decision 1): creates the directory, initializes a Git repository
@@ -733,14 +733,40 @@ pub async fn find_notes_by_title(query: String, limit: u32) -> Result<Vec<NoteMe
 
 /// Candidates for the completion triggered by `[[` (CAP-GRAPH-02). The
 /// trigger is a UI affordance; what gets inserted is `LinkCompletion::insert_text`,
-/// built Core-side. `limit` carries [`search_notes`]' semantics, including `0`
-/// returning no candidates.
+/// built Core-side. Results are capped at ten and include a Core-derived
+/// prospective ghost when `query` is a valid, as-yet-unoccupied target in the
+/// current Note's Directory. `limit == 0` returns no candidates.
 #[frb]
-pub async fn link_completions(query: String, limit: u32) -> Result<Vec<LinkCompletion>, AppError> {
+pub async fn link_completions(
+    note_id: String,
+    query: String,
+    limit: u32,
+) -> Result<Vec<LinkCompletion>, AppError> {
     let workspace_id = crate::db::connection::active_workspace_id()?;
     crate::db::connection::with_connection(|conn| {
-        crate::index::query::link_completions_impl(conn, &workspace_id, &query, limit)
+        crate::index::query::link_completions_impl(conn, &workspace_id, &note_id, &query, limit)
     })
+}
+
+/// Re-resolves an internal Link target at activation time. The parsed AST's
+/// `exists` flag is intentionally not accepted because it is render-time,
+/// stale-prone advisory state.
+#[frb]
+pub async fn resolve_link_target(target_id: String) -> Result<LinkTargetResolution, AppError> {
+    let workspace_id = crate::db::connection::active_workspace_id()?;
+    crate::db::connection::with_connection(|conn| {
+        crate::index::query::resolve_link_target_impl(conn, &workspace_id, &target_id)
+    })
+}
+
+/// Creates the exact validated identity carried by a still-missing Link.
+/// Parent Directories are materialized under the lifecycle lock; if a burlmd
+/// caller created the target after resolution this opens that Note instead,
+/// while a foreign filesystem collision is refused rather than overwritten.
+#[frb]
+pub async fn create_link_target(target_id: String) -> Result<NoteState, AppError> {
+    let workspace = crate::workspace::persist::Workspace::active()?;
+    crate::workspace::lifecycle::create_link_target(&workspace, &target_id)
 }
 
 /// Notes linking *to* this one (CAP-GRAPH-05).
@@ -1459,6 +1485,46 @@ mod tests {
         );
     }
 
+    /// Drives F006's new public FFI surface through the same active-Workspace
+    /// setup production uses. The test deliberately does not inspect an AST
+    /// `exists` flag: activation is the resolver's index query, and creation
+    /// consumes only the exact Core-owned target id.
+    #[test]
+    fn wrapper_layer_link_resolution_and_create_target_follow_the_public_ffi_contract() {
+        let _guards = wrapper_guards();
+        let _workspace = wrapper_bootstrap();
+
+        assert_eq!(
+            block_on(resolve_link_target("projects/Future Plan".to_string())).unwrap(),
+            LinkTargetResolution::Missing {
+                target_id: "projects/Future Plan".to_string(),
+                directory_path: "projects".to_string(),
+                title: "Future Plan".to_string(),
+            }
+        );
+        let created = block_on(create_link_target("projects/Future Plan".to_string())).unwrap();
+        assert_eq!(created.metadata.id, "projects/Future Plan");
+        assert_eq!(
+            block_on(resolve_link_target("projects/Future Plan".to_string())).unwrap(),
+            LinkTargetResolution::Existing {
+                note_id: "projects/Future Plan".to_string(),
+            }
+        );
+
+        let completions = block_on(link_completions(
+            "projects/Future Plan".to_string(),
+            "Next Plan".to_string(),
+            100,
+        ))
+        .unwrap();
+        assert_eq!(completions.len(), 1);
+        assert!(matches!(
+            completions[0].kind,
+            LinkCompletionKind::ProspectiveGhost { ref target_id }
+                if target_id == "projects/Next Plan"
+        ));
+    }
+
     /// `insert_block`, `delete_block`, `split_block` and
     /// `merge_block_with_previous` all share the signature `(note_id,
     /// block_path) -> Result<NoteState, AppError>`, so only an observable
@@ -2061,7 +2127,8 @@ mod tests {
         // Three functions on this boundary legitimately have it, and no
         // fourth may be added without amending the contract. `open_note`
         // and `reload_note` are the two the previous revision named.
-        // `create_note` is the third and is not an exception to the rule
+        // `create_note` and `create_link_target` are the creation entries and
+        // are not exceptions to the rule
         // above but an instance of it: `contracts/ffi_api.rs` specifies that
         // it creates the file *and opens it*, precisely so that the first
         // `update_block` after a creation substitutes into a buffer that was
@@ -2075,6 +2142,7 @@ mod tests {
         assert_eq!(
             opener_shaped_names,
             vec![
+                "create_link_target".to_string(),
                 "create_note".to_string(),
                 "open_note".to_string(),
                 "reload_note".to_string()

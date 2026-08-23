@@ -6,6 +6,8 @@ import 'package:burlmd/src/components/block_editor.dart';
 import 'package:burlmd/src/components/block_view.dart';
 import 'package:burlmd/src/providers/note_providers.dart';
 import 'package:burlmd/src/providers/rust_api_provider.dart';
+import 'package:burlmd/src/providers/workspace_provider.dart';
+import 'package:burlmd/l10n/generated/app_localizations.dart';
 import 'package:burlmd/src/rust/draft.dart';
 import 'package:burlmd/src/rust/markdown/ast.dart';
 import 'package:flutter/material.dart';
@@ -97,6 +99,9 @@ class EditorState extends ConsumerState<Editor> {
     }
     if (Platform.environment.containsKey('BURLMD_SMOKE_F005')) {
       unawaited(_runSmokeF005());
+    }
+    if (Platform.environment.containsKey('BURLMD_SMOKE_F006')) {
+      unawaited(_runSmokeF006());
     }
   }
 
@@ -267,6 +272,9 @@ class EditorState extends ConsumerState<Editor> {
           smokeF005:
               Platform.environment.containsKey('BURLMD_SMOKE_F005') &&
               note.metadata.title == 'F005 emphasis',
+          smokeF006:
+              Platform.environment.containsKey('BURLMD_SMOKE_F006') &&
+              note.metadata.title == 'F006 link completion',
         ),
       );
     }
@@ -285,8 +293,76 @@ class EditorState extends ConsumerState<Editor> {
       node: note.ast[index],
       blockPath: path,
       onFocusRequested: _promote,
+      onLinkActivated: (targetId) => unawaited(_followInternalLink(targetId)),
       selectionRegistrar: broker,
     );
+  }
+
+  /// Follows an internal Link through the Core at activation time. The AST's
+  /// `exists` bit never appears here: it is an advisory rendering affordance,
+  /// and a stale Note can only be followed safely from this fresh sealed
+  /// resolution.
+  Future<void> _followInternalLink(String targetId) async {
+    try {
+      final api = ref.read(rustApiProvider);
+      final resolution = await api.resolveLinkTarget(targetId);
+      if (!mounted) return;
+      switch (resolution) {
+        case LinkTargetResolution_Existing(:final noteId):
+          ref.read(selectedNoteIdProvider.notifier).select(noteId);
+        case LinkTargetResolution_Missing(
+          :final targetId,
+          :final directoryPath,
+          :final title,
+        ):
+          await _offerCreateLinkedNote(
+            context,
+            api,
+            targetId: targetId,
+            directoryPath: directoryPath,
+            title: title,
+          );
+      }
+    } catch (error) {
+      if (mounted) ref.read(editorErrorProvider.notifier).report(error);
+    }
+  }
+
+  Future<void> _offerCreateLinkedNote(
+    BuildContext context,
+    RustApi api, {
+    required String targetId,
+    required String directoryPath,
+    required String title,
+  }) async {
+    final l10n = AppLocalizations.of(context)!;
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(l10n.createLinkedNoteTitle),
+        content: Text(l10n.createLinkedNoteBody(title, directoryPath)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text(l10n.createLinkedNoteCancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text(l10n.createLinkedNoteConfirm),
+          ),
+        ],
+      ),
+    );
+    if (accepted != true || !mounted) return;
+    try {
+      // `targetId` comes only from the fresh Core resolution above. Dart does
+      // not derive a title, directory, or replacement identity here.
+      final created = await api.createLinkTarget(targetId);
+      ref.invalidate(workspaceTreeProvider);
+      ref.read(selectedNoteIdProvider.notifier).select(created.metadata.id);
+    } catch (error) {
+      if (mounted) ref.read(editorErrorProvider.notifier).report(error);
+    }
   }
 
   /// Promotes the Core-resolved editable leaf for a top-level rendered
@@ -693,6 +769,77 @@ class EditorState extends ConsumerState<Editor> {
     } catch (error) {
       ref.read(editorErrorProvider.notifier).report(error);
     }
+  }
+
+  /// F006's real-app stage. It promotes the Core-staged `[[` source, waits
+  /// for [BlockEditor]'s real completion acceptance and blur commit, confirms
+  /// the returned AST actually contains a Link, then follows that rendered
+  /// link through the same re-resolution callback a pointer/keyboard uses.
+  Future<void> _runSmokeF006() async {
+    final deadline = DateTime.now().add(const Duration(seconds: 30));
+    while (mounted && DateTime.now().isBefore(deadline)) {
+      final note = ref.read(activeNoteProvider);
+      if (note?.metadata.title == 'F006 link completion' &&
+          note!.ast.isNotEmpty) {
+        break;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    }
+    if (!mounted) return;
+    final staged = ref.read(activeNoteProvider);
+    if (staged == null || staged.metadata.title != 'F006 link completion') {
+      return;
+    }
+    _promote([0], blockCoreRenderedLength(staged.ast.first));
+    while (mounted && DateTime.now().isBefore(deadline)) {
+      final settled = ref.read(activeNoteProvider);
+      final targetId = settled == null
+          ? null
+          : _firstInternalLinkTarget(settled.ast);
+      if (_focused == null &&
+          settled?.metadata.title == 'F006 link completion' &&
+          targetId != null) {
+        await _followInternalLink(targetId);
+        await WidgetsBinding.instance.endOfFrame;
+        final readinessPath = Platform.environment['BURLMD_SMOKE_READY_FILE'];
+        if (readinessPath != null && mounted) {
+          try {
+            File(readinessPath).writeAsStringSync(
+              'f006-completion-accepted-and-internal-link-followed\n',
+            );
+          } on FileSystemException {
+            // The shell requires the marker and will reject this stage.
+          }
+        }
+        return;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    }
+  }
+
+  String? _firstInternalLinkTarget(List<AstNode> nodes) {
+    for (final node in nodes) {
+      final target = switch (node) {
+        AstNode_Paragraph(:final content) ||
+        AstNode_Heading(:final content) => _firstTargetIn(content),
+        AstNode_List(:final items) => _firstInternalLinkTarget(items),
+        AstNode_ListItem(:final content) => _firstInternalLinkTarget(content),
+        AstNode_Blockquote(:final nodes) => _firstInternalLinkTarget(nodes),
+        AstNode_Suggestion(:final localContent) => _firstInternalLinkTarget(
+          localContent,
+        ),
+        _ => null,
+      };
+      if (target != null) return target;
+    }
+    return null;
+  }
+
+  String? _firstTargetIn(List<InlineElement> content) {
+    for (final element in content) {
+      if (element case InlineElement_Link(:final targetId)) return targetId;
+    }
+    return null;
   }
 
   /// Manual-QA hook for `scripts/smoke-shot.sh f004-block-editing`

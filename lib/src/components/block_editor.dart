@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
 
+import 'package:burlmd/src/components/link_completion.dart';
 import 'package:burlmd/src/providers/note_providers.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -50,6 +51,7 @@ class BlockEditor extends ConsumerStatefulWidget {
     this.onBackspaceAtStart,
     this.onPhantomInsert,
     this.smokeF005 = false,
+    this.smokeF006 = false,
   });
 
   final String noteId;
@@ -124,6 +126,11 @@ class BlockEditor extends ConsumerStatefulWidget {
   /// source; it is inert in normal editing.
   final bool smokeF005;
 
+  /// QA-only F006 path: waits for the same valid popup normal typing opens,
+  /// accepts it through the same handler as Enter, then blurs to render the
+  /// Core-produced Markdown as an internal Link.
+  final bool smokeF006;
+
   @override
   ConsumerState<BlockEditor> createState() => _BlockEditorState();
 }
@@ -139,6 +146,8 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
   bool _pendingResolutionScheduled = false;
   bool _hasResyncConflict = false;
   bool _phantomMaterialized = false;
+  final GlobalKey<LinkCompletionState> _completionKey =
+      GlobalKey<LinkCompletionState>();
 
   /// Flutter 3.44.3 exposes [TextEditingValue.isComposingRangeValid], but a
   /// valid collapsed range is not an active composition. Only a non-empty,
@@ -160,6 +169,7 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
     _controller.addListener(_onEditingValueChanged);
     _focusNode = FocusNode()..addListener(_onFocusChanged);
     if (widget.smokeF005) unawaited(_runSmokeF005Shortcut());
+    if (widget.smokeF006) unawaited(_runSmokeF006Completion());
   }
 
   @override
@@ -373,6 +383,9 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
     }
+    if (_completionKey.currentState?.handleKeyEvent(event) ?? false) {
+      return KeyEventResult.handled;
+    }
     final emphasis = _emphasisShortcutFor(event);
     if (emphasis != null) {
       // A phantom has no Core-backed source span, and a resync conflict has
@@ -457,6 +470,16 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
     _lastSettledText = result.text;
   }
 
+  /// Applies a Core-provided completion as one controller update and exactly
+  /// one buffered Core write.  The popup never constructs a destination; it
+  /// supplies only its immutable replacement result.
+  void _applyLinkCompletion(String source, TextSelection selection) {
+    if (_hasResyncConflict || widget.phantom) return;
+    _controller.value = TextEditingValue(text: source, selection: selection);
+    _bufferSource(source);
+    _lastSettledText = source;
+  }
+
   /// Stages a real focused raw selection, then dispatches the exact source
   /// operation used by a platform-primary shortcut. It exists solely because
   /// the smoke harness launches a release desktop application without a test
@@ -476,6 +499,25 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
     );
     _applyEmphasis(_InlineEmphasis.bold);
     unawaited(_writeSmokeF005Readiness(_controller.value));
+  }
+
+  Future<void> _runSmokeF006Completion() async {
+    final deadline = DateTime.now().add(const Duration(seconds: 10));
+    while (mounted && DateTime.now().isBefore(deadline)) {
+      await WidgetsBinding.instance.endOfFrame;
+      if (_focusNode.hasFocus &&
+          (_completionKey.currentState?.isOpen ?? false)) {
+        break;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    }
+    if (!mounted ||
+        !_focusNode.hasFocus ||
+        !(_completionKey.currentState?.acceptActiveForSmoke() ?? false)) {
+      return;
+    }
+    await WidgetsBinding.instance.endOfFrame;
+    if (mounted) _focusNode.unfocus();
   }
 
   Future<void> _writeSmokeF005Readiness(TextEditingValue value) async {
@@ -526,30 +568,47 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
     // shortcut (`EDIT-F004`).
     child: Focus(
       onKeyEvent: _handleKeyEvent,
-      child: EditableText(
-        controller: _controller,
-        focusNode: _focusNode,
-        autofocus: true,
-        style: widget.style,
-        cursorColor: Theme.of(context).colorScheme.primary,
-        backgroundCursorColor: Colors.grey,
-        maxLines: null,
-        keyboardType: TextInputType.multiline,
-        onChanged: (text) {
-          if (widget.phantom) return;
-          if (_hasResyncConflict) return;
-          // The Block's raw source text, not a reconstructed AstNode — this
-          // is the per-keystroke buffering call (`update_block`, ADR-007
-          // decision 4): no parse, no AST round trip, draft-row write only.
-          // Refusals surface through keystrokeWriteFailureProvider beside the
-          // content, never by replacing it (flow-edit-note.md).
-          // A deferred composition resync is resolved by the controller
-          // listener, including a composing-only completion. Do not race it
-          // here by replaying the stale external source over this input.
-          if (_pendingResync != null && !_hasLiveComposition) return;
-          _bufferSource(text);
-          if (!_hasLiveComposition) _lastSettledText = text;
-        },
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          EditableText(
+            controller: _controller,
+            focusNode: _focusNode,
+            autofocus: true,
+            style: widget.style,
+            cursorColor: Theme.of(context).colorScheme.primary,
+            backgroundCursorColor: Colors.grey,
+            maxLines: null,
+            keyboardType: TextInputType.multiline,
+            onChanged: (text) {
+              if (widget.phantom) return;
+              if (_hasResyncConflict) return;
+              // The Block's raw source text, not a reconstructed AstNode — this
+              // is the per-keystroke buffering call (`update_block`, ADR-007
+              // decision 4): no parse, no AST round trip, draft-row write only.
+              // Refusals surface through keystrokeWriteFailureProvider beside the
+              // content, never by replacing it (flow-edit-note.md).
+              // A deferred composition resync is resolved by the controller
+              // listener, including a composing-only completion. Do not race it
+              // here by replaying the stale external source over this input.
+              if (_pendingResync != null && !_hasLiveComposition) return;
+              _bufferSource(text);
+              if (!_hasLiveComposition) _lastSettledText = text;
+            },
+          ),
+          Positioned(
+            top: 28,
+            left: 0,
+            right: 0,
+            child: LinkCompletionPopup(
+              key: _completionKey,
+              noteId: widget.noteId,
+              controller: _controller,
+              focusNode: _focusNode,
+              onAccepted: _applyLinkCompletion,
+            ),
+          ),
+        ],
       ),
     ),
   );
