@@ -1,5 +1,5 @@
 ---
-version: v1.6.7
+version: v1.6.12
 ---
 
 # Bill of Materials (BOM) & Stack
@@ -42,10 +42,14 @@ version: v1.6.7
 - **FRB Version Triple:** `flutter_rust_bridge_codegen` (pinned by `nixpkgs`, currently 2.12.0) is versioned independently of the `flutter_rust_bridge` Rust crate and Dart package, which resolve from crates.io and pub.dev. Upstream publishes no explicit rule requiring the three to match — the manual and troubleshooting pages were checked and are silent on it — but the codegen emits bindings against a specific runtime API, so skew between them is a live risk rather than a documented constraint. Keep the three aligned and treat a `devenv update` that moves the codegen as requiring the other two to be bumped with it. **To confirm empirically at CORE-A001**, which is the first point at which all three exist.
 - **OKF Specification Version:** Pinned to v0.2 by ADR-004. The specification's §12 states that a minor bump adds backward-compatible optional fields while a major bump may rename required fields or change reserved filenames — but do not plan against that stated policy, because upstream has already departed from it. The only minor bump the format has had, v0.1 to v0.2, carried two breaking changes in its own §13.1: `timestamp` superseded by `generated.at`, and the body `# Citations` list superseded by the `sources` frontmatter field. **Treat every OKF revision, minor or major, as potentially breaking** and as an explicit decision to re-evaluate against `data-models/okf-bundle.md`; never as an automatic adoption. The format is young (v0.1 shipped June 2026, v0.2 within weeks), so movement is likely and this is not a theoretical concern. Note also that we ship untagged: §12 permits declaring `okf_version` only in a bundle-root `index.md`, which ADR-004 decision 6 declines to generate.
 - **`saphyr` Pre-1.0 Risk:** The pin is `0.0.11` (published 2026-07-11). The crate is at `0.0.x`, has shipped multiple releases in a single day, and changed publishing maintainer partway through its history — so its API should be assumed unstable across any bump. This is tolerable here specifically because the surface consumed is tiny and read-only (parse a block; extract two scalar strings), which caps the blast radius of a breaking change at a single module. It would not be tolerable if the frontmatter block were being serialized back out. Re-verify on every bump. `saphyr-parser` is pinned to the identical `0.0.11` for the same reason and carries the same risk profile — it is published from the same repository in lockstep with `saphyr`, so the two are re-verified together.
-- **Data Schemas:** Handled through `rusqlite` `PRAGMA user_version`. A fresh
-  index records version 2. Opening a version 1 index adds and backfills
-  `notes.title_lookup_key`, then creates its lookup index in the same
-  transaction. The derived key uses NFKC, full Unicode case folding, and NFC,
-  so title-prefix lookup does not depend on SQLite's ASCII-only `LIKE` and
-  `NOCASE` behavior. An index with a later version remains unchanged.
+- **Data Schemas:** Handled through `rusqlite` `PRAGMA user_version`. Fresh
+  creation, recoverable version-zero crash states, and version publication are
+  one immediate SQLite transaction. Version zero is not assumed empty: a full
+  v1 `notes` shape is migrated before v2 is published, while a v2 shape or the
+  deterministic `workspaces`-only prefix is completed as v2. Opening a version
+  1 index adds and backfills `notes.title_lookup_key`, then creates its lookup
+  index in that same transaction. The derived key uses NFKC, full Unicode case
+  folding, and NFC, so title-prefix lookup does not depend on SQLite's
+  ASCII-only `LIKE` and `NOCASE` behavior. An index with a later version
+  remains unchanged.
 - **Key Rotation:** The root AES key is randomly generated on first boot and never leaves the device's secure enclave. Key rotation is currently out of scope unless device compromise is suspected.

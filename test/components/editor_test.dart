@@ -108,6 +108,8 @@ class _FakeRustApi extends RustApi {
   int slotContinuationCount = 0;
 
   StructuralEdit? replaceSelectionResult;
+  StructuralEdit? splitResult;
+  StructuralEdit? mergeResult;
 
   @override
   StructuralEdit continueBlockAfter(
@@ -147,6 +149,18 @@ class _FakeRustApi extends RustApi {
   ) =>
       replaceSelectionResult ??
       (throw StateError('no selected Enter result prepared'));
+
+  @override
+  StructuralEdit splitBlock(
+    String noteId,
+    List<int> blockPath,
+    String source,
+    int offset,
+  ) => splitResult ?? (throw StateError('no split result prepared'));
+
+  @override
+  StructuralEdit mergeBlockWithPrevious(String noteId, List<int> blockPath) =>
+      mergeResult ?? (throw StateError('no merge result prepared'));
 
   @override
   NoteState commitBlock(String noteId, List<int> blockPath) {
@@ -1990,6 +2004,103 @@ void main() {
   );
 
   testWidgets(
+    'same-frame multiline phantom values apply only their final-leaf delta',
+    (tester) async {
+      final materialized = _testNoteState([
+        _plainParagraph('one'),
+        _plainParagraph('two'),
+      ]);
+      final api = _FakeRustApi()
+        ..continuationResult = StructuralEdit(
+          state: materialized,
+          blockPath: Uint64List.fromList([1]),
+          caretOffset: BigInt.from(3),
+        )
+        ..sources['1'] = 'two';
+      await pumpEditor(tester, const [], api: api);
+
+      // Both platform values arrive before the materialized field can replace
+      // the phantom controller. The second value still contains the whole
+      // old multiline source, so sending it directly would duplicate `one`.
+      tester.testTextInput.updateEditingValue(
+        const TextEditingValue(
+          text: 'one\n\ntwo',
+          selection: TextSelection.collapsed(offset: 8),
+        ),
+      );
+      tester.testTextInput.updateEditingValue(
+        const TextEditingValue(
+          text: 'one\n\ntwo!',
+          selection: TextSelection.collapsed(offset: 9),
+        ),
+      );
+
+      expect(api.continuationCount, 1);
+      expect(api.lastBlockPath, [1]);
+      expect(api.lastSource, 'two!');
+
+      await tester.pump();
+      expect(_field(tester).controller.text, 'two!');
+    },
+  );
+
+  testWidgets(
+    'same-frame phantom deltas preserve Unicode selections, deletions, and replacements',
+    (tester) async {
+      const initial = 'one\n\ntwo😀';
+      const afterDeletion = 'one\n\ntwo';
+      const afterReplacement = 'one\n\ntx😀';
+      final materialized = _testNoteState([
+        _plainParagraph('one'),
+        _plainParagraph('two😀'),
+      ]);
+      final api = _FakeRustApi()
+        ..continuationResult = StructuralEdit(
+          state: materialized,
+          blockPath: Uint64List.fromList([1]),
+          caretOffset: BigInt.from('two😀'.length),
+        )
+        ..sources['1'] = 'two😀';
+      await pumpEditor(tester, const [], api: api);
+
+      tester.testTextInput.updateEditingValue(
+        const TextEditingValue(
+          text: initial,
+          selection: TextSelection(baseOffset: 8, extentOffset: initial.length),
+        ),
+      );
+      // Delete the selected surrogate pair from the final materialized leaf.
+      tester.testTextInput.updateEditingValue(
+        const TextEditingValue(
+          text: afterDeletion,
+          selection: TextSelection.collapsed(offset: afterDeletion.length),
+        ),
+      );
+      tester.testTextInput.updateEditingValue(
+        const TextEditingValue(
+          text: afterDeletion,
+          selection: TextSelection(baseOffset: 6, extentOffset: 8),
+        ),
+      );
+      // Then replace a selected ASCII suffix with a mixed-width value.
+      tester.testTextInput.updateEditingValue(
+        const TextEditingValue(
+          text: afterReplacement,
+          selection: TextSelection.collapsed(offset: afterReplacement.length),
+        ),
+      );
+
+      expect(api.continuationCount, 1);
+      expect(api.lastBlockPath, [1]);
+      expect(api.lastSource, 'tx😀');
+
+      await tester.pump();
+      expect(_field(tester).controller.text, 'tx😀');
+      expect(_field(tester).controller.selection.extentOffset, 'tx😀'.length);
+    },
+  );
+
+  testWidgets(
     'successful insertion-slot materialization does not raise a stale-slot warning',
     (tester) async {
       final afterSelection = _testNoteState([_plainParagraph('beta')]);
@@ -2076,6 +2187,114 @@ void main() {
       expect(api.continuationCount, 1);
       expect(api.lastBlockPath, [0]);
       expect(api.lastSource, 'typed!');
+    },
+  );
+
+  testWidgets(
+    'successful split hydration failure retires the old field for authoritative rendering',
+    (tester) async {
+      final splitState = _testNoteState([
+        _plainParagraph('al'),
+        _plainParagraph('pha'),
+      ]);
+      final api = _FakeRustApi()
+        ..sources['0'] = 'alpha'
+        ..splitResult = StructuralEdit(
+          state: splitState,
+          blockPath: Uint64List.fromList([1]),
+          caretOffset: BigInt.zero,
+        );
+      final container = await pumpEditor(tester, [
+        _plainParagraph('alpha'),
+      ], api: api);
+      await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
+      api.failBlockSource = true;
+      _field(tester).controller.selection = const TextSelection.collapsed(
+        offset: 2,
+      );
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+
+      expect(container.read(activeNoteProvider), same(splitState));
+      expect(_writableFields(), findsNothing);
+      expect(container.read(editorErrorProvider), isNull);
+      expect(container.read(keystrokeWriteFailureProvider), isNull);
+      expect(
+        find.textContaining('Could not complete the editor operation'),
+        findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets(
+    'successful selected Enter hydration failure retires the old field for authoritative rendering',
+    (tester) async {
+      final splitState = _testNoteState([_plainParagraph('replacement')]);
+      final api = _FakeRustApi()
+        ..sources['0'] = 'alpha'
+        ..replaceSelectionResult = StructuralEdit(
+          state: splitState,
+          blockPath: Uint64List.fromList([0]),
+          caretOffset: BigInt.zero,
+        );
+      final container = await pumpEditor(tester, [
+        _plainParagraph('alpha'),
+      ], api: api);
+      await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
+      api.failBlockSource = true;
+      _field(tester).controller.selection = const TextSelection(
+        baseOffset: 0,
+        extentOffset: 5,
+      );
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+
+      expect(container.read(activeNoteProvider), same(splitState));
+      expect(_writableFields(), findsNothing);
+      expect(container.read(editorErrorProvider), isNull);
+      expect(container.read(keystrokeWriteFailureProvider), isNull);
+      expect(
+        find.textContaining('Could not complete the editor operation'),
+        findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets(
+    'successful merge hydration failure retires the old field for authoritative rendering',
+    (tester) async {
+      final mergedState = _testNoteState([_plainParagraph('alphabeta')]);
+      final api = _FakeRustApi()
+        ..sources['0'] = 'alpha'
+        ..sources['1'] = 'beta'
+        ..mergeResult = StructuralEdit(
+          state: mergedState,
+          blockPath: Uint64List.fromList([0]),
+          caretOffset: BigInt.from(5),
+        );
+      final container = await pumpEditor(tester, [
+        _plainParagraph('alpha'),
+        _plainParagraph('beta'),
+      ], api: api);
+      await promoteByTap(tester, find.byKey(const ValueKey('block-1')));
+      api.failBlockSource = true;
+      _field(tester).controller.selection = const TextSelection.collapsed(
+        offset: 0,
+      );
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
+      await tester.pump();
+
+      expect(container.read(activeNoteProvider), same(mergedState));
+      expect(_writableFields(), findsNothing);
+      expect(container.read(editorErrorProvider), isNull);
+      expect(container.read(keystrokeWriteFailureProvider), isNull);
+      expect(
+        find.textContaining('Could not complete the editor operation'),
+        findsOneWidget,
+      );
     },
   );
 
