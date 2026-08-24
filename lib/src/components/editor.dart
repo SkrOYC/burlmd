@@ -1365,6 +1365,12 @@ class EditorState extends ConsumerState<Editor> {
             )
           : api.continueBlockAtInsertionSlot(note.metadata.id, slot, text);
       final newState = structural.state;
+      // The Core mutation is already authoritative. Retire the empty field
+      // before publishing it so the provider listener cannot mistake the
+      // expected slot consumption for an external stale-slot invalidation,
+      // and so a failed optional hydration cannot leave a retryable phantom
+      // that would duplicate this successful insertion.
+      _retirePhantomAfterMaterialization();
       ref.read(activeNoteProvider.notifier).adopt(newState);
       final insertedPath = structural.blockPath
           .map((part) => part.toInt())
@@ -1381,11 +1387,31 @@ class EditorState extends ConsumerState<Editor> {
       });
       return true;
     } catch (error) {
-      // A failed first insertion has no Core Block yet, so this raw phantom
-      // is the user's only visible text. Leave it mounted and retryable.
-      ref.read(keystrokeWriteFailureProvider.notifier).report(error);
+      // A Core refusal leaves the first-text phantom mounted and retryable.
+      // Once Core returned a structural result, though, any failure here is
+      // only optional source hydration: the rendered Note is authoritative,
+      // and retrying the phantom would duplicate that completed mutation.
+      if (_focused?.isPhantom == true) {
+        ref.read(keystrokeWriteFailureProvider.notifier).report(error);
+      } else {
+        _reportEditorOperationFailure(error);
+      }
       return false;
     }
+  }
+
+  /// Removes an empty editor field after Core has accepted its first text.
+  /// This must happen before provider adoption: a selected-Enter slot is a
+  /// capability for the old state, while its successful materialization is an
+  /// expected state replacement, not a stale-slot failure.
+  void _retirePhantomAfterMaterialization() {
+    final focused = _focused;
+    if (focused == null || !focused.isPhantom) return;
+    setState(() {
+      if (!identical(_focused, focused)) return;
+      _focused = null;
+      _selectionBrokers.clear();
+    });
   }
 
   /// Completes the handoff from the phantom controller to Core's returned

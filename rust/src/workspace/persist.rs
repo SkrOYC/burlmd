@@ -1258,7 +1258,7 @@ impl NoteSession {
         &self,
         block_path: &[usize],
         source: &str,
-    ) -> Result<(NoteState, Vec<usize>), AppError> {
+    ) -> Result<(NoteState, Vec<usize>, usize), AppError> {
         struct ContinuationResult {
             focus_parent: Vec<usize>,
             inserted: std::ops::Range<usize>,
@@ -1400,8 +1400,9 @@ impl NoteSession {
                     }
                 }
             },
-            |_, spans, ast, result| {
-                first_editable_leaf_inserted_under(
+            |working, spans, ast, result| {
+                final_editable_leaf_inserted_under(
+                    working,
                     spans,
                     ast,
                     &result.focus_parent,
@@ -1409,6 +1410,7 @@ impl NoteSession {
                 )
             },
         )
+        .map(|(state, focus)| (state, focus.block_path, focus.caret_offset))
     }
 
     /// Materializes text in a Core-returned empty editor slot. This is distinct
@@ -1419,7 +1421,7 @@ impl NoteSession {
         &self,
         insertion_slot: &StructuralEditInsertionSlot,
         source: &str,
-    ) -> Result<(NoteState, Vec<usize>), AppError> {
+    ) -> Result<(NoteState, Vec<usize>, usize), AppError> {
         struct SlotContinuation {
             inserted: std::ops::Range<usize>,
         }
@@ -1469,8 +1471,11 @@ impl NoteSession {
                     },
                 ))
             },
-            |_, spans, _, result| first_editable_leaf_overlapping(spans, &result.inserted),
+            |working, spans, _, result| {
+                final_editable_leaf_overlapping(working, spans, &result.inserted)
+            },
         )
+        .map(|(state, focus)| (state, focus.block_path, focus.caret_offset))
     }
 
     /// Deletes a Block, taking the newline run that immediately followed it
@@ -4170,22 +4175,30 @@ fn check_span(source: &str, span: &std::ops::Range<usize>) -> Result<(), AppErro
     Ok(())
 }
 
-/// Finds the editable leaf newly created by a structural continuation in a
-/// freshly parsed result. This runs before `structural_edit_with_result`
+/// One post-splice focus target. The path and UTF-16 offset are derived from
+/// the same leaf: returning a first-leaf path with a whole-source caret makes
+/// multiline first insertions focus the wrong field.
+struct InsertedEditableFocus {
+    block_path: Vec<usize>,
+    caret_offset: usize,
+}
+
+/// Finds the final editable leaf newly created by a structural continuation
+/// in a freshly parsed result. This runs before `structural_edit_with_result`
 /// installs anything: a continuation whose supplied Markdown parses only as
 /// unaddressable source must refuse atomically, rather than focusing a
 /// pre-existing sibling and persisting hidden content that a retry duplicates.
-fn first_editable_leaf_inserted_under(
+fn final_editable_leaf_inserted_under(
+    source: &str,
     spans: &SpanMap,
     ast: &[AstNode],
     parent_path: &[usize],
     inserted: &std::ops::Range<usize>,
-) -> Result<Vec<usize>, AppError> {
-    spans
+) -> Result<InsertedEditableFocus, AppError> {
+    let block = spans
         .blocks()
         .filter(|block| {
             block.is_leaf()
-                && block.path.starts_with(parent_path)
                 && block.source.start < inserted.end
                 && inserted.start < block.source.end
                 && !matches!(
@@ -4193,37 +4206,60 @@ fn first_editable_leaf_inserted_under(
                     Some(AstNode::ListItem { content, .. }) if content.is_empty()
                 )
         })
-        .map(|block| block.path.clone())
-        .min()
+        .max_by_key(|block| (block.source.start, block.source.end))
         .ok_or_else(|| {
             AppError::ParseError(format!(
                 "continued Block at {parent_path:?} created no editable leaf"
             ))
-        })
+        })?;
+    inserted_editable_focus(source, block, inserted)
 }
 
 /// Finds an editable leaf made by an opaque insertion slot. Unlike a normal
 /// continuation, the slot need not have a surviving AST parent: its ListItem
 /// or Blockquote syntax may have been removed together with the selected
 /// field. The inserted source range is therefore the only safe authority.
-fn first_editable_leaf_overlapping(
+fn final_editable_leaf_overlapping(
+    source: &str,
     spans: &SpanMap,
     inserted: &std::ops::Range<usize>,
-) -> Result<Vec<usize>, AppError> {
-    spans
+) -> Result<InsertedEditableFocus, AppError> {
+    let block = spans
         .blocks()
         .filter(|block| {
             block.is_leaf()
                 && block.source.start < inserted.end
                 && inserted.start < block.source.end
         })
-        .map(|block| block.path.clone())
-        .min()
+        .max_by_key(|block| (block.source.start, block.source.end))
         .ok_or_else(|| {
             AppError::ParseError(
                 "materializing the phantom insertion slot created no editable leaf".to_string(),
             )
-        })
+        })?;
+    inserted_editable_focus(source, block, inserted)
+}
+
+/// Converts the end of the caller's inserted source into the returned leaf's
+/// local Flutter UTF-16 coordinate. The final editable leaf stays authoritative
+/// if the supplied source ends with raw HTML, a reference definition, CRLF, or
+/// Unicode; those bytes may be outside the leaf but must not retarget focus.
+fn inserted_editable_focus(
+    source: &str,
+    block: &crate::markdown::spans::BlockSpan,
+    inserted: &std::ops::Range<usize>,
+) -> Result<InsertedEditableFocus, AppError> {
+    let caret_end = inserted.end.clamp(block.source.start, block.source.end);
+    let field_prefix = source.get(block.source.start..caret_end).ok_or_else(|| {
+        AppError::ParseError(format!(
+            "continued Block at {:?} has an unaddressable focus offset",
+            block.path
+        ))
+    })?;
+    Ok(InsertedEditableFocus {
+        block_path: block.path.clone(),
+        caret_offset: field_prefix.encode_utf16().count(),
+    })
 }
 
 /// Whether deleting this leaf's complete source line may also delete the
@@ -5845,7 +5881,7 @@ mod tests {
             "the empty-slot transaction was not crash durable"
         );
 
-        let (_, path) = session
+        let (_, path, _) = session
             .continue_block_at_insertion_slot(&insertion_slot, "Typed")
             .unwrap();
         assert_eq!(path, vec![0]);
@@ -6111,7 +6147,7 @@ mod tests {
                 "{name}: empty slot was not draft durable"
             );
 
-            let (_, typed_path) = session
+            let (_, typed_path, _) = session
                 .continue_block_at_insertion_slot(&insertion_slot, "Typed")
                 .unwrap_or_else(|error| panic!("{name}: typing in slot refused: {error:?}"));
             assert!(
@@ -6188,7 +6224,7 @@ mod tests {
             );
             assert_eq!(insertion_slot.required_after_newlines, 0);
             assert_eq!(*session.working_source().unwrap(), after_selection);
-            let (_, typed_path) = session
+            let (_, typed_path, _) = session
                 .continue_block_at_insertion_slot(&insertion_slot, "Typed")
                 .unwrap_or_else(|error| panic!("{name}: quote slot typing refused: {error:?}"));
             assert_eq!(
@@ -6319,7 +6355,7 @@ mod tests {
         assert!(state.ast.is_empty());
         assert!(f.draft("a").is_some());
 
-        let (_, path) = session
+        let (_, path, _) = session
             .continue_block_at_insertion_slot(&insertion_slot, "Retried")
             .unwrap();
         assert_eq!(path, vec![0]);
@@ -7474,7 +7510,7 @@ mod tests {
         f.write("a.md", "- alpha\n- beta\n");
         let session = f.open("a");
 
-        let (state, focus) = session.continue_block_after(&[0, 0, 0], "middle").unwrap();
+        let (state, focus, _) = session.continue_block_after(&[0, 0, 0], "middle").unwrap();
 
         assert_eq!(
             *session.working_source().unwrap(),
@@ -7497,7 +7533,7 @@ mod tests {
         f.write("a.md", "- alpha\r\n- beta\r\n");
         let session = f.open("a");
 
-        let (_, focus) = session.continue_block_after(&[0, 0, 0], "middle").unwrap();
+        let (_, focus, _) = session.continue_block_after(&[0, 0, 0], "middle").unwrap();
 
         let expected = "- alpha\r\n- middle\r\n- beta\r\n";
         assert_eq!(*session.working_source().unwrap(), expected);
@@ -7524,7 +7560,7 @@ mod tests {
         let session = f.open("a");
 
         session.update_block(&[0], "- item\n").unwrap();
-        let (state, focus) = session.continue_block_after(&[0], "next").unwrap();
+        let (state, focus, _) = session.continue_block_after(&[0], "next").unwrap();
 
         assert_eq!(*session.working_source().unwrap(), "- item\n- next\n");
         assert_eq!(focus, vec![0, 1, 0]);
@@ -7595,7 +7631,7 @@ mod tests {
         f.write("a.md", "> - alpha\n> - beta\n");
         let session = f.open("a");
 
-        let (state, focus) = session
+        let (state, focus, _) = session
             .continue_block_after(&[0, 0, 0, 0], "middle")
             .unwrap();
 
@@ -7629,7 +7665,7 @@ mod tests {
         f.write("a.md", "> alpha\n\nBeta\n");
         let session = f.open("a");
 
-        let (state, focus) = session.continue_block_after(&[0, 0], "middle").unwrap();
+        let (state, focus, _) = session.continue_block_after(&[0, 0], "middle").unwrap();
 
         assert_eq!(
             *session.working_source().unwrap(),
@@ -7649,7 +7685,7 @@ mod tests {
         f.write("a.md", "Alpha\n\nBeta\n");
         let session = f.open("a");
 
-        let (state, focus) = session.continue_block_after(&[0], "middle").unwrap();
+        let (state, focus, _) = session.continue_block_after(&[0], "middle").unwrap();
 
         assert_eq!(
             *session.working_source().unwrap(),
@@ -7669,7 +7705,7 @@ mod tests {
         f.write("a.md", "");
         let session = f.open("a");
 
-        let (state, focus) = session.continue_block_after(&[0], "first").unwrap();
+        let (state, focus, _) = session.continue_block_after(&[0], "first").unwrap();
 
         assert_eq!(*session.working_source().unwrap(), "first\n");
         assert_eq!(focus, vec![0]);
@@ -7678,6 +7714,68 @@ mod tests {
             node_at_path(&state.ast, &focus),
             Some(AstNode::Paragraph { .. })
         ));
+    }
+
+    /// A multiline first insert may create several editable leaves. Its focus
+    /// must name the final one, with a caret in that same raw field rather
+    /// than a whole-input offset accidentally applied to the first paragraph.
+    #[test]
+    fn continuing_multiline_source_focuses_the_final_editable_leaf_at_its_local_utf16_caret() {
+        let f = fixture();
+        f.write("a.md", "Alpha\r\n");
+        let session = f.open("a");
+        let inserted = "one\r\n\r\ntwo😀\r\n\r\n[kept]: </target.md>";
+
+        let (_, focus, caret) = session.continue_block_after(&[0], inserted).unwrap();
+
+        assert_eq!(
+            *session.working_source().unwrap(),
+            format!("Alpha\r\n\r\n{inserted}\r\n")
+        );
+        assert_eq!(focus, vec![2]);
+        assert_eq!(session.block_source(&focus).unwrap(), "two😀\r\n");
+        assert_eq!(caret, "two😀\r\n".encode_utf16().count());
+
+        session.update_block(&focus, "two😀\r\ntyped").unwrap();
+        assert!(
+            session.working_source().unwrap().contains("two😀\r\ntyped"),
+            "the returned path must accept the following write in the final leaf"
+        );
+    }
+
+    /// Opaque slots use the same final-leaf calculation. A selected Enter can
+    /// remove the old field before materialization, so no sibling path is a
+    /// valid substitute for this post-splice result.
+    #[test]
+    fn materializing_multiline_slot_focuses_the_final_editable_leaf_at_its_local_utf16_caret() {
+        let f = fixture();
+        f.write("a.md", "Alpha\r\n\r\nBeta\r\n");
+        let session = f.open("a");
+        let (_, location) = session
+            .replace_selection_and_split_block_from_editor_source(
+                &[0],
+                "Alpha\r\n",
+                0,
+                "Alpha\r\n".encode_utf16().count(),
+            )
+            .unwrap();
+        let StructuralEditLocation::Phantom { insertion_slot } = location else {
+            panic!("complete selected Enter must create an insertion slot");
+        };
+        let inserted = "one\r\n\r\ntwo😀\r\n\r\n[kept]: </target.md>";
+
+        let (_, focus, caret) = session
+            .continue_block_at_insertion_slot(&insertion_slot, inserted)
+            .unwrap();
+
+        assert_eq!(focus, vec![1]);
+        assert_eq!(session.block_source(&focus).unwrap(), "two😀\r\n");
+        assert_eq!(caret, "two😀\r\n".encode_utf16().count());
+        session.update_block(&focus, "two😀\r\ntyped").unwrap();
+        assert!(
+            session.working_source().unwrap().contains("two😀\r\ntyped"),
+            "the returned slot path must accept the following write in the final leaf"
+        );
     }
 
     /// The empty-Note sentinel means that there is no editable Block, not
@@ -7695,7 +7793,7 @@ mod tests {
             f.write(&format!("{name}.md"), original);
             let session = f.open(name);
 
-            let (state, focus) = session.continue_block_after(&[0], "first").unwrap();
+            let (state, focus, _) = session.continue_block_after(&[0], "first").unwrap();
             let expected = format!("{original}\nfirst\n");
 
             assert_eq!(*session.working_source().unwrap(), expected);
@@ -7759,7 +7857,7 @@ mod tests {
                 "{name}: a refused continuation wrote a draft"
             );
 
-            let (_, focus) = session.continue_block_after(&[0], "first").unwrap();
+            let (_, focus, _) = session.continue_block_after(&[0], "first").unwrap();
             let expected = format!("{original}\nfirst\n");
             assert_eq!(
                 *session.working_source().unwrap(),
@@ -7813,7 +7911,7 @@ mod tests {
             assert_eq!(session.edit_seq(), sequence_before);
             assert!(f.draft(name).is_none(), "{name}: refusal wrote a draft row");
 
-            let (_, focus) = session.continue_block_after(&path, retry).unwrap();
+            let (_, focus, _) = session.continue_block_after(&path, retry).unwrap();
             assert_eq!(*session.working_source().unwrap(), expected);
             assert_eq!(session.block_source(&focus).unwrap().trim(), retry);
             assert_eq!(

@@ -46,6 +46,7 @@ class _FakeRustApi extends RustApi {
   _FakeRustApi({this.failContainerPaths = false});
 
   final bool failContainerPaths;
+  bool failBlockSource = false;
 
   String? lastNoteId;
   List<int>? lastBlockPath;
@@ -82,9 +83,11 @@ class _FakeRustApi extends RustApi {
   NoteState? commitResult;
 
   @override
-  String getBlockSource(String noteId, List<int> blockPath) =>
-      sources[blockPath.join('/')] ??
-      (throw Exception('no source for $blockPath'));
+  String getBlockSource(String noteId, List<int> blockPath) {
+    if (failBlockSource) throw StateError('source hydration refused');
+    return sources[blockPath.join('/')] ??
+        (throw Exception('no source for $blockPath'));
+  }
 
   @override
   void updateBlock(String noteId, List<int> blockPath, String newSource) {
@@ -101,6 +104,11 @@ class _FakeRustApi extends RustApi {
   StructuralEdit? continuationResult;
   int continuationCount = 0;
 
+  StructuralEdit? slotContinuationResult;
+  int slotContinuationCount = 0;
+
+  StructuralEdit? replaceSelectionResult;
+
   @override
   StructuralEdit continueBlockAfter(
     String noteId,
@@ -111,9 +119,34 @@ class _FakeRustApi extends RustApi {
     final result =
         continuationResult ??
         (throw StateError('no continuation result prepared'));
-    sources[result.blockPath.join('/')] = source;
+    sources.putIfAbsent(result.blockPath.join('/'), () => source);
     return result;
   }
+
+  @override
+  StructuralEdit continueBlockAtInsertionSlot(
+    String noteId,
+    StructuralEditInsertionSlot insertionSlot,
+    String source,
+  ) {
+    slotContinuationCount++;
+    final result =
+        slotContinuationResult ??
+        (throw StateError('no slot continuation result prepared'));
+    sources.putIfAbsent(result.blockPath.join('/'), () => source);
+    return result;
+  }
+
+  @override
+  StructuralEdit replaceSelectionAndSplitBlock(
+    String noteId,
+    List<int> blockPath,
+    String source,
+    int selectionBase,
+    int selectionExtent,
+  ) =>
+      replaceSelectionResult ??
+      (throw StateError('no selected Enter result prepared'));
 
   @override
   NoteState commitBlock(String noteId, List<int> blockPath) {
@@ -1921,6 +1954,128 @@ void main() {
       expect(container.read(activeNoteProvider), same(materialized));
       expect(_field(tester).controller.text, 'abc');
       expect(_field(tester).focusNode.hasFocus, isTrue);
+    },
+  );
+
+  testWidgets(
+    'multiline phantom materialization continues typing in Core’s final leaf',
+    (tester) async {
+      final materialized = _testNoteState([
+        _plainParagraph('one'),
+        _plainParagraph('two😀'),
+      ]);
+      final api = _FakeRustApi()
+        ..continuationResult = StructuralEdit(
+          state: materialized,
+          blockPath: Uint64List.fromList([1]),
+          caretOffset: BigInt.from('two😀'.length),
+        )
+        ..sources['1'] = 'two😀';
+      final container = await pumpEditor(tester, const [], api: api);
+
+      await tester.enterText(_writableFields(), 'one\n\ntwo😀');
+      await tester.pump();
+
+      expect(container.read(activeNoteProvider), same(materialized));
+      expect(_field(tester).controller.text, 'two😀');
+      expect(_field(tester).controller.selection.extentOffset, 'two😀'.length);
+
+      await tester.enterText(_writableFields(), 'two😀!');
+      await tester.pump();
+
+      expect(api.continuationCount, 1);
+      expect(api.lastBlockPath, [1]);
+      expect(api.lastSource, 'two😀!');
+    },
+  );
+
+  testWidgets(
+    'successful insertion-slot materialization does not raise a stale-slot warning',
+    (tester) async {
+      final afterSelection = _testNoteState([_plainParagraph('beta')]);
+      final materialized = _testNoteState([
+        _plainParagraph('one'),
+        _plainParagraph('two😀'),
+        _plainParagraph('beta'),
+      ]);
+      final slot = StructuralEditInsertionSlot(
+        sourceOffset: BigInt.zero,
+        linePrefix: '',
+        requiredAfterNewlines: BigInt.zero,
+        noteId: _testMetadata.id,
+        sourceFingerprint: 'test-slot',
+      );
+      final api = _FakeRustApi()
+        ..sources['0'] = 'alpha'
+        ..sources['1'] = 'beta'
+        ..replaceSelectionResult = StructuralEdit(
+          state: afterSelection,
+          blockPath: Uint64List(0),
+          caretOffset: BigInt.zero,
+          phantomInsertionSlot: slot,
+        )
+        ..slotContinuationResult = StructuralEdit(
+          state: materialized,
+          blockPath: Uint64List.fromList([1]),
+          caretOffset: BigInt.from('two😀'.length),
+        )
+        ..sources['1'] = 'two😀';
+      final container = await pumpEditor(tester, [
+        _plainParagraph('alpha'),
+        _plainParagraph('beta'),
+      ], api: api);
+      await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
+      _field(tester).controller.selection = const TextSelection(
+        baseOffset: 0,
+        extentOffset: 5,
+      );
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+      await tester.enterText(_writableFields(), 'one\n\ntwo😀');
+      await tester.pump();
+
+      expect(container.read(activeNoteProvider), same(materialized));
+      expect(api.slotContinuationCount, 1);
+      expect(_field(tester).controller.text, 'two😀');
+      expect(
+        container.read(keystrokeWriteFailureProvider),
+        isNull,
+        reason: 'consuming the exact returned slot is not a stale-slot failure',
+      );
+    },
+  );
+
+  testWidgets(
+    'a successful phantom mutation cannot be retried when source hydration fails',
+    (tester) async {
+      final materialized = _testNoteState([_plainParagraph('typed')]);
+      final api = _FakeRustApi()
+        ..continuationResult = StructuralEdit(
+          state: materialized,
+          blockPath: Uint64List.fromList([0]),
+          caretOffset: BigInt.from(5),
+        )
+        ..sources['0'] = 'typed';
+      final container = await pumpEditor(tester, const [], api: api);
+      api.failBlockSource = true;
+
+      await tester.enterText(_writableFields(), 'typed');
+      await tester.pump();
+
+      expect(container.read(activeNoteProvider), same(materialized));
+      expect(_writableFields(), findsNothing);
+      expect(api.continuationCount, 1);
+      expect(container.read(keystrokeWriteFailureProvider), isNull);
+
+      api.failBlockSource = false;
+      await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
+      await tester.enterText(_writableFields(), 'typed!');
+      await tester.pump();
+
+      expect(api.continuationCount, 1);
+      expect(api.lastBlockPath, [0]);
+      expect(api.lastSource, 'typed!');
     },
   );
 

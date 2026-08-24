@@ -1,5 +1,21 @@
 # Stage 3: Technical Implementation Changelog
 
+## v1.6.11
+
+Patch correction from PR #10 review, round 22. No bill-of-materials, PRD, or
+architecture change.
+
+- `continue_block_after` and `continue_block_at_insertion_slot` now derive
+  both `StructuralEdit.block_path` and its UTF-16 `caret_offset` from the
+  final editable leaf overlapping the inserted source. Multiline input,
+  trailing unaddressable Markdown, CRLF, and non-BMP characters can no longer
+  pair the first paragraph with a whole-input caret.
+- Presentation retires a successfully materialized phantom before publishing
+  Core's returned Note state, so consuming the exact opaque insertion slot is
+  not reported as a stale capability. It adopts the returned state before
+  optional raw-source hydration; if that fetch fails, rendered state remains
+  authoritative and the old phantom cannot retry or duplicate the mutation.
+
 ## v1.6.10
 
 Patch correction from PR #10 review, round 21. No bill-of-materials, PRD, or

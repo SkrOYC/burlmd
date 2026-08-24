@@ -3998,7 +3998,7 @@ mod tests {
         let created_source = f.read("Fresh.md");
         let session = persist::lookup(f.workspace.id(), "Fresh").unwrap().unwrap();
 
-        let (state, focus) = session
+        let (state, focus, _) = session
             .continue_block_after(&[0], "First editable Block")
             .unwrap();
         let expected = format!("{created_source}First editable Block\n");

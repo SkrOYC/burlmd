@@ -872,11 +872,13 @@ pub struct StructuralEdit {
 /// supplies only the actual editable leaf path and source; it must never
 /// select a structural behavior from the path length.
 ///
-/// Core derives the returned leaf from the post-splice parse before it installs
-/// or persists the structural state. If `source` yields only unaddressable
-/// Markdown (for example a reference definition or raw HTML), the call refuses
-/// unchanged rather than persisting hidden content and inviting a duplicate
-/// retry.
+/// Core derives the returned leaf and UTF-16 caret together from the final
+/// editable leaf overlapping the supplied source in the post-splice parse,
+/// before it installs or persists structural state. Trailing unaddressable
+/// Markdown is preserved but does not retarget that focus. If `source` yields
+/// only unaddressable Markdown (for example a reference definition or raw
+/// HTML), the call refuses unchanged rather than persisting hidden content and
+/// inviting a duplicate retry.
 #[frb(sync)]
 pub fn continue_block_after(
     note_id: String,
@@ -892,7 +894,9 @@ pub fn continue_block_after(
 /// `StructuralEdit::phantom_insertion_slot`, rather than calling
 /// `continue_block_after` with an invented leaf path. A stale capability is
 /// refused without changing source, draft, or edit state, and Presentation
-/// retires/refetches its phantom before retrying from the returned Note.
+/// retires its phantom and adopts the returned Note before optional source
+/// hydration. A hydration failure leaves rendered state authoritative and must
+/// not make the completed materialization retryable.
 #[frb(sync)]
 pub fn continue_block_at_insertion_slot(
     note_id: String,
