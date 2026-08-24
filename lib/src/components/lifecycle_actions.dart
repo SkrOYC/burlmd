@@ -680,6 +680,11 @@ class LifecycleActions {
   /// case handled by [_closeIfOpen].
   void _clearIfSelected(String noteId) {
     if (_ref.read(selectedNoteIdProvider) != noteId) return;
+    // A prior incoming open can have closed the old session and then failed
+    // before mounting this selected Note. Deletion makes that selection dead;
+    // use the same presentation clear as the mounted-victim path so its fatal
+    // open error and one-shot status cannot outlive an impossible retry.
+    _ref.read(activeNoteProvider.notifier).clear();
     _ref.read(selectedNoteIdProvider.notifier).clear();
   }
 }

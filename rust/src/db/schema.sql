@@ -31,9 +31,15 @@ PRAGMA foreign_keys = ON;
 -- = 1;` in this file would silently reset a migrated database back to the
 -- baseline on every subsequent open -- turning the one value a future
 -- migration branches on into a constant. Instead, `init_schema` reads `PRAGMA
--- user_version` first and writes it to 2 only when it reads 0, i.e. on a
--- freshly created file. `WSPC-D004` carries a criterion for this: an index
--- whose `user_version` reads something other than 0 must be left as it was.
+-- user_version` first. A version-zero file is classified inside one immediate
+-- transaction: a truly empty file (or the recoverable `workspaces`-only DDL
+-- prefix) receives v2 atomically; a v1 `notes` shape is migrated and
+-- backfilled before v2 is published; and a v2 `notes` shape has any missing
+-- idempotent objects completed before that publication. This matters because
+-- version 0 can otherwise be a complete v1 file left by a crash between the
+-- old schema batch and its separate version write. An index whose
+-- `user_version` reads something later than 2 remains untouched by this
+-- migration runner.
 
 -- Foreign key enforcement is per CONNECTION and is not stored in the database
 -- file: SQLite defaults it OFF, so every connection the application opens must

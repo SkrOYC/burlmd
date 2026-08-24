@@ -37,6 +37,78 @@ bool _isValidUtf16SelectionBoundary(String text, int offset) {
       next <= 0xDFFF);
 }
 
+/// The part of a stale phantom controller value that changed since its last
+/// platform update. Work in Unicode scalar boundaries so a platform selection
+/// can never turn a surrogate pair into an invalid source splice.
+class _Utf16Delta {
+  const _Utf16Delta({
+    required this.start,
+    required this.end,
+    required this.replacement,
+  });
+
+  final int start;
+  final int end;
+  final String replacement;
+}
+
+int _nextUtf16Scalar(String text, int offset) {
+  final unit = text.codeUnitAt(offset);
+  return unit >= 0xD800 &&
+          unit <= 0xDBFF &&
+          offset + 1 < text.length &&
+          text.codeUnitAt(offset + 1) >= 0xDC00 &&
+          text.codeUnitAt(offset + 1) <= 0xDFFF
+      ? offset + 2
+      : offset + 1;
+}
+
+int _previousUtf16Scalar(String text, int offset) {
+  final previous = text.codeUnitAt(offset - 1);
+  return previous >= 0xDC00 &&
+          previous <= 0xDFFF &&
+          offset > 1 &&
+          text.codeUnitAt(offset - 2) >= 0xD800 &&
+          text.codeUnitAt(offset - 2) <= 0xDBFF
+      ? offset - 2
+      : offset - 1;
+}
+
+bool _sameUtf16Scalar(String a, int aOffset, String b, int bOffset) {
+  final aEnd = _nextUtf16Scalar(a, aOffset);
+  final bEnd = _nextUtf16Scalar(b, bOffset);
+  return aEnd - aOffset == bEnd - bOffset &&
+      a.substring(aOffset, aEnd) == b.substring(bOffset, bEnd);
+}
+
+_Utf16Delta _utf16Delta(String previous, String next) {
+  var prefix = 0;
+  while (prefix < previous.length &&
+      prefix < next.length &&
+      _sameUtf16Scalar(previous, prefix, next, prefix)) {
+    prefix = _nextUtf16Scalar(previous, prefix);
+  }
+
+  var previousEnd = previous.length;
+  var nextEnd = next.length;
+  while (previousEnd > prefix &&
+      nextEnd > prefix &&
+      _sameUtf16Scalar(
+        previous,
+        _previousUtf16Scalar(previous, previousEnd),
+        next,
+        _previousUtf16Scalar(next, nextEnd),
+      )) {
+    previousEnd = _previousUtf16Scalar(previous, previousEnd);
+    nextEnd = _previousUtf16Scalar(next, nextEnd);
+  }
+  return _Utf16Delta(
+    start: prefix,
+    end: previousEnd,
+    replacement: next.substring(prefix, nextEnd),
+  );
+}
+
 /// A frozen cross-Block target owned by the editor's input proxy. Ordinary
 /// selections retain their public Core [BlockRange] coordinates; Select All
 /// is a distinct Core operation because an empty terminal rendering has no
@@ -1212,6 +1284,7 @@ class EditorState extends ConsumerState<Editor> {
       });
       return;
     }
+    var adoptedAuthoritativeResult = false;
     try {
       final api = ref.read(rustApiProvider);
       final structural = splitAfterReplacement
@@ -1225,6 +1298,12 @@ class EditorState extends ConsumerState<Editor> {
           : api.splitBlock(note.metadata.id, blockPath, source, caret);
       final newState = structural.state;
       ref.read(activeNoteProvider.notifier).adopt(newState);
+      adoptedAuthoritativeResult = true;
+      // The Core result has already replaced the structural address the old
+      // field named. Retire that field before optional hydration, so a source
+      // fetch failure cannot leave a stale controller retrying a mutation
+      // that has succeeded.
+      _retireFocusedAfterStructuralResult();
       final phantomInsertionSlot = structural.phantomInsertionSlot;
       if (phantomInsertionSlot != null) {
         setState(() {
@@ -1257,10 +1336,15 @@ class EditorState extends ConsumerState<Editor> {
         );
       });
     } catch (error) {
-      // A split refusal leaves the focused raw source as the only editable
-      // representation of this operation. Keep it mounted and surface the
-      // failure beside it, just like a refused merge or blur commit.
-      ref.read(keystrokeWriteFailureProvider.notifier).report(error);
+      // Before Core returns, this is a refusal and the raw source remains the
+      // only retryable representation. Afterwards only source hydration can
+      // fail: the rendered authoritative state wins and the failure is a
+      // nonfatal status, never a stale-controller retry.
+      if (adoptedAuthoritativeResult) {
+        _reportEditorOperationFailure(error);
+      } else {
+        ref.read(keystrokeWriteFailureProvider.notifier).report(error);
+      }
     }
   }
 
@@ -1376,6 +1460,7 @@ class EditorState extends ConsumerState<Editor> {
           .map((part) => part.toInt())
           .toList();
       final source = api.getBlockSource(note.metadata.id, insertedPath);
+      final materializedSourceOffset = text.lastIndexOf(source);
       setState(() {
         _focused = _Focus(
           noteId: note.metadata.id,
@@ -1383,6 +1468,10 @@ class EditorState extends ConsumerState<Editor> {
           source: source,
           caret: structural.caretOffset.toInt().clamp(0, source.length),
           lastSeenState: newState,
+          phantomControllerValue: text,
+          phantomControllerSourceOffset: materializedSourceOffset >= 0
+              ? materializedSourceOffset
+              : null,
         );
       });
       return true;
@@ -1414,6 +1503,18 @@ class EditorState extends ConsumerState<Editor> {
     });
   }
 
+  /// A split or merge has invalidated the field's old structural address.
+  /// Clear it at the authoritative adoption boundary, rather than after the
+  /// optional raw-source fetch, so every fetch failure has the same rendered
+  /// fallback as a range edit.
+  void _retireFocusedAfterStructuralResult() {
+    setState(() {
+      _focused = null;
+      _selectionBrokers.clear();
+      _wholeNoteSelectedId = null;
+    });
+  }
+
   /// Completes the handoff from the phantom controller to Core's returned
   /// Block when multiple platform values arrive before Flutter can rebuild.
   bool _handlePhantomMaterializedUpdate(String text, TextSelection selection) {
@@ -1426,12 +1527,70 @@ class EditorState extends ConsumerState<Editor> {
         focused.noteId != note.metadata.id) {
       return false;
     }
+    final previous = focused.phantomControllerValue;
+    final sourceOffset = focused.phantomControllerSourceOffset;
+    // Core's returned source is not always text-identical to the stale
+    // phantom value (for example, a parser may normalize its surrounding
+    // container). There is no safe address for that controller callback;
+    // acknowledge and defer it to the already-scheduled rebuilt field rather
+    // than treating a completed mutation as a rejected write.
+    if (previous == null || sourceOffset == null) return true;
+    final delta = _utf16Delta(previous, text);
+    final sourceEnd = sourceOffset + focused.source.length;
+
+    if (delta.start == delta.end && delta.replacement.isEmpty) {
+      focused
+        ..phantomControllerValue = text
+        ..caret = (selection.extentOffset - sourceOffset).clamp(
+          0,
+          focused.source.length,
+        );
+      return true;
+    }
+
+    // A stale controller spans the source that produced all materialized
+    // Blocks, while this focus owns only Core's returned final leaf. Changes
+    // wholly before/after that leaf are deferred to the imminent rebuilt
+    // field; forwarding them would overwrite unrelated authoritative Blocks.
+    // An edit that crosses the boundary is equally ambiguous, so it is
+    // deliberately not replayed from this obsolete controller.
+    final changedBeforeSource =
+        delta.end < sourceOffset ||
+        (delta.end == sourceOffset && delta.start != delta.end);
+    final changedAfterSource =
+        delta.start > sourceEnd ||
+        (delta.start == sourceEnd && delta.start != delta.end);
+    if (changedBeforeSource || changedAfterSource) {
+      focused.phantomControllerValue = text;
+      if (changedBeforeSource) {
+        focused.phantomControllerSourceOffset =
+            sourceOffset + delta.replacement.length - (delta.end - delta.start);
+      }
+      return true;
+    }
+    if (delta.start < sourceOffset || delta.end > sourceEnd) {
+      focused.phantomControllerValue = text;
+      return true;
+    }
+
+    final sourceStart = delta.start - sourceOffset;
+    final sourceEndOffset = delta.end - sourceOffset;
+    final nextSource = focused.source.replaceRange(
+      sourceStart,
+      sourceEndOffset,
+      delta.replacement,
+    );
     final accepted = ref
         .read(activeNoteProvider.notifier)
-        .updateBlock(focused.path, text);
+        .updateBlock(focused.path, nextSource);
     if (accepted) {
-      focused.source = text;
-      focused.caret = selection.extentOffset.clamp(0, text.length);
+      focused
+        ..source = nextSource
+        ..caret = (selection.extentOffset - sourceOffset).clamp(
+          0,
+          nextSource.length,
+        )
+        ..phantomControllerValue = text;
     }
     return accepted;
   }
@@ -1447,6 +1606,7 @@ class EditorState extends ConsumerState<Editor> {
     final note = ref.read(activeNoteProvider);
     if (note == null) return;
     if (_previousLeafPath(note, blockPath) == null) return;
+    var adoptedAuthoritativeResult = false;
     try {
       final api = ref.read(rustApiProvider);
       final structural = api.mergeBlockWithPrevious(
@@ -1455,6 +1615,10 @@ class EditorState extends ConsumerState<Editor> {
       );
       final newState = structural.state;
       ref.read(activeNoteProvider.notifier).adopt(newState);
+      adoptedAuthoritativeResult = true;
+      // As with split, the returned state invalidates the old field before a
+      // best-effort source hydration can fail.
+      _retireFocusedAfterStructuralResult();
       final mergedPath = structural.blockPath
           .map((part) => part.toInt())
           .toList();
@@ -1469,11 +1633,13 @@ class EditorState extends ConsumerState<Editor> {
         );
       });
     } catch (error) {
-      // A merge refusal leaves the currently focused source untouched. Keep
-      // that field mounted so the user can revise or copy it, just like a
-      // refused per-keystroke write; replacing the whole editor here would
-      // discard the only visible representation of the blocked operation.
-      ref.read(keystrokeWriteFailureProvider.notifier).report(error);
+      if (adoptedAuthoritativeResult) {
+        _reportEditorOperationFailure(error);
+      } else {
+        // A Core refusal leaves the current raw source untouched and
+        // retryable; only the post-success hydration path falls back.
+        ref.read(keystrokeWriteFailureProvider.notifier).report(error);
+      }
     }
   }
 
@@ -2121,6 +2287,8 @@ class _Focus {
     this.isPhantom = false,
     this.phantomInsertionIndex,
     this.phantomInsertionSlot,
+    this.phantomControllerValue,
+    this.phantomControllerSourceOffset,
   }) : token = _nextFocusToken++;
 
   /// Identifies this focus session (`EDIT-F004`). Echoed back by a blurring
@@ -2169,6 +2337,13 @@ class _Focus {
   /// Presentation retains it only to return it unchanged to Core when the
   /// phantom receives its first text.
   final StructuralEditInsertionSlot? phantomInsertionSlot;
+
+  /// The obsolete phantom controller's last complete platform value and the
+  /// UTF-16 offset where this materialized final leaf lived inside it. They
+  /// exist only for callbacks delivered before Flutter rebuilds the field;
+  /// every subsequent value is reduced to a delta against this snapshot.
+  String? phantomControllerValue;
+  int? phantomControllerSourceOffset;
 }
 
 /// Monotonic source of [_Focus.token] values.

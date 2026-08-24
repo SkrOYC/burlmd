@@ -2,7 +2,7 @@ use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 
-use rusqlite::Connection;
+use rusqlite::{Connection, Transaction, TransactionBehavior};
 use zeroize::Zeroizing;
 
 use crate::error::AppError;
@@ -105,14 +105,24 @@ const CURRENT_SCHEMA_VERSION: i64 = 2;
 /// power Find and Link completion. Unlike a fresh index, a v1 index already
 /// has a `notes` table, so `CREATE TABLE IF NOT EXISTS` cannot add the new
 /// column: it must be migrated and backfilled before the v2 index exists.
-/// Any later version remains untouched so a future migration can own it.
+///
+/// Schema creation and version publication share one immediate SQLite
+/// transaction. In particular, `user_version = 0` does not prove that a file
+/// is empty: an earlier build could have crashed after creating the complete
+/// v1 schema but before writing its version. The version-zero branch therefore
+/// recognizes the recoverable v1/v2 shapes rather than replaying v2 DDL into a
+/// v1 `notes` table. Any later version remains untouched so a future migration
+/// can own it.
 pub fn init_schema(conn: &Connection) -> Result<(), AppError> {
+    // `schema.sql` contains this too, but a PRAGMA inside the immediate
+    // creation/migration transaction cannot change SQLite's per-connection
+    // setting. Keep direct in-memory callers correct as well as connections
+    // opened through `open_encrypted_db_with_key`.
+    conn.execute_batch("PRAGMA foreign_keys = ON;")?;
+
     let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
     match user_version {
-        0 => {
-            conn.execute_batch(SCHEMA)?;
-            conn.execute_batch(&format!("PRAGMA user_version = {CURRENT_SCHEMA_VERSION};"))?;
-        }
+        0 => recover_version_zero_schema(conn)?,
         1 => migrate_v1_to_v2(conn)?,
         _ => conn.execute_batch(SCHEMA)?,
     }
@@ -120,50 +130,140 @@ pub fn init_schema(conn: &Connection) -> Result<(), AppError> {
     Ok(())
 }
 
+/// Recovers a database which still reports version zero. The only
+/// deterministically recoverable partial creation state is the schema's first
+/// table (`workspaces`) without `notes`; once `notes` exists, its columns
+/// distinguish a complete/partial v1 schema from a complete/partial v2 schema.
+/// Other version-zero shapes are not ours to guess at and are rejected before
+/// this initializer writes to them.
+fn recover_version_zero_schema(conn: &Connection) -> Result<(), AppError> {
+    let transaction = Transaction::new_unchecked(conn, TransactionBehavior::Immediate)?;
+    let table_names = user_table_names(&transaction)?;
+
+    if !table_names.iter().any(|name| name == "notes") {
+        if table_names.is_empty() || (table_names.len() == 1 && table_names[0] == "workspaces") {
+            apply_current_schema(&transaction)?;
+        } else {
+            return Err(AppError::DatabaseError(format!(
+                "cannot recover version-zero database with no notes table and tables: {}",
+                table_names.join(", ")
+            )));
+        }
+    } else {
+        let columns = note_column_names(&transaction)?;
+        if has_all_columns(&columns, V2_NOTE_COLUMNS) {
+            // The previous creation may have stopped after the v2 notes table
+            // was committed. Replaying idempotent DDL completes any missing
+            // tables/indexes before publishing the version.
+            apply_current_schema(&transaction)?;
+        } else if has_all_columns(&columns, V1_NOTE_COLUMNS)
+            && !columns.iter().any(|column| column == "title_lookup_key")
+        {
+            migrate_v1_to_v2_in_transaction(&transaction)?;
+        } else {
+            return Err(AppError::DatabaseError(format!(
+                "cannot recover unrecognized version-zero notes schema with columns: {}",
+                columns.join(", ")
+            )));
+        }
+    }
+
+    transaction.commit()?;
+    Ok(())
+}
+
+const V1_NOTE_COLUMNS: &[&str] = &[
+    "id",
+    "workspace_id",
+    "path",
+    "title",
+    "last_modified",
+    "content_hash",
+    "okf_conformant",
+];
+const V2_NOTE_COLUMNS: &[&str] = &[
+    "id",
+    "workspace_id",
+    "path",
+    "title",
+    "title_lookup_key",
+    "last_modified",
+    "content_hash",
+    "okf_conformant",
+];
+
+fn user_table_names(conn: &Connection) -> Result<Vec<String>, AppError> {
+    let mut statement = conn.prepare(
+        "SELECT name FROM sqlite_master \
+         WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
+    )?;
+    let rows = statement.query_map([], |row| row.get(0))?;
+    rows.collect::<Result<Vec<_>, _>>().map_err(AppError::from)
+}
+
+fn note_column_names(conn: &Connection) -> Result<Vec<String>, AppError> {
+    let mut statement = conn.prepare("PRAGMA table_info(notes)")?;
+    let rows = statement.query_map([], |row| row.get(1))?;
+    rows.collect::<Result<Vec<_>, _>>().map_err(AppError::from)
+}
+
+fn has_all_columns(columns: &[String], required: &[&str]) -> bool {
+    required
+        .iter()
+        .all(|required_column| columns.iter().any(|column| column == required_column))
+}
+
+/// Creates any missing v2 objects and publishes the matching version. The
+/// caller owns the transaction so DDL, backfill, and version publication are
+/// indivisible.
+fn apply_current_schema(conn: &Connection) -> Result<(), AppError> {
+    conn.execute_batch(SCHEMA)?;
+    conn.execute_batch(&format!("PRAGMA user_version = {CURRENT_SCHEMA_VERSION};"))?;
+    Ok(())
+}
+
 /// Adds and fills the v2 normalized, full-Unicode case-folded title lookup
 /// key. This is one SQLite transaction: a crash or failure cannot leave a v1
 /// index claiming v2 while any row still has no key.
 fn migrate_v1_to_v2(conn: &Connection) -> Result<(), AppError> {
-    let migration = (|| -> Result<(), AppError> {
-        conn.execute_batch(
-            "BEGIN IMMEDIATE;
-             ALTER TABLE notes ADD COLUMN title_lookup_key TEXT NOT NULL DEFAULT '';
-             CREATE INDEX idx_notes_title_lookup
-                 ON notes(workspace_id, title_lookup_key COLLATE NOCASE, title, id);",
+    let transaction = Transaction::new_unchecked(conn, TransactionBehavior::Immediate)?;
+    migrate_v1_to_v2_in_transaction(&transaction)?;
+    transaction.commit()?;
+    Ok(())
+}
+
+fn migrate_v1_to_v2_in_transaction(conn: &Connection) -> Result<(), AppError> {
+    conn.execute_batch("ALTER TABLE notes ADD COLUMN title_lookup_key TEXT NOT NULL DEFAULT '';")?;
+    // A full v1 file already has these objects, but a crash may have left a
+    // prefix of the old DDL behind. Complete the v2 DDL while this transaction
+    // is still open; the lookup index is therefore never published without its
+    // backing column.
+    conn.execute_batch(SCHEMA)?;
+
+    let mut select = conn.prepare("SELECT workspace_id, id, title FROM notes")?;
+    let rows = select.query_map([], |row| {
+        Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, String>(2)?,
+        ))
+    })?;
+    let titles = rows.collect::<Result<Vec<_>, _>>()?;
+    drop(select);
+
+    for (workspace_id, note_id, title) in titles {
+        conn.execute(
+            "UPDATE notes SET title_lookup_key = ?1 WHERE workspace_id = ?2 AND id = ?3",
+            rusqlite::params![
+                crate::index::title_lookup_key(&title),
+                workspace_id,
+                note_id
+            ],
         )?;
-
-        let mut select = conn.prepare("SELECT workspace_id, id, title FROM notes")?;
-        let rows = select.query_map([], |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, String>(2)?,
-            ))
-        })?;
-        let titles = rows.collect::<Result<Vec<_>, _>>()?;
-        drop(select);
-
-        for (workspace_id, note_id, title) in titles {
-            conn.execute(
-                "UPDATE notes SET title_lookup_key = ?1 WHERE workspace_id = ?2 AND id = ?3",
-                rusqlite::params![
-                    crate::index::title_lookup_key(&title),
-                    workspace_id,
-                    note_id
-                ],
-            )?;
-        }
-
-        conn.execute_batch(&format!(
-            "PRAGMA user_version = {CURRENT_SCHEMA_VERSION}; COMMIT;"
-        ))?;
-        Ok(())
-    })();
-
-    if migration.is_err() {
-        let _ = conn.execute_batch("ROLLBACK;");
     }
-    migration
+
+    conn.execute_batch(&format!("PRAGMA user_version = {CURRENT_SCHEMA_VERSION};"))?;
+    Ok(())
 }
 
 /// Opens the encrypted local index at `path` (via the OS Keychain root key)
@@ -724,6 +824,163 @@ mod tests {
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
         assert_eq!(version, CURRENT_SCHEMA_VERSION);
+    }
+
+    #[test]
+    fn version_zero_full_v1_schema_recovers_notes_links_and_unicode_title_lookup() {
+        let (dir, conn) = open_test_db();
+        // Build every v1 object from the current physical contract by removing
+        // precisely the two v2 DDL additions. `user_version` intentionally
+        // remains SQLite's default 0, modeling a process killed after the old
+        // non-transactional DDL succeeded but before version publication.
+        let v1_schema = SCHEMA
+            .replacen("    title_lookup_key TEXT NOT NULL,\n", "", 1)
+            .replacen(
+                "CREATE INDEX IF NOT EXISTS idx_notes_title_lookup\n    ON notes(workspace_id, title_lookup_key COLLATE NOCASE, title, id);\n\n",
+                "",
+                1,
+            );
+        assert!(
+            !v1_schema.contains("title_lookup_key TEXT NOT NULL"),
+            "the fixture must model the v1 notes shape"
+        );
+        assert!(
+            !v1_schema.contains("CREATE INDEX IF NOT EXISTS idx_notes_title_lookup"),
+            "the fixture must model the v1 index set"
+        );
+        conn.execute_batch(&v1_schema).unwrap();
+        conn.execute_batch(
+            "INSERT INTO workspaces (id, name, provider, local_path)
+                 VALUES ('ws', 'Workspace', 'local', '/workspace');
+             INSERT INTO notes (id, workspace_id, path, title, last_modified, content_hash)
+                 VALUES
+                    ('uber', 'ws', 'uber.md', 'Über', 0, 'hash-uber'),
+                    ('target', 'ws', 'target.md', 'Target', 0, 'hash-target');
+             INSERT INTO links (workspace_id, source_id, target_id, target_title)
+                 VALUES ('ws', 'uber', 'target', 'Target');",
+        )
+        .unwrap();
+
+        init_schema(&conn).unwrap();
+
+        let lookup_key: String = conn
+            .query_row(
+                "SELECT title_lookup_key FROM notes WHERE workspace_id = 'ws' AND id = 'uber'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(lookup_key, crate::index::title_lookup_key("Über"));
+        let link: (String, String) = conn
+            .query_row(
+                "SELECT target_id, target_title FROM links \
+                 WHERE workspace_id = 'ws' AND source_id = 'uber'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(link, ("target".to_string(), "Target".to_string()));
+        assert_eq!(
+            crate::index::query::find_notes_by_title_impl(&conn, "ws", "über", 10)
+                .unwrap()
+                .into_iter()
+                .map(|note| note.id)
+                .collect::<Vec<_>>(),
+            vec!["uber"]
+        );
+        let index_exists: i64 = conn
+            .query_row(
+                "SELECT count(*) FROM sqlite_master \
+                 WHERE type = 'index' AND name = 'idx_notes_title_lookup'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(index_exists, 1);
+
+        // Recovery is complete and reopening/re-initializing cannot alter the
+        // published version or duplicate either the schema or graph data.
+        drop(conn);
+        let reopened =
+            open_encrypted_db_with_key(&dir.path().join("index.sqlite3"), &[0x24u8; 32]).unwrap();
+        init_schema(&reopened).unwrap();
+        let version: i64 = reopened
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(version, CURRENT_SCHEMA_VERSION);
+        let links: i64 = reopened
+            .query_row("SELECT count(*) FROM links", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(links, 1);
+    }
+
+    #[test]
+    fn version_zero_workspaces_only_partial_schema_is_completed_transactionally() {
+        let (_dir, conn) = open_test_db();
+        conn.execute_batch(
+            "CREATE TABLE workspaces (
+                 id TEXT PRIMARY KEY,
+                 name TEXT NOT NULL,
+                 provider TEXT NOT NULL,
+                 remote_url TEXT,
+                 local_path TEXT NOT NULL
+             );",
+        )
+        .unwrap();
+
+        init_schema(&conn).unwrap();
+        init_schema(&conn).unwrap();
+
+        let version: i64 = conn
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(version, CURRENT_SCHEMA_VERSION);
+        let notes_exists: i64 = conn
+            .query_row(
+                "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'notes'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(notes_exists, 1);
+    }
+
+    #[test]
+    fn fresh_schema_failure_rolls_back_schema_and_version_publication_together() {
+        let (_dir, conn) = open_test_db();
+        conn.authorizer(Some(
+            |context: rusqlite::hooks::AuthContext<'_>| match context.action {
+                rusqlite::hooks::AuthAction::CreateTable {
+                    table_name: "notes",
+                } => rusqlite::hooks::Authorization::Deny,
+                _ => rusqlite::hooks::Authorization::Allow,
+            },
+        ))
+        .unwrap();
+
+        let error = init_schema(&conn).expect_err("injected CREATE TABLE failure must surface");
+        assert!(matches!(error, AppError::DatabaseError(_)));
+        let version: i64 = conn
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(version, 0);
+        let created_tables: i64 = conn
+            .query_row(
+                "SELECT count(*) FROM sqlite_master \
+                 WHERE type = 'table' AND name NOT LIKE 'sqlite_%'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(created_tables, 0, "the failed fresh schema must roll back");
+
+        conn.authorizer(None::<fn(rusqlite::hooks::AuthContext<'_>) -> _>)
+            .unwrap();
+        init_schema(&conn).unwrap();
+        let committed_version: i64 = conn
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(committed_version, CURRENT_SCHEMA_VERSION);
     }
 
     /// WSPC-D004 review finding #3: after a bootstrap call succeeds,

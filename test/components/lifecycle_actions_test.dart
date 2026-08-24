@@ -1126,6 +1126,31 @@ void main() {
       expect(api.calls.where((c) => c.startsWith('closeNote')), isEmpty);
     });
 
+    testWidgets(
+      'deleting a selected but unmounted Note clears its failed-open error',
+      (tester) async {
+        final api = _LifecycleApi()..openStates['A'] = stateFor('A');
+        late ProviderContainer container;
+        await tester.pumpWidget(_probeHarness(api, (c) => container = c));
+        addTearDown(container.dispose);
+        final controller = container.read(activeNoteProvider.notifier);
+        await controller.open('A');
+        container.read(selectedNoteIdProvider.notifier).select('B');
+        await controller.open('B');
+
+        expect(container.read(activeNoteProvider), isNull);
+        expect(container.read(selectedNoteIdProvider), 'B');
+        expect(container.read(editorErrorProvider), isNotNull);
+
+        await container.read(lifecycleActionsProvider).deleteNote('B');
+
+        expect(container.read(activeNoteProvider), isNull);
+        expect(container.read(selectedNoteIdProvider), isNull);
+        expect(container.read(editorErrorProvider), isNull);
+        expect(container.read(noteCloseFailureProvider), isNull);
+      },
+    );
+
     testWidgets('deleting another note leaves the editor alone', (
       tester,
     ) async {

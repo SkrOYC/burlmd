@@ -1,5 +1,18 @@
 # Stage 3: Technical Implementation Changelog
 
+## v1.6.12
+
+Patch correction from PR #10 review, round 23. The physical schema DDL is
+unchanged; its initialization and migration publication contract is corrected.
+
+- Version-zero initialization now distinguishes an empty file, the
+  `workspaces`-only crash prefix, a legacy v1 `notes` table, and a v2 `notes`
+  table. It commits all recovered/current DDL, Unicode lookup-key backfill, and
+  `user_version = 2` together, so a kill cannot leave complete v1 data at
+  version zero or publish v2 before its schema is usable. Unrecognized
+  version-zero shapes fail without being guessed at; later versions remain
+  untouched.
+
 ## v1.6.11
 
 Patch correction from PR #10 review, round 22. No bill-of-materials, PRD, or
