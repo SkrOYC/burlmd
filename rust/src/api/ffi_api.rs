@@ -578,13 +578,13 @@ pub fn continue_block_at_insertion_slot(
     insertion_slot: StructuralEditInsertionSlot,
     source: String,
 ) -> Result<StructuralEdit, AppError> {
-    let (state, block_path) = with_open_session_edit(&note_id, |session| {
+    let (state, block_path, caret_offset) = with_open_session_edit(&note_id, |session| {
         session.continue_block_at_insertion_slot(&insertion_slot, &source)
     })?;
     Ok(StructuralEdit {
         state,
         block_path,
-        caret_offset: source.encode_utf16().count(),
+        caret_offset,
         phantom_insertion_slot: None,
     })
 }
@@ -620,13 +620,13 @@ pub fn continue_block_after(
     block_path: Vec<usize>,
     source: String,
 ) -> Result<StructuralEdit, AppError> {
-    let (state, block_path) = with_open_session_edit(&note_id, |session| {
+    let (state, block_path, caret_offset) = with_open_session_edit(&note_id, |session| {
         session.continue_block_after(&block_path, &source)
     })?;
     Ok(StructuralEdit {
         state,
         block_path,
-        caret_offset: source.encode_utf16().count(),
+        caret_offset,
         phantom_insertion_slot: None,
     })
 }
