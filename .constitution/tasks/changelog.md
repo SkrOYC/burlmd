@@ -1,5 +1,13 @@
 # Stage 4: Tasks Changelog
 
+## v1.9.4
+
+Bounded PR #10 review round 23 documentation for an archived Epic F scope
+deviation. The record covers schema recovery for version-zero SQLite files and
+its verification. It does not reopen tickets or change active scope,
+estimates, dependencies, acceptance criteria, the backlog, or the critical
+path.
+
 ## v1.9.3
 
 Bounded PR #10 review round 7 correction to archived Epic F. The correction

@@ -595,6 +595,28 @@ the prior editor writable.
 This bounded correction includes Rust regressions and Stage 3 and Stage 4
 reconciliation. It does not reopen an Epic F ticket.
 
+### PR #10 review round 23 scope deviation (2026-08-23)
+
+Round 23 found that a database reporting `user_version = 0` can contain a
+complete version 1 schema if a process stops between schema creation and
+version publication. This bounded post-closeout correction makes recovery and
+publication one immediate SQLite transaction. It does not reopen `WSPC-D004`
+or an Epic F ticket.
+
+The deviation changes `rust/src/db/connection.rs` to classify empty,
+`workspaces`-only, version 1, and version 2 version-zero states before it
+publishes version 2. It updates `rust/src/db/schema.sql` and the matching
+Stage 3 schema, stack, and changelog records. Regression tests cover complete
+version 1 recovery, the `workspaces`-only prefix, and rollback when fresh
+schema creation fails. The correction adds no dependency because the existing
+`rusqlite` transaction API provides the required immediate transaction.
+
+Verification ran the focused schema-recovery tests in `rust/src/db/connection.rs`,
+Flutter widget tests with Core-returned source shapes, Flutter static analysis,
+formatting, and the diff and debug-marker checks. Active scope, estimates,
+dependencies, acceptance criteria, the backlog, and the critical path remain
+unchanged.
+
 ## Deferred follow-ups and remaining risks
 
 No Epic F acceptance criterion remains open. Deferred work is recorded in the
