@@ -22,11 +22,14 @@ class _RescanRustApi extends RustApi {
 
   /// Whether the fake write tier reports unwritten edits for an open Note.
   bool unwrittenEdits = false;
+  final Map<String, bool> unwrittenEditsByNote = {};
+  final Set<String> restoredDraftIds = {};
 
   int treeFetches = 0;
   final List<String> calls = [];
   final List<String> blockUpdates = [];
   Completer<NoteState>? reloadGate;
+  Completer<void>? closeGate;
 
   _RescanRustApi(this.currentTree);
 
@@ -49,7 +52,7 @@ class _RescanRustApi extends RustApi {
   NoteWriteStatus noteWriteStatus(String noteId) => NoteWriteStatus(
     lastWrittenAt: null,
     lastError: null,
-    hasUnwrittenEdits: unwrittenEdits,
+    hasUnwrittenEdits: unwrittenEditsByNote[noteId] ?? unwrittenEdits,
   );
 
   @override
@@ -65,7 +68,7 @@ class _RescanRustApi extends RustApi {
         okfConformant: true,
       ),
       baseRevision: 'head',
-      restoredFromDraft: false,
+      restoredFromDraft: restoredDraftIds.contains(noteId),
     );
   }
 
@@ -80,6 +83,8 @@ class _RescanRustApi extends RustApi {
   @override
   Future<void> closeNote(String noteId) async {
     calls.add('close:$noteId');
+    final gate = closeGate;
+    if (gate != null && !gate.isCompleted) await gate.future;
   }
 
   @override
@@ -298,6 +303,96 @@ void main() {
       container.read(activeNoteProvider.notifier).updateBlock([0], 'retained');
       expect(api.blockUpdates, ['b:0:retained']);
       expect(container.read(activeNoteProvider)!.metadata.id, 'b');
+    },
+  );
+
+  testWidgets(
+    'a delayed clean A-to-B switch refuses rescan until B is reconciled, then allows retry',
+    (tester) async {
+      final api = _RescanRustApi([_note('a', 'Alpha'), _note('b', 'Beta')]);
+      final closeGate = Completer<void>();
+      api.closeGate = closeGate;
+      var reindexCalls = 0;
+      final container = await _pumpShell(
+        tester,
+        api,
+        reindex: () async {
+          reindexCalls++;
+          return 2;
+        },
+      );
+
+      await tester.tap(find.text('Alpha'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Beta'));
+      await tester.pump();
+      expect(container.read(noteSwitchingProvider), isTrue);
+      expect(_rescanButton(tester).onPressed, isNull);
+
+      await container.read(rescanStateProvider.notifier).run();
+      expect(reindexCalls, 0);
+      expect(container.read(rescanEditingProvider), 0);
+      expect(container.read(rescanStateProvider).refusedReason, isNotNull);
+
+      closeGate.complete();
+      await tester.pumpAndSettle();
+      expect(container.read(noteSwitchingProvider), isFalse);
+      expect(container.read(selectedNoteIdProvider), 'b');
+      expect(container.read(activeNoteProvider)!.metadata.id, 'b');
+
+      await container.read(rescanStateProvider.notifier).run();
+      await tester.pumpAndSettle();
+      expect(reindexCalls, 1);
+      expect(container.read(rescanEditingProvider), 0);
+    },
+  );
+
+  testWidgets(
+    'a delayed switch to restored dirty B refuses rescan until its draft is clean',
+    (tester) async {
+      final api = _RescanRustApi([_note('a', 'Alpha'), _note('b', 'Beta')]);
+      final closeGate = Completer<void>();
+      api
+        ..closeGate = closeGate
+        ..restoredDraftIds.add('b')
+        ..unwrittenEditsByNote['b'] = true;
+      var reindexCalls = 0;
+      final container = await _pumpShell(
+        tester,
+        api,
+        reindex: () async {
+          reindexCalls++;
+          return 2;
+        },
+      );
+
+      await tester.tap(find.text('Alpha'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Beta'));
+      await tester.pump();
+      await container.read(rescanStateProvider.notifier).run();
+      expect(reindexCalls, 0);
+      expect(container.read(rescanEditingProvider), 0);
+
+      closeGate.complete();
+      await tester.pumpAndSettle();
+      expect(container.read(activeNoteProvider)!.metadata.id, 'b');
+      expect(container.read(activeNoteProvider)!.restoredFromDraft, isTrue);
+      expect(container.read(selectedNoteIdProvider), 'b');
+
+      await container.read(rescanStateProvider.notifier).run();
+      expect(reindexCalls, 0);
+      expect(
+        container.read(rescanStateProvider).refusedReason,
+        contains('unsaved edits'),
+      );
+      expect(container.read(rescanEditingProvider), 0);
+
+      api.unwrittenEditsByNote['b'] = false;
+      await container.read(rescanStateProvider.notifier).run();
+      await tester.pumpAndSettle();
+      expect(reindexCalls, 1);
+      expect(container.read(rescanEditingProvider), 0);
     },
   );
 

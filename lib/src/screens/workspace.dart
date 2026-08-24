@@ -163,7 +163,8 @@ class WorkspaceRescan extends Notifier<RescanState> {
     // The regular affordance is disabled by the same shared gate, but this
     // direct check protects a stale frame or programmatic caller as well.
     if (ref.read(lifecycleEditingProvider) > 0 ||
-        ref.read(reloadEditingProvider) > 0) {
+        ref.read(reloadEditingProvider) > 0 ||
+        ref.read(noteSwitchingProvider)) {
       state = const RescanState(
         refusedReason:
             'Rescan unavailable while workspace changes are in progress.',
@@ -267,7 +268,8 @@ class _RescanButton extends ConsumerWidget {
         rescan.running ||
         blockedByOpenEdits ||
         ref.watch(lifecycleEditingProvider) > 0 ||
-        ref.watch(reloadEditingProvider) > 0;
+        ref.watch(reloadEditingProvider) > 0 ||
+        ref.watch(noteSwitchingProvider);
 
     return Tooltip(
       message: 'Re-read the workspace from disk and refresh the note tree',

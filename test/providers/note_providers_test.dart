@@ -8,12 +8,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 class _SwitchingRustApi extends RustApi {
-  _SwitchingRustApi({this.warningOnClose = false, this.failFirstOpenOf});
+  _SwitchingRustApi({
+    this.warningOnClose = false,
+    this.failFirstOpenOf,
+    this.closeGate,
+  });
 
   final bool warningOnClose;
   final String? failFirstOpenOf;
   final List<String> calls = [];
   final List<String> blockUpdates = [];
+  final Completer<void>? closeGate;
   Completer<NoteState>? reloadGate;
   Object? reloadError;
   var _hasFailedOpen = false;
@@ -21,6 +26,8 @@ class _SwitchingRustApi extends RustApi {
   @override
   Future<void> closeNote(String noteId) async {
     calls.add('close:$noteId');
+    final gate = closeGate;
+    if (gate != null && !gate.isCompleted) await gate.future;
     if (warningOnClose) {
       throw const CloseNoteWarning('version-history recording was unavailable');
     }
@@ -83,6 +90,40 @@ ProviderContainer _containerFor(_SwitchingRustApi api) {
 }
 
 void main() {
+  test(
+    'an admission change during a delayed close releases switching before later navigation and editing',
+    () async {
+      final closeGate = Completer<void>();
+      final api = _SwitchingRustApi(closeGate: closeGate);
+      final container = _containerFor(api);
+      final controller = container.read(activeNoteProvider.notifier);
+
+      await controller.open('a');
+      container.read(selectedNoteIdProvider.notifier).select('b');
+      final switching = controller.open('b');
+      await Future<void>.delayed(Duration.zero);
+      expect(container.read(noteSwitchingProvider), isTrue);
+      expect(container.read(editorInputBlockedProvider), isTrue);
+
+      // This models a lifecycle action claiming the replacement boundary
+      // while Core is still closing A. The stale switch must retire A without
+      // leaving its admission gate held forever.
+      container.read(lifecycleAdmissionProvider.notifier).next();
+      closeGate.complete();
+      await switching;
+
+      expect(container.read(activeNoteProvider), isNull);
+      expect(container.read(noteSwitchingProvider), isFalse);
+      expect(container.read(editorInputBlockedProvider), isFalse);
+
+      container.read(selectedNoteIdProvider.notifier).select('a');
+      await controller.open('a');
+      controller.updateBlock([0], 'editable after stale switch');
+      expect(container.read(activeNoteProvider)!.metadata.id, 'a');
+      expect(api.blockUpdates, ['a:0:editable after stale switch']);
+    },
+  );
+
   test(
     'a completed close warning continues to the selected Note without restoring the dead session',
     () async {
