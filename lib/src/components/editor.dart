@@ -109,6 +109,17 @@ _Utf16Delta _utf16Delta(String previous, String next) {
   );
 }
 
+/// Returns the part of a hydrated leaf that can appear in a phantom
+/// controller value. Core includes one structural terminal line ending in a
+/// leaf source, but the phantom controller has no corresponding final line.
+/// Remove only that final LF or CRLF: meaningful preceding line endings remain
+/// available to the editor and to Core.
+String _phantomControllerLeafContent(String source) {
+  if (source.endsWith('\r\n')) return source.substring(0, source.length - 2);
+  if (source.endsWith('\n')) return source.substring(0, source.length - 1);
+  return source;
+}
+
 /// A frozen cross-Block target owned by the editor's input proxy. Ordinary
 /// selections retain their public Core [BlockRange] coordinates; Select All
 /// is a distinct Core operation because an empty terminal rendering has no
@@ -1460,7 +1471,13 @@ class EditorState extends ConsumerState<Editor> {
           .map((part) => part.toInt())
           .toList();
       final source = api.getBlockSource(note.metadata.id, insertedPath);
-      final materializedSourceOffset = text.lastIndexOf(source);
+      // Core source ends in the leaf's structural line ending (`\n` or
+      // `\r\n`), while the stale phantom controller ends at its last visible
+      // line. Locate only that controller-visible leaf content. Retaining the
+      // full `source` below preserves Core's structural terminator when the
+      // next same-frame callback applies its delta.
+      final controllerLeafContent = _phantomControllerLeafContent(source);
+      final materializedSourceOffset = text.lastIndexOf(controllerLeafContent);
       setState(() {
         _focused = _Focus(
           noteId: note.metadata.id,
@@ -1536,14 +1553,21 @@ class EditorState extends ConsumerState<Editor> {
     // than treating a completed mutation as a rejected write.
     if (previous == null || sourceOffset == null) return true;
     final delta = _utf16Delta(previous, text);
-    final sourceEnd = sourceOffset + focused.source.length;
+    // See [_phantomControllerLeafContent]. The stale controller cannot name
+    // Core's structural terminal line ending, so controller coordinates stop
+    // immediately before it. Source splices use those same offsets, leaving
+    // the terminator in place.
+    final controllerSourceLength = _phantomControllerLeafContent(
+      focused.source,
+    ).length;
+    final sourceEnd = sourceOffset + controllerSourceLength;
 
     if (delta.start == delta.end && delta.replacement.isEmpty) {
       focused
         ..phantomControllerValue = text
         ..caret = (selection.extentOffset - sourceOffset).clamp(
           0,
-          focused.source.length,
+          controllerSourceLength,
         );
       return true;
     }
@@ -1588,7 +1612,7 @@ class EditorState extends ConsumerState<Editor> {
         ..source = nextSource
         ..caret = (selection.extentOffset - sourceOffset).clamp(
           0,
-          nextSource.length,
+          _phantomControllerLeafContent(nextSource).length,
         )
         ..phantomControllerValue = text;
     }

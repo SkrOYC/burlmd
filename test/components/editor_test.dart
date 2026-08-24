@@ -2045,6 +2045,101 @@ void main() {
   );
 
   testWidgets(
+    'same-frame phantom deltas preserve a Unicode leaf before Core’s LF terminator',
+    (tester) async {
+      final materialized = _testNoteState([
+        _plainParagraph('one'),
+        _plainParagraph('two😀'),
+      ]);
+      final api = _FakeRustApi()
+        ..continuationResult = StructuralEdit(
+          state: materialized,
+          blockPath: Uint64List.fromList([1]),
+          caretOffset: BigInt.from('two😀'.length),
+        )
+        // Real Core leaf sources include one structural final line ending.
+        ..sources['1'] = 'two😀\n';
+      await pumpEditor(tester, const [], api: api);
+
+      // These values all arrive before the phantom field rebuilds. Append,
+      // delete, then replace within the final leaf; none may duplicate the
+      // preceding materialized paragraph or consume Core's terminal LF.
+      tester.testTextInput.updateEditingValue(
+        const TextEditingValue(
+          text: 'one\n\ntwo😀',
+          selection: TextSelection.collapsed(offset: 10),
+        ),
+      );
+      tester.testTextInput.updateEditingValue(
+        const TextEditingValue(
+          text: 'one\n\ntwo😀!',
+          selection: TextSelection.collapsed(offset: 11),
+        ),
+      );
+      tester.testTextInput.updateEditingValue(
+        const TextEditingValue(
+          text: 'one\n\ntwo😀',
+          selection: TextSelection.collapsed(offset: 10),
+        ),
+      );
+      tester.testTextInput.updateEditingValue(
+        const TextEditingValue(
+          text: 'one\n\ntx😀',
+          selection: TextSelection.collapsed(offset: 9),
+        ),
+      );
+
+      expect(api.continuationCount, 1);
+      expect(api.updateCount, 3);
+      expect(api.lastBlockPath, [1]);
+      expect(api.lastSource, 'tx😀\n');
+
+      await tester.pump();
+      expect(_field(tester).controller.text, 'tx😀\n');
+      expect(_field(tester).controller.selection.extentOffset, 'tx😀'.length);
+    },
+  );
+
+  testWidgets(
+    'same-frame phantom deltas preserve Core’s CRLF leaf terminator',
+    (tester) async {
+      final materialized = _testNoteState([
+        _plainParagraph('one'),
+        _plainParagraph('two'),
+      ]);
+      final api = _FakeRustApi()
+        ..continuationResult = StructuralEdit(
+          state: materialized,
+          blockPath: Uint64List.fromList([1]),
+          caretOffset: BigInt.from(3),
+        )
+        ..sources['1'] = 'two\r\n';
+      await pumpEditor(tester, const [], api: api);
+
+      tester.testTextInput.updateEditingValue(
+        const TextEditingValue(
+          text: 'one\r\n\r\ntwo',
+          selection: TextSelection.collapsed(offset: 10),
+        ),
+      );
+      tester.testTextInput.updateEditingValue(
+        const TextEditingValue(
+          text: 'one\r\n\r\ntwo!',
+          selection: TextSelection.collapsed(offset: 11),
+        ),
+      );
+
+      expect(api.continuationCount, 1);
+      expect(api.updateCount, 1);
+      expect(api.lastBlockPath, [1]);
+      expect(api.lastSource, 'two!\r\n');
+
+      await tester.pump();
+      expect(_field(tester).controller.text, 'two!\r\n');
+    },
+  );
+
+  testWidgets(
     'same-frame phantom deltas preserve Unicode selections, deletions, and replacements',
     (tester) async {
       const initial = 'one\n\ntwo😀';
