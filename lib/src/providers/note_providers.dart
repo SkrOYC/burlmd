@@ -320,50 +320,52 @@ class NoteController extends Notifier<NoteState?> {
     }
     var switching = false;
     var closedWithWarning = false;
-    if (current != null) {
-      // Revoke the old editor before awaiting the close. The old provider
-      // value remains only to restore it when this close itself refuses.
-      switching = true;
-      ref.read(noteSwitchingProvider.notifier).set(true);
-      try {
-        await api.closeNote(current.metadata.id);
-      } catch (error) {
-        if (error is CloseNoteWarning) {
-          // Core retired the outgoing session after the bytes were safe, but
-          // could not finish commit or draft cleanup. Continue to the selected
-          // Note: restoring `current` here would make its raw editor writable
-          // against a deregistered session. The Editor consumes this one-shot
-          // warning through the same dismissible status surface as a refusal.
-          closedWithWarning = true;
-          ref.read(editorErrorProvider.notifier).report(null);
-          ref.read(noteCloseFailureProvider.notifier).report(error);
-        } else {
-          ref.read(noteSwitchingProvider.notifier).set(false);
-          // Closing refused, so the old session remains Core-valid and can be
-          // edited again. It is a nonfatal one-shot outcome, not the persistent
-          // no-session error panel used for a failed open.
-          ref.read(editorErrorProvider.notifier).report(null);
-          ref.read(noteCloseFailureProvider.notifier).report(error);
-          // The switch aborts with the old Note still open; point the tree
-          // back at it so the selection highlight matches what the editor
-          // actually shows. The error stays surfaced above.
-          _restoreSelection(current.metadata.id, admittedByLifecycle);
+    try {
+      if (current != null) {
+        // Revoke the old editor before awaiting the close. The old provider
+        // value remains only to restore it when this close itself refuses.
+        // Every return after this point remains inside this transaction's
+        // cleanup boundary: lifecycle admission can change while closeNote is
+        // delayed, and must never leave editor input permanently blocked.
+        switching = true;
+        ref.read(noteSwitchingProvider.notifier).set(true);
+        try {
+          await api.closeNote(current.metadata.id);
+        } catch (error) {
+          if (error is CloseNoteWarning) {
+            // Core retired the outgoing session after the bytes were safe, but
+            // could not finish commit or draft cleanup. Continue to the selected
+            // Note: restoring `current` here would make its raw editor writable
+            // against a deregistered session. The Editor consumes this one-shot
+            // warning through the same dismissible status surface as a refusal.
+            closedWithWarning = true;
+            ref.read(editorErrorProvider.notifier).report(null);
+            ref.read(noteCloseFailureProvider.notifier).report(error);
+          } else {
+            // Closing refused, so the old session remains Core-valid and can be
+            // edited again. It is a nonfatal one-shot outcome, not the persistent
+            // no-session error panel used for a failed open.
+            ref.read(editorErrorProvider.notifier).report(null);
+            ref.read(noteCloseFailureProvider.notifier).report(error);
+            // The switch aborts with the old Note still open; point the tree
+            // back at it so the selection highlight matches what the editor
+            // actually shows. The error stays surfaced above.
+            _restoreSelection(current.metadata.id, admittedByLifecycle);
+            return;
+          }
+        }
+        if (!_isOpenAdmissionCurrent(
+          lifecycleAdmission,
+          admittedByLifecycle: admittedByLifecycle,
+        )) {
+          // Core accepted the close, but lifecycle work claimed the replacement
+          // boundary while it was pending. This snapshot names a retired
+          // session, so do not retain it or continue into the selected id.
+          state = null;
+          ref.read(keystrokeWriteFailureProvider.notifier).report(null);
           return;
         }
       }
-      if (!_isOpenAdmissionCurrent(
-        lifecycleAdmission,
-        admittedByLifecycle: admittedByLifecycle,
-      )) {
-        // Core accepted the close, but lifecycle work claimed the replacement
-        // boundary while it was pending. This snapshot names a retired
-        // session, so do not retain it or continue into the selected id.
-        state = null;
-        ref.read(keystrokeWriteFailureProvider.notifier).report(null);
-        return;
-      }
-    }
-    try {
       final opened = await api.openNote(noteId);
       if (!_isOpenAdmissionCurrent(
         lifecycleAdmission,
