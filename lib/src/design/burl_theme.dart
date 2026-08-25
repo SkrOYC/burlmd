@@ -1,7 +1,6 @@
 import 'package:flutter/foundation.dart'
     show TargetPlatform, defaultTargetPlatform;
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// Font families embedded solely for the deterministic visual-parity fixture.
 ///
@@ -21,29 +20,27 @@ const burlPrototypeMonoFallback = <String>[
 enum BurlThemePreference { system, light, dark }
 
 enum BurlFontScale {
-  compact(14, 1.625, 'Compact'),
-  standard(16, 1.68, 'Standard'),
-  comfortable(18, 1.72, 'Comfortable'),
-  spacious(20, 1.75, 'Large');
+  compact(14, 1.625),
+  standard(16, 1.68),
+  comfortable(18, 1.72),
+  spacious(20, 1.75);
 
-  const BurlFontScale(this.size, this.height, this.label);
+  const BurlFontScale(this.size, this.height);
 
   final double size;
   final double height;
-  final String label;
 }
 
 enum BurlMeasure {
-  narrow(440, '55ch · Narrow reading'),
-  standard(520, '65ch · Standard prose'),
-  wide(600, '75ch · Wide'),
-  technical(680, '85ch · Code & tables'),
-  full(double.infinity, 'Full width');
+  narrow(440),
+  standard(520),
+  wide(600),
+  technical(680),
+  full(double.infinity);
 
-  const BurlMeasure(this.maxWidth, this.label);
+  const BurlMeasure(this.maxWidth);
 
   final double maxWidth;
-  final String label;
 }
 
 enum BurlPlatformChrome { macos, linux, minimal }
@@ -87,29 +84,6 @@ class BurlPreferences {
     focusMode: focusMode ?? this.focusMode,
   );
 }
-
-class BurlPreferencesController extends Notifier<BurlPreferences> {
-  @override
-  BurlPreferences build() => BurlPreferences.defaults();
-
-  void setTheme(BurlThemePreference value) =>
-      state = state.copyWith(theme: value);
-
-  void setFontScale(BurlFontScale value) =>
-      state = state.copyWith(fontScale: value);
-
-  void setMeasure(BurlMeasure value) => state = state.copyWith(measure: value);
-
-  void setPlatformChrome(BurlPlatformChrome value) =>
-      state = state.copyWith(platformChrome: value);
-
-  void setFocusMode(bool value) => state = state.copyWith(focusMode: value);
-}
-
-final burlPreferencesProvider =
-    NotifierProvider<BurlPreferencesController, BurlPreferences>(
-      BurlPreferencesController.new,
-    );
 
 extension on BurlThemePreference {
   ThemeMode get materialMode => switch (this) {

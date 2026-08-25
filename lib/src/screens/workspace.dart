@@ -58,6 +58,7 @@ class WorkspaceScreen extends ConsumerWidget {
         ),
         data: (info) => BurlWorkspaceShell(
           workspaceName: info.name,
+          workspacePath: info.localPath.isEmpty ? null : info.localPath,
           rescanButton: const WorkspaceRescanButton(),
           onRescan: () => ref.read(rescanStateProvider.notifier).run(),
           fixtureCaptureController: fixtureCaptureController,

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:burlmd/src/components/lifecycle_actions.dart';
+import 'package:burlmd/l10n/generated/app_localizations.dart';
 import 'package:burlmd/src/providers/note_providers.dart';
 import 'package:burlmd/src/providers/rust_api_provider.dart';
 import 'package:burlmd/src/providers/workspace_provider.dart';
@@ -119,7 +120,11 @@ Future<ProviderContainer> _pumpShell(
   await tester.pumpWidget(
     UncontrolledProviderScope(
       container: container,
-      child: const MaterialApp(home: WorkspaceScreen()),
+      child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: const WorkspaceScreen(),
+      ),
     ),
   );
   await tester.pumpAndSettle();

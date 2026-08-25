@@ -2,7 +2,9 @@ import 'package:burlmd/src/providers/rust_api_provider.dart';
 import 'package:burlmd/src/providers/workspace_provider.dart';
 import 'package:burlmd/src/design/burl_theme.dart';
 import 'package:burlmd/src/design/burl_motion.dart';
+import 'package:burlmd/src/providers/burl_preferences_provider.dart';
 import 'package:burlmd/src/components/visual_parity_fixture.dart';
+import 'package:burlmd/l10n/generated/app_localizations.dart';
 import 'package:burlmd/src/rust/draft.dart';
 import 'package:burlmd/src/rust/error.dart';
 import 'package:burlmd/src/rust/markdown/ast.dart';
@@ -156,6 +158,8 @@ Future<ProviderContainer> _pumpShell(
     UncontrolledProviderScope(
       container: container,
       child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Builder(
           builder: (context) => MediaQuery(
             data: MediaQuery.of(
@@ -363,6 +367,8 @@ void main() {
       UncontrolledProviderScope(
         container: container,
         child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           builder: (context, child) => MediaQuery(
             data: MediaQuery.of(context).copyWith(disableAnimations: true),
             child: child!,
@@ -673,6 +679,17 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('shell-sync')));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('sync-state-select')), findsNothing);
+    expect(
+      find.text('Path: /tmp/workspace\nOrigin: Local only'),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('sync-now')),
+        matching: find.text('Rescan workspace'),
+      ),
+      findsOneWidget,
+    );
     await tester.tap(find.byKey(const ValueKey('sync-done')));
     await tester.pumpAndSettle();
 
@@ -707,6 +724,24 @@ void main() {
     await tester.tap(find.byTooltip('Close a.md'));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('shell-tab-a')), findsOneWidget);
+  });
+
+  testWidgets('a focused tab opens its context menu with Shift+F10', (
+    tester,
+  ) async {
+    final api = _MountingRustApi([_treeNode('a', 'Alpha')]);
+    await _pumpShell(tester, api);
+
+    await tester.tap(find.byKey(const Key('shell-tab-visual-welcome')));
+    await tester.pump();
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.f10);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('tab-menu-close')), findsOneWidget);
+    expect(find.byKey(const ValueKey('tab-menu-close-others')), findsOneWidget);
+    expect(find.byKey(const ValueKey('tab-menu-close-all')), findsOneWidget);
   });
 
   testWidgets(
@@ -779,7 +814,7 @@ void main() {
 
     await tester.tap(find.text('Preferences'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('macos'));
+    await tester.tap(find.text('macOS'));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('platform-chrome-macos')), findsOneWidget);
 

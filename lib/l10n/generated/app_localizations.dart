@@ -183,6 +183,480 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Could not complete the editor operation: {error}'**
   String editorOperationFailed(String error);
+
+  /// Label for the workspace search command.
+  ///
+  /// In en, this message translates to:
+  /// **'Search notes…'**
+  String get workspaceSearchNotes;
+
+  /// Tooltip for the workspace search command.
+  ///
+  /// In en, this message translates to:
+  /// **'Search notes'**
+  String get workspaceSearchNotesTooltip;
+
+  /// Label for the local workspace inspector command.
+  ///
+  /// In en, this message translates to:
+  /// **'Local workspace'**
+  String get workspaceLocalWorkspace;
+
+  /// Label for the preferences command.
+  ///
+  /// In en, this message translates to:
+  /// **'Preferences'**
+  String get workspacePreferences;
+
+  /// Tooltip for opening the compact workspace navigator.
+  ///
+  /// In en, this message translates to:
+  /// **'Open navigator'**
+  String get workspaceOpenNavigator;
+
+  /// Tooltip for collapsing the wide workspace navigator.
+  ///
+  /// In en, this message translates to:
+  /// **'Collapse sidebar'**
+  String get workspaceCollapseSidebar;
+
+  /// Fallback path shown before a note is selected.
+  ///
+  /// In en, this message translates to:
+  /// **'workspace'**
+  String get workspaceDefaultPath;
+
+  /// Initial visual tab name before a note is selected.
+  ///
+  /// In en, this message translates to:
+  /// **'Welcome.md'**
+  String get workspaceWelcomeTab;
+
+  /// Name for a newly added visual-only tab.
+  ///
+  /// In en, this message translates to:
+  /// **'Untitled {number}.md'**
+  String workspaceUntitledTab(int number);
+
+  /// Tooltip for adding a local visual-only tab.
+  ///
+  /// In en, this message translates to:
+  /// **'Add visual tab'**
+  String get workspaceAddVisualTab;
+
+  /// Tab context-menu action.
+  ///
+  /// In en, this message translates to:
+  /// **'Close tab'**
+  String get workspaceCloseTab;
+
+  /// Tab context-menu action.
+  ///
+  /// In en, this message translates to:
+  /// **'Close other tabs'**
+  String get workspaceCloseOtherTabs;
+
+  /// Tab context-menu action that preserves provider-owned note tabs.
+  ///
+  /// In en, this message translates to:
+  /// **'Close all visual tabs'**
+  String get workspaceCloseAllVisualTabs;
+
+  /// Accessible label for a workspace tab.
+  ///
+  /// In en, this message translates to:
+  /// **'{title} tab'**
+  String workspaceTabLabel(String title);
+
+  /// Tooltip for closing a named workspace tab.
+  ///
+  /// In en, this message translates to:
+  /// **'Close {title}'**
+  String workspaceCloseNamedTab(String title);
+
+  /// Tooltip shown after copying the current note path.
+  ///
+  /// In en, this message translates to:
+  /// **'Copied path'**
+  String get workspaceCopiedPath;
+
+  /// Tooltip for copying the current note path.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy path'**
+  String get workspaceCopyPath;
+
+  /// Label and tooltip for the note history command.
+  ///
+  /// In en, this message translates to:
+  /// **'History'**
+  String get workspaceHistory;
+
+  /// Breadcrumb used for a root-level note or workspace path.
+  ///
+  /// In en, this message translates to:
+  /// **'Workspace  ›  {path}'**
+  String workspaceBreadcrumb(String path);
+
+  /// Fallback note modification summary.
+  ///
+  /// In en, this message translates to:
+  /// **'Modified recently'**
+  String get workspaceModifiedRecently;
+
+  /// Recent note modification summary.
+  ///
+  /// In en, this message translates to:
+  /// **'Modified just now'**
+  String get workspaceModifiedJustNow;
+
+  /// Note modification summary measured in minutes.
+  ///
+  /// In en, this message translates to:
+  /// **'Modified {minutes}m ago'**
+  String workspaceModifiedMinutesAgo(int minutes);
+
+  /// Note modification summary measured in hours.
+  ///
+  /// In en, this message translates to:
+  /// **'Modified {hours}h ago'**
+  String workspaceModifiedHoursAgo(int hours);
+
+  /// Note modification summary measured in days.
+  ///
+  /// In en, this message translates to:
+  /// **'Modified {days}d ago'**
+  String workspaceModifiedDaysAgo(int days);
+
+  /// Compact current-note summary.
+  ///
+  /// In en, this message translates to:
+  /// **'{modified} · {words} {wordLabel}'**
+  String workspaceNoteSummary(String modified, int words, String wordLabel);
+
+  /// Singular word-count unit.
+  ///
+  /// In en, this message translates to:
+  /// **'word'**
+  String get workspaceWordSingular;
+
+  /// Plural word-count unit.
+  ///
+  /// In en, this message translates to:
+  /// **'words'**
+  String get workspaceWordPlural;
+
+  /// Empty editor title.
+  ///
+  /// In en, this message translates to:
+  /// **'Select a note to open it'**
+  String get workspaceSelectNoteTitle;
+
+  /// Empty editor explanatory text.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a note from the directory tree to begin writing.'**
+  String get workspaceSelectNoteBody;
+
+  /// Tooltip for closing the search palette.
+  ///
+  /// In en, this message translates to:
+  /// **'Close search'**
+  String get workspaceCloseSearch;
+
+  /// Preferences drawer title.
+  ///
+  /// In en, this message translates to:
+  /// **'Editor Preferences'**
+  String get workspaceEditorPreferences;
+
+  /// Preferences section label for the app theme.
+  ///
+  /// In en, this message translates to:
+  /// **'Appearance theme'**
+  String get workspaceAppearanceTheme;
+
+  /// Preferences section label for prose font size.
+  ///
+  /// In en, this message translates to:
+  /// **'Base reading size'**
+  String get workspaceBaseReadingSize;
+
+  /// Preferences section label for prose width.
+  ///
+  /// In en, this message translates to:
+  /// **'Prose line measure'**
+  String get workspaceProseLineMeasure;
+
+  /// Preferences section label for desktop chrome style.
+  ///
+  /// In en, this message translates to:
+  /// **'Desktop platform chrome'**
+  String get workspaceDesktopPlatformChrome;
+
+  /// Preferences toggle title for focus mode.
+  ///
+  /// In en, this message translates to:
+  /// **'Focus Mode (Zen)'**
+  String get workspaceFocusMode;
+
+  /// Preferences toggle description for focus mode.
+  ///
+  /// In en, this message translates to:
+  /// **'Dim non-active blocks while editing'**
+  String get workspaceFocusModeDescription;
+
+  /// Generic close or completion action in workspace surfaces.
+  ///
+  /// In en, this message translates to:
+  /// **'Done'**
+  String get workspaceDone;
+
+  /// Theme preference that follows the operating system.
+  ///
+  /// In en, this message translates to:
+  /// **'System'**
+  String get themePreferenceSystem;
+
+  /// Light theme preference.
+  ///
+  /// In en, this message translates to:
+  /// **'Light'**
+  String get themePreferenceLight;
+
+  /// Dark theme preference.
+  ///
+  /// In en, this message translates to:
+  /// **'Dark'**
+  String get themePreferenceDark;
+
+  /// Compact editor font-scale preference.
+  ///
+  /// In en, this message translates to:
+  /// **'Compact'**
+  String get fontScaleCompact;
+
+  /// Standard editor font-scale preference.
+  ///
+  /// In en, this message translates to:
+  /// **'Standard'**
+  String get fontScaleStandard;
+
+  /// Comfortable editor font-scale preference.
+  ///
+  /// In en, this message translates to:
+  /// **'Comfortable'**
+  String get fontScaleComfortable;
+
+  /// Large editor font-scale preference.
+  ///
+  /// In en, this message translates to:
+  /// **'Large'**
+  String get fontScaleLarge;
+
+  /// Narrow prose line-measure preference.
+  ///
+  /// In en, this message translates to:
+  /// **'55ch · Narrow reading'**
+  String get measureNarrow;
+
+  /// Standard prose line-measure preference.
+  ///
+  /// In en, this message translates to:
+  /// **'65ch · Standard prose'**
+  String get measureStandard;
+
+  /// Wide prose line-measure preference.
+  ///
+  /// In en, this message translates to:
+  /// **'75ch · Wide'**
+  String get measureWide;
+
+  /// Technical prose line-measure preference.
+  ///
+  /// In en, this message translates to:
+  /// **'85ch · Code & tables'**
+  String get measureTechnical;
+
+  /// Full-width prose line-measure preference.
+  ///
+  /// In en, this message translates to:
+  /// **'Full width'**
+  String get measureFull;
+
+  /// Desktop chrome preference for macOS-style controls.
+  ///
+  /// In en, this message translates to:
+  /// **'macOS'**
+  String get platformChromeMacos;
+
+  /// Desktop chrome preference for Linux-style controls.
+  ///
+  /// In en, this message translates to:
+  /// **'Linux'**
+  String get platformChromeLinux;
+
+  /// Desktop chrome preference without controls.
+  ///
+  /// In en, this message translates to:
+  /// **'Minimal'**
+  String get platformChromeMinimal;
+
+  /// Title of the local workspace inspector.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync & Storage'**
+  String get syncInspectorTitle;
+
+  /// Tooltip for closing the local workspace inspector.
+  ///
+  /// In en, this message translates to:
+  /// **'Close sync inspector'**
+  String get syncCloseInspector;
+
+  /// Displayed local branch name until Core provides repository state.
+  ///
+  /// In en, this message translates to:
+  /// **'main'**
+  String get syncBranch;
+
+  /// Actual local workspace path shown by the inspector.
+  ///
+  /// In en, this message translates to:
+  /// **'Path: {path}'**
+  String syncInspectorPath(String path);
+
+  /// Repository-origin state when no remote is configured.
+  ///
+  /// In en, this message translates to:
+  /// **'Origin: Local only'**
+  String get syncLocalOrigin;
+
+  /// Honest production note for deferred remote status support.
+  ///
+  /// In en, this message translates to:
+  /// **'Remote sync status becomes available when the Core exposes it.'**
+  String get syncStatusUnavailable;
+
+  /// Action that refreshes only the local workspace index.
+  ///
+  /// In en, this message translates to:
+  /// **'Rescan workspace'**
+  String get syncRescanWorkspace;
+
+  /// Local visual state label for a synchronized workspace.
+  ///
+  /// In en, this message translates to:
+  /// **'In Sync'**
+  String get syncStateInSync;
+
+  /// Local visual state label for pending review.
+  ///
+  /// In en, this message translates to:
+  /// **'1 Pending Suggestion'**
+  String get syncStatePendingSuggestion;
+
+  /// Local visual state label for syncing.
+  ///
+  /// In en, this message translates to:
+  /// **'Syncing'**
+  String get syncStateSyncing;
+
+  /// Local visual state label for a workspace without a remote.
+  ///
+  /// In en, this message translates to:
+  /// **'Local Only'**
+  String get syncStateLocalOnly;
+
+  /// Local visual state label for disconnected state.
+  ///
+  /// In en, this message translates to:
+  /// **'Offline'**
+  String get syncStateOffline;
+
+  /// Local visual state label for missing credentials.
+  ///
+  /// In en, this message translates to:
+  /// **'Auth Required'**
+  String get syncStateAuthRequired;
+
+  /// Local visual state label for an unreachable remote.
+  ///
+  /// In en, this message translates to:
+  /// **'Unreachable'**
+  String get syncStateUnreachable;
+
+  /// Local visual state label for filesystem changes.
+  ///
+  /// In en, this message translates to:
+  /// **'External Changes'**
+  String get syncStateExternalChanges;
+
+  /// Description for the synchronized visual state.
+  ///
+  /// In en, this message translates to:
+  /// **'All notes match the remote Git repository.'**
+  String get syncDescriptionInSync;
+
+  /// Description for the pending-review visual state.
+  ///
+  /// In en, this message translates to:
+  /// **'A remote change is ready for in-line block review.'**
+  String get syncDescriptionPendingSuggestion;
+
+  /// Description for the syncing visual state.
+  ///
+  /// In en, this message translates to:
+  /// **'Synchronizing with the remote repository.'**
+  String get syncDescriptionSyncing;
+
+  /// Description for the local-only visual state.
+  ///
+  /// In en, this message translates to:
+  /// **'Local files on disk without a configured remote origin.'**
+  String get syncDescriptionLocalOnly;
+
+  /// Description for the offline visual state.
+  ///
+  /// In en, this message translates to:
+  /// **'Working locally; Burl will sync again when reconnected.'**
+  String get syncDescriptionOffline;
+
+  /// Description for the authentication-required visual state.
+  ///
+  /// In en, this message translates to:
+  /// **'An SSH key or access token is required.'**
+  String get syncDescriptionAuthRequired;
+
+  /// Description for the unreachable visual state.
+  ///
+  /// In en, this message translates to:
+  /// **'The configured remote could not be reached.'**
+  String get syncDescriptionUnreachable;
+
+  /// Description for the external-changes visual state.
+  ///
+  /// In en, this message translates to:
+  /// **'Files on disk were updated by another application.'**
+  String get syncDescriptionExternalChanges;
+
+  /// Title for the history drawer.
+  ///
+  /// In en, this message translates to:
+  /// **'Git History'**
+  String get historyTitle;
+
+  /// Honest production history unavailable state.
+  ///
+  /// In en, this message translates to:
+  /// **'No snapshots are available yet. Git history will appear here when the Core exposes note snapshots.'**
+  String get historyNoSnapshotsAvailable;
+
+  /// History drawer persistence note.
+  ///
+  /// In en, this message translates to:
+  /// **'Stored in .git/'**
+  String get historyStoredInGit;
 }
 
 class _AppLocalizationsDelegate

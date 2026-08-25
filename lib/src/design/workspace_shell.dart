@@ -8,10 +8,12 @@ import 'package:burlmd/src/components/visual_parity_fixture.dart';
 import 'package:burlmd/src/components/workspace_tree.dart';
 import 'package:burlmd/src/design/burl_theme.dart';
 import 'package:burlmd/src/design/burl_motion.dart';
+import 'package:burlmd/src/providers/burl_preferences_provider.dart';
 import 'package:burlmd/src/providers/note_providers.dart';
 import 'package:burlmd/src/providers/workspace_provider.dart';
 import 'package:burlmd/src/rust/draft.dart';
 import 'package:burlmd/src/rust/markdown/ast.dart';
+import 'package:burlmd/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart'
     show TargetPlatform, defaultTargetPlatform;
@@ -32,6 +34,10 @@ class _ShellIntent extends Intent {
   final _ShellCommand command;
 }
 
+class _TabContextMenuIntent extends Intent {
+  const _TabContextMenuIntent();
+}
+
 enum _ShellCommand { search, history, preferences, closeTab, dismiss }
 
 const _visualFixture = bool.fromEnvironment('BURLMD_VISUAL_FIXTURE');
@@ -42,12 +48,14 @@ class BurlWorkspaceShell extends ConsumerStatefulWidget {
   const BurlWorkspaceShell({
     super.key,
     required this.workspaceName,
+    this.workspacePath,
     required this.rescanButton,
     required this.onRescan,
     this.fixtureCaptureController,
   });
 
   final String workspaceName;
+  final String? workspacePath;
   final Widget rescanButton;
   final VoidCallback onRescan;
   final FixtureCaptureController? fixtureCaptureController;
@@ -161,6 +169,7 @@ class _BurlWorkspaceShellState extends ConsumerState<BurlWorkspaceShell> {
       );
     }
     final colors = context.burlColors;
+    final l10n = AppLocalizations.of(context)!;
     return Shortcuts(
       shortcuts: const {
         SingleActivator(LogicalKeyboardKey.keyK, control: true): _ShellIntent(
@@ -279,7 +288,7 @@ class _BurlWorkspaceShellState extends ConsumerState<BurlWorkspaceShell> {
                         left: 258,
                         child: IconButton(
                           key: const ValueKey('shell-sidebar-collapse'),
-                          tooltip: 'Collapse sidebar',
+                          tooltip: l10n.workspaceCollapseSidebar,
                           onPressed: () =>
                               setState(() => _sidebarCollapsed = true),
                           icon: const Icon(
@@ -310,6 +319,7 @@ class _BurlWorkspaceShellState extends ConsumerState<BurlWorkspaceShell> {
                       _SyncInspector(
                         onClose: () => setState(() => _syncOpen = false),
                         onRescan: widget.onRescan,
+                        workspacePath: widget.workspacePath,
                       ),
                     if (_historyOpen)
                       _HistoryDrawer(
@@ -410,6 +420,7 @@ class _NavigatorPane extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.burlColors;
+    final l10n = AppLocalizations.of(context)!;
     return DecoratedBox(
       decoration: BoxDecoration(
         color: c.sidebar,
@@ -446,7 +457,8 @@ class _NavigatorPane extends StatelessWidget {
             child: _QuietButton(
               key: const Key('shell-search'),
               icon: LucideIcons.search,
-              label: 'Search notes…',
+              label: l10n.workspaceSearchNotes,
+              tooltip: l10n.workspaceSearchNotesTooltip,
               trailing: '⌘K',
               onPressed: onSearch,
             ),
@@ -463,7 +475,8 @@ class _NavigatorPane extends StatelessWidget {
                 _QuietButton(
                   key: const Key('shell-sync'),
                   icon: LucideIcons.git_pull_request,
-                  label: 'Local workspace',
+                  label: l10n.workspaceLocalWorkspace,
+                  tooltip: l10n.workspaceLocalWorkspace,
                   trailing: 'main',
                   onPressed: onSync,
                   tint: c.accent,
@@ -475,10 +488,11 @@ class _NavigatorPane extends StatelessWidget {
                       key: const ValueKey('shell-preferences'),
                       onPressed: onPreferences,
                       icon: const Icon(LucideIcons.settings, size: 15),
-                      label: const Text('Preferences'),
+                      label: Text(l10n.workspacePreferences),
                     ),
                     const Spacer(),
                     IconButton(
+                      tooltip: l10n.workspacePreferences,
                       onPressed: onPreferences,
                       icon: const Icon(LucideIcons.sun, size: 15),
                     ),
@@ -504,6 +518,7 @@ class _Rail extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.burlColors;
+    final l10n = AppLocalizations.of(context)!;
     return DecoratedBox(
       decoration: BoxDecoration(
         color: c.sidebar,
@@ -516,16 +531,19 @@ class _Rail extends StatelessWidget {
             const SizedBox(height: 8),
             IconButton(
               key: openKey,
+              tooltip: l10n.workspaceOpenNavigator,
               onPressed: onOpen,
               icon: const Icon(LucideIcons.panel_left, size: 18),
             ),
             IconButton(
               key: const ValueKey('shell-rail-search'),
+              tooltip: l10n.workspaceSearchNotesTooltip,
               onPressed: onSearch,
               icon: const Icon(LucideIcons.search, size: 18),
             ),
             const Spacer(),
             IconButton(
+              tooltip: l10n.workspacePreferences,
               onPressed: onOpen,
               icon: const Icon(LucideIcons.settings, size: 18),
             ),
@@ -608,11 +626,25 @@ class _EditorPane extends ConsumerStatefulWidget {
 }
 
 class _EditorPaneState extends ConsumerState<_EditorPane> {
-  final List<_VisualTab> _tabs = [_VisualTab.visual('Welcome.md')];
+  late final List<_VisualTab> _tabs;
+  var _tabsInitialized = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_tabsInitialized) return;
+    _tabsInitialized = true;
+    _tabs = [
+      _VisualTab.visual(
+        AppLocalizations.of(context)!.workspaceWelcomeTab,
+        id: 'visual-welcome',
+      ),
+    ];
+  }
 
   void _syncActiveTab(NoteState? active) {
     if (active == null) return;
-    _tabs.removeWhere((tab) => tab.noteId == null && tab.label == 'Welcome.md');
+    _tabs.removeWhere((tab) => tab.id == 'visual-welcome');
     final id = active.metadata.id;
     final index = _tabs.indexWhere((tab) => tab.id == id);
     final tab = _VisualTab.note(
@@ -628,7 +660,11 @@ class _EditorPaneState extends ConsumerState<_EditorPane> {
   }
 
   void _addVisualTab() => setState(() {
-    _tabs.add(_VisualTab.visual('Untitled ${_tabs.length}.md'));
+    _tabs.add(
+      _VisualTab.visual(
+        AppLocalizations.of(context)!.workspaceUntitledTab(_tabs.length),
+      ),
+    );
   });
 
   // A visual close may remove an inactive/local tab. Closing the active Note
@@ -728,8 +764,8 @@ class _VisualTab {
     recovered: recovered,
   );
 
-  factory _VisualTab.visual(String label) =>
-      _VisualTab._(id: 'visual-$label', label: label);
+  factory _VisualTab.visual(String label, {String? id}) =>
+      _VisualTab._(id: id ?? 'visual-$label', label: label);
 
   final String id;
   final String label;
@@ -763,6 +799,7 @@ class _VisualTabStrip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.burlColors;
+    final l10n = AppLocalizations.of(context)!;
     return SizedBox(
       key: const Key('shell-tab-strip'),
       height: 36,
@@ -776,7 +813,7 @@ class _VisualTabStrip extends StatelessWidget {
             if (compact)
               IconButton(
                 key: const Key('shell-open-navigator'),
-                tooltip: 'Open navigator',
+                tooltip: l10n.workspaceOpenNavigator,
                 constraints: const BoxConstraints.tightFor(
                   width: 36,
                   height: 36,
@@ -808,7 +845,7 @@ class _VisualTabStrip extends StatelessWidget {
             ),
             IconButton(
               key: const Key('shell-add-tab'),
-              tooltip: 'Add visual tab',
+              tooltip: l10n.workspaceAddVisualTab,
               constraints: const BoxConstraints.tightFor(width: 36, height: 36),
               padding: EdgeInsets.zero,
               iconSize: 16,
@@ -842,31 +879,44 @@ class _WorkspaceTab extends StatefulWidget {
 
 class _WorkspaceTabState extends State<_WorkspaceTab> {
   var _hovered = false;
+  final _focusNode = FocusNode(debugLabel: 'workspace tab');
 
-  Future<void> _showMenu(TapDownDetails details) async {
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  Offset _keyboardMenuPosition() {
+    final box = context.findRenderObject()! as RenderBox;
+    return box.localToGlobal(Offset(0, box.size.height));
+  }
+
+  Future<void> _showMenuAt(Offset globalPosition) async {
+    final l10n = AppLocalizations.of(context)!;
     final result = await showMenu<_TabMenuAction>(
       context: context,
       position: RelativeRect.fromLTRB(
-        details.globalPosition.dx,
-        details.globalPosition.dy,
+        globalPosition.dx,
+        globalPosition.dy,
         0,
         0,
       ),
-      items: const [
+      items: [
         PopupMenuItem(
           key: ValueKey('tab-menu-close'),
           value: _TabMenuAction.close,
-          child: Text('Close tab'),
+          child: Text(l10n.workspaceCloseTab),
         ),
         PopupMenuItem(
           key: ValueKey('tab-menu-close-others'),
           value: _TabMenuAction.closeOthers,
-          child: Text('Close other tabs'),
+          child: Text(l10n.workspaceCloseOtherTabs),
         ),
         PopupMenuItem(
           key: ValueKey('tab-menu-close-all'),
           value: _TabMenuAction.closeAll,
-          child: Text('Close all visual tabs'),
+          child: Text(l10n.workspaceCloseAllVisualTabs),
         ),
       ],
     );
@@ -885,117 +935,144 @@ class _WorkspaceTabState extends State<_WorkspaceTab> {
   @override
   Widget build(BuildContext context) {
     final c = context.burlColors;
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: Semantics(
-        selected: widget.active,
-        button: true,
-        label: '${widget.tab.label} tab',
-        child: Listener(
-          onPointerDown: (event) {
-            if (event.buttons == kMiddleMouseButton) widget.onClose();
+    final l10n = AppLocalizations.of(context)!;
+    return FocusableActionDetector(
+      focusNode: _focusNode,
+      shortcuts: const {
+        SingleActivator(LogicalKeyboardKey.contextMenu):
+            _TabContextMenuIntent(),
+        SingleActivator(LogicalKeyboardKey.f10, shift: true):
+            _TabContextMenuIntent(),
+      },
+      actions: {
+        _TabContextMenuIntent: CallbackAction<_TabContextMenuIntent>(
+          onInvoke: (_) {
+            unawaited(_showMenuAt(_keyboardMenuPosition()));
+            return null;
           },
-          child: GestureDetector(
-            onSecondaryTapDown: _showMenu,
-            child: SizedBox(
-              width: 224,
-              child: AnimatedContainer(
-                duration: BurlMotion.duration(context, BurlMotion.chrome),
-                curve: BurlMotion.enterCurve,
-                decoration: BoxDecoration(
-                  color: widget.active ? c.surfaceRaised : c.sidebar,
-                  border: Border(
-                    top: BorderSide(
-                      color: widget.active ? c.accent : Colors.transparent,
-                      width: 2,
+        ),
+      },
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        child: Semantics(
+          selected: widget.active,
+          button: true,
+          label: l10n.workspaceTabLabel(widget.tab.label),
+          child: Listener(
+            onPointerDown: (event) {
+              if (event.buttons == kMiddleMouseButton) widget.onClose();
+            },
+            child: GestureDetector(
+              onSecondaryTapDown: (details) {
+                _focusNode.requestFocus();
+                unawaited(_showMenuAt(details.globalPosition));
+              },
+              child: SizedBox(
+                width: 224,
+                child: AnimatedContainer(
+                  duration: BurlMotion.duration(context, BurlMotion.chrome),
+                  curve: BurlMotion.enterCurve,
+                  decoration: BoxDecoration(
+                    color: widget.active ? c.surfaceRaised : c.sidebar,
+                    border: Border(
+                      top: BorderSide(
+                        color: widget.active ? c.accent : Colors.transparent,
+                        width: 2,
+                      ),
+                      left: BorderSide(color: c.borderSubtle),
+                      right: BorderSide(color: c.borderSubtle),
                     ),
-                    left: BorderSide(color: c.borderSubtle),
-                    right: BorderSide(color: c.borderSubtle),
                   ),
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: InkWell(
-                        key: Key('shell-tab-${widget.tab.id}'),
-                        hoverDuration: BurlMotion.duration(
-                          context,
-                          BurlMotion.chrome,
-                        ),
-                        onTap: widget.onSelect,
-                        child: Padding(
-                          padding: const EdgeInsets.only(left: 10, right: 2),
-                          child: Row(
-                            children: [
-                              Icon(
-                                LucideIcons.file_text,
-                                size: 13,
-                                color: widget.active ? c.accent : c.textMuted,
-                              ),
-                              if (widget.tab.recovered) ...[
-                                const SizedBox(width: 5),
-                                Container(
-                                  key: ValueKey(
-                                    'shell-tab-status-${widget.tab.id}',
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: InkWell(
+                          key: Key('shell-tab-${widget.tab.id}'),
+                          canRequestFocus: false,
+                          hoverDuration: BurlMotion.duration(
+                            context,
+                            BurlMotion.chrome,
+                          ),
+                          onTap: () {
+                            _focusNode.requestFocus();
+                            widget.onSelect();
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.only(left: 10, right: 2),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  LucideIcons.file_text,
+                                  size: 13,
+                                  color: widget.active ? c.accent : c.textMuted,
+                                ),
+                                if (widget.tab.recovered) ...[
+                                  const SizedBox(width: 5),
+                                  Container(
+                                    key: ValueKey(
+                                      'shell-tab-status-${widget.tab.id}',
+                                    ),
+                                    width: 5,
+                                    height: 5,
+                                    decoration: BoxDecoration(
+                                      color: c.review,
+                                      shape: BoxShape.circle,
+                                    ),
                                   ),
-                                  width: 5,
-                                  height: 5,
-                                  decoration: BoxDecoration(
-                                    color: c.review,
-                                    shape: BoxShape.circle,
+                                ],
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: Text(
+                                    widget.tab.label,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontFamily: 'monospace',
+                                      fontSize: 10,
+                                      fontWeight: widget.active
+                                          ? FontWeight.w600
+                                          : null,
+                                      color: widget.active
+                                          ? c.textPrimary
+                                          : c.textSecondary,
+                                    ),
                                   ),
                                 ),
                               ],
-                              const SizedBox(width: 6),
-                              Expanded(
-                                child: Text(
-                                  widget.tab.label,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    fontFamily: 'monospace',
-                                    fontSize: 10,
-                                    fontWeight: widget.active
-                                        ? FontWeight.w600
-                                        : null,
-                                    color: widget.active
-                                        ? c.textPrimary
-                                        : c.textSecondary,
-                                  ),
-                                ),
-                              ),
-                            ],
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                    IgnorePointer(
-                      ignoring: !(_hovered || widget.active),
-                      child: AnimatedOpacity(
-                        opacity: _hovered
-                            ? 1
-                            : widget.active
-                            ? .8
-                            : 0,
-                        duration: BurlMotion.duration(
-                          context,
-                          BurlMotion.chrome,
-                        ),
-                        child: IconButton(
-                          key: ValueKey('shell-tab-close-${widget.tab.id}'),
-                          tooltip: 'Close ${widget.tab.label}',
-                          constraints: const BoxConstraints.tightFor(
-                            width: 28,
-                            height: 34,
+                      IgnorePointer(
+                        ignoring: !(_hovered || widget.active),
+                        child: AnimatedOpacity(
+                          opacity: _hovered
+                              ? 1
+                              : widget.active
+                              ? .8
+                              : 0,
+                          duration: BurlMotion.duration(
+                            context,
+                            BurlMotion.chrome,
                           ),
-                          padding: EdgeInsets.zero,
-                          iconSize: 13,
-                          onPressed: widget.onClose,
-                          icon: const Icon(LucideIcons.x),
+                          child: IconButton(
+                            key: ValueKey('shell-tab-close-${widget.tab.id}'),
+                            tooltip: l10n.workspaceCloseNamedTab(
+                              widget.tab.label,
+                            ),
+                            constraints: const BoxConstraints.tightFor(
+                              width: 28,
+                              height: 34,
+                            ),
+                            padding: EdgeInsets.zero,
+                            iconSize: 13,
+                            onPressed: widget.onClose,
+                            icon: const Icon(LucideIcons.x),
+                          ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -1045,10 +1122,11 @@ class _MetadataHeaderState extends State<_MetadataHeader> {
   @override
   Widget build(BuildContext context) {
     final c = context.burlColors;
+    final l10n = AppLocalizations.of(context)!;
     final metadata = widget.note?.metadata;
-    final path = metadata?.path ?? 'workspace';
+    final path = metadata?.path ?? l10n.workspaceDefaultPath;
     final filename = _filename(path);
-    final breadcrumb = _breadcrumb(path);
+    final breadcrumb = _breadcrumb(path, l10n);
     return LayoutBuilder(
       builder: (context, constraints) {
         final showBreadcrumb = !widget.compact && constraints.maxWidth >= 680;
@@ -1085,7 +1163,9 @@ class _MetadataHeaderState extends State<_MetadataHeader> {
               ),
               IconButton(
                 key: const Key('shell-copy-path'),
-                tooltip: _copied ? 'Copied path' : 'Copy path',
+                tooltip: _copied
+                    ? l10n.workspaceCopiedPath
+                    : l10n.workspaceCopyPath,
                 constraints: const BoxConstraints.tightFor(
                   width: 32,
                   height: 32,
@@ -1098,7 +1178,7 @@ class _MetadataHeaderState extends State<_MetadataHeader> {
               if (showSummary)
                 Flexible(
                   child: Text(
-                    _noteSummary(widget.note),
+                    _noteSummary(widget.note, l10n),
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(fontSize: 10, color: c.textMuted),
                   ),
@@ -1109,12 +1189,12 @@ class _MetadataHeaderState extends State<_MetadataHeader> {
                   key: const Key('shell-history'),
                   onPressed: widget.onHistory,
                   icon: const Icon(LucideIcons.rotate_ccw_clock, size: 14),
-                  label: const Text('History'),
+                  label: Text(l10n.workspaceHistory),
                 )
               else
                 IconButton(
                   key: const Key('shell-history'),
-                  tooltip: 'History',
+                  tooltip: l10n.workspaceHistory,
                   constraints: const BoxConstraints.tightFor(
                     width: 32,
                     height: 32,
@@ -1166,30 +1246,38 @@ class _FilenameChip extends StatelessWidget {
 
 String _filename(String path) => path.split('/').last;
 
-String _breadcrumb(String path) {
+String _breadcrumb(String path, AppLocalizations l10n) {
   final parts = path.split('/');
-  return parts.length > 1 ? parts.join('  ›  ') : 'Workspace  ›  $path';
+  return parts.length > 1
+      ? parts.join('  ›  ')
+      : l10n.workspaceBreadcrumb(path);
 }
 
-String _modifiedLabel(Object? timestamp) {
-  if (timestamp is! int || timestamp <= 0) return 'Modified recently';
+String _modifiedLabel(Object? timestamp, AppLocalizations l10n) {
+  if (timestamp is! int || timestamp <= 0) {
+    return l10n.workspaceModifiedRecently;
+  }
   final elapsed = DateTime.now().difference(
     DateTime.fromMillisecondsSinceEpoch(timestamp * 1000),
   );
   return switch (elapsed.inMinutes) {
-    < 2 => 'Modified just now',
-    < 60 => 'Modified ${elapsed.inMinutes}m ago',
-    < 1440 => 'Modified ${elapsed.inHours}h ago',
-    _ => 'Modified ${elapsed.inDays}d ago',
+    < 2 => l10n.workspaceModifiedJustNow,
+    < 60 => l10n.workspaceModifiedMinutesAgo(elapsed.inMinutes),
+    < 1440 => l10n.workspaceModifiedHoursAgo(elapsed.inHours),
+    _ => l10n.workspaceModifiedDaysAgo(elapsed.inDays),
   };
 }
 
-String _noteSummary(NoteState? note) {
-  final modified = _modifiedLabel(note?.metadata.lastModified);
+String _noteSummary(NoteState? note, AppLocalizations l10n) {
+  final modified = _modifiedLabel(note?.metadata.lastModified, l10n);
   if (note == null) return modified;
   final words = _wordCount(note.ast);
   if (words == 0) return modified;
-  return '$modified · $words ${words == 1 ? 'word' : 'words'}';
+  return l10n.workspaceNoteSummary(
+    modified,
+    words,
+    words == 1 ? l10n.workspaceWordSingular : l10n.workspaceWordPlural,
+  );
 }
 
 int _wordCount(Iterable<AstNode> nodes) =>
@@ -1232,6 +1320,7 @@ class _EmptyEditor extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.burlColors;
+    final l10n = AppLocalizations.of(context)!;
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -1247,13 +1336,13 @@ class _EmptyEditor extends StatelessWidget {
             child: Icon(LucideIcons.folder, size: 23, color: c.textMuted),
           ),
           const SizedBox(height: 12),
-          const Text(
-            'Select a note to open it',
+          Text(
+            l10n.workspaceSelectNoteTitle,
             style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 4),
           Text(
-            'Choose a note from the directory tree to begin writing.',
+            l10n.workspaceSelectNoteBody,
             style: TextStyle(fontSize: 12, color: c.textSecondary),
           ),
         ],
@@ -1267,19 +1356,20 @@ class _QuietButton extends StatelessWidget {
     super.key,
     required this.icon,
     required this.label,
+    required this.tooltip,
     required this.trailing,
     required this.onPressed,
     this.tint,
   });
   final IconData icon;
-  final String label, trailing;
+  final String label, tooltip, trailing;
   final VoidCallback onPressed;
   final Color? tint;
   @override
   Widget build(BuildContext context) {
     final c = context.burlColors;
     return Tooltip(
-      message: label == 'Search notes…' ? 'Search notes' : label,
+      message: tooltip,
       child: SizedBox(
         width: double.infinity,
         child: OutlinedButton(
@@ -1319,6 +1409,7 @@ class _SearchPalette extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.burlColors;
+    final l10n = AppLocalizations.of(context)!;
     return Positioned.fill(
       key: const ValueKey('shell-search-overlay'),
       child: BurlScaleFadeEntrance(
@@ -1360,7 +1451,7 @@ class _SearchPalette extends StatelessWidget {
                             right: 3,
                             child: IconButton(
                               key: const ValueKey('search-close'),
-                              tooltip: 'Close search',
+                              tooltip: l10n.workspaceCloseSearch,
                               onPressed: onClose,
                               icon: const Icon(LucideIcons.x, size: 15),
                             ),
@@ -1386,6 +1477,7 @@ class _PreferencesDrawer extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final p = ref.watch(burlPreferencesProvider);
     final c = context.burlColors;
+    final l10n = AppLocalizations.of(context)!;
     Widget section(String label, Widget child) => Padding(
       padding: const EdgeInsets.only(bottom: 22),
       child: Column(
@@ -1482,9 +1574,9 @@ class _PreferencesDrawer extends ConsumerWidget {
                               children: [
                                 const Icon(LucideIcons.settings, size: 17),
                                 const SizedBox(width: 8),
-                                const Expanded(
+                                Expanded(
                                   child: Text(
-                                    'Editor Preferences',
+                                    l10n.workspaceEditorPreferences,
                                     style: TextStyle(
                                       fontSize: 14,
                                       fontWeight: FontWeight.w600,
@@ -1505,50 +1597,48 @@ class _PreferencesDrawer extends ConsumerWidget {
                               padding: const EdgeInsets.all(20),
                               children: [
                                 section(
-                                  'Appearance theme',
+                                  l10n.workspaceAppearanceTheme,
                                   options(
                                     'theme',
                                     BurlThemePreference.values,
                                     p.theme,
-                                    (v) =>
-                                        v.name[0].toUpperCase() +
-                                        v.name.substring(1),
+                                    (v) => _themePreferenceLabel(v, l10n),
                                     ref
                                         .read(burlPreferencesProvider.notifier)
                                         .setTheme,
                                   ),
                                 ),
                                 section(
-                                  'Base reading size',
+                                  l10n.workspaceBaseReadingSize,
                                   options(
                                     'font-scale',
                                     BurlFontScale.values,
                                     p.fontScale,
-                                    (v) => v.label,
+                                    (v) => _fontScaleLabel(v, l10n),
                                     ref
                                         .read(burlPreferencesProvider.notifier)
                                         .setFontScale,
                                   ),
                                 ),
                                 section(
-                                  'Prose line measure',
+                                  l10n.workspaceProseLineMeasure,
                                   options(
                                     'measure',
                                     BurlMeasure.values,
                                     p.measure,
-                                    (v) => v.label,
+                                    (v) => _measureLabel(v, l10n),
                                     ref
                                         .read(burlPreferencesProvider.notifier)
                                         .setMeasure,
                                   ),
                                 ),
                                 section(
-                                  'Desktop platform chrome',
+                                  l10n.workspaceDesktopPlatformChrome,
                                   options(
                                     'platform-chrome',
                                     BurlPlatformChrome.values,
                                     p.platformChrome,
-                                    (v) => v.name,
+                                    (v) => _platformChromeLabel(v, l10n),
                                     ref
                                         .read(burlPreferencesProvider.notifier)
                                         .setPlatformChrome,
@@ -1561,9 +1651,9 @@ class _PreferencesDrawer extends ConsumerWidget {
                                   onChanged: ref
                                       .read(burlPreferencesProvider.notifier)
                                       .setFocusMode,
-                                  title: const Text('Focus Mode (Zen)'),
-                                  subtitle: const Text(
-                                    'Dim non-active blocks while editing',
+                                  title: Text(l10n.workspaceFocusMode),
+                                  subtitle: Text(
+                                    l10n.workspaceFocusModeDescription,
                                   ),
                                 ),
                               ],
@@ -1576,7 +1666,7 @@ class _PreferencesDrawer extends ConsumerWidget {
                               child: FilledButton(
                                 key: const ValueKey('preferences-done'),
                                 onPressed: onClose,
-                                child: const Text('Done'),
+                                child: Text(l10n.workspaceDone),
                               ),
                             ),
                           ),
@@ -1594,6 +1684,39 @@ class _PreferencesDrawer extends ConsumerWidget {
   }
 }
 
+String _themePreferenceLabel(
+  BurlThemePreference preference,
+  AppLocalizations l10n,
+) => switch (preference) {
+  BurlThemePreference.system => l10n.themePreferenceSystem,
+  BurlThemePreference.light => l10n.themePreferenceLight,
+  BurlThemePreference.dark => l10n.themePreferenceDark,
+};
+
+String _fontScaleLabel(BurlFontScale scale, AppLocalizations l10n) =>
+    switch (scale) {
+      BurlFontScale.compact => l10n.fontScaleCompact,
+      BurlFontScale.standard => l10n.fontScaleStandard,
+      BurlFontScale.comfortable => l10n.fontScaleComfortable,
+      BurlFontScale.spacious => l10n.fontScaleLarge,
+    };
+
+String _measureLabel(BurlMeasure measure, AppLocalizations l10n) =>
+    switch (measure) {
+      BurlMeasure.narrow => l10n.measureNarrow,
+      BurlMeasure.standard => l10n.measureStandard,
+      BurlMeasure.wide => l10n.measureWide,
+      BurlMeasure.technical => l10n.measureTechnical,
+      BurlMeasure.full => l10n.measureFull,
+    };
+
+String _platformChromeLabel(BurlPlatformChrome chrome, AppLocalizations l10n) =>
+    switch (chrome) {
+      BurlPlatformChrome.macos => l10n.platformChromeMacos,
+      BurlPlatformChrome.linux => l10n.platformChromeLinux,
+      BurlPlatformChrome.minimal => l10n.platformChromeMinimal,
+    };
+
 enum _SyncVisualState {
   connectedIdle,
   pendingSuggestions,
@@ -1606,31 +1729,27 @@ enum _SyncVisualState {
 }
 
 extension on _SyncVisualState {
-  String get label => switch (this) {
-    _SyncVisualState.connectedIdle => 'In Sync',
-    _SyncVisualState.pendingSuggestions => '1 Pending Suggestion',
-    _SyncVisualState.syncing => 'Syncing',
-    _SyncVisualState.localOnly => 'Local Only',
-    _SyncVisualState.offline => 'Offline',
-    _SyncVisualState.authRequired => 'Auth Required',
-    _SyncVisualState.syncError => 'Unreachable',
-    _SyncVisualState.externalChanged => 'External Changes',
+  String label(AppLocalizations l10n) => switch (this) {
+    _SyncVisualState.connectedIdle => l10n.syncStateInSync,
+    _SyncVisualState.pendingSuggestions => l10n.syncStatePendingSuggestion,
+    _SyncVisualState.syncing => l10n.syncStateSyncing,
+    _SyncVisualState.localOnly => l10n.syncStateLocalOnly,
+    _SyncVisualState.offline => l10n.syncStateOffline,
+    _SyncVisualState.authRequired => l10n.syncStateAuthRequired,
+    _SyncVisualState.syncError => l10n.syncStateUnreachable,
+    _SyncVisualState.externalChanged => l10n.syncStateExternalChanges,
   };
 
-  String get description => switch (this) {
-    _SyncVisualState.connectedIdle =>
-      'All notes match the remote Git repository.',
+  String description(AppLocalizations l10n) => switch (this) {
+    _SyncVisualState.connectedIdle => l10n.syncDescriptionInSync,
     _SyncVisualState.pendingSuggestions =>
-      'A remote change is ready for in-line block review.',
-    _SyncVisualState.syncing => 'Synchronizing with the remote repository.',
-    _SyncVisualState.localOnly =>
-      'Local files on disk without a configured remote origin.',
-    _SyncVisualState.offline =>
-      'Working locally; Burl will sync again when reconnected.',
-    _SyncVisualState.authRequired => 'An SSH key or access token is required.',
-    _SyncVisualState.syncError => 'The configured remote could not be reached.',
-    _SyncVisualState.externalChanged =>
-      'Files on disk were updated by another application.',
+      l10n.syncDescriptionPendingSuggestion,
+    _SyncVisualState.syncing => l10n.syncDescriptionSyncing,
+    _SyncVisualState.localOnly => l10n.syncDescriptionLocalOnly,
+    _SyncVisualState.offline => l10n.syncDescriptionOffline,
+    _SyncVisualState.authRequired => l10n.syncDescriptionAuthRequired,
+    _SyncVisualState.syncError => l10n.syncDescriptionUnreachable,
+    _SyncVisualState.externalChanged => l10n.syncDescriptionExternalChanges,
   };
 
   IconData get icon => switch (this) {
@@ -1646,8 +1765,13 @@ extension on _SyncVisualState {
 }
 
 class _SyncInspector extends StatefulWidget {
-  const _SyncInspector({required this.onClose, required this.onRescan});
+  const _SyncInspector({
+    required this.onClose,
+    required this.onRescan,
+    required this.workspacePath,
+  });
   final VoidCallback onClose, onRescan;
+  final String? workspacePath;
 
   @override
   State<_SyncInspector> createState() => _SyncInspectorState();
@@ -1684,6 +1808,7 @@ class _SyncInspectorState extends State<_SyncInspector>
   @override
   Widget build(BuildContext context) {
     final c = context.burlColors;
+    final l10n = AppLocalizations.of(context)!;
     return _CenteredOverlay(
       key: const ValueKey('sync-inspector'),
       onClose: widget.onClose,
@@ -1704,15 +1829,15 @@ class _SyncInspectorState extends State<_SyncInspector>
                 ),
               ),
               const SizedBox(width: 8),
-              const Expanded(
+              Expanded(
                 child: Text(
-                  'Sync & Storage',
+                  l10n.syncInspectorTitle,
                   style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
                 ),
               ),
               IconButton(
                 key: const ValueKey('sync-close'),
-                tooltip: 'Close sync inspector',
+                tooltip: l10n.syncCloseInspector,
                 onPressed: widget.onClose,
                 icon: const Icon(LucideIcons.x, size: 16),
               ),
@@ -1738,37 +1863,38 @@ class _SyncInspectorState extends State<_SyncInspector>
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    _state.label,
+                    _state.label(l10n),
                     style: const TextStyle(fontWeight: FontWeight.w600),
                   ),
                 ),
-                Text('main', style: TextStyle(color: c.textMuted)),
+                Text(l10n.syncBranch, style: TextStyle(color: c.textMuted)),
               ],
             ),
           ),
           const SizedBox(height: 8),
           Text(
-            _state.description,
+            _state.description(l10n),
             style: TextStyle(fontSize: 12, color: c.textSecondary),
           ),
           const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: c.surface,
-              border: Border.all(color: c.borderSubtle),
-              borderRadius: BorderRadius.circular(7),
-            ),
-            child: Text(
-              'Path: ~/Documents/burlmd\nOrigin: Local only',
-              style: TextStyle(
-                fontFamily: 'monospace',
-                fontSize: 10,
-                color: c.textSecondary,
+          if (widget.workspacePath case final path?)
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: c.surface,
+                border: Border.all(color: c.borderSubtle),
+                borderRadius: BorderRadius.circular(7),
+              ),
+              child: Text(
+                '${l10n.syncInspectorPath(path)}\n${l10n.syncLocalOrigin}',
+                style: TextStyle(
+                  fontFamily: 'monospace',
+                  fontSize: 10,
+                  color: c.textSecondary,
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 12),
+          if (widget.workspacePath != null) const SizedBox(height: 12),
           if (_visualFixture) ...[
             Text(
               'SIMULATION STATE',
@@ -1789,7 +1915,7 @@ class _SyncInspectorState extends State<_SyncInspector>
                   DropdownMenuItem(
                     key: ValueKey('sync-state-${state.name}'),
                     value: state,
-                    child: Text(state.label),
+                    child: Text(state.label(l10n)),
                   ),
               ],
               onChanged: (state) {
@@ -1798,12 +1924,14 @@ class _SyncInspectorState extends State<_SyncInspector>
             ),
           ] else
             Text(
-              'Remote sync status becomes available when the Core exposes it.',
+              l10n.syncStatusUnavailable,
               style: TextStyle(fontSize: 11, color: c.textMuted),
             ),
           const SizedBox(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
+          Wrap(
+            alignment: WrapAlignment.end,
+            spacing: 8,
+            runSpacing: 8,
             children: [
               OutlinedButton.icon(
                 key: const ValueKey('sync-now'),
@@ -1812,13 +1940,12 @@ class _SyncInspectorState extends State<_SyncInspector>
                   widget.onClose();
                 },
                 icon: const Icon(LucideIcons.refresh_cw, size: 14),
-                label: const Text('Sync Now'),
+                label: Text(l10n.syncRescanWorkspace),
               ),
-              const SizedBox(width: 8),
               FilledButton(
                 key: const ValueKey('sync-done'),
                 onPressed: widget.onClose,
-                child: const Text('Done'),
+                child: Text(l10n.workspaceDone),
               ),
             ],
           ),
@@ -1880,6 +2007,7 @@ class _HistoryDrawerState extends State<_HistoryDrawer> {
   @override
   Widget build(BuildContext context) {
     final c = context.burlColors;
+    final l10n = AppLocalizations.of(context)!;
     final snapshots = _snapshots.take(_fixtureCount).toList();
     final selected = snapshots.isEmpty
         ? 0
@@ -1925,14 +2053,16 @@ class _HistoryDrawerState extends State<_HistoryDrawer> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      'Git History',
+                                      l10n.historyTitle,
                                       style: TextStyle(
                                         fontSize: 14,
                                         fontWeight: FontWeight.w600,
                                       ),
                                     ),
                                     Text(
-                                      'workspace',
+                                      l10n.workspaceBreadcrumb(
+                                        l10n.workspaceDefaultPath,
+                                      ),
                                       style: TextStyle(
                                         fontFamily: 'monospace',
                                         fontSize: 10,
@@ -2100,7 +2230,7 @@ class _HistoryDrawerState extends State<_HistoryDrawer> {
                                   child: Padding(
                                     padding: const EdgeInsets.all(28),
                                     child: Text(
-                                      'No snapshots are available yet. Git history will appear here when the Core exposes note snapshots.',
+                                      l10n.historyNoSnapshotsAvailable,
                                       key: const ValueKey(
                                         'history-unavailable',
                                       ),
@@ -2118,7 +2248,7 @@ class _HistoryDrawerState extends State<_HistoryDrawer> {
                           child: Row(
                             children: [
                               Text(
-                                'Stored in .git/',
+                                l10n.historyStoredInGit,
                                 style: TextStyle(
                                   fontFamily: 'monospace',
                                   fontSize: 10,
@@ -2129,7 +2259,7 @@ class _HistoryDrawerState extends State<_HistoryDrawer> {
                               FilledButton(
                                 key: const ValueKey('history-done'),
                                 onPressed: widget.onClose,
-                                child: const Text('Done'),
+                                child: Text(l10n.workspaceDone),
                               ),
                             ],
                           ),
