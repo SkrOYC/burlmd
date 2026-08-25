@@ -94,6 +94,12 @@ abstract class AppLocalizations {
   /// A list of this localizations delegate's supported locales.
   static const List<Locale> supportedLocales = <Locale>[Locale('en')];
 
+  /// Application title shown by the operating system.
+  ///
+  /// In en, this message translates to:
+  /// **'burlmd'**
+  String get appTitle;
+
   /// Accessible label for the internal link completion results.
   ///
   /// In en, this message translates to:

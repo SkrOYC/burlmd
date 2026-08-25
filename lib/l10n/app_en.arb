@@ -1,5 +1,9 @@
 {
   "@@locale": "en",
+  "appTitle": "burlmd",
+  "@appTitle": {
+    "description": "Application title shown by the operating system."
+  },
   "linkCompletionLabel": "Link completion",
   "@linkCompletionLabel": {
     "description": "Accessible label for the internal link completion results."

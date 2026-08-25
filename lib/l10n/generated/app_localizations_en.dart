@@ -9,6 +9,9 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
+  String get appTitle => 'burlmd';
+
+  @override
   String get linkCompletionLabel => 'Link completion';
 
   @override
