@@ -1,5 +1,15 @@
 # Stage 3: Technical Implementation Changelog
 
+## v1.6.13
+
+Patch correction from PR #11 review, round 6. No bill-of-materials, PRD, or
+architecture change.
+
+- The repository layout and Dart guidance now define `lib/src/design/` as the
+  presentation-only home for shell composition, theme, and motion. It may use
+  components, providers, and generated types, but it neither owns provider
+  state nor calls Core/FRB directly.
+
 ## v1.6.12
 
 Patch correction from PR #10 review, round 23. The physical schema DDL is

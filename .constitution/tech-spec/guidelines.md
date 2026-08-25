@@ -27,6 +27,7 @@ The repository follows the default `flutter_rust_bridge` template structure to m
 │   ├── main.dart
 │   ├── src/
 │   │   ├── components/      # Reusable UI blocks
+│   │   ├── design/          # Presentation composition, theme, and motion
 │   │   ├── providers/       # Riverpod state definitions
 │   │   ├── rust/            # Auto-generated FRB Dart bindings
 │   │   └── screens/         # Full-screen routes (workspace.dart, login.dart —
@@ -96,6 +97,11 @@ All commands below assume the `devenv` shell (`devenv shell`, or automatic via
    - Must pass `dart analyze`.
    - Must be formatted with `dart format`.
    - UI widgets must be completely stateless regarding note content. All active note state is pulled from Riverpod providers connected to the FRB. Ephemeral selection coordinates (`block_path` plus Flutter UTF-16 rendered offset) are UI state, not note content, and are exempt — this is what allows cross-Block selection under ADR-006 without amending `architecture/containers.md`.
+   - **`lib/src/design/` is presentation-only composition.** It owns shell
+     composition, theme tokens/construction, and motion. It may depend on
+     components, providers, and generated types, but must not define provider
+     state or call Core/FRB directly; provider modules own state and Core
+     access remains behind their existing seams.
    - The rendered and raw presentations of a Block must be typographically identical. Only the text differs (`**bold**` versus bold); font, size, weight, line height, and padding must not, or the Block visibly jumps when it takes focus.
    - **Every error returned across the FFI boundary must reach a user-visible surface.** No call site may swallow a Core error. This rule exists because the editor shipped through Epic B with no error path at all — failures crossed the boundary and were discarded, a gap Epic B's review recorded but could not reach until the editor was mounted (`SHEL-E004`, which landed the shell's error surface).
    - **Shell surfaces coordinate through provider seams, not widget ownership.** Note selection flows through the shared selection seam (`selectedNoteIdProvider`) so the tree, editor and lifecycle actions stay coherent without referencing each other; the Directory tree renders from the Core's single whole-tree payload (one call, children nested) and holds only expansion state as ephemeral UI state. Note switching must close the outgoing Note through the Core before opening the next, so its session reaches the commit tier (`SHEL-E004`).
