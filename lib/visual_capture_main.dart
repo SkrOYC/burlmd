@@ -7,6 +7,11 @@ import 'package:flutter_driver/driver_extension.dart';
 
 /// Normal-app capture target used by the external Linux compositor worker.
 /// This deliberately avoids testWidgets/integration_test bindings.
+///
+/// The target mounts the test-only deterministic English prototype fixture,
+/// not production [MyApp]. Its literal fixture strings are authoritative
+/// reference data and must not follow the user's locale. The production Linux
+/// driver covers localized [MyApp] separately.
 void main() {
   final controller = FixtureCaptureController();
   enableFlutterDriverExtension(

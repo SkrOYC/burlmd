@@ -40,6 +40,11 @@ This target deliberately uses neither `testWidgets` nor an
 `IntegrationTestWidgetsFlutterBinding`; it is the normal Flutter application
 at `lib/visual_capture_main.dart` with the Flutter Driver extension enabled.
 
+The target mounts a test-only deterministic English prototype fixture, not
+production `MyApp`. Its literal fixture and sample strings are authoritative
+reference data, so they intentionally don't follow the system locale. The
+production Linux driver covers localized `MyApp` separately.
+
 The ready file contains the following fields:
 
 ```json
