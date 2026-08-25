@@ -695,7 +695,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('sync-state-select')), findsNothing);
     expect(
-      find.text('Path: /tmp/workspace\nOrigin: Local only'),
+      find.text('Path: /tmp/workspace\nRemote: Not configured'),
       findsOneWidget,
     );
     expect(
@@ -705,6 +705,7 @@ void main() {
       ),
       findsOneWidget,
     );
+    expect(find.text('main'), findsNothing);
     await tester.tap(find.byKey(const ValueKey('sync-done')));
     await tester.pumpAndSettle();
 
@@ -739,6 +740,22 @@ void main() {
     await tester.tap(find.byTooltip('Close a.md'));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('shell-tab-a')), findsOneWidget);
+  });
+
+  testWidgets('the production shell exposes no visual-fixture route', (
+    tester,
+  ) async {
+    final api = _MountingRustApi([_treeNode('a', 'Alpha')]);
+    await _pumpShell(tester, api);
+
+    expect(
+      find.byKey(const ValueKey('shell-open-visual-fixture')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey('visual-parity-fixture-route')),
+      findsNothing,
+    );
   });
 
   testWidgets('a focused tab opens its context menu with Shift+F10', (

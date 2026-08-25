@@ -514,23 +514,17 @@ abstract class AppLocalizations {
   /// **'Close sync inspector'**
   String get syncCloseInspector;
 
-  /// Displayed local branch name until Core provides repository state.
-  ///
-  /// In en, this message translates to:
-  /// **'main'**
-  String get syncBranch;
-
   /// Actual local workspace path shown by the inspector.
   ///
   /// In en, this message translates to:
   /// **'Path: {path}'**
   String syncInspectorPath(String path);
 
-  /// Repository-origin state when no remote is configured.
+  /// Repository remote state when Core has no configured remote.
   ///
   /// In en, this message translates to:
-  /// **'Origin: Local only'**
-  String get syncLocalOrigin;
+  /// **'Remote: Not configured'**
+  String get syncRemoteNotConfigured;
 
   /// Honest production note for deferred remote status support.
   ///
@@ -613,7 +607,7 @@ abstract class AppLocalizations {
   /// Description for the local-only visual state.
   ///
   /// In en, this message translates to:
-  /// **'Local files on disk without a configured remote origin.'**
+  /// **'Local files on disk without a configured Remote.'**
   String get syncDescriptionLocalOnly;
 
   /// Description for the offline visual state.

@@ -257,15 +257,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncCloseInspector => 'Close sync inspector';
 
   @override
-  String get syncBranch => 'main';
-
-  @override
   String syncInspectorPath(String path) {
     return 'Path: $path';
   }
 
   @override
-  String get syncLocalOrigin => 'Origin: Local only';
+  String get syncRemoteNotConfigured => 'Remote: Not configured';
 
   @override
   String get syncStatusUnavailable =>
@@ -312,7 +309,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get syncDescriptionLocalOnly =>
-      'Local files on disk without a configured remote origin.';
+      'Local files on disk without a configured Remote.';
 
   @override
   String get syncDescriptionOffline =>

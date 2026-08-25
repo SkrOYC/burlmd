@@ -23,6 +23,8 @@ class VisualParityFixture extends StatefulWidget {
 /// This is test-only prototype data, not the production application. Its
 /// English fixture and sample strings intentionally remain literal so the
 /// reference screenshots stay deterministic across system locales.
+/// `Personal Vault` is immutable authoritative prototype sample data, not
+/// production Workspace terminology.
 class FixtureReferenceShell extends StatefulWidget {
   const FixtureReferenceShell({super.key, this.captureController});
 
