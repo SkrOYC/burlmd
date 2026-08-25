@@ -910,11 +910,19 @@ class _WorkspaceTabState extends State<_WorkspaceTab> {
             _TabContextMenuIntent(),
         SingleActivator(LogicalKeyboardKey.f10, shift: true):
             _TabContextMenuIntent(),
+        SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
+        SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
       },
       actions: {
         _TabContextMenuIntent: CallbackAction<_TabContextMenuIntent>(
           onInvoke: (_) {
             unawaited(_showMenuAt(_keyboardMenuPosition()));
+            return null;
+          },
+        ),
+        ActivateIntent: CallbackAction<ActivateIntent>(
+          onInvoke: (_) {
+            widget.onSelect();
             return null;
           },
         ),
