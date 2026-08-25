@@ -16,6 +16,14 @@ void _expectRectNear(WidgetTester tester, Finder finder, Rect expected) {
   expect(actual.height, closeTo(expected.height, 1));
 }
 
+void _expectEnabledIconButtonsToHaveTooltips(WidgetTester tester) {
+  for (final button in tester.widgetList<IconButton>(find.byType(IconButton))) {
+    if (button.onPressed != null) {
+      expect(button.tooltip, isNotEmpty);
+    }
+  }
+}
+
 void main() {
   testWidgets('capture controller drives the complete reference matrix', (
     tester,
@@ -411,16 +419,24 @@ void main() {
 
   testWidgets('fixture exposes driven internal-link states', (tester) async {
     await tester.pumpWidget(const MaterialApp(home: VisualParityFixture()));
+    _expectEnabledIconButtonsToHaveTooltips(tester);
 
     expect(find.byKey(const ValueKey('fixture-link-normal')), findsOneWidget);
     expect(find.byKey(const ValueKey('fixture-link-hover')), findsOneWidget);
     expect(find.byKey(const ValueKey('fixture-link-missing')), findsOneWidget);
     expect(find.byKey(const ValueKey('fixture-code-header')), findsOneWidget);
     expect(find.byKey(const ValueKey('fixture-code-language')), findsOneWidget);
+    expect(find.byTooltip('Copy code'), findsOneWidget);
 
     await tester.tap(find.byKey(const ValueKey('fixture-link-normal')));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('fixture-link-popover')), findsOneWidget);
+
+    final recoveryStory = find.byKey(const ValueKey('fixture-story-recovery'));
+    tester.widget<TextButton>(recoveryStory).onPressed!.call();
+    await tester.pumpAndSettle();
+    _expectEnabledIconButtonsToHaveTooltips(tester);
+    expect(find.byTooltip('Dismiss recovered drafts'), findsOneWidget);
   });
 
   testWidgets('reference shell drives deterministic capture overlays', (
@@ -2067,6 +2083,55 @@ void main() {
         ).brightness,
         Brightness.dark,
       );
+    },
+  );
+
+  testWidgets(
+    'reference icon actions expose stable labels in wide and compact shells',
+    (tester) async {
+      final semantics = tester.ensureSemantics();
+      tester.view.physicalSize = const Size(1440, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(const MaterialApp(home: FixtureReferenceShell()));
+      await tester.pumpAndSettle();
+      _expectEnabledIconButtonsToHaveTooltips(tester);
+      expect(find.byTooltip('New note'), findsOneWidget);
+      expect(find.byTooltip('Copy filename'), findsOneWidget);
+      expect(
+        tester.getSemantics(find.byTooltip('New note')),
+        isSemantics(tooltip: 'New note', isButton: true),
+      );
+
+      await tester.tap(find.byKey(const ValueKey('fixture-shell-preferences')));
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Close Editor Preferences'), findsOneWidget);
+      expect(
+        tester.getSemantics(find.byTooltip('Close Editor Preferences')),
+        isSemantics(tooltip: 'Close Editor Preferences', isButton: true),
+      );
+      await tester.tap(find.byTooltip('Close Editor Preferences'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const ValueKey('fixture-shell-history')));
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Close Git History'), findsOneWidget);
+      expect(
+        tester.getSemantics(find.byTooltip('Close Git History')),
+        isSemantics(tooltip: 'Close Git History', isButton: true),
+      );
+      await tester.tap(find.byTooltip('Close Git History'));
+      await tester.pumpAndSettle();
+
+      tester.view.physicalSize = const Size(480, 820);
+      await tester.pumpWidget(const MaterialApp(home: FixtureReferenceShell()));
+      await tester.pumpAndSettle();
+      _expectEnabledIconButtonsToHaveTooltips(tester);
+      expect(find.byTooltip('Light theme'), findsOneWidget);
+      expect(find.byTooltip('Close sourdough-focaccia.md'), findsOneWidget);
+      semantics.dispose();
     },
   );
 }

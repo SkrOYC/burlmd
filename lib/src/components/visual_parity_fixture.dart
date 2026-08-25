@@ -1230,6 +1230,7 @@ class _FixtureReferenceShellV2State extends State<FixtureReferenceShell> {
                         height: 28,
                         child: IconButton(
                           key: const ValueKey('fixture-narrow-sun-button'),
+                          tooltip: 'Light theme',
                           onPressed: () {},
                           constraints: const BoxConstraints.tightFor(
                             width: 28,
@@ -1276,11 +1277,13 @@ class _FixtureReferenceShellV2State extends State<FixtureReferenceShell> {
         children: [
           IconButton(
             key: const ValueKey('fixture-shell-search'),
+            tooltip: 'Open search',
             onPressed: _openSearch,
             icon: const Icon(LucideIcons.search, size: 16),
           ),
           IconButton(
             key: const ValueKey('fixture-shell-preferences'),
+            tooltip: 'Open preferences',
             onPressed: _openPreferences,
             icon: const Icon(LucideIcons.settings, size: 16),
           ),
@@ -1338,6 +1341,7 @@ class _FixtureReferenceShellV2State extends State<FixtureReferenceShell> {
                 height: 36,
                 child: IconButton(
                   key: const ValueKey('fixture-tab-new'),
+                  tooltip: 'New note',
                   onPressed: () {},
                   constraints: BoxConstraints.tightFor(
                     width: wide ? 48 : 38,
@@ -1402,6 +1406,7 @@ class _FixtureReferenceShellV2State extends State<FixtureReferenceShell> {
                         ),
                         IconButton(
                           key: const ValueKey('fixture-metadata-copy'),
+                          tooltip: 'Copy filename',
                           onPressed: () {},
                           icon: const Icon(LucideIcons.copy, size: 13),
                         ),
@@ -4587,6 +4592,7 @@ class _FixtureReferenceShellV2State extends State<FixtureReferenceShell> {
           ),
         ),
         IconButton(
+          tooltip: 'Close $title',
           onPressed: _closeOverlay,
           icon: const Icon(LucideIcons.x, size: 16),
           constraints: const BoxConstraints.tightFor(width: 28, height: 28),
@@ -5105,6 +5111,7 @@ class _FixtureSelectableTab extends StatelessWidget {
           if (selected)
             IconButton(
               key: ValueKey('fixture-tab-close-$label'),
+              tooltip: 'Close $label',
               onPressed: () {},
               icon: const Icon(LucideIcons.x, size: 13),
               constraints: const BoxConstraints.tightFor(width: 22, height: 22),
@@ -5390,6 +5397,7 @@ class _VisualParityFixtureState extends State<VisualParityFixture> {
                 const Spacer(),
                 IconButton(
                   key: const ValueKey('fixture-code-copy'),
+                  tooltip: _copied ? 'Code copied' : 'Copy code',
                   icon: Icon(
                     _copied ? LucideIcons.check : LucideIcons.copy,
                     size: 15,
@@ -5574,6 +5582,7 @@ class _VisualParityFixtureState extends State<VisualParityFixture> {
           onTap: () => setState(() => _recoveryDismissed = true),
           trailing: IconButton(
             key: const ValueKey('fixture-recovery-dismiss'),
+            tooltip: 'Dismiss recovered drafts',
             icon: const Icon(LucideIcons.x),
             onPressed: () => setState(() => _recoveryDismissed = true),
           ),
