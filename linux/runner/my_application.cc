@@ -25,13 +25,16 @@ static void my_application_activate(GApplication* application) {
   GtkWindow* window =
       GTK_WINDOW(gtk_application_window_new(GTK_APPLICATION(application)));
 
+  // Capture runs can request a chromeless client area so the screenshot bounds
+  // match Flutter's frame exactly. Normal desktop launches keep their platform
+  // chrome unchanged.
+  const gboolean capture_chromeless =
+      g_strcmp0(g_getenv("BURLMD_CAPTURE_CHROMELESS"), "1") == 0;
+
   // Use a header bar when running in GNOME as this is the common style used
-  // by applications and is the setup most users will be using (e.g. Ubuntu
-  // desktop).
-  // If running on X and not using GNOME then just use a traditional title bar
-  // in case the window manager does more exotic layout, e.g. tiling.
-  // If running on Wayland assume the header bar will work (may need changing
-  // if future cases occur).
+  // by applications and is the setup most users will be using (for example,
+  // Ubuntu desktop). If running on X and not using GNOME, use a traditional
+  // title bar in case the window manager has a different layout.
   gboolean use_header_bar = TRUE;
 #ifdef GDK_WINDOWING_X11
   GdkScreen* screen = gtk_window_get_screen(window);
@@ -42,7 +45,9 @@ static void my_application_activate(GApplication* application) {
     }
   }
 #endif
-  if (use_header_bar) {
+  if (capture_chromeless) {
+    gtk_window_set_decorated(window, FALSE);
+  } else if (use_header_bar) {
     GtkHeaderBar* header_bar = GTK_HEADER_BAR(gtk_header_bar_new());
     gtk_widget_show(GTK_WIDGET(header_bar));
     gtk_header_bar_set_title(header_bar, "burlmd");

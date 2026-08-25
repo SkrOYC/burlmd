@@ -356,7 +356,9 @@ void main() {
     var clipboard = '';
     mockClipboard(tester, (text) => clipboard = text);
 
-    final code = _textBox(tester, 'print(1)');
+    final code = tester.getRect(
+      find.byKey(const ValueKey('code-block-source')),
+    );
     final para = _textBox(tester, 'closing');
     // Start inside the CODE variant (char 3 of the monospace ink, which maps
     // identically into the Core's verbatim definition), end inside the
@@ -367,7 +369,7 @@ void main() {
       // Mid-height of the code box would land on line 2 ('print(2);'); pin
       // the point to the middle of line 1 so the offset is deterministic.
       code.topLeft + const Offset(3 * 13 + 6.5, 14),
-      para.topLeft + Offset(12 * 14 + 7, para.height / 2),
+      para.topLeft + Offset(12 * 16 + 8, para.height / 2),
     );
     await tester.pumpAndSettle();
 

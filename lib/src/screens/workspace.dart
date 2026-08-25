@@ -1,8 +1,6 @@
-import 'package:burlmd/src/components/draft_recovery.dart';
-import 'package:burlmd/src/components/editor.dart';
-import 'package:burlmd/src/components/search_panel.dart';
 import 'package:burlmd/src/components/status_message.dart';
-import 'package:burlmd/src/components/workspace_tree.dart';
+import 'package:burlmd/src/components/visual_parity_fixture.dart';
+import 'package:burlmd/src/design/workspace_shell.dart';
 import 'package:burlmd/src/providers/note_providers.dart';
 import 'package:burlmd/src/providers/rust_api_provider.dart';
 import 'package:burlmd/src/providers/search_provider.dart';
@@ -14,7 +12,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 /// tree as its navigation sidebar (`SHEL-E003`) and the editor for the
 /// selected Note as its main pane (`SHEL-E004`).
 class WorkspaceScreen extends ConsumerWidget {
-  const WorkspaceScreen({super.key});
+  const WorkspaceScreen({super.key, this.fixtureCaptureController});
+
+  /// Test-only bridge for the visual-fixture branch. Production callers leave
+  /// this null and retain the ordinary workspace composition.
+  final FixtureCaptureController? fixtureCaptureController;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -32,7 +34,6 @@ class WorkspaceScreen extends ConsumerWidget {
     });
 
     return Scaffold(
-      appBar: AppBar(title: const Text('burlmd')),
       body: workspace.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, _) => Center(
@@ -55,63 +56,11 @@ class WorkspaceScreen extends ConsumerWidget {
             ),
           ),
         ),
-        data: (info) => Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            SizedBox(
-              width: 280,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Text(
-                      info.name,
-                      style: Theme.of(context).textTheme.titleSmall,
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
-                    child: Row(
-                      children: [
-                        // Expanded so a narrow sidebar constrains the
-                        // button's label instead of overflowing the row.
-                        const Expanded(child: _RescanButton()),
-                        // The search affordance (`SHEL-E006`): toggles the
-                        // panel section below the tree. It sits where
-                        // navigation lives, like the rescan action.
-                        IconButton(
-                          tooltip: 'Search notes',
-                          isSelected: ref.watch(searchSectionOpenProvider),
-                          selectedIcon: const Icon(Icons.search),
-                          icon: const Icon(Icons.search_outlined),
-                          onPressed: () => ref
-                              .read(searchSectionOpenProvider.notifier)
-                              .toggle(),
-                        ),
-                      ],
-                    ),
-                  ),
-                  // Recovered-draft notices (`SHEL-E007`) surface above the
-                  // tree so recovered work is announced at startup; the
-                  // panel collapses to nothing when nothing was recovered.
-                  const RecoveredDraftsPanel(),
-                  const Expanded(child: WorkspaceTree()),
-                  // The search surface itself (`SHEL-E006`): a fixed-height
-                  // section under the tree, shown only while toggled. Its
-                  // result limit belongs to this surface, not to the panel
-                  // or the Core.
-                  if (ref.watch(searchSectionOpenProvider))
-                    const SizedBox(
-                      height: 280,
-                      child: SearchPanel(resultLimit: 25),
-                    ),
-                ],
-              ),
-            ),
-            const VerticalDivider(width: 1),
-            const Expanded(child: _EditorPane()),
-          ],
+        data: (info) => BurlWorkspaceShell(
+          workspaceName: info.name,
+          rescanButton: const WorkspaceRescanButton(),
+          onRescan: () => ref.read(rescanStateProvider.notifier).run(),
+          fixtureCaptureController: fixtureCaptureController,
         ),
       ),
     );
@@ -249,8 +198,8 @@ final rescanStateProvider = NotifierProvider<WorkspaceRescan, RescanState>(
 /// tree surface in the sidebar. Its label states plainly what it does —
 /// re-read the Workspace from disk — and it disables while a reindex is in
 /// flight or while the open Note holds unwritten edits (the STOP condition).
-class _RescanButton extends ConsumerWidget {
-  const _RescanButton();
+class WorkspaceRescanButton extends ConsumerWidget {
+  const WorkspaceRescanButton({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -287,51 +236,3 @@ class _RescanButton extends ConsumerWidget {
     );
   }
 }
-
-/// The shell's main pane (`SHEL-E004`): the editor for whichever Note the
-/// tree has selected. Selection is published by [WorkspaceTree] through
-/// [selectedNoteIdProvider]; this pane reacts to it by driving
-/// [NoteController.open], which closes the outgoing Note through the Core
-/// before opening the new one, so navigation alone keeps every editing
-/// session committed to version history.
-class _EditorPane extends ConsumerWidget {
-  const _EditorPane();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final selectedId = ref.watch(selectedNoteIdProvider);
-    // Side effect lives in a listener, not in build's body: selection
-    // changes fire exactly once per change, so no rebuild can re-issue an
-    // open for a Note already being opened.
-    ref.listen<String?>(selectedNoteIdProvider, (_, next) {
-      if (next != null) ref.read(activeNoteProvider.notifier).open(next);
-    });
-    if (selectedId == null) {
-      return const Center(child: Text('Select a note to open it'));
-    }
-    // The write-tier notice (`SHEL-E007`) rides above the editor pane for
-    // whichever Note is open. Watching it here also *arms* polling: the
-    // monitor's periodic timer exists only while something watches it, and
-    // without an armed poller a write failure would be raised into nothing
-    // while the user keeps typing into a buffer nothing can persist.
-    return const Column(
-      children: [
-        WriteTierNotice(),
-        Expanded(child: Editor()),
-      ],
-    );
-  }
-}
-
-/// Whether the sidebar's search section is expanded (the mount point of
-/// `SHEL-E006`'s [SearchPanel]). Ephemeral UI state, not Note content.
-class SearchSectionOpen extends Notifier<bool> {
-  @override
-  bool build() => false;
-
-  void toggle() => state = !state;
-}
-
-final searchSectionOpenProvider = NotifierProvider<SearchSectionOpen, bool>(
-  SearchSectionOpen.new,
-);

@@ -1,5 +1,6 @@
 import 'package:burlmd/src/components/lifecycle_actions.dart';
 import 'package:burlmd/src/components/status_message.dart';
+import 'package:burlmd/src/design/burl_theme.dart';
 import 'package:burlmd/src/providers/note_providers.dart';
 import 'package:burlmd/src/providers/rust_api_provider.dart';
 import 'package:burlmd/src/providers/workspace_provider.dart';
@@ -13,6 +14,7 @@ import 'package:burlmd/src/rust/index/query.dart'
     show TreeNode_Directory, TreeNode_Note;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_lucide/flutter_lucide.dart';
 
 /// The Workspace rendered as a nested, expandable Directory tree
 /// (`SHEL-E003`) — the primary navigation surface — now also the surface
@@ -52,6 +54,8 @@ class WorkspaceTree extends ConsumerStatefulWidget {
 }
 
 class _WorkspaceTreeState extends ConsumerState<WorkspaceTree> {
+  static const _rowHeight = 28.0;
+
   /// Paths of currently expanded Directories. Ephemeral UI state only.
   final Set<String> _expanded = {};
 
@@ -90,8 +94,23 @@ class _WorkspaceTreeState extends ConsumerState<WorkspaceTree> {
     return tree.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (_, _) => const _TreeErrorState(),
-      data: (root) => ListView(
-        children: _rows(root, selectedId, lifecycleActive: lifecycleActive),
+      data: (root) => Material(
+        color: _colors(context).sidebar,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(8, 6, 6, 8),
+          children: [
+            _TreeSectionHeader(
+              lifecycleActive: lifecycleActive,
+              onCreateNote: lifecycleActive
+                  ? null
+                  : () => _createRootNote(context),
+              onCreateDirectory: lifecycleActive
+                  ? null
+                  : () => _createRootDirectory(context),
+            ),
+            ..._rows(root, selectedId, lifecycleActive: lifecycleActive),
+          ],
+        ),
       ),
     );
   }
@@ -144,6 +163,117 @@ class _WorkspaceTreeState extends ConsumerState<WorkspaceTree> {
         ),
     ];
   }
+
+  Future<void> _createRootNote(BuildContext context) => _run(
+    context,
+    ref,
+    () => promptForText(context, title: 'New note', label: 'Title'),
+    (title) => ref.read(lifecycleActionsProvider).createNote('', title),
+  );
+
+  Future<void> _createRootDirectory(BuildContext context) => _run(
+    context,
+    ref,
+    () => promptForText(context, title: 'New directory', label: 'Name'),
+    (name) => ref
+        .read(lifecycleActionsProvider)
+        .createDirectory(joinDirectoryPath('', name)),
+  );
+}
+
+/// The tree's compact desktop section chrome. The actions deliberately call
+/// the same lifecycle seam as directory-row menus; this is a visual shortcut,
+/// not a second creation path or a fabricated root Directory node.
+class _TreeSectionHeader extends StatelessWidget {
+  const _TreeSectionHeader({
+    required this.lifecycleActive,
+    required this.onCreateNote,
+    required this.onCreateDirectory,
+  });
+
+  final bool lifecycleActive;
+  final VoidCallback? onCreateNote;
+  final VoidCallback? onCreateDirectory;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = _colors(context);
+    return Semantics(
+      header: true,
+      child: SizedBox(
+        height: _WorkspaceTreeState._rowHeight,
+        child: Row(
+          children: [
+            Icon(
+              LucideIcons.chevron_down,
+              size: 13,
+              color: colors.textMuted,
+              semanticLabel: 'Directories',
+            ),
+            const SizedBox(width: 5),
+            Expanded(
+              child: Text(
+                'DIRECTORIES',
+                style: TextStyle(
+                  color: colors.textMuted,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.8,
+                ),
+              ),
+            ),
+            _CompactTreeAction(
+              key: const ValueKey('tree-new-note'),
+              tooltip: 'New note',
+              icon: LucideIcons.file_plus,
+              enabled: !lifecycleActive,
+              onPressed: onCreateNote,
+            ),
+            const SizedBox(width: 2),
+            _CompactTreeAction(
+              key: const ValueKey('tree-new-directory'),
+              tooltip: 'New directory',
+              icon: LucideIcons.folder_plus,
+              enabled: !lifecycleActive,
+              onPressed: onCreateDirectory,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CompactTreeAction extends StatelessWidget {
+  const _CompactTreeAction({
+    super.key,
+    required this.tooltip,
+    required this.icon,
+    required this.enabled,
+    required this.onPressed,
+  });
+
+  final String tooltip;
+  final IconData icon;
+  final bool enabled;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = _colors(context);
+    return IconButton(
+      tooltip: tooltip,
+      onPressed: enabled ? onPressed : null,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints.tightFor(
+        width: _WorkspaceTreeState._rowHeight,
+        height: _WorkspaceTreeState._rowHeight,
+      ),
+      iconSize: 14,
+      color: colors.textMuted,
+      icon: Icon(icon),
+    );
+  }
 }
 
 /// The sidebar's error state (flow-workspace-navigation.md failure path):
@@ -192,32 +322,91 @@ class _DirectoryRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final colors = _colors(context);
     return ListTile(
-      contentPadding: EdgeInsets.only(left: 8.0 + depth * 16.0, right: 8.0),
-      leading: Icon(
-        expanded ? Icons.folder_open : Icons.folder,
-        semanticLabel: expanded ? 'Expanded directory' : 'Directory',
+      key: ValueKey('workspace-tree-directory-${node.path}'),
+      dense: true,
+      minTileHeight: _WorkspaceTreeState._rowHeight,
+      minVerticalPadding: 0,
+      minLeadingWidth: 0,
+      horizontalTitleGap: 8,
+      titleAlignment: ListTileTitleAlignment.center,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+      contentPadding: EdgeInsets.only(left: 8.0 + depth * 16.0, right: 0),
+      iconColor: colors.textSecondary,
+      textColor: colors.textPrimary,
+      leading: SizedBox(
+        width: 32,
+        child: Row(
+          children: [
+            Icon(
+              expanded ? LucideIcons.chevron_down : LucideIcons.chevron_right,
+              size: 13,
+              color: colors.textMuted,
+            ),
+            const SizedBox(width: 4),
+            Icon(
+              expanded ? LucideIcons.folder_open : LucideIcons.folder,
+              size: 14,
+              color: colors.textSecondary,
+              semanticLabel: expanded ? 'Expanded directory' : 'Directory',
+            ),
+          ],
+        ),
       ),
-      title: Text(node.name, overflow: TextOverflow.ellipsis),
-      trailing: PopupMenuButton<String>(
-        tooltip: 'Actions for directory ${node.name}',
-        enabled: !lifecycleActive,
-        onSelected: (action) => switch (action) {
-          'new-note' => _createNote(context, ref),
-          'new-directory' => _createDirectory(context, ref),
-          'rename' => _rename(context, ref),
-          'delete' => _delete(context, ref),
-          _ => Future<void>.value(),
-        },
-        itemBuilder: (_) => const [
-          PopupMenuItem(value: 'new-note', child: Text('New note here')),
-          PopupMenuItem(
-            value: 'new-directory',
-            child: Text('New subdirectory'),
+      title: Text(
+        node.name,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          color: colors.textPrimary,
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+      trailing: SizedBox(
+        width: _WorkspaceTreeState._rowHeight,
+        height: _WorkspaceTreeState._rowHeight,
+        child: PopupMenuButton<String>(
+          key: ValueKey('workspace-tree-directory-actions-${node.path}'),
+          tooltip: 'Actions for directory ${node.name}',
+          enabled: !lifecycleActive,
+          padding: EdgeInsets.zero,
+          icon: Icon(LucideIcons.ellipsis, size: 15, color: colors.textMuted),
+          color: colors.surface,
+          shape: RoundedRectangleBorder(
+            side: BorderSide(color: colors.borderSubtle),
+            borderRadius: BorderRadius.circular(6),
           ),
-          PopupMenuItem(value: 'rename', child: Text('Rename')),
-          PopupMenuItem(value: 'delete', child: Text('Delete')),
-        ],
+          onSelected: (action) => switch (action) {
+            'new-note' => _createNote(context, ref),
+            'new-directory' => _createDirectory(context, ref),
+            'rename' => _rename(context, ref),
+            'delete' => _delete(context, ref),
+            _ => Future<void>.value(),
+          },
+          itemBuilder: (_) => [
+            PopupMenuItem(
+              key: ValueKey('tree-context-create-note-${node.path}'),
+              value: 'new-note',
+              child: const Text('New note here'),
+            ),
+            PopupMenuItem(
+              key: ValueKey('tree-context-create-directory-${node.path}'),
+              value: 'new-directory',
+              child: const Text('New subdirectory'),
+            ),
+            PopupMenuItem(
+              key: ValueKey('tree-context-rename-directory-${node.path}'),
+              value: 'rename',
+              child: const Text('Rename'),
+            ),
+            PopupMenuItem(
+              key: ValueKey('tree-context-delete-directory-${node.path}'),
+              value: 'delete',
+              child: const Text('Delete'),
+            ),
+          ],
+        ),
       ),
       onTap: onTap,
     );
@@ -304,25 +493,82 @@ class _NoteRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final colors = _colors(context);
     return ListTile(
-      contentPadding: EdgeInsets.only(left: 24.0 + depth * 16.0, right: 8.0),
-      leading: const Icon(Icons.description, semanticLabel: 'Note'),
-      title: Text(node.title, overflow: TextOverflow.ellipsis),
+      key: ValueKey('workspace-tree-note-${node.id}'),
+      dense: true,
+      minTileHeight: _WorkspaceTreeState._rowHeight,
+      minVerticalPadding: 0,
+      minLeadingWidth: 0,
+      horizontalTitleGap: 8,
+      titleAlignment: ListTileTitleAlignment.center,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+      contentPadding: EdgeInsets.only(left: 8.0 + depth * 16.0, right: 0),
+      leading: SizedBox(
+        width: 32,
+        child: Row(
+          children: [
+            const SizedBox(width: 17),
+            Icon(
+              LucideIcons.file_text,
+              size: 13,
+              color: selected ? colors.accent : colors.textMuted,
+              semanticLabel: 'Note',
+            ),
+          ],
+        ),
+      ),
+      title: Text(
+        node.title,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          color: selected ? colors.textPrimary : colors.textSecondary,
+          fontSize: 12,
+          fontWeight: selected ? FontWeight.w500 : FontWeight.w400,
+        ),
+      ),
       selected: selected,
-      trailing: PopupMenuButton<String>(
-        tooltip: 'Actions for note ${node.title}',
-        enabled: !lifecycleActive,
-        onSelected: (action) => switch (action) {
-          'rename' => _rename(context, ref),
-          'move' => _move(context, ref),
-          'delete' => _delete(context, ref),
-          _ => Future<void>.value(),
-        },
-        itemBuilder: (_) => const [
-          PopupMenuItem(value: 'rename', child: Text('Rename')),
-          PopupMenuItem(value: 'move', child: Text('Move to directory…')),
-          PopupMenuItem(value: 'delete', child: Text('Delete')),
-        ],
+      selectedTileColor: colors.hover,
+      selectedColor: colors.textPrimary,
+      hoverColor: colors.hover,
+      trailing: SizedBox(
+        width: _WorkspaceTreeState._rowHeight,
+        height: _WorkspaceTreeState._rowHeight,
+        child: PopupMenuButton<String>(
+          key: ValueKey('workspace-tree-note-actions-${node.id}'),
+          tooltip: 'Actions for note ${node.title}',
+          enabled: !lifecycleActive,
+          padding: EdgeInsets.zero,
+          icon: Icon(LucideIcons.ellipsis, size: 14, color: colors.textMuted),
+          color: colors.surface,
+          shape: RoundedRectangleBorder(
+            side: BorderSide(color: colors.borderSubtle),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          onSelected: (action) => switch (action) {
+            'rename' => _rename(context, ref),
+            'move' => _move(context, ref),
+            'delete' => _delete(context, ref),
+            _ => Future<void>.value(),
+          },
+          itemBuilder: (_) => [
+            PopupMenuItem(
+              key: ValueKey('tree-context-rename-${node.id}'),
+              value: 'rename',
+              child: const Text('Rename'),
+            ),
+            PopupMenuItem(
+              key: ValueKey('tree-context-move-${node.id}'),
+              value: 'move',
+              child: const Text('Move to directory…'),
+            ),
+            PopupMenuItem(
+              key: ValueKey('tree-context-delete-${node.id}'),
+              value: 'delete',
+              child: const Text('Delete'),
+            ),
+          ],
+        ),
       ),
       onTap: onTap,
     );
@@ -416,6 +662,7 @@ Future<String?> promptForText(
     builder: (dialogContext) => AlertDialog(
       title: Text(title),
       content: TextField(
+        key: const ValueKey('lifecycle-text-input'),
         controller: controller,
         autofocus: true,
         decoration: InputDecoration(labelText: label),
@@ -423,10 +670,12 @@ Future<String?> promptForText(
       ),
       actions: [
         TextButton(
+          key: const ValueKey('lifecycle-dialog-cancel'),
           onPressed: () => Navigator.of(dialogContext).pop(),
           child: const Text('Cancel'),
         ),
         TextButton(
+          key: const ValueKey('lifecycle-dialog-confirm'),
           onPressed: () =>
               Navigator.of(dialogContext).pop(controller.text.trim()),
           child: const Text('OK'),
@@ -453,22 +702,99 @@ Future<bool> confirmDeletion(
   required String name,
   required String consequence,
 }) async {
+  final reducedMotion = MediaQuery.disableAnimationsOf(context);
   final confirmed = await showDialog<bool>(
     context: context,
-    builder: (dialogContext) => AlertDialog(
-      title: Text('Delete $kind "$name"?'),
-      content: Text(consequence),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(dialogContext).pop(false),
-          child: const Text('Cancel'),
+    animationStyle: reducedMotion
+        ? AnimationStyle.noAnimation
+        : const AnimationStyle(
+            duration: Duration(milliseconds: 120),
+            reverseDuration: Duration(milliseconds: 120),
+            curve: Cubic(0.16, 1, 0.3, 1),
+            reverseCurve: Cubic(0.16, 1, 0.3, 1),
+          ),
+    builder: (dialogContext) {
+      final colors = _colors(dialogContext);
+      return AlertDialog(
+        key: const ValueKey('delete-confirmation-dialog'),
+        constraints: const BoxConstraints(maxWidth: 384),
+        backgroundColor: colors.surface,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          side: BorderSide(color: colors.borderSubtle),
+          borderRadius: BorderRadius.circular(8),
         ),
-        TextButton(
-          onPressed: () => Navigator.of(dialogContext).pop(true),
-          child: const Text('Delete'),
+        title: Row(
+          children: [
+            Icon(LucideIcons.circle_alert, color: colors.syncError, size: 18),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Delete $kind "$name"?',
+                style: TextStyle(
+                  color: colors.textPrimary,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
         ),
-      ],
-    ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              consequence,
+              style: TextStyle(color: colors.textSecondary, fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              key: const ValueKey('delete-confirmation-safety'),
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: colors.reviewSubtle,
+                border: Border.all(color: colors.borderSubtle),
+                borderRadius: BorderRadius.circular(5),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    LucideIcons.rotate_ccw_clock,
+                    size: 15,
+                    color: colors.review,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Deleted content remains recoverable from local version history.',
+                      style: TextStyle(
+                        color: colors.textSecondary,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            key: const ValueKey('delete-confirmation-cancel'),
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            key: const ValueKey('delete-confirmation-confirm'),
+            style: TextButton.styleFrom(foregroundColor: colors.syncError),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      );
+    },
   );
   return confirmed ?? false;
 }
@@ -535,3 +861,9 @@ void report(BuildContext context, LifecycleOutcome outcome) {
 /// or trailing slash; empty string at the root) with a new segment.
 String joinDirectoryPath(String parent, String name) =>
     parent.isEmpty ? name : '$parent/$name';
+
+BurlColors _colors(BuildContext context) =>
+    Theme.of(context).extension<BurlColors>() ??
+    (Theme.of(context).brightness == Brightness.dark
+        ? BurlColors.dark
+        : BurlColors.light);

@@ -1,8 +1,10 @@
 import 'package:burlmd/src/providers/note_providers.dart';
 import 'package:burlmd/src/providers/workspace_provider.dart';
 import 'package:burlmd/src/rust/error.dart';
+import 'package:burlmd/src/design/burl_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_lucide/flutter_lucide.dart';
 
 /// The recovered-draft surface (`SHEL-E007`): every Note the Core reports as
 /// carrying an unflushed draft from a previous session is listed here so the
@@ -33,43 +35,82 @@ class RecoveredDraftsPanel extends ConsumerWidget {
         drafts.value?.where((note) => !dismissed.contains(note.id)).toList() ??
         const [];
     if (surfaced.isEmpty) return const SizedBox.shrink();
+    final colors = _colors(context);
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-          child: Row(
-            children: [
-              const Icon(Icons.history, semanticLabel: 'Recovered'),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Recovered drafts',
-                  style: Theme.of(context).textTheme.titleSmall,
+    return Container(
+      key: const ValueKey('recovered-drafts-panel'),
+      margin: const EdgeInsets.fromLTRB(8, 8, 8, 4),
+      decoration: BoxDecoration(
+        color: colors.reviewSubtle,
+        border: Border.all(color: colors.borderSubtle),
+        borderRadius: BorderRadius.circular(7),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
+            child: Row(
+              children: [
+                Icon(
+                  LucideIcons.rotate_ccw_clock,
+                  size: 15,
+                  color: colors.review,
+                  semanticLabel: 'Recovered',
+                ),
+                const SizedBox(width: 7),
+                Expanded(
+                  child: Text(
+                    'Recovered drafts',
+                    style: TextStyle(
+                      color: colors.textPrimary,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          for (final note in surfaced)
+            Material(
+              key: ValueKey('recovery-notice-${note.id}'),
+              color: colors.reviewSubtle,
+              child: ListTile(
+                key: ValueKey('recovered-${note.id}'),
+                dense: true,
+                visualDensity: VisualDensity.compact,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                contentPadding: const EdgeInsets.only(left: 12, right: 3),
+                title: Text(
+                  note.title,
+                  style: TextStyle(
+                    color: colors.textPrimary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                subtitle: Text(
+                  'Unsaved changes were recovered from a previous session.',
+                  style: TextStyle(color: colors.textSecondary, fontSize: 11),
+                ),
+                hoverColor: colors.hover,
+                onTap: selectionBlocked ? null : () => _open(ref, note.id),
+                trailing: IconButton(
+                  key: ValueKey('recovery-dismiss-${note.id}'),
+                  tooltip: 'Dismiss notice',
+                  icon: Icon(LucideIcons.x, size: 14, color: colors.textMuted),
+                  onPressed: () => ref
+                      .read(dismissedRecoveriesProvider.notifier)
+                      .dismiss(note.id),
                 ),
               ),
-            ],
-          ),
-        ),
-        for (final note in surfaced)
-          ListTile(
-            key: ValueKey('recovered-${note.id}'),
-            title: Text(note.title),
-            subtitle: const Text(
-              'Unsaved changes were recovered from a previous session.',
             ),
-            onTap: selectionBlocked ? null : () => _open(ref, note.id),
-            trailing: IconButton(
-              tooltip: 'Dismiss notice',
-              icon: const Icon(Icons.close),
-              onPressed: () => ref
-                  .read(dismissedRecoveriesProvider.notifier)
-                  .dismiss(note.id),
-            ),
-          ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -102,6 +143,7 @@ class WriteTierNotice extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final colors = _colors(context);
     // A refused per-keystroke write (`update_block` tier 1). Surfaced here,
     // above the editor, rather than through [editorErrorProvider]: the
     // flow's contract is that the user never loses sight of their text
@@ -113,16 +155,16 @@ class WriteTierNotice extends ConsumerWidget {
     // switch/reload.
     final keystrokeFailure = ref.watch(keystrokeWriteFailureProvider);
     if (keystrokeFailure != null) {
-      return Card(
-        margin: const EdgeInsets.all(8),
+      return _WriteNoticeCard(
         child: Padding(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(10),
           child: Row(
             children: [
               Icon(
-                Icons.warning_amber_rounded,
+                LucideIcons.circle_alert,
                 semanticLabel: 'Edit not saved yet',
-                color: Theme.of(context).colorScheme.error,
+                size: 16,
+                color: colors.syncError,
               ),
               const SizedBox(width: 8),
               Expanded(
@@ -143,16 +185,16 @@ class WriteTierNotice extends ConsumerWidget {
     // risk of write failures surfacing into nothing). The monitor keeps
     // retrying on its own; there is no user action that fixes polling.
     if (surface.statusUnavailable) {
-      return Card(
-        margin: const EdgeInsets.all(8),
+      return _WriteNoticeCard(
         child: Padding(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(10),
           child: Row(
             children: [
               Icon(
-                Icons.warning_amber_rounded,
+                LucideIcons.circle_alert,
                 semanticLabel: 'Write status unavailable',
-                color: Theme.of(context).colorScheme.error,
+                size: 16,
+                color: colors.syncError,
               ),
               const SizedBox(width: 8),
               const Expanded(
@@ -179,10 +221,9 @@ class WriteTierNotice extends ConsumerWidget {
       _ => 'Writing the note failed: $error',
     };
 
-    return Card(
-      margin: const EdgeInsets.all(8),
+    return _WriteNoticeCard(
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(10),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
@@ -190,9 +231,10 @@ class WriteTierNotice extends ConsumerWidget {
             Row(
               children: [
                 Icon(
-                  Icons.warning_amber_rounded,
+                  LucideIcons.circle_alert,
                   semanticLabel: 'Write failure',
-                  color: Theme.of(context).colorScheme.error,
+                  size: 16,
+                  color: colors.syncError,
                 ),
                 const SizedBox(width: 8),
                 Expanded(child: Text(message)),
@@ -204,7 +246,7 @@ class WriteTierNotice extends ConsumerWidget {
                 alignment: Alignment.centerRight,
                 child: TextButton.icon(
                   key: const ValueKey('reload-offer'),
-                  icon: const Icon(Icons.refresh),
+                  icon: const Icon(LucideIcons.refresh_cw, size: 15),
                   label: const Text('Reload from disk'),
                   onPressed: () => _confirmAndReload(context, ref),
                 ),
@@ -249,3 +291,29 @@ class WriteTierNotice extends ConsumerWidget {
     await ref.read(activeNoteProvider.notifier).reloadFromDisk();
   }
 }
+
+class _WriteNoticeCard extends StatelessWidget {
+  const _WriteNoticeCard({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = _colors(context);
+    return Container(
+      margin: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: colors.reviewSubtle,
+        border: Border.all(color: colors.borderSubtle),
+        borderRadius: BorderRadius.circular(7),
+      ),
+      child: child,
+    );
+  }
+}
+
+BurlColors _colors(BuildContext context) =>
+    Theme.of(context).extension<BurlColors>() ??
+    (Theme.of(context).brightness == Brightness.dark
+        ? BurlColors.dark
+        : BurlColors.light);

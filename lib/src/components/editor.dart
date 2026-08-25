@@ -7,6 +7,7 @@ import 'package:burlmd/src/components/block_view.dart';
 import 'package:burlmd/src/components/lifecycle_actions.dart';
 import 'package:burlmd/src/components/range_text_input_client.dart';
 import 'package:burlmd/src/components/status_message.dart';
+import 'package:burlmd/src/design/burl_theme.dart';
 import 'package:burlmd/src/providers/note_providers.dart';
 import 'package:burlmd/src/providers/rust_api_provider.dart';
 import 'package:burlmd/src/providers/workspace_provider.dart';
@@ -431,6 +432,7 @@ class EditorState extends ConsumerState<Editor> {
                 (focusedForSlot?.path.first ?? -1) + 1,
                 note.ast.length,
               ));
+    final preferences = ref.watch(burlPreferencesProvider);
     return Actions(
       actions: <Type, Action<Intent>>{
         CopySelectionTextIntent: _copyAction,
@@ -453,17 +455,52 @@ class EditorState extends ConsumerState<Editor> {
               // Captured for the smoke hook's select-all invocation; reading
               // it during build keeps it current across rebuilds.
               _areaContext = areaContext;
-              return ListView.builder(
-                itemCount: note.ast.length + (phantomSlot ? 1 : 0),
-                itemBuilder: (context, i) => phantomSlot && i == phantomAnchor
-                    ? _buildPhantomEntry(note)
-                    // Slots past the phantom shift back by one onto their
-                    // real Block index.
-                    : _buildEntry(
-                        context,
-                        note,
-                        phantomSlot && i > phantomAnchor ? i - 1 : i,
+              return LayoutBuilder(
+                builder: (context, constraints) {
+                  // Keep prose at the user-selected measure without changing
+                  // the SelectionArea or introducing a second scrollable.
+                  // The ListView still owns virtualization, selection and
+                  // vertical geometry; every entry merely receives the same
+                  // centered, finite cross-axis slot.
+                  final availableWidth = constraints.hasBoundedWidth
+                      ? constraints.maxWidth
+                      : MediaQuery.sizeOf(context).width;
+                  final horizontalPadding = math.min(
+                    24.0,
+                    math.max(0.0, availableWidth / 2),
+                  );
+                  final paddedWidth = math.max(
+                    0.0,
+                    availableWidth - horizontalPadding * 2,
+                  );
+                  final entryWidth = preferences.measure.maxWidth.isFinite
+                      ? math.min(paddedWidth, preferences.measure.maxWidth)
+                      : paddedWidth;
+                  final verticalPadding = availableWidth < 600 ? 32.0 : 40.0;
+                  return ListView.builder(
+                    padding: EdgeInsets.only(
+                      top: verticalPadding,
+                      bottom: verticalPadding + 16,
+                    ),
+                    itemCount: note.ast.length + (phantomSlot ? 1 : 0),
+                    itemBuilder: (context, i) => Center(
+                      child: SizedBox(
+                        width: entryWidth,
+                        child: phantomSlot && i == phantomAnchor
+                            ? _buildPhantomEntry(note, preferences.fontScale)
+                            // Slots past the phantom shift back by one onto
+                            // their real Block index.
+                            : _buildEntry(
+                                context,
+                                note,
+                                phantomSlot && i > phantomAnchor ? i - 1 : i,
+                                preferences.fontScale,
+                                preferences.focusMode,
+                              ),
                       ),
+                    ),
+                  );
+                },
               );
             },
           ),
@@ -472,13 +509,32 @@ class EditorState extends ConsumerState<Editor> {
     );
   }
 
-  Widget _buildEntry(BuildContext context, NoteState note, int index) {
+  Widget _buildEntry(
+    BuildContext context,
+    NoteState note,
+    int index,
+    BurlFontScale fontScale,
+    bool focusMode,
+  ) {
     final path = [index];
     // One stable wrapper per entry so tests (and the layout) can address a
     // Block's slot regardless of which presentation currently fills it.
-    return KeyedSubtree(
-      key: ValueKey('entry-$index'),
-      child: _buildEntryInner(context, note, path, index),
+    final dimmed =
+        focusMode &&
+        _focused != null &&
+        !_focused!.isPhantom &&
+        !_pathStartsWith(_focused!.path, [index]);
+    return AnimatedOpacity(
+      duration: MediaQuery.disableAnimationsOf(context)
+          ? Duration.zero
+          : const Duration(milliseconds: 150),
+      curve: Curves.easeOutCubic,
+      opacity: dimmed ? 0.35 : 1,
+      alwaysIncludeSemantics: true,
+      child: KeyedSubtree(
+        key: ValueKey('entry-$index'),
+        child: _buildEntryInner(context, note, path, index, fontScale),
+      ),
     );
   }
 
@@ -487,6 +543,7 @@ class EditorState extends ConsumerState<Editor> {
     NoteState note,
     List<int> path,
     int index,
+    BurlFontScale fontScale,
   ) {
     final focused = _focused;
     final broker = _selectionBrokers.putIfAbsent(
@@ -519,13 +576,14 @@ class EditorState extends ConsumerState<Editor> {
           blockPath: focused.path,
           source: focused.source,
           initialCaret: focused.caret,
-          style: blockTextStyle(leaf),
+          style: blockTextStyle(leaf, fontScale: fontScale),
           resyncToken: focused.resyncToken,
           focusToken: focused.token,
           onEnter: (source, selection) =>
               _handleEnterRequested(focused.path, source, selection),
           onBackspaceAtStart: () => _handleBackspaceAtStart(focused.path),
           onFocusLost: _handleFieldBlur,
+          onDismiss: () => _handleFieldBlur(focused.token),
           onCommitEligibilityChanged: _handleCommitEligibilityChanged,
           onPendingWriteChanged: _handlePendingWriteChanged,
           smokeF005:
@@ -536,6 +594,7 @@ class EditorState extends ConsumerState<Editor> {
               note.metadata.title == 'F006 link completion',
         ),
         selectionRegistrar: broker,
+        fontScale: fontScale,
       );
     }
     // Unfocused Blocks join the shared selection region through their own
@@ -554,6 +613,7 @@ class EditorState extends ConsumerState<Editor> {
       onFocusRequested: _promote,
       onLinkActivated: (targetId) => unawaited(_followInternalLink(targetId)),
       selectionRegistrar: broker,
+      fontScale: fontScale,
     );
   }
 
@@ -1183,7 +1243,7 @@ class EditorState extends ConsumerState<Editor> {
   /// Enter was pressed in ([Editor.build]). Also the permanent first
   /// line of an EMPTY Note, which is the only way composing can begin
   /// there.
-  Widget _buildPhantomEntry(NoteState note) {
+  Widget _buildPhantomEntry(NoteState note, BurlFontScale fontScale) {
     final path = _focused?.path ?? const [0];
     const node = AstNode.paragraph(content: []);
     return KeyedSubtree(
@@ -1199,7 +1259,7 @@ class EditorState extends ConsumerState<Editor> {
         blockPath: path,
         source: '',
         initialCaret: 0,
-        style: blockTextStyle(node),
+        style: blockTextStyle(node, fontScale: fontScale),
         focusToken: _focused?.token ?? -1,
         phantom: true,
         // Enter in a still-empty phantom cannot be represented in CommonMark

@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:burlmd/src/components/link_completion.dart';
+import 'package:burlmd/src/design/burl_theme.dart';
 import 'package:burlmd/src/providers/note_providers.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -47,6 +48,7 @@ class BlockEditor extends ConsumerStatefulWidget {
     required this.style,
     required this.focusToken,
     required this.onFocusLost,
+    this.onDismiss,
     required this.onCommitEligibilityChanged,
     this.onPendingWriteChanged,
     this.resyncToken = 0,
@@ -87,6 +89,10 @@ class BlockEditor extends ConsumerStatefulWidget {
   /// generation being replaced (a phantom converting to a real Block, a
   /// split's second half) and the blur must commit nothing.
   final void Function(int focusToken) onFocusLost;
+
+  /// Requests the owning editor commit and return this raw block to formatted
+  /// presentation without bypassing its lifecycle state.
+  final VoidCallback? onDismiss;
 
   /// Publishes whether the parent may replace this focus session. A
   /// composition conflict leaves the local text intentionally unresolved, so
@@ -664,6 +670,13 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
     // below completion and emphasis handling: those have their own explicit
     // composition semantics.
     if (_hasLiveComposition) return KeyEventResult.ignored;
+    if (event is KeyDownEvent &&
+        event.logicalKey == LogicalKeyboardKey.escape) {
+      widget.onDismiss?.call();
+      return widget.onDismiss == null
+          ? KeyEventResult.ignored
+          : KeyEventResult.handled;
+    }
     final selection = _controller.selection;
     if (event is KeyDownEvent &&
         (event.logicalKey == LogicalKeyboardKey.enter ||
@@ -810,6 +823,15 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
   @override
   Widget build(BuildContext context) {
     final inputBlocked = ref.watch(editorInputBlockedProvider);
+    final colors =
+        Theme.of(context).extension<BurlColors>() ??
+        (Theme.of(context).brightness == Brightness.dark
+            ? BurlColors.dark
+            : BurlColors.light);
+    final isCodeBlock = widget.style.fontFamily == 'monospace';
+    final codeInk = Theme.of(context).brightness == Brightness.dark
+        ? const Color(0xffe4e4e7)
+        : const Color(0xff171717);
     ref.listen<bool>(editorInputBlockedProvider, (wasBlocked, isBlocked) {
       if (wasBlocked == false && isBlocked && _hasLiveComposition) {
         // The IME candidate can have started before lifecycle work claimed the
@@ -859,38 +881,73 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
         // The key-event intercept sits directly above the field so Enter and
         // Backspace-at-start reach [_handleKeyEvent] before any text-editing
         // shortcut (`EDIT-F004`).
-        child: Focus(
-          onKeyEvent: _handleKeyEvent,
-          child: EditableText(
-            controller: _controller,
-            focusNode: _focusNode,
-            autofocus: true,
-            style: widget.style,
-            cursorColor: Theme.of(context).colorScheme.primary,
-            backgroundCursorColor: Colors.grey,
-            readOnly: inputBlocked,
-            maxLines: null,
-            keyboardType: TextInputType.multiline,
-            onChanged: (text) {
-              if (inputBlocked) return;
-              if (widget.phantom) return;
-              if (_hasResyncConflict) return;
-              // The Block's raw source text, not a reconstructed AstNode — this
-              // is the per-keystroke buffering call (`update_block`, ADR-007
-              // decision 4): no parse, no AST round trip, draft-row write only.
-              // Refusals surface through keystrokeWriteFailureProvider beside the
-              // content, never by replacing it (flow-edit-note.md).
-              // A deferred composition resync is resolved by the controller
-              // listener, including a composing-only completion. Do not race it
-              // here by replaying the stale external source over this input.
-              if (_pendingResync != null && !_hasLiveComposition) return;
-              _bufferSource(text, settle: !_hasLiveComposition);
-            },
+        child: AnimatedContainer(
+          duration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : const Duration(milliseconds: 150),
+          curve: Curves.easeOutCubic,
+          decoration: BoxDecoration(
+            color: isCodeBlock ? Colors.transparent : colors.focusedBlock,
+          ),
+          child: CustomPaint(
+            foregroundPainter: _FocusRailPainter(colors.accent),
+            child: Focus(
+              onKeyEvent: _handleKeyEvent,
+              child: EditableText(
+                key: ValueKey('raw-editor-${widget.blockPath.join('-')}'),
+                controller: _controller,
+                focusNode: _focusNode,
+                autofocus: true,
+                style: widget.style.copyWith(
+                  color: isCodeBlock ? codeInk : colors.textPrimary,
+                ),
+                cursorColor: colors.accent,
+                backgroundCursorColor: colors.textMuted,
+                readOnly: inputBlocked,
+                maxLines: null,
+                keyboardType: TextInputType.multiline,
+                onChanged: (text) {
+                  if (inputBlocked) return;
+                  if (widget.phantom) return;
+                  if (_hasResyncConflict) return;
+                  // The Block's raw source text, not a reconstructed AstNode — this
+                  // is the per-keystroke buffering call (`update_block`, ADR-007
+                  // decision 4): no parse, no AST round trip, draft-row write only.
+                  // Refusals surface through keystrokeWriteFailureProvider beside the
+                  // content, never by replacing it (flow-edit-note.md).
+                  // A deferred composition resync is resolved by the controller
+                  // listener, including a composing-only completion. Do not race it
+                  // here by replaying the stale external source over this input.
+                  if (_pendingResync != null && !_hasLiveComposition) return;
+                  _bufferSource(text, settle: !_hasLiveComposition);
+                },
+              ),
+            ),
           ),
         ),
       ),
     );
   }
+}
+
+/// Paints the focus rail over the raw editor without participating in layout,
+/// preserving the promotion slot's width and text wrap geometry.
+class _FocusRailPainter extends CustomPainter {
+  const _FocusRailPainter(this.color);
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.drawRect(
+      Rect.fromLTWH(0, 0, 3, size.height),
+      Paint()..color = color,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _FocusRailPainter oldDelegate) =>
+      oldDelegate.color != color;
 }
 
 enum _InlineEmphasis {

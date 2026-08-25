@@ -263,7 +263,7 @@ void main() {
     final coreCallsBeforeDismiss = api.calls
         .where((c) => !c.startsWith('status:'))
         .toList();
-    await tester.tap(find.byIcon(Icons.close));
+    await tester.tap(find.byTooltip('Dismiss notice'));
     await tester.pumpAndSettle();
 
     // The notice is gone…

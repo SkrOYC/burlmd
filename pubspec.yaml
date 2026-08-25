@@ -43,6 +43,7 @@ dependencies:
   flutter_localizations:
     sdk: flutter
   intl: 0.20.2
+  flutter_lucide: ^1.33.0
 
 dev_dependencies:
   flutter_test:
@@ -60,6 +61,8 @@ dev_dependencies:
   build_runner: ^2.15.1
   url_launcher_platform_interface: ^2.3.2
   plugin_platform_interface: ^2.1.8
+  flutter_driver:
+    sdk: flutter
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -67,6 +70,25 @@ dev_dependencies:
 # The following section is specific to Flutter packages.
 flutter:
   generate: true
+
+  # Deterministic faces for the BURLMD_VISUAL_FIXTURE route only. Their OFL
+  # notices are distributed beside the source files in assets/fonts/prototype.
+  fonts:
+    - family: BurlPrototypeSans
+      fonts:
+        - asset: assets/fonts/prototype/Roboto[wdth,wght].ttf
+        - asset: assets/fonts/prototype/Roboto-Italic[wdth,wght].ttf
+          style: italic
+    - family: BurlPrototypeMono
+      fonts:
+        - asset: assets/fonts/prototype/LiberationMono-Regular.ttf
+        - asset: assets/fonts/prototype/LiberationMono-Italic.ttf
+          style: italic
+        - asset: assets/fonts/prototype/LiberationMono-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/prototype/LiberationMono-BoldItalic.ttf
+          weight: 700
+          style: italic
 
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in

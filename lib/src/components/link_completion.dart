@@ -2,12 +2,14 @@ import 'dart:async';
 
 import 'package:burlmd/l10n/generated/app_localizations.dart';
 import 'package:burlmd/src/components/status_message.dart';
+import 'package:burlmd/src/design/burl_theme.dart';
 import 'package:burlmd/src/providers/rust_api_provider.dart';
 import 'package:burlmd/src/rust/index/query.dart' as core;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_lucide/flutter_lucide.dart';
 
 /// A non-empty valid composing range belongs to the platform input method.
 /// Flutter 3.44.3 documents that an IME owns this provisional text, including
@@ -359,15 +361,32 @@ class LinkCompletionState extends ConsumerState<LinkCompletionPopup> {
   Widget build(BuildContext context) {
     if (!isOpen) return const SizedBox.shrink();
     final l10n = AppLocalizations.of(context)!;
+    final colors =
+        Theme.of(context).extension<BurlColors>() ??
+        (Theme.of(context).brightness == Brightness.dark
+            ? BurlColors.dark
+            : BurlColors.light);
     return Semantics(
       container: true,
       label: l10n.linkCompletionLabel,
       child: Material(
         key: _surfaceKey,
-        elevation: 6,
-        color: Theme.of(context).colorScheme.surface,
-        child: ConstrainedBox(
+        color: Colors.transparent,
+        child: Container(
+          key: const ValueKey('link-completion-popup'),
           constraints: const BoxConstraints(maxHeight: 216),
+          decoration: BoxDecoration(
+            color: colors.surface,
+            border: Border.all(color: colors.borderStrong),
+            borderRadius: BorderRadius.circular(7),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x26000000),
+                blurRadius: 14,
+                offset: Offset(0, 5),
+              ),
+            ],
+          ),
           child: ListView.builder(
             controller: _scrollController,
             shrinkWrap: true,
@@ -392,13 +411,69 @@ class LinkCompletionState extends ConsumerState<LinkCompletionPopup> {
                 label: label,
                 child: InkWell(
                   key: ValueKey('link-completion-$index'),
+                  borderRadius: BorderRadius.circular(4),
+                  hoverColor: colors.hover,
                   onTap: () => _accept(candidate),
-                  child: ListTile(
-                    selected: index == _activeIndex,
-                    title: Text(candidate.title),
-                    trailing: prospective
-                        ? Chip(label: Text(l10n.linkCompletionProspectiveBadge))
-                        : null,
+                  child: Container(
+                    key: ValueKey('link-completion-row-$index'),
+                    margin: const EdgeInsets.symmetric(horizontal: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 7,
+                    ),
+                    decoration: BoxDecoration(
+                      color: index == _activeIndex
+                          ? colors.accentSubtle
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          prospective
+                              ? LucideIcons.sparkles
+                              : LucideIcons.file_text,
+                          size: 14,
+                          color: prospective ? colors.review : colors.accent,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            candidate.title,
+                            softWrap: true,
+                            style: TextStyle(
+                              color: colors.textPrimary,
+                              fontSize: 12,
+                              fontWeight: index == _activeIndex
+                                  ? FontWeight.w600
+                                  : FontWeight.w400,
+                            ),
+                          ),
+                        ),
+                        if (prospective)
+                          Container(
+                            margin: const EdgeInsets.only(left: 8),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 5,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: colors.reviewSubtle,
+                              border: Border.all(color: colors.borderSubtle),
+                              borderRadius: BorderRadius.circular(3),
+                            ),
+                            child: Text(
+                              l10n.linkCompletionProspectiveBadge,
+                              style: TextStyle(
+                                color: colors.review,
+                                fontFamily: 'monospace',
+                                fontSize: 10,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
                 ),
               );
