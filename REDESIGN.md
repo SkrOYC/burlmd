@@ -27,9 +27,9 @@ link feedback, 200 ms focus dimming, and 100 ms row feedback. When
 duration and the sync spinner is static. These paths are covered by widget
 tests.
 
-The design-system specimen page provides implementation surfaces only. It is
-not an authoritative screenshot surface and is excluded from the 22-surface
-comparison matrix.
+The `VisualParityFixture` design-system specimen provides implementation
+surfaces only. It has no production route, is not an authoritative screenshot
+surface, and is excluded from the 22-surface comparison matrix.
 
 ## Responsive layout
 
@@ -102,6 +102,13 @@ and stable geometry before capture.
 The normal application target is `lib/visual_capture_main.dart`. It exposes a
 `FixtureCaptureController` through `FlutterDriver.requestData`; it does not
 use a widget-test binding as the capture target.
+
+The capture target mounts the test-only deterministic English prototype
+fixture, not production `MyApp`. Its literal sample data, including
+`Personal Vault`, is immutable authoritative prototype data rather than
+production Workspace terminology. It intentionally ignores the system locale
+to keep screenshots stable. The production Linux driver covers localized
+`MyApp` separately.
 
 For each state, `test_driver/visual_capture_driver.dart` publishes a
 resize-ready handshake, waits for the controller to report the exact viewport,

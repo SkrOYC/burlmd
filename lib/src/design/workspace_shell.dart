@@ -70,7 +70,6 @@ class _BurlWorkspaceShellState extends ConsumerState<BurlWorkspaceShell> {
   bool _preferencesOpen = false;
   bool _syncOpen = false;
   bool _historyOpen = false;
-  bool _visualFixtureOpen = false;
   bool _sidebarCollapsed = false;
   var _tabCloseRequest = 0;
 
@@ -107,8 +106,7 @@ class _BurlWorkspaceShellState extends ConsumerState<BurlWorkspaceShell> {
           _searchOpen ||
           _preferencesOpen ||
           _syncOpen ||
-          _historyOpen ||
-          _visualFixtureOpen;
+          _historyOpen;
       if (!hasOverlay) return KeyEventResult.ignored;
       _dismissTop();
       return KeyEventResult.handled;
@@ -272,18 +270,6 @@ class _BurlWorkspaceShellState extends ConsumerState<BurlWorkspaceShell> {
                         ),
                       ],
                     ),
-                    if (_visualFixture)
-                      Positioned(
-                        top: 4,
-                        right: 4,
-                        child: IconButton(
-                          key: const ValueKey('shell-open-visual-fixture'),
-                          tooltip: 'Open visual fixture',
-                          onPressed: () =>
-                              setState(() => _visualFixtureOpen = true),
-                          icon: const Icon(LucideIcons.flask_conical, size: 16),
-                        ),
-                      ),
                     if (tier == _ShellTier.wide && !_sidebarCollapsed)
                       Positioned(
                         top: 12,
@@ -326,28 +312,6 @@ class _BurlWorkspaceShellState extends ConsumerState<BurlWorkspaceShell> {
                     if (_historyOpen)
                       _HistoryDrawer(
                         onClose: () => setState(() => _historyOpen = false),
-                      ),
-                    if (_visualFixture && _visualFixtureOpen)
-                      Positioned.fill(
-                        key: const ValueKey('visual-parity-fixture-route'),
-                        child: Stack(
-                          children: [
-                            const VisualParityFixture(),
-                            Positioned(
-                              top: 4,
-                              right: 4,
-                              child: IconButton(
-                                key: const ValueKey(
-                                  'visual-parity-fixture-close',
-                                ),
-                                tooltip: 'Close visual fixture',
-                                onPressed: () =>
-                                    setState(() => _visualFixtureOpen = false),
-                                icon: const Icon(LucideIcons.x, size: 16),
-                              ),
-                            ),
-                          ],
-                        ),
                       ),
                   ],
                 ),
@@ -479,7 +443,6 @@ class _NavigatorPane extends StatelessWidget {
                   icon: LucideIcons.git_pull_request,
                   label: l10n.workspaceLocalWorkspace,
                   tooltip: l10n.workspaceLocalWorkspace,
-                  trailing: 'main',
                   onPressed: onSync,
                   tint: c.accent,
                 ),
@@ -1361,12 +1324,13 @@ class _QuietButton extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.tooltip,
-    required this.trailing,
+    this.trailing,
     required this.onPressed,
     this.tint,
   });
   final IconData icon;
-  final String label, tooltip, trailing;
+  final String label, tooltip;
+  final String? trailing;
   final VoidCallback onPressed;
   final Color? tint;
   @override
@@ -1391,14 +1355,15 @@ class _QuietButton extends StatelessWidget {
               Expanded(
                 child: Text(label, style: const TextStyle(fontSize: 12)),
               ),
-              Text(
-                trailing,
-                style: TextStyle(
-                  fontFamily: 'monospace',
-                  fontSize: 10,
-                  color: c.textMuted,
+              if (trailing case final trailingText?)
+                Text(
+                  trailingText,
+                  style: TextStyle(
+                    fontFamily: 'monospace',
+                    fontSize: 10,
+                    color: c.textMuted,
+                  ),
                 ),
-              ),
             ],
           ),
         ),
@@ -1872,7 +1837,6 @@ class _SyncInspectorState extends State<_SyncInspector>
                     style: const TextStyle(fontWeight: FontWeight.w600),
                   ),
                 ),
-                Text(l10n.syncBranch, style: TextStyle(color: c.textMuted)),
               ],
             ),
           ),
@@ -1891,7 +1855,7 @@ class _SyncInspectorState extends State<_SyncInspector>
                 borderRadius: BorderRadius.circular(7),
               ),
               child: Text(
-                '${l10n.syncInspectorPath(path)}\n${l10n.syncLocalOrigin}',
+                '${l10n.syncInspectorPath(path)}\n${l10n.syncRemoteNotConfigured}',
                 style: TextStyle(
                   fontFamily: 'monospace',
                   fontSize: 10,
