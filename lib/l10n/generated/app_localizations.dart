@@ -202,6 +202,24 @@ abstract class AppLocalizations {
   /// **'Search notes'**
   String get workspaceSearchNotesTooltip;
 
+  /// Displayed search shortcut on macOS.
+  ///
+  /// In en, this message translates to:
+  /// **'⌘K'**
+  String get workspaceSearchShortcutMacos;
+
+  /// Displayed search shortcut on non-macOS desktop platforms.
+  ///
+  /// In en, this message translates to:
+  /// **'Ctrl+K'**
+  String get workspaceSearchShortcutControl;
+
+  /// Accessible label for dismissing a modal workspace overlay.
+  ///
+  /// In en, this message translates to:
+  /// **'Dismiss overlay'**
+  String get workspaceDismissOverlay;
+
   /// Label for the local workspace inspector command.
   ///
   /// In en, this message translates to:

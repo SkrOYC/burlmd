@@ -83,6 +83,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get workspaceSearchNotesTooltip => 'Search notes';
 
   @override
+  String get workspaceSearchShortcutMacos => '⌘K';
+
+  @override
+  String get workspaceSearchShortcutControl => 'Ctrl+K';
+
+  @override
+  String get workspaceDismissOverlay => 'Dismiss overlay';
+
+  @override
   String get workspaceLocalWorkspace => 'Local workspace';
 
   @override

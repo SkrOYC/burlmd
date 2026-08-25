@@ -255,6 +255,13 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('shell-root')), findsOneWidget);
     expect(
+      find.descendant(
+        of: find.byKey(const Key('shell-search')),
+        matching: find.text('Ctrl+K'),
+      ),
+      findsOneWidget,
+    );
+    expect(
       find.byKey(const ValueKey('recovery-notice-recovered')),
       findsOneWidget,
     );
@@ -374,11 +381,11 @@ void main() {
 
     Future<void> focusStarterRaw() async {
       final raw = find.byKey(const ValueKey('raw-editor-1'));
-      if (raw.evaluate().isNotEmpty) {
-        await tester.tap(raw);
-      } else {
+      if (raw.evaluate().isEmpty) {
         await tester.tap(find.byKey(const ValueKey('promote-block-1')));
+        await tester.pump();
       }
+      await tester.tap(raw);
       await tester.pump();
       expect(find.byKey(const ValueKey('raw-editor-1')), findsOneWidget);
     }
@@ -403,6 +410,11 @@ void main() {
       expect(raw.controller.text, 'Feed twice daily.');
     }
 
+    void expectCommittedSourceWhileModalOwnsFocus() {
+      expect(find.byKey(const ValueKey('raw-editor-1')), findsNothing);
+      expect(find.text('Feed twice daily.'), findsOneWidget);
+    }
+
     Future<void> sendPrimary(LogicalKeyboardKey key) async {
       await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
       await tester.sendKeyEvent(key);
@@ -416,28 +428,31 @@ void main() {
     await focusStarterRaw();
     await sendPrimary(LogicalKeyboardKey.keyK);
     expect(find.byKey(const ValueKey('search-palette')), findsOneWidget);
-    expectRawSource();
+    expectCommittedSourceWhileModalOwnsFocus();
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('search-palette')), findsNothing);
+    await focusStarterRaw();
     expectRawSource();
 
     await focusStarterRaw();
     await sendPrimary(LogicalKeyboardKey.keyH);
     expect(find.byKey(const ValueKey('history-drawer')), findsOneWidget);
-    expectRawSource();
+    expectCommittedSourceWhileModalOwnsFocus();
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('history-drawer')), findsNothing);
+    await focusStarterRaw();
     expectRawSource();
 
     await focusStarterRaw();
     await sendPrimary(LogicalKeyboardKey.comma);
     expect(find.byKey(const ValueKey('preferences-drawer')), findsOneWidget);
-    expectRawSource();
+    expectCommittedSourceWhileModalOwnsFocus();
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('preferences-drawer')), findsNothing);
+    await focusStarterRaw();
     expectRawSource();
 
     await focusStarterRaw();
