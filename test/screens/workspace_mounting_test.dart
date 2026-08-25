@@ -776,6 +776,37 @@ void main() {
     expect(find.byKey(const ValueKey('tab-menu-close-all')), findsOneWidget);
   });
 
+  testWidgets('a focused note tab selects with Enter and Space', (
+    tester,
+  ) async {
+    final api = _MountingRustApi([
+      _treeNode('a', 'Alpha'),
+      _treeNode('b', 'Beta'),
+    ]);
+    final container = await _pumpShell(tester, api);
+
+    await tester.tap(find.byKey(const ValueKey('workspace-tree-note-a')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('workspace-tree-note-b')));
+    await tester.pumpAndSettle();
+
+    final alphaTab = find.byKey(const Key('shell-tab-a'));
+    Focus.of(tester.element(alphaTab)).requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(container.read(selectedNoteIdProvider), 'a');
+    expect(api.calls, contains('open:a'));
+
+    final betaTab = find.byKey(const Key('shell-tab-b'));
+    Focus.of(tester.element(betaTab)).requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.space);
+    await tester.pumpAndSettle();
+    expect(container.read(selectedNoteIdProvider), 'b');
+    expect(api.calls, contains('open:b'));
+  });
+
   testWidgets(
     'the search palette close affordance retains its shell callback',
     (tester) async {
