@@ -1,4 +1,5 @@
 import 'package:burlmd/src/components/workspace_tree.dart';
+import 'package:burlmd/l10n/generated/app_localizations.dart';
 import 'package:burlmd/src/providers/note_providers.dart';
 import 'package:burlmd/src/providers/rust_api_provider.dart';
 import 'package:burlmd/src/providers/workspace_provider.dart';
@@ -53,6 +54,8 @@ Future<void> _pumpTree(
     ProviderScope(
       overrides: [rustApiProvider.overrideWithValue(_StubRustApi(root))],
       child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: SizedBox(
             width: 300,
@@ -185,7 +188,9 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [rustApiProvider.overrideWithValue(api)],
-          child: const MaterialApp(
+          child: MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
             home: Scaffold(body: SizedBox(width: 300, child: WorkspaceTree())),
           ),
         ),
@@ -228,6 +233,8 @@ void main() {
           ),
         ],
         child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
             body: Consumer(
               builder: (context, ref, _) {
@@ -297,6 +304,8 @@ void main() {
           ),
         ],
         child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
             body: Consumer(
               builder: (context, ref, _) {
@@ -359,6 +368,8 @@ void main() {
           ),
         ],
         child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
             body: Consumer(
               builder: (context, ref, _) {
@@ -393,7 +404,9 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [rustApiProvider.overrideWithValue(api)],
-        child: const MaterialApp(
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(body: SizedBox(width: 300, child: WorkspaceTree())),
         ),
       ),

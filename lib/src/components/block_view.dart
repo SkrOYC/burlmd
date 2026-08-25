@@ -156,6 +156,7 @@ class _CodeBlockSlotState extends State<CodeBlockSlot> {
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final colors = _colors(context);
+    final l10n = AppLocalizations.of(context)!;
     final border = dark ? const Color(0xff2a2a30) : const Color(0xffe2dfd6);
     final bodyColor = dark ? const Color(0xff141416) : const Color(0xfff6f5f0);
     final headerColor = dark
@@ -263,7 +264,9 @@ class _CodeBlockSlotState extends State<CodeBlockSlot> {
                                     size: 12,
                                   ),
                                   const SizedBox(width: 4),
-                                  Text(_copied ? 'Copied' : 'Copy'),
+                                  Text(
+                                    _copied ? l10n.codeCopied : l10n.codeCopy,
+                                  ),
                                 ],
                               ),
                             ),

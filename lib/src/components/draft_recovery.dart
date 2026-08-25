@@ -2,6 +2,7 @@ import 'package:burlmd/src/providers/note_providers.dart';
 import 'package:burlmd/src/providers/workspace_provider.dart';
 import 'package:burlmd/src/rust/error.dart';
 import 'package:burlmd/src/design/burl_theme.dart';
+import 'package:burlmd/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
@@ -36,6 +37,7 @@ class RecoveredDraftsPanel extends ConsumerWidget {
         const [];
     if (surfaced.isEmpty) return const SizedBox.shrink();
     final colors = _colors(context);
+    final l10n = AppLocalizations.of(context)!;
 
     return Container(
       key: const ValueKey('recovered-drafts-panel'),
@@ -57,12 +59,12 @@ class RecoveredDraftsPanel extends ConsumerWidget {
                   LucideIcons.rotate_ccw_clock,
                   size: 15,
                   color: colors.review,
-                  semanticLabel: 'Recovered',
+                  semanticLabel: l10n.recoveryLabel,
                 ),
                 const SizedBox(width: 7),
                 Expanded(
                   child: Text(
-                    'Recovered drafts',
+                    l10n.recoveryDrafts,
                     style: TextStyle(
                       color: colors.textPrimary,
                       fontSize: 12,
@@ -94,14 +96,14 @@ class RecoveredDraftsPanel extends ConsumerWidget {
                   ),
                 ),
                 subtitle: Text(
-                  'Unsaved changes were recovered from a previous session.',
+                  l10n.recoveryDescription,
                   style: TextStyle(color: colors.textSecondary, fontSize: 11),
                 ),
                 hoverColor: colors.hover,
                 onTap: selectionBlocked ? null : () => _open(ref, note.id),
                 trailing: IconButton(
                   key: ValueKey('recovery-dismiss-${note.id}'),
-                  tooltip: 'Dismiss notice',
+                  tooltip: l10n.recoveryDismiss,
                   icon: Icon(LucideIcons.x, size: 14, color: colors.textMuted),
                   onPressed: () => ref
                       .read(dismissedRecoveriesProvider.notifier)
@@ -144,6 +146,7 @@ class WriteTierNotice extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = _colors(context);
+    final l10n = AppLocalizations.of(context)!;
     // A refused per-keystroke write (`update_block` tier 1). Surfaced here,
     // above the editor, rather than through [editorErrorProvider]: the
     // flow's contract is that the user never loses sight of their text
@@ -162,15 +165,14 @@ class WriteTierNotice extends ConsumerWidget {
             children: [
               Icon(
                 LucideIcons.circle_alert,
-                semanticLabel: 'Edit not saved yet',
+                semanticLabel: l10n.writeEditNotSaved,
                 size: 16,
                 color: colors.syncError,
               ),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'Your latest edit could not be saved yet ($keystrokeFailure). '
-                  'Your text is still here; saving retries automatically.',
+                  l10n.writeEditNotSavedDescription('$keystrokeFailure'),
                 ),
               ),
             ],
@@ -192,18 +194,12 @@ class WriteTierNotice extends ConsumerWidget {
             children: [
               Icon(
                 LucideIcons.circle_alert,
-                semanticLabel: 'Write status unavailable',
+                semanticLabel: l10n.writeStatusUnavailable,
                 size: 16,
                 color: colors.syncError,
               ),
               const SizedBox(width: 8),
-              const Expanded(
-                child: Text(
-                  'The note\'s save status cannot be checked right now. '
-                  'Your latest edits may not be written to disk yet; '
-                  'checking continues automatically.',
-                ),
-              ),
+              Expanded(child: Text(l10n.writeStatusUnavailableDescription)),
             ],
           ),
         ),
@@ -213,12 +209,9 @@ class WriteTierNotice extends ConsumerWidget {
     if (error == null) return const SizedBox.shrink();
 
     final message = switch (error) {
-      AppError_RevisionMismatch() =>
-        'This note changed on disk while you were editing '
-            '(revision mismatch), so your latest text could not be written.',
-      AppError_DiskFull() =>
-        'The disk is full. Changes cannot be saved until space is freed.',
-      _ => 'Writing the note failed: $error',
+      AppError_RevisionMismatch() => l10n.writeRevisionMismatch,
+      AppError_DiskFull() => l10n.writeDiskFull,
+      _ => l10n.writeFailed('$error'),
     };
 
     return _WriteNoticeCard(
@@ -232,7 +225,7 @@ class WriteTierNotice extends ConsumerWidget {
               children: [
                 Icon(
                   LucideIcons.circle_alert,
-                  semanticLabel: 'Write failure',
+                  semanticLabel: l10n.writeFailure,
                   size: 16,
                   color: colors.syncError,
                 ),
@@ -247,7 +240,7 @@ class WriteTierNotice extends ConsumerWidget {
                 child: TextButton.icon(
                   key: const ValueKey('reload-offer'),
                   icon: const Icon(LucideIcons.refresh_cw, size: 15),
-                  label: const Text('Reload from disk'),
+                  label: Text(l10n.writeReloadFromDisk),
                   onPressed: () => _confirmAndReload(context, ref),
                 ),
               ),
@@ -263,23 +256,20 @@ class WriteTierNotice extends ConsumerWidget {
   /// chooses, their buffered text stays reachable — cancelling leaves the
   /// buffer and the surfaced failure exactly as they are.
   Future<void> _confirmAndReload(BuildContext context, WidgetRef ref) async {
+    final l10n = AppLocalizations.of(context)!;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Reload from disk?'),
-        content: const Text(
-          'Reloading discards your buffered text — everything you have '
-          'typed that was not written to disk. The file changed while you '
-          'were editing, so reloading cannot keep it.',
-        ),
+        title: Text(l10n.writeReloadFromDiskTitle),
+        content: Text(l10n.writeReloadFromDiskDescription),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Keep editing'),
+            child: Text(l10n.writeKeepEditing),
           ),
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Discard and reload'),
+            child: Text(l10n.writeDiscardAndReload),
           ),
         ],
       ),

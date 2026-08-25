@@ -2,6 +2,7 @@ import 'package:burlmd/src/providers/search_provider.dart';
 import 'package:burlmd/src/providers/workspace_provider.dart';
 import 'package:burlmd/src/rust/draft.dart';
 import 'package:burlmd/src/design/burl_theme.dart';
+import 'package:burlmd/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
@@ -67,6 +68,7 @@ class _SearchPanelState extends ConsumerState<SearchPanel> {
     final results = ref.watch(searchResultsProvider(widget.resultLimit));
     final selectionBlocked = ref.watch(noteSelectionBlockedProvider);
     final colors = _colors(context);
+    final l10n = AppLocalizations.of(context)!;
     _inputFocusNode.onKeyEvent = (_, event) {
       if (event is KeyDownEvent &&
           event.logicalKey == LogicalKeyboardKey.escape) {
@@ -138,9 +140,9 @@ class _SearchPanelState extends ConsumerState<SearchPanel> {
                     LucideIcons.search,
                     size: 16,
                     color: colors.textMuted,
-                    semanticLabel: 'Search',
+                    semanticLabel: l10n.searchIconLabel,
                   ),
-                  hintText: 'Search notes',
+                  hintText: l10n.searchNotesHint,
                   isDense: true,
                   filled: true,
                   fillColor: colors.surface,
@@ -179,15 +181,15 @@ class _SearchPanelState extends ConsumerState<SearchPanel> {
                     ),
                     data: (hits) {
                       if (ref.read(searchQueryProvider).trim().isEmpty) {
-                        return const _EmptyState(
+                        return _EmptyState(
                           key: ValueKey('search-empty'),
-                          message: 'Type to search your notes',
+                          message: l10n.searchTypePrompt,
                         );
                       }
                       if (hits.isEmpty) {
-                        return const _EmptyState(
+                        return _EmptyState(
                           key: ValueKey('search-no-match'),
-                          message: 'No matching notes',
+                          message: l10n.searchNoMatches,
                         );
                       }
                       final selectedIndex = _selectedIndex.clamp(
@@ -295,6 +297,7 @@ class _SearchErrorState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = _colors(context);
+    final l10n = AppLocalizations.of(context)!;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -309,10 +312,10 @@ class _SearchErrorState extends StatelessWidget {
                   LucideIcons.circle_alert,
                   size: 16,
                   color: colors.syncError,
-                  semanticLabel: 'Error',
+                  semanticLabel: l10n.searchErrorLabel,
                 ),
                 const SizedBox(width: 8),
-                const Flexible(child: Text('Search failed')),
+                Flexible(child: Text(l10n.searchFailed)),
               ],
             ),
             const SizedBox(height: 4),
@@ -328,12 +331,11 @@ class _SearchErrorState extends StatelessWidget {
               key: const ValueKey('search-retry'),
               onPressed: onRetry,
               icon: const Icon(LucideIcons.refresh_cw, size: 15),
-              label: const Text('Retry'),
+              label: Text(l10n.treeRetry),
             ),
             const SizedBox(height: 4),
             Text(
-              'If this keeps happening, run "Rescan workspace" to rebuild '
-              'the search index.',
+              l10n.searchRescanHint,
               style: TextStyle(color: colors.textMuted, fontSize: 12),
               textAlign: TextAlign.center,
             ),
@@ -361,6 +363,7 @@ class _ResultRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = _colors(context);
+    final l10n = AppLocalizations.of(context)!;
     return KeyedSubtree(
       key: ValueKey('search-result-${hit.id}'),
       child: Material(
@@ -379,7 +382,7 @@ class _ResultRow extends StatelessWidget {
             LucideIcons.file_text,
             size: 15,
             color: colors.accent,
-            semanticLabel: 'Note',
+            semanticLabel: l10n.treeNote,
           ),
           title: Text(
             hit.title,

@@ -1,4 +1,5 @@
 import 'package:burlmd/src/components/editor.dart';
+import 'package:burlmd/l10n/generated/app_localizations.dart';
 import 'package:burlmd/src/providers/note_providers.dart';
 import 'package:burlmd/src/providers/rust_api_provider.dart';
 import 'package:burlmd/src/rust/draft.dart';
@@ -134,6 +135,8 @@ Future<ProviderContainer> pumpEditor(
     UncontrolledProviderScope(
       container: container,
       child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(body: Editor(key: ValueKey('editor-$pumpCounter'))),
       ),
     ),
