@@ -348,6 +348,21 @@ void main() {
     expect(settled.scale.value, closeTo(1, .001));
   });
 
+  testWidgets('rail settings opens preferences instead of the navigator', (
+    tester,
+  ) async {
+    final api = _MountingRustApi([_treeNode('a', 'Alpha')]);
+    await _pumpShell(tester, api);
+    tester.view.physicalSize = const Size(800, 800);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('shell-rail-preferences')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('preferences-drawer')), findsOneWidget);
+    expect(find.byKey(const Key('shell-navigator-overlay')), findsNothing);
+  });
+
   testWidgets('reduced motion opens the navigator at its final position', (
     tester,
   ) async {

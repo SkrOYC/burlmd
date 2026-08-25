@@ -1602,7 +1602,11 @@ void main() {
         child: Consumer(
           builder: (context, ref, _) {
             container = ProviderScope.containerOf(context);
-            return const MaterialApp(home: Scaffold(body: Editor()));
+            return const MaterialApp(
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: Scaffold(body: Editor()),
+            );
           },
         ),
       ),
@@ -1676,7 +1680,11 @@ void main() {
         child: Consumer(
           builder: (context, ref, _) {
             container = ProviderScope.containerOf(context);
-            return const MaterialApp(home: Scaffold(body: Editor()));
+            return const MaterialApp(
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: Scaffold(body: Editor()),
+            );
           },
         ),
       ),
@@ -1741,7 +1749,11 @@ void main() {
         child: Consumer(
           builder: (context, ref, _) {
             container = ProviderScope.containerOf(context);
-            return const MaterialApp(home: Scaffold(body: Editor()));
+            return const MaterialApp(
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: Scaffold(body: Editor()),
+            );
           },
         ),
       ),
@@ -1805,7 +1817,11 @@ void main() {
         child: Consumer(
           builder: (context, ref, _) {
             container = ProviderScope.containerOf(context);
-            return const MaterialApp(home: Scaffold(body: Editor()));
+            return const MaterialApp(
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: Scaffold(body: Editor()),
+            );
           },
         ),
       ),

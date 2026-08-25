@@ -167,14 +167,22 @@ class _WorkspaceTreeState extends ConsumerState<WorkspaceTree> {
   Future<void> _createRootNote(BuildContext context) => _run(
     context,
     ref,
-    () => promptForText(context, title: 'New note', label: 'Title'),
+    () => promptForText(
+      context,
+      title: AppLocalizations.of(context)!.treeNewNote,
+      label: AppLocalizations.of(context)!.treeTitle,
+    ),
     (title) => ref.read(lifecycleActionsProvider).createNote('', title),
   );
 
   Future<void> _createRootDirectory(BuildContext context) => _run(
     context,
     ref,
-    () => promptForText(context, title: 'New directory', label: 'Name'),
+    () => promptForText(
+      context,
+      title: AppLocalizations.of(context)!.treeNewDirectory,
+      label: AppLocalizations.of(context)!.treeName,
+    ),
     (name) => ref
         .read(lifecycleActionsProvider)
         .createDirectory(joinDirectoryPath('', name)),
@@ -198,6 +206,7 @@ class _TreeSectionHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = _colors(context);
+    final l10n = AppLocalizations.of(context)!;
     return Semantics(
       header: true,
       child: SizedBox(
@@ -208,12 +217,12 @@ class _TreeSectionHeader extends StatelessWidget {
               LucideIcons.chevron_down,
               size: 13,
               color: colors.textMuted,
-              semanticLabel: 'Directories',
+              semanticLabel: l10n.treeDirectories,
             ),
             const SizedBox(width: 5),
             Expanded(
               child: Text(
-                'DIRECTORIES',
+                l10n.treeDirectoriesHeading,
                 style: TextStyle(
                   color: colors.textMuted,
                   fontSize: 11,
@@ -224,7 +233,7 @@ class _TreeSectionHeader extends StatelessWidget {
             ),
             _CompactTreeAction(
               key: const ValueKey('tree-new-note'),
-              tooltip: 'New note',
+              tooltip: l10n.treeNewNote,
               icon: LucideIcons.file_plus,
               enabled: !lifecycleActive,
               onPressed: onCreateNote,
@@ -232,7 +241,7 @@ class _TreeSectionHeader extends StatelessWidget {
             const SizedBox(width: 2),
             _CompactTreeAction(
               key: const ValueKey('tree-new-directory'),
-              tooltip: 'New directory',
+              tooltip: l10n.treeNewDirectory,
               icon: LucideIcons.folder_plus,
               enabled: !lifecycleActive,
               onPressed: onCreateDirectory,
@@ -284,25 +293,28 @@ class _TreeErrorState extends ConsumerWidget {
   const _TreeErrorState();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) => Padding(
-    padding: const EdgeInsets.all(12),
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Failed to load workspace tree',
-          style: Theme.of(context).textTheme.bodySmall,
-        ),
-        TextButton.icon(
-          key: const ValueKey('tree-retry'),
-          onPressed: () => ref.invalidate(workspaceTreeProvider),
-          icon: const Icon(Icons.refresh, size: 18),
-          label: const Text('Retry'),
-        ),
-      ],
-    ),
-  );
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context)!;
+    return Padding(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            l10n.treeFailedToLoad,
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          TextButton.icon(
+            key: const ValueKey('tree-retry'),
+            onPressed: () => ref.invalidate(workspaceTreeProvider),
+            icon: const Icon(Icons.refresh, size: 18),
+            label: Text(l10n.treeRetry),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _DirectoryRow extends ConsumerWidget {
@@ -323,6 +335,7 @@ class _DirectoryRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = _colors(context);
+    final l10n = AppLocalizations.of(context)!;
     return ListTile(
       key: ValueKey('workspace-tree-directory-${node.path}'),
       dense: true,
@@ -349,7 +362,9 @@ class _DirectoryRow extends ConsumerWidget {
               expanded ? LucideIcons.folder_open : LucideIcons.folder,
               size: 14,
               color: colors.textSecondary,
-              semanticLabel: expanded ? 'Expanded directory' : 'Directory',
+              semanticLabel: expanded
+                  ? l10n.treeExpandedDirectory
+                  : l10n.treeDirectory,
             ),
           ],
         ),
@@ -368,7 +383,7 @@ class _DirectoryRow extends ConsumerWidget {
         height: _WorkspaceTreeState._rowHeight,
         child: PopupMenuButton<String>(
           key: ValueKey('workspace-tree-directory-actions-${node.path}'),
-          tooltip: 'Actions for directory ${node.name}',
+          tooltip: l10n.treeDirectoryActions(node.name),
           enabled: !lifecycleActive,
           padding: EdgeInsets.zero,
           icon: Icon(LucideIcons.ellipsis, size: 15, color: colors.textMuted),
@@ -388,22 +403,22 @@ class _DirectoryRow extends ConsumerWidget {
             PopupMenuItem(
               key: ValueKey('tree-context-create-note-${node.path}'),
               value: 'new-note',
-              child: const Text('New note here'),
+              child: Text(l10n.treeNewNoteHere),
             ),
             PopupMenuItem(
               key: ValueKey('tree-context-create-directory-${node.path}'),
               value: 'new-directory',
-              child: const Text('New subdirectory'),
+              child: Text(l10n.treeNewSubdirectory),
             ),
             PopupMenuItem(
               key: ValueKey('tree-context-rename-directory-${node.path}'),
               value: 'rename',
-              child: const Text('Rename'),
+              child: Text(l10n.treeRename),
             ),
             PopupMenuItem(
               key: ValueKey('tree-context-delete-directory-${node.path}'),
               value: 'delete',
-              child: const Text('Delete'),
+              child: Text(l10n.treeDelete),
             ),
           ],
         ),
@@ -417,8 +432,8 @@ class _DirectoryRow extends ConsumerWidget {
     ref,
     () => promptForText(
       context,
-      title: 'New note in "${node.name}"',
-      label: 'Title',
+      title: AppLocalizations.of(context)!.treeNewNoteInDirectory(node.name),
+      label: AppLocalizations.of(context)!.treeTitle,
     ),
     (title) => ref.read(lifecycleActionsProvider).createNote(node.path, title),
   );
@@ -431,8 +446,10 @@ class _DirectoryRow extends ConsumerWidget {
     ref,
     () => promptForText(
       context,
-      title: 'New subdirectory in "${node.name}"',
-      label: 'Name',
+      title: AppLocalizations.of(
+        context,
+      )!.treeNewSubdirectoryInDirectory(node.name),
+      label: AppLocalizations.of(context)!.treeName,
     ),
     (name) => ref
         .read(lifecycleActionsProvider)
@@ -445,8 +462,8 @@ class _DirectoryRow extends ConsumerWidget {
     () async {
       final newName = await promptForText(
         context,
-        title: 'Rename directory "${node.name}"',
-        label: 'New name',
+        title: AppLocalizations.of(context)!.treeRenameDirectory(node.name),
+        label: AppLocalizations.of(context)!.treeNewName,
         initialValue: node.name,
       );
       return (newName == null || newName == node.name) ? null : newName;
@@ -463,11 +480,11 @@ class _DirectoryRow extends ConsumerWidget {
       // confirming this dialog first.
       return await confirmDeletion(
             context,
-            kind: 'directory',
+            kind: AppLocalizations.of(context)!.treeDirectoryKind,
             name: node.name,
-            consequence:
-                'Every note inside "${node.name}" is deleted with it. '
-                'They stay recoverable from local version history.',
+            consequence: AppLocalizations.of(
+              context,
+            )!.treeDeleteDirectoryConsequence(node.name),
           )
           ? true
           : null;
@@ -494,6 +511,7 @@ class _NoteRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = _colors(context);
+    final l10n = AppLocalizations.of(context)!;
     return ListTile(
       key: ValueKey('workspace-tree-note-${node.id}'),
       dense: true,
@@ -513,7 +531,7 @@ class _NoteRow extends ConsumerWidget {
               LucideIcons.file_text,
               size: 13,
               color: selected ? colors.accent : colors.textMuted,
-              semanticLabel: 'Note',
+              semanticLabel: l10n.treeNote,
             ),
           ],
         ),
@@ -536,7 +554,7 @@ class _NoteRow extends ConsumerWidget {
         height: _WorkspaceTreeState._rowHeight,
         child: PopupMenuButton<String>(
           key: ValueKey('workspace-tree-note-actions-${node.id}'),
-          tooltip: 'Actions for note ${node.title}',
+          tooltip: l10n.treeNoteActions(node.title),
           enabled: !lifecycleActive,
           padding: EdgeInsets.zero,
           icon: Icon(LucideIcons.ellipsis, size: 14, color: colors.textMuted),
@@ -555,17 +573,17 @@ class _NoteRow extends ConsumerWidget {
             PopupMenuItem(
               key: ValueKey('tree-context-rename-${node.id}'),
               value: 'rename',
-              child: const Text('Rename'),
+              child: Text(l10n.treeRename),
             ),
             PopupMenuItem(
               key: ValueKey('tree-context-move-${node.id}'),
               value: 'move',
-              child: const Text('Move to directory…'),
+              child: Text(l10n.treeMoveToDirectory),
             ),
             PopupMenuItem(
               key: ValueKey('tree-context-delete-${node.id}'),
               value: 'delete',
-              child: const Text('Delete'),
+              child: Text(l10n.treeDelete),
             ),
           ],
         ),
@@ -580,8 +598,8 @@ class _NoteRow extends ConsumerWidget {
     () async {
       final newTitle = await promptForText(
         context,
-        title: 'Rename note',
-        label: 'New title',
+        title: AppLocalizations.of(context)!.treeRenameNote,
+        label: AppLocalizations.of(context)!.treeNewTitle,
         initialValue: node.title,
       );
       return (newTitle == null || newTitle == node.title) ? null : newTitle;
@@ -606,11 +624,11 @@ class _NoteRow extends ConsumerWidget {
         // confirming this dialog first.
         return await confirmDeletion(
               context,
-              kind: 'note',
+              kind: AppLocalizations.of(context)!.treeNoteKind,
               name: node.title,
-              consequence:
-                  'It stays recoverable from local version history, but links '
-                  'elsewhere that pointed at it will no longer resolve.',
+              consequence: AppLocalizations.of(
+                context,
+              )!.treeDeleteNoteConsequence,
             )
             ? true
             : null;
@@ -651,6 +669,7 @@ Future<String?> promptForText(
   String? initialValue,
 }) async {
   final controller = TextEditingController(text: initialValue ?? '');
+  final l10n = AppLocalizations.of(context)!;
   // Pushed as an explicit route so the dialog's `completed` future is
   // reachable: the controller must outlive the popping route's exit
   // transition (its TextField stays attached — and cursor-blink ticks read
@@ -672,13 +691,13 @@ Future<String?> promptForText(
         TextButton(
           key: const ValueKey('lifecycle-dialog-cancel'),
           onPressed: () => Navigator.of(dialogContext).pop(),
-          child: const Text('Cancel'),
+          child: Text(l10n.treeCancel),
         ),
         TextButton(
           key: const ValueKey('lifecycle-dialog-confirm'),
           onPressed: () =>
               Navigator.of(dialogContext).pop(controller.text.trim()),
-          child: const Text('OK'),
+          child: Text(l10n.treeConfirm),
         ),
       ],
     ),
@@ -715,6 +734,7 @@ Future<bool> confirmDeletion(
           ),
     builder: (dialogContext) {
       final colors = _colors(dialogContext);
+      final l10n = AppLocalizations.of(dialogContext)!;
       return AlertDialog(
         key: const ValueKey('delete-confirmation-dialog'),
         constraints: const BoxConstraints(maxWidth: 384),
@@ -730,7 +750,7 @@ Future<bool> confirmDeletion(
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                'Delete $kind "$name"?',
+                l10n.treeDeleteNamed(kind, name),
                 style: TextStyle(
                   color: colors.textPrimary,
                   fontSize: 16,
@@ -768,7 +788,7 @@ Future<bool> confirmDeletion(
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Deleted content remains recoverable from local version history.',
+                      l10n.treeDeletedContentRecoverable,
                       style: TextStyle(
                         color: colors.textSecondary,
                         fontSize: 11,
@@ -784,13 +804,13 @@ Future<bool> confirmDeletion(
           TextButton(
             key: const ValueKey('delete-confirmation-cancel'),
             onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancel'),
+            child: Text(l10n.treeCancel),
           ),
           TextButton(
             key: const ValueKey('delete-confirmation-confirm'),
             style: TextButton.styleFrom(foregroundColor: colors.syncError),
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Delete'),
+            child: Text(l10n.treeDelete),
           ),
         ],
       );
@@ -815,13 +835,14 @@ Future<String?> pickDirectory(BuildContext context, WidgetRef ref) async {
   }
 
   collect(root);
-  String label(String path) => path.isEmpty ? '(workspace root)' : path;
+  String label(String path) =>
+      path.isEmpty ? AppLocalizations.of(context)!.treeWorkspaceRoot : path;
 
   if (!context.mounted) return null;
   return showDialog<String>(
     context: context,
     builder: (dialogContext) => SimpleDialog(
-      title: const Text('Move to which directory?'),
+      title: Text(AppLocalizations.of(dialogContext)!.treeMoveDestinationTitle),
       children: [
         for (final path in paths)
           SimpleDialogOption(
@@ -851,7 +872,9 @@ void report(BuildContext context, LifecycleOutcome outcome) {
       },
     },
     LifecycleRefused(:final reason) => reason,
-    LifecycleFailed(:final error) => 'The action failed: $error',
+    LifecycleFailed(:final error) => AppLocalizations.of(
+      context,
+    )!.treeActionFailed('$error'),
   };
   if (message == null) return;
   showStatusMessage(context, message);

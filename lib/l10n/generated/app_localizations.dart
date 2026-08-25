@@ -657,6 +657,372 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Stored in .git/'**
   String get historyStoredInGit;
+
+  /// Workspace tree action to create a note.
+  ///
+  /// In en, this message translates to:
+  /// **'New note'**
+  String get treeNewNote;
+
+  /// Workspace tree action to create a directory.
+  ///
+  /// In en, this message translates to:
+  /// **'New directory'**
+  String get treeNewDirectory;
+
+  /// Text-field label for a note title.
+  ///
+  /// In en, this message translates to:
+  /// **'Title'**
+  String get treeTitle;
+
+  /// Text-field label for a directory name.
+  ///
+  /// In en, this message translates to:
+  /// **'Name'**
+  String get treeName;
+
+  /// Accessible label for the workspace directory section.
+  ///
+  /// In en, this message translates to:
+  /// **'Directories'**
+  String get treeDirectories;
+
+  /// Visible uppercase workspace directory section heading.
+  ///
+  /// In en, this message translates to:
+  /// **'DIRECTORIES'**
+  String get treeDirectoriesHeading;
+
+  /// Workspace tree load failure state.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to load workspace tree'**
+  String get treeFailedToLoad;
+
+  /// Retry a failed workspace tree load or search.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get treeRetry;
+
+  /// Accessible label for an expanded directory icon.
+  ///
+  /// In en, this message translates to:
+  /// **'Expanded directory'**
+  String get treeExpandedDirectory;
+
+  /// Accessible label for a directory icon.
+  ///
+  /// In en, this message translates to:
+  /// **'Directory'**
+  String get treeDirectory;
+
+  /// Lowercase directory noun in a delete confirmation.
+  ///
+  /// In en, this message translates to:
+  /// **'directory'**
+  String get treeDirectoryKind;
+
+  /// Accessible label for a note icon.
+  ///
+  /// In en, this message translates to:
+  /// **'Note'**
+  String get treeNote;
+
+  /// Lowercase note noun in a delete confirmation.
+  ///
+  /// In en, this message translates to:
+  /// **'note'**
+  String get treeNoteKind;
+
+  /// Tooltip for a directory overflow menu.
+  ///
+  /// In en, this message translates to:
+  /// **'Actions for directory {name}'**
+  String treeDirectoryActions(String name);
+
+  /// Tooltip for a note overflow menu.
+  ///
+  /// In en, this message translates to:
+  /// **'Actions for note {title}'**
+  String treeNoteActions(String title);
+
+  /// Directory context-menu action.
+  ///
+  /// In en, this message translates to:
+  /// **'New note here'**
+  String get treeNewNoteHere;
+
+  /// Directory context-menu action.
+  ///
+  /// In en, this message translates to:
+  /// **'New subdirectory'**
+  String get treeNewSubdirectory;
+
+  /// Workspace tree context-menu action.
+  ///
+  /// In en, this message translates to:
+  /// **'Rename'**
+  String get treeRename;
+
+  /// Workspace tree destructive action.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
+  String get treeDelete;
+
+  /// Note context-menu move action.
+  ///
+  /// In en, this message translates to:
+  /// **'Move to directory…'**
+  String get treeMoveToDirectory;
+
+  /// Create-note dialog title for a directory.
+  ///
+  /// In en, this message translates to:
+  /// **'New note in \"{name}\"'**
+  String treeNewNoteInDirectory(String name);
+
+  /// Create-directory dialog title for a directory.
+  ///
+  /// In en, this message translates to:
+  /// **'New subdirectory in \"{name}\"'**
+  String treeNewSubdirectoryInDirectory(String name);
+
+  /// Rename-directory dialog title.
+  ///
+  /// In en, this message translates to:
+  /// **'Rename directory \"{name}\"'**
+  String treeRenameDirectory(String name);
+
+  /// Text-field label for a renamed directory.
+  ///
+  /// In en, this message translates to:
+  /// **'New name'**
+  String get treeNewName;
+
+  /// Rename-note dialog title.
+  ///
+  /// In en, this message translates to:
+  /// **'Rename note'**
+  String get treeRenameNote;
+
+  /// Text-field label for a renamed note.
+  ///
+  /// In en, this message translates to:
+  /// **'New title'**
+  String get treeNewTitle;
+
+  /// Delete-directory confirmation consequence.
+  ///
+  /// In en, this message translates to:
+  /// **'Every note inside \"{name}\" is deleted with it. They stay recoverable from local version history.'**
+  String treeDeleteDirectoryConsequence(String name);
+
+  /// Delete-note confirmation consequence.
+  ///
+  /// In en, this message translates to:
+  /// **'It stays recoverable from local version history, but links elsewhere that pointed at it will no longer resolve.'**
+  String get treeDeleteNoteConsequence;
+
+  /// Cancel a lifecycle dialog.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get treeCancel;
+
+  /// Confirm entered lifecycle dialog text.
+  ///
+  /// In en, this message translates to:
+  /// **'OK'**
+  String get treeConfirm;
+
+  /// Delete confirmation title.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete {kind} \"{name}\"?'**
+  String treeDeleteNamed(String kind, String name);
+
+  /// Delete confirmation safety note.
+  ///
+  /// In en, this message translates to:
+  /// **'Deleted content remains recoverable from local version history.'**
+  String get treeDeletedContentRecoverable;
+
+  /// Move dialog label for the workspace root.
+  ///
+  /// In en, this message translates to:
+  /// **'(workspace root)'**
+  String get treeWorkspaceRoot;
+
+  /// Move-note destination dialog title.
+  ///
+  /// In en, this message translates to:
+  /// **'Move to which directory?'**
+  String get treeMoveDestinationTitle;
+
+  /// Lifecycle action failure status.
+  ///
+  /// In en, this message translates to:
+  /// **'The action failed: {error}'**
+  String treeActionFailed(String error);
+
+  /// Code-block copy button label.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy'**
+  String get codeCopy;
+
+  /// Code-block copy feedback label.
+  ///
+  /// In en, this message translates to:
+  /// **'Copied'**
+  String get codeCopied;
+
+  /// Accessible label for recovered-draft indicator.
+  ///
+  /// In en, this message translates to:
+  /// **'Recovered'**
+  String get recoveryLabel;
+
+  /// Recovered-drafts panel title.
+  ///
+  /// In en, this message translates to:
+  /// **'Recovered drafts'**
+  String get recoveryDrafts;
+
+  /// Recovered-draft row description.
+  ///
+  /// In en, this message translates to:
+  /// **'Unsaved changes were recovered from a previous session.'**
+  String get recoveryDescription;
+
+  /// Tooltip to hide a recovered-draft notice.
+  ///
+  /// In en, this message translates to:
+  /// **'Dismiss notice'**
+  String get recoveryDismiss;
+
+  /// Accessible label for a transient write failure.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit not saved yet'**
+  String get writeEditNotSaved;
+
+  /// Transient write failure explanation.
+  ///
+  /// In en, this message translates to:
+  /// **'Your latest edit could not be saved yet ({error}). Your text is still here; saving retries automatically.'**
+  String writeEditNotSavedDescription(String error);
+
+  /// Accessible label for unavailable write status.
+  ///
+  /// In en, this message translates to:
+  /// **'Write status unavailable'**
+  String get writeStatusUnavailable;
+
+  /// Unavailable write status explanation.
+  ///
+  /// In en, this message translates to:
+  /// **'The note\'s save status cannot be checked right now. Your latest edits may not be written to disk yet; checking continues automatically.'**
+  String get writeStatusUnavailableDescription;
+
+  /// Revision mismatch write failure explanation.
+  ///
+  /// In en, this message translates to:
+  /// **'This note changed on disk while you were editing (revision mismatch), so your latest text could not be written.'**
+  String get writeRevisionMismatch;
+
+  /// Disk-full write failure explanation.
+  ///
+  /// In en, this message translates to:
+  /// **'The disk is full. Changes cannot be saved until space is freed.'**
+  String get writeDiskFull;
+
+  /// Generic write failure explanation.
+  ///
+  /// In en, this message translates to:
+  /// **'Writing the note failed: {error}'**
+  String writeFailed(String error);
+
+  /// Accessible label for a write failure.
+  ///
+  /// In en, this message translates to:
+  /// **'Write failure'**
+  String get writeFailure;
+
+  /// Action to reload a changed note from disk.
+  ///
+  /// In en, this message translates to:
+  /// **'Reload from disk'**
+  String get writeReloadFromDisk;
+
+  /// Reload confirmation title.
+  ///
+  /// In en, this message translates to:
+  /// **'Reload from disk?'**
+  String get writeReloadFromDiskTitle;
+
+  /// Reload confirmation explanation.
+  ///
+  /// In en, this message translates to:
+  /// **'Reloading discards your buffered text — everything you have typed that was not written to disk. The file changed while you were editing, so reloading cannot keep it.'**
+  String get writeReloadFromDiskDescription;
+
+  /// Cancel reload and keep buffered edits.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep editing'**
+  String get writeKeepEditing;
+
+  /// Confirm reload and discard buffered edits.
+  ///
+  /// In en, this message translates to:
+  /// **'Discard and reload'**
+  String get writeDiscardAndReload;
+
+  /// Accessible label for a search icon.
+  ///
+  /// In en, this message translates to:
+  /// **'Search'**
+  String get searchIconLabel;
+
+  /// Search field hint.
+  ///
+  /// In en, this message translates to:
+  /// **'Search notes'**
+  String get searchNotesHint;
+
+  /// Empty search state prompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Type to search your notes'**
+  String get searchTypePrompt;
+
+  /// Search state with no matching notes.
+  ///
+  /// In en, this message translates to:
+  /// **'No matching notes'**
+  String get searchNoMatches;
+
+  /// Accessible label for search error icon.
+  ///
+  /// In en, this message translates to:
+  /// **'Error'**
+  String get searchErrorLabel;
+
+  /// Search error heading.
+  ///
+  /// In en, this message translates to:
+  /// **'Search failed'**
+  String get searchFailed;
+
+  /// Search error recovery guidance.
+  ///
+  /// In en, this message translates to:
+  /// **'If this keeps happening, run \"Rescan workspace\" to rebuild the search index.'**
+  String get searchRescanHint;
 }
 
 class _AppLocalizationsDelegate

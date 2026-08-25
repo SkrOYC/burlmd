@@ -339,4 +339,215 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get historyStoredInGit => 'Stored in .git/';
+
+  @override
+  String get treeNewNote => 'New note';
+
+  @override
+  String get treeNewDirectory => 'New directory';
+
+  @override
+  String get treeTitle => 'Title';
+
+  @override
+  String get treeName => 'Name';
+
+  @override
+  String get treeDirectories => 'Directories';
+
+  @override
+  String get treeDirectoriesHeading => 'DIRECTORIES';
+
+  @override
+  String get treeFailedToLoad => 'Failed to load workspace tree';
+
+  @override
+  String get treeRetry => 'Retry';
+
+  @override
+  String get treeExpandedDirectory => 'Expanded directory';
+
+  @override
+  String get treeDirectory => 'Directory';
+
+  @override
+  String get treeDirectoryKind => 'directory';
+
+  @override
+  String get treeNote => 'Note';
+
+  @override
+  String get treeNoteKind => 'note';
+
+  @override
+  String treeDirectoryActions(String name) {
+    return 'Actions for directory $name';
+  }
+
+  @override
+  String treeNoteActions(String title) {
+    return 'Actions for note $title';
+  }
+
+  @override
+  String get treeNewNoteHere => 'New note here';
+
+  @override
+  String get treeNewSubdirectory => 'New subdirectory';
+
+  @override
+  String get treeRename => 'Rename';
+
+  @override
+  String get treeDelete => 'Delete';
+
+  @override
+  String get treeMoveToDirectory => 'Move to directory…';
+
+  @override
+  String treeNewNoteInDirectory(String name) {
+    return 'New note in \"$name\"';
+  }
+
+  @override
+  String treeNewSubdirectoryInDirectory(String name) {
+    return 'New subdirectory in \"$name\"';
+  }
+
+  @override
+  String treeRenameDirectory(String name) {
+    return 'Rename directory \"$name\"';
+  }
+
+  @override
+  String get treeNewName => 'New name';
+
+  @override
+  String get treeRenameNote => 'Rename note';
+
+  @override
+  String get treeNewTitle => 'New title';
+
+  @override
+  String treeDeleteDirectoryConsequence(String name) {
+    return 'Every note inside \"$name\" is deleted with it. They stay recoverable from local version history.';
+  }
+
+  @override
+  String get treeDeleteNoteConsequence =>
+      'It stays recoverable from local version history, but links elsewhere that pointed at it will no longer resolve.';
+
+  @override
+  String get treeCancel => 'Cancel';
+
+  @override
+  String get treeConfirm => 'OK';
+
+  @override
+  String treeDeleteNamed(String kind, String name) {
+    return 'Delete $kind \"$name\"?';
+  }
+
+  @override
+  String get treeDeletedContentRecoverable =>
+      'Deleted content remains recoverable from local version history.';
+
+  @override
+  String get treeWorkspaceRoot => '(workspace root)';
+
+  @override
+  String get treeMoveDestinationTitle => 'Move to which directory?';
+
+  @override
+  String treeActionFailed(String error) {
+    return 'The action failed: $error';
+  }
+
+  @override
+  String get codeCopy => 'Copy';
+
+  @override
+  String get codeCopied => 'Copied';
+
+  @override
+  String get recoveryLabel => 'Recovered';
+
+  @override
+  String get recoveryDrafts => 'Recovered drafts';
+
+  @override
+  String get recoveryDescription =>
+      'Unsaved changes were recovered from a previous session.';
+
+  @override
+  String get recoveryDismiss => 'Dismiss notice';
+
+  @override
+  String get writeEditNotSaved => 'Edit not saved yet';
+
+  @override
+  String writeEditNotSavedDescription(String error) {
+    return 'Your latest edit could not be saved yet ($error). Your text is still here; saving retries automatically.';
+  }
+
+  @override
+  String get writeStatusUnavailable => 'Write status unavailable';
+
+  @override
+  String get writeStatusUnavailableDescription =>
+      'The note\'s save status cannot be checked right now. Your latest edits may not be written to disk yet; checking continues automatically.';
+
+  @override
+  String get writeRevisionMismatch =>
+      'This note changed on disk while you were editing (revision mismatch), so your latest text could not be written.';
+
+  @override
+  String get writeDiskFull =>
+      'The disk is full. Changes cannot be saved until space is freed.';
+
+  @override
+  String writeFailed(String error) {
+    return 'Writing the note failed: $error';
+  }
+
+  @override
+  String get writeFailure => 'Write failure';
+
+  @override
+  String get writeReloadFromDisk => 'Reload from disk';
+
+  @override
+  String get writeReloadFromDiskTitle => 'Reload from disk?';
+
+  @override
+  String get writeReloadFromDiskDescription =>
+      'Reloading discards your buffered text — everything you have typed that was not written to disk. The file changed while you were editing, so reloading cannot keep it.';
+
+  @override
+  String get writeKeepEditing => 'Keep editing';
+
+  @override
+  String get writeDiscardAndReload => 'Discard and reload';
+
+  @override
+  String get searchIconLabel => 'Search';
+
+  @override
+  String get searchNotesHint => 'Search notes';
+
+  @override
+  String get searchTypePrompt => 'Type to search your notes';
+
+  @override
+  String get searchNoMatches => 'No matching notes';
+
+  @override
+  String get searchErrorLabel => 'Error';
+
+  @override
+  String get searchFailed => 'Search failed';
+
+  @override
+  String get searchRescanHint =>
+      'If this keeps happening, run \"Rescan workspace\" to rebuild the search index.';
 }

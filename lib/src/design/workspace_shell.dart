@@ -257,6 +257,8 @@ class _BurlWorkspaceShellState extends ConsumerState<BurlWorkspaceShell> {
                                   : _navigatorOpen = true,
                             ),
                             onSearch: () => setState(() => _searchOpen = true),
+                            onPreferences: () =>
+                                setState(() => _preferencesOpen = true),
                           ),
                         Expanded(
                           child: _EditorPane(
@@ -511,9 +513,10 @@ class _Rail extends StatelessWidget {
   const _Rail({
     required this.onOpen,
     required this.onSearch,
+    required this.onPreferences,
     this.openKey = const Key('shell-open-navigator'),
   });
-  final VoidCallback onOpen, onSearch;
+  final VoidCallback onOpen, onSearch, onPreferences;
   final Key openKey;
   @override
   Widget build(BuildContext context) {
@@ -543,8 +546,9 @@ class _Rail extends StatelessWidget {
             ),
             const Spacer(),
             IconButton(
+              key: const ValueKey('shell-rail-preferences'),
               tooltip: l10n.workspacePreferences,
-              onPressed: onOpen,
+              onPressed: onPreferences,
               icon: const Icon(LucideIcons.settings, size: 18),
             ),
             const SizedBox(height: 8),
@@ -1585,6 +1589,7 @@ class _PreferencesDrawer extends ConsumerWidget {
                                 ),
                                 IconButton(
                                   key: const ValueKey('preferences-close'),
+                                  tooltip: l10n.workspacePreferences,
                                   onPressed: onClose,
                                   icon: const Icon(LucideIcons.x, size: 17),
                                 ),
@@ -2074,6 +2079,7 @@ class _HistoryDrawerState extends State<_HistoryDrawer> {
                               ),
                               IconButton(
                                 key: const ValueKey('history-close'),
+                                tooltip: l10n.workspaceHistory,
                                 onPressed: widget.onClose,
                                 icon: const Icon(LucideIcons.x, size: 17),
                               ),
