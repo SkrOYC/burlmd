@@ -9,6 +9,8 @@ import 'package:burlmd/src/rust/draft.dart';
 import 'package:burlmd/src/rust/error.dart';
 import 'package:burlmd/src/rust/markdown/ast.dart';
 import 'package:burlmd/src/screens/workspace.dart';
+import 'package:flutter/foundation.dart'
+    show debugDefaultTargetPlatformOverride;
 import 'package:flutter/material.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -303,6 +305,11 @@ void main() {
     await tester.tap(find.byKey(const Key('shell-open-navigator')));
     await tester.pumpAndSettle();
     expect(find.text('Alpha'), findsOneWidget);
+    expect(find.byType(ModalBarrier), findsAtLeastNWidgets(1));
+    expect(
+      find.byKey(const ValueKey('workspace-modal-focus-scope')),
+      findsOneWidget,
+    );
     await tester.tapAt(const Offset(700, 400));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('navigator-scrim')), findsNothing);
@@ -521,6 +528,92 @@ void main() {
     },
   );
 
+  testWidgets('workspace overlays move and retain focus inside the modal', (
+    tester,
+  ) async {
+    final api = _MountingRustApi([_treeNode('a', 'Alpha')]);
+    await _pumpShell(tester, api);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('shell-search')),
+        matching: find.text('Ctrl+K'),
+      ),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(const ValueKey('shell-sync')));
+    await tester.pumpAndSettle();
+    final overlay = find.byKey(const ValueKey('sync-inspector'));
+    final scopeFinder = find.byKey(
+      const ValueKey('workspace-modal-focus-scope'),
+    );
+    expect(scopeFinder, findsOneWidget);
+    expect(
+      find.descendant(of: overlay, matching: find.byType(ModalBarrier)),
+      findsOneWidget,
+    );
+    final scope = FocusScope.of(tester.element(scopeFinder));
+    expect(scope.hasFocus, isTrue);
+    expect(FocusManager.instance.primaryFocus!.ancestors, contains(scope));
+
+    for (var index = 0; index < 12; index++) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+      expect(FocusManager.instance.primaryFocus!.ancestors, contains(scope));
+    }
+    await tester.tap(find.byKey(const ValueKey('sync-close')));
+    await tester.pumpAndSettle();
+
+    for (final surface in [
+      (
+        const Key('shell-search'),
+        const ValueKey('shell-search-overlay'),
+        const ValueKey('search-close'),
+      ),
+      (
+        const Key('shell-preferences'),
+        const ValueKey('preferences-overlay'),
+        const ValueKey('preferences-close'),
+      ),
+      (
+        const Key('shell-history'),
+        const ValueKey('history-overlay'),
+        const ValueKey('history-close'),
+      ),
+    ]) {
+      await tester.tap(find.byKey(surface.$1));
+      await tester.pumpAndSettle();
+      final modal = find.byKey(surface.$2);
+      expect(
+        find.byKey(const ValueKey('workspace-modal-focus-scope')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: modal, matching: find.byType(ModalBarrier)),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(surface.$3));
+      await tester.pumpAndSettle();
+    }
+  });
+
+  testWidgets('workspace search shortcut label follows the platform', (
+    tester,
+  ) async {
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+    await _pumpShell(tester, _MountingRustApi([_treeNode('a', 'Alpha')]));
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('shell-search')),
+        matching: find.text('⌘K'),
+      ),
+      findsOneWidget,
+    );
+    debugDefaultTargetPlatformOverride = null;
+    await tester.pump();
+  });
+
   testWidgets('early shell shortcuts preserve a primary-focused raw editor', (
     tester,
   ) async {
@@ -557,36 +650,37 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    void expectRawText() {
-      expect(
-        tester.widget<EditableText>(raw).controller.text,
-        'retained draft',
-      );
+    Future<void> refocusRawEditor() async {
+      if (raw.evaluate().isEmpty) {
+        await tester.tap(find.byKey(const ValueKey('promote-block-0')));
+        await tester.pump();
+      }
+      await tester.tap(raw);
     }
 
     await sendPrimary(LogicalKeyboardKey.keyK);
     expect(find.byKey(const ValueKey('search-palette')), findsOneWidget);
-    expectRawText();
+    expect(raw, findsNothing);
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();
 
-    await tester.tap(raw);
+    await refocusRawEditor();
     await sendPrimary(LogicalKeyboardKey.keyH);
     expect(find.byKey(const ValueKey('history-drawer')), findsOneWidget);
-    expectRawText();
+    expect(raw, findsNothing);
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();
 
-    await tester.tap(raw);
+    await refocusRawEditor();
     await sendPrimary(LogicalKeyboardKey.comma);
     expect(find.byKey(const ValueKey('preferences-drawer')), findsOneWidget);
-    expectRawText();
+    expect(raw, findsNothing);
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();
 
-    await tester.tap(raw);
+    await refocusRawEditor();
     await sendPrimary(LogicalKeyboardKey.keyW);
-    expectRawText();
+    expect(raw, findsOneWidget);
     await tester.enterText(raw, 'ordinary typing');
     expect(tester.widget<EditableText>(raw).controller.text, 'ordinary typing');
   });

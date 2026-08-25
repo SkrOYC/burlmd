@@ -425,7 +425,7 @@ class _NavigatorPane extends StatelessWidget {
               icon: LucideIcons.search,
               label: l10n.workspaceSearchNotes,
               tooltip: l10n.workspaceSearchNotesTooltip,
-              trailing: '⌘K',
+              trailing: _searchShortcutLabel(l10n),
               onPressed: onSearch,
             ),
           ),
@@ -535,45 +535,32 @@ class _NavigatorOverlay extends StatelessWidget {
   final VoidCallback onClose, onSearch, onPreferences, onSync;
   final Widget rescanButton;
   @override
-  Widget build(BuildContext context) => Positioned.fill(
+  Widget build(BuildContext context) => _ShellModalOverlay(
     key: const ValueKey('shell-navigator-overlay'),
-    child: Stack(
-      children: [
-        Positioned.fill(
-          child: BurlFadeEntrance(
-            duration: BurlMotion.drawer,
-            child: GestureDetector(
-              key: const Key('navigator-scrim'),
-              onTap: onClose,
-              behavior: HitTestBehavior.opaque,
-              child: const ColoredBox(color: Color(0x66000000)),
+    onClose: onClose,
+    barrierDuration: BurlMotion.drawer,
+    child: Align(
+      alignment: Alignment.centerLeft,
+      child: BurlScaleFadeEntrance(
+        child: Material(
+          color: Colors.transparent,
+          child: SizedBox(
+            key: const ValueKey('navigator-pane'),
+            width: 320,
+            child: _NavigatorPane(
+              workspaceName: workspaceName,
+              onSearch: () {
+                onClose();
+                onSearch();
+              },
+              onPreferences: onPreferences,
+              onSync: onSync,
+              rescanButton: rescanButton,
+              onNoteSelected: onClose,
             ),
           ),
         ),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: BurlScaleFadeEntrance(
-            child: Material(
-              color: Colors.transparent,
-              child: SizedBox(
-                key: const ValueKey('navigator-pane'),
-                width: 320,
-                child: _NavigatorPane(
-                  workspaceName: workspaceName,
-                  onSearch: () {
-                    onClose();
-                    onSearch();
-                  },
-                  onPreferences: onPreferences,
-                  onSync: onSync,
-                  rescanButton: rescanButton,
-                  onNoteSelected: onClose,
-                ),
-              ),
-            ),
-          ),
-        ),
-      ],
+      ),
     ),
   );
 }
@@ -1221,6 +1208,11 @@ class _FilenameChip extends StatelessWidget {
 
 String _filename(String path) => path.split('/').last;
 
+String _searchShortcutLabel(AppLocalizations l10n) =>
+    defaultTargetPlatform == TargetPlatform.macOS
+    ? l10n.workspaceSearchShortcutMacos
+    : l10n.workspaceSearchShortcutControl;
+
 String _breadcrumb(String path, AppLocalizations l10n) {
   final parts = path.split('/');
   return parts.length > 1
@@ -1387,57 +1379,47 @@ class _SearchPalette extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.burlColors;
     final l10n = AppLocalizations.of(context)!;
-    return Positioned.fill(
+    return _ShellModalOverlay(
       key: const ValueKey('shell-search-overlay'),
-      child: BurlScaleFadeEntrance(
-        child: Material(
-          color: Colors.transparent,
-          child: GestureDetector(
-            onTap: onClose,
-            child: ColoredBox(
-              color: const Color(0x88000000),
-              child: Align(
-                alignment: const Alignment(0, -.68),
-                child: GestureDetector(
-                  onTap: () {},
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 672),
-                    child: Container(
-                      key: const Key('search-palette'),
-                      margin: const EdgeInsets.all(16),
-                      height: 480,
-                      decoration: BoxDecoration(
-                        color: c.surfaceRaised,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: c.borderStrong),
-                        boxShadow: const [
-                          BoxShadow(color: Color(0x55000000), blurRadius: 28),
-                        ],
-                      ),
-                      child: Stack(
-                        children: [
-                          Positioned.fill(
-                            child: SearchPanel(
-                              resultLimit: 25,
-                              onResultSelected: onClose,
-                              onDismiss: onClose,
-                            ),
-                          ),
-                          Positioned(
-                            top: 3,
-                            right: 3,
-                            child: IconButton(
-                              key: const ValueKey('search-close'),
-                              tooltip: l10n.workspaceCloseSearch,
-                              onPressed: onClose,
-                              icon: const Icon(LucideIcons.x, size: 15),
-                            ),
-                          ),
-                        ],
-                      ),
+      onClose: onClose,
+      barrierColor: const Color(0x88000000),
+      child: Align(
+        alignment: const Alignment(0, -.68),
+        child: BurlScaleFadeEntrance(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 672),
+            child: Container(
+              key: const Key('search-palette'),
+              margin: const EdgeInsets.all(16),
+              height: 480,
+              decoration: BoxDecoration(
+                color: c.surfaceRaised,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: c.borderStrong),
+                boxShadow: const [
+                  BoxShadow(color: Color(0x55000000), blurRadius: 28),
+                ],
+              ),
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: SearchPanel(
+                      resultLimit: 25,
+                      onResultSelected: onClose,
+                      onDismiss: onClose,
                     ),
                   ),
-                ),
+                  Positioned(
+                    top: 3,
+                    right: 3,
+                    child: IconButton(
+                      key: const ValueKey('search-close'),
+                      tooltip: l10n.workspaceCloseSearch,
+                      onPressed: onClose,
+                      icon: const Icon(LucideIcons.x, size: 15),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -1518,144 +1500,127 @@ class _PreferencesDrawer extends ConsumerWidget {
         ],
       ),
     );
-    return Positioned.fill(
+    return _ShellModalOverlay(
       key: const ValueKey('preferences-overlay'),
-      child: Material(
-        color: Colors.transparent,
-        child: Stack(
-          children: [
-            Positioned.fill(
-              child: BurlFadeEntrance(
-                duration: BurlMotion.drawer,
-                child: GestureDetector(
-                  key: const ValueKey('preferences-scrim'),
-                  onTap: onClose,
-                  child: const ColoredBox(color: Color(0x66000000)),
-                ),
-              ),
-            ),
-            Align(
-              alignment: Alignment.centerRight,
-              child: BurlScaleFadeEntrance(
-                child: Material(
-                  key: const ValueKey('preferences-drawer'),
-                  color: c.surfaceRaised,
-                  child: SizedBox(
-                    width: math.min(448, MediaQuery.sizeOf(context).width),
-                    child: SafeArea(
-                      child: Column(
+      onClose: onClose,
+      barrierDuration: BurlMotion.drawer,
+      child: Align(
+        alignment: Alignment.centerRight,
+        child: BurlScaleFadeEntrance(
+          child: Material(
+            key: const ValueKey('preferences-drawer'),
+            color: c.surfaceRaised,
+            child: SizedBox(
+              width: math.min(448, MediaQuery.sizeOf(context).width),
+              child: SafeArea(
+                child: Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.all(18),
+                      child: Row(
                         children: [
-                          Padding(
-                            padding: const EdgeInsets.all(18),
-                            child: Row(
-                              children: [
-                                const Icon(LucideIcons.settings, size: 17),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    l10n.workspaceEditorPreferences,
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ),
-                                IconButton(
-                                  key: const ValueKey('preferences-close'),
-                                  tooltip: l10n.workspacePreferences,
-                                  onPressed: onClose,
-                                  icon: const Icon(LucideIcons.x, size: 17),
-                                ),
-                              ],
-                            ),
-                          ),
-                          Divider(height: 1, color: c.borderSubtle),
+                          const Icon(LucideIcons.settings, size: 17),
+                          const SizedBox(width: 8),
                           Expanded(
-                            child: ListView(
-                              padding: const EdgeInsets.all(20),
-                              children: [
-                                section(
-                                  l10n.workspaceAppearanceTheme,
-                                  options(
-                                    'theme',
-                                    BurlThemePreference.values,
-                                    p.theme,
-                                    (v) => _themePreferenceLabel(v, l10n),
-                                    ref
-                                        .read(burlPreferencesProvider.notifier)
-                                        .setTheme,
-                                  ),
-                                ),
-                                section(
-                                  l10n.workspaceBaseReadingSize,
-                                  options(
-                                    'font-scale',
-                                    BurlFontScale.values,
-                                    p.fontScale,
-                                    (v) => _fontScaleLabel(v, l10n),
-                                    ref
-                                        .read(burlPreferencesProvider.notifier)
-                                        .setFontScale,
-                                  ),
-                                ),
-                                section(
-                                  l10n.workspaceProseLineMeasure,
-                                  options(
-                                    'measure',
-                                    BurlMeasure.values,
-                                    p.measure,
-                                    (v) => _measureLabel(v, l10n),
-                                    ref
-                                        .read(burlPreferencesProvider.notifier)
-                                        .setMeasure,
-                                  ),
-                                ),
-                                section(
-                                  l10n.workspaceDesktopPlatformChrome,
-                                  options(
-                                    'platform-chrome',
-                                    BurlPlatformChrome.values,
-                                    p.platformChrome,
-                                    (v) => _platformChromeLabel(v, l10n),
-                                    ref
-                                        .read(burlPreferencesProvider.notifier)
-                                        .setPlatformChrome,
-                                  ),
-                                ),
-                                SwitchListTile(
-                                  key: const ValueKey('preferences-focus-mode'),
-                                  contentPadding: EdgeInsets.zero,
-                                  value: p.focusMode,
-                                  onChanged: ref
-                                      .read(burlPreferencesProvider.notifier)
-                                      .setFocusMode,
-                                  title: Text(l10n.workspaceFocusMode),
-                                  subtitle: Text(
-                                    l10n.workspaceFocusModeDescription,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.all(14),
-                            child: Align(
-                              alignment: Alignment.centerRight,
-                              child: FilledButton(
-                                key: const ValueKey('preferences-done'),
-                                onPressed: onClose,
-                                child: Text(l10n.workspaceDone),
+                            child: Text(
+                              l10n.workspaceEditorPreferences,
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
                               ),
                             ),
+                          ),
+                          IconButton(
+                            key: const ValueKey('preferences-close'),
+                            tooltip: l10n.workspacePreferences,
+                            onPressed: onClose,
+                            icon: const Icon(LucideIcons.x, size: 17),
                           ),
                         ],
                       ),
                     ),
-                  ),
+                    Divider(height: 1, color: c.borderSubtle),
+                    Expanded(
+                      child: ListView(
+                        padding: const EdgeInsets.all(20),
+                        children: [
+                          section(
+                            l10n.workspaceAppearanceTheme,
+                            options(
+                              'theme',
+                              BurlThemePreference.values,
+                              p.theme,
+                              (v) => _themePreferenceLabel(v, l10n),
+                              ref
+                                  .read(burlPreferencesProvider.notifier)
+                                  .setTheme,
+                            ),
+                          ),
+                          section(
+                            l10n.workspaceBaseReadingSize,
+                            options(
+                              'font-scale',
+                              BurlFontScale.values,
+                              p.fontScale,
+                              (v) => _fontScaleLabel(v, l10n),
+                              ref
+                                  .read(burlPreferencesProvider.notifier)
+                                  .setFontScale,
+                            ),
+                          ),
+                          section(
+                            l10n.workspaceProseLineMeasure,
+                            options(
+                              'measure',
+                              BurlMeasure.values,
+                              p.measure,
+                              (v) => _measureLabel(v, l10n),
+                              ref
+                                  .read(burlPreferencesProvider.notifier)
+                                  .setMeasure,
+                            ),
+                          ),
+                          section(
+                            l10n.workspaceDesktopPlatformChrome,
+                            options(
+                              'platform-chrome',
+                              BurlPlatformChrome.values,
+                              p.platformChrome,
+                              (v) => _platformChromeLabel(v, l10n),
+                              ref
+                                  .read(burlPreferencesProvider.notifier)
+                                  .setPlatformChrome,
+                            ),
+                          ),
+                          SwitchListTile(
+                            key: const ValueKey('preferences-focus-mode'),
+                            contentPadding: EdgeInsets.zero,
+                            value: p.focusMode,
+                            onChanged: ref
+                                .read(burlPreferencesProvider.notifier)
+                                .setFocusMode,
+                            title: Text(l10n.workspaceFocusMode),
+                            subtitle: Text(l10n.workspaceFocusModeDescription),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.all(14),
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: FilledButton(
+                          key: const ValueKey('preferences-done'),
+                          onPressed: onClose,
+                          child: Text(l10n.workspaceDone),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -1990,265 +1955,235 @@ class _HistoryDrawerState extends State<_HistoryDrawer> {
         ? 0
         : _selected.clamp(0, snapshots.length - 1);
     final snapshot = snapshots.isEmpty ? _snapshots.first : snapshots[selected];
-    return Positioned.fill(
+    return _ShellModalOverlay(
       key: const ValueKey('history-overlay'),
-      child: Material(
-        color: Colors.transparent,
-        child: Stack(
-          children: [
-            Positioned.fill(
-              child: BurlFadeEntrance(
-                duration: BurlMotion.drawer,
-                child: GestureDetector(
-                  key: const ValueKey('history-scrim'),
-                  onTap: widget.onClose,
-                  child: const ColoredBox(color: Color(0x66000000)),
-                ),
-              ),
-            ),
-            Align(
-              alignment: Alignment.centerRight,
-              child: BurlScaleFadeEntrance(
-                child: Container(
-                  key: const ValueKey('history-drawer'),
-                  width: math.min(576, MediaQuery.sizeOf(context).width),
-                  color: c.surfaceRaised,
-                  child: SafeArea(
-                    child: Column(
+      onClose: widget.onClose,
+      barrierDuration: BurlMotion.drawer,
+      child: Align(
+        alignment: Alignment.centerRight,
+        child: BurlScaleFadeEntrance(
+          child: Container(
+            key: const ValueKey('history-drawer'),
+            width: math.min(576, MediaQuery.sizeOf(context).width),
+            color: c.surfaceRaised,
+            child: SafeArea(
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.all(18),
+                    child: Row(
                       children: [
-                        Padding(
-                          padding: const EdgeInsets.all(18),
-                          child: Row(
-                            children: [
-                              const Icon(
-                                LucideIcons.rotate_ccw_clock,
-                                size: 17,
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      l10n.historyTitle,
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                    Text(
-                                      l10n.workspaceBreadcrumb(
-                                        l10n.workspaceDefaultPath,
-                                      ),
-                                      style: TextStyle(
-                                        fontFamily: 'monospace',
-                                        fontSize: 10,
-                                        color: c.textMuted,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              IconButton(
-                                key: const ValueKey('history-close'),
-                                tooltip: l10n.workspaceHistory,
-                                onPressed: widget.onClose,
-                                icon: const Icon(LucideIcons.x, size: 17),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Divider(height: 1, color: c.borderSubtle),
+                        const Icon(LucideIcons.rotate_ccw_clock, size: 17),
+                        const SizedBox(width: 8),
                         Expanded(
-                          child: _visualFixture && snapshots.isEmpty
-                              ? const Center(
-                                  child: Text(
-                                    'No snapshots in this fixture state.',
-                                    key: ValueKey('history-fixture-empty'),
-                                  ),
-                                )
-                              : _visualFixture
-                              ? Row(
-                                  children: [
-                                    SizedBox(
-                                      width: 190,
-                                      child: ListView(
-                                        padding: const EdgeInsets.all(8),
-                                        children: [
-                                          if (_visualFixture)
-                                            Wrap(
-                                              children: [
-                                                for (final entry in const [
-                                                  (0, 'zero'),
-                                                  (1, 'one'),
-                                                  (3, 'many'),
-                                                ])
-                                                  TextButton(
-                                                    key: ValueKey(
-                                                      'history-fixture-${entry.$2}',
-                                                    ),
-                                                    onPressed: () => setState(
-                                                      () {
-                                                        _fixtureCount =
-                                                            entry.$1;
-                                                        _selected = 0;
-                                                        _confirmRestore = false;
-                                                        _restored = false;
-                                                      },
-                                                    ),
-                                                    child: Text(entry.$2),
-                                                  ),
-                                              ],
-                                            ),
-                                          Text(
-                                            '${snapshots.length} SNAPSHOTS',
-                                            style: TextStyle(
-                                              fontSize: 10,
-                                              letterSpacing: 1,
-                                              color: c.textMuted,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 6),
-                                          for (
-                                            var index = 0;
-                                            index < snapshots.length;
-                                            index++
-                                          )
-                                            _HistorySnapshotTile(
-                                              snapshot: snapshots[index],
-                                              selected: index == selected,
-                                              onTap: () => setState(() {
-                                                _selected = index;
-                                                _confirmRestore = false;
-                                                _restored = false;
-                                              }),
-                                            ),
-                                        ],
-                                      ),
-                                    ),
-                                    VerticalDivider(
-                                      width: 1,
-                                      color: c.borderSubtle,
-                                    ),
-                                    Expanded(
-                                      child: ListView(
-                                        padding: const EdgeInsets.all(16),
-                                        children: [
-                                          _HistoryMetadataCard(
-                                            snapshot: snapshot,
-                                          ),
-                                          const SizedBox(height: 16),
-                                          Text(
-                                            'WORKING TREE COMPARISON',
-                                            style: TextStyle(
-                                              fontSize: 10,
-                                              letterSpacing: 1,
-                                              color: c.textMuted,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 8),
-                                          _HistoryDiffCard(snapshot: snapshot),
-                                          const SizedBox(height: 16),
-                                          if (_restored)
-                                            Column(
-                                              key: const ValueKey(
-                                                'history-restore-resolved',
-                                              ),
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
-                                              children: [
-                                                Text(
-                                                  'Restored ${snapshot.hash}',
-                                                ),
-                                                TextButton(
-                                                  key: const ValueKey(
-                                                    'history-restore-reset',
-                                                  ),
-                                                  onPressed: () => setState(
-                                                    () => _restored = false,
-                                                  ),
-                                                  child: const Text('Reset'),
-                                                ),
-                                              ],
-                                            )
-                                          else if (_confirmRestore)
-                                            _RestoreConfirmation(
-                                              snapshot: snapshot,
-                                              onCancel: () => setState(
-                                                () => _confirmRestore = false,
-                                              ),
-                                              onConfirm: () => setState(() {
-                                                _confirmRestore = false;
-                                                _restored = true;
-                                              }),
-                                            )
-                                          else
-                                            OutlinedButton.icon(
-                                              key: const ValueKey(
-                                                'history-restore-request',
-                                              ),
-                                              onPressed: () => setState(() {
-                                                _confirmRestore = true;
-                                                _restored = false;
-                                              }),
-                                              icon: const Icon(
-                                                LucideIcons.rotate_ccw,
-                                                size: 15,
-                                              ),
-                                              label: Text(
-                                                'Restore note to ${snapshot.hash}',
-                                              ),
-                                            ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                )
-                              : Center(
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(28),
-                                    child: Text(
-                                      l10n.historyNoSnapshotsAvailable,
-                                      key: const ValueKey(
-                                        'history-unavailable',
-                                      ),
-                                      textAlign: TextAlign.center,
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: c.textSecondary,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.all(14),
-                          child: Row(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                l10n.historyStoredInGit,
+                                l10n.historyTitle,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              Text(
+                                l10n.workspaceBreadcrumb(
+                                  l10n.workspaceDefaultPath,
+                                ),
                                 style: TextStyle(
                                   fontFamily: 'monospace',
                                   fontSize: 10,
                                   color: c.textMuted,
                                 ),
                               ),
-                              const Spacer(),
-                              FilledButton(
-                                key: const ValueKey('history-done'),
-                                onPressed: widget.onClose,
-                                child: Text(l10n.workspaceDone),
-                              ),
                             ],
                           ),
+                        ),
+                        IconButton(
+                          key: const ValueKey('history-close'),
+                          tooltip: l10n.workspaceHistory,
+                          onPressed: widget.onClose,
+                          icon: const Icon(LucideIcons.x, size: 17),
                         ),
                       ],
                     ),
                   ),
-                ),
+                  Divider(height: 1, color: c.borderSubtle),
+                  Expanded(
+                    child: _visualFixture && snapshots.isEmpty
+                        ? const Center(
+                            child: Text(
+                              'No snapshots in this fixture state.',
+                              key: ValueKey('history-fixture-empty'),
+                            ),
+                          )
+                        : _visualFixture
+                        ? Row(
+                            children: [
+                              SizedBox(
+                                width: 190,
+                                child: ListView(
+                                  padding: const EdgeInsets.all(8),
+                                  children: [
+                                    if (_visualFixture)
+                                      Wrap(
+                                        children: [
+                                          for (final entry in const [
+                                            (0, 'zero'),
+                                            (1, 'one'),
+                                            (3, 'many'),
+                                          ])
+                                            TextButton(
+                                              key: ValueKey(
+                                                'history-fixture-${entry.$2}',
+                                              ),
+                                              onPressed: () => setState(() {
+                                                _fixtureCount = entry.$1;
+                                                _selected = 0;
+                                                _confirmRestore = false;
+                                                _restored = false;
+                                              }),
+                                              child: Text(entry.$2),
+                                            ),
+                                        ],
+                                      ),
+                                    Text(
+                                      '${snapshots.length} SNAPSHOTS',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        letterSpacing: 1,
+                                        color: c.textMuted,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    for (
+                                      var index = 0;
+                                      index < snapshots.length;
+                                      index++
+                                    )
+                                      _HistorySnapshotTile(
+                                        snapshot: snapshots[index],
+                                        selected: index == selected,
+                                        onTap: () => setState(() {
+                                          _selected = index;
+                                          _confirmRestore = false;
+                                          _restored = false;
+                                        }),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                              VerticalDivider(width: 1, color: c.borderSubtle),
+                              Expanded(
+                                child: ListView(
+                                  padding: const EdgeInsets.all(16),
+                                  children: [
+                                    _HistoryMetadataCard(snapshot: snapshot),
+                                    const SizedBox(height: 16),
+                                    Text(
+                                      'WORKING TREE COMPARISON',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        letterSpacing: 1,
+                                        color: c.textMuted,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    _HistoryDiffCard(snapshot: snapshot),
+                                    const SizedBox(height: 16),
+                                    if (_restored)
+                                      Column(
+                                        key: const ValueKey(
+                                          'history-restore-resolved',
+                                        ),
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text('Restored ${snapshot.hash}'),
+                                          TextButton(
+                                            key: const ValueKey(
+                                              'history-restore-reset',
+                                            ),
+                                            onPressed: () => setState(
+                                              () => _restored = false,
+                                            ),
+                                            child: const Text('Reset'),
+                                          ),
+                                        ],
+                                      )
+                                    else if (_confirmRestore)
+                                      _RestoreConfirmation(
+                                        snapshot: snapshot,
+                                        onCancel: () => setState(
+                                          () => _confirmRestore = false,
+                                        ),
+                                        onConfirm: () => setState(() {
+                                          _confirmRestore = false;
+                                          _restored = true;
+                                        }),
+                                      )
+                                    else
+                                      OutlinedButton.icon(
+                                        key: const ValueKey(
+                                          'history-restore-request',
+                                        ),
+                                        onPressed: () => setState(() {
+                                          _confirmRestore = true;
+                                          _restored = false;
+                                        }),
+                                        icon: const Icon(
+                                          LucideIcons.rotate_ccw,
+                                          size: 15,
+                                        ),
+                                        label: Text(
+                                          'Restore note to ${snapshot.hash}',
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          )
+                        : Center(
+                            child: Padding(
+                              padding: const EdgeInsets.all(28),
+                              child: Text(
+                                l10n.historyNoSnapshotsAvailable,
+                                key: const ValueKey('history-unavailable'),
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: c.textSecondary,
+                                ),
+                              ),
+                            ),
+                          ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Row(
+                      children: [
+                        Text(
+                          l10n.historyStoredInGit,
+                          style: TextStyle(
+                            fontFamily: 'monospace',
+                            fontSize: 10,
+                            color: c.textMuted,
+                          ),
+                        ),
+                        const Spacer(),
+                        FilledButton(
+                          key: const ValueKey('history-done'),
+                          onPressed: widget.onClose,
+                          child: Text(l10n.workspaceDone),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -2479,6 +2414,73 @@ class _RestoreConfirmation extends StatelessWidget {
   }
 }
 
+class _ShellModalOverlay extends StatefulWidget {
+  const _ShellModalOverlay({
+    super.key,
+    required this.onClose,
+    required this.child,
+    this.barrierColor = const Color(0x66000000),
+    this.barrierDuration,
+  });
+
+  final VoidCallback onClose;
+  final Widget child;
+  final Color barrierColor;
+  final Duration? barrierDuration;
+
+  @override
+  State<_ShellModalOverlay> createState() => _ShellModalOverlayState();
+}
+
+class _ShellModalOverlayState extends State<_ShellModalOverlay> {
+  late final FocusScopeNode _focusScope = FocusScopeNode(
+    debugLabel: 'workspace modal',
+    traversalEdgeBehavior: TraversalEdgeBehavior.closedLoop,
+  );
+
+  @override
+  void dispose() {
+    _focusScope.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    return Positioned.fill(
+      child: BlockSemantics(
+        child: FocusScope.withExternalFocusNode(
+          key: const ValueKey('workspace-modal-focus-scope'),
+          focusScopeNode: _focusScope,
+          autofocus: true,
+          child: FocusTraversalGroup(
+            child: Focus(
+              autofocus: true,
+              skipTraversal: true,
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: BurlFadeEntrance(
+                      duration: widget.barrierDuration ?? BurlMotion.overlay,
+                      child: ModalBarrier(
+                        color: widget.barrierColor,
+                        onDismiss: widget.onClose,
+                        semanticsLabel: l10n.workspaceDismissOverlay,
+                        barrierSemanticsDismissible: true,
+                      ),
+                    ),
+                  ),
+                  widget.child,
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _CenteredOverlay extends StatelessWidget {
   const _CenteredOverlay({
     super.key,
@@ -2490,33 +2492,21 @@ class _CenteredOverlay extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.burlColors;
-    return Positioned.fill(
-      child: BurlFadeEntrance(
-        child: Material(
-          color: Colors.transparent,
-          child: GestureDetector(
-            onTap: onClose,
-            child: ColoredBox(
-              color: const Color(0x66000000),
-              child: Center(
-                child: GestureDetector(
-                  onTap: () {},
-                  child: BurlScaleFadeEntrance(
-                    child: Container(
-                      width: 384,
-                      margin: const EdgeInsets.all(20),
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: c.surfaceRaised,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: c.borderStrong),
-                      ),
-                      child: child,
-                    ),
-                  ),
-                ),
-              ),
+    return _ShellModalOverlay(
+      key: key,
+      onClose: onClose,
+      child: Center(
+        child: BurlScaleFadeEntrance(
+          child: Container(
+            width: 384,
+            margin: const EdgeInsets.all(20),
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: c.surfaceRaised,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: c.borderStrong),
             ),
+            child: child,
           ),
         ),
       ),
