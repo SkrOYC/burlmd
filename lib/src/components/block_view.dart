@@ -1,10 +1,14 @@
+import 'dart:async';
+
 import 'package:burlmd/l10n/generated/app_localizations.dart';
+import 'package:burlmd/src/design/burl_theme.dart';
 import 'package:burlmd/src/rust/markdown/ast.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart'
     show BoxHitTestResult, RenderParagraph, RenderProxyBox, SelectionRegistrar;
 import 'package:flutter/services.dart';
+import 'package:flutter_lucide/flutter_lucide.dart';
 
 /// Formatted rendering for one Block, shared by every state a Block can be
 /// in (`EDIT-F002`, CAP-EDIT-01): unfocused Blocks render through
@@ -32,16 +36,23 @@ import 'package:flutter/services.dart';
 /// pane's light background — so the ink color both presentations share is
 /// pinned here to match what the formatted path's theme inheritance already
 /// produced (Material's light-scheme on-surface ink).
-const Color _blockInk = Color(0xff1c1b1f);
-
-TextStyle blockTextStyle(AstNode node) => switch (node) {
+TextStyle blockTextStyle(
+  AstNode node, {
+  BurlFontScale fontScale = BurlFontScale.compact,
+}) => switch (node) {
   // Headings scale by level exactly as the read-only path always did, but
   // now with an explicit height so the promoted field matches.
   AstNode_Heading(:final level) => TextStyle(
-    fontSize: (28 - level * 2).toDouble(),
+    fontSize:
+        switch (level) {
+          1 => 24.0,
+          2 => 18.0,
+          _ => 16.0,
+        } *
+        fontScale.size /
+        BurlFontScale.compact.size,
     fontWeight: FontWeight.bold,
-    height: 1.3,
-    color: _blockInk,
+    height: level == 1 ? 1.25 : 1.3,
   ),
   // A focused code Block shows its fence lines too, in the same monospace
   // face the rendered form uses.
@@ -53,7 +64,7 @@ TextStyle blockTextStyle(AstNode node) => switch (node) {
   ),
   // Everything else — paragraphs, list-item bodies, quote bodies, the raw
   // source of a focused thematic break — shares the body style.
-  _ => const TextStyle(fontSize: 14, height: 1.45, color: _blockInk),
+  _ => TextStyle(fontSize: fontScale.size, height: fontScale.height),
 };
 
 /// The container decoration around a Block's text surface, shared by BOTH
@@ -75,21 +86,254 @@ TextStyle blockTextStyle(AstNode node) => switch (node) {
 /// returned as-is; ThematicBreak's rule-to-`---` change is intrinsic content
 /// movement CAP-EDIT-01 sanctions (`SPK-EDIT-F001` §4), not decoration drift.
 Widget blockContainer(AstNode node, Widget child) => switch (node) {
-  AstNode_CodeBlock() => Container(
-    width: double.infinity,
-    padding: const EdgeInsets.all(8),
-    color: Colors.black87,
-    child: child,
-  ),
-  AstNode_Blockquote() => Container(
-    padding: const EdgeInsets.only(left: 12),
-    decoration: const BoxDecoration(
-      border: Border(left: BorderSide(width: 3, color: Colors.grey)),
-    ),
-    child: child,
+  AstNode_CodeBlock() => child,
+  AstNode_Blockquote() => Builder(
+    builder: (context) {
+      final colors = _colors(context);
+      return Container(
+        padding: const EdgeInsets.only(left: 12),
+        decoration: BoxDecoration(
+          color: colors.accentSubtle,
+          border: Border(left: BorderSide(width: 2, color: colors.accent)),
+        ),
+        child: DefaultTextStyle.merge(
+          style: TextStyle(
+            fontStyle: FontStyle.italic,
+            color: colors.textSecondary,
+          ),
+          child: child,
+        ),
+      );
+    },
   ),
   _ => child,
 };
+
+/// The authoritative visual slot for a fenced code Block.
+///
+/// Promotion keeps this widget mounted and changes only [editor]. Language,
+/// copy feedback, padding, borders, and total geometry therefore cannot drift
+/// between formatted and raw states. The invisible formatted body remains the
+/// focused state's layout baseline, so visible fences may scroll but can
+/// never move the caret or downstream Blocks.
+class CodeBlockSlot extends StatefulWidget {
+  const CodeBlockSlot({
+    super.key,
+    required this.node,
+    this.editor,
+    this.fontScale = BurlFontScale.compact,
+  });
+
+  final AstNode_CodeBlock node;
+  final Widget? editor;
+  final BurlFontScale fontScale;
+
+  @override
+  State<CodeBlockSlot> createState() => _CodeBlockSlotState();
+}
+
+class _CodeBlockSlotState extends State<CodeBlockSlot> {
+  Timer? _copyReset;
+  var _copied = false;
+
+  @override
+  void dispose() {
+    _copyReset?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _copy() async {
+    await Clipboard.setData(ClipboardData(text: widget.node.code));
+    if (!mounted) return;
+    _copyReset?.cancel();
+    setState(() => _copied = true);
+    _copyReset = Timer(const Duration(milliseconds: 1800), () {
+      if (mounted) setState(() => _copied = false);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final colors = _colors(context);
+    final border = dark ? const Color(0xff2a2a30) : const Color(0xffe2dfd6);
+    final bodyColor = dark ? const Color(0xff141416) : const Color(0xfff6f5f0);
+    final headerColor = dark
+        ? const Color(0xff18181c)
+        : const Color(0xffefece4);
+    final ink = dark ? const Color(0xffe4e4e7) : const Color(0xff171717);
+    final duration = MediaQuery.disableAnimationsOf(context)
+        ? Duration.zero
+        : const Duration(milliseconds: 120);
+    final formattedBody = Text(
+      widget.node.code,
+      key: const ValueKey('code-block-source'),
+      style: blockTextStyle(
+        widget.node,
+        fontScale: widget.fontScale,
+      ).copyWith(color: ink),
+    );
+    final body = widget.editor == null
+        ? formattedBody
+        : Stack(
+            children: [
+              SelectionContainer.disabled(
+                child: IgnorePointer(
+                  child: ExcludeSemantics(
+                    child: Opacity(opacity: 0, child: formattedBody),
+                  ),
+                ),
+              ),
+              Positioned.fill(child: widget.editor!),
+            ],
+          );
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 14),
+      child: DecoratedBox(
+        key: const ValueKey('code-block-slot'),
+        decoration: BoxDecoration(
+          color: bodyColor,
+          border: Border.all(color: border),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(7),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SelectionContainer.disabled(
+                child: _NonDocumentText(
+                  child: Container(
+                    key: const ValueKey('code-block-header'),
+                    height: 30,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    decoration: BoxDecoration(
+                      color: headerColor,
+                      border: Border(bottom: BorderSide(color: border)),
+                    ),
+                    child: Row(
+                      children: [
+                        Text(
+                          widget.node.language ?? 'code',
+                          key: const ValueKey('code-block-language'),
+                          style: TextStyle(
+                            color: colors.textSecondary,
+                            fontFamily: 'monospace',
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            height: 1,
+                          ),
+                        ),
+                        const Spacer(),
+                        SizedBox(
+                          width: 80,
+                          height: 28,
+                          child: TextButton(
+                            key: const ValueKey('code-block-copy'),
+                            style: TextButton.styleFrom(
+                              padding: EdgeInsets.zero,
+                              minimumSize: const Size(80, 28),
+                              foregroundColor: _copied
+                                  ? colors.accent
+                                  : colors.textSecondary,
+                              textStyle: const TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w400,
+                              ),
+                            ),
+                            onPressed: _copy,
+                            child: AnimatedSwitcher(
+                              duration: duration,
+                              switchInCurve: const Cubic(0.16, 1, 0.3, 1),
+                              switchOutCurve: const Cubic(0.16, 1, 0.3, 1),
+                              transitionBuilder: (child, animation) =>
+                                  FadeTransition(
+                                    opacity: animation,
+                                    child: child,
+                                  ),
+                              child: Row(
+                                key: ValueKey(_copied),
+                                mainAxisAlignment: MainAxisAlignment.end,
+                                children: [
+                                  Icon(
+                                    _copied
+                                        ? LucideIcons.check
+                                        : LucideIcons.copy,
+                                    size: 12,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(_copied ? 'Copied' : 'Copy'),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              Container(
+                key: const ValueKey('code-block-body'),
+                constraints: const BoxConstraints(minHeight: 40),
+                padding: const EdgeInsets.all(12),
+                color: bodyColor,
+                child: body,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Decorative Block text that is outside Core's canonical rendered-text
+/// coordinate space, such as a code language or Copy label.
+class _NonDocumentText extends SingleChildRenderObjectWidget {
+  const _NonDocumentText({required super.child});
+
+  @override
+  _RenderNonDocumentText createRenderObject(BuildContext context) =>
+      _RenderNonDocumentText();
+}
+
+class _RenderNonDocumentText extends RenderProxyBox {}
+
+Widget _headingSlot(AstNode_Heading node, Widget formatted, {Widget? editor}) {
+  final body = editor == null
+      ? formatted
+      : Stack(
+          children: [
+            SelectionContainer.disabled(
+              child: IgnorePointer(
+                child: ExcludeSemantics(
+                  child: Opacity(opacity: 0, child: formatted),
+                ),
+              ),
+            ),
+            Positioned.fill(child: editor),
+          ],
+        );
+  if (node.level != 1) return body;
+  return Builder(
+    builder: (context) => Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        body,
+        const SizedBox(height: 10),
+        Divider(
+          key: const ValueKey('heading-1-divider'),
+          height: 1,
+          thickness: 1,
+          color: _colors(context).borderSubtle,
+        ),
+        const SizedBox(height: 16),
+      ],
+    ),
+  );
+}
 
 /// Holds a promoted raw editor to the formatted Block's measured footprint.
 ///
@@ -103,12 +347,19 @@ Widget blockContainer(AstNode node, Widget child) => switch (node) {
 /// more space. [SelectionContainer.disabled] is essential: this baseline is
 /// layout-only while a Block is focused and must not rejoin the surrounding
 /// SelectionArea.
-Widget blockPromotionSlot(AstNode node, Widget editor) => Stack(
+Widget blockPromotionSlot(
+  AstNode node,
+  Widget editor, {
+  BurlFontScale fontScale = BurlFontScale.compact,
+}) => Stack(
   children: [
     SelectionContainer.disabled(
       child: IgnorePointer(
         child: ExcludeSemantics(
-          child: Opacity(opacity: 0, child: renderBlock(node)),
+          child: Opacity(
+            opacity: 0,
+            child: renderBlock(node, fontScale: fontScale),
+          ),
         ),
       ),
     ),
@@ -118,9 +369,47 @@ Widget blockPromotionSlot(AstNode node, Widget editor) => Stack(
 
 /// One list marker cell: a checkbox for task items, otherwise the marker
 /// glyph with the same right padding both paths must draw.
-Widget _markerWidget(bool? checked, String marker) => checked != null
-    ? Checkbox(value: checked, onChanged: null)
-    : Padding(padding: const EdgeInsets.only(right: 4), child: Text(marker));
+Widget _markerWidget(
+  bool? checked,
+  String marker, {
+  BurlFontScale fontScale = BurlFontScale.compact,
+}) => checked != null
+    ? Builder(
+        builder: (context) {
+          final colors = _colors(context);
+          return Semantics(
+            checked: checked,
+            child: SizedBox(
+              width: 26,
+              height: 24,
+              child: Align(
+                alignment: Alignment.topLeft,
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Icon(
+                    checked ? LucideIcons.square_check_big : LucideIcons.square,
+                    key: ValueKey('task-${checked ? 'checked' : 'unchecked'}'),
+                    size: 16,
+                    color: checked ? colors.accent : colors.textMuted,
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      )
+    : Builder(
+        builder: (context) => Padding(
+          padding: const EdgeInsets.only(right: 6),
+          child: Text(
+            marker,
+            style: TextStyle(
+              color: _colors(context).textMuted,
+              fontSize: 13 * fontScale.size / BurlFontScale.compact.size,
+            ),
+          ),
+        ),
+      );
 
 /// Renders one Block formatted (read-only). Moved verbatim from
 /// `editor.dart` by `EDIT-F002` so both presentations live beside the style
@@ -128,14 +417,20 @@ Widget _markerWidget(bool? checked, String marker) => checked != null
 /// branches now take their outer style from [blockTextStyle] instead of
 /// ad-hoc literals so the two paths cannot diverge, and every decorated type
 /// routes through [blockContainer], which the focused path reuses unchanged.
-Widget renderBlock(AstNode node) => switch (node) {
-  AstNode_Heading(:final content) => Text.rich(
-    TextSpan(children: content.map(renderInline).toList()),
-    style: blockTextStyle(node),
+Widget renderBlock(
+  AstNode node, {
+  BurlFontScale fontScale = BurlFontScale.compact,
+}) => switch (node) {
+  AstNode_Heading(:final content) => _headingSlot(
+    node,
+    Text.rich(
+      TextSpan(children: content.map(renderInline).toList()),
+      style: blockTextStyle(node, fontScale: fontScale),
+    ),
   ),
   AstNode_Paragraph(:final content) => Text.rich(
     TextSpan(children: content.map(renderInline).toList()),
-    style: blockTextStyle(node),
+    style: blockTextStyle(node, fontScale: fontScale),
   ),
   AstNode_List(:final ordered, :final items) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
@@ -146,8 +441,9 @@ Widget renderBlock(AstNode node) => switch (node) {
             content,
             checked,
             ordered ? '${index + 1}.' : '•',
+            fontScale: fontScale,
           ),
-          _ => renderBlock(item),
+          _ => renderBlock(item, fontScale: fontScale),
         },
     ],
   ),
@@ -158,19 +454,21 @@ Widget renderBlock(AstNode node) => switch (node) {
     content,
     checked,
     '•',
+    fontScale: fontScale,
   ),
   AstNode_Blockquote(:final nodes) => blockContainer(
     node,
     Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: nodes.map(renderBlock).toList(),
+      children: nodes
+          .map((child) => renderBlock(child, fontScale: fontScale))
+          .toList(),
     ),
   ),
-  AstNode_CodeBlock(:final code) => blockContainer(
-    node,
-    Text(code, style: blockTextStyle(node)),
+  AstNode_CodeBlock() => CodeBlockSlot(node: node, fontScale: fontScale),
+  AstNode_ThematicBreak() => Builder(
+    builder: (context) => Divider(color: _colors(context).borderSubtle),
   ),
-  AstNode_ThematicBreak() => const Divider(),
   // `urlOrPath` is a real filesystem path or URL from the Markdown source,
   // not a Flutter asset-bundle key, so `Image.asset` will not actually load
   // real note images — every one falls through to the alt-text placeholder
@@ -186,7 +484,9 @@ Widget renderBlock(AstNode node) => switch (node) {
   // (current-device) branch renders for now.
   AstNode_Suggestion(:final localContent) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
-    children: localContent.map(renderBlock).toList(),
+    children: localContent
+        .map((child) => renderBlock(child, fontScale: fontScale))
+        .toList(),
   ),
 };
 
@@ -196,15 +496,19 @@ Widget renderBlock(AstNode node) => switch (node) {
 Widget _renderBlockForView(
   AstNode node,
   TextSpan Function(String targetId, bool exists, List<InlineElement> content)
-  linkSpan,
-) => switch (node) {
-  AstNode_Heading(:final content) => Text.rich(
-    TextSpan(children: _interactiveInlines(content, linkSpan)),
-    style: blockTextStyle(node),
+  linkSpan, {
+  BurlFontScale fontScale = BurlFontScale.compact,
+}) => switch (node) {
+  AstNode_Heading(:final content) => _headingSlot(
+    node,
+    Text.rich(
+      TextSpan(children: _interactiveInlines(content, linkSpan)),
+      style: blockTextStyle(node, fontScale: fontScale),
+    ),
   ),
   AstNode_Paragraph(:final content) => Text.rich(
     TextSpan(children: _interactiveInlines(content, linkSpan)),
-    style: blockTextStyle(node),
+    style: blockTextStyle(node, fontScale: fontScale),
   ),
   AstNode_List(:final ordered, :final items) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
@@ -217,20 +521,24 @@ Widget _renderBlockForView(
               checked,
               ordered ? '${index + 1}.' : '•',
               linkSpan,
+              fontScale: fontScale,
             ),
-          _ => _renderBlockForView(item, linkSpan),
+          _ => _renderBlockForView(item, linkSpan, fontScale: fontScale),
         },
     ],
   ),
   AstNode_ListItem(:final content, :final checked) => Row(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      _markerWidget(checked, '•'),
+      _markerWidget(checked, '•', fontScale: fontScale),
       Expanded(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: content
-              .map((child) => _renderBlockForView(child, linkSpan))
+              .map(
+                (child) =>
+                    _renderBlockForView(child, linkSpan, fontScale: fontScale),
+              )
               .toList(),
         ),
       ),
@@ -241,17 +549,22 @@ Widget _renderBlockForView(
     Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: nodes
-          .map((child) => _renderBlockForView(child, linkSpan))
+          .map(
+            (child) =>
+                _renderBlockForView(child, linkSpan, fontScale: fontScale),
+          )
           .toList(),
     ),
   ),
   AstNode_Suggestion(:final localContent) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: localContent
-        .map((child) => _renderBlockForView(child, linkSpan))
+        .map(
+          (child) => _renderBlockForView(child, linkSpan, fontScale: fontScale),
+        )
         .toList(),
   ),
-  _ => renderBlock(node),
+  _ => renderBlock(node, fontScale: fontScale),
 };
 
 List<InlineSpan> _interactiveInlines(
@@ -276,16 +589,27 @@ Widget renderBlockWithFocusedLeaf(
   List<int> relativeLeafPath,
   Widget Function(AstNode leaf) buildEditor, {
   Widget Function(AstNode node)? renderUnfocused,
+  BurlFontScale fontScale = BurlFontScale.compact,
 }) {
-  final renderSibling = renderUnfocused ?? renderBlock;
+  final renderSibling =
+      renderUnfocused ?? (node) => renderBlock(node, fontScale: fontScale);
   if (relativeLeafPath.isEmpty) {
     final editor = buildEditor(node);
     return switch (node) {
-      AstNode_CodeBlock() => blockPromotionSlot(
-        node,
-        blockContainer(node, editor),
+      AstNode_CodeBlock() => CodeBlockSlot(
+        node: node,
+        editor: editor,
+        fontScale: fontScale,
       ),
-      _ => blockPromotionSlot(node, editor),
+      AstNode_Heading(:final content) => _headingSlot(
+        node,
+        Text.rich(
+          TextSpan(children: content.map(renderInline).toList()),
+          style: blockTextStyle(node, fontScale: fontScale),
+        ),
+        editor: editor,
+      ),
+      _ => blockPromotionSlot(node, editor, fontScale: fontScale),
     };
   }
   final childIndex = relativeLeafPath.first;
@@ -307,12 +631,14 @@ Widget renderBlockWithFocusedLeaf(
                         remaining,
                         buildEditor,
                         renderUnfocused: renderUnfocused,
+                        fontScale: fontScale,
                       ),
                     _ => renderBlockWithFocusedLeaf(
                       item,
                       remaining,
                       buildEditor,
                       renderUnfocused: renderUnfocused,
+                      fontScale: fontScale,
                     ),
                   }
                 : switch (item) {
@@ -322,6 +648,7 @@ Widget renderBlockWithFocusedLeaf(
                         checked,
                         ordered ? '${index + 1}.' : '•',
                         renderSibling,
+                        fontScale: fontScale,
                       ),
                     _ => renderSibling(item),
                   },
@@ -336,6 +663,7 @@ Widget renderBlockWithFocusedLeaf(
         relativeLeafPath,
         buildEditor,
         renderUnfocused: renderUnfocused,
+        fontScale: fontScale,
       ),
     AstNode_Blockquote(:final nodes)
         when childIndex >= 0 && childIndex < nodes.length =>
@@ -351,6 +679,7 @@ Widget renderBlockWithFocusedLeaf(
                       remaining,
                       buildEditor,
                       renderUnfocused: renderUnfocused,
+                      fontScale: fontScale,
                     )
                   : renderSibling(child),
           ],
@@ -368,6 +697,7 @@ Widget renderBlockWithFocusedLeaf(
                     remaining,
                     buildEditor,
                     renderUnfocused: renderUnfocused,
+                    fontScale: fontScale,
                   )
                 : renderSibling(child),
         ],
@@ -383,10 +713,11 @@ Widget _renderFocusedListItem(
   List<int> relativeLeafPath,
   Widget Function(AstNode leaf) buildEditor, {
   Widget Function(AstNode node)? renderUnfocused,
+  BurlFontScale fontScale = BurlFontScale.compact,
 }) => Row(
   crossAxisAlignment: CrossAxisAlignment.start,
   children: [
-    _markerWidget(checked, marker),
+    _markerWidget(checked, marker, fontScale: fontScale),
     Expanded(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -398,30 +729,53 @@ Widget _renderFocusedListItem(
                     relativeLeafPath.sublist(1),
                     buildEditor,
                     renderUnfocused: renderUnfocused,
+                    fontScale: fontScale,
                   )
-                : (renderUnfocused ?? renderBlock)(child),
+                : (renderUnfocused ??
+                      (node) => renderBlock(node, fontScale: fontScale))(child),
         ],
       ),
     ),
   ],
 );
 
-Widget _renderListItem(List<AstNode> content, bool? checked, String marker) =>
-    _renderListItemWith(content, checked, marker, renderBlock);
+Widget _renderListItem(
+  List<AstNode> content,
+  bool? checked,
+  String marker, {
+  BurlFontScale fontScale = BurlFontScale.compact,
+}) => _renderListItemWith(
+  content,
+  checked,
+  marker,
+  (node) => renderBlock(node, fontScale: fontScale),
+  fontScale: fontScale,
+);
 
 Widget _renderListItemWith(
   List<AstNode> content,
   bool? checked,
   String marker,
-  Widget Function(AstNode node) renderChild,
-) => Row(
+  Widget Function(AstNode node) renderChild, {
+  BurlFontScale fontScale = BurlFontScale.compact,
+}) => Row(
   crossAxisAlignment: CrossAxisAlignment.start,
   children: [
-    _markerWidget(checked, marker),
+    _markerWidget(checked, marker, fontScale: fontScale),
     Expanded(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: content.map(renderChild).toList(),
+      child: Builder(
+        builder: (context) => DefaultTextStyle.merge(
+          style: checked == true
+              ? TextStyle(
+                  color: _colors(context).textMuted,
+                  decoration: TextDecoration.lineThrough,
+                )
+              : const TextStyle(),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: content.map(renderChild).toList(),
+          ),
+        ),
       ),
     ),
   ],
@@ -432,17 +786,34 @@ Widget _renderListItemForView(
   bool? checked,
   String marker,
   TextSpan Function(String targetId, bool exists, List<InlineElement> content)
-  linkSpan,
-) => Row(
+  linkSpan, {
+  BurlFontScale fontScale = BurlFontScale.compact,
+}) => Row(
   crossAxisAlignment: CrossAxisAlignment.start,
   children: [
-    _markerWidget(checked, marker),
+    _markerWidget(checked, marker, fontScale: fontScale),
     Expanded(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: content
-            .map((child) => _renderBlockForView(child, linkSpan))
-            .toList(),
+      child: Builder(
+        builder: (context) => DefaultTextStyle.merge(
+          style: checked == true
+              ? TextStyle(
+                  color: _colors(context).textMuted,
+                  decoration: TextDecoration.lineThrough,
+                )
+              : const TextStyle(),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: content
+                .map(
+                  (child) => _renderBlockForView(
+                    child,
+                    linkSpan,
+                    fontScale: fontScale,
+                  ),
+                )
+                .toList(),
+          ),
+        ),
       ),
     ),
   ],
@@ -475,8 +846,8 @@ TextSpan renderInline(InlineElement element) => switch (element) {
 /// this shared helper splits back into two.
 TextSpan _renderLinkSpan(List<InlineElement> content) => TextSpan(
   style: const TextStyle(
-    color: Colors.blue,
     decoration: TextDecoration.underline,
+    decorationThickness: 1,
   ),
   children: content.map(renderInline).toList(),
 );
@@ -871,6 +1242,7 @@ class BlockView extends StatefulWidget {
     this.focusedLeafPath,
     this.buildFocusedEditor,
     this.selectionRegistrar,
+    this.fontScale = BurlFontScale.compact,
     this.recognizerFactory = TapGestureRecognizer.new,
   }) : assert(
          (focusedLeafPath == null) == (buildFocusedEditor == null),
@@ -896,6 +1268,10 @@ class BlockView extends StatefulWidget {
   /// offsets, without the region knowing anything about Blocks. The
   /// forwarding preserves the region's own registration unchanged.
   final SelectionRegistrar? selectionRegistrar;
+
+  /// The reader-controlled prose scale. Code Blocks deliberately retain
+  /// their fixed monospace metrics through [blockTextStyle].
+  final BurlFontScale fontScale;
 
   /// Creates recognizers for rendered internal Links. Exposed for lifecycle
   /// tests so they can observe that stale recognizers are disposed.
@@ -997,19 +1373,25 @@ class _BlockViewState extends State<BlockView> {
   Widget build(BuildContext context) {
     final onLinkActivated = widget.onLinkActivated;
     final l10n = AppLocalizations.of(context);
+    final colors = _colors(context);
+    final fontScale = widget.fontScale;
     final links = _activeLinks();
     final linkIdentities = _linkIdentities(links);
     var renderedLinkIndex = 0;
     Widget renderInteractive(AstNode node) =>
         onLinkActivated == null || l10n == null
-        ? renderBlock(node)
+        ? renderBlock(node, fontScale: fontScale)
         : _renderBlockForView(node, (targetId, exists, content) {
             final identity = linkIdentities[renderedLinkIndex++];
             assert(identity.targetId == targetId);
             return TextSpan(
               style: TextStyle(
-                color: exists ? Colors.blue : Colors.deepOrange,
+                color: exists ? colors.accent : colors.syncError,
                 decoration: TextDecoration.underline,
+                decorationColor: exists
+                    ? colors.accentBorder
+                    : colors.syncError,
+                decorationThickness: 1,
                 decorationStyle: exists
                     ? TextDecorationStyle.solid
                     : TextDecorationStyle.dotted,
@@ -1022,7 +1404,7 @@ class _BlockViewState extends State<BlockView> {
                 _recognizerFor(identity),
               ),
             );
-          });
+          }, fontScale: fontScale);
     final focusedLeafPath = widget.focusedLeafPath;
     final buildFocusedEditor = widget.buildFocusedEditor;
     Widget child = focusedLeafPath == null
@@ -1032,6 +1414,7 @@ class _BlockViewState extends State<BlockView> {
             focusedLeafPath,
             buildFocusedEditor!,
             renderUnfocused: renderInteractive,
+            fontScale: fontScale,
           );
     if (widget.selectionRegistrar != null) {
       child = SelectionRegistrarScope(
@@ -1039,59 +1422,73 @@ class _BlockViewState extends State<BlockView> {
         child: child,
       );
     }
+    child = KeyedSubtree(
+      // Presentation changes in place. In particular, CodeBlockSlot owns
+      // time-bound Copy feedback that must survive formatted/raw promotion.
+      key: ValueKey('block-presentation-${widget.blockPath.join('-')}'),
+      child: child,
+    );
     _scheduleLinkSemanticsLayout(links, linkIdentities, l10n);
-    return Focus(
-      canRequestFocus: true,
-      onKeyEvent: (_, event) {
-        if (event is KeyDownEvent &&
-            (event.logicalKey == LogicalKeyboardKey.enter ||
-                event.logicalKey == LogicalKeyboardKey.space)) {
-          // A focused Block always promotes. Links have their own focus
-          // targets below; Block Enter must never silently follow the first
-          // Link it happens to contain.
-          widget.onFocusRequested(widget.blockPath, 0);
-          return KeyEventResult.handled;
-        }
-        return KeyEventResult.ignored;
-      },
-      child: Semantics(
-        button: true,
-        focusable: true,
-        child: GestureDetector(
-          key: _textSurfaceKey,
-          behavior: HitTestBehavior.opaque,
-          onTapUp: (details) => _handleTapUp(context, details),
-          child: FocusTraversalGroup(
-            policy: OrderedTraversalPolicy(),
-            child: Stack(
-              children: [
-                child,
-                if (onLinkActivated != null && l10n != null)
-                  for (final (linkIndex, identity) in linkIdentities.indexed)
-                    for (final (boxIndex, semanticBox)
-                        in _linkSemanticBoxes
-                            .where((box) => box.identity == identity)
-                            .indexed)
-                      _InternalLinkSemanticTarget(
-                        key: ValueKey(
-                          boxIndex == 0
-                              ? 'internal-link-focus-'
-                                    '$linkIndex-${links[linkIndex].targetId}'
-                              : 'internal-link-semantics-'
-                                    '${semanticBox.identity.targetId}-'
-                                    '${semanticBox.identity.occurrence}-$boxIndex',
-                        ),
-                        rect: semanticBox.rect,
-                        label: semanticBox.label,
-                        focusNode: boxIndex == 0
-                            ? _focusNodeFor(identity)
-                            : null,
-                        order: linkIndex + 1,
-                        focused: _focusNodeFor(identity).hasFocus,
-                        onActivated: () =>
-                            onLinkActivated.call(semanticBox.identity.targetId),
-                      ),
-              ],
+    return DefaultTextStyle.merge(
+      style: TextStyle(color: colors.textPrimary),
+      child: Focus(
+        canRequestFocus: true,
+        onKeyEvent: (_, event) {
+          if (event is KeyDownEvent &&
+              (event.logicalKey == LogicalKeyboardKey.enter ||
+                  event.logicalKey == LogicalKeyboardKey.space)) {
+            // A focused Block always promotes. Links have their own focus
+            // targets below; Block Enter must never silently follow the first
+            // Link it happens to contain.
+            widget.onFocusRequested(widget.blockPath, 0);
+            return KeyEventResult.handled;
+          }
+          return KeyEventResult.ignored;
+        },
+        child: Semantics(
+          button: true,
+          focusable: true,
+          child: KeyedSubtree(
+            key: ValueKey('promote-block-${widget.blockPath.join('-')}'),
+            child: GestureDetector(
+              key: _textSurfaceKey,
+              behavior: HitTestBehavior.opaque,
+              onTapUp: (details) => _handleTapUp(context, details),
+              child: FocusTraversalGroup(
+                policy: OrderedTraversalPolicy(),
+                child: Stack(
+                  children: [
+                    child,
+                    if (onLinkActivated != null && l10n != null)
+                      for (final (linkIndex, identity)
+                          in linkIdentities.indexed)
+                        for (final (boxIndex, semanticBox)
+                            in _linkSemanticBoxes
+                                .where((box) => box.identity == identity)
+                                .indexed)
+                          _InternalLinkSemanticTarget(
+                            key: ValueKey(
+                              boxIndex == 0
+                                  ? 'internal-link-focus-'
+                                        '$linkIndex-${links[linkIndex].targetId}'
+                                  : 'internal-link-semantics-'
+                                        '${semanticBox.identity.targetId}-'
+                                        '${semanticBox.identity.occurrence}-$boxIndex',
+                            ),
+                            rect: semanticBox.rect,
+                            label: semanticBox.label,
+                            focusNode: boxIndex == 0
+                                ? _focusNodeFor(identity)
+                                : null,
+                            order: linkIndex + 1,
+                            focused: _focusNodeFor(identity).hasFocus,
+                            onActivated: () => onLinkActivated.call(
+                              semanticBox.identity.targetId,
+                            ),
+                          ),
+                  ],
+                ),
+              ),
             ),
           ),
         ),
@@ -1136,6 +1533,7 @@ class _BlockViewState extends State<BlockView> {
     RenderObject object,
     List<RenderParagraph> out,
   ) {
+    if (object is _RenderNonDocumentText) return;
     if (object is RenderParagraph) {
       out.add(object);
       return;
@@ -1206,6 +1604,12 @@ class _BlockViewState extends State<BlockView> {
     });
   }
 }
+
+BurlColors _colors(BuildContext context) =>
+    Theme.of(context).extension<BurlColors>() ??
+    (Theme.of(context).brightness == Brightness.dark
+        ? BurlColors.dark
+        : BurlColors.light);
 
 typedef _LinkRecognizerIdentity = ({String targetId, int occurrence});
 

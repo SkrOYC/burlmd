@@ -207,7 +207,7 @@ packages:
     source: sdk
     version: "0.0.0"
   flutter_driver:
-    dependency: transitive
+    dependency: "direct dev"
     description: flutter
     source: sdk
     version: "0.0.0"
@@ -224,6 +224,14 @@ packages:
     description: flutter
     source: sdk
     version: "0.0.0"
+  flutter_lucide:
+    dependency: "direct main"
+    description:
+      name: flutter_lucide
+      sha256: "585c589a49368e884307152b18c26521c3cd419bfadb1b82cd2fe9177f234789"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.33.0"
   flutter_riverpod:
     dependency: "direct main"
     description:

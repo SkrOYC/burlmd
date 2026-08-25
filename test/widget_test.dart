@@ -1,6 +1,7 @@
 import 'package:burlmd/main.dart';
 import 'package:burlmd/src/providers/rust_api_provider.dart';
 import 'package:burlmd/src/screens/login.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -29,6 +30,40 @@ WorkspaceInfo _localWorkspace() => const WorkspaceInfo(
 );
 
 void main() {
+  testWidgets('capture frame appears only for the visual fixture build', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(1600, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          rustApiProvider.overrideWithValue(_StubRustApi(_localWorkspace())),
+        ],
+        child: const MyApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    const captureEnabled =
+        bool.fromEnvironment('BURLMD_VISUAL_FIXTURE') &&
+        int.fromEnvironment('BURLMD_CAPTURE_WIDTH') > 0 &&
+        int.fromEnvironment('BURLMD_CAPTURE_HEIGHT') > 0;
+    const captureWidth = int.fromEnvironment('BURLMD_CAPTURE_WIDTH');
+    const captureHeight = int.fromEnvironment('BURLMD_CAPTURE_HEIGHT');
+    final frame = find.byKey(const Key('capture-frame'));
+    expect(frame, captureEnabled ? findsOneWidget : findsNothing);
+    if (captureEnabled) {
+      expect(
+        tester.getSize(frame),
+        Size(captureWidth.toDouble(), captureHeight.toDouble()),
+      );
+    }
+  });
+
   // SHEL-E002: with no credentials and no network, launching the application
   // opens the local Workspace directly. The stub's `openOrCreateLocalWorkspace`
   // is exactly what the real Core path is — no credential, no network
@@ -48,9 +83,9 @@ void main() {
 
     expect(api.openOrCreateCalls, 1);
     expect(find.byType(LoginScreen), findsNothing);
-    // The minimal shell this milestone asserts on; SHEL-E003 fills it.
-    expect(find.text('burlmd'), findsOneWidget);
-    expect(find.text('workspace'), findsOneWidget);
+    // The shell chrome mounts without a login gate; its desktop tabs replace
+    // the former full-width brand header.
+    expect(find.byKey(const Key('shell-tab-strip')), findsOneWidget);
   });
 
   testWidgets('a bootstrap failure surfaces instead of the login screen', (

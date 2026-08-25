@@ -1,6 +1,8 @@
 import 'dart:io';
 
 import 'package:burlmd/src/smoke_isolation.dart';
+import 'package:burlmd/src/design/burl_theme.dart';
+import 'package:burlmd/src/design/burl_motion.dart';
 import 'package:burlmd/src/providers/workspace_provider.dart';
 import 'package:burlmd/src/rust/frb_generated.dart';
 import 'package:burlmd/src/rust/draft.dart';
@@ -8,9 +10,21 @@ import 'package:burlmd/src/providers/rust_api_provider.dart';
 import 'package:burlmd/src/screens/workspace.dart';
 import 'package:burlmd/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
+// flutter_driver intentionally remains a development SDK dependency: the
+// extension below is compiled only for explicit driver runs.
+// ignore: depend_on_referenced_packages
+import 'package:flutter_driver/driver_extension.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+const _visualFixture = bool.fromEnvironment('BURLMD_VISUAL_FIXTURE');
+const _captureWidth = int.fromEnvironment('BURLMD_CAPTURE_WIDTH');
+const _captureHeight = int.fromEnvironment('BURLMD_CAPTURE_HEIGHT');
+const _captureFrame = _visualFixture && _captureWidth > 0 && _captureHeight > 0;
+
 Future<void> main() async {
+  if (const bool.fromEnvironment('ENABLE_FLUTTER_DRIVER')) {
+    enableFlutterDriverExtension(enableTextEntryEmulation: false);
+  }
   await _rejectUnisolatedSmokeScenario();
   await RustLib.init();
   runApp(const ProviderScope(child: MyApp()));
@@ -42,14 +56,42 @@ Future<void> _rejectUnisolatedSmokeScenario() async {
   }
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends ConsumerWidget {
   const MyApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final preferences = ref.watch(burlPreferencesProvider);
     return MaterialApp(
+      title: 'burlmd',
+      debugShowCheckedModeBanner: false,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
+      theme: buildBurlTheme(Brightness.light),
+      darkTheme: buildBurlTheme(Brightness.dark),
+      themeMode: materialThemeMode(preferences.theme),
+      // [BurlThemeTransition] reads the accessibility preference from the
+      // route's MediaQuery; keep MaterialApp's outer theme swap immediate.
+      themeAnimationDuration: Duration.zero,
+      builder: (context, child) {
+        final content = BurlThemeTransition(
+          theme: Theme.of(context),
+          child: child ?? const SizedBox.shrink(),
+        );
+        if (!_captureFrame) return content;
+        return ColoredBox(
+          color: const Color(0xff101014),
+          child: Align(
+            alignment: Alignment.topLeft,
+            child: SizedBox(
+              key: const ValueKey('capture-frame'),
+              width: _captureWidth.toDouble(),
+              height: _captureHeight.toDouble(),
+              child: ClipRect(child: content),
+            ),
+          ),
+        );
+      },
       home: _Home(),
     );
   }

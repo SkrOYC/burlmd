@@ -5,6 +5,7 @@ import 'package:burlmd/src/providers/workspace_provider.dart';
 import 'package:burlmd/src/rust/draft.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// A [RustApi] whose `searchNotes` never touches FFI. It records every
@@ -55,6 +56,8 @@ Future<ProviderContainer> _pumpPanel(
   _StubRustApi api, {
   int resultLimit = 10,
   ValueChanged<String>? onNoteSelected,
+  VoidCallback? onResultSelected,
+  VoidCallback? onDismiss,
 }) async {
   late ProviderContainer container;
   await tester.pumpWidget(
@@ -70,6 +73,8 @@ Future<ProviderContainer> _pumpPanel(
                 child: SearchPanel(
                   resultLimit: resultLimit,
                   onNoteSelected: onNoteSelected,
+                  onResultSelected: onResultSelected,
+                  onDismiss: onDismiss,
                 ),
               );
             },
@@ -144,6 +149,38 @@ void main() {
     // provider state it listens on, and the widget callback.
     expect(container.read(selectedNoteIdProvider), 'n-ledger');
     expect(callbackId, 'n-ledger');
+  });
+
+  testWidgets('a successful result selection notifies its embedding surface', (
+    WidgetTester tester,
+  ) async {
+    const query = 'ledger';
+    var closed = 0;
+    final api = _StubRustApi({
+      query: [hit('n-ledger', 'The Ledger')],
+    });
+    await _pumpPanel(tester, api, onResultSelected: () => closed++);
+
+    await _type(tester, query);
+    await tester.tap(find.text('The Ledger'));
+    await tester.pumpAndSettle();
+
+    expect(closed, 1);
+  });
+
+  testWidgets('Escape notifies an embedding palette to dismiss', (
+    WidgetTester tester,
+  ) async {
+    var dismissed = 0;
+    await _pumpPanel(
+      tester,
+      _StubRustApi(const {}),
+      onDismiss: () => dismissed++,
+    );
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+
+    expect(dismissed, 1);
   });
 
   testWidgets(

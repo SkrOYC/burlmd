@@ -66,6 +66,66 @@ Future<void> _pumpTree(
 }
 
 void main() {
+  testWidgets('uses compact 28px rows and exposes the directories section', (
+    WidgetTester tester,
+  ) async {
+    await _pumpTree(tester, [
+      directory('Projects', 'Projects/', [
+        note('plan', 'Plan', 'Projects/Plan.md'),
+      ]),
+      note('inbox', 'Inbox', 'Inbox.md'),
+    ]);
+
+    expect(find.text('DIRECTORIES'), findsOneWidget);
+    expect(find.byKey(const ValueKey('tree-new-note')), findsOneWidget);
+    expect(find.byKey(const ValueKey('tree-new-directory')), findsOneWidget);
+
+    final rootRows = tester.widgetList<ListTile>(find.byType(ListTile));
+    expect(rootRows, hasLength(2));
+    for (final row in rootRows) {
+      expect(row.minTileHeight, 28);
+      expect(tester.getSize(find.byWidget(row)).height, 28);
+    }
+
+    await tester.tap(find.text('Projects'));
+    await tester.pumpAndSettle();
+
+    final expandedRows = tester.widgetList<ListTile>(find.byType(ListTile));
+    final projects = expandedRows.firstWhere(
+      (row) => (row.title! as Text).data == 'Projects',
+    );
+    final plan = expandedRows.firstWhere(
+      (row) => (row.title! as Text).data == 'Plan',
+    );
+    expect(plan.minTileHeight, 28);
+    expect(tester.getSize(find.byWidget(plan)).height, 28);
+
+    // One depth step is a deliberately tight 16px guide, matching the
+    // compact tree composition without changing the underlying hierarchy.
+    expect(
+      (plan.contentPadding! as EdgeInsets).left,
+      (projects.contentPadding! as EdgeInsets).left + 16,
+    );
+  });
+
+  testWidgets('section creation controls use the lifecycle-backed prompts', (
+    WidgetTester tester,
+  ) async {
+    await _pumpTree(tester, []);
+
+    await tester.tap(find.byKey(const ValueKey('tree-new-note')));
+    await tester.pumpAndSettle();
+    expect(find.text('New note'), findsOneWidget);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('tree-new-directory')));
+    await tester.pumpAndSettle();
+    expect(find.text('New directory'), findsOneWidget);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('directories sort before notes at each level, both by name', (
     WidgetTester tester,
   ) async {
@@ -261,6 +321,28 @@ void main() {
       find.byWidgetPredicate((widget) => widget is PopupMenuButton<String>),
     );
     expect(menu.enabled, isFalse);
+    expect(
+      tester
+          .widget<IconButton>(
+            find.descendant(
+              of: find.byKey(const ValueKey('tree-new-note')),
+              matching: find.byType(IconButton),
+            ),
+          )
+          .onPressed,
+      isNull,
+    );
+    expect(
+      tester
+          .widget<IconButton>(
+            find.descendant(
+              of: find.byKey(const ValueKey('tree-new-directory')),
+              matching: find.byType(IconButton),
+            ),
+          )
+          .onPressed,
+      isNull,
+    );
 
     container.read(lifecycleEditingProvider.notifier).end();
   });

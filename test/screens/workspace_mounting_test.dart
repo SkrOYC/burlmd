@@ -1,10 +1,18 @@
 import 'package:burlmd/src/providers/rust_api_provider.dart';
 import 'package:burlmd/src/providers/workspace_provider.dart';
+import 'package:burlmd/src/design/burl_theme.dart';
+import 'package:burlmd/src/design/burl_motion.dart';
+import 'package:burlmd/src/components/visual_parity_fixture.dart';
 import 'package:burlmd/src/rust/draft.dart';
 import 'package:burlmd/src/rust/error.dart';
+import 'package:burlmd/src/rust/markdown/ast.dart';
 import 'package:burlmd/src/screens/workspace.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart'
+    show Uint64List;
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// A [RustApi] standing in for the Core at the shell level, with the
@@ -14,6 +22,8 @@ class _MountingRustApi extends RustApi {
   _MountingRustApi(this.tree);
 
   final List<TreeNode> tree;
+  List<AstNode> ast = const [];
+  final Map<String, String> sources = {};
 
   /// What `pending_drafts` reports on startup.
   List<NoteMetadata> drafts = const [];
@@ -51,7 +61,7 @@ class _MountingRustApi extends RustApi {
   Future<NoteState> openNote(String noteId) async {
     calls.add('open:$noteId');
     return NoteState(
-      ast: const [],
+      ast: ast,
       metadata: NoteMetadata(
         id: noteId,
         path: '$noteId.md',
@@ -68,6 +78,39 @@ class _MountingRustApi extends RustApi {
   Future<void> closeNote(String noteId) async {
     calls.add('close:$noteId');
   }
+
+  @override
+  String getBlockSource(String noteId, List<int> blockPath) =>
+      sources[blockPath.join('/')] ?? '';
+
+  @override
+  BlockCaret resolveBlockCaret(
+    String noteId,
+    List<int> topLevelPath,
+    int renderedUtf16Offset,
+  ) => BlockCaret(
+    blockPath: Uint64List.fromList(topLevelPath),
+    caretOffset: BigInt.from(renderedUtf16Offset),
+  );
+
+  @override
+  void updateBlock(String noteId, List<int> blockPath, String newSource) {
+    sources[blockPath.join('/')] = newSource;
+  }
+
+  @override
+  NoteState commitBlock(String noteId, List<int> blockPath) => NoteState(
+    ast: ast,
+    metadata: NoteMetadata(
+      id: noteId,
+      path: '$noteId.md',
+      title: noteId,
+      lastModified: 0,
+      okfConformant: true,
+    ),
+    baseRevision: 'head',
+    restoredFromDraft: false,
+  );
 
   @override
   Future<List<NoteMetadata>> searchNotes(String query, int limit) async {
@@ -93,8 +136,13 @@ NoteMetadata _metadata(String id, String title, {String? snippet}) =>
 
 Future<ProviderContainer> _pumpShell(
   WidgetTester tester,
-  _MountingRustApi api,
-) async {
+  _MountingRustApi api, {
+  bool disableAnimations = false,
+}) async {
+  tester.view.physicalSize = const Size(1200, 800);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
   final container = ProviderContainer(
     overrides: [
       rustApiProvider.overrideWithValue(api),
@@ -107,11 +155,42 @@ Future<ProviderContainer> _pumpShell(
   await tester.pumpWidget(
     UncontrolledProviderScope(
       container: container,
-      child: const MaterialApp(home: WorkspaceScreen()),
+      child: MaterialApp(
+        home: Builder(
+          builder: (context) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(disableAnimations: disableAnimations),
+            child: const WorkspaceScreen(),
+          ),
+        ),
+      ),
     ),
   );
   await tester.pumpAndSettle();
   return container;
+}
+
+ValueNotifier<String?> _captureClipboard(WidgetTester tester) {
+  final clipboard = ValueNotifier<String?>(null);
+  tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+    SystemChannels.platform,
+    (call) async {
+      if (call.method == 'Clipboard.setData') {
+        final data = call.arguments as Map<Object?, Object?>?;
+        clipboard.value = data?['text'] as String?;
+      }
+      return null;
+    },
+  );
+  addTearDown(() {
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      null,
+    );
+    clipboard.dispose();
+  });
+  return clipboard;
 }
 
 void main() {
@@ -163,7 +242,7 @@ void main() {
 
     // Dismissal hides the notice without touching the Core — no close, no
     // reopen, no draft discard (SHEL-E007's first STOP condition).
-    await tester.tap(find.byIcon(Icons.close));
+    await tester.tap(find.byTooltip('Dismiss notice'));
     await tester.pumpAndSettle();
     expect(find.text('Recovered drafts'), findsNothing);
     expect(api.calls.where((c) => !c.startsWith('search:')), isEmpty);
@@ -206,5 +285,567 @@ void main() {
     // And the failure is visible where the user is looking: directly above
     // the editor pane.
     expect(find.textContaining('disk is full'), findsOneWidget);
+  });
+
+  testWidgets('rail and compact tiers open and dismiss the overlay navigator', (
+    tester,
+  ) async {
+    final api = _MountingRustApi([_treeNode('a', 'Alpha')]);
+    await _pumpShell(tester, api);
+
+    tester.view.physicalSize = const Size(800, 800);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('shell-open-navigator')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('shell-open-navigator')));
+    await tester.pumpAndSettle();
+    expect(find.text('Alpha'), findsOneWidget);
+    await tester.tapAt(const Offset(700, 400));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('navigator-scrim')), findsNothing);
+
+    tester.view.physicalSize = const Size(600, 800);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('shell-open-navigator')));
+    await tester.pumpAndSettle();
+    expect(find.text('Alpha'), findsOneWidget);
+  });
+
+  testWidgets('navigator entrance has measurable mid- and end-motion states', (
+    tester,
+  ) async {
+    final api = _MountingRustApi([_treeNode('a', 'Alpha')]);
+    await _pumpShell(tester, api);
+    tester.view.physicalSize = const Size(800, 800);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('shell-open-navigator')));
+    await tester.pump();
+    expect(find.byType(BurlScaleFadeEntrance), findsOneWidget);
+
+    // The entrance schedules its target after its initial mounted frame.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 60));
+    final scale = tester.widget<ScaleTransition>(
+      find.descendant(
+        of: find.byType(BurlScaleFadeEntrance),
+        matching: find.byType(ScaleTransition),
+      ),
+    );
+    expect(scale.scale.value, greaterThan(.98));
+    expect(scale.scale.value, lessThan(1));
+
+    await tester.pump(const Duration(milliseconds: 60));
+    final settled = tester.widget<ScaleTransition>(
+      find.descendant(
+        of: find.byType(BurlScaleFadeEntrance),
+        matching: find.byType(ScaleTransition),
+      ),
+    );
+    expect(settled.scale.value, closeTo(1, .001));
+  });
+
+  testWidgets('reduced motion opens the navigator at its final position', (
+    tester,
+  ) async {
+    final api = _MountingRustApi([_treeNode('a', 'Alpha')]);
+    tester.view.physicalSize = const Size(800, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final container = ProviderContainer(
+      overrides: [
+        rustApiProvider.overrideWithValue(api),
+        writeStatusPollIntervalProvider.overrideWithValue(null),
+      ],
+    );
+    addTearDown(container.dispose);
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(disableAnimations: true),
+            child: child!,
+          ),
+          home: const WorkspaceScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('shell-open-navigator')));
+    await tester.pump();
+    final entrance = tester.widget<BurlScaleFadeEntrance>(
+      find.byType(BurlScaleFadeEntrance),
+    );
+    expect(entrance.duration, BurlMotion.drawer);
+    final opacity = tester.widget<AnimatedOpacity>(
+      find.descendant(
+        of: find.byType(BurlScaleFadeEntrance),
+        matching: find.byType(AnimatedOpacity),
+      ),
+    );
+    expect(opacity.duration, Duration.zero);
+    expect(opacity.opacity, 1);
+  });
+
+  testWidgets('shell dialogs share the strict 0/60/120 scale-fade contract', (
+    tester,
+  ) async {
+    final api = _MountingRustApi([_treeNode('a', 'Alpha')]);
+    await _pumpShell(tester, api);
+
+    for (final surface in [
+      (const ValueKey('shell-search'), const ValueKey('search-close')),
+      (
+        const ValueKey('shell-preferences'),
+        const ValueKey('preferences-close'),
+      ),
+      (const ValueKey('shell-history'), const ValueKey('history-close')),
+      (const ValueKey('shell-sync'), const ValueKey('sync-close')),
+    ]) {
+      await tester.tap(find.byKey(surface.$1));
+      await tester.pump();
+      final entrance = find.byType(BurlScaleFadeEntrance).last;
+      final opacity = tester.widget<AnimatedOpacity>(
+        find
+            .descendant(of: entrance, matching: find.byType(AnimatedOpacity))
+            .first,
+      );
+      expect(opacity.opacity, 0);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 60));
+      final mid = tester.widget<ScaleTransition>(
+        find
+            .descendant(of: entrance, matching: find.byType(ScaleTransition))
+            .first,
+      );
+      expect(mid.scale.value, greaterThan(.98));
+      expect(mid.scale.value, lessThan(1));
+      await tester.pump(const Duration(milliseconds: 60));
+      expect(mid.scale.value, closeTo(1, .001));
+      await tester.tap(find.byKey(surface.$2));
+      await tester.pumpAndSettle();
+    }
+  });
+
+  testWidgets('reduced motion makes every shell dialog final and interactive', (
+    tester,
+  ) async {
+    final api = _MountingRustApi([_treeNode('a', 'Alpha')]);
+    await _pumpShell(tester, api, disableAnimations: true);
+    for (final surface in [
+      (const ValueKey('shell-search'), const ValueKey('search-close')),
+      (
+        const ValueKey('shell-preferences'),
+        const ValueKey('preferences-close'),
+      ),
+      (const ValueKey('shell-history'), const ValueKey('history-close')),
+      (const ValueKey('shell-sync'), const ValueKey('sync-close')),
+    ]) {
+      await tester.tap(find.byKey(surface.$1));
+      await tester.pump();
+      final entrance = find.byType(BurlScaleFadeEntrance).last;
+      final opacity = tester.widget<AnimatedOpacity>(
+        find
+            .descendant(of: entrance, matching: find.byType(AnimatedOpacity))
+            .first,
+      );
+      final scale = tester.widget<AnimatedScale>(
+        find
+            .descendant(of: entrance, matching: find.byType(AnimatedScale))
+            .first,
+      );
+      expect(opacity.duration, Duration.zero);
+      expect(opacity.opacity, 1);
+      expect(scale.duration, Duration.zero);
+      expect(scale.scale, 1);
+      await tester.tap(find.byKey(surface.$2));
+      await tester.pump();
+    }
+  });
+
+  testWidgets(
+    'global shortcuts open surfaces and Escape dismisses the top one',
+    (tester) async {
+      final api = _MountingRustApi([_treeNode('a', 'Alpha')]);
+      await _pumpShell(tester, api);
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyK);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('search-palette')), findsOneWidget);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('search-palette')), findsNothing);
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyH);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('history-drawer')), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.comma);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('preferences-drawer')), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('preferences-drawer')), findsNothing);
+    },
+  );
+
+  testWidgets('early shell shortcuts preserve a primary-focused raw editor', (
+    tester,
+  ) async {
+    final api = _MountingRustApi([_treeNode('a', 'Alpha')])
+      ..ast = [
+        AstNode.paragraph(
+          content: [
+            InlineElement.text(
+              const TextRun(
+                content: 'draft',
+                bold: false,
+                italic: false,
+                strikethrough: false,
+                code: false,
+              ),
+            ),
+          ],
+        ),
+      ]
+      ..sources['0'] = 'draft';
+    await _pumpShell(tester, api);
+    await tester.tap(find.byKey(const ValueKey('workspace-tree-note-a')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('promote-block-0')));
+    await tester.pump();
+    final raw = find.byKey(const ValueKey('raw-editor-0'));
+    expect(raw, findsOneWidget);
+    await tester.enterText(raw, 'retained draft');
+
+    Future<void> sendPrimary(LogicalKeyboardKey key) async {
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(key);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pumpAndSettle();
+    }
+
+    void expectRawText() {
+      expect(
+        tester.widget<EditableText>(raw).controller.text,
+        'retained draft',
+      );
+    }
+
+    await sendPrimary(LogicalKeyboardKey.keyK);
+    expect(find.byKey(const ValueKey('search-palette')), findsOneWidget);
+    expectRawText();
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+
+    await tester.tap(raw);
+    await sendPrimary(LogicalKeyboardKey.keyH);
+    expect(find.byKey(const ValueKey('history-drawer')), findsOneWidget);
+    expectRawText();
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+
+    await tester.tap(raw);
+    await sendPrimary(LogicalKeyboardKey.comma);
+    expect(find.byKey(const ValueKey('preferences-drawer')), findsOneWidget);
+    expectRawText();
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+
+    await tester.tap(raw);
+    await sendPrimary(LogicalKeyboardKey.keyW);
+    expectRawText();
+    await tester.enterText(raw, 'ordinary typing');
+    expect(tester.widget<EditableText>(raw).controller.text, 'ordinary typing');
+  });
+
+  testWidgets('focus mode snaps paint without moving a block when reduced', (
+    tester,
+  ) async {
+    final api = _MountingRustApi([_treeNode('a', 'Alpha')])
+      ..ast = [
+        AstNode.paragraph(
+          content: [
+            InlineElement.text(
+              const TextRun(
+                content: 'first',
+                bold: false,
+                italic: false,
+                strikethrough: false,
+                code: false,
+              ),
+            ),
+          ],
+        ),
+        AstNode.paragraph(
+          content: [
+            InlineElement.text(
+              const TextRun(
+                content: 'second',
+                bold: false,
+                italic: false,
+                strikethrough: false,
+                code: false,
+              ),
+            ),
+          ],
+        ),
+      ]
+      ..sources['0'] = 'first'
+      ..sources['1'] = 'second';
+    await _pumpShell(tester, api, disableAnimations: true);
+    await tester.tap(find.byKey(const ValueKey('workspace-tree-note-a')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('shell-preferences')));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('preferences-focus-mode')),
+      180,
+      scrollable: find.descendant(
+        of: find.byKey(const ValueKey('preferences-drawer')),
+        matching: find.byType(Scrollable),
+      ),
+    );
+    await tester.tap(find.byKey(const ValueKey('preferences-focus-mode')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('preferences-done')));
+    await tester.pumpAndSettle();
+    final before = tester.getRect(find.byKey(const ValueKey('entry-1')));
+    await tester.tap(find.byKey(const ValueKey('promote-block-1')));
+    await tester.pump();
+    final dimmedOpacity = tester.widget<AnimatedOpacity>(
+      find.ancestor(
+        of: find.byKey(const ValueKey('entry-0')),
+        matching: find.byType(AnimatedOpacity),
+      ),
+    );
+    expect(dimmedOpacity.duration, Duration.zero);
+    expect(dimmedOpacity.opacity, 0.35);
+    expect(tester.getRect(find.byKey(const ValueKey('entry-1'))), before);
+  });
+
+  testWidgets('preferences update the in-session theme choice', (tester) async {
+    final api = _MountingRustApi([_treeNode('a', 'Alpha')]);
+    final container = await _pumpShell(tester, api);
+
+    await tester.tap(find.text('Preferences'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('preferences-drawer')), findsOneWidget);
+    await tester.tap(find.text('Dark'));
+    await tester.pumpAndSettle();
+    expect(
+      container.read(burlPreferencesProvider).theme,
+      BurlThemePreference.dark,
+    );
+
+    await tester.tap(find.text('Light'));
+    await tester.pumpAndSettle();
+    expect(
+      container.read(burlPreferencesProvider).theme,
+      BurlThemePreference.light,
+    );
+
+    await tester.tap(find.text('System'));
+    await tester.pumpAndSettle();
+    expect(
+      container.read(burlPreferencesProvider).theme,
+      BurlThemePreference.system,
+    );
+  });
+
+  testWidgets('production sync and history remain honest without Core data', (
+    tester,
+  ) async {
+    final api = _MountingRustApi([_treeNode('a', 'Alpha')]);
+    await _pumpShell(tester, api);
+
+    await tester.tap(find.byKey(const ValueKey('shell-sync')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('sync-state-select')), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('sync-done')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('shell-history')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('history-unavailable')), findsOneWidget);
+  });
+
+  testWidgets('the editor shell renders bounded visual tabs and keeps note '
+      'selection on the production provider seam', (tester) async {
+    final api = _MountingRustApi([_treeNode('a', 'Alpha')]);
+    final container = await _pumpShell(tester, api);
+
+    expect(find.byKey(const Key('shell-tab-strip')), findsOneWidget);
+    expect(find.text('Welcome.md'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('shell-add-tab')));
+    await tester.pumpAndSettle();
+    expect(find.text('Untitled 1.md'), findsOneWidget);
+
+    // Tree selection still drives `selectedNoteIdProvider` and the existing
+    // open path; tabs merely reflect that real selected Note once it opens.
+    await tester.tap(find.text('Alpha'));
+    await tester.pumpAndSettle();
+    expect(container.read(selectedNoteIdProvider), 'a');
+    expect(api.calls, contains('open:a'));
+    expect(find.byKey(const Key('shell-tab-a')), findsOneWidget);
+    expect(find.text('Welcome.md'), findsNothing);
+
+    // Closing an active Note remains intentionally deferred until it can use
+    // the lifecycle-aware close/flush path; the provider-owned tab persists.
+    await tester.tap(find.byTooltip('Close a.md'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('shell-tab-a')), findsOneWidget);
+  });
+
+  testWidgets(
+    'the search palette close affordance retains its shell callback',
+    (tester) async {
+      final api = _MountingRustApi([_treeNode('a', 'Alpha')]);
+      await _pumpShell(tester, api);
+
+      await tester.tap(find.byTooltip('Search notes'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('search-palette')), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Close search'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('search-palette')), findsNothing);
+    },
+  );
+
+  testWidgets('the metadata bar uses active Note metadata and provides copy '
+      'feedback', (tester) async {
+    final api = _MountingRustApi([_treeNode('a', 'Alpha')])
+      ..ast = [
+        AstNode.paragraph(
+          content: const [
+            InlineElement.text(
+              TextRun(
+                content: 'Three useful words',
+                bold: false,
+                italic: false,
+                strikethrough: false,
+                code: false,
+              ),
+            ),
+          ],
+        ),
+      ];
+    final clipboard = _captureClipboard(tester);
+    await _pumpShell(tester, api);
+
+    await tester.tap(find.text('Alpha'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('shell-filename-chip')), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('shell-filename-chip')),
+        matching: find.text('a.md'),
+      ),
+      findsOneWidget,
+    );
+    expect(find.textContaining('Modified recently'), findsOneWidget);
+    expect(find.textContaining('3 words'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('shell-copy-path')));
+    await tester.pumpAndSettle();
+    expect(clipboard.value, 'a.md');
+    expect(find.byIcon(LucideIcons.check), findsOneWidget);
+  });
+
+  testWidgets('narrow chrome hides metadata detail, clamps preferences, and '
+      'keeps explicit platform-chrome choices visible', (tester) async {
+    final api = _MountingRustApi([_treeNode('a', 'Alpha')]);
+    final container = await _pumpShell(tester, api);
+
+    container
+        .read(burlPreferencesProvider.notifier)
+        .setPlatformChrome(BurlPlatformChrome.minimal);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('platform-chrome-minimal')), findsOneWidget);
+
+    await tester.tap(find.text('Preferences'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('macos'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('platform-chrome-macos')), findsOneWidget);
+
+    tester.view.physicalSize = const Size(420, 800);
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('History'), findsOneWidget);
+    expect(
+      tester.getSize(find.byKey(const Key('preferences-drawer'))).width,
+      420,
+    );
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets('fixture stories use the strict 0/60/120 scale-fade transition', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const MaterialApp(home: VisualParityFixture()));
+    await tester.tap(find.byKey(const ValueKey('fixture-story-raw')));
+    await tester.pump();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 60));
+    final mid = tester.widget<ScaleTransition>(
+      find.byType(ScaleTransition).last,
+    );
+    expect(mid.scale.value, greaterThan(.98));
+    expect(mid.scale.value, lessThan(1));
+    await tester.pump(const Duration(milliseconds: 60));
+    expect(mid.scale.value, closeTo(1, .001));
+  });
+
+  testWidgets('fixture story switch is immediate with reduced motion', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(disableAnimations: true),
+            child: const VisualParityFixture(),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.byKey(const ValueKey('fixture-story-raw')));
+    await tester.pump();
+    expect(find.byKey(const ValueKey('fixture-raw-block')), findsOneWidget);
+  });
+
+  testWidgets('reduced sync spinner is stopped and invariant', (tester) async {
+    const turns = AlwaysStoppedAnimation<double>(.25);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(disableAnimations: true),
+            child: const BurlSyncSpinner(
+              turns: turns,
+              child: Icon(Icons.refresh),
+            ),
+          ),
+        ),
+      ),
+    );
+    expect(find.byKey(const ValueKey('sync-spinner-stopped')), findsOneWidget);
+    expect(find.byKey(const ValueKey('sync-spinner')), findsNothing);
+    final before = tester.getTopLeft(find.byIcon(Icons.refresh));
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(tester.getTopLeft(find.byIcon(Icons.refresh)), before);
   });
 }

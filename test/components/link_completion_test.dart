@@ -1117,7 +1117,15 @@ void main() {
       tester.getTopLeft(find.text('2.')).dx,
     ];
     expect(orderedXs.last, orderedXs.first);
-    _expectAlignedMarkerX(tester, find.byType(Checkbox), 2);
+    _expectAlignedMarkerX(
+      tester,
+      find.byWidgetPredicate(
+        (widget) =>
+            widget.key == const ValueKey('task-checked') ||
+            widget.key == const ValueKey('task-unchecked'),
+      ),
+      2,
+    );
   });
 
   testWidgets('BlockView prunes obsolete link recognizers after an update', (

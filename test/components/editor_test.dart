@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:burlmd/l10n/generated/app_localizations.dart';
 import 'package:burlmd/src/components/editor.dart';
 import 'package:burlmd/src/components/lifecycle_actions.dart';
+import 'package:burlmd/src/design/burl_theme.dart';
 import 'package:burlmd/src/providers/note_providers.dart';
 import 'package:burlmd/src/providers/rust_api_provider.dart';
 import 'package:burlmd/src/providers/workspace_provider.dart';
@@ -433,6 +434,7 @@ Future<ProviderContainer> pumpEditor(
   WidgetTester tester,
   List<AstNode> ast, {
   RustApi? api,
+  bool disableAnimations = false,
 }) async {
   final container = ProviderContainer(
     overrides: [
@@ -455,7 +457,12 @@ Future<ProviderContainer> pumpEditor(
       child: MaterialApp(
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
-        home: Scaffold(body: Editor(key: ValueKey('editor-${pumpCounter++}'))),
+        home: MediaQuery(
+          data: MediaQueryData(disableAnimations: disableAnimations),
+          child: Scaffold(
+            body: Editor(key: ValueKey('editor-${pumpCounter++}')),
+          ),
+        ),
       ),
     ),
   );
@@ -639,7 +646,15 @@ void main() {
       tester.getTopLeft(find.text('3.')).dx,
     ];
     expect(orderedXs.skip(1), everyElement(orderedXs.first));
-    _expectAlignedMarkerX(tester, find.byType(Checkbox), 2);
+    _expectAlignedMarkerX(
+      tester,
+      find.byWidgetPredicate(
+        (widget) =>
+            widget.key == const ValueKey('task-checked') ||
+            widget.key == const ValueKey('task-unchecked'),
+      ),
+      2,
+    );
   });
 
   testWidgets('a bold run renders styled with no delimiters while the '
@@ -799,16 +814,88 @@ void main() {
     await pumpEditor(tester, [_plainParagraph('hello world')], api: api);
 
     // Ahem (the test font) draws every glyph exactly fontSize wide, so the
-    // boundary between characters is deterministic: character 6 ('w') starts
-    // at 6*14 px into the painted paragraph; tap its middle.
+    // boundary between characters is deterministic. The prose slot is now
+    // centered, so derive the global x-coordinate from its render object.
     final paragraph = tester.renderObject<RenderParagraph>(
       find.byType(RichText),
     );
-    await tester.tapAt(Offset(6 * 14 + 7, paragraph.size.height / 2));
+    final origin = paragraph.localToGlobal(Offset.zero);
+    await tester.tapAt(
+      Offset(origin.dx + 6 * 16 + 8, origin.dy + paragraph.size.height / 2),
+    );
     await tester.pump();
     await tester.pump();
 
     expect(_field(tester).controller.selection.baseOffset, 6);
+  });
+
+  testWidgets('the selected prose measure centers entries on a wide editor', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final container = await pumpEditor(tester, [_plainParagraph('measure')]);
+    final preferences = container.read(burlPreferencesProvider.notifier);
+
+    preferences.setMeasure(BurlMeasure.wide);
+    await tester.pump();
+    final wide = tester.getRect(find.byKey(const ValueKey('entry-0')));
+    expect(wide.left, 300);
+    expect(wide.top, 40);
+    expect(wide.width, 600);
+
+    preferences.setMeasure(BurlMeasure.full);
+    await tester.pump();
+    final full = tester.getRect(find.byKey(const ValueKey('entry-0')));
+    expect(full.left, 24);
+    expect(full.width, 1152);
+  });
+
+  testWidgets('narrow editors retain touch padding while respecting measure', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final container = await pumpEditor(tester, [_plainParagraph('narrow')]);
+    container
+        .read(burlPreferencesProvider.notifier)
+        .setMeasure(BurlMeasure.technical);
+    await tester.pump();
+
+    final entry = tester.getRect(find.byKey(const ValueKey('entry-0')));
+    expect(entry.left, 24);
+    expect(entry.top, 32);
+    expect(entry.width, 272);
+  });
+
+  testWidgets('font-scale preferences update prose and retain focused slots', (
+    tester,
+  ) async {
+    final api = _FakeRustApi()..sources['0'] = 'scaled prose';
+    final container = await pumpEditor(tester, [
+      _plainParagraph('scaled prose'),
+    ], api: api);
+    final preferences = container.read(burlPreferencesProvider.notifier);
+
+    for (final scale in BurlFontScale.values) {
+      preferences.setFontScale(scale);
+      await tester.pump();
+      final richText = _firstRichText(tester);
+      final root = richText.text as TextSpan;
+      expect(root.style?.fontSize, scale.size);
+    }
+
+    final before = tester.getRect(find.byKey(const ValueKey('entry-0')));
+    await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
+    final focused = tester.getRect(find.byKey(const ValueKey('entry-0')));
+    expect(_field(tester).style.fontSize, BurlFontScale.spacious.size);
+    expect(focused, before);
   });
 
   // -- Typographic stability -----------------------------------------------
@@ -977,7 +1064,7 @@ void main() {
 
   // -- Promotion fidelity: container decorations replicated (P1/P2) --------
 
-  testWidgets('a focused code Block keeps its dark pane and white ink', (
+  testWidgets('a focused code Block keeps its themed pane and readable ink', (
     tester,
   ) async {
     final api = _FakeRustApi()..sources['0'] = '```\nprint(1);\n```';
@@ -985,26 +1072,166 @@ void main() {
 
     await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
 
-    // The dark container decoration the unfocused render draws is
-    // replicated around the promoted field (SPK-EDIT-F001 §3b), so the
-    // white ink stays visible instead of painting white-on-white.
-    final darkPane = find.ancestor(
+    // The themed body the unfocused render draws is the same body containing
+    // the promoted field (SPK-EDIT-F001 §3b).
+    final body = find.ancestor(
       of: _writableFields(),
-      matching: find.byWidgetPredicate(
-        (widget) => widget is Container && widget.color == Colors.black87,
-      ),
+      matching: find.byKey(const ValueKey('code-block-body')),
     );
-    expect(darkPane, findsOneWidget);
-    expect(_field(tester).style.color, Colors.white);
+    expect(body, findsOneWidget);
+    expect(_field(tester).style.color, const Color(0xff171717));
 
     // Rendered geometry, not a property guess: the field sits inset by the
-    // pane's 8px padding on both axes — exactly where the formatted code
+    // pane's 12px padding on both axes — exactly where the formatted code
     // text painted before promotion.
     final fieldBox = tester.renderObject<RenderBox>(_writableFields().first);
-    final paneBox = tester.renderObject<RenderBox>(darkPane.first);
+    final paneBox = tester.renderObject<RenderBox>(body.first);
     expect(
       fieldBox.localToGlobal(Offset.zero) - paneBox.localToGlobal(Offset.zero),
-      const Offset(8, 8),
+      const Offset(12, 12),
+    );
+  });
+
+  testWidgets('code header and body retain identical geometry while the raw '
+      'caret and copy affordance stay live', (tester) async {
+    final clipboard = _mockClipboard(tester);
+    final api = _FakeRustApi()..sources['0'] = '```dart\nprint(1);\n```';
+    await pumpEditor(tester, [
+      const AstNode.codeBlock(language: 'dart', code: 'print(1);'),
+    ], api: api);
+
+    final entryBefore = tester.getRect(find.byKey(const ValueKey('entry-0')));
+    final headerBefore = tester.getRect(
+      find.byKey(const ValueKey('code-block-header')),
+    );
+    final bodyBefore = tester.getRect(
+      find.byKey(const ValueKey('code-block-body')),
+    );
+    expect(find.text('dart'), findsOneWidget);
+    expect(find.text('Copy'), findsOneWidget);
+
+    // Copy is a header action, not a request to promote the code body.
+    await tester.tap(find.byKey(const ValueKey('code-block-copy')));
+    await tester.pump();
+    expect(clipboard.value, 'print(1);');
+    expect(find.text('Copied'), findsOneWidget);
+    expect(_writableFields(), findsNothing);
+
+    await promoteByTap(tester, find.byKey(const ValueKey('code-block-source')));
+    final controller = _field(tester).controller;
+    controller.selection = const TextSelection.collapsed(offset: 5);
+    await tester.pump();
+
+    expect(tester.getRect(find.byKey(const ValueKey('entry-0'))), entryBefore);
+    expect(
+      tester.getRect(find.byKey(const ValueKey('code-block-header'))),
+      headerBefore,
+    );
+    expect(
+      tester.getRect(find.byKey(const ValueKey('code-block-body'))),
+      bodyBefore,
+    );
+    expect(find.text('dart'), findsOneWidget);
+    expect(find.byKey(const ValueKey('code-block-copy')), findsOneWidget);
+    expect(
+      find.text('Copied'),
+      findsOneWidget,
+      reason: 'promotion keeps the authoritative code-slot state mounted',
+    );
+
+    await tester.tap(find.byKey(const ValueKey('code-block-copy')));
+    await tester.pump();
+    expect(_writableFields(), findsOneWidget);
+    expect(controller.selection, const TextSelection.collapsed(offset: 5));
+    expect(tester.getRect(find.byKey(const ValueKey('entry-0'))), entryBefore);
+
+    await tester.pump(const Duration(milliseconds: 1799));
+    expect(find.text('Copied'), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 121));
+    await tester.pumpAndSettle();
+    expect(find.text('Copy'), findsOneWidget);
+    expect(find.text('Copied'), findsNothing);
+  });
+
+  testWidgets('code copy feedback has no transition under reduced motion', (
+    tester,
+  ) async {
+    _mockClipboard(tester);
+    await pumpEditor(tester, [
+      const AstNode.codeBlock(language: 'text', code: 'still'),
+    ], disableAnimations: true);
+
+    final switcher = tester.widget<AnimatedSwitcher>(
+      find.descendant(
+        of: find.byKey(const ValueKey('code-block-copy')),
+        matching: find.byType(AnimatedSwitcher),
+      ),
+    );
+    expect(switcher.duration, Duration.zero);
+
+    final entry = tester.getRect(find.byKey(const ValueKey('entry-0')));
+    await tester.tap(find.byKey(const ValueKey('code-block-copy')));
+    await tester.pump();
+    expect(find.text('Copied'), findsOneWidget);
+    expect(tester.getRect(find.byKey(const ValueKey('entry-0'))), entry);
+    await tester.pump(const Duration(milliseconds: 1800));
+    expect(find.text('Copy'), findsOneWidget);
+    expect(find.text('Copied'), findsNothing);
+  });
+
+  testWidgets('H1 divider and rhythm remain in the same slot while focused', (
+    tester,
+  ) async {
+    final api = _FakeRustApi()..sources['0'] = '# Title';
+    await pumpEditor(tester, [
+      AstNode.heading(level: 1, content: [_plainRun('Title')]),
+    ], api: api);
+
+    final entry = tester.getRect(find.byKey(const ValueKey('entry-0')));
+    final divider = tester.getRect(
+      find.byKey(const ValueKey('heading-1-divider')),
+    );
+    await promoteByTap(tester, find.text('Title'));
+
+    expect(tester.getRect(find.byKey(const ValueKey('entry-0'))), entry);
+    expect(
+      tester.getRect(find.byKey(const ValueKey('heading-1-divider'))),
+      divider,
+    );
+    expect(_field(tester).controller.text, '# Title');
+  });
+
+  testWidgets('task markers are compact and completed task ink is struck', (
+    tester,
+  ) async {
+    await pumpEditor(tester, [
+      AstNode.list(
+        ordered: false,
+        items: [
+          AstNode.listItem(checked: true, content: [_plainParagraph('done')]),
+          AstNode.listItem(checked: false, content: [_plainParagraph('next')]),
+        ],
+      ),
+    ]);
+
+    expect(find.byType(Checkbox), findsNothing);
+    expect(find.byKey(const ValueKey('task-checked')), findsOneWidget);
+    expect(find.byKey(const ValueKey('task-unchecked')), findsOneWidget);
+    expect(
+      tester.getSize(find.byKey(const ValueKey('task-checked'))),
+      const Size.square(16),
+    );
+    final inheritedStyles = tester.widgetList<DefaultTextStyle>(
+      find.ancestor(
+        of: find.text('done'),
+        matching: find.byType(DefaultTextStyle),
+      ),
+    );
+    expect(
+      inheritedStyles.any(
+        (style) => style.style.decoration == TextDecoration.lineThrough,
+      ),
+      isTrue,
     );
   });
 
@@ -1236,7 +1463,7 @@ void main() {
       ),
     ], api: api);
 
-    expect(find.byType(Checkbox), findsOneWidget);
+    expect(find.byKey(const ValueKey('task-checked')), findsOneWidget);
     await promoteByTap(tester, find.text('task text'));
 
     expect(_field(tester).controller.text, 'task text');
@@ -2772,6 +2999,7 @@ void main() {
   testWidgets('selecting a note in the tree renders its blocks as output', (
     tester,
   ) async {
+    _setWideShellViewport(tester);
     final api = _ShellRustApi([
       TreeNode.note(id: 'n1', title: 'Seeded Note', path: 'Seeded.md'),
     ]);
@@ -2820,6 +3048,7 @@ void main() {
 
   testWidgets('typing while a gated switch closes and opens cannot mutate the '
       'outgoing Note or survive only in its controller', (tester) async {
+    _setWideShellViewport(tester);
     final closeGate = Completer<void>();
     final api = _ShellRustApi(
       [
@@ -2919,6 +3148,7 @@ void main() {
   testWidgets('a failed gated close restores the coherent old raw editor', (
     tester,
   ) async {
+    _setWideShellViewport(tester);
     final closeGate = Completer<void>();
     final api = _ShellRustApi(
       [
@@ -2986,6 +3216,7 @@ void main() {
   testWidgets('a Core error on open surfaces instead of being swallowed', (
     tester,
   ) async {
+    _setWideShellViewport(tester);
     final api = _ShellRustApi(
       [TreeNode.note(id: 'bad', title: 'Broken Note', path: 'Broken.md')],
       failOpenFor: {'bad'},
@@ -3023,4 +3254,14 @@ Future<void> _pumpShell(WidgetTester tester, _ShellRustApi api) async {
     ),
   );
   await tester.pumpAndSettle();
+}
+
+/// The redesigned shell presents its navigator as a rail at the default
+/// 800px test surface. These navigation-flow tests exercise the wide-shell
+/// tree path, so establish that available width explicitly.
+void _setWideShellViewport(WidgetTester tester) {
+  tester.view.physicalSize = const Size(1200, 800);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
 }

@@ -101,6 +101,10 @@ Future<ProviderContainer> _pumpShell(
   _RescanRustApi api, {
   required Future<int> Function() reindex,
 }) async {
+  tester.view.physicalSize = const Size(1200, 800);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
   final container = ProviderContainer(
     overrides: [
       rustApiProvider.overrideWithValue(api),
