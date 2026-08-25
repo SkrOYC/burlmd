@@ -8,6 +8,7 @@ import 'package:burlmd/src/components/lifecycle_actions.dart';
 import 'package:burlmd/src/components/range_text_input_client.dart';
 import 'package:burlmd/src/components/status_message.dart';
 import 'package:burlmd/src/design/burl_theme.dart';
+import 'package:burlmd/src/providers/burl_preferences_provider.dart';
 import 'package:burlmd/src/providers/note_providers.dart';
 import 'package:burlmd/src/providers/rust_api_provider.dart';
 import 'package:burlmd/src/providers/workspace_provider.dart';

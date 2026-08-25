@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:burlmd/src/smoke_isolation.dart';
 import 'package:burlmd/src/design/burl_theme.dart';
 import 'package:burlmd/src/design/burl_motion.dart';
+import 'package:burlmd/src/providers/burl_preferences_provider.dart';
 import 'package:burlmd/src/providers/workspace_provider.dart';
 import 'package:burlmd/src/rust/frb_generated.dart';
 import 'package:burlmd/src/rust/draft.dart';
