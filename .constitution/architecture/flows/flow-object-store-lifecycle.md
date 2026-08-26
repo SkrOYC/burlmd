@@ -50,7 +50,7 @@ stateDiagram-v2
 
 ## Failure path
 
-- Anonymous readability or unknown privacy refuses connection. While synchronized, privacy is revalidated on startup, before publication batches, and periodically; stale or failed evidence pauses Object transfer and history publication while local work remains available.
+- Any anonymous list, read, write, or delete permission—or unknown privacy—refuses connection. While synchronized, all four permissions are revalidated on startup, before publication batches, and periodically; stale or failed evidence pauses Object transfer and history publication while local work remains available.
 - Credential rotation validates replacements before removing earlier local credentials.
 - Missing or corrupt bytes never become visible before identity verification. Asset Recovery preserves every verified copy and exposes only valid recovery actions.
 - Cache eviction requires a verified Object Store copy and 30 days without use. burlmd doesn't delete authoritative Object Store bytes during `0.x`.

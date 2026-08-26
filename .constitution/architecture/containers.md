@@ -156,7 +156,7 @@ Device preferences never enter Workspace content. Session and navigation state r
 
 - **Boundary kind:** Module.
 - **Logical type:** Optional asynchronous Object coordinator.
-- **Responsibility:** Validates Object Store privacy at connection and revalidates it periodically and before publication, uploads and verifies required Objects before history publication, hydrates Objects, and coordinates migration, repair, rotation, and cleanup.
+- **Responsibility:** Validates at connection, periodically, and before publication that anonymous callers can't list, read, write, or delete in the Object Store prefix; uploads and verifies required Objects before history publication; hydrates Objects; and coordinates migration, repair, rotation, and cleanup.
 - **Inputs and outputs:** Accepts Object obligations and retention roots. Returns verification, hydration, migration, and recovery outcomes.
 - **Depends on:** Object Store, Secure Storage, Local Asset Store, Application State, and Core Coordination.
 

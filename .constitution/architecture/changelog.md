@@ -1,5 +1,9 @@
 # Stage 2: Architecture changelog
 
+## v1.4.13 - 2026-08-26
+
+PR #12 full review round 12 defines private Object Storage across the complete anonymous permission surface: list, read, write, and delete must all be denied at connection and during recurring or prepublication revalidation.
+
 ## v1.4.12 - 2026-08-26
 
 PR #12 full review round 11 constrains direct Remote detach to asset-free Workspaces. Every asset-bearing detach, including from privacy-loss or unauthenticated states, enters `LocalWithObjectStore` and must reconnect the exact prior Remote before the authenticated full-local transition.
