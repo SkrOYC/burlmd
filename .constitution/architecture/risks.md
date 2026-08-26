@@ -44,11 +44,11 @@ Repudiation isn't a release claim because burlmd is a single-Writer local produc
 - **Sensitivity point:** Intent timing affects local responsiveness and publication safety.
 - **Mitigation:** Persist the Object obligation before referenced history, repair obligations from unpublished history on startup and before publication, and verify Objects before push.
 
-## Risk 6: Protected-history cleanup cost
+## Risk 6: Cross-system Object deletion race
 
-- **Risk:** Complete published-history enumeration can be slow or unavailable, preventing authoritative Object deletion.
-- **Sensitivity point:** Broader retention improves recovery but increases storage and enumeration cost.
-- **Mitigation:** Prefer safety. Cache eviction remains available with a verified remote copy, but authoritative deletion stops when completeness is unknown.
+- **Risk:** A Remote ref can publish an Object reference between reachability inspection and deletion from generic S3-compatible storage.
+- **Sensitivity point:** Git and Object Store operations don't share an atomic transaction, and guest Remote pushes can't be required to honor a burlmd-only lease.
+- **Mitigation:** During `0.x`, burlmd evicts only verified local cache copies and never deletes authoritative Object Store bytes.
 
 ## Risk 7: Provider state ambiguity
 

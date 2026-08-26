@@ -1,10 +1,10 @@
 ---
-version: v2.1.10
+version: v2.1.11
 ---
 
 # Active backlog summary
 
-**Total Active Story Points:** 558
+**Total Active Story Points:** 564
 
 The complete forward backlog contains 80 tickets across seven active epics. All specified P0 work is planned. The five decision-producing Spikes are the first tickets in the epics they govern.
 
@@ -17,7 +17,7 @@ PR #11 remains the delivered redesign foundation and isn’t retroactively assig
 
 ## Critical path
 
-The longest dependency path is **150 story points**:
+The longest dependency path is **153 story points**:
 
 1. `AST-H001`
 2. `MODEL-H003`
@@ -382,4 +382,4 @@ Complete diagnostics, migration, nightly meters, production AppImage/Flake/macOS
 
 ### Explicitly deferred
 
-Only the decisions already under `.constitution/prd/out-of-scope/` remain unplanned: GitLab/second Provider, S3-only Workspaces, HTML export and Publishing, graph visualization, floating formatting toolbar, full history diff viewer, Intel macOS, Linux ARM64, self-updating binaries, signing/notarization during `0.x`, mobile apps, simultaneous Workspaces, and independent-history merging.
+Only the decisions already under `.constitution/prd/out-of-scope/` remain unplanned: GitLab/second Provider, S3-only Workspaces, authoritative Object Store deletion during `0.x`, HTML export and Publishing, graph visualization, floating formatting toolbar, full history diff viewer, Intel macOS, Linux ARM64, self-updating binaries, signing/notarization during `0.x`, mobile apps, simultaneous Workspaces, and independent-history merging.

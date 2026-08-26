@@ -1,5 +1,5 @@
 ---
-version: v2.1.10
+version: v2.1.11
 status: active
 epic: K
 ---
@@ -187,17 +187,18 @@ The exact runbook command starts from a clean second-device state, joins the iso
 - **Scope (Out-of-Scope Files):**
   - Deleting Remote repositories or Object Store buckets
 - **Verification Command:** `cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && dart analyze && git diff --check`
-- **Expected Success Output:** exit 0 with offline attachment-only detach, online full-local transition, reconnect, protected-hydration block, and exact-history preservation tests passing
+- **Expected Success Output:** exit 0 with offline transition to local-with-store, direct retained-store removal, online full-local transition, reconnect, hydration refusal, and exact-history preservation tests passing
 - **STOP Conditions:**
   - STOP if detach deletes history or Objects, or can leave an asset-bearing Workspace inconsistently attached.
   - STOP if a full-local transition relies on cached Remote refs, stale readiness, or no authenticated online Remote revalidation.
-- **Description:** Keep sign-out credential-only. Permit offline Remote detachment only as local bookkeeping that retains the Object Store connection. For a full-local transition, authenticate online, enumerate all published refs again, hydrate and verify the resulting Protected Object closure, and consume the revision-bound readiness result atomically before detaching both external stores. Reconnect the exact prior Remote without rewriting history.
+  - STOP if removing the Object Store from `LocalWithObjectStore` can proceed without the local-revision readiness result from DETACH-I012.
+- **Description:** Keep sign-out credential-only. Offline Remote detachment moves to `LocalWithObjectStore` and retains Object Store configuration. From that state, let the Writer either reconnect the exact prior Remote or consume DETACH-I012 local-revision readiness to remove the retained store and become fully local. For a full-local transition while attached, authenticate online, enumerate all published refs again, hydrate and verify the resulting Protected Object closure, and consume the ref/revision-bound readiness atomically before detaching both external stores. Never delete remote Object bytes or rewrite history.
 - **Acceptance:**
   - **Mode:** invariant
   - **Evidence:**
 
 ```text
-Sign-out preserves attachment. Offline detachment removes only local Remote bookkeeping, retains the Object Store, and preserves local commits. Full-local transition requires an authenticated online Remote-ref revalidation immediately before hydration readiness and compare-and-swap detach. It refuses offline, stale, incomplete, or advanced ref evidence. Success retains all protected bytes and detaches both external stores; reconnect restores publication without history rewrite.
+Sign-out preserves attachment. Offline detachment removes only local Remote bookkeeping, enters `LocalWithObjectStore`, retains the Object Store, and preserves local commits. From that state, reconnect restores publication without history rewrite. Direct store removal succeeds only after DETACH-I012 verifies every locally protected byte against the current local revision; failure or revision advance preserves the store. Full-local transition while attached requires authenticated online Remote-ref revalidation immediately before hydration readiness and compare-and-swap detach. It refuses offline, stale, incomplete, or advanced ref evidence. Both successful paths retain all protected bytes and delete no authoritative remote Object.
 ```
 
 #### REMOTE-K007 Integrate Remote settings, privacy, and authorization states

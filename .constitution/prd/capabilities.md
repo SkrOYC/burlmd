@@ -219,11 +219,6 @@ PR #11 also delivered the design system, responsive shell, preferences surface, 
 - **Rationale:** User-controlled storage must remain replaceable without weakening history.
 
 - **Priority:** P0
-- **Capability ID:** CAP-ASSET-07
-- **Capability:** burlmd can delete an authoritative Object only after the Object remains unreachable from every Protected State for 30 days and burlmd has enumerated complete published Remote history.
-- **Rationale:** Cleanup must not break restorable history or another published branch.
-
-- **Priority:** P0
 - **Capability ID:** CAP-ASSET-08
 - **Capability:** In a connected Workspace, burlmd can evict inactive local Object bytes after 30 days only when the Object Store contains a verified copy and no current Note requires the bytes offline.
 - **Rationale:** Local cache control must remain distinct from deleting an authoritative Object.

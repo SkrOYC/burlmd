@@ -1,5 +1,11 @@
 # Stage 1: Product Requirements Changelog
 
+## v1.3.5 - 2026-08-26
+
+### Changed
+
+- Deferred authoritative Object Store deletion during `0.x`. Git refs and generic S3-compatible deletion can't form an atomic transaction, and guest Remote pushes can't honor a burlmd-only lease. Verified 30-day local cache eviction remains active.
+
 ## v1.3.4 - 2026-08-26
 
 ### Added

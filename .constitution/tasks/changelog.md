@@ -1,5 +1,18 @@
 # Stage 4: Tasks changelog
 
+## v2.1.11 - 2026-08-26
+
+PR #12 full review round 7 found four P1 integrity gaps and one P2 schema defect. This patch resolves all five.
+
+### Changed
+
+- Deferred authoritative Object Store deletion during `0.x`; verified 30-day local cache eviction remains planned.
+- Added durable replacement-store migration intent, mandatory dual-write publication, delta reconciliation, and revision-bound compare-and-swap cutover.
+- Enforced `assets/objects/**` exclusion in every Core staging and commit path without trusting `.gitignore` or ambient Git configuration.
+- Added direct hydration and retained-store removal from `LocalWithObjectStore` without reconnecting the detached Remote.
+- Allowed honest empty stdout and stderr strings in result schema v6.
+- Re-estimated MIGRATE-I011 and DETACH-I012 from 5 to 8 points each. The active backlog remains 80 tickets and becomes 564 points; 215 dependency edges remain, and the critical path becomes 153 points.
+
 ## v2.1.10 - 2026-08-26
 
 PR #12 full review round 6 found one P1 and four P2 contract gaps. This patch resolves all five and corrects one stale lineage banner.
