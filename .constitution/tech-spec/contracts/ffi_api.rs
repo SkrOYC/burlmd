@@ -1,6 +1,6 @@
-// FORWARD STATUS (TechSpec v1.7.14-provisional): this is the delivered
-// brownfield interface, not an implementation-ready contract for PRD v1.3.5
-// and Architecture v1.4.13.
+// FORWARD STATUS (TechSpec v1.7.15-provisional): this is the delivered
+// brownfield interface, not an implementation-ready contract for PRD v1.3.6
+// and Architecture v1.4.14.
 // In particular, AstNode is a rendering projection rather than the required
 // canonical extended AST; the OAuth redirect flow is superseded by the
 // GitHub App device-flow decision; title-verbatim path derivation is under

@@ -1,5 +1,5 @@
 ---
-version: v2.1.16
+version: v2.1.17
 status: active
 epic: M
 ---
@@ -425,25 +425,28 @@ Both macOS hosts record the same candidate hash, Apple's observed stable-major p
 #### PUBLISH-M014 Publish the verified GitHub `0.x` prerelease
 - **Type:** Chore
 - **Effort:** 5
-- **Dependencies:** GATE-M011, GATE-M012, GATE-M013
+- **Dependencies:** GATE-M011, GATE-M012, GATE-M013, REG-K001
 - **Category:** Security
 - **Scope (In-Scope Files):**
   - `.github/workflows/**`
+  - `.constitution/reports/**`
+  - `config/github-app.release.toml`
   - `scripts/**`
   - `CHANGELOG.md`
 - **Scope (Out-of-Scope Files):**
   - Rebuilding candidates during publication, stable signing/notarization, and automatic binary replacement
-- **Verification Command:** Run the accepted GitHub prerelease publication and remote verification commands from final TechSpec for the already-gated candidate hashes, then `git diff --check`.
+- **Verification Command:** Run `./scripts/attest-github-app-token-expiration.sh --client-id "$BURLMD_GITHUB_APP_CLIENT_ID" --output .constitution/reports/github-app-token-expiration-attestation.json`, complete the displayed device-flow authorization as the project administrator, then run `./scripts/verify-github-app-registration.sh --manifest config/github-app.release.toml --installation-url "$BURLMD_GITHUB_APP_INSTALLATION_URL" --expected-client-id "$BURLMD_GITHUB_APP_CLIENT_ID" --require-device-flow --require-private-repository-permissions --forbid-permission workflows --token-expiration-attestation .constitution/reports/github-app-token-expiration-attestation.json --max-attestation-age-hours 24 --output .constitution/reports/github-app-registration.json`; run the accepted GitHub prerelease publication and remote verification commands from final TechSpec for the already-gated candidate hashes; then run `git diff --check`.
 - **Expected Success Output:** one GitHub `0.x` prerelease exposes exactly the gated immutable artifacts, checksums, provenance, compatibility labels, source revision, licenses, and unsigned disclosures
 - **STOP Conditions:**
   - STOP if final Stage 3 hasn't replaced the GitHub publication placeholder with exact accepted commands.
   - STOP if any published byte differs from the gated candidate, any gate is missing or older than its accepted freshness window, the version isn't `0.x`, an artifact attestation fails the accepted repository/workflow/ref/revision trust policy, or metadata claims an untested system.
+  - STOP if the fresh GitHub App registration report is missing, the administrator-approved expiring-token attestation is more than 24 hours old, or the App's client ID, installation URL, device-flow setting, private-repository permissions, or absence of Workflows permission has drifted.
   - STOP and return to GATE-M013 if Apple's official stable-version source no longer matches the gate's recorded two-major pair or if that observation is more than 24 hours old; reconcile the packaging contract first when the pair changes.
-- **Description:** Immediately before publication, query Apple's official stable-version source and require the GATE-M013 pair and observation to be current within 24 hours. Publish the already-gated AppImage, Apple Silicon archive, and attested Flake source archive; expose the gated release-tagged Flake revision; attach their existing checksums, attestations, licenses, and disclosures; and mark the GitHub Release as a prerelease without rebuilding.
+- **Description:** Immediately before publication, rerun the REG-K001 GitHub App registration and device-flow verification with fresh administrator-approved token-expiration evidence no older than 24 hours. Query Apple's official stable-version source and require the GATE-M013 pair and observation to be current within 24 hours. Publish the already-gated AppImage, Apple Silicon archive, and attested Flake source archive; expose the gated release-tagged Flake revision; attach their existing checksums, attestations, licenses, and disclosures; and mark the GitHub Release as a prerelease without rebuilding.
 - **Acceptance:**
   - **Mode:** runbook_probe
   - **Evidence:**
 
 ```text
-Remote verification matches every published byte and Flake revision to the three gate reports and verifies each GitHub Actions attestation against the accepted GitHub/Sigstore issuer, `SkrOYC/burlmd`, release workflow, release ref, source revision, and subject identity. The publication record includes the fresh official Apple version observation and the matching GATE-M013 pair. The release is marked prerelease, compatibility and unsigned disclosures are accurate, and no publication step rebuilt an artifact.
+Remote verification matches every published byte and Flake revision to the three gate reports and verifies each GitHub Actions attestation against the accepted GitHub/Sigstore issuer, `SkrOYC/burlmd`, release workflow, release ref, source revision, and subject identity. The publication record includes a fresh drift-free GitHub App registration report, its administrator-approved token-expiration attestation age, the fresh official Apple version observation, and the matching GATE-M013 pair. The release is marked prerelease, compatibility and unsigned disclosures are accurate, and no publication step rebuilt an artifact.
 ```

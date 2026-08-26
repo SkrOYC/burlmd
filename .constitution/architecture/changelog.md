@@ -1,5 +1,9 @@
 # Stage 2: Architecture changelog
 
+## v1.4.14 - 2026-08-26
+
+Reviewed for PRD v1.3.6. PR #12 full review round 14 aligns privacy-paused recovery and the Object Store risk boundary with the complete negative anonymous List, Get, Put, and Delete probe.
+
 ## v1.4.13 - 2026-08-26
 
 PR #12 full review round 12 defines private Object Storage across the complete anonymous permission surface: list, read, write, and delete must all be denied at connection and during recurring or prepublication revalidation.
