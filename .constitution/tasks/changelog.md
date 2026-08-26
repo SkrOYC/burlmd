@@ -1,5 +1,9 @@
 # Stage 4: Tasks changelog
 
+## v2.1.20 - 2026-08-26
+
+PR #12 full review round 18 closes the device-flow expiry identifier gap. AUTH-K001 tests and accepts both `expired_token` and GitHub's documented `token_expired` wording as restart outcomes. Ticket count, effort, dependencies, and critical path remain 80 tickets, 564 points, 217 edges, and 153 points.
+
 ## v2.1.19 - 2026-08-26
 
 PR #12 full review round 17 closes two P1 and one P2 evidence gaps. PATH roles are bound to Linux/ext4 and macOS/APFS. Packaging requires Linux/x86-64 build hosts and system-captured guest evidence for every named Ubuntu and Debian runtime. GitHub REST fixtures assert the accepted media type and `X-GitHub-Api-Version` header. Ticket count, effort, dependencies, and critical path remain 80 tickets, 564 points, 217 edges, and 153 points.
