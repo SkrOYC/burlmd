@@ -1,5 +1,5 @@
 ---
-version: v2.1.6
+version: v2.1.7
 status: active
 epic: I
 ---
@@ -10,7 +10,7 @@ Deliver inline images through a portable Local Asset Store and a first-class, us
 
 **Capability coverage:** CAP-EDIT-06, CAP-ASSET-01, CAP-ASSET-02, CAP-ASSET-03, CAP-ASSET-04, CAP-ASSET-05, CAP-ASSET-06, CAP-ASSET-07, CAP-ASSET-08, CAP-ASSET-09, CAP-ASSET-10, CAP-ASSET-11, CAP-ASSET-12.
 
-**Total Effort:** 87 story points
+**Total Effort:** 92 story points
 
 #### ASSET-I001 Measure the hybrid Asset and Object Store contract
 - **Type:** Spike
@@ -22,7 +22,7 @@ Deliver inline images through a portable Local Asset Store and a first-class, us
   - `.constitution/spikes/SPK-ASSET-I001.md`
 - **Scope (Out-of-Scope Files):**
   - Every repository path not listed above (don't touch production or active specifications)
-- **Verification Command:** Run these exact commands in order on their named hosts: common: `cargo test --locked --manifest-path .constitution/prototypes/assets/Cargo.toml --all-targets`; Linux reference profile: `cargo run --locked --release --manifest-path .constitution/prototypes/assets/Cargo.toml -- probe --run-id linux-reference --role linux-reference-profile --expected-os linux --profile linux-i5-8250u-16gib --fixture-dir .constitution/prototypes/assets/fixtures --output .constitution/prototypes/assets/runs/linux-reference.json`; macOS reference profile: `cargo run --locked --release --manifest-path .constitution/prototypes/assets/Cargo.toml -- probe --run-id macos-reference --role macos-reference-profile --expected-os macos --profile macos-m1-8gib --fixture-dir .constitution/prototypes/assets/fixtures --output .constitution/prototypes/assets/runs/macos-reference.json`; coordinator after both runs: `cargo run --locked --release --manifest-path .constitution/prototypes/assets/Cargo.toml -- aggregate --contract .constitution/tech-spec/contracts/provisional-spikes.toml --schema .constitution/tech-spec/contracts/spike-result.schema.json --require-role linux-reference-profile --require-role macos-reference-profile --require-distinct-hosts 2 --require-distinct-operating-systems 2 --output .constitution/prototypes/assets/results.json`.
+- **Verification Command:** Run these exact commands in order on their named hosts: common: `cargo test --locked --manifest-path .constitution/prototypes/assets/Cargo.toml --all-targets`; Linux reference profile: `cargo run --locked --release --manifest-path .constitution/prototypes/assets/Cargo.toml -- probe --run-id linux-reference --role linux-reference-profile --expected-os linux --profile linux-i5-8250u-16gib --fixture-dir .constitution/prototypes/assets/fixtures --output .constitution/prototypes/assets/runs/linux-reference.json --handoff-bundle .constitution/prototypes/assets/handoff/outbox/linux-reference.tar.zst --handoff-sha256 .constitution/prototypes/assets/handoff/outbox/linux-reference.sha256`; macOS reference profile: `cargo run --locked --release --manifest-path .constitution/prototypes/assets/Cargo.toml -- probe --run-id macos-reference --role macos-reference-profile --expected-os macos --profile macos-m1-8gib --fixture-dir .constitution/prototypes/assets/fixtures --output .constitution/prototypes/assets/runs/macos-reference.json --handoff-bundle .constitution/prototypes/assets/handoff/outbox/macos-reference.tar.zst --handoff-sha256 .constitution/prototypes/assets/handoff/outbox/macos-reference.sha256`; coordinator transfer: `mkdir -p .constitution/prototypes/assets/handoff/inbox && scp "$BURLMD_LINUX_HANDOFF_SOURCE/linux-reference.tar.zst" "$BURLMD_LINUX_HANDOFF_SOURCE/linux-reference.sha256" "$BURLMD_MACOS_HANDOFF_SOURCE/macos-reference.tar.zst" "$BURLMD_MACOS_HANDOFF_SOURCE/macos-reference.sha256" .constitution/prototypes/assets/handoff/inbox/`; coordinator aggregation: `cargo run --locked --release --manifest-path .constitution/prototypes/assets/Cargo.toml -- aggregate --contract .constitution/tech-spec/contracts/provisional-spikes.toml --schema .constitution/tech-spec/contracts/spike-result.schema.json --import-bundle .constitution/prototypes/assets/handoff/inbox/linux-reference.tar.zst --import-sha256 .constitution/prototypes/assets/handoff/inbox/linux-reference.sha256 --import-bundle .constitution/prototypes/assets/handoff/inbox/macos-reference.tar.zst --import-sha256 .constitution/prototypes/assets/handoff/inbox/macos-reference.sha256 --require-role linux-reference-profile --require-role macos-reference-profile --require-distinct-hosts 2 --require-distinct-operating-systems 2 --output .constitution/prototypes/assets/results.json`.
 - **Expected Success Output:** exit 0 with a finalized schema-valid report and explicit OD-06/OD-07 disposition
 - **STOP Conditions:**
   - STOP if credentials would enter committed files or evidence.
@@ -292,6 +292,32 @@ And leaves both external connections unchanged
 And the prepared Workspace can restart offline with every protected byte available
 ```
 
+#### UNLINK-I013 Detach an unused Object Store without detaching the Remote
+- **Type:** Feature
+- **Effort:** 5
+- **Dependencies:** OBJECT-I004, RETAIN-I007, REFS-L010, CI-M003
+- **Category:** Correctness
+- **Scope (In-Scope Files):**
+  - `rust/src/object_store/**`
+  - `rust/src/security/**`
+  - `rust/src/api/ffi_api.rs`
+  - `lib/src/components/**`
+  - `test/**`
+- **Scope (Out-of-Scope Files):**
+  - Full-local Remote detach owned by DETACH-I012 and DETACH-K006
+- **Verification Command:** `cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh unlink-i013 && git diff --check`
+- **Expected Success Output:** exit 0 with empty-protected-set, stale-enumeration refusal, credential removal, Remote-preservation, and reconnect tests passing
+- **STOP Conditions:**
+  - STOP if published history is incomplete, any Protected Object exists, the enumerated revision has advanced, or Object Store detach can alter Remote attachment/history.
+- **Description:** Enumerate every Protected State through the complete published-ref inventory, prove the protected Object set is empty at compare-and-swap time, remove only the Object Store configuration and local credential, keep the private GitHub Remote attached, and permit later Object Store reconnection.
+- **Acceptance:**
+  - **Mode:** invariant
+  - **Evidence:**
+
+```text
+Property and interruption tests cover current state, retained/unpublished local history, every published branch/tag, pending reconciliation, and Consolidation. Detach succeeds only for a revision-bound empty protected set; it removes the local Object Store credential/configuration, preserves the exact Remote and Git history, and refuses stale, incomplete, or nonempty enumeration without changing either connection.
+```
+
 #### ADOPT-I009 Inventory and migrate foreign Workspace Assets
 - **Type:** Feature
 - **Effort:** 8
@@ -326,7 +352,7 @@ And unreferenced files remain unchanged for review
 #### ASSET-I010 Integrate Asset state with restore, Consolidation, and shell status
 - **Type:** Feature
 - **Effort:** 8
-- **Dependencies:** IMAGE-I003, RECOVER-I006, ROTATE-I008, MIGRATE-I011, DETACH-I012, ADOPT-I009, HIST-G010, CI-M003
+- **Dependencies:** IMAGE-I003, RECOVER-I006, ROTATE-I008, MIGRATE-I011, DETACH-I012, UNLINK-I013, ADOPT-I009, HIST-G010, CI-M003
 - **Category:** Correctness
 - **Scope (In-Scope Files):**
   - `rust/src/assets/**`

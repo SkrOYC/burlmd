@@ -1,5 +1,5 @@
 ---
-version: v2.1.6
+version: v2.1.7
 status: active
 epic: M
 ---
@@ -10,7 +10,7 @@ Make the complete desktop application supportable, measurable, installable, migr
 
 **Capability coverage:** CAP-SUP-01, CAP-REL-01, CAP-REL-02, CAP-REL-03, CAP-REL-04, CAP-REL-05, CAP-REL-06, plus every scalar PRD quality meter and the release-blocking feature matrix.
 
-**Total Effort:** 96 story points
+**Total Effort:** 99 story points
 
 #### PKG-M001 Prove prerelease packaging feasibility and Linux baseline
 - **Type:** Spike
@@ -22,7 +22,7 @@ Make the complete desktop application supportable, measurable, installable, migr
   - `.constitution/spikes/SPK-PKG-M001.md`
 - **Scope (Out-of-Scope Files):**
   - Every repository path not listed above (don't package production or edit active specifications)
-- **Verification Command:** Execute these exact commands on their named host roles, preserving order within each role, then run the coordinator command:
+- **Verification Command:** Execute these exact commands on their named host roles, preserving order within each role, transfer the opaque handoff bundles, then run the coordinator aggregation:
   - linux-flake-check: `cd .constitution/prototypes/packaging && cargo run --locked --release --manifest-path result-tool/Cargo.toml -- execute --run-id linux-flake-check --role linux-flake-check --output runs/linux-flake-check.json --stdout logs/linux-flake-check.stdout --stderr logs/linux-flake-check.stderr --success-marker artifacts/linux-flake-check.ok -- nix flake check --print-build-logs`
   - linux-build: `cd .constitution/prototypes/packaging && cargo run --locked --release --manifest-path result-tool/Cargo.toml -- execute --run-id linux-build --role linux-build --output runs/linux-build.json --stdout logs/linux-build.stdout --stderr logs/linux-build.stderr --artifact result-links/appimage --copy-artifact-to artifacts/appimage -- nix build --print-build-logs --out-link result-links/appimage .#checks.x86_64-linux.appimage`
   - linux-flake-install: `cd .constitution/prototypes/packaging && cargo run --locked --release --manifest-path result-tool/Cargo.toml -- execute --run-id linux-flake-install --role linux-flake-install --output runs/linux-flake-install.json --stdout logs/linux-flake-install.stdout --stderr logs/linux-flake-install.stderr --artifact result-links/flake-install --copy-artifact-to artifacts/flake-install -- nix build --print-build-logs --out-link result-links/flake-install .#checks.x86_64-linux.flake-install`
@@ -35,9 +35,12 @@ Make the complete desktop application supportable, measurable, installable, migr
   - linux-runtime-candidate: `cd .constitution/prototypes/packaging && cargo run --locked --release --manifest-path result-tool/Cargo.toml -- execute --run-id debian-13-x86_64 --role linux-runtime-candidate --output runs/debian-13-x86_64.json --stdout logs/debian-13.stdout --stderr logs/debian-13.stderr --artifact result-links/debian-13 --copy-artifact-to artifacts/debian-13 -- nix build --print-build-logs --out-link result-links/debian-13 .#checks.x86_64-linux.debian-13`
   - macos-current-stable: `cd .constitution/prototypes/packaging/harness && cargo run --locked --release --manifest-path ../result-tool/Cargo.toml -- execute --run-id macos-current-aarch64 --role macos-current-stable --output ../runs/macos-current-aarch64.json --stdout ../logs/macos-current.stdout --stderr ../logs/macos-current.stderr --artifact build/macos/Build/Products/Release --copy-artifact-to ../artifacts/macos-current -- flutter build macos --release`
   - macos-current-stable: `cd .constitution/prototypes/packaging/harness && cargo run --locked --release --manifest-path ../result-tool/Cargo.toml -- execute --append --run-id macos-current-aarch64 --role macos-current-stable --output ../runs/macos-current-aarch64.json --stdout ../logs/macos-current-probe.stdout --stderr ../logs/macos-current-probe.stderr --artifact ../artifacts/macos-current-probe.json -- build/macos/Build/Products/Release/harness.app/Contents/MacOS/harness --burlmd-packaging-probe ../artifacts/macos-current-probe.json`
+  - macos-current-stable: `cd .constitution/prototypes/packaging && cargo run --locked --release --manifest-path result-tool/Cargo.toml -- handoff export --run-id macos-current-aarch64 --run-file runs/macos-current-aarch64.json --artifact-dir artifacts/macos-current --output handoff/outbox/macos-current-aarch64.tar.zst --sha256-output handoff/outbox/macos-current-aarch64.sha256`
   - macos-previous-stable: `cd .constitution/prototypes/packaging/harness && cargo run --locked --release --manifest-path ../result-tool/Cargo.toml -- execute --run-id macos-previous-aarch64 --role macos-previous-stable --output ../runs/macos-previous-aarch64.json --stdout ../logs/macos-previous.stdout --stderr ../logs/macos-previous.stderr --artifact build/macos/Build/Products/Release --copy-artifact-to ../artifacts/macos-previous -- flutter build macos --release`
   - macos-previous-stable: `cd .constitution/prototypes/packaging/harness && cargo run --locked --release --manifest-path ../result-tool/Cargo.toml -- execute --append --run-id macos-previous-aarch64 --role macos-previous-stable --output ../runs/macos-previous-aarch64.json --stdout ../logs/macos-previous-probe.stdout --stderr ../logs/macos-previous-probe.stderr --artifact ../artifacts/macos-previous-probe.json -- build/macos/Build/Products/Release/harness.app/Contents/MacOS/harness --burlmd-packaging-probe ../artifacts/macos-previous-probe.json`
-  - coordinator: `cd .constitution/prototypes/packaging && cargo run --locked --release --manifest-path result-tool/Cargo.toml -- aggregate --contract ../../tech-spec/contracts/provisional-spikes.toml --schema ../../tech-spec/contracts/spike-result.schema.json --require-role linux-flake-check --require-role linux-build --require-role linux-flake-install --require-role linux-installed-runtime=2 --require-role linux-runtime-candidate=5 --require-role macos-current-stable --require-role macos-previous-stable --require-distinct-macos-versions=2 --output results.json`
+  - macos-previous-stable: `cd .constitution/prototypes/packaging && cargo run --locked --release --manifest-path result-tool/Cargo.toml -- handoff export --run-id macos-previous-aarch64 --run-file runs/macos-previous-aarch64.json --artifact-dir artifacts/macos-previous --output handoff/outbox/macos-previous-aarch64.tar.zst --sha256-output handoff/outbox/macos-previous-aarch64.sha256`
+  - coordinator-transfer: `cd .constitution/prototypes/packaging && mkdir -p handoff/inbox && scp "$BURLMD_MACOS_CURRENT_HANDOFF_SOURCE/macos-current-aarch64.tar.zst" "$BURLMD_MACOS_CURRENT_HANDOFF_SOURCE/macos-current-aarch64.sha256" "$BURLMD_MACOS_PREVIOUS_HANDOFF_SOURCE/macos-previous-aarch64.tar.zst" "$BURLMD_MACOS_PREVIOUS_HANDOFF_SOURCE/macos-previous-aarch64.sha256" handoff/inbox/`
+  - coordinator: `cd .constitution/prototypes/packaging && cargo run --locked --release --manifest-path result-tool/Cargo.toml -- aggregate --contract ../../tech-spec/contracts/provisional-spikes.toml --schema ../../tech-spec/contracts/spike-result.schema.json --import-bundle handoff/inbox/macos-current-aarch64.tar.zst --import-sha256 handoff/inbox/macos-current-aarch64.sha256 --import-bundle handoff/inbox/macos-previous-aarch64.tar.zst --import-sha256 handoff/inbox/macos-previous-aarch64.sha256 --require-role linux-flake-check --require-role linux-build --require-role linux-flake-install --require-role linux-installed-runtime=2 --require-role linux-runtime-candidate=5 --require-role macos-current-stable --require-role macos-previous-stable --require-distinct-macos-versions=2 --output results.json`
 - **Expected Success Output:** exit 0 with finalized multi-host schema-valid evidence and OD-08 recommendation
 - **STOP Conditions:**
   - STOP if the harness uses ambient Git, omits installed-runtime probes, or infers one Platform result from another.
@@ -78,10 +81,33 @@ Unique hashed/logged runs verify installed Git/runtime, secure storage, file sel
 Generated content, credential, signed-location, and content-derived canaries never appear in files or export; required failures and state transitions do; rotation caps storage; logging failure never becomes a product failure; export performs no network request.
 ```
 
+#### FLAKE-M002 Stabilize the authoritative-success timestamp regression test
+- **Type:** Chore
+- **Effort:** 3
+- **Dependencies:** None
+- **Category:** Tech-Debt
+- **Scope (In-Scope Files):**
+  - `rust/src/workspace/persist.rs`
+  - `scripts/repeat-test.sh`
+- **Scope (Out-of-Scope Files):**
+  - Weakening authoritative-success semantics or deleting timestamp assertions without a deterministic replacement
+- **Verification Command:** `cargo test --manifest-path rust/Cargo.toml a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success && ./scripts/repeat-test.sh --count 100 -- cargo test --manifest-path rust/Cargo.toml a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success && git diff --check`
+- **Expected Success Output:** the targeted regression passes once normally and 100 consecutive isolated repetitions with deterministic timestamp evidence
+- **STOP Conditions:**
+  - STOP if the fix can hide a real ordering failure, rely on wall-clock coincidence, or weaken the authoritative-success state comparison.
+- **Description:** Replace the one-second `last_modified` race in the existing structural-draft authoritative-success regression with deterministic clock/state evidence while preserving the production invariant and exact state comparison.
+- **Acceptance:**
+  - **Mode:** stat_threshold
+  - **Evidence:**
+
+```text
+Metric: targeted-test failures. Dataset: 100 consecutive isolated repetitions after one ordinary run. Threshold: 0 failures and no skipped assertion. Command: the exact verification command above. The assertion still distinguishes authoritative success from rollback/failure without depending on wall-clock second boundaries.
+```
+
 #### CI-M003 Establish the Linux and Apple Silicon macOS PR matrix
 - **Type:** Chore
 - **Effort:** 8
-- **Dependencies:** None
+- **Dependencies:** FLAKE-M002
 - **Category:** DX
 - **Scope (In-Scope Files):**
   - `.github/workflows/**`

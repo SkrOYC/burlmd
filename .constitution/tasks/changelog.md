@@ -1,5 +1,22 @@
 # Stage 4: Tasks changelog
 
+## v2.1.7 - 2026-08-26
+
+PR #12 full review round 3 found three P1 and two P2 gaps. This patch resolves all five.
+
+### Added
+
+- Added `REG-K001` to own project GitHub App registration, installation URL, versioned permissions, device-flow/expiring-token settings, release client ID, and live drift gate.
+- Added `UNLINK-I013` for independent Object Store detach when complete Protected-State enumeration proves no Object reference exists, without detaching the private GitHub Remote.
+- Added `FLAKE-M002` to stabilize the existing authoritative-success timestamp regression before CI makes the full Rust suite a required gate.
+
+### Fixed
+
+- Added proactive access-token refresh and exactly one refresh/replay after an authenticated `401`; a second `401` becomes authentication-required.
+- Reconciled provisional Stage 3 against Architecture v1.4.3.
+- Added opaque SHA-256-verified cross-host result export, SCP transfer, import, and aggregation for AST, path, Asset, and packaging Spikes.
+- Recomputed the active backlog to 80 tickets, 558 points, and 214 dependency edges. The critical path remains 129 points.
+
 ## v2.1.6 - 2026-08-26
 
 PR #12 full review round 2 found five P1 and two P2 gaps. This patch resolves all seven.

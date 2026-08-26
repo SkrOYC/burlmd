@@ -37,6 +37,9 @@ url = "https://github.com/login/oauth/access_token"
 grant_type = "refresh_token"
 required_fields = ["client_id", "grant_type", "refresh_token"]
 rotate_pair_atomically = true
+refresh_before_access_token_expiry = true
+on_authenticated_401 = "refresh-once-then-retry-original-operation-once"
+on_second_401_after_refresh = "authentication-required-without-another-retry"
 on_bad_refresh_token = "restart-device-flow"
 
 [token_storage]

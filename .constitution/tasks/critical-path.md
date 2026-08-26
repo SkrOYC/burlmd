@@ -1,12 +1,12 @@
 ---
-version: v2.1.6
+version: v2.1.7
 ---
 
 # Active backlog summary
 
-**Total Active Story Points:** 545
+**Total Active Story Points:** 558
 
-The complete forward backlog contains 77 tickets across seven active epics. All specified P0 work is planned. The five decision-producing Spikes are the first tickets in the epics they govern.
+The complete forward backlog contains 80 tickets across seven active epics. All specified P0 work is planned. The five decision-producing Spikes are the first tickets in the epics they govern.
 
 ## Shared execution and generated-output conventions
 
@@ -82,6 +82,7 @@ flowchart LR
         ROTATEI008[ROTATE-I008]
         MIGRATEI011[MIGRATE-I011]
         DETACHI012[DETACH-I012]
+        UNLINKI013[UNLINK-I013]
         ADOPTI009[ADOPT-I009]
         ASSETI010[ASSET-I010]
     end
@@ -95,6 +96,7 @@ flowchart LR
         CONSUIJ007[CONSUI-J007]
     end
     subgraph EpicK["Epic K"]
+        REGK001[REG-K001]
         AUTHK001[AUTH-K001]
         TOKENK002[TOKEN-K002]
         REPOK003[REPO-K003]
@@ -121,6 +123,7 @@ flowchart LR
     subgraph EpicM["Epic M"]
         PKGM001[PKG-M001]
         LOGM002[LOG-M002]
+        FLAKEM002[FLAKE-M002]
         CIM003[CI-M003]
         BENCHM004[BENCH-M004]
         HEALTHM004[HEALTH-M004]
@@ -341,6 +344,14 @@ flowchart LR
     REFSL010 --> MIGRATEI011
     REFSL010 --> DETACHI012
     DECIDEH011 --> RESCANH012
+    CIM003 --> REGK001
+    REGK001 --> AUTHK001
+    OBJECTI004 --> UNLINKI013
+    RETAINI007 --> UNLINKI013
+    REFSL010 --> UNLINKI013
+    CIM003 --> UNLINKI013
+    UNLINKI013 --> ASSETI010
+    FLAKEM002 --> CIM003
 ```
 
 ## Phasing strategy
