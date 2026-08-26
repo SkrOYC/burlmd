@@ -1,5 +1,5 @@
 ---
-version: v2.1.12
+version: v2.1.13
 status: active
 epic: K
 ---
@@ -216,7 +216,7 @@ Sign-out preserves attachment. Offline detachment removes only local Remote book
   - `test/**`
 - **Scope (Out-of-Scope Files):**
   - Reconciliation UI owned by Epic L
-- **Verification Command:** `cargo test --manifest-path rust/Cargo.toml && flutter_rust_bridge_codegen generate && flutter test && dart analyze && ./scripts/smoke-shot.sh remote-k007 && git diff --check`
+- **Verification Command:** `cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && ./scripts/smoke-shot.sh remote-k007 && git diff --check`
 - **Expected Success Output:** exit 0 with connect, second-device join, reauthorize, public/lost-access pause, sign-out, detach/reconnect, and keyboard/Semantics tests passing
 - **STOP Conditions:**
   - STOP if authentication gates local writing or UI conflates sign-out with detach.

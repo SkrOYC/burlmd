@@ -1,5 +1,5 @@
 ---
-version: v2.1.12
+version: v2.1.13
 status: active
 epic: J
 ---
@@ -24,16 +24,16 @@ Provide complete atomic exit paths and a safe way to bring another local Workspa
 - **Scope (Out-of-Scope Files):**
   - Destination serialization owned by COPY-J002 and ARCHIVE-J003
 - **Verification Command:** `cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && dart analyze && git diff --check`
-- **Expected Success Output:** exit 0 with flush, stable-revision, decision-block, and session-preservation tests passing
+- **Expected Success Output:** exit 0 with flush, stable-revision, Directory-set, decision-block, and session-preservation tests passing
 - **STOP Conditions:**
   - STOP if Export retires open sessions, reads across revisions, or proceeds with an unresolved external-file decision.
-- **Description:** Acquire a stable Workspace Export lease, flush every open Note through normal durability without closing it, stop on unresolved authority, derive the complete Note/Object closure, and release without mutating the Workspace.
+- **Description:** Acquire a stable Workspace Export lease, flush every open Note through normal durability without closing it, stop on unresolved authority, and bind the authoritative Directory set—including empty Directories—plus the complete Note/Object closure to the same Workspace revision. Release without mutating the Workspace.
 - **Acceptance:**
   - **Mode:** invariant
   - **Evidence:**
 
 ```text
-Concurrent mutation tests prove every exported path and Object belongs to one revision; all drafts are flushed; no session retires; unresolved external decisions stop before destination writes; and the authoritative Workspace remains unchanged.
+Concurrent Note and Directory mutation tests prove every exported path, empty Directory, and Object belongs to one revision; all drafts are flushed; no session retires; unresolved external decisions stop before destination writes; and the authoritative Workspace remains unchanged.
 ```
 
 #### COPY-J002 Publish an atomic plain-copy Export
@@ -147,7 +147,7 @@ The source Workspace remains byte-identical; stale inputs refuse before mutation
   - `integration_test/**`
 - **Scope (Out-of-Scope Files):**
   - Consolidation UI, HTML output, Publishing, and history diff viewer
-- **Verification Command:** `cargo test --manifest-path rust/Cargo.toml && flutter_rust_bridge_codegen generate && flutter test && dart analyze && ./scripts/smoke-shot.sh port-j006 && git diff --check`
+- **Verification Command:** `cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && ./scripts/smoke-shot.sh port-j006 && git diff --check`
 - **Expected Success Output:** exit 0 with Export destination, replacement confirmation, progress, failure, keyboard, and Semantics tests passing
 - **STOP Conditions:**
   - STOP if the UI presents partial Export output as success or parses error strings instead of typed Core state.
@@ -177,7 +177,7 @@ And failure reports a typed recovery state without claiming success
   - `integration_test/**`
 - **Scope (Out-of-Scope Files):**
   - Export UI, automatic collision choices, and history diff viewer
-- **Verification Command:** `cargo test --manifest-path rust/Cargo.toml && flutter_rust_bridge_codegen generate && flutter test && dart analyze && ./scripts/smoke-shot.sh consui-j007 && git diff --check`
+- **Verification Command:** `cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && ./scripts/smoke-shot.sh consui-j007 && git diff --check`
 - **Expected Success Output:** exit 0 with source selection, plan, collision decision, progress, rollback, keyboard, and Semantics tests passing
 - **STOP Conditions:**
   - STOP if Flutter constructs collision outcomes, mutates the source Workspace, or claims success before Core publishes the atomic result.

@@ -1,5 +1,5 @@
 ---
-version: v2.1.12
+version: v2.1.13
 status: active
 epic: M
 ---
@@ -50,7 +50,7 @@ Make the complete desktop application supportable, measurable, installable, migr
   - STOP if the harness uses ambient Git, omits installed-runtime probes, or infers one Platform result from another.
   - STOP and reconcile the contract if Apple's published stable-version list no longer identifies macOS 26 and macOS 15 as the two most recent stable major versions.
   - STOP at the 3-day time box and leave unsupported hosts outside the recommendation.
-- **Description:** Build and install the representative harness as AppImage, tagged Nix Flake package, and unsigned Apple Silicon archive across the required Linux and macOS matrix.
+- **Description:** Build and install the representative harness as AppImage, tagged Nix Flake package, and unsigned Apple Silicon archive across the required Linux and macOS matrix. Prove the checksum and provenance-metadata layout inside the prototype; authenticated GitHub Actions attestation creation remains production workflow work owned by RELEASE-M009 and PUBLISH-M014.
 - **Acceptance:**
   - **Mode:** hitl_sil
   - **Evidence:**
@@ -203,7 +203,7 @@ And returning below the reset boundary permits a later warning
   - `test/**`
 - **Scope (Out-of-Scope Files):**
   - Downgrade compatibility and unnecessary Note/OKF rewrites
-- **Verification Command:** `cargo test --manifest-path rust/Cargo.toml && flutter_rust_bridge_codegen generate && flutter test && dart analyze && ./scripts/smoke-shot.sh migrate-m005 && git diff --check`
+- **Verification Command:** `cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && ./scripts/smoke-shot.sh migrate-m005 && git diff --check`
 - **Expected Success Output:** exit 0 with backup, forward migration, rebuild, fault injection, rollback, and later-version refusal tests passing
 - **STOP Conditions:**
   - STOP if migration can partially publish, changes Markdown unnecessarily, or destroys the only usable prior state before success.

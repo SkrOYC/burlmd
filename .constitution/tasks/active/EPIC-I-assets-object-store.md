@@ -1,5 +1,5 @@
 ---
-version: v2.1.12
+version: v2.1.13
 status: active
 epic: I
 ---
@@ -119,17 +119,18 @@ And oversized, unsafe, or invalid input is refused without changing the Note
 - **Scope (Out-of-Scope Files):**
   - Bucket-policy mutation, cloud-account provisioning, or a burlmd-operated bucket
 - **Verification Command:** `cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh object-i004 && git diff --check && ! rg -n '\[DEBUG-' lib rust test scripts`
-- **Expected Success Output:** exit 0 with protocol, credential-isolation, privacy, and probe cleanup tests passing
+- **Expected Success Output:** exit 0 with protocol, credential-isolation, initial and recurring privacy, drift-pause, and probe cleanup tests passing
 - **STOP Conditions:**
   - STOP if final TechSpec hasn't accepted the client/configuration contract.
   - STOP if anonymous read can't be disproved or credentials leave Platform secure storage.
-- **Description:** Collect endpoint, region, bucket, prefix, and narrowly scoped credentials; store secrets securely; validate list/read/write/delete with a disposable Object; reject anonymously readable storage without mutating policy.
+  - STOP synchronized publication after any failed or stale privacy revalidation; local work remains available.
+- **Description:** Collect endpoint, region, bucket, prefix, and narrowly scoped credentials; store secrets securely; validate list/read/write/delete with a disposable Object; reject anonymously readable storage without mutating policy. Revalidate privacy at startup, before each publication batch, and at least every 15 minutes while synchronized by writing an unpredictable disposable sentinel, attempting an unauthenticated read of its exact key, and cleaning it up. A failed, stale, or anonymously readable probe moves Object synchronization to a visible privacy-paused state until a fresh probe succeeds.
 - **Acceptance:**
   - **Mode:** contract_test
   - **Evidence:**
 
 ```text
-AWS and safe non-AWS S3-compatible contract fixtures prove endpoint/addressing behavior, disposable list/read/write/delete, cleanup, anonymous-read refusal, secret redaction, and no credential persistence in Workspace, Dart state, Git, or diagnostics.
+AWS and safe non-AWS S3-compatible contract fixtures prove endpoint/addressing behavior, disposable list/read/write/delete, cleanup, anonymous-read refusal, secret redaction, and no credential persistence in Workspace, Dart state, Git, or diagnostics. Policy-drift tests make the sentinel anonymously readable after connection and prove the next scheduled or prepublication probe pauses Object synchronization before any history publication; a fresh private probe resumes it without blocking local Note work.
 ```
 
 #### TRANSFER-I005 Upload, verify, and progressively hydrate Objects
@@ -150,13 +151,14 @@ AWS and safe non-AWS S3-compatible contract fixtures prove endpoint/addressing b
 - **Expected Success Output:** exit 0 with verified-before-publish obligations and progressive/offline hydration tests passing
 - **STOP Conditions:**
   - STOP if an Object is marked available before hash verification or transfers block local Note editing.
+  - STOP publication if OBJECT-I004 privacy evidence is missing, failed, or older than 15 minutes.
 - **Description:** Upload content-addressed Objects, verify remote bytes, prioritize active hydration on another device, retain offline Note work, and persist resumable transfer state outside the manifest.
 - **Acceptance:**
   - **Mode:** invariant
   - **Evidence:**
 
 ```text
-No history-publication obligation completes before every referenced Object verifies remotely; hydration exposes only verified bytes, prioritizes active Assets, resumes after interruption, and never blocks local Note editing while offline.
+No history-publication obligation completes before every referenced Object verifies remotely and fresh OBJECT-I004 privacy evidence permits the batch. Hydration exposes only verified bytes, prioritizes active Assets, resumes after interruption, and never blocks local Note editing while offline. Privacy drift pauses synchronized transfer and publication without converting local work into an error.
 ```
 
 #### RECOVER-I006 Resolve missing or corrupt Objects safely
