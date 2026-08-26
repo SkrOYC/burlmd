@@ -8,7 +8,7 @@ The following table summarizes the Stage 2 trust boundaries:
 | :--- | :--- | :--- |
 | Agent to Workspace | Tampering, path escape, denial of service | Treat every guest write as a proposal. Validate conformance, containment, size, and revision before authority changes. |
 | Provider and Remote | Spoofing, tampering, information disclosure, denial of service | Use explicit authorization and privacy states. Validate incoming history and keep local work available. |
-| Object Store | Tampering, information disclosure, denial of service | Refuse anonymous readability, verify Object identity, isolate credentials, and pause dependent history publication. |
+| Object Store | Tampering, information disclosure, denial of service | Refuse anonymous list, read, write, and delete access; verify Object identity; isolate credentials; and pause dependent history publication. |
 | Platform secure storage | Information disclosure, elevation of privilege | Persist secrets only through Platform facilities and limit transient exposure. |
 | Release Distribution | Tampering, spoofing | Publish common-matrix evidence, integrity data, and provenance for every artifact. |
 

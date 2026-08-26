@@ -1,5 +1,9 @@
 # Stage 3: Technical Implementation Changelog
 
+## v1.7.15-provisional
+
+PR #12 full review round 14 binds this provisional layer to PRD v1.3.6 and Architecture v1.4.14. Publication now directly consumes a fresh REG-K001 registration report and administrator-approved expiring-token attestation no older than 24 hours.
+
 ## v1.7.14-provisional
 
 PR #12 full review round 12 binds this provisional layer to Architecture v1.4.13. The private Object Store probe now requires negative anonymous List, Get, Put, and Delete outcomes with verified sentinel survival and unconditional authenticated cleanup.

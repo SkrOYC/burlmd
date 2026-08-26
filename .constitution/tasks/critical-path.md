@@ -1,5 +1,5 @@
 ---
-version: v2.1.16
+version: v2.1.17
 ---
 
 # Active backlog summary
@@ -298,6 +298,7 @@ flowchart LR
     GATEM011 --> PUBLISHM014
     GATEM012 --> PUBLISHM014
     GATEM013 --> PUBLISHM014
+    REGK001 --> PUBLISHM014
     CIM003 --> EDITG008
     CIM003 --> FINDG009
     CIM003 --> HISTG010

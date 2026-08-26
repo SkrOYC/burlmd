@@ -1,5 +1,11 @@
 # Stage 1: Product Requirements Changelog
 
+## v1.3.6 - 2026-08-26
+
+### Fixed
+
+- Defined the Private Object Store Boundary across anonymous list, read, write, and delete access. Any permissive, missing, or stale result refuses connection or pauses synchronized publication.
+
 ## v1.3.5 - 2026-08-26
 
 ### Changed

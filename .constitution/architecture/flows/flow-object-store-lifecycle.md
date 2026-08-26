@@ -15,7 +15,7 @@ stateDiagram-v2
     HydratingRemote --> RemoteWithObjectStore: Active Objects first; remaining current state verified
     RemoteWithObjectStore --> RemoteAssetRecovery: Missing or corrupt Object pauses affected synchronization
     RemoteWithObjectStore --> PausedObjectPrivacy: Scheduled or prepublication privacy probe is stale or fails
-    PausedObjectPrivacy --> RemoteWithObjectStore: Fresh probe disproves anonymous read
+    PausedObjectPrivacy --> RemoteWithObjectStore: Fresh probe denies anonymous List, Get, Put, and Delete
     LocalWithObjectStore --> LocalAssetRecovery: Missing or corrupt Object needs recovery
     HydratingRemote --> RemoteAssetRecovery: Identity verification fails
     RemoteAssetRecovery --> RemoteWithObjectStore: Repair, replacement, or reference removal verifies
