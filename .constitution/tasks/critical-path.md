@@ -1,5 +1,5 @@
 ---
-version: v2.1.4
+version: v2.1.5
 ---
 
 # Active backlog summary
@@ -11,7 +11,7 @@ The complete forward backlog contains 77 tickets across seven active epics. All 
 ## Shared execution and generated-output conventions
 
 - While Stage 3 remains provisional, only the five `Spike` tickets are executable. Every production ticket has an implicit STOP before implementation until measured Product Requirements and Architecture evolution is accepted, Stage 3 is final, and Stage 4 has adapted that ticket’s scope, estimate, dependencies, and exact verification command. This shared STOP applies even when a production ticket has no Spike dependency.
-- A ticket that scopes `rust/src/api/ffi_api.rs` also scopes regenerated `lib/src/rust/**` output. Its verification must regenerate bindings and fail on a stale generated diff. This convention avoids repeating generated files in every FFI ticket without transferring ownership away from the ticket.
+- A ticket that scopes `rust/src/api/ffi_api.rs` also scopes both generated outputs: `lib/src/rust/**` and `rust/src/frb_generated.rs`. Its verification must regenerate and compare both byte for byte, fail on stale output, and leave the pre-check working tree unchanged. This convention avoids repeating generated files in every FFI ticket without transferring ownership away from the ticket.
 
 PR #11 remains the delivered redesign foundation and isn’t retroactively assigned to an epic. `SHELL-G001` removes the presentation-only Platform chrome that leaked from its prototype.
 

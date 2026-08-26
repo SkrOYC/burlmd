@@ -18,7 +18,7 @@
 ## Codebase baseline
 
 - **State today:** The delivered bundle derives filenames verbatim from titles and inherits host-filesystem equivalence.
-- **Discovered constraints:** Titles remain in frontmatter; ghost Links must invert; Windows is an interoperability target; symlinks, submodules, traversal, and ambiguous aliases are refused.
+- **Discovered constraints:** Titles remain in frontmatter; ghost Links must invert; Windows is an interoperability target; symlinks, submodules, traversal, and ambiguous aliases are refused; Linux and macOS runs must carry verified host facts and distinct operating systems rather than trusted labels.
 
 ## Options and trade-offs
 
