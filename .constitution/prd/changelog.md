@@ -1,5 +1,55 @@
 # Stage 1: Product Requirements Changelog
 
+## v1.3.2 - 2026-08-26
+
+### Fixed
+
+- Reclassified CAP-GRAPH-04 as delivered after the full sweep confirmed production Link completion, follow-time resolution, create-on-follow, FFI, UI, and regression coverage. Downstream work preserves and adapts the capability; it doesn't schedule it as unfinished.
+
+## v1.3.1 - 2026-08-26
+
+### Fixed
+
+- Clarified that Zero Automatic Telemetry prohibits automatic off-device transmission, not bounded content-excluding local diagnostics. Local diagnostic records and Writer-created exports still exclude content, credentials, signed locations, and content-derived telemetry; only the Writer may choose to share an export.
+
+## v1.3.0 - 2026-08-25
+
+Evolution pass driven by the Tasks interview after PR #11. This minor release defines the complete forward product scope and removes delivered or deferred work from the active capability set.
+
+### Added
+
+- Added active capabilities for desktop-session durability, live guest-change reconciliation, canonical cross-platform paths, Assets, a user-controlled Object Store, complete private-Remote reconciliation, installable prereleases, update notification, and safe application-state migration.
+- Added the Platform actor and clarified that an Agent is a guest to burlmd's Workspace authority.
+- Added Asset, Object, Local Asset Store, Object Store, Lifecycle Decision, and Asset Decision to the glossary and domain model.
+- Added measurable constraints for external-change detection, image import, repository-health warnings, Object integrity, protected history, release parity, and migration safety.
+- Added out-of-scope records for the second Remote provider, HTML output, Object-Store-only Workspaces, optional editing surfaces, the full history diff viewer, additional release architectures, self-updating binaries, and prerelease signing.
+
+### Changed
+
+- Separated the delivered A-F capability baseline from unfinished `P0` release scope so downstream Tasks don't replan shipped work.
+- Made Suggestions persistent through history and synchronization. Added separate Lifecycle Decision and Asset Decision outcomes for conflicts that aren't content edits.
+- Replaced CAP-PORT-04 and provider-specific CAP-SYNC-09 with explicit deferrals.
+- Declared `System/Native` as the only active archetype because mobile device applications remain deferred.
+- Moved GitHub, GitLab, S3-compatible storage, release architecture, and implementation choices into the operator-preferences appendix.
+
+### Removed
+
+- Removed emulated operating-system chrome, HTML output, the floating formatting toolbar, graph visualization, and a second Remote provider from active product scope.
+
+### Fixed
+
+- Restored one-to-one traceability for every delivered capability instead of collapsing stable IDs into ranges.
+- Specified serial close, warning, failure, focus, guest-write, Export, asset-adoption, and delete-versus-edit outcomes that the first draft left ambiguous.
+- Replaced mechanism-specific Remote polling with an observable freshness meter and defined reproducible corpus and desktop performance profiles.
+- Expanded Zero Automatic Telemetry to prohibit automatic usage, error, diagnostic, content, and content-derived reporting.
+- Added Provider, Protected State, Suggestion ownership, and Decision ownership relationships to the domain model.
+- Updated the screen-reader deferral to reference the August 25 open-decision register.
+- Separated device preferences from per-Workspace session state and Workspace synchronization.
+- Added informed guest repair, Workspace containment, coupled Remote and Object Store detachment, and release-artifact provenance requirements.
+- Corrected the Open Knowledge Format definition, transient encryption-key rule, technology-neutral history meter, and Search Latency failure threshold.
+- Excluded invalid guest Notes from editing until repair, restored every missing-Object recovery choice, and removed Note-level Version terminology from Workspace history retention.
+- Added explicit Workspace switching, binding release systems and macOS support windows, and the private Object Store boundary.
+
 ## v1.2.0
 Evolution pass driven by the Realign interview of 2026-08-21 (see `reports/2026-08-21-interview-realign.md`), widening and deepening the layer after the operator judged the original planning shallow. Minor bump: new capabilities, a mandatory block the stage contract now requires, and materially expanded constraints; no restructuring of the stage.
 

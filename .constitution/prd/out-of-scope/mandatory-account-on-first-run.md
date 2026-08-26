@@ -7,7 +7,7 @@
 Requiring the user to authorize a hosting provider before the application becomes usable, so that every Workspace is provisioned from or connected to a Remote at creation time. Under this model the first screen is an authorization prompt and no Note can be written until it succeeds.
 
 ## Why it was in the PRD
-The original capability set stated that users "authenticate via an OAuth provider ... to automatically provision or connect their Workspace," and the auth flow was written as authorize → exchange credentials → **clone repository** → initialize index → ready. There was no path through that flow that did not involve a Remote, and "provision or connect" was never disambiguated. The shipped implementation followed it literally and gated the entire application behind a login screen.
+The original capability set made Provider authorization the only path to a Workspace. It didn't define a local-only path, and the shipped implementation gated the application behind authorization.
 
 ## Why it was rejected
 1. **It directly contradicted an existing constraint.** The Local-First Mandate requires the application be "100% functional when completely disconnected from the internet." A network handshake before the first keystroke is not a partial violation of that; it inverts it.

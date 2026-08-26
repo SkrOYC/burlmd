@@ -1,35 +1,34 @@
-# Execution Flow: Background Sync
+# Background synchronization flow
 
-**Maps to PRD Capability:** CAP-SYNC-02 (once connected, the system automatically synchronizes changes with the Remote in the background without user action). Epic: Synchronization & Conflict Resolution, **P1**.
-
-> **Status:** the body below predates PRD v1.1.0 and ADR-005/ADR-006. It is not updated here because the whole of synchronization is deferred to Epic G, which will revise it against the current contract; the header is corrected because it cited a P0 priority the PRD no longer assigns and an epic name that no longer exists.
+**Maps to:** CAP-SYNC-02, CAP-SYNC-03.
 
 ```mermaid
-sequenceDiagram
-    participant Core as Core Engine
-    participant Local as Local Repository
-    participant Sync as Sync Manager
-    participant Remote as Remote Repository
-
-    Core->>Local: Commit final Markdown to disk
-    Local-->>Core: Success
-    
-    Sync->>Local: Observe new un-pushed local commit
-    Sync->>Sync: Wait for debounce period (e.g., 5 seconds of inactivity)
-    
-    Sync->>Remote: Push local commit to remote branch
-    alt Push Success
-        Remote-->>Sync: OK
-        Sync->>Local: Mark commit as pushed
-    else Push Failure (Network Error)
-        Remote--xSync: Timeout / Disconnect
-        Sync->>Sync: Schedule retry with exponential backoff
-    else Push Failure (Conflict)
-        Remote-->>Sync: Rejected (Non-fast-forward)
-        Sync->>Remote: Fetch latest upstream
-        Remote-->>Sync: Upstream commits
-        Sync->>Local: Merge upstream into local (writes raw conflict markers if overlapping)
-        Sync->>Sync: Trigger re-index of notes and notes_fts tables
-        Sync->>Core: Notify of potential conflict state
-    end
+stateDiagram-v2
+    [*] --> Idle
+    Idle --> Inspecting: Launch, local Version, freshness interval, or final attempt
+    Inspecting --> Behind: Incoming history is available
+    Inspecting --> Offline: Network unavailable
+    Inspecting --> AuthenticationRequired: Authoritative credential rejection
+    Inspecting --> PausedDecision: Lifecycle Decision or Asset Decision pending
+    Inspecting --> Reconciling: Incoming and local history diverge
+    Inspecting --> Failed: Nontransient operation failure
+    Inspecting --> UploadingObjects: Unpublished history requires Objects
+    UploadingObjects --> Publishing: Every Object verified
+    Publishing --> Clean: History publication and incoming application complete
+    Behind --> Clean: Incoming history applies without divergence
+    Clean --> Idle
+    Offline --> Inspecting: Connectivity returns
+    AuthenticationRequired --> Inspecting: Reauthorization succeeds
+    PausedDecision --> Inspecting: Decision finalizes
+    Reconciling --> PendingSuggestions: Valid content state contains Suggestions
+    Reconciling --> Publishing: Valid resolved state exists
+    PendingSuggestions --> Publishing: Valid history can publish
+    Failed --> Inspecting: Writer retries or condition changes
 ```
+
+## Failure path
+
+- Synchronization state remains explicit and never blocks local editing or history.
+- The bounded shutdown attempt reports unfinished work and doesn't delay Platform shutdown indefinitely.
+- Startup resumes durable intents, Object obligations, and reconciliation records idempotently.
+- Pending Suggestions remain a distinct synchronized state and don't block valid history publication.

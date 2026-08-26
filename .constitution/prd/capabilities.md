@@ -1,248 +1,343 @@
-# Functional Capabilities
+# Functional capabilities
 
-Priorities express the critical path to a Workspace the primary actor can rely on daily. `P0` is required before the application is usable for real note-taking, `P1` is the following phase, `P2` is optional.
+Priorities describe the forward release path. `P0` capabilities are required for the feature-complete `0.x` desktop release defined by this pass. Deferred work lives under `out-of-scope/` and doesn't appear in the active capability set.
 
-## Epic: Core Editing & Formatting
+## Delivered baseline
+
+The following capabilities are implemented. Downstream stages must preserve them but must not schedule them as unfinished work:
+
+| Capability ID | Delivered outcome | Rationale |
+| :--- | :--- | :--- |
+| CAP-EDIT-01 | The focused Block shows Markdown source, and other Blocks render formatted content. | Writers edit real source without losing a readable Note. |
+| CAP-EDIT-02 | Writers can author and render headings, lists, blockquotes, code blocks, and thematic breaks. | Notes can express structured thought. |
+| CAP-EDIT-03 | Writers can create, split, merge, and delete Blocks through ordinary typing. | Note structure can evolve during composition. |
+| CAP-EDIT-04 | Writers can select and copy content across Block boundaries as faithful Markdown. | Common editing actions aren't limited by Block boundaries. |
+| CAP-EDIT-05 | Writers can apply inline emphasis through standard keyboard shortcuts. | Formatting doesn't require manual delimiter entry. |
+| CAP-LIFE-01 | Writers can create a Note in a chosen Directory. | A Workspace needs a direct content-creation path. |
+| CAP-LIFE-02 | Writers can rename a Note without breaking inbound Links. | Routine renames must preserve the graph. |
+| CAP-LIFE-03 | Writers can move a Note without breaking inbound Links. | Organization can evolve after writing. |
+| CAP-LIFE-04 | Writers can delete a Note with recoverable local history. | Deletion remains safe to use. |
+| CAP-LIFE-05 | Writers can create nested Directories. | The Workspace supports hierarchical organization. |
+| CAP-LIFE-06 | Writers can rename and delete Directories while preserving contained Notes and inbound Links. | Hierarchy management is complete. |
+| CAP-GRAPH-01 | Writers can browse the Workspace tree and open any Note. | Every Note remains reachable. |
+| CAP-GRAPH-02 | Writers can insert a Link by searching existing Note titles. | Link creation doesn't require path entry. |
+| CAP-GRAPH-03 | Writers can follow a rendered Link to its target Note. | The knowledge graph is traversable. |
+| CAP-GRAPH-04 | Writers can create a Link to a Note that doesn't exist and create that Note by following the Link. | Ghost Links and create-on-follow are implemented end to end. |
+| CAP-WS-01 | Writers can start in a local Workspace without an account or network connection. | Local writing has no external gate. |
+| CAP-WS-02 | Closing an edited Note records its session in local history. | Local-only Workspaces retain recoverable versions. |
+| CAP-WS-03 | Drafts survive abrupt process termination. | A crash doesn't discard in-progress work. |
+| CAP-WS-04 | The local aggregate search index is encrypted with a key in Platform secure storage. | Aggregated Note content receives application-managed protection. |
+| CAP-WS-06 | Writers can run an explicit Workspace Rescan. | Manual recovery remains available when automatic observation needs repair. |
+| CAP-FIND-01 | Writers can search all Notes and open a result. | Knowledge remains retrievable as the Workspace grows. |
+| CAP-PORT-01 | Every Note that burlmd creates conforms to the Open Knowledge Format. | Guest tools can read and traverse burlmd-created content. |
+
+PR #11 also delivered the design system, responsive shell, preferences surface, localization foundation, keyboard accessibility, semantic labels, and deterministic visual evidence. Downstream stages must consume this foundation and must not create a retrospective design epic.
+
+## Desktop session
 
 - **Priority:** P0
-- **Capability ID:** CAP-EDIT-01
-- **Capability:** When the user places the cursor in a Block, that Block displays its raw Markdown source for direct editing, while every other Block in the Note remains rendered as formatted output.
-- **Rationale:** The primary actor writes Markdown deliberately and needs to see exactly what is stored, without giving up reading the Note as a finished document.
+- **Capability ID:** CAP-PREF-01
+- **Capability:** When the Writer changes the theme, font scale, prose measure, focus mode, or update-notification preference, burlmd restores that device-specific choice after restart without synchronizing it through Workspace content.
+- **Rationale:** The delivered preferences surface isn't complete until its choices persist.
 
 - **Priority:** P0
-- **Capability ID:** CAP-EDIT-02
-- **Capability:** Users can author and render the full set of structural Block types: headings, bulleted and numbered lists, blockquotes, code blocks, and thematic breaks.
-- **Rationale:** Foundational elements for knowledge organization; a Note limited to plain paragraphs cannot hold structured thought.
+- **Capability ID:** CAP-SHELL-02
+- **Capability:** Every tab-close entry point closes the affected Note through its durability and history lifecycle before burlmd removes the tab.
+- **Rationale:** A tab button, middle-click, keyboard command, or batch action must not bypass Note persistence.
 
 - **Priority:** P0
-- **Capability ID:** CAP-EDIT-03
-- **Capability:** Users can create, split, merge, and delete Blocks through ordinary typing — beginning a new Block from the end of an existing one, and merging back into the previous Block when deleting from the start.
-- **Rationale:** Without this, a Note's structure is fixed at creation and the editor cannot be used to compose anything.
+- **Capability ID:** CAP-SHELL-03
+- **Capability:** After restart, burlmd reopens the last Workspace and restores that Workspace's open Notes, active Note, navigation state, search state, and synchronization presentation when those items remain available.
+- **Rationale:** A desktop writing environment must preserve working context across routine restarts.
 
 - **Priority:** P0
-- **Capability ID:** CAP-EDIT-04
-- **Capability:** Users can select text spanning multiple Blocks and copy it, receiving Markdown that reproduces the selected content faithfully.
-- **Rationale:** Selection that stops at Block boundaries breaks the most common editing actions in any document of length.
+- **Capability ID:** CAP-SHELL-04
+- **Capability:** The host operating system provides all window chrome. burlmd doesn't display or offer emulated operating-system chrome.
+- **Rationale:** Presentation-only prototype controls conflict with the Platform and aren't part of the product.
 
 - **Priority:** P0
-- **Capability ID:** CAP-EDIT-05
-- **Capability:** Users can apply inline emphasis (bold, italic, strikethrough, inline code) to a selection in the focused Block via standard keyboard shortcuts.
-- **Rationale:** Even a writer fluent in Markdown expects the shortcut to wrap a selection rather than typing delimiters by hand.
+- **Capability ID:** CAP-SHELL-05
+- **Capability:** During a batch close, burlmd processes Notes serially and stops before unprocessed tabs after the first error or degraded-durability warning.
+- **Rationale:** Serial handling gives every closed or retained tab an unambiguous outcome.
 
-- **Priority:** P1
+- **Priority:** P0
+- **Capability ID:** CAP-SHELL-06
+- **Capability:** If burlmd retires a Note session with a degraded-durability warning, it removes that closed tab, reports the warning, preserves every unprocessed tab, and cancels any Workspace switch or orderly shutdown.
+- **Rationale:** A retired session can't remain as an open but unusable tab.
+
+- **Priority:** P0
+- **Capability ID:** CAP-SHELL-07
+- **Capability:** If a Note fails to close, burlmd keeps the failed and unprocessed tabs open, reports the partial result, and cancels the Workspace switch or orderly shutdown.
+- **Rationale:** A close failure must not discard an active session or let a wider lifecycle operation continue.
+
+- **Priority:** P0
+- **Capability ID:** CAP-SHELL-08
+- **Capability:** After the active tab closes, burlmd selects the following tab or the preceding tab when no following tab remains.
+- **Rationale:** Deterministic focus preserves keyboard continuity.
+
+## Note editing and retrieval
+
+- **Priority:** P0
 - **Capability ID:** CAP-EDIT-06
-- **Capability:** Users can embed images stored inside the Workspace and see them previewed inline.
-- **Rationale:** Visual capture (diagrams, screenshots) is a routine part of note-taking, but a Note without it is still fully useful.
+- **Capability:** Writers can insert images from a file, clipboard, or drag-and-drop action and view them inline in the Note.
+- **Rationale:** Images are part of feature-complete daily note-taking.
 
-- **Priority:** P2
-- **Capability ID:** CAP-EDIT-07
-- **Capability:** Users can apply inline formatting through a floating toolbar surfaced on selection.
-- **Rationale:** Redundant with keyboard shortcuts for this actor; valuable only for occasional or pointer-driven use.
-
-- **Priority:** P1
+- **Priority:** P0
 - **Capability ID:** CAP-EDIT-08
-- **Capability:** When the user invokes undo, the application reverses their most recent content change in the open Note — including changes that spanned multiple Blocks or destroyed a range — without consulting version history, and redo reapplies it.
-- **Rationale:** Every editor this actor writes in reverses structural operations; an undo that stops at Block boundaries makes a cross-Block deletion unrecoverable by any means short of archaeology, and lost work is the failure the primary actor forgives least. Undo covers the user's own editing actions only: reverting what another device contributed is conflict resolution, not undo, and lifecycle operations such as rename are not content changes and sit outside undo's scope.
-
-## Epic: Note & Directory Lifecycle
+- **Capability:** When the Writer invokes undo or redo, burlmd reverses or reapplies the most recent content operation in the open Note without consulting version history.
+- **Rationale:** Undo must cover structural and cross-Block editing without conflating editing with synchronization or lifecycle history.
 
 - **Priority:** P0
-- **Capability ID:** CAP-LIFE-01
-- **Capability:** Users can create a new Note inside a chosen Directory.
-- **Rationale:** The application cannot be used at all without this; it was absent from the previous capability set entirely.
-
-- **Priority:** P0
-- **Capability ID:** CAP-LIFE-02
-- **Capability:** Users can rename a Note, and every existing Link pointing at it is updated automatically to continue resolving.
-- **Rationale:** Renaming is routine during writing, and a rename that silently breaks the knowledge graph makes Links untrustworthy.
-
-- **Priority:** P0
-- **Capability ID:** CAP-LIFE-03
-- **Capability:** Users can move a Note into a different Directory, with inbound Links updated automatically.
-- **Rationale:** Organization emerges after writing, so Notes must be reorganizable without cost.
-
-- **Priority:** P0
-- **Capability ID:** CAP-LIFE-04
-- **Capability:** Users can delete a Note, with the deletion captured in local version history so it remains recoverable.
-- **Rationale:** Deletion must be safe enough to use freely.
-
-- **Priority:** P0
-- **Capability ID:** CAP-LIFE-05
-- **Capability:** Users can create Directories, nested to arbitrary depth.
-- **Rationale:** Primary hierarchical organization paradigm.
-
-- **Priority:** P1
-- **Capability ID:** CAP-LIFE-06
-- **Capability:** Users can rename and delete Directories, with contained Notes and inbound Links following correctly.
-- **Rationale:** Completes hierarchy management, but is reachable manually in the interim by moving Notes individually.
-
-## Epic: Knowledge Graph & Navigation
-
-- **Priority:** P0
-- **Capability ID:** CAP-GRAPH-01
-- **Capability:** Users can browse the Workspace as a nested Directory tree and open any Note from it.
-- **Rationale:** Primary navigation surface; without it, no Note is reachable after it is written.
-
-- **Priority:** P0
-- **Capability ID:** CAP-GRAPH-02
-- **Capability:** While editing, users can insert a Link to another Note through an in-editor completion that searches existing Notes by title, without typing the target location by hand.
-- **Rationale:** Enables lateral exploration of ideas; hand-authoring link targets is error-prone and would discourage linking entirely.
-
-- **Priority:** P0
-- **Capability ID:** CAP-GRAPH-03
-- **Capability:** Users can follow a Link from a rendered Block to open the target Note.
-- **Rationale:** A knowledge graph that cannot be traversed is only decoration.
-
-- **Priority:** P1
-- **Capability ID:** CAP-GRAPH-04
-- **Capability:** Users can create a Link to a Note that does not yet exist, and create that Note by following the Link.
-- **Rationale:** Supports writing forward into concepts not yet captured, a core knowledge-graph workflow.
-
-- **Priority:** P1
-- **Capability ID:** CAP-GRAPH-05
-- **Capability:** Users can see which other Notes link to the Note they are currently reading.
-- **Rationale:** Inbound connections are how a graph becomes navigable in both directions.
-
-- **Priority:** P2
-- **Capability ID:** CAP-GRAPH-06
-- **Capability:** Users can visualize the relationships between Notes through a graphical map.
-- **Rationale:** Helps users understand the macro-structure of their knowledge graph; exploratory rather than load-bearing.
-
-## Epic: Workspace & Local Durability
-
-- **Priority:** P0
-- **Capability ID:** CAP-WS-01
-- **Capability:** On first launch, users can begin writing in a local Workspace immediately, with no account, no provider authorization, and no network connection.
-- **Rationale:** Requiring a network handshake before the first word contradicts the Local-First Mandate and blocks all use of the application when no provider is configured.
-
-- **Priority:** P0
-- **Capability ID:** CAP-WS-02
-- **Capability:** Every editing session on a Note is captured in the Workspace's local version history when the Note is closed, and any earlier version remains recoverable.
-- **Rationale:** Version history is the durability guarantee that makes a local-only Workspace trustworthy before any Remote exists.
-
-- **Priority:** P0
-- **Capability ID:** CAP-WS-03
-- **Capability:** In-progress edits that have not yet been written to the Note survive abrupt termination of the application, and are restored when it next opens.
-- **Rationale:** Unsaved work lost to a crash is the failure the primary actor forgives least.
-
-- **Priority:** P0
-- **Capability ID:** CAP-WS-04
-- **Capability:** The local search index — which aggregates the content of every Note into one file — is encrypted by the application, with its key held in operating-system secure storage. Notes themselves are stored as plaintext so that standard tooling can operate on them, and their at-rest protection is whatever the operating system provides rather than anything the application guarantees.
-- **Rationale:** Limits what a compromised device yields without making the Notes unreadable to the tooling that must merge them. Stated as two separate guarantees deliberately: only the first is something this application can actually deliver.
-
-- **Priority:** P1
-- **Capability ID:** CAP-WS-05
-- **Capability:** Users can open an existing Workspace directory that the application did not create, including one populated by another tool.
-- **Rationale:** Adoption path for users with existing Markdown collections; not required to start writing.
-
-- **Priority:** P1
-- **Capability ID:** CAP-WS-06
-- **Capability:** When the user invokes an explicit refresh action, the application re-derives its internal view of the Workspace from the files currently on disk, so that changes made by external tools while the application was open become visible.
-- **Rationale:** CAP-PORT-03 recognizes external changes made while the application was closed. An Agent actor can also write while it runs; until live monitoring exists, an honest user-invoked rescan keeps that state reachable rather than invisible.
-
-## Epic: History & Recovery
-
-- **Priority:** P1
-- **Capability ID:** CAP-HIST-01
-- **Capability:** For the Note they are reading, users can see the list of its past versions and restore any earlier version as the current content.
-- **Rationale:** CAP-WS-02 guarantees every session lands in version history, but a guarantee nobody can see or act on protects nothing. Restore is destructive to unwritten work, so it confirms first.
-
-## Epic: Supportability
-
-- **Priority:** P1
-- **Capability ID:** CAP-SUP-01
-- **Capability:** When something goes wrong, users can produce a diagnostics bundle describing the application's recent behavior — errors, retries, and failures, with Note content excluded — and hand it to someone troubleshooting.
-- **Rationale:** Zero Content Telemetry forbids phoning home, so when the application misbehaves there is otherwise nothing a user can attach to a bug report. The exclusion of content is what makes the bundle safe to share.
-
-## Epic: Synchronization & Conflict Resolution
-
-- **Priority:** P1
-- **Capability ID:** CAP-SYNC-01
-- **Capability:** Users can connect an existing local Workspace to a Remote by authorizing a provider, either provisioning a new private repository or selecting one they already own, after which existing local history is published to it.
-- **Rationale:** Multi-device access and off-machine durability, offered as a deliberate step rather than a precondition to use.
-
-- **Priority:** P1
-- **Capability ID:** CAP-SYNC-02
-- **Capability:** Once connected, the system automatically synchronizes changes with the Remote in the background without user action.
-- **Rationale:** Sync the user has to remember to perform is sync that silently stops happening.
-
-- **Priority:** P1
-- **Capability ID:** CAP-SYNC-03
-- **Capability:** Users can see an ambient indication of synchronization state, including when the Workspace is offline, behind, or failing to sync.
-- **Rationale:** Silent sync failure erodes trust in the archive more than visible failure does.
-
-- **Priority:** P1
-- **Capability ID:** CAP-SYNC-04
-- **Capability:** When the same Note is edited concurrently on two devices, the system surfaces the divergence inline as a Suggestion the user can accept or reject, never as raw conflict markers and never by duplicating the Note.
-- **Rationale:** Converts the single most intimidating failure mode of version-controlled storage into an ordinary editing decision.
-
-- **Priority:** P1
-- **Capability ID:** CAP-SYNC-05
-- **Capability:** When provider authorization expires or is revoked, the Workspace remains fully readable and editable locally, and the user is prompted to re-authorize rather than blocked.
-- **Rationale:** A lapsed credential is a sync problem; it must never become a writing problem.
-
-- **Priority:** P1
-- **Capability ID:** CAP-SYNC-06
-- **Capability:** Users can detach the Remote from a connected Workspace, returning it to fully functional local-only operation with all history intact, and reconnect later without loss.
-- **Rationale:** Connection must remain reversible. A user who attached a work account to a personal archive needs an exit that does not cost them their Notes, and sign-out alone leaves the attachment in place.
-
-- **Priority:** P1
-- **Capability ID:** CAP-SYNC-07
-- **Capability:** On a second device, users can join an existing connected Workspace by authorizing the same provider and selecting the repository the first device publishes to; the application clones it and the clone becomes a full local Workspace.
-- **Rationale:** Multi-device access is the point of connecting at all. Authorize-then-clone completes the path ADR decisions reserve for it and matches how version-controlled storage is normally adopted on a second machine.
-
-- **Priority:** P1
-- **Capability ID:** CAP-SYNC-08
-- **Capability:** While connecting, users can consolidate Notes from a previous local Workspace into the freshly connected one: non-conflicting Notes migrate automatically, and each collision — the same identity arising on both sides — resolves explicitly as keep mine, keep theirs, or keep both under a new name. The source Workspace is never modified.
-- **Rationale:** Real users arrive with existing local archives on both ends of a connect. Full history merging between divergent archives stays out of scope (`out-of-scope/history-merge-on-connect.md`); guided consolidation gives those users a supported path that never silently discards either side.
-
-- **Priority:** P1
-- **Capability ID:** CAP-SYNC-09
-- **Capability:** Users can connect a Workspace through a second hosting provider, GitLab, with the same authorize, provision-or-select, publish, detach, and consolidate behaviors the first provider supports.
-- **Rationale:** Provider choice is stated in operator intent, and a seam built for exactly one provider tends to ossify around it. Sequenced behind the first provider, which proves the surface before a second consumer arrives.
-
-## Epic: Discovery & Retrieval
-
-- **Priority:** P0
-- **Capability ID:** CAP-FIND-01
-- **Capability:** Users can search the full text of every Note in the Workspace and open a result directly.
-- **Rationale:** Essential for retrieving knowledge as volume scales beyond what the Directory tree makes visible.
-
-- **Priority:** P1
 - **Capability ID:** CAP-FIND-02
-- **Capability:** Users can jump directly to a Note by typing part of its title, without leaving the keyboard.
-- **Rationale:** The dominant navigation path once a Workspace is large; full-text search covers the need until then.
-
-- **Priority:** P1
-- **Capability ID:** CAP-FIND-03
-- **Capability:** Within the Note they are editing, users can find every occurrence of a search string — including occurrences inside rendered inline structure — navigate between them, and replace found occurrences individually or all at once.
-- **Rationale:** Workspace search stops at the Note boundary, leaving long Notes to scroll-and-squint. Replacement composes with the same machinery that powers cross-Block selection, and replace-all must behave as one operation rather than many.
-
-## Epic: Portability & Interoperability
+- **Capability:** Writers can open a Note by typing part of its title without leaving the keyboard.
+- **Rationale:** Title-based navigation is the primary retrieval path for a known Note.
 
 - **Priority:** P0
-- **Capability ID:** CAP-PORT-01
-- **Capability:** Every Note the application *creates* conforms to the Open Knowledge Format the moment it is created, so that any conforming tool or agent can read the Notes and traverse the Links with no export step and no application-specific parser.
-- **Rationale:** Makes data sovereignty concrete rather than aspirational, and serves the Automated Consumer actor directly. Conformance is continuous, not a mode. Scoped to what the application *creates* rather than to the whole Workspace at all times, because the format defines conformance over an entire bundle: one file an external tool dropped in without frontmatter makes the bundle non-conformant, and CAP-WS-05 and CAP-PORT-03 both make that a supported and possibly permanent state. Promising more would be a promise the application can only keep by rewriting files the user never asked it to touch. *Creates* rather than *writes* for a second reason inside that same scoping: editing one of those foreign files **writes** it and leaves it non-conformant, so the wider verb would be false on a path the design supports rather than merely optimistic.
+- **Capability ID:** CAP-FIND-03
+- **Capability:** Within an open Note, Writers can find matches, navigate between them, replace one match, or replace all matches as one undoable operation.
+- **Rationale:** Workspace search doesn't replace precise editing inside a long Note.
+
+- **Priority:** P0
+- **Capability ID:** CAP-GRAPH-05
+- **Capability:** Writers can view the Notes that link to the open Note.
+- **Rationale:** Backlinks make the knowledge graph navigable in both directions.
+
+## Workspace authority and recovery
+
+- **Priority:** P0
+- **Capability ID:** CAP-WS-05
+- **Capability:** When the Writer opens a directory that burlmd didn't create, burlmd validates it before adoption, includes conforming Notes, and lists invalid Notes for explicit Repair or Exclude decisions.
+- **Rationale:** Open storage permits guest tools, but burlmd remains the authority for Workspace semantics and must not rewrite foreign content silently.
+
+- **Priority:** P0
+- **Capability ID:** CAP-WS-07
+- **Capability:** While a Workspace is open, burlmd detects guest file creates, edits, moves, renames, and deletes without requiring Rescan.
+- **Rationale:** A guest tool can write while burlmd runs, and those changes must not remain invisible.
+
+- **Priority:** P0
+- **Capability ID:** CAP-WS-08
+- **Capability:** When a guest changes a clean open Note with conforming content, burlmd validates and indexes the change, records it in local history, and reloads the Note.
+- **Rationale:** A clean Note can adopt valid guest work without an unnecessary decision.
+
+- **Priority:** P0
+- **Capability ID:** CAP-WS-09
+- **Capability:** When a guest changes a Note with an unsaved burlmd draft, burlmd preserves both versions and offers **Compare**, **Keep burlmd version**, or **Load external version**.
+- **Rationale:** Same-device concurrent writes are file-authority decisions, not Remote Suggestions.
+
+- **Priority:** P0
+- **Capability ID:** CAP-WS-10
+- **Capability:** Before burlmd applies a dirty-Note decision, it verifies that the guest file revision hasn't changed and requests another decision when it has.
+- **Rationale:** A Writer's choice must not apply to a guest revision they didn't review.
+
+- **Priority:** P0
+- **Capability ID:** CAP-WS-11
+- **Capability:** Before repairing invalid guest content, burlmd preserves the original bytes and previews every proposed change for the Writer.
+- **Rationale:** Explicit repair isn't informed when the Writer can't inspect what burlmd will rewrite.
+
+- **Priority:** P0
+- **Capability ID:** CAP-WS-12
+- **Capability:** For an invalid guest write detected while the Workspace is open, burlmd preserves the last known-good Note and offers **Repair**, **Compare**, or **Exclude** before authoritative state changes.
+- **Rationale:** Invalid live input must not silently replace readable content or block access to the preserved version.
+
+- **Priority:** P0
+- **Capability ID:** CAP-WS-13
+- **Capability:** Writers can explicitly open or switch to an existing Workspace. burlmd keeps one Workspace active and completes the normal Note close lifecycle before switching.
+- **Rationale:** Workspace access must not depend only on restart restoration or first-time adoption.
+
+- **Priority:** P0
+- **Capability ID:** CAP-HIST-01
+- **Capability:** Writers can list a Note's past versions and restore a selected version after confirming the operation.
+- **Rationale:** The delivered session history must be visible and recoverable through the application.
+
+- **Priority:** P0
+- **Capability ID:** CAP-SUP-01
+- **Capability:** Writers can create a Diagnostics Export that contains application and schema versions, errors, retries, and failures without Note or Asset content.
+- **Rationale:** User-controlled diagnostics provide supportability without automatic telemetry.
+
+## Portability and paths
 
 - **Priority:** P0
 - **Capability ID:** CAP-PORT-02
-- **Capability:** Users can Export the Workspace to a location of their choosing, producing Notes readable with no application-specific tooling — either as a plain copy of the bundle or as a single `.okf` Bundle Archive.
-- **Rationale:** Guarantees an exit path. Lower priority than it would otherwise be precisely because CAP-PORT-01 keeps the live Workspace already in that state. The archive form is distribution of the bundle in the packaged form the Open Knowledge Format itself names, not a proprietary container.
+- **Capability:** Writers can Export one stable Workspace revision as either a plain bundle copy or a single Bundle Archive.
+- **Rationale:** Both supported forms provide a complete exit path without application-specific tooling.
 
-- **Priority:** P1
+- **Priority:** P0
+- **Capability ID:** CAP-PORT-06
+- **Capability:** Before Export, burlmd flushes every open Note through its durability lifecycle without retiring the session and stops when an external-file decision remains unresolved.
+- **Rationale:** Export must not capture stale drafts or an undecided authority state.
+
+- **Priority:** P0
+- **Capability ID:** CAP-PORT-07
+- **Capability:** A plain-copy Export refuses a nonempty destination, and a Bundle Archive requires confirmation before replacement.
+- **Rationale:** Export must not silently combine with or overwrite unrelated content.
+
+- **Priority:** P0
+- **Capability ID:** CAP-PORT-08
+- **Capability:** burlmd exposes an Export destination only after the complete output is verified. A failed Export doesn't appear successful or leave partial output at the selected destination.
+- **Rationale:** Atomic visibility keeps the portability guarantee trustworthy.
+
+- **Priority:** P0
 - **Capability ID:** CAP-PORT-03
-- **Capability:** Changes made to Workspace files by external tools while the application is closed are recognized and reflected when it next opens.
-- **Rationale:** A format other tools can write is only genuinely open if the application tolerates them having written to it.
+- **Capability:** When a guest tool changes Workspace files, burlmd validates the change against the published Workspace contract and preserves the last known-good state until invalid input is repaired or excluded.
+- **Rationale:** Interoperability requires clear authority and recovery rules, not silent trust in every filesystem write.
 
-- **Priority:** P1
-- **Capability ID:** CAP-PORT-04
-- **Capability:** Users can Publish the Workspace as a self-contained HTML rendition — a single file presenting every Note with Links navigable — readable offline in any browser with no network access beyond loading the file itself.
-- **Rationale:** Serves readers who will never install anything, following the shape the format's own reference tooling demonstrates. Deliberately sequenced after the application has a design system of its own: a rendition worth publishing should look like the product, and it inherits Zero Content Telemetry absolutely — no external scripts, no load-time calls.
+- **Priority:** P0
+- **Capability ID:** CAP-PORT-05
+- **Capability:** Every Workspace path that burlmd creates remains unambiguous when the Workspace moves among supported Linux and macOS hosts and Windows-compatible storage.
+- **Rationale:** A Workspace must not change identity or develop collisions because another filesystem applies different case, normalization, or reserved-name rules.
 
-## Epic: Preferences & Appearance
+## Assets and object storage
 
-- **Priority:** P1
-- **Capability ID:** CAP-PREF-01
-- **Capability:** Users can adjust how the application looks and behaves through a preferences surface — appearance theme, text size, and comparable settings — with choices persisted across sessions.
-- **Rationale:** Writers live in this application for hours; light and dark environments alone make fixed styling a daily irritation. This capability is owned by an interactive design epic: the settings surface defines burlmd's design language, and human design judgment drives it rather than widget-by-widget assembly. It precedes the surfaces that consume its tokens, notably CAP-PORT-04's rendition.
+- **Priority:** P0
+- **Capability ID:** CAP-ASSET-01
+- **Capability:** Each Asset uses a portable Workspace reference and remains available offline while the Asset is active.
+- **Rationale:** A Note must not depend on the source location from which the Writer imported an image.
+
+- **Priority:** P0
+- **Capability ID:** CAP-ASSET-02
+- **Capability:** burlmd deduplicates byte-identical Objects and preserves distinct bytes when two Asset references conflict.
+- **Rationale:** Content identity reduces unnecessary storage without turning a collision into silent data loss.
+
+- **Priority:** P0
+- **Capability ID:** CAP-ASSET-03
+- **Capability:** Before a Workspace with Assets connects to a Remote, the Writer connects a user-controlled Object Store and burlmd verifies that every protected Object is available there.
+- **Rationale:** A published Note history must not reference binary content that another device can't retrieve.
+
+- **Priority:** P0
+- **Capability ID:** CAP-ASSET-04
+- **Capability:** After a Writer joins a connected Workspace on another device, active Assets become available progressively without blocking Note editing.
+- **Rationale:** Text remains usable during large transfers, and active context receives priority.
+
+- **Priority:** P0
+- **Capability ID:** CAP-ASSET-05
+- **Capability:** When an Object is missing or corrupt, burlmd preserves verified copies, pauses affected synchronization, and offers **Retry**, **Repair from local copy**, **Choose replacement**, or **Remove reference** when each action is valid.
+- **Rationale:** Missing bytes must not become silent reference deletion or corrupt content.
+
+- **Priority:** P0
+- **Capability ID:** CAP-ASSET-06
+- **Capability:** Writers can rotate Object Store credentials or replace the Object Store without losing any Object reachable from a Protected State.
+- **Rationale:** User-controlled storage must remain replaceable without weakening history.
+
+- **Priority:** P0
+- **Capability ID:** CAP-ASSET-07
+- **Capability:** burlmd can delete an authoritative Object only after the Object remains unreachable from every Protected State for 30 days and burlmd has enumerated complete published Remote history.
+- **Rationale:** Cleanup must not break restorable history or another published branch.
+
+- **Priority:** P0
+- **Capability ID:** CAP-ASSET-08
+- **Capability:** In a connected Workspace, burlmd can evict inactive local Object bytes after 30 days only when the Object Store contains a verified copy and no current Note requires the bytes offline.
+- **Rationale:** Local cache control must remain distinct from deleting an authoritative Object.
+
+- **Priority:** P0
+- **Capability ID:** CAP-ASSET-09
+- **Capability:** Before adopting a Workspace with ordinary Asset files, burlmd inventories references and reports missing, ambiguous, oversized, or nonconforming Assets without changing the Workspace.
+- **Rationale:** Migration must not begin from incomplete or ambiguous input.
+
+- **Priority:** P0
+- **Capability ID:** CAP-ASSET-10
+- **Capability:** After preflight succeeds, burlmd migrates referenced Assets to portable identities as one recoverable lifecycle outcome and keeps unreferenced files available for review.
+- **Rationale:** Adoption must preserve both referenced content and guest files that burlmd doesn't own.
+
+- **Priority:** P0
+- **Capability ID:** CAP-ASSET-11
+- **Capability:** Before an asset-bearing Workspace becomes fully local, burlmd verifies that every Object reachable from a Protected State is available locally, then detaches both the Object Store and Remote.
+- **Rationale:** Returning to local operation must not strand history in storage that the Workspace no longer uses.
+
+- **Priority:** P0
+- **Capability ID:** CAP-ASSET-12
+- **Capability:** burlmd blocks Object Store detachment when protected hydration is incomplete and doesn't keep an asset-bearing Workspace Remote-connected without a verified Object Store.
+- **Rationale:** Remote Note history and synchronized Object availability form one user-visible integrity guarantee.
+
+## Private Remote synchronization
+
+- **Priority:** P0
+- **Capability ID:** CAP-SYNC-01
+- **Capability:** Writers can connect a local Workspace to an eligible private Remote by provisioning one or selecting an empty one, then publish local history after all prerequisites pass.
+- **Rationale:** Connection adds off-device durability without becoming a prerequisite for local use.
+
+- **Priority:** P0
+- **Capability ID:** CAP-SYNC-02
+- **Capability:** After connection, burlmd synchronizes changes during application use and makes a bounded final attempt during orderly shutdown.
+- **Rationale:** Synchronization must continue without a resident background service or a manual command.
+
+- **Priority:** P0
+- **Capability ID:** CAP-SYNC-03
+- **Capability:** Writers can distinguish clean, active, offline, behind, failed, authentication-required, paused-decision, and pending-Suggestion synchronization states.
+- **Rationale:** Different recovery actions require distinct and visible states.
+
+- **Priority:** P0
+- **Capability ID:** CAP-SYNC-04
+- **Capability:** When concurrent edits affect the same Note content, burlmd preserves base, local, and incoming content and represents each smallest safe difference as an independently resolvable Suggestion.
+- **Rationale:** Content reconciliation must not expose raw conflict markers, duplicate Notes, or force an all-or-nothing choice.
+
+- **Priority:** P0
+- **Capability ID:** CAP-SYNC-05
+- **Capability:** When authorization expires or is revoked, burlmd pauses Remote synchronization, keeps local capabilities available, and guides the Writer through reauthorization.
+- **Rationale:** Credential state is a synchronization concern, not a writing gate.
+
+- **Priority:** P0
+- **Capability ID:** CAP-SYNC-06
+- **Capability:** Writers can sign out without removing the Remote, detach through an explicit operation that preserves local history and protected Assets, and reconnect later without loss.
+- **Rationale:** Authentication and Workspace attachment have different consequences and must remain separate.
+
+- **Priority:** P0
+- **Capability ID:** CAP-SYNC-07
+- **Capability:** On another device, Writers can authorize the same Provider, select the connected private Remote, and create a complete local Workspace from it.
+- **Rationale:** Multi-device access is the primary value of Remote synchronization.
+
+- **Priority:** P0
+- **Capability ID:** CAP-SYNC-08
+- **Capability:** During connection, Writers can consolidate Notes from another local Workspace by migrating nonconflicting Notes and deciding each identity collision without changing the source Workspace.
+- **Rationale:** Consolidation supports established local archives without merging unrelated histories.
+
+- **Priority:** P0
+- **Capability ID:** CAP-SYNC-10
+- **Capability:** When synchronization produces a lifecycle or path-identity conflict, burlmd pauses Workspace synchronization and requires a Lifecycle Decision while keeping local editing and history available.
+- **Rationale:** Structural outcomes can't be represented safely as inline content Suggestions.
+
+- **Priority:** P0
+- **Capability ID:** CAP-SYNC-11
+- **Capability:** When synchronization produces conflicting Asset bytes, references, or availability, burlmd pauses Workspace synchronization and requires an Asset Decision while keeping local editing and history available.
+- **Rationale:** Binary outcomes require explicit choices and verified Object state.
+
+- **Priority:** P0
+- **Capability ID:** CAP-SYNC-12
+- **Capability:** If a connected Remote becomes public or loses required access, burlmd pauses synchronization and preserves the complete local Workspace until the Writer restores a valid private connection or detaches it.
+- **Rationale:** This phase promises private repositories and must fail closed when that privacy boundary changes.
+
+- **Priority:** P0
+- **Capability ID:** CAP-SYNC-13
+- **Capability:** When one side deletes a Note and the other edits it, burlmd restores the edited Note as a Suggestion and requires confirmation before deletion wins.
+- **Rationale:** Delete-versus-edit contains recoverable content and must not collapse into a structural deletion choice.
+
+## Releases and upgrades
+
+- **Priority:** P0
+- **Capability ID:** CAP-REL-01
+- **Capability:** Writers can install an Apple Silicon macOS or x86-64 Linux `0.x` release from published artifacts without building burlmd from source.
+- **Rationale:** A feature-complete desktop application isn't releasable if installation depends on the development environment.
+
+- **Priority:** P0
+- **Capability ID:** CAP-REL-02
+- **Capability:** Every supported release system passes the same release-blocking matrix for local editing, persistence, Export, synchronization, secure storage, recovery, and update notification.
+- **Rationale:** An artifact isn't supported merely because it launches.
+
+- **Priority:** P0
+- **Capability ID:** CAP-REL-03
+- **Capability:** When a compatible higher `0.x` release is available, burlmd notifies the Writer and opens the release information without replacing installed binaries.
+- **Rationale:** Update awareness is useful before the project owns a safe self-update mechanism.
+
+- **Priority:** P0
+- **Capability ID:** CAP-REL-04
+- **Capability:** After an application-state schema change, burlmd backs up affected state, migrates it atomically, and restores the earlier state when migration fails.
+- **Rationale:** Prerelease iteration must not make a Workspace unusable after an upgrade.
+
+- **Priority:** P0
+- **Capability ID:** CAP-REL-05
+- **Capability:** Writers can independently verify the integrity and provenance of every published release artifact.
+- **Rationale:** Installability without verifiable origin or bytes leaves the release trust boundary incomplete.
+
+- **Priority:** P0
+- **Capability ID:** CAP-REL-06
+- **Capability:** Each release supports the two most recent macOS major versions available on its release date and the x86-64 Linux runtime baseline accepted from OD-08 evidence.
+- **Rationale:** A release needs an explicit, evidence-backed compatibility window before its artifacts can be called supported.

@@ -1,16 +1,25 @@
 ---
-version: v1.3.0
+version: v1.4.2
 ---
 
-# Architectural Strategy
+# Architectural strategy
 
-## Architectural Pattern: Local-First Thick Client with Eventual Remote Sync
-The system adopts a local-first architecture where the client application encapsulates both the presentation layer and a full backend-equivalent data engine. The local data store acts as the primary, synchronous source of truth, while an asynchronous background worker handles eventual consistency with a remote Git repository.
+## Architectural pattern
+
+burlmd remains a local-first modular desktop application. One authoritative Core boundary coordinates a Canonical Note Model, Workspace state, local durability, guest-change reconciliation, and optional external synchronization. The editing path stays local and synchronous. Remote and Object transfers run asynchronously and can't become prerequisites for local writing.
+
+A separate release pipeline produces installable artifacts for the supported Platform matrix. The runtime can inspect release metadata and notify the Writer, but installation remains under the Platform or package manager's authority.
 
 ## Why this pattern fits
-This pattern perfectly satisfies the PRD's constraints for sub-16ms UI responsiveness and 100% offline functionality. By keeping the Presentation Container completely stateless and streaming updates to a local Core Engine, we eliminate network latency from the user's editing flow. The use of a background sync worker abstracting Git operations fulfills the requirement for seamless, non-technical synchronization while guaranteeing data sovereignty via the remote repository.
 
-## Trade-offs Accepted
-- **Client Footprint:** The application binary will be significantly larger than a standard API-driven app because it must embed a full local index and Git-equivalent operational logic.
-- **Initial Load Latency:** Adopting an existing Workspace on a *second* device requires a full repository clone, which may be slow on a degraded network compared to lazy-loading a single Note from a cloud database. This no longer applies to first use: under ADR-005 the first Workspace is created locally with `init`, so nothing is cloned and no network is contacted before the first word is written.
-- **FFI Complexity:** Maintaining a strict, zero-overhead boundary between a stateless UI and a stateful Core Engine requires rigorous serialization contracts (AST passing), increasing development overhead.
+The pattern keeps every local capability available without a Provider or network connection. It also gives guest tools a published filesystem contract without giving them authority over invalid state. The Canonical Note Model prevents editing, rendering, indexing, and reconciliation from developing competing interpretations of one Note.
+
+Remote synchronization and Object transfer are separate logical boundaries because they fail independently and don't share a transaction. A coordination state machine prevents published Note history from referencing unavailable Objects. Explicit Suggestion, Lifecycle Decision, Asset Decision, and guest-write paths keep distinct conflict classes from collapsing into one unsafe workflow.
+
+## Accepted trade-offs
+
+- The installed application carries local parsing, indexing, history, monitoring, and synchronization responsibilities, which increases artifact size and internal complexity.
+- Local Asset Store and Object Store coordination adds durable state and recovery work, but preserves offline access and user-controlled storage.
+- A lowest-common-denominator Workspace path model rejects some host-valid names to preserve identity across systems.
+- Structural and Asset Decisions can pause Workspace synchronization. Local editing and history remain available during the pause.
+- Unsigned `0.x` macOS artifacts require accurate installation guidance until stable-release signing becomes release-blocking.

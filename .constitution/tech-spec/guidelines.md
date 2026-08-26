@@ -1,5 +1,17 @@
 # Project Structure & Guidelines
 
+## Provisional research boundary
+
+TechSpec v1.7.2-provisional permits research code only under `.constitution/prototypes/`. Production directories (`lib/`, `rust/`, `linux/`, and `macos/`) are read-only inputs to this research wave. A Spike may create an isolated Rust or Flutter harness through the relevant CLI, add dependencies through `cargo add` or `flutter pub add`, and commit its generated lock file inside its own prototype directory. It must not add a candidate dependency to the production manifests.
+
+The five exact prototype roots and verification commands are machine-readable in `contracts/provisional-spikes.toml`. Its allowlist is exhaustive: each Spike may write only its named prototype root and report path; every unlisted repository path is read-only. Framework bookkeeping may update the owning active Task after the Spike process exits, but that isn't part of the Spike's write authority.
+
+Each harness writes one `results.json` that validates against `contracts/spike-result.schema.json`, records each platform run and exact tool and dependency versions, names its corpus, reports every required measurement, and makes one evidence-backed recommendation. Every gate and measurement names the candidate it evaluates or the reserved `cross-cutting` value. The harness must also read its own TOML entry and fail unless its result contains exactly the declared candidate names and required gate names, every candidate has attributed outcomes, run IDs are unique, and every required run role is present; JSON Schema alone can't enforce those cross-file constraints.
+
+Command execution records exit status and separate standard-output and standard-error artifacts. Before aggregation, the harness verifies that every referenced evidence and artifact path is inside the Spike's write allowlist, exists, matches its byte count and SHA-256 digest, and isn't replaced by a later command. Raw fixtures and measurements stay beside the result. A conclusion without reproducible evidence does not settle an open decision.
+
+Research Tasks stop on a failed safety or fidelity gate. A performance miss is evidence, not permission to weaken the PRD: the result records it and final Product Requirements or Technical Implementation evolution decides the response. Production implementation remains blocked until the final TechSpec replaces the provisional ADRs, FFI banner, on-disk path and asset contracts, and bill of materials.
+
 ## Commits
 This repository uses [Conventional Commits](https://www.conventionalcommits.org/):
 `type(scope): summary`, with types `feat`, `fix`, `docs`, `chore`, `refactor`, and
@@ -46,6 +58,9 @@ The repository follows the default `flutter_rust_bridge` template structure to m
 │   │   │   ├── ffi_api.rs   # The contract surface
 │   │   │   └── simple.rs    # FRB template init hook (outside the contract)
 │   │   ├── db/              # rusqlite database management
+│   │   ├── assets/          # Planned: Local Asset Store identity, manifest,
+│   │   │                      hydration, verification, and retention
+│   │   ├── diagnostics/     # Planned: rotating structured log and export
 │   │   ├── draft.rs         # Active-draft-state domain: NoteState/NoteMetadata,
 │   │   │                      the open-note cache, block_path-addressed edits
 │   │   ├── error.rs         # Shared AppError, so db/security don't depend on api
@@ -64,8 +79,12 @@ The repository follows the default `flutter_rust_bridge` template structure to m
 │   │   │                      validate), `concept_id` (concept-id <-> path,
 │   │   │                      reserved-filename rules), `links` (target
 │   │   │                      resolution and serialization)
+│   │   ├── export/          # Planned: stable-revision copy/archive Export
+│   │   ├── object_store/    # Planned: S3-compatible transfer and validation
+│   │   ├── provider/        # Planned: private GitHub App/provider integration
 │   │   ├── security/        # OS Keychain root-key integration
 │   │   ├── sync/            # Debounced background sync scheduler
+│   │   ├── update/          # Planned: compatible release-metadata checks
 │   │   ├── workspace/       # `bootstrap` (init/open, Git repo adoption),
 │   │   │                      `lifecycle` (note & directory create/rename/
 │   │   │                      move/delete, atomic write), `links_rewrite`
@@ -73,8 +92,14 @@ The repository follows the default `flutter_rust_bridge` template structure to m
 │   │   │                      `persist` (the ADR-008 tiers and their locks)
 │   │   └── test_support.rs  # #[cfg(test)]-only fixtures shared across unit test modules
 ├── pubspec.yaml             # Dart dependencies
+├── .github/workflows/       # Planned: PR, canary, benchmark, and release gates
+├── flake.nix                # Planned: release-tagged Nix package entrypoint
+├── flake.lock               # Planned: release Flake reproducibility boundary
+├── nix/                     # Planned: release package modules and checks
 └── flutter_rust_bridge.yaml # FRB configuration
 ```
+
+The directories marked **Planned** are the physical homes for the forward boundaries already accepted by Architecture v1.4.0. They remain absent until their owning implementation ticket begins. A Spike never creates them. Final Stage 3 may refine files inside a planned directory after evidence, but moving responsibility to a different boundary requires Architecture review and a Tasks adaptation.
 
 `android/` and `ios/` are absent by design: mobile targets are deferred per
 `tasks/critical-path.md`, and no mobile toolchain is provisioned. `ANDROID_HOME`
@@ -91,7 +116,7 @@ All commands below assume the `devenv` shell (`devenv shell`, or automatic via
    - Must pass `cargo clippy -- -D warnings`.
    - Must be formatted with `cargo fmt`.
    - Avoid async/await unless absolutely necessary (e.g., long-running sync operations on a dedicated thread). Local index queries remain synchronous for maximum performance, except where `tech-spec/contracts/ffi_api.rs` itself declares a function `async` (e.g. `search_notes`) — the contract's FFI-boundary signature takes precedence over this preference; the function's own body should still execute synchronously to completion rather than actually yielding to an executor.
-   - Source spans are Core-side state, keyed by `block_path`, and must never be added as fields on `AstNode` or otherwise cross the FFI boundary (ADR-007 decision 3). The UI cannot use byte offsets into a file it does not own, and carrying them would inflate every edit round trip against the 16ms budget — `architecture/risks.md` risk 1.
+   - In the delivered v1.6.x model, source spans are Core-side state keyed by `block_path` and aren't fields of the reduced `AstNode` render projection. Forward work must instead keep source ranges inside the canonical Core document/AST state required by ADR-013; a Flutter render projection still receives only the coordinates its interaction contract needs. Final Stage 3 settles the exact range and projection types after SPK-AST-H001. No UI code may treat a byte offset into Core-owned source as independent authority.
    - No code path may rewrite bytes outside the span of an edited Block. This is the Edit Fidelity constraint in `prd/constraints.md` and it is the reason no AST-to-Markdown serializer exists for the save path; adding one for that path reintroduces exactly the failure the constraint forbids.
 2. **Dart:**
    - Must pass `dart analyze`.
@@ -170,6 +195,18 @@ The active editor-depth tickets quote these commands exactly. `BURLMD_SMOKE_F005
 - `flutter test test/components/emphasis_shortcuts_test.dart && BURLMD_SMOKE_F005=1 ./scripts/smoke-shot.sh f005-emphasis && dart analyze && git diff --check && ! rg -n '\[DEBUG-' lib rust test scripts`
 - `cargo test --lib --manifest-path rust/Cargo.toml link_completion_limit_is_ten -- --list | rg -q ': test' && cargo test --lib --manifest-path rust/Cargo.toml link_completion_limit_is_ten && cargo test --lib --manifest-path rust/Cargo.toml prospective_ghost_completion -- --list | rg -q ': test' && cargo test --lib --manifest-path rust/Cargo.toml prospective_ghost_completion && cargo test --lib --manifest-path rust/Cargo.toml resolve_link_target -- --list | rg -q ': test' && cargo test --lib --manifest-path rust/Cargo.toml resolve_link_target && cargo test --lib --manifest-path rust/Cargo.toml create_link_target -- --list | rg -q ': test' && cargo test --lib --manifest-path rust/Cargo.toml create_link_target && flutter_rust_bridge_codegen generate && flutter gen-l10n && flutter test test/components/link_completion_test.dart test/components/editor_test.dart && BURLMD_SMOKE_F006=1 ./scripts/smoke-shot.sh f006-link-completion && dart analyze && git diff --check && ! rg -n '\[DEBUG-' lib rust test scripts`
 - `cargo test --lib --manifest-path rust/Cargo.toml range_edit_result_reports_phantom -- --list | rg -q ': test' && cargo test --lib --manifest-path rust/Cargo.toml range_edit_result_reports_phantom && cargo test --lib --manifest-path rust/Cargo.toml range_edit_result_rejects_utf16_surrogate -- --list | rg -q ': test' && cargo test --lib --manifest-path rust/Cargo.toml range_edit_result_rejects_utf16_surrogate && cargo test --lib --manifest-path rust/Cargo.toml && flutter_rust_bridge_codegen generate && flutter test test/components/selection_editing_test.dart test/components/text_input_client_test.dart test/components/selection_test.dart && BURLMD_SMOKE_F007=1 ./scripts/smoke-shot.sh f007-range-editing && dart analyze && git diff --check && ! rg -n '\[DEBUG-' lib rust test scripts`
+
+## Forward implementation verification commands
+
+Stage 4 tickets quote one of these gates and replace `<ticket-id>` with their lowercase ticket identifier. Ticket-specific tests and hardware-in-the-loop procedures supplement the gate; they don't remove it.
+
+- **Core-only:** `cargo test --manifest-path rust/Cargo.toml && cargo clippy --workspace --all-targets --manifest-path rust/Cargo.toml -- -D warnings && git diff --check`
+- **Core/FFI/UI:** `cargo test --manifest-path rust/Cargo.toml && flutter_rust_bridge_codegen generate && flutter test && dart analyze && ./scripts/smoke-shot.sh <ticket-id> && git diff --check && ! rg -n '\[DEBUG-' lib rust test scripts`
+- **Flutter-only:** `flutter test && dart analyze && ./scripts/smoke-shot.sh <ticket-id> && git diff --check && ! rg -n '\[DEBUG-' lib rust test scripts`
+- **Release Flake:** `nix flake check && nix build .#packages.x86_64-linux.default && git diff --check`
+- **macOS release build:** `flutter build macos --release && git diff --check`
+
+Spike-dependent implementation tickets may quote the stable portion of these commands while the TechSpec is provisional. They must stop before implementation until final Stage 3 replaces every candidate-specific command and Stage 4 adapts the ticket.
 
 ## Index connection obligations
 

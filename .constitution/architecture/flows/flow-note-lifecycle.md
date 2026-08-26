@@ -1,53 +1,31 @@
-# Execution Flow: Note & Directory Lifecycle
+# Note and Directory lifecycle flow
 
-**Maps to PRD Capability:** CAP-LIFE-01 (create a Note in a chosen Directory), CAP-LIFE-02 (rename with inbound Links updated), CAP-LIFE-03 (move with inbound Links updated), CAP-LIFE-04 (delete recoverable from version history), CAP-LIFE-05 (create Directories nested to arbitrary depth). Also establishes CAP-PORT-01 for created Notes: a Note conforms to the Open Knowledge Format from the moment of creation.
+**Maps to delivered:** CAP-LIFE-01, CAP-LIFE-02, CAP-LIFE-03, CAP-LIFE-04, CAP-LIFE-05, CAP-LIFE-06, CAP-PORT-01.
+
+**Maps to active:** CAP-PORT-05.
 
 ```mermaid
 sequenceDiagram
-    participant UI as Presentation Container
-    participant Core as Core Engine
-    participant Local as Local Repository
+    participant UI as Presentation and Interaction
+    participant Core as Core Coordination
+    participant Workspace as Workspace Model
+    participant Persist as Workspace Persistence
+    participant Index as Derived Index
 
-    UI->>Core: Create Note (directory, title)
-    Core->>Core: Derive filename from title verbatim
-    alt Path occupied, reserved, or underivable
-        Core-->>UI: Path unavailable — the user retitles; nothing is silently altered
-    else Path available
-        Core->>Local: Write conformant frontmatter + body atomically
-        Core->>Local: Index the new Note (notes, search, links)
-        Core-->>UI: State of the opened Note
+    UI->>Core: Create, rename, move, or delete
+    Core->>Workspace: Validate canonical path, containment, identity, and affected Links
+    Workspace-->>Core: Complete change set or refusal
+    alt Change set is valid
+        Core->>Persist: Apply one recoverable lifecycle outcome
+        Core->>Index: Apply derived projection
+        Core-->>UI: Updated tree and open-session identities
+    else Invalid or ambiguous path
+        Core-->>UI: Refuse before mutation
     end
-
-    UI->>Core: Rename or Move Note (identity, new path)
-    Core->>Local: Begin: filesystem journal + index transaction
-    Core->>Local: Move the file
-    Core->>Local: Rewrite every inbound Link's target in its source Note
-    Core->>Local: Cascade identity through index rows
-    alt Any step fails
-        Core->>Local: Unwind the journal; roll back the transaction
-        Core-->>UI: Failure reported; file tree, index and Link text all exactly as before
-    else All steps succeed
-        Core->>Local: One atomic commit covering exactly the touched paths
-        Core-->>UI: New state + the list of rewritten source Notes so open views can refresh
-    end
-
-    UI->>Core: Delete Note (confirmed in the UI first)
-    Core->>Local: Remove file, index rows, search entry — one transaction
-    Core->>Local: Commit the deletion
-    Note over Local: Recovery is version history (CAP-WS-02), not an undo stack
 ```
-
-## Why rename is drawn as one atomic operation
-
-A Note's identity is its path. Renaming therefore changes the identity every inbound Link names, and a rewrite that stops halfway leaves dangling Links indistinguishable from deliberate ghost Links — silent graph decay (`risks.md` risk 8). The operation is atomic across three stores at once: files, index rows, and Link text inside other Notes' sources.
 
 ## Failure path
 
-- **Collision or reserved name:** refused before anything moves; the user chooses again.
-- **Mid-operation failure:** the journal unwinds completed renames and the transaction rolls back, leaving no partial state — proven by the lifecycle tests that inject failures mid-sweep.
-- **An unrewritable inbound Link:** aborts the whole operation rather than being skipped. The sweep is a precondition, not a best effort.
-- **Open Notes holding rewritten Links:** the Core reports which Notes it rewrote so their open buffers, span maps and recorded revisions move forward too — otherwise their next idle write would copy the old Link text back over the correction.
-
-## Directory operations follow the same shape
-
-Creating, renaming, moving and deleting Directories reuse this discipline, including the identity remapping returned when a rename changes the ids of every Note beneath it.
+- A path collision, unsupported indirection, or containment escape fails before mutation.
+- A mid-operation failure restores the earlier files, Link text, open-session state, and derived projection.
+- Delete remains recoverable through local history and isn't an undo operation.

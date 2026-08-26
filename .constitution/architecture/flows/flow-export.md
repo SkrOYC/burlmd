@@ -1,37 +1,53 @@
-# Execution Flow: Workspace Export
+# Workspace Export flow
 
-**Maps to PRD Capability:** CAP-PORT-02 (Export the Workspace as a plain bundle copy or a single `.okf` Bundle Archive, readable with no application-specific tooling).
+**Maps to:** CAP-PORT-02, CAP-PORT-06, CAP-PORT-07, CAP-PORT-08.
 
 ```mermaid
 sequenceDiagram
-    participant UI as Presentation Container
-    participant Core as Core Engine
-    participant Local as Local Repository
-    participant FS as Destination (user-chosen)
+    participant UI as Presentation and Interaction
+    participant Core as Core Coordination
+    participant Workspace as Workspace Model
+    participant Persist as Workspace Persistence
+    participant LocalAssets as Local Asset Store
+    participant ObjectTransfer as Object Transfer Coordinator
+    participant Destination as Export Destination
 
-    UI->>Core: Export (destination, form: copy | archive)
-    Core->>Local: Read bundle tree (version history excluded)
-
-    alt Plain copy
-        Core->>FS: Write every Note, Directory and Attachment verbatim
-    else Bundle Archive
-        Core->>FS: Write one .okf archive of the same tree
+    UI->>Core: Export form and destination
+    Core->>Workspace: Flush every open Note; require resolved guest decisions
+    Core->>Persist: Pin one stable Workspace revision
+    Core->>Workspace: Derive referenced Object closure for pinned revision
+    Core->>LocalAssets: Verify every referenced Object
+    opt Missing Object can be hydrated or repaired
+        Core->>ObjectTransfer: Recover missing Object closure
+        ObjectTransfer->>LocalAssets: Store verified recovered Objects
+        Core->>LocalAssets: Verify complete closure again
     end
-
-    Core->>Core: Conformance check over what was written
-    Core-->>UI: Result — including any non-conformant Notes found
-
-    Note over UI,FS: The conformance check reports; it never gates. Refusing to hand users their own data would invert the capability's purpose.
+    alt Object closure is complete and verified
+        alt Plain copy
+            alt Destination is empty
+                Core->>Destination: Prepare and verify complete copy with Objects
+                Core->>Destination: Publish complete output atomically
+                Core-->>UI: Export success
+            else Destination is nonempty
+                Core-->>UI: Refuse; terminal outcome
+            end
+        else Bundle Archive
+            alt Replacement is absent or confirmed
+                Core->>Destination: Prepare and verify complete archive with Objects
+                Core->>Destination: Publish complete output atomically
+                Core-->>UI: Export success
+            else Replacement isn't confirmed
+                Core-->>UI: Refuse; terminal outcome
+            end
+        end
+    else Object is unavailable or corrupt
+        Core-->>UI: Stop Export and enter Object recovery; terminal outcome
+    end
 ```
-
-## Design notes
-
-- **Cheap by construction, for the right reason.** The copy is cheap because the live Workspace is plaintext at all times — not because it is guaranteed conformant. CAP-PORT-01 scopes conformance to Notes this application creates, and foreign files are exported exactly as their author wrote them.
-- **Version history is excluded by default.** Export answers "take my Notes elsewhere"; the Git history belongs to the local repository and is not part of the format's bundle.
-- **The `.okf` archive is the packaged distribution form the Open Knowledge Format itself names** (§3): a zip of the directory, nothing proprietary inside.
 
 ## Failure path
 
-- **Destination unwritable** (permissions, full disk, path occupied): fail with a destination-specific error before writing anything partial; a failed export leaves no half-written tree behind.
-- **Read errors mid-copy** (a file vanished or became unreadable during the walk): report which paths could not be exported rather than failing silently — partial output plus an explicit list is more honest than either aborting everything or pretending completeness.
-- **Non-conformant content:** never blocks. The result names such Notes so the user knows what another tool will see; that is the whole obligation.
+- A flush failure or unresolved guest decision stops Export before revision capture.
+- A read, write, or verification failure removes temporary output and doesn't expose partial success.
+- A missing or corrupt Object stops publication and enters Object recovery.
+- Foreign nonconforming content remains byte-preserved in Export and is reported rather than silently repaired.

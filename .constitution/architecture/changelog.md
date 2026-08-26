@@ -1,4 +1,48 @@
-# Stage 2: Architecture Changelog
+# Stage 2: Architecture changelog
+
+## v1.4.2 - 2026-08-26
+
+Reviewed for PRD v1.3.2. The Link graph flow already models delivered ghost-Link creation and now classifies CAP-GRAPH-04 as delivered rather than active. No boundary or flow change is required.
+
+## v1.4.1 - 2026-08-26
+
+Reviewed for PRD v1.3.1. No structural change is required: Architecture already separates bounded structured local diagnostics from any off-device transmission and excludes content, credentials, signed locations, and content-derived telemetry.
+
+## v1.4.0 - 2026-08-25
+
+Evolution pass for PRD v1.3.0 and the August 25 Tasks interview. This minor release expands the logical architecture for the feature-complete desktop, private Remote, Object Store, reconciliation, and release scope.
+
+### Added
+
+- Added Canonical Note Model, Workspace Model, Workspace Observer, Application State, Object Transfer Coordinator, Host Platform, Object Store, and Release Pipeline boundaries.
+- Added logical flows for desktop sessions, live monitoring, Asset adoption, Object Store lifecycle, complete reconciliation, history and diagnostics, and release upgrades.
+- Added durable logical state for guest decisions, reconciliation inputs, Object obligations, Protected State, migrations, and per-Workspace sessions.
+- Added trust notes and risks for guest writes, Provider and Remote input, Object integrity, release distribution, path portability, stale decisions, and split external transactions.
+
+### Changed
+
+- Replaced the Git-specific eventual-sync strategy with a provider-independent local-first modular desktop strategy.
+- Replaced physical protocols, engines, token flows, tables, commands, and interface contracts with logical request, event, storage, and external-service categories.
+- Made Presentation responsible for interaction state while Core Coordination remains the sole Workspace authority.
+- Separated device preferences, per-Workspace session state, authoritative Workspace bytes, rebuildable indexing, Remote history, and Object bytes.
+- Reworked every flow so all 60 active P0 capabilities and the delivered baseline have explicit mappings and failure behavior.
+
+### Removed
+
+- Removed stale loopback authorization, raw-marker conflict, ambient polling, physical serialization, filename-verbatim, and partial-Export designs from normative Architecture.
+- Removed retired Epic G, H, and I deferral banners. The forward architecture follows current PRD scope rather than provisional historical assignments.
+
+### Fixed
+
+- Assigned authoritative session ownership only to Workspace Model and limited Application State to persistence and restoration.
+- Added the Agent filesystem trust path, Host filesystem edges, and a distinct Local Asset Store boundary.
+- Made Export refusal terminal and made every attached Remote state reauthorizable or explicitly detachable.
+- Applied durable input recording and conditional finalization to content, lifecycle, and Asset reconciliation.
+- Added guest lifecycle monitoring for create, move, rename, and delete outcomes.
+- Completed visible synchronization-state mapping and documented Release Distribution as an external boundary.
+- Routed Object bytes, identity verification, deduplication, Export closure, hydration, eviction, and retention through Local Asset Store.
+- Split content and Decision finalization guards, added retryable authorization-refresh states, and made missing Object recovery pause affected synchronization.
+- Routed every authoritative response through Core Coordination, corrected Observer and Derived Index edge directions, and moved ghost identity resolution to Workspace Model.
 
 ## v1.3.0
 Evolution pass driven by the Realign interview of 2026-08-21 and PRD v1.2.0, closing the compliance gaps the audit named while leaving every logical container, boundary and pattern untouched.

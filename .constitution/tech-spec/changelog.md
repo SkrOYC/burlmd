@@ -1,5 +1,26 @@
 # Stage 3: Technical Implementation Changelog
 
+## v1.7.2-provisional
+
+Reviewed for PRD v1.3.2 and Architecture v1.4.2. CAP-GRAPH-04 is now classified as delivered; its existing FFI, Link model, and create-on-follow implementation remain brownfield preservation inputs. No candidate decision or production implementation is authorized by this patch.
+
+## v1.7.1-provisional
+
+Reviewed for PRD v1.3.1 and Architecture v1.4.1. The existing local structured-diagnostics boundary already matches the clarified privacy requirement, so no physical design changes are needed. Production implementation remains unauthorized until the five Spikes, measured upstream evolution, and final Stage 3 pass complete.
+
+## v1.7.0-provisional
+
+Forward reconciliation after PR #11. This version is deliberately provisional: it authorizes decision-producing research only and doesn't authorize production implementation.
+
+- Added exact isolated contracts for five Spikes: canonical Markdown AST, cross-platform paths, Git-shaped reconciliation analysis, hybrid assets/S3-compatible objects, and desktop packaging.
+- Added a machine-checkable, multi-platform Spike result schema and required exact versions, corpora, candidate-attributed gates and measurements, command results, hashed artifacts, evidence, recommendation, and unresolved questions. Each harness must additionally enforce exact candidate and gate equality, unique runs, required platform roles, artifact integrity, and containment against its TOML contract.
+- Recorded proposed ADR-013 through ADR-016 and ADR-018. Accepted ADR-017 replaces the prior provider-neutral OAuth redirect design with private GitHub-only GitHub App device flow; ADR-009 is superseded for this phase.
+- Added the accepted device-flow endpoint, permission, token-storage, refresh, and Git credential contract without a desktop client secret or App private key.
+- Marked the delivered FFI, SQLite schema, and OKF bundle contracts as brownfield where they conflict with PRD v1.3.0. Final Stage 3 must reconcile them after measured Product Requirements and Architecture review.
+- Preserved Flutter 3.44.3, Dart 3.12.2, Rust 1.97.1, Git 2.54.0, and every production dependency. Candidate packages remain isolated to Spikes.
+- Made every unlisted repository path read-only for each research Spike through an explicit write allowlist. Stage 4 may plan the full downstream backlog, but only the five Spikes execute before the constitution returns through measured PRD, Architecture, and final Technical Implementation evolution; affected tickets are then adapted to the accepted contracts.
+- Added physical forward module homes and reusable Core-only, Core/FFI/UI, Flutter-only, Flake, and macOS implementation gates so the complete Stage 4 backlog can name paths and commands without choosing them downstream.
+
 ## v1.6.13
 
 Patch correction from PR #11 review, round 6. No bill-of-materials, PRD, or

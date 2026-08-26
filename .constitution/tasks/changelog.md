@@ -1,4 +1,106 @@
-# Stage 4: Tasks Changelog
+# Stage 4: Tasks changelog
+
+## v2.1.4 - 2026-08-26
+
+The fourth and final fresh review found no P0 issues and two P1 dependency/evidence gaps.
+
+### Fixed
+
+- Made the Writer-facing Remote UI depend on completed second-device join and detach/reconnect Core behavior, and explicitly assigned both workflows to that UI ticket.
+- Split nightly PRD-meter verification into exact Linux and Apple Silicon macOS host commands plus an aggregation command that rejects missing, duplicate, or same-host evidence.
+- Recomputed 203 dependency edges. Ticket count and effort remain 77 tickets and 545 points; the complete Remote UI dependencies move the critical path to 113 points.
+
+## v2.1.3 - 2026-08-26
+
+A third fresh full-stage review found no P0 issues and five P1 verification gaps. This patch resolves all five.
+
+### Fixed
+
+- Removed the pre-check binding generation that could erase stale evidence before `check-generated-bindings.sh` took its snapshot. All 43 FFI tickets now call the non-mutating checker directly.
+- Added the mandatory real-application smoke launch to the six remaining UI-touching tickets.
+- Added an explicit 3,600-second offline scenario to the live synchronization freshness meter.
+- Narrowed `MAC-M008` to reproducible archive construction; installed two-version verification remains solely in dependent `GATE-M013`.
+- Added exact apply/probe/cleanup commands and machine-readable outcomes to the second-device and private GitHub canary runbooks.
+- Aligned the PRD vision version marker and corrected the extra H1 in the critical-path document.
+
+## v2.1.2 - 2026-08-26
+
+A second fresh full-stage review found no P0 issues and four P1 gaps. This patch resolves all four and the review’s lower-priority correctness/style observations.
+
+### Changed
+
+- Made immutable candidate construction depend on diagnostics, the complete nightly/product chain, and migration so later product changes can't fall outside the candidate hash.
+- Added `CI-M003` as an explicit dependency of every FFI-changing ticket and made its non-mutating generated-binding checker part of all 43 FFI verification gates.
+- Replaced the observer’s unavailable single-host benchmark script with exact Rust meter commands for the distinct Linux and Apple Silicon macOS reference hosts.
+- Added an exact live private-Remote freshness command and dataset to `SCHED-L003`.
+- Clarified that Object Store credential rotation removes the earlier local secret and instructs the Writer to revoke it at the provider.
+- Reclassified implemented CAP-GRAPH-04 as delivered and retained it as a preservation obligation.
+- Applied sentence case to the new Stage 4 document headings.
+- Recomputed 201 dependency edges. The active total remains 77 tickets and 545 points, and the critical path remains 108 points.
+
+## v2.1.1 - 2026-08-26
+
+Fresh full-stage review found no P0 issues and nine P1 gaps. This patch resolves all nine and the review’s ticket-size concern.
+
+### Added
+
+- Added `HEALTH-M004` for the accepted history-storage meter and Writer-facing warning.
+- Split Object Store credential rotation, replacement-store migration, and full-local detach into `ROTATE-I008`, `MIGRATE-I011`, and `DETACH-I012`.
+- Split Export and Consolidation UI into `PORT-J006` and `CONSUI-J007`.
+- Split the installed release matrix into AppImage, Nix, and Apple Silicon macOS gates and added terminal `PUBLISH-M014` publication.
+- Added a shared execution gate: only the five Spikes run while Stage 3 is provisional. Every production ticket waits for measured upstream evolution, final Stage 3, and Stage 4 adaptation.
+- Added a shared generated-binding scope convention for every FFI-changing ticket.
+
+### Changed
+
+- Recomputed the active backlog to 77 tickets and 545 story points. The critical path is now 108 points and ends with verified GitHub prerelease publication.
+- Moved update-notification implementation before immutable candidate construction. Publication now depends on three installed-artifact gates.
+- Made nightly meters depend on complete synchronization and the history-health warning, and gave the observer and nightly meters exact profile commands.
+- Quoted the exact multi-host PATH, Asset, and packaging Spike commands.
+- Made Platform-chrome removal own `burl_theme.dart`, named its visual baselines, and set the visual-diff threshold explicitly.
+- Required plain-copy Export to preserve and report nonconforming guest Notes without repair or refusal.
+- Aligned local diagnostics with PRD v1.3.1 and Architecture v1.4.1, including signed-location and content-derived-data exclusions.
+
+## v2.1.0 - 2026-08-26
+
+### Added
+
+- Added the complete forward backlog: 70 atomic tickets across seven active epics and 522 story points.
+- Added Epic G (desktop session and local workflows), Epic H (canonical Workspace authority and monitoring), Epic I (Assets and Object Store), Epic J (Export and Consolidation), Epic K (private GitHub Remote), Epic L (synchronization and reconciliation), and Epic M (quality and releases).
+- Added explicit capability coverage for all 60 active PRD capabilities and preservation/integration obligations for the delivered baseline.
+- Added the complete cross-epic dependency graph and the 114-point critical path from canonical AST research through the installed release gate.
+
+### Changed
+
+- Moved each decision-producing Spike into the epic it governs: AST-H001 and PATH-H002, ASSET-I001, GIT-L001, and PKG-M001.
+- Planned downstream implementation tickets now. Spike-dependent tickets depend on their owning Spike and stop until measured upstream evolution accepts the contract; Stage 4 then adapts their scope, estimates, and verification rather than recreating the roadmap.
+- Replaced the one-epic research-only plan with the forward execution sequence: independent foundations, canonical local application, Assets/portability/private Remote, synchronization/reconciliation, then quality/release.
+
+### Fixed
+
+- Corrected the earlier interpretation that a provisional TechSpec prevented epic planning. It prevents premature implementation of unresolved contracts; it doesn't prevent dependency-ordered backlog design.
+
+### Removed
+
+- Removed the single umbrella **Research Foundations** epic. Its five Spikes remain, now as the first relevant tickets of their owning epics.
+
+## v2.0.0 - 2026-08-25
+
+### Added
+
+- Added active Epic G, **Research Foundations**, with five independent 8-point Spike tickets for the canonical AST, cross-platform paths, Git reconciliation analysis, hybrid assets and S3-compatible objects, and prerelease packaging.
+- Added one framework-standard Spike report placeholder per ticket under `.constitution/spikes/`.
+- Added exact TechSpec-derived prototype roots, write allowlists, verification commands, STOP conditions, and mode-tagged evidence to every ticket.
+
+### Changed
+
+- Replaced the empty active backlog with 40 research-only points and five equal parallel 8-point critical paths.
+- Replaced the obsolete Wave 3 narrative with the forward pipeline: execute Spikes, route measured thresholds through Product Requirements and Architecture, finalize Technical Implementation, then generate the production backlog.
+- Reserved PR #11 as delivered redesign foundation. No retrospective design epic or fictional reconciliation ticket was created for it.
+
+### Removed
+
+- Removed the provisional Epic G/H/I narrative assignments from the active roadmap. The new Epic G is a real active research epic with explicit tickets; it isn't the prior placeholder for sync integration.
 
 ## v1.9.4
 

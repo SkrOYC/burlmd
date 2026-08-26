@@ -1,52 +1,72 @@
-# Logical Risks & Technical Debt
+# Logical risks and technical debt
 
-## Trust Boundaries & Threat Notes (STRIDE)
+## Trust boundaries and threat notes
 
-Four boundaries exist where something outside the application's own trust domain touches user data. Depth scales with actual risk; these are working notes, not a certified model.
+The following table summarizes the Stage 2 trust boundaries:
 
-| Boundary | Dominant threats | Posture |
+| Boundary | Dominant threats | Logical mitigation |
 | :--- | :--- | :--- |
-| **OAuth provider ↔ loopback redirect** (flow-auth-handshake) | Spoofing, Tampering: a malicious local process racing the loopback listener or intercepting the redirect; session fixation via replayed codes | PKCE with verifier never crossing to the caller; `state` minted, retained Core-side against a single-use flow id, and compared before any token exchange — a check that exists now because its absence shipped once and read as protection while being decoration. Tokens live only in OS secure storage and never transit logs or history. |
-| **Remote repository** (pull path) | Tampering, Information disclosure: a compromised or hostile repository delivers crafted content — conflict-marker payloads, frontmatter bombs, pathological nesting — that becomes bundle input | Pulled content is untrusted input: it passes the same frontmatter validation, alias-rejection and normalization rules as foreign bundles before reaching the index. The encrypted index is derived state and discardable, bounding blast radius. Disclosure is bounded by repository privacy, which provisioning enforces. |
-| **Agent actor writes to the Workspace** (CAP-PORT-03, CAP-WS-05) | Tampering, Elevation via path tricks: link destinations escaping the bundle (`../`), filenames that lie about their encoding, YAML alias bombs | Destination resolution normalizes `..` and refuses to climb above the bundle root; non-UTF-8 names are skipped rather than lossily accepted; alias-bearing frontmatter is rejected before materialization. A hostile Note can at worst fail to index or produce ghost Links — it cannot cause writes outside the bundle or crash the host. |
-| **OS secure storage** (root key, tokens) | Information disclosure, Elevation: key or token extraction by another process or a memory scrape | Keys ride the OS credential facility and raw-key application; credentials are excluded from logs and version history by constraint; zeroization applies to in-memory key material. Residual exposure is the platform's, not this system's to promise away. |
+| Agent to Workspace | Tampering, path escape, denial of service | Treat every guest write as a proposal. Validate conformance, containment, size, and revision before authority changes. |
+| Provider and Remote | Spoofing, tampering, information disclosure, denial of service | Use explicit authorization and privacy states. Validate incoming history and keep local work available. |
+| Object Store | Tampering, information disclosure, denial of service | Refuse anonymous readability, verify Object identity, isolate credentials, and pause dependent history publication. |
+| Platform secure storage | Information disclosure, elevation of privilege | Persist secrets only through Platform facilities and limit transient exposure. |
+| Release Distribution | Tampering, spoofing | Publish common-matrix evidence, integrity data, and provenance for every artifact. |
 
-Denial of service against the editing surface is treated under resilience (the write tiers, atomic commits) rather than here: the adversary there is bad luck, not an actor. Repudiation is likewise out of scope across all four boundaries: single-user local data with version history means there is no third party to dispute an action to, and no action whose authorship is ambiguous.
+Repudiation isn't a release claim because burlmd is a single-Writer local product and doesn't provide third-party authorship attestation.
 
-## 1. FFI Serialization Overhead
-- **Risk:** Passing the entire markdown AST tree back and forth across the FFI boundary on every block edit could violate the 16ms frame budget, causing UI stutter.
-- **Mitigation:** Rely on `flutter_rust_bridge` (v2)'s high-performance SSE (Simple Serialization Engine) which minimizes overhead. If latency persists for enormous files, refactor the FFI boundary to stream differential AST updates (only the modified node) instead of the entire tree.
+## Risk 1: Canonical model projection cost
 
-## 2. Sync Worker Battery Drain
-- **Risk:** A continuous background Sync Manager polling or pushing frequently on mobile devices will cause excessive battery consumption.
-- **Mitigation:** The Sync Manager must be logically debounced, only triggering pushes after a defined period of inactivity or utilizing OS-level background task scheduling APIs to batch network requests.
+- **Risk:** A complete Canonical Note Model can exceed input-latency or memory constraints when every edit projects a large tree to Presentation.
+- **Sensitivity point:** Projection granularity and source-range ownership affect responsiveness without changing the logical boundary.
+- **Mitigation:** The AST Spike measures candidate foundations, full and partial projections, source fidelity, and reference profiles before Stage 3 accepts a physical model.
 
-## 3. Large Repository Indexing Latency
-- **Risk:** For power users with thousands of notes, performing a full logical re-index of the graph (Links and OKF hierarchy) upon initial device clone could lock up the Core Engine for seconds or minutes.
-- **Mitigation (implemented, `WSPC-D005`):** The Local Repository performs incremental indexing, updating only the files that changed rather than rescanning the entire directory tree. `index::incremental::index_note` hashes the file and compares it against the stored `notes.content_hash`, returning `IndexOutcome::Unchanged` and writing nothing when they agree. Proven by `index::incremental::tests::an_unchanged_note_is_not_rewritten`, which uses the `fts_mapping.fts_rowid` as a sentinel: reindexing an untouched Note must leave that rowid identical, so the test fails if the short-circuit is bypassed *or* if it is faked by skipping work the changed path needs.
-- **Residual gap (owned, not open-ended):** the incremental path has no batch entry point over a changed-path set, and no removal route — `index_note` reports `NotFound` for a file that has vanished rather than retiring its rows. A pull that deletes or renames files therefore cannot bring the index level short of a full `reindex_workspace`. Owned by the ticket that wires `SyncDeps::reindex`; recorded in `tech-spec/changelog.md` v1.2.0.
-<!-- Risks 4 and 5 were removed before v1.0.0. The numbering is left as-is
-     deliberately: risk numbers are cited across roughly a dozen files, and
-     renumbering would silently redirect every one of them. -->
+## Risk 2: Cross-platform path rejection
 
-## 6. Optimistic Concurrency Control for Background Sync
-- **Risk:** The background Sync Manager pulls remote changes and overwrites the local file while the user is actively editing a dirty AST draft in memory. When the user saves, the draft blindly overwrites the file, destroying the remote changes and Git conflict markers.
-- **Mitigation (superseded — the Resolution below is what ships):** The Core Engine must implement Optimistic Concurrency Control (OCC). `save_note` will require an `expected_base_revision` (e.g., file hash or last-modified timestamp). If the on-disk file was modified by background sync while the draft was active, the save is rejected, and the Core Engine forces the UI to reload the file and render the newly injected Git conflict markers.
-- **Resolution (tech-spec v1.1.0):** `save_note` no longer exists, and the OCC token is **not a parameter at all**. The Core holds a current revision per open Note, initialised at open and re-recorded after every successful write, and compares it itself before writing — see `flush_note` in `tech-spec/contracts/ffi_api.rs`. Requiring the token from the caller is the design this mitigation described and is specifically wrong here, because a Core-owned idle timer advances the revision without the UI observing it. Read the Mitigation above as history; this paragraph is what ships. Separately, `base_revision` is defined as a **content hash of the on-disk file**, not a `last_modified` timestamp — see `tech-spec/adrs/ADR-007-span-preserving-splice-edits.md` decision 7. This also fixes a latent defect the Epic B note below could not: `open_note` returned the literal placeholder `"head"` while `save_note` compared against a stringified `notes.last_modified`, so the two ends were never the same token and any real save would have returned a conflict by construction. A content hash is well-defined at both ends, immune to timestamp granularity and clock skew, and is stored in `notes.content_hash`.
-- **Implemented (`WSPC-D007`):** the Core-side shape above ships. The recorded revision is initialised at open and re-recorded after every successful write, the comparison happens inside the per-Note tier 2 write lock so that check, write and re-record cannot interleave with a second writer, and `reload_note` rebuilds from disk. Proven by `workspace::persist::tests::reloading_rebuilds_from_disk_and_the_next_write_succeeds` (a mismatch is detected, the reload clears it, and the following write is accepted) and `workspace::persist::tests::a_reload_of_a_conflicted_file_yields_suggestion_nodes` (a file carrying Git conflict markers materializes as `Suggestion` nodes rather than as literal `<<<<<<<` prose). `workspace::persist::tests::work_written_before_a_reload_still_reaches_history_on_close` covers the case the residual risk below is really about — a reload must not discard work already written.
-- **Residual risk:** OCC still only *detects* the race; it does not resolve it. On mismatch the Core rejects the write and the UI must reload — through `reload_note` in `tech-spec/contracts/ffi_api.rs`. That function is named here explicitly because an earlier revision of this sentence described the recovery without one existing anywhere in the contract. `open_note` cannot serve: it restores the surviving draft in preference to disk, so the reload would return the buffer that just lost the comparison and the next timer tick would fail identically, forever. `reload_note` is where any conflict markers the Sync Manager introduced are surfaced as `Suggestion` nodes. Because writes are now splices rather than whole-file serializations (ADR-007), the blast radius of a missed detection is smaller than it was — an unedited region cannot be clobbered even in principle — but a genuinely concurrent edit to the *same* Block still needs the check.
-- **Superseded (Epic B status note):** the previous text recorded that no Markdown serializer or write-through existed. Both are specified as of tech-spec v1.1.0; the serializer specifically does *not* exist by design, having been replaced by source splicing.
+- **Risk:** A lowest-common-denominator path model can reject names that are valid on the current host or create unexpected disambiguation.
+- **Sensitivity point:** Normalization and collision rules affect portability, Link stability, and adoption friction together.
+- **Mitigation:** The path Spike tests supported host filesystems and Windows-compatible rules. Guest paths fail preflight before mutation.
 
-## 7. Span Invalidation Under Splicing
-- **Risk:** `tech-spec/adrs/ADR-007-span-preserving-splice-edits.md` keys the Core Engine's source spans by `block_path`. Splicing Block N shifts every subsequent byte offset in the file, so a stale span map silently writes edits into the wrong region — a data-corruption failure mode, not a crash, and one that unit tests over single-Block fixtures would not catch.
-- **Mitigation (implemented, `WSPC-D003`; cost measured by `SPK-WSPC-D001`):** Reparse the whole file after every committed splice rather than adjusting offsets in place. This is O(file) per committed edit, which the tiering in ADR-008 keeps off the per-keystroke path, and it makes an incorrect span map unrepresentable rather than merely unlikely. The cost is now measured rather than feared — a committed splice plus reparse stays inside one frame to roughly 360 KiB of prose (conservative p95) — so the arithmetic optimization is not needed and is forbidden on every committed path.
+## Risk 3: Missed or reordered guest events
 
-  The mitigation is proven from two directions. `markdown::spans::invariants::check` is the executable statement of what a span map must satisfy: no degenerate span, every endpoint a character boundary within the source, no child escaping its parent's extent, and siblings both disjoint and ordered the way their paths are. It returns `Err` with a description rather than panicking, specifically so `proptest` can shrink a failing case. Alongside it sit the **truthful-span refusal** tests, which are the ones that matter here because they cover the case where the honest answer is to have no span at all: `inline_content_that_renders_nothing_never_fabricates_a_span`, `a_buffered_edit_of_a_container_is_refused_rather_than_corrupting_its_children` and `a_container_edit_would_have_left_descendants_outside_their_parent` each assert that the engine **refuses** rather than emitting a plausible-looking span it cannot justify — which is the discipline that keeps this risk's silent-corruption mode unrepresentable. `a_buffered_edit_leaves_a_map_that_still_describes_the_source` and `a_structure_changing_buffered_edit_still_leaves_a_coherent_map` cover the narrower arithmetic case below.
+- **Risk:** Platform event streams can omit, duplicate, or reorder changes, leaving the derived index or open Note stale.
+- **Sensitivity point:** Debounce duration trades detection latency against duplicate lifecycle outcomes.
+- **Mitigation:** Events are hints, not authority. Reconcile against disk state and revision, deduplicate bursts, and retain Rescan as recovery.
 
-  One narrower case is settled and deliberately outside that warning: `update_block` moves the edited Block's span end by the byte delta and shifts every later span by the same amount, per ADR-008 decision 2. That is not the substitution this risk is about. Nothing is being re-derived — one Block's text changed, its structure is not being reinterpreted until blur, the shift is a single uniform delta, and `commit_block` reparses and rebuilds the whole map immediately afterwards. `SPK-WSPC-D001` settled the open question this paragraph used to defer: arithmetic **cannot** replace the reparse on the committed path, and not only on cost grounds. A committed splice is exactly the operation that may change a Block's node shape, so arithmetic would produce correctly-shifted offsets into a tree that no longer describes the file — silent by construction. The buffering case above stays permitted, and is in fact necessary: reparsing per keystroke would cost 3.4ms per character at 102 KiB and exceed the frame budget on its own at 512 KiB.
+## Risk 4: Stale reconciliation decisions
 
-## 8. Positional Identity and Link Rewriting
-- **Risk:** OKF v0.2 defines a concept's identity as its path (`tech-spec/adrs/ADR-004-okf-conformance.md`), so renaming or moving a Note changes its id and breaks every inbound Link unless all of them are rewritten in the same operation. A partial rewrite leaves dangling Links that are indistinguishable from deliberate ghost Links, so the graph degrades silently rather than failing loudly.
-- **Mitigation (implemented, `WSPC-D006`):** Rename and move are single atomic operations covering the file, the index rows, and every inbound Link, committed together (CAP-LIFE-02, CAP-LIFE-03). The `idx_links_target` index in `data-models/schema.sql` makes finding inbound Links cheap enough that there is no incentive to skip the sweep. `workspace::lifecycle` performs the filesystem half through a journal that records each rename and unwinds it on failure, inside a database transaction that is only committed once every file move has succeeded. Proven by `workspace::lifecycle::tests::a_rename_that_fails_partway_leaves_nothing_changed` (the rollback path: an injected mid-operation failure leaves the file tree, the index rows and the Link text all exactly as they were) and `an_unrewritable_inbound_link_fails_the_rename` (the sweep is a precondition, not a best effort — a Link that cannot be rewritten aborts the whole operation rather than being skipped). `three_sources_linking_to_a_multi_word_title_all_follow_the_rename` and `a_renamed_note_is_found_by_its_new_title_and_no_longer_by_its_old` cover the success path across the prose, index and search surfaces.
-- **Atomicity over the files is necessary and not sufficient.** A rewrite can be undone after the fact by state the transaction did not touch. A *source* Note that is open holds a working source with the old Link text, and its next idle write copies that buffer verbatim over the rewritten file; a source Note carrying an unflushed draft does the same one session later, since `open_note` parses the draft in preference to disk. Either way the corruption described above still occurs — merely later, and from a direction file-level atomicity cannot see. The operation must therefore carry every affected Note's buffer, span map, recorded revision and draft row forward with it, not only the renamed Note's; see `rename_note` in `tech-spec/contracts/ffi_api.rs`.
-- **Residual risk:** a rename on one device concurrent with an edit on another resolves to a ghost Link, which OKF §6.1 requires consumers to tolerate and which the product surfaces as a creatable Note rather than an error.
+- **Risk:** Local history can advance while a Lifecycle Decision or Asset Decision is open.
+- **Sensitivity point:** Allowing local editing improves availability but invalidates a tentative result.
+- **Mitigation:** Persist reconciliation inputs and condition finalization on unchanged local state. Recompute and request renewed input when outcomes differ.
+
+## Risk 5: Remote and Object split transaction
+
+- **Risk:** A crash can leave Note history referencing an Object without a durable upload obligation.
+- **Sensitivity point:** Intent timing affects local responsiveness and publication safety.
+- **Mitigation:** Persist the Object obligation before referenced history, repair obligations from unpublished history on startup and before publication, and verify Objects before push.
+
+## Risk 6: Protected-history cleanup cost
+
+- **Risk:** Complete published-history enumeration can be slow or unavailable, preventing authoritative Object deletion.
+- **Sensitivity point:** Broader retention improves recovery but increases storage and enumeration cost.
+- **Mitigation:** Prefer safety. Cache eviction remains available with a verified remote copy, but authoritative deletion stops when completeness is unknown.
+
+## Risk 7: Provider state ambiguity
+
+- **Risk:** Network failure, rate limiting, expired tokens, revoked authorization, lost installation access, and public visibility can collapse into one authentication error.
+- **Mitigation:** Keep distinct state classes and recovery actions. Reauthorization follows only authoritative credential rejection or revocation.
+
+## Risk 8: Release support drift
+
+- **Risk:** An artifact can launch but fail secure storage, file selection, authorization, synchronization, or update checks on a named system.
+- **Sensitivity point:** A wider Platform matrix multiplies release-gate cost.
+- **Mitigation:** Admit a system only after the complete installed-app matrix passes. The packaging Spike selects the Linux baseline before Stage 3 binds it.
+
+## Risk 9: Unsigned prerelease trust
+
+- **Risk:** Unsigned `0.x` macOS artifacts create installation friction and a weaker trust signal.
+- **Mitigation:** Publish integrity and provenance, label the artifact accurately, and provide Platform guidance. Signing becomes release-blocking at stability.
+
+## Risk 10: Delivered-model migration
+
+- **Risk:** Replacing the smaller rendering projection with the Canonical Note Model can regress delivered editing, selection, Links, or lifecycle behavior.
+- **Mitigation:** Treat delivered A-F behavior as compatibility evidence. The AST Spike and final implementation contracts must preserve source fidelity and existing acceptance suites.

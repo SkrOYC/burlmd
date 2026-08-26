@@ -1,3 +1,14 @@
+// FORWARD STATUS (TechSpec v1.7.2-provisional): this is the delivered
+// brownfield interface, not an implementation-ready contract for PRD v1.3.2.
+// In particular, AstNode is a rendering projection rather than the required
+// canonical extended AST; the OAuth redirect flow is superseded by the
+// GitHub App device-flow decision; title-verbatim path derivation is under
+// OD-05; export predates atomic object-complete export; and asset, monitoring,
+// reconciliation-decision, session-restore, and release surfaces are absent.
+// Research-only Tasks must use contracts/provisional-spikes.toml and must not
+// implement or extend this FFI. Final Stage 3 evolution reconciles this file
+// after the five Spikes produce evidence.
+//
 // Raw Rust interface contract exposed to Flutter via flutter_rust_bridge.
 // This defines the exact shapes passing over the FFI boundary.
 //
