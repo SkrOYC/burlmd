@@ -1,5 +1,9 @@
 # Stage 4: Tasks changelog
 
+## v2.1.15 - 2026-08-26
+
+PR #12 full review round 11 removes a detach-state ambiguity in the auth flow. Direct transition to `LocalOnly` is asset-free only; asset-bearing Workspaces enter `LocalWithObjectStore` from connected, privacy-paused, authentication-required, or signed-out states and must reconnect the exact prior Remote before full-local preparation. Ticket count, effort, dependencies, and critical path remain 80 tickets, 564 points, 216 edges, and 153 points.
+
 ## v2.1.14 - 2026-08-26
 
 PR #12 full review round 10 closes three P1 and three P2 gaps. Replacement-store migration now validates privacy before intent or copy and continuously through migration. Consolidation tests include the second preparation and publication phase. Offline Remote detach retains the Object Store until the exact prior Remote reconnects and supplies fresh authenticated authority for a full-local transition, preserving CAP-ASSET-11. Refresh errors have typed terminal or Writer-action outcomes, and Spike evidence validates semantic timestamps and real Git revision widths. Ticket count, effort, dependencies, and critical path remain 80 tickets, 564 points, 216 edges, and 153 points.
