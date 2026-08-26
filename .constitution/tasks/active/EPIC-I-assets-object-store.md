@@ -1,5 +1,5 @@
 ---
-version: v2.1.15
+version: v2.1.16
 status: active
 epic: I
 ---
@@ -122,15 +122,15 @@ And oversized, unsafe, or invalid input is refused without changing the Note
 - **Expected Success Output:** exit 0 with protocol, credential-isolation, initial and recurring privacy, drift-pause, and probe cleanup tests passing
 - **STOP Conditions:**
   - STOP if final TechSpec hasn't accepted the client/configuration contract.
-  - STOP if anonymous read can't be disproved or credentials leave Platform secure storage.
+  - STOP if anonymous list, read, write, or delete access can't be disproved or credentials leave Platform secure storage.
   - STOP synchronized publication after any failed or stale privacy revalidation; local work remains available.
-- **Description:** Collect endpoint, region, bucket, prefix, and narrowly scoped credentials; store secrets securely; validate list/read/write/delete with a disposable Object; reject anonymously readable storage without mutating policy. Revalidate privacy at startup, before each publication batch, and at least every 15 minutes while synchronized by writing an unpredictable disposable sentinel, attempting an unauthenticated read of its exact key, and cleaning it up. A failed, stale, or anonymously readable probe moves Object synchronization to a visible privacy-paused state until a fresh probe succeeds.
+- **Description:** Collect endpoint, region, bucket, prefix, and narrowly scoped credentials; store secrets securely; validate authenticated list/read/write/delete with disposable Objects; reject anonymously listable, readable, writable, or deletable storage without mutating policy. Revalidate privacy at startup, before each publication batch, and at least every 15 minutes while synchronized. Under an unpredictable disposable prefix, authenticate to create read/delete sentinels, then require unauthenticated `ListObjectsV2`, `GetObject`, `PutObject`, and `DeleteObject` attempts to fail. Verify after the delete attempt that its sentinel still exists, and use authenticated cleanup for every sentinel plus any anonymously created object on every outcome. A failed, stale, or anonymously permissive probe moves Object synchronization to a visible privacy-paused state until a fresh complete probe succeeds.
 - **Acceptance:**
   - **Mode:** contract_test
   - **Evidence:**
 
 ```text
-AWS and safe non-AWS S3-compatible contract fixtures prove endpoint/addressing behavior, disposable list/read/write/delete, cleanup, anonymous-read refusal, secret redaction, and no credential persistence in Workspace, Dart state, Git, or diagnostics. Policy-drift tests make the sentinel anonymously readable after connection and prove the next scheduled or prepublication probe pauses Object synchronization before any history publication; a fresh private probe resumes it without blocking local Note work.
+AWS and safe non-AWS S3-compatible contract fixtures prove endpoint/addressing behavior, authenticated disposable list/read/write/delete, unconditional cleanup, anonymous List/Get/Put/Delete refusal, secret redaction, and no credential persistence in Workspace, Dart state, Git, or diagnostics. Independent policy-drift fixtures enable each anonymous permission after connection and prove the next scheduled or prepublication probe pauses Object synchronization before any history publication. The delete probe verifies its sentinel survives; the put probe cleans up even when the anonymous request unexpectedly succeeds. A fresh complete private probe resumes synchronization without blocking local Note work.
 ```
 
 #### TRANSFER-I005 Upload, verify, and progressively hydrate Objects
@@ -270,7 +270,7 @@ Fault injection proves the active credential reference is always either the veri
   - **Evidence:**
 
 ```text
-Concurrency and interruption tests start publication before, during, and after baseline copy. Initial validation rejects an anonymously readable replacement before intent or copy. A policy-drift fixture makes it anonymously readable during baseline and delta work; the next scheduled or prepublication probe pauses copying, dual writes, and publication with the old store still authoritative. Every publication under the migration intent verifies fresh replacement privacy and its Objects in both stores. Delta reconciliation reaches the exact bound Workspace and Remote inventories before compare-and-swap cutover. A stale epoch, revision, ref inventory, privacy result, missing replacement credential, or failed verification blocks publication or cutover without changing authority. Restart resumes durable progress only after fresh private-store validation; successful cutover makes the replacement authoritative and retains the old store descriptor as readable fallback without changing Object identities. Tests cover a stale publisher after cutover and a fresh-device join whose replacement lookup misses: securely supplied old-store credentials or a credentialed peer fetch the old object, verify its content identity, backfill and verify the replacement, and only then hydrate it. No contract claims the fallback can be retired during `0.x`.
+Concurrency and interruption tests start publication before, during, and after baseline copy. Initial validation rejects a replacement that permits any anonymous List, Get, Put, or Delete operation before intent or copy. Independent policy-drift fixtures enable each operation during baseline and delta work; the next scheduled or prepublication probe pauses copying, dual writes, and publication with the old store still authoritative. Every publication under the migration intent verifies fresh replacement privacy and its Objects in both stores. Delta reconciliation reaches the exact bound Workspace and Remote inventories before compare-and-swap cutover. A stale epoch, revision, ref inventory, privacy result, missing replacement credential, or failed verification blocks publication or cutover without changing authority. Restart resumes durable progress only after fresh private-store validation; successful cutover makes the replacement authoritative and retains the old store descriptor as readable fallback without changing Object identities. Tests cover a stale publisher after cutover and a fresh-device join whose replacement lookup misses: securely supplied old-store credentials or a credentialed peer fetch the old object, verify its content identity, backfill and verify the replacement, and only then hydrate it. No contract claims the fallback can be retired during `0.x`.
 ```
 
 #### DETACH-I012 Prepare every protected Object for full-local transition
