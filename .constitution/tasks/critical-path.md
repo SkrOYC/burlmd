@@ -1,5 +1,5 @@
 ---
-version: v2.1.7
+version: v2.1.8
 ---
 
 # Active backlog summary
@@ -17,28 +17,31 @@ PR #11 remains the delivered redesign foundation and isn’t retroactively assig
 
 ## Critical path
 
-The longest dependency path is **129 story points**:
+The longest dependency path is **150 story points**:
 
 1. `AST-H001`
 2. `MODEL-H003`
 3. `ADAPT-H004`
 4. `AUTH-H006`
-5. `STORE-I002`
-6. `TRANSFER-I005`
-7. `CONNECT-K004`
-8. `SCHED-L003`
-9. `REFS-L010`
-10. `DETACH-I012`
-11. `DETACH-K006`
-12. `REMOTE-K007`
-13. `STATE-L009`
-14. `INTEG-L012`
-15. `APPIMAGE-M006`
-16. `RELEASE-M009`
-17. `GATE-M011`
-18. `PUBLISH-M014`
+5. `PREFLIGHT-H007`
+6. `REPAIR-H008`
+7. `CONS-J004`
+8. `COLLIDE-J005`
+9. `CONSUI-J007`
+10. `CONNECT-K004`
+11. `SCHED-L003`
+12. `REFS-L010`
+13. `DETACH-I012`
+14. `DETACH-K006`
+15. `REMOTE-K007`
+16. `STATE-L009`
+17. `INTEG-L012`
+18. `APPIMAGE-M006`
+19. `RELEASE-M009`
+20. `GATE-M011`
+21. `PUBLISH-M014`
 
-The path now establishes scheduling and complete published-Remote ref enumeration before full-local Object preparation, detach, and the Writer-facing Remote workflow. It terminates in publication only after synchronization integration, immutable candidate construction, and the installed AppImage gate. The Nix and macOS gates run in parallel and also block publication.
+The path establishes canonical Workspace repair and connection-time Consolidation before initial Remote publication. It then establishes scheduling and complete published-Remote ref enumeration before full-local Object preparation, detach, and the Writer-facing Remote workflow. It terminates in publication only after synchronization integration, immutable candidate construction, and the installed AppImage gate. The Nix and macOS gates run in parallel and also block publication.
 
 ## Build order diagram
 
@@ -205,6 +208,7 @@ flowchart LR
     COPYJ002 --> PORTJ006
     ARCHIVEJ003 --> PORTJ006
     COLLIDEJ005 --> CONSUIJ007
+    CONSUIJ007 --> CONNECTK004
     AUTHK001 --> TOKENK002
     TOKENK002 --> REPOK003
     REPOK003 --> CONNECTK004

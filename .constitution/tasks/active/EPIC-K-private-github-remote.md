@@ -1,5 +1,5 @@
 ---
-version: v2.1.7
+version: v2.1.8
 status: active
 epic: K
 ---
@@ -8,7 +8,7 @@ epic: K
 
 Implement the complete private GitHub reference connection through GitHub App device flow. Authentication, Remote attachment, Object Store readiness, privacy, sign-out, detach, and reconnect remain distinct state transitions. GitLab and every second Provider remain deferred.
 
-**Capability coverage:** CAP-SYNC-01, CAP-SYNC-05, CAP-SYNC-06, CAP-SYNC-07, CAP-SYNC-12, and the connection prerequisites in CAP-ASSET-03, CAP-ASSET-11, and CAP-ASSET-12. CAP-SYNC-08 is owned by Epic J.
+**Capability coverage:** CAP-SYNC-01, CAP-SYNC-05, CAP-SYNC-06, CAP-SYNC-07, CAP-SYNC-12, and the connection prerequisites in CAP-ASSET-03, CAP-ASSET-11, and CAP-ASSET-12. Epic J owns CAP-SYNC-08 Consolidation behavior and UI; CONNECT-K004 and REMOTE-K007 own its connection-time orchestration.
 
 **Total Effort:** 66 story points
 
@@ -20,22 +20,23 @@ Implement the complete private GitHub reference connection through GitHub App de
 - **Scope (In-Scope Files):**
   - `config/github-app.release.toml`
   - `docs/github-app-installation.md`
+  - `scripts/attest-github-app-token-expiration.sh`
   - `scripts/verify-github-app-registration.sh`
   - `.github/workflows/**`
   - `.constitution/reports/**`
 - **Scope (Out-of-Scope Files):**
   - Embedding a client secret, GitHub App private key, or installation token minting authority
-- **Verification Command:** `./scripts/verify-github-app-registration.sh --manifest config/github-app.release.toml --installation-url "$BURLMD_GITHUB_APP_INSTALLATION_URL" --expected-client-id "$BURLMD_GITHUB_APP_CLIENT_ID" --require-device-flow --require-expiring-user-tokens --require-private-repository-permissions --output .constitution/reports/github-app-registration.json && git diff --check`
-- **Expected Success Output:** exit 0 with a non-placeholder public client ID, reachable installation URL, exact versioned permissions, enabled device flow, enabled expiring user tokens, and drift-free release report
+- **Verification Command:** Run `./scripts/attest-github-app-token-expiration.sh --client-id "$BURLMD_GITHUB_APP_CLIENT_ID" --output .constitution/reports/github-app-token-expiration-attestation.json`, complete the displayed device-flow authorization as the project administrator, then run `./scripts/verify-github-app-registration.sh --manifest config/github-app.release.toml --installation-url "$BURLMD_GITHUB_APP_INSTALLATION_URL" --expected-client-id "$BURLMD_GITHUB_APP_CLIENT_ID" --require-device-flow --require-private-repository-permissions --token-expiration-attestation .constitution/reports/github-app-token-expiration-attestation.json --max-attestation-age-hours 24 --output .constitution/reports/github-app-registration.json && git diff --check`.
+- **Expected Success Output:** exit 0 with a non-placeholder public client ID, reachable installation URL, exact versioned permissions, a successful device-code request, a fresh expiring-token attestation, and a drift-free release report
 - **STOP Conditions:**
   - STOP if release configuration uses a placeholder client ID, requires a client secret/private key in the binary or CI, omits the public installation URL, or differs from the versioned permission manifest.
-- **Description:** Register the project-owned GitHub App through the human administrator runbook, publish its installation URL, version its repository and account permissions, enable device flow and expiring user tokens, inject the public release client ID, and fail release verification when live settings drift from the manifest.
+- **Description:** Register the project-owned GitHub App through the administrator runbook, publish its installation URL, version its repository and account permissions, enable device flow and expiring user tokens, and inject the public release client ID. Automate public metadata, installation URL, permission, client-ID, and device-code checks. Require a fresh administrator-approved device-flow attestation for token expiration before release.
 - **Acceptance:**
   - **Mode:** runbook_probe
   - **Evidence:**
 
 ```text
-The administrator runbook records registration and ownership without exporting secrets. The exact probe reads live App metadata and proves the published installation URL, non-placeholder release client ID, Contents/Administration/implicit Metadata permissions, device-flow setting, expiring-user-token setting, and manifest version. A changed or disabled setting fails before AUTH-K001 or release verification can pass.
+The administrator runbook records registration and ownership without exporting secrets. The automated probe reads public App metadata and proves the installation URL, release client ID, permissions, manifest version, and a successful device-code request. A human-approved device flow must issue `expires_in`, `refresh_token`, and `refresh_token_expires_in`. The attestation records their presence and lifetimes but never their values, securely discards the tokens, and expires after 24 hours. Missing or stale evidence blocks AUTH-K001 and release verification.
 ```
 
 #### AUTH-K001 Replace legacy OAuth with GitHub App device flow
@@ -119,7 +120,7 @@ GitHub API fixtures cover user and organization installations, insufficient perm
 #### CONNECT-K004 Attach and publish an existing local Workspace
 - **Type:** Feature
 - **Effort:** 8
-- **Dependencies:** REPO-K003, TRANSFER-I005, CI-M003
+- **Dependencies:** REPO-K003, TRANSFER-I005, CONSUI-J007, CI-M003
 - **Category:** Feature-Evolution
 - **Scope (In-Scope Files):**
   - `rust/src/git/operations.rs`
@@ -127,19 +128,20 @@ GitHub API fixtures cover user and organization installations, insufficient perm
   - `rust/src/sync/**`
   - `rust/src/api/ffi_api.rs`
   - `test/**`
+  - `integration_test/connect_consolidation_flow_test.dart`
 - **Scope (Out-of-Scope Files):**
   - Reconciliation against a populated unrelated repository
-- **Verification Command:** `cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && dart analyze && git diff --check`
-- **Expected Success Output:** exit 0 with prerequisite, ephemeral credential, publish, rollback, and privacy-recheck tests passing
+- **Verification Command:** `cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test integration_test/connect_consolidation_flow_test.dart -d linux && dart analyze && git diff --check`
+- **Expected Success Output:** exit 0 with prerequisite, optional prepublication Consolidation, ephemeral credential, publish, rollback, and privacy-recheck tests passing
 - **STOP Conditions:**
   - STOP if protected Objects aren't verified in the Object Store or Git credentials would persist beyond one process invocation.
-- **Description:** Recheck private/empty eligibility and Object readiness, attach the Remote without rehoming local state, publish existing history with an ephemeral user token, and persist attachment only after success.
+- **Description:** Recheck private/empty eligibility and Object readiness, then enter the connection `Preparing` state. Before initial publication, let the Writer either continue with the active Workspace or complete the typed Consolidation workflow from Epic J. Attach the Remote without rehoming local state, publish with an ephemeral user token, and persist attachment only after success.
 - **Acceptance:**
   - **Mode:** invariant
   - **Evidence:**
 
 ```text
-No Note history publishes before protected Objects verify; Git receives credentials only through the ephemeral adapter; failure leaves the local Workspace/history intact and unattached; success records the exact private Remote without credentials in config or URL.
+No Note history publishes before protected Objects verify and the Writer completes or declines Consolidation. The connection integration test drives `Preparing → Consolidating → Connected`, including a collision decision, and proves the source stays unchanged. Git receives credentials only through the ephemeral adapter. Failure leaves the local Workspace and history intact and unattached; success records the exact private Remote without credentials in configuration or URL.
 ```
 
 #### CLONE-K005 Join a connected Workspace on another device
@@ -184,16 +186,17 @@ The exact runbook command starts from a clean second-device state, joins the iso
 - **Scope (Out-of-Scope Files):**
   - Deleting Remote repositories or Object Store buckets
 - **Verification Command:** `cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && dart analyze && git diff --check`
-- **Expected Success Output:** exit 0 with offline/no-credential detach, reconnect, protected-hydration block, and exact-history preservation tests passing
+- **Expected Success Output:** exit 0 with offline attachment-only detach, online full-local transition, reconnect, protected-hydration block, and exact-history preservation tests passing
 - **STOP Conditions:**
-  - STOP if detach deletes history/Objects, requires network/credentials, or can leave an asset-bearing Workspace inconsistently attached.
-- **Description:** Keep sign-out credential-only, detach as explicit local bookkeeping, preserve all history, block full-local transition until protected hydration completes, and reconnect the exact prior Remote without rewriting history.
+  - STOP if detach deletes history or Objects, or can leave an asset-bearing Workspace inconsistently attached.
+  - STOP if a full-local transition relies on cached Remote refs, stale readiness, or no authenticated online Remote revalidation.
+- **Description:** Keep sign-out credential-only. Permit offline Remote detachment only as local bookkeeping that retains the Object Store connection. For a full-local transition, authenticate online, enumerate all published refs again, hydrate and verify the resulting Protected Object closure, and consume the revision-bound readiness result atomically before detaching both external stores. Reconnect the exact prior Remote without rewriting history.
 - **Acceptance:**
   - **Mode:** invariant
   - **Evidence:**
 
 ```text
-Sign-out preserves attachment; detach works offline without credentials and preserves commits; protected Asset checks gate full-local transition; successful full-local mode retains all bytes and detaches both external stores; reconnect restores publication without history rewrite.
+Sign-out preserves attachment. Offline detachment removes only local Remote bookkeeping, retains the Object Store, and preserves local commits. Full-local transition requires an authenticated online Remote-ref revalidation immediately before hydration readiness and compare-and-swap detach. It refuses offline, stale, incomplete, or advanced ref evidence. Success retains all protected bytes and detaches both external stores; reconnect restores publication without history rewrite.
 ```
 
 #### REMOTE-K007 Integrate Remote settings, privacy, and authorization states
@@ -214,16 +217,17 @@ Sign-out preserves attachment; detach works offline without credentials and pres
 - **Expected Success Output:** exit 0 with connect, second-device join, reauthorize, public/lost-access pause, sign-out, detach/reconnect, and keyboard/Semantics tests passing
 - **STOP Conditions:**
   - STOP if authentication gates local writing or UI conflates sign-out with detach.
-- **Description:** Present device flow, repository selection/provisioning, Object prerequisites, initial attachment, second-device authorize/select/clone join, reauthorization, privacy failure, sign-out, full-local detach, and reconnect through typed authoritative states. CLONE-K005 and DETACH-K006 own the Core behavior; this ticket owns their Writer-facing workflows.
+- **Description:** Present device flow, repository selection/provisioning, Object prerequisites, optional prepublication Consolidation, initial attachment, second-device authorize/select/clone join, reauthorization, privacy failure, sign-out, full-local detach, and reconnect through typed authoritative states. CLONE-K005 and DETACH-K006 own the Core behavior; this ticket owns their Writer-facing workflows.
 - **Acceptance:**
   - **Mode:** gherkin
   - **Evidence:**
 
 ```gherkin
 Given a local Workspace in each authorization and attachment state
-When the Writer connects a local Workspace, joins from a second device, signs out, reauthorizes, detaches, reconnects, or restores privacy
+When the Writer connects a local Workspace, optionally consolidates another local Workspace before publication, joins from a second device, signs out, reauthorizes, detaches, reconnects, or restores privacy
 Then local editing remains available
 And the UI shows the exact typed state and valid next actions
+And connection can't publish while Consolidation is active or unresolved
 And public or inaccessible Remote state pauses synchronization
 ```
 

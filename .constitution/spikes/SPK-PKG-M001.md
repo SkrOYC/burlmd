@@ -18,7 +18,7 @@
 ## Codebase baseline
 
 - **State today:** Development builds exist; GitHub Releases don't provide the required installable artifacts. The production shell still contains presentation-only emulated Platform chrome, which the harness must not reproduce.
-- **Discovered constraints:** Apple Silicon only on macOS; x86-64 general Linux; Nix Flake for Nix-managed installs; unsigned `0.x`; two current stable macOS major versions; no ambient Git or self-updater. Nix out-links resolve outside the repository, so every measured artifact or closure must be copied into the Spike's `artifacts/` directory before containment, byte-count, and SHA-256 evidence is recorded. Distinct macOS hosts export opaque SHA-256-verified handoff bundles for coordinator import; no shared checkout is assumed.
+- **Discovered constraints:** Apple Silicon only on macOS; x86-64 general Linux; Nix Flake for Nix-managed installs; unsigned `0.x`; no ambient Git or self-updater. Apple's published stable-version list identifies macOS Tahoe 26 and macOS Sequoia 15 as the two stable major versions on August 26, 2026. Distinct Apple Silicon hosts must run those versions. If that pair changes before execution, stop and reconcile the contract. Each installed probe must execute the copied artifact that aggregation hashes. Nix out-links resolve outside the repository, so every measured artifact or closure must be copied into the Spike's `artifacts/` directory before containment, byte-count, and SHA-256 evidence is recorded. The macOS hosts export opaque SHA-256-verified handoff bundles for coordinator import; no shared checkout is assumed.
 
 ## Options and trade-offs
 

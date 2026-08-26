@@ -2,7 +2,7 @@
 
 ## Provisional research boundary
 
-TechSpec v1.7.5-provisional permits research code only under `.constitution/prototypes/`. Production directories (`lib/`, `rust/`, `linux/`, and `macos/`) are read-only inputs to this research wave. A Spike may create an isolated Rust or Flutter harness through the relevant CLI, add dependencies through `cargo add` or `flutter pub add`, and commit its generated lock file inside its own prototype directory. It must not add a candidate dependency to the production manifests.
+TechSpec v1.7.6-provisional permits research code only under `.constitution/prototypes/`. Production directories (`lib/`, `rust/`, `linux/`, and `macos/`) are read-only inputs to this research wave. A Spike may create an isolated Rust or Flutter harness through the relevant CLI, add dependencies through `cargo add` or `flutter pub add`, and commit its generated lock file inside its own prototype directory. It must not add a candidate dependency to the production manifests.
 
 The five exact prototype roots and verification commands are machine-readable in `contracts/provisional-spikes.toml`. Its allowlist is exhaustive: each Spike may write only its named prototype root and report path; every unlisted repository path is read-only. Framework bookkeeping may update the owning active Task after the Spike process exits, but that isn't part of the Spike's write authority.
 
@@ -100,7 +100,7 @@ The repository follows the default `flutter_rust_bridge` template structure to m
 └── flutter_rust_bridge.yaml # FRB configuration
 ```
 
-The directories marked **Planned** are the physical homes for the forward boundaries already accepted by Architecture v1.4.4. They remain absent until their owning implementation ticket begins. A Spike never creates them. Final Stage 3 may refine files inside a planned directory after evidence, but moving responsibility to a different boundary requires Architecture review and a Tasks adaptation.
+The directories marked **Planned** are the physical homes for the forward boundaries already accepted by Architecture v1.4.5. They remain absent until their owning implementation ticket begins. A Spike never creates them. Final Stage 3 may refine files inside a planned directory after evidence, but moving responsibility to a different boundary requires Architecture review and a Tasks adaptation.
 
 `android/` and `ios/` are absent by design: mobile targets are deferred per
 `tasks/critical-path.md`, and no mobile toolchain is provisioned. `ANDROID_HOME`

@@ -1,5 +1,9 @@
 # Stage 3: Technical Implementation Changelog
 
+## v1.7.6-provisional
+
+PR #12 full review round 4 binds this provisional layer to PRD v1.3.3 and Architecture v1.4.5. It also binds AST and macOS packaging evidence to verified host facts and makes installed probes execute copied artifacts. GitHub App verification now separates public drift checks from a fresh administrator-approved expiring-token attestation. The forward contracts require fresh online Remote authority for full-local transition, integrate Consolidation into initial connection, and reconcile ADR-011 with the content-derived telemetry prohibition. Production implementation remains unauthorized.
+
 ## v1.7.5-provisional
 
 PR #12 full review round 3 reconciled the provisional layer against Architecture v1.4.4, completed the access-token `401` recovery contract, and added integrity-checked cross-host Spike result handoff. GitHub App registration and settings drift now have explicit downstream ownership. Production implementation remains unauthorized.
@@ -18,7 +22,7 @@ Reviewed for PRD v1.3.2 and Architecture v1.4.2. CAP-GRAPH-04 is now classified 
 
 ## v1.7.1-provisional
 
-Reviewed for PRD v1.3.1 and Architecture v1.4.1. The existing local structured-diagnostics boundary already matches the clarified privacy requirement, so no physical design changes are needed. Production implementation remains unauthorized until the five Spikes, measured upstream evolution, and final Stage 3 pass complete.
+Reviewed for PRD v1.3.1 and Architecture v1.4.1. This review incorrectly concluded that the local structured-diagnostics boundary matched the clarified privacy requirement. ADR-011 still allowed paths and concept IDs. TechSpec v1.7.6-provisional resolves that contradiction by excluding signed locations and all content-derived metadata. Production implementation remains unauthorized until the five Spikes, measured upstream evolution, and final Stage 3 pass complete.
 
 ## v1.7.0-provisional
 
