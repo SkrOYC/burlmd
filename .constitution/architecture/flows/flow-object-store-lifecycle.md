@@ -22,9 +22,11 @@ stateDiagram-v2
     DetachUnusedStore --> Connected: Any protected reference exists or enumeration is stale/incomplete
     RemoteWithoutObjectStore --> Validate: Writer reconnects an Object Store
     RemoteWithoutObjectStore --> LocalOnly: Writer separately detaches the Remote
-    Connected --> Detaching: Return Workspace to fully local
+    Connected --> RevalidatingRemote: Return Workspace to fully local
+    RevalidatingRemote --> Detaching: Fresh published refs and protected closure verified
+    RevalidatingRemote --> Connected: Offline, unauthorized, incomplete, or stale
     Detaching --> LocalOnly: Every Protected State hydrated; Object Store and Remote detach
-    Detaching --> Connected: Hydration incomplete
+    Detaching --> Connected: Bound revision advances before atomic detach
 ```
 
 ## Failure path
@@ -35,3 +37,4 @@ stateDiagram-v2
 - Cache eviction requires a verified Object Store copy. Authoritative deletion also requires 30 days of unreachability and complete published-history enumeration.
 - An asset-bearing Workspace never remains Remote-connected without a verified Object Store.
 - A Remote-connected Workspace with no protected Object references may detach only the Object Store after complete current, local-history, published-history, pending-reconciliation, and Consolidation enumeration proves the protected set empty. The Remote remains attached.
+- Offline Remote detachment removes local attachment state only and retains the Object Store. A full-local transition requires authenticated online enumeration of every published Remote ref immediately before Protected Object hydration. The transition consumes a readiness result bound to that ref inventory and the Workspace revision, and refuses if either advances before atomic detach.

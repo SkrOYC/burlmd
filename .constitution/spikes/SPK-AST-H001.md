@@ -18,7 +18,7 @@
 ## Codebase baseline
 
 - **State today:** Production uses `pulldown-cmark =0.12.2` events and a reduced `AstNode` render/edit projection.
-- **Discovered constraints:** The original source remains authoritative; untouched bytes can't be normalized; Flutter can't own a second document model; all declared syntax and burlmd domain nodes must be represented; performance and FFI projection cost require distinct Linux and Apple Silicon macOS reference-host evidence exchanged through opaque SHA-256-verified handoff bundles rather than a shared checkout assumption.
+- **Discovered constraints:** The original source remains authoritative; untouched bytes can't be normalized; Flutter can't own a second document model; all declared syntax and burlmd domain nodes must be represented; performance and FFI projection cost require distinct hosts with verified x86-64 Linux and Apple Silicon macOS facts. The hosts exchange opaque SHA-256-verified handoff bundles rather than relying on a shared checkout.
 
 ## Options and trade-offs
 

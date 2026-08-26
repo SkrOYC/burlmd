@@ -1,5 +1,9 @@
 # Stage 2: Architecture changelog
 
+## v1.4.5 - 2026-08-26
+
+Reviewed for PRD v1.3.3. PR #12 full review round 4 distinguishes offline Remote detachment from the full-local transition. Offline detachment retains the Object Store. Full-local transition requires authenticated online enumeration of all published Remote refs, verified hydration of the resulting Protected Object closure, and an atomic revision-bound detach.
+
 ## v1.4.4 - 2026-08-26
 
 PR #12 full review round 3 restored independent Object Store detach for Remote-connected Workspaces whose complete Protected State contains no Object references. Asset-bearing Workspaces still require a verified Object Store, and full-local transition still detaches both external stores only after complete hydration.

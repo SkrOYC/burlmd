@@ -1,5 +1,11 @@
 # Stage 1: Product Requirements Changelog
 
+## v1.3.3 - 2026-08-26
+
+### Fixed
+
+- Clarified that an offline Remote detach retains the Object Store. A full-local transition requires fresh authenticated Remote authority before burlmd verifies and detaches every protected Object.
+
 ## v1.3.2 - 2026-08-26
 
 ### Fixed

@@ -30,7 +30,7 @@
 - Before local history can reference a new Object, Application State records a durable operation intent and Object obligation.
 - Before history publication, Object Transfer verifies every required Object in the Object Store. Startup and prepublication reconciliation derive missing obligations from unpublished history.
 - Pull or join validates referenced Object manifests before authoritative materialization and hydrates active Assets first.
-- An asset-bearing connected Workspace can't detach its Object Store alone. Returning to local operation requires complete protected hydration and detaches both external storage boundaries.
+- An asset-bearing connected Workspace can't detach its Object Store alone. Offline Remote detachment retains the Object Store. Returning to fully local operation requires fresh authenticated enumeration of all published Remote refs, complete protected hydration, and atomic revision-bound detachment of both external storage boundaries.
 
 ## Retention and integrity
 

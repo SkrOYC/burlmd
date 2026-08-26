@@ -1,5 +1,20 @@
 # Stage 4: Tasks changelog
 
+## v2.1.8 - 2026-08-26
+
+PR #12 full review round 4 found six P1 and two P2 contract gaps. This patch resolves all eight.
+
+### Fixed
+
+- Bound AST evidence to system-captured host fingerprints and verified x86-64 Linux and Apple Silicon macOS facts; caller-supplied flags are assertions only.
+- Made the macOS packaging Spike run each installed probe from the copied artifact that aggregation hashes.
+- Bound packaging evidence to distinct Apple Silicon hosts running macOS 26 and macOS 15.
+- Split GitHub App verification into automated public drift checks and a fresh administrator-approved expiring-token attestation.
+- Limited offline Remote detach to attachment-only mode that retains the Object Store. Full-local transition now requires fresh authenticated Remote-ref enumeration.
+- Integrated optional Consolidation into the connection state machine before initial Remote publication, including an end-to-end release-matrix scenario.
+- Clarified full-local transition in PRD v1.3.3, evolved Architecture to v1.4.5, bound Stage 3 to both, corrected the earlier v1.4.4 lineage marker, and reconciled ADR-011 with the prohibition on signed-location and content-derived diagnostics.
+- Recomputed 215 dependency edges. The 150-point critical path now includes the required Consolidation-to-connection sequence; ticket count and effort remain 80 tickets and 558 points.
+
 ## v2.1.7 - 2026-08-26
 
 PR #12 full review round 3 found three P1 and two P2 gaps. This patch resolves all five.
@@ -13,7 +28,7 @@ PR #12 full review round 3 found three P1 and two P2 gaps. This patch resolves a
 ### Fixed
 
 - Added proactive access-token refresh and exactly one refresh/replay after an authenticated `401`; a second `401` becomes authentication-required.
-- Reconciled provisional Stage 3 against Architecture v1.4.3.
+- Reconciled provisional Stage 3 against Architecture v1.4.4.
 - Added opaque SHA-256-verified cross-host result export, SCP transfer, import, and aggregation for AST, path, Asset, and packaging Spikes.
 - Recomputed the active backlog to 80 tickets, 558 points, and 214 dependency edges. The critical path remains 129 points.
 

@@ -1,5 +1,5 @@
 ---
-version: v2.1.7
+version: v2.1.8
 status: active
 epic: I
 ---
@@ -275,21 +275,23 @@ Every protected Object remains available throughout migration; restart resumes f
 - **Scope (Out-of-Scope Files):**
   - Remote/Object Store attachment mutation owned by DETACH-K006 and S3-only Workspace operation
 - **Verification Command:** `cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh detach-i012 && git diff --check`
-- **Expected Success Output:** exit 0 with full hydration, readiness-token, refusal, and offline restart tests passing
+- **Expected Success Output:** exit 0 with online Remote revalidation, full hydration, readiness-token, refusal, and offline restart-after-preparation tests passing
 - **STOP Conditions:**
   - STOP if readiness can be issued while any Protected Object is missing, unverified, or based on stale reachability.
-- **Description:** Enumerate the complete Protected Object closure, hydrate and verify it locally, and issue a revision-bound readiness result for DETACH-K006 without changing either external connection.
+  - STOP if the full-local preparation can't authenticate online and re-enumerate all published Remote refs immediately before closure computation.
+- **Description:** Authenticate online and re-enumerate every published Remote ref, compute the complete Protected Object closure from that fresh authority, hydrate and verify it locally, and issue a revision-bound readiness result for DETACH-K006 without changing either external connection.
 - **Acceptance:**
   - **Mode:** gherkin
   - **Evidence:**
 
 ```gherkin
-Given a connected Workspace has protected Objects that may not be local
+Given an authenticated online Workspace has protected Objects that may not be local
 When burlmd prepares a full-local transition
-Then it hydrates and verifies every protected Object
-And returns readiness bound to the enumerated revision
+Then it freshly enumerates every published Remote ref
+And hydrates and verifies every protected Object reachable from that authority
+And returns readiness bound to the Remote-ref inventory and Workspace revision
 And leaves both external connections unchanged
-And the prepared Workspace can restart offline with every protected byte available
+And restart preserves the prepared bytes but requires online revalidation before detach if either bound revision can be stale
 ```
 
 #### UNLINK-I013 Detach an unused Object Store without detaching the Remote

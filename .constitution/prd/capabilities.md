@@ -240,7 +240,7 @@ PR #11 also delivered the design system, responsive shell, preferences surface, 
 
 - **Priority:** P0
 - **Capability ID:** CAP-ASSET-11
-- **Capability:** Before an asset-bearing Workspace becomes fully local, burlmd verifies that every Object reachable from a Protected State is available locally, then detaches both the Object Store and Remote.
+- **Capability:** Before an asset-bearing Workspace becomes fully local, burlmd uses fresh authenticated Remote state to verify that every Object reachable from a Protected State is available locally, then atomically detaches both the Object Store and Remote. An offline Remote detach retains the Object Store.
 - **Rationale:** Returning to local operation must not strand history in storage that the Workspace no longer uses.
 
 - **Priority:** P0

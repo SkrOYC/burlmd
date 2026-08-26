@@ -1,5 +1,5 @@
 ---
-version: v2.1.7
+version: v2.1.8
 status: active
 epic: J
 ---
@@ -181,16 +181,17 @@ And failure reports a typed recovery state without claiming success
 - **Expected Success Output:** exit 0 with source selection, plan, collision decision, progress, rollback, keyboard, and Semantics tests passing
 - **STOP Conditions:**
   - STOP if Flutter constructs collision outcomes, mutates the source Workspace, or claims success before Core publishes the atomic result.
-- **Description:** Present the typed Consolidation plan and explicit collision choices, collect Writer decisions accessibly, and surface authoritative progress, success, rollback, and retry outcomes.
+- **Description:** Present the typed Consolidation plan and explicit collision choices, collect Writer decisions accessibly, and surface authoritative progress, success, rollback, and retry outcomes. Expose this workflow as the optional `Preparing → Consolidating → Connected` branch that CONNECT-K004 consumes before initial publication.
 - **Acceptance:**
   - **Mode:** gherkin
   - **Evidence:**
 
 ```gherkin
 Given a source Workspace produces typed collisions during Consolidation planning
-When the Writer resolves every choice using keyboard or pointer
+When the Writer selects Consolidation during Remote connection and resolves every choice using keyboard or pointer
 Then the UI submits only typed decisions to Core
 And the source remains unchanged
-And success appears only after atomic publication
+And the Remote connection can't publish until Consolidation reaches its atomic destination outcome
+And success appears only after Consolidation and initial Remote publication complete
 And a failed attempt exposes a recoverable typed outcome
 ```
