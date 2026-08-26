@@ -2,7 +2,7 @@
 
 ## Provisional research boundary
 
-TechSpec v1.7.17-provisional permits research code only under `.constitution/prototypes/`. Production directories (`lib/`, `rust/`, `linux/`, and `macos/`) are read-only inputs to this research wave. A Spike may create an isolated Rust or Flutter harness through the relevant CLI and add dependencies through `cargo add` or `flutter pub add`. Every Rust scaffold runs the declared `cargo generate-lockfile` command; after the last dependency change, the Spike reruns it and commits the generated lockfile before any `--locked` verification. The Spike must not add a candidate dependency to the production manifests.
+TechSpec v1.7.18-provisional permits research code only under `.constitution/prototypes/`. Production directories (`lib/`, `rust/`, `linux/`, and `macos/`) are read-only inputs to this research wave. A Spike may create an isolated Rust or Flutter harness through the relevant CLI and add dependencies through `cargo add` or `flutter pub add`. Every Rust scaffold runs the declared `cargo generate-lockfile` command; after the last dependency change, the Spike reruns it and commits the generated lockfile before any `--locked` verification. The Spike must not add a candidate dependency to the production manifests.
 
 The five exact prototype roots and verification commands are machine-readable in `contracts/provisional-spikes.toml`. Its allowlist is exhaustive: each Spike may write only its named prototype root and report path; every unlisted repository path is read-only. Framework bookkeeping may update the owning active Task after the Spike process exits, but that isn't part of the Spike's write authority.
 

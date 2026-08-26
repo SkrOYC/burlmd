@@ -1,5 +1,5 @@
 schema_version = 10
-stage = "tech-spec-v1.7.17-provisional"
+stage = "tech-spec-v1.7.18-provisional"
 production_implementation_authorized = false
 result_schema = ".constitution/tech-spec/contracts/spike-result.schema.json"
 

@@ -1,5 +1,5 @@
 ---
-version: v2.1.19
+version: v2.1.20
 status: active
 epic: K
 ---
@@ -54,16 +54,16 @@ The administrator runbook records registration and ownership without exporting s
 - **Scope (Out-of-Scope Files):**
   - OAuth redirect listener, client secret, GitHub App private key, and GitLab
 - **Verification Command:** `cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh auth-k001 && git diff --check && ! rg -n '\[DEBUG-' lib rust test scripts`
-- **Expected Success Output:** exit 0 with device-code, polling, slowdown, denial, expiry, cancellation, bad-code restart, unverified-email guidance, and every documented fatal device-flow error contract test passing
+- **Expected Success Output:** exit 0 with device-code, polling, slowdown, denial, cancellation, bad-code restart, both documented expiry identifiers, unverified-email guidance, and every documented fatal device-flow error contract test passing
 - **STOP Conditions:**
   - STOP if implementation needs an embedded client secret, App private key, callback listener, or automated browser approval.
-- **Description:** Implement the accepted GitHub App device-code request and polling contract, expose verification URI/code and typed progress, and remove the old PKCE redirect/client-secret path.
+- **Description:** Implement the accepted GitHub App device-code request and polling contract, expose verification URI/code and typed progress, and remove the old PKCE redirect/client-secret path. Treat both `expired_token` and GitHub's documented `token_expired` wording as expiry responses that discard the code and restart device authorization.
 - **Acceptance:**
   - **Mode:** contract_test
   - **Evidence:**
 
 ```text
-Protocol fixtures verify the pinned GitHub API contract, polling interval and `slow_down` handling, terminal denial/expiry, cancellation, public client ID only, and absence of every superseded redirect/secret path. Success requires the complete expiring token pair, both lifetimes, empty `scope`, and bearer `token_type` in JSON. `bad_verification_code` restarts device flow with a fresh code. `unverified_user_email` stops polling and guides the Writer to verify their primary email before restarting. `unsupported_grant_type`, `incorrect_client_credentials`, `incorrect_device_code`, and `device_flow_disabled` stop polling immediately and surface typed configuration or protocol failures.
+Protocol fixtures verify the pinned GitHub API contract, polling interval and `slow_down` handling, terminal denial, cancellation, public client ID only, and absence of every superseded redirect/secret path. Success requires the complete expiring token pair, both lifetimes, empty `scope`, and bearer `token_type` in JSON. `bad_verification_code`, `expired_token`, and `token_expired` each discard the unusable code and restart device flow with a fresh code. `unverified_user_email` stops polling and guides the Writer to verify their primary email before restarting. `unsupported_grant_type`, `incorrect_client_credentials`, `incorrect_device_code`, and `device_flow_disabled` stop polling immediately and surface typed configuration or protocol failures.
 ```
 
 #### TOKEN-K002 Persist, refresh, and revoke the user token pair safely

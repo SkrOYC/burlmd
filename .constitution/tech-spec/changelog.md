@@ -1,5 +1,9 @@
 # Stage 3: Technical Implementation Changelog
 
+## v1.7.18-provisional
+
+PR #12 full review round 18 advances GitHub contract to v6 and deliberately supports both `expired_token` and the current GitHub documentation's `token_expired` wording. Either expiry response discards the unusable code and restarts device authorization.
+
 ## v1.7.17-provisional
 
 PR #12 full review round 17 advances Spike results to schema v10. PATH aggregation now binds its roles to Linux/ext4 and macOS/APFS. Packaging binds Linux roles to Linux/x86-64 hosts and every named distribution candidate to system-captured guest runtime evidence. GitHub contract v5 requires the versioned REST headers on App, installation, repository, and release calls while excluding OAuth endpoints.
