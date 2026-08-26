@@ -1,5 +1,5 @@
-schema_version = 8
-stage = "tech-spec-v1.7.11-provisional"
+schema_version = 9
+stage = "tech-spec-v1.7.12-provisional"
 production_implementation_authorized = false
 result_schema = ".constitution/tech-spec/contracts/spike-result.schema.json"
 
@@ -15,10 +15,11 @@ validate_candidate_attribution = true
 validate_artifact_containment_existence_size_and_sha256 = true
 copy_external_or_symlinked_build_outputs_into_the_write_allowlist_before_hashing = true
 capture_command_exit_status_stdout_and_stderr = true
-validate_rfc3339_timestamps_without_relying_on_optional_format_plugins = true
+semantically_parse_rfc3339_timestamps_and_reject_invalid_calendar_dates_without_optional_format_plugins = true
 capture_host_fingerprint_os_version_architecture_filesystem_and_profile_from_system_apis = true
 never_accept_caller_supplied_host_facts_as_evidence = true
 capture_repository_revision_tree_lockfile_contract_schema_probe_source_probe_binary_and_corpus_hashes = true
+resolve_recorded_repository_revision_to_the_captured_checkout = true
 reject_cross_host_repository_tree_lockfile_contract_schema_probe_source_or_corpus_mismatch = true
 
 [multi_host_handoff]

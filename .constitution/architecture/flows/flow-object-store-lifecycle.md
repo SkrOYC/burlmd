@@ -9,11 +9,8 @@ stateDiagram-v2
     ValidateLocalStore --> LocalWithObjectStore: Private access and required operations verified
     ValidateLocalStore --> FullyLocal: Validation fails
     FullyLocal --> RemoteWithoutObjectStore: Asset-free Remote connects
-    LocalWithObjectStore --> RemoteWithObjectStore: Remote connects
+    LocalWithObjectStore --> RemoteWithObjectStore: Remote connects or exact prior Remote reconnects
     RemoteWithObjectStore --> LocalWithObjectStore: Offline Remote detach retains Object Store
-    LocalWithObjectStore --> HydratingForStoreDetach: Remove retained Object Store
-    HydratingForStoreDetach --> FullyLocal: Every local Protected Object verified; Object Store detaches
-    HydratingForStoreDetach --> LocalWithObjectStore: Hydration incomplete or revision advances
     RemoteWithObjectStore --> HydratingRemote: Join or restore needs Objects
     HydratingRemote --> RemoteWithObjectStore: Active Objects first; remaining current state verified
     RemoteWithObjectStore --> RemoteAssetRecovery: Missing or corrupt Object pauses affected synchronization
@@ -25,9 +22,17 @@ stateDiagram-v2
     RemoteAssetRecovery --> RemoteAssetRecovery: Retry remains unresolved
     LocalAssetRecovery --> LocalWithObjectStore: Repair, replacement, or reference removal verifies
     LocalAssetRecovery --> LocalAssetRecovery: Retry remains unresolved
-    RemoteWithObjectStore --> MigratingRemoteStore: Publish migration intent; begin dual write
+    RemoteWithObjectStore --> ValidateReplacementStore: Writer requests replacement store
+    ValidateReplacementStore --> MigratingRemoteStore: Replacement privacy and operations verified; publish intent
+    ValidateReplacementStore --> RemoteWithObjectStore: Validation fails before copy
+    MigratingRemoteStore --> PausedMigrationPrivacy: Replacement privacy probe fails or expires
+    PausedMigrationPrivacy --> MigratingRemoteStore: Fresh replacement validation succeeds
     MigratingRemoteStore --> RemoteWithObjectStore: Complete migration or keep earlier store after failure
-    LocalWithObjectStore --> MigratingLocalStore: Replace before any Remote attachment
+    LocalWithObjectStore --> ValidateLocalReplacementStore: Replace before any Remote attachment
+    ValidateLocalReplacementStore --> MigratingLocalStore: Replacement privacy and operations verified
+    ValidateLocalReplacementStore --> LocalWithObjectStore: Validation fails before copy
+    MigratingLocalStore --> PausedLocalMigrationPrivacy: Replacement privacy probe fails or expires
+    PausedLocalMigrationPrivacy --> MigratingLocalStore: Fresh replacement validation succeeds
     MigratingLocalStore --> LocalWithObjectStore: Complete migration or keep earlier store after failure
     RemoteWithObjectStore --> DetachUnusedStore: Writer requests Object Store-only detach
     DetachUnusedStore --> RemoteWithoutObjectStore: Complete protected set is empty; Object Store detaches and Remote remains
@@ -51,5 +56,5 @@ stateDiagram-v2
 - Cache eviction requires a verified Object Store copy and 30 days without use. burlmd doesn't delete authoritative Object Store bytes during `0.x`.
 - An asset-bearing Workspace never remains Remote-connected without a verified Object Store.
 - A Remote-connected Workspace with no protected Object references may detach only the Object Store after complete current, local-history, published-history, pending-reconciliation, and Consolidation enumeration proves the protected set empty. The Remote remains attached.
-- Offline Remote detachment moves `RemoteWithObjectStore` to `LocalWithObjectStore`; it removes local Remote attachment state and retains the Object Store. The Writer can reconnect the Remote or hydrate every locally protected Object before removing the retained Object Store. A full-local transition from an attached Remote requires authenticated online enumeration of every published Remote ref immediately before Protected Object hydration. The transition consumes a readiness result bound to that ref inventory and the Workspace revision, and refuses if either advances before atomic detach.
-- Replacing the store for a connected Workspace publishes a durable migration intent. Every publisher dual-writes until baseline and delta reconciliation reach the bound Workspace and Remote inventories. Cutover retains a non-secret descriptor for the old store. On a replacement miss, securely supplied old-store credentials or a credentialed peer recover and content-verify the Object, backfill and verify the replacement, and only then hydrate the requester. A Remote-detached Workspace that previously published must reconnect before replacement migration; it can instead hydrate locally and remove the retained store.
+- Offline Remote detachment moves `RemoteWithObjectStore` to `LocalWithObjectStore`; it removes local Remote attachment state and retains the Object Store. The Writer must reconnect the exact prior Remote before a full-local transition. That transition requires authenticated online enumeration of every published Remote ref immediately before Protected Object hydration, consumes readiness bound to that ref inventory and the Workspace revision, and refuses if either advances before atomic detach.
+- Replacing the store for a connected Workspace first passes the complete private-store validation boundary, then publishes a durable migration intent. Replacement privacy is revalidated periodically and before publication throughout baseline copy, delta reconciliation, and dual writes; failure pauses migration and publication with the old store authoritative and local work available. Every publisher dual-writes until baseline and delta reconciliation reach the bound Workspace and Remote inventories. Cutover retains a non-secret descriptor for the old store. On a replacement miss, securely supplied old-store credentials or a credentialed peer recover and content-verify the Object, backfill and verify the replacement, and only then hydrate the requester. A Remote-detached Workspace that previously published must reconnect before replacement migration.

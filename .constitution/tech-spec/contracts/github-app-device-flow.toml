@@ -1,4 +1,4 @@
-schema_version = 3
+schema_version = 4
 status = "accepted-provisional-contract"
 provider = "github"
 repository_visibility = "private-only"
@@ -52,6 +52,10 @@ refresh_before_access_token_expiry = true
 on_authenticated_401 = "refresh-once-then-retry-original-operation-once"
 on_second_401_after_refresh = "authentication-required-without-another-retry"
 on_bad_refresh_token = "restart-device-flow"
+fatal_errors = ["unsupported_grant_type", "incorrect_client_credentials"]
+fatal_error_action = "preserve-current-pair-stop-refresh-and-report-typed-configuration-or-protocol-failure"
+writer_action_errors = ["unverified_user_email"]
+unverified_user_email_action = "preserve-current-pair-prompt-email-verification-then-restart-device-flow"
 
 [token_storage]
 location = "platform-secure-storage"

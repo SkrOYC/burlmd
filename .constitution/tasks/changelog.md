@@ -1,5 +1,9 @@
 # Stage 4: Tasks changelog
 
+## v2.1.14 - 2026-08-26
+
+PR #12 full review round 10 closes three P1 and three P2 gaps. Replacement-store migration now validates privacy before intent or copy and continuously through migration. Consolidation tests include the second preparation and publication phase. Offline Remote detach retains the Object Store until the exact prior Remote reconnects and supplies fresh authenticated authority for a full-local transition, preserving CAP-ASSET-11. Refresh errors have typed terminal or Writer-action outcomes, and Spike evidence validates semantic timestamps and real Git revision widths. Ticket count, effort, dependencies, and critical path remain 80 tickets, 564 points, 216 edges, and 153 points.
+
 ## v2.1.13 - 2026-08-26
 
 PR #12 full review round 9 closes three P1 and three P2 execution gaps. Consolidation must return through prerequisite verification and initial publication. Object Store privacy is revalidated on startup, periodically, and before publication, with drift pausing synchronization. Authenticated attestations stay with RELEASE-M009 and PUBLISH-M014 instead of the prototype-only packaging Spike. Stable Export leases now bind empty Directories, profile-bound Spike results require complete hardware facts, and UI-only tickets no longer mutate unscoped generated FFI outputs during verification. Ticket count, effort, dependencies, and the 153-point critical path remain unchanged at 80 tickets, 564 points, and 216 edges.

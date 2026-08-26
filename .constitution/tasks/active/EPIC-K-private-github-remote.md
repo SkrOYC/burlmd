@@ -1,5 +1,5 @@
 ---
-version: v2.1.13
+version: v2.1.14
 status: active
 epic: K
 ---
@@ -80,16 +80,16 @@ Protocol fixtures verify the pinned GitHub API contract, polling interval and `s
 - **Scope (Out-of-Scope Files):**
   - Workspace attachment and Git remote configuration
 - **Verification Command:** `cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh token-k002 && git diff --check`
-- **Expected Success Output:** exit 0 with secure-store, pre-expiry refresh, concurrent refresh, atomic rotation, one-401 retry, second-401 refusal, transient failure, bad-refresh, and sign-out tests passing
+- **Expected Success Output:** exit 0 with secure-store, pre-expiry refresh, concurrent refresh, atomic rotation, one-401 retry, second-401 refusal, transient failure, bad-refresh, fatal refresh configuration/protocol, unverified-email, and sign-out tests passing
 - **STOP Conditions:**
   - STOP if tokens transit persistent Dart state, logs, diagnostics, Git config, a remote URL, or Workspace files.
-- **Description:** Store expiring access/refresh tokens only in Platform secure storage, serialize refresh, atomically rotate the pair before expiry or after one authenticated `401`, replay the failed operation at most once, treat a second `401` as authentication-required, preserve credentials on transient failure, restart device flow only after definitive refresh-token rejection/expiry, and implement sign-out without detach.
+- **Description:** Store expiring access/refresh tokens only in Platform secure storage, serialize refresh, atomically rotate the pair before expiry or after one authenticated `401`, replay the failed operation at most once, treat a second `401` as authentication-required, and preserve credentials on transient failure. A definitive bad refresh token restarts device flow. `unsupported_grant_type` and `incorrect_client_credentials` preserve the current pair, stop refresh, and surface typed configuration/protocol failure without retry. `unverified_user_email` preserves the pair, prompts the Writer to verify the primary email, and then restarts device flow. Implement sign-out without detach.
 - **Acceptance:**
   - **Mode:** invariant
   - **Evidence:**
 
 ```text
-At most one refresh runs. JSON fixtures require `access_token`, `expires_in`, `refresh_token`, `refresh_token_expires_in`, empty `scope`, and bearer `token_type` before rotation. Missing, malformed, or form-encoded success responses preserve the earlier pair and fail as protocol errors. Readers observe either the old valid pair or the new complete pair; access-token expiry refreshes proactively; one authenticated `401` causes exactly one refresh and one replay; a second `401` stops as authentication-required; transient errors retain the pair and local operation; a definitively bad refresh returns to authorization; sign-out removes credentials but preserves Workspace Remote attachment and history.
+At most one refresh runs. JSON fixtures require `access_token`, `expires_in`, `refresh_token`, `refresh_token_expires_in`, empty `scope`, and bearer `token_type` before rotation. Missing, malformed, or form-encoded success responses preserve the earlier pair and fail as protocol errors. Readers observe either the old valid pair or the new complete pair; access-token expiry refreshes proactively; one authenticated `401` causes exactly one refresh and one replay; a second `401` stops as authentication-required; transient errors retain the pair and local operation; a definitively bad refresh returns to authorization. `unsupported_grant_type` and `incorrect_client_credentials` never retry and expose distinct typed configuration/protocol outcomes. `unverified_user_email` exposes Writer guidance and restarts only after verification. Sign-out removes credentials but preserves Workspace Remote attachment and history.
 ```
 
 #### REPO-K003 Discover installations and select or provision a private repository
@@ -142,7 +142,7 @@ GitHub API fixtures cover user and organization installations, insufficient perm
   - **Evidence:**
 
 ```text
-No Note history publishes before protected Objects verify and the Writer completes or declines Consolidation. Generated refs prove that a workflow path in current or historical commits refuses publication while local use remains available. The connection integration test drives `Preparing → Consolidating → Connected`, including a collision decision, and proves the source stays unchanged. Git receives credentials only through the ephemeral adapter. Failure leaves the local Workspace and history intact and unattached; success records the exact private Remote without credentials in configuration or URL.
+No Note history publishes before protected Objects verify and the Writer completes or declines Consolidation. Generated refs prove that a workflow path in current or historical commits refuses publication while local use remains available. The connection integration test drives `Preparing → Consolidating → Preparing → Connected`, including a collision decision, and proves the source stays unchanged. It asserts that the second preparation phase rechecks Object/privacy prerequisites and that initial publication completes before `Connected`. Git receives credentials only through the ephemeral adapter. Failure leaves the local Workspace and history intact and unattached; success records the exact private Remote without credentials in configuration or URL.
 ```
 
 #### CLONE-K005 Join a connected Workspace on another device
@@ -188,18 +188,18 @@ The exact runbook command starts from a clean second-device state, joins the iso
 - **Scope (Out-of-Scope Files):**
   - Deleting Remote repositories or Object Store buckets
 - **Verification Command:** `cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && dart analyze && git diff --check`
-- **Expected Success Output:** exit 0 with offline transition to local-with-store, direct retained-store removal, online full-local transition, reconnect, hydration refusal, and exact-history preservation tests passing
+- **Expected Success Output:** exit 0 with offline transition to local-with-store, required reconnect before retained-store removal, online full-local transition, hydration refusal, and exact-history preservation tests passing
 - **STOP Conditions:**
   - STOP if detach deletes history or Objects, or can leave an asset-bearing Workspace inconsistently attached.
   - STOP if a full-local transition relies on cached Remote refs, stale readiness, or no authenticated online Remote revalidation.
-  - STOP if removing the Object Store from `LocalWithObjectStore` can proceed without the local-revision readiness result from DETACH-I012.
-- **Description:** Keep sign-out credential-only. Offline Remote detachment moves to `LocalWithObjectStore` and retains Object Store configuration. From that state, let the Writer either reconnect the exact prior Remote or consume DETACH-I012 local-revision readiness to remove the retained store and become fully local. For a full-local transition while attached, authenticate online, enumerate all published refs again, hydrate and verify the resulting Protected Object closure, and consume the ref/revision-bound readiness atomically before detaching both external stores. Never delete remote Object bytes or rewrite history.
+  - STOP if removing the Object Store from `LocalWithObjectStore` can proceed without reconnecting the exact prior Remote and obtaining fresh authenticated ref/revision-bound readiness from DETACH-I012.
+- **Description:** Keep sign-out credential-only. Offline Remote detachment moves to `LocalWithObjectStore` and retains Object Store configuration. From that state, reconnect the exact prior Remote before either resuming publication or returning fully local. For a full-local transition, authenticate online, enumerate all published refs again, hydrate and verify the resulting Protected Object closure, and consume the ref/revision-bound readiness atomically before detaching both external stores. Never delete remote Object bytes or rewrite history.
 - **Acceptance:**
   - **Mode:** invariant
   - **Evidence:**
 
 ```text
-Sign-out preserves attachment. Offline detachment removes only local Remote bookkeeping, enters `LocalWithObjectStore`, retains the Object Store, and preserves local commits. From that state, reconnect restores publication without history rewrite. Direct store removal succeeds only after DETACH-I012 verifies every locally protected byte against the current local revision; failure or revision advance preserves the store. Full-local transition while attached requires authenticated online Remote-ref revalidation immediately before hydration readiness and compare-and-swap detach. It refuses offline, stale, incomplete, or advanced ref evidence. Both successful paths retain all protected bytes and delete no authoritative remote Object.
+Sign-out preserves attachment. Offline detachment removes only local Remote bookkeeping, enters `LocalWithObjectStore`, retains the Object Store, and preserves local commits. That state can't remove the retained store directly. Reconnecting the exact prior Remote restores publication without history rewrite or allows a full-local transition through authenticated online Remote-ref revalidation immediately before hydration readiness and compare-and-swap detach. The transition refuses offline, stale, incomplete, or advanced ref evidence. Success retains all protected bytes and deletes no authoritative remote Object.
 ```
 
 #### REMOTE-K007 Integrate Remote settings, privacy, and authorization states
