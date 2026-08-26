@@ -1,5 +1,20 @@
 # Stage 4: Tasks changelog
 
+## v2.1.5 - 2026-08-26
+
+PR #12 full review round 1 found three P1 and five low-cost P2 contract gaps. This patch resolves all of them without changing ticket count, effort, dependencies, or the critical path.
+
+### Fixed
+
+- Required the packaging Spike to copy Nix out-link results into its contained `artifacts/` directory before hashing or aggregation.
+- Split AST performance and FFI projection evidence across distinct Linux and Apple Silicon macOS reference hosts with rejecting aggregation.
+- Extended the generated-output convention and checker to `rust/src/frb_generated.rs` as well as `lib/src/rust/**`.
+- Bound path-Spike runs to verified operating-system roles and required two distinct operating systems.
+- Classified all documented GitHub device-flow polling errors as transient, terminal authorization, or fatal configuration/protocol outcomes.
+- Made the CI ticket run formatting, Clippy, workflow lint, and explicit Linux/macOS matrix assertions.
+- Added required production manifests and Platform seams to the Object Store and image-import ticket scopes.
+- Required Spike result tools to validate RFC 3339 timestamps without assuming an optional JSON Schema format plugin.
+
 ## v2.1.4 - 2026-08-26
 
 The fourth and final fresh review found no P0 issues and two P1 dependency/evidence gaps.

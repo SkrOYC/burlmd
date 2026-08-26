@@ -28,6 +28,8 @@ respect_server_interval = true
 slow_down_adds_seconds = 5
 terminal_errors = ["expired_token", "access_denied"]
 transient_states = ["authorization_pending", "slow_down"]
+fatal_errors = ["unsupported_grant_type", "incorrect_client_credentials", "incorrect_device_code", "device_flow_disabled"]
+fatal_error_action = "stop-polling-and-report-configuration-or-protocol-failure"
 
 [refresh]
 method = "POST"

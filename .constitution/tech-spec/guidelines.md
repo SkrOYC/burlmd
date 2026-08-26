@@ -2,7 +2,7 @@
 
 ## Provisional research boundary
 
-TechSpec v1.7.2-provisional permits research code only under `.constitution/prototypes/`. Production directories (`lib/`, `rust/`, `linux/`, and `macos/`) are read-only inputs to this research wave. A Spike may create an isolated Rust or Flutter harness through the relevant CLI, add dependencies through `cargo add` or `flutter pub add`, and commit its generated lock file inside its own prototype directory. It must not add a candidate dependency to the production manifests.
+TechSpec v1.7.3-provisional permits research code only under `.constitution/prototypes/`. Production directories (`lib/`, `rust/`, `linux/`, and `macos/`) are read-only inputs to this research wave. A Spike may create an isolated Rust or Flutter harness through the relevant CLI, add dependencies through `cargo add` or `flutter pub add`, and commit its generated lock file inside its own prototype directory. It must not add a candidate dependency to the production manifests.
 
 The five exact prototype roots and verification commands are machine-readable in `contracts/provisional-spikes.toml`. Its allowlist is exhaustive: each Spike may write only its named prototype root and report path; every unlisted repository path is read-only. Framework bookkeeping may update the owning active Task after the Spike process exits, but that isn't part of the Spike's write authority.
 
@@ -50,6 +50,7 @@ The repository follows the default `flutter_rust_bridge` template structure to m
 │                              screenshots to .qa/, which is gitignored
 ├── test/                    # Dart widget tests
 ├── rust/                    # Rust Core Engine source code
+│   └── src/frb_generated.rs # Auto-generated FRB Rust bridge; changes with Dart bindings
 │   ├── Cargo.toml
 │   ├── tests/               # Rust integration tests
 │   ├── src/
@@ -201,7 +202,7 @@ The active editor-depth tickets quote these commands exactly. `BURLMD_SMOKE_F005
 Stage 4 tickets quote one of these gates and replace `<ticket-id>` with their lowercase ticket identifier. Ticket-specific tests and hardware-in-the-loop procedures supplement the gate; they don't remove it.
 
 - **Core-only:** `cargo test --manifest-path rust/Cargo.toml && cargo clippy --workspace --all-targets --manifest-path rust/Cargo.toml -- -D warnings && git diff --check`
-- **Core/FFI/UI:** `cargo test --manifest-path rust/Cargo.toml && flutter_rust_bridge_codegen generate && flutter test && dart analyze && ./scripts/smoke-shot.sh <ticket-id> && git diff --check && ! rg -n '\[DEBUG-' lib rust test scripts`
+- **Core/FFI/UI:** `cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh <ticket-id> && git diff --check && ! rg -n '\[DEBUG-' lib rust test scripts`
 - **Flutter-only:** `flutter test && dart analyze && ./scripts/smoke-shot.sh <ticket-id> && git diff --check && ! rg -n '\[DEBUG-' lib rust test scripts`
 - **Release Flake:** `nix flake check && nix build .#packages.x86_64-linux.default && git diff --check`
 - **macOS release build:** `flutter build macos --release && git diff --check`

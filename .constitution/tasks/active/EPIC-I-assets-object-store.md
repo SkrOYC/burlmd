@@ -1,5 +1,5 @@
 ---
-version: v2.1.4
+version: v2.1.5
 status: active
 epic: I
 ---
@@ -75,6 +75,10 @@ Byte-identical imports share one Object; distinct bytes never collide; active by
   - `lib/src/components/editor.dart`
   - `lib/src/components/block_view.dart`
   - `lib/src/providers/note_providers.dart`
+  - `pubspec.yaml`
+  - `pubspec.lock`
+  - `linux/**`
+  - `macos/**`
   - `test/**`
   - `integration_test/**`
 - **Scope (Out-of-Scope Files):**
@@ -105,6 +109,8 @@ And oversized, unsafe, or invalid input is refused without changing the Note
   - `rust/src/object_store/**`
   - `rust/src/security/**`
   - `rust/src/api/ffi_api.rs`
+  - `rust/Cargo.toml`
+  - `rust/Cargo.lock`
   - `lib/src/components/**`
   - `test/**`
 - **Scope (Out-of-Scope Files):**

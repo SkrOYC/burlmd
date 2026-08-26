@@ -1,5 +1,5 @@
 ---
-version: v2.1.4
+version: v2.1.5
 status: active
 epic: H
 ---
@@ -24,8 +24,8 @@ AST-H001 and PATH-H002 execute first. Their reports feed measured upstream evolu
   - `.constitution/spikes/SPK-AST-H001.md`
 - **Scope (Out-of-Scope Files):**
   - Every repository path not listed above (don't touch production or active specifications)
-- **Verification Command:** `cargo test --locked --manifest-path .constitution/prototypes/ast/Cargo.toml --all-targets && cargo run --locked --release --manifest-path .constitution/prototypes/ast/Cargo.toml -- --contract .constitution/tech-spec/contracts/provisional-spikes.toml --schema .constitution/tech-spec/contracts/spike-result.schema.json --output .constitution/prototypes/ast/results.json`
-- **Expected Success Output:** exit 0 with a finalized schema-valid result and Spike report
+- **Verification Command:** Run these exact commands on their named hosts: common: `cargo test --locked --manifest-path .constitution/prototypes/ast/Cargo.toml --all-targets`; Linux reference profile: `cargo run --locked --release --manifest-path .constitution/prototypes/ast/Cargo.toml -- probe --run-id linux-reference --role linux-reference-profile --profile linux-i5-8250u-16gib --output .constitution/prototypes/ast/runs/linux-reference.json`; Apple Silicon macOS reference profile: `cargo run --locked --release --manifest-path .constitution/prototypes/ast/Cargo.toml -- probe --run-id macos-reference --role macos-reference-profile --profile macos-m1-8gib --output .constitution/prototypes/ast/runs/macos-reference.json`; coordinator: `cargo run --locked --release --manifest-path .constitution/prototypes/ast/Cargo.toml -- aggregate --contract .constitution/tech-spec/contracts/provisional-spikes.toml --schema .constitution/tech-spec/contracts/spike-result.schema.json --require-role linux-reference-profile --require-role macos-reference-profile --require-distinct-hosts 2 --output .constitution/prototypes/ast/results.json`.
+- **Expected Success Output:** exit 0 with distinct reference-host runs and a finalized schema-valid result and Spike report
 - **STOP Conditions:**
   - STOP if a candidate can't preserve untouched bytes or represent any required syntax/domain case.
   - STOP when the 3-day time box expires; record partial evidence without choosing by intuition.
@@ -35,7 +35,7 @@ AST-H001 and PATH-H002 execute first. Their reports feed measured upstream evolu
   - **Evidence:**
 
 ```text
-Every declared candidate and gate has attributed evidence for syntax, positions, source fidelity, Links, rendered selections, structural edits, Suggestions, performance, and FFI projection. The report recommends one foundation or explicitly leaves the decision unresolved.
+Every declared candidate and gate has attributed evidence for syntax, positions, source fidelity, Links, rendered selections, structural edits, and Suggestions. Distinct Linux and Apple Silicon macOS reference-host evidence covers performance and FFI projection cost. Aggregation rejects missing, duplicated, or same-host evidence and recommends one foundation or explicitly leaves the decision unresolved.
 ```
 
 #### PATH-H002 Select the canonical cross-platform path algorithm
@@ -48,7 +48,7 @@ Every declared candidate and gate has attributed evidence for syntax, positions,
   - `.constitution/spikes/SPK-PATH-H002.md`
 - **Scope (Out-of-Scope Files):**
   - Every repository path not listed above (don't touch production or active specifications)
-- **Verification Command:** Run these exact commands in order on their named hosts: common: `cargo test --locked --manifest-path .constitution/prototypes/path/Cargo.toml --all-targets`; Linux: `cargo run --locked --release --manifest-path .constitution/prototypes/path/Cargo.toml -- probe --run-id linux-default-filesystem --output .constitution/prototypes/path/runs/linux-default-filesystem.json`; macOS: `cargo run --locked --release --manifest-path .constitution/prototypes/path/Cargo.toml -- probe --run-id macos-default-filesystem --output .constitution/prototypes/path/runs/macos-default-filesystem.json`; coordinator after both runs: `cargo run --locked --release --manifest-path .constitution/prototypes/path/Cargo.toml -- aggregate --contract .constitution/tech-spec/contracts/provisional-spikes.toml --schema .constitution/tech-spec/contracts/spike-result.schema.json --require-run linux-default-filesystem --require-run macos-default-filesystem --output .constitution/prototypes/path/results.json`.
+- **Verification Command:** Run these exact commands in order on their named hosts: common: `cargo test --locked --manifest-path .constitution/prototypes/path/Cargo.toml --all-targets`; Linux default filesystem: `cargo run --locked --release --manifest-path .constitution/prototypes/path/Cargo.toml -- probe --run-id linux-default-filesystem --role linux-default-filesystem --expected-os linux --expected-filesystem default --output .constitution/prototypes/path/runs/linux-default-filesystem.json`; macOS default filesystem: `cargo run --locked --release --manifest-path .constitution/prototypes/path/Cargo.toml -- probe --run-id macos-default-filesystem --role macos-default-filesystem --expected-os macos --expected-filesystem default --output .constitution/prototypes/path/runs/macos-default-filesystem.json`; coordinator after both runs: `cargo run --locked --release --manifest-path .constitution/prototypes/path/Cargo.toml -- aggregate --contract .constitution/tech-spec/contracts/provisional-spikes.toml --schema .constitution/tech-spec/contracts/spike-result.schema.json --require-role linux-default-filesystem --require-role macos-default-filesystem --require-distinct-operating-systems 2 --output .constitution/prototypes/path/results.json`.
 - **Expected Success Output:** exit 0 with distinct filesystem runs and a finalized schema-valid report
 - **STOP Conditions:**
   - STOP if identity remains host-dependent or an accepted path can escape/alias the Workspace.
@@ -59,7 +59,7 @@ Every declared candidate and gate has attributed evidence for syntax, positions,
   - **Evidence:**
 
 ```text
-Generated and adversarial fixtures prove deterministic identity, collision freedom under all target equivalence rules, invertible ghost Links, safe case-only rename, and refusal of reserved, aliased, traversal, symlink, and submodule input.
+Generated and adversarial fixtures prove deterministic identity, collision freedom under all target equivalence rules, invertible ghost Links, safe case-only rename, and refusal of reserved, aliased, traversal, symlink, and submodule input. Aggregation verifies recorded host facts and rejects missing roles, duplicate operating systems, or an operating system that doesn't match its declared role.
 ```
 
 #### MODEL-H003 Implement the canonical source-backed Note document

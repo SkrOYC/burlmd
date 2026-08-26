@@ -18,7 +18,7 @@
 ## Codebase baseline
 
 - **State today:** Development builds exist; GitHub Releases don't provide the required installable artifacts. The production shell still contains presentation-only emulated Platform chrome, which the harness must not reproduce.
-- **Discovered constraints:** Apple Silicon only on macOS; x86-64 general Linux; Nix Flake for Nix-managed installs; unsigned `0.x`; two current stable macOS major versions; no ambient Git or self-updater.
+- **Discovered constraints:** Apple Silicon only on macOS; x86-64 general Linux; Nix Flake for Nix-managed installs; unsigned `0.x`; two current stable macOS major versions; no ambient Git or self-updater. Nix out-links resolve outside the repository, so every measured artifact or closure must be copied into the Spike's `artifacts/` directory before containment, byte-count, and SHA-256 evidence is recorded.
 
 ## Options and trade-offs
 
