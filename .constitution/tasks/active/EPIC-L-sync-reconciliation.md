@@ -1,5 +1,5 @@
 ---
-version: v2.1.11
+version: v2.1.12
 status: active
 epic: L
 ---
@@ -274,13 +274,14 @@ And Decision pauses do not block local editing or history
 - **Expected Success Output:** exit 0 with unfiltered advertised-ref enumeration, quarantined no-prune fetch, incomplete stop, and deletion integration tests passing
 - **STOP Conditions:**
   - STOP if an advertised ref is excluded or can't be fetched into quarantine without an accepted upstream classification that proves it isn't published history.
-- **Description:** Run unfiltered `git ls-remote --refs` against the attached Remote, parse every advertised `refs/*` entry, and fetch each Object ID into an isolated no-prune quarantine namespace without mutating Workspace refs. Extend Protected State roots with every fetched history for recovery, migration, detach, cache-retention, and reconciliation decisions. Fail closed when enumeration, classification, or fetch completeness is unproven.
+  - STOP and mark Remote authority incomplete if advertisement or quarantine work exceeds 100,000 refs, 16 MiB of advertised-ref bytes, 2 GiB of cumulative fetched data, or 30 minutes of wall-clock time.
+- **Description:** Run unfiltered `git ls-remote --refs` against the attached Remote and stream-parse every advertised `refs/*` entry under explicit count and byte limits. Fetch each Object ID into an isolated, bounded, no-prune temporary quarantine namespace without mutating Workspace refs. Enforce 100,000 refs, 16 MiB of advertisement data, 2 GiB of cumulative fetched data, and a 30-minute wall-clock deadline, with cancellation and cleanup on success, failure, cancellation, and restart. Extend Protected State roots with every fetched history for recovery, migration, detach, cache-retention, and reconciliation decisions. Fail closed when enumeration, classification, fetch completeness, or resource bounds are unproven while preserving local use.
 - **Acceptance:**
   - **Mode:** invariant
   - **Evidence:**
 
 ```text
-Generated Remote namespaces include branches, annotated and lightweight tags, pull-request refs, and arbitrary advertised ref hierarchies. Every fetchable advertised Object ID expands Protected State. Reflog-only and non-advertised Provider-internal refs don't expand authority. An unclassified or unfetchable advertised ref, authorization failure, enumeration failure, or fetch failure stops any decision that requires complete published history. Independent verified local cache eviction remains possible; authoritative remote deletion doesn't exist during `0.x`.
+Generated Remote namespaces include branches, annotated and lightweight tags, pull-request refs, and arbitrary advertised ref hierarchies. Every fetchable advertised Object ID expands Protected State. Reflog-only and non-advertised Provider-internal refs don't expand authority. Boundary tests cover every limit, streaming behavior, cancellation, crash recovery, path confinement, and unconditional quarantine cleanup. An unclassified or unfetchable advertised ref, authorization failure, enumeration failure, fetch failure, or exceeded limit marks Remote authority incomplete and stops migration, detach, retention, or reconciliation decisions that require complete published history without blocking local editing. Independent verified local cache eviction remains possible; authoritative remote deletion doesn't exist during `0.x`.
 ```
 
 #### DELETE-L011 Resolve delete-versus-edit without content loss

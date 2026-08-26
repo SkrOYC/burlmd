@@ -1,5 +1,5 @@
 ---
-version: v2.1.11
+version: v2.1.12
 status: active
 epic: I
 ---
@@ -255,18 +255,19 @@ Fault injection proves the active credential reference is always either the veri
 - **Scope (Out-of-Scope Files):**
   - Credential rotation and S3-only Workspaces
 - **Verification Command:** `cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh migrate-i011 && git diff --check`
-- **Expected Success Output:** exit 0 with durable intent, dual-write, baseline/delta copy, revision-bound cutover, resume, and rollback tests passing
+- **Expected Success Output:** exit 0 with durable intent, dual-write, baseline/delta copy, revision-bound cutover, resume, stale-publisher, and fresh-device fallback tests passing
 - **STOP Conditions:**
   - STOP if the old store can retire before every Protected Object is verified in the replacement.
   - STOP if any device can publish during migration without first verifying each new Object in both stores, or if a device without replacement credentials can publish after cutover.
+  - STOP if cutover discards the non-secret old-store fallback descriptor or a replacement-store miss can strand a protected Object that remains verifiable in the retained old store.
   - STOP if a Remote-detached Workspace with prior published history attempts replacement migration; reconnect for coordinated migration or hydrate and remove the retained store.
-- **Description:** Publish a durable migration intent with non-secret old/new store identities. While the intent is active, every connected device dual-writes and verifies new Objects before publication; devices without replacement credentials pause publication but keep local use. Copy and verify the baseline Protected Object closure, repeatedly reconcile deltas against complete advertised refs and local publication state, then publish a compare-and-swap cutover bound to the migration epoch, Workspace revision, and Remote-ref inventory. Keep the old store as a readable fallback because authoritative deletion is disabled during `0.x`.
+- **Description:** Publish a durable migration intent with non-secret old/new store identities. While the intent is active, every connected device dual-writes and verifies new Objects before publication; devices without replacement credentials pause publication but keep local use. Copy and verify the baseline Protected Object closure, repeatedly reconcile deltas against complete advertised refs and local publication state, then publish a compare-and-swap cutover bound to the migration epoch, Workspace revision, and Remote-ref inventory. Keep the old store's non-secret fallback descriptor in Workspace authority because authoritative deletion is disabled during `0.x`. On a replacement miss, use securely stored old-store credentials or request them from the Writer; alternatively, a connected device that retains those credentials may perform the same on-demand backfill. Verify the old bytes by content hash, write and verify the replacement, then hydrate from the replacement.
 - **Acceptance:**
   - **Mode:** invariant
   - **Evidence:**
 
 ```text
-Concurrency and interruption tests start publication before, during, and after baseline copy. Every publication under the migration intent verifies its Objects in both stores. Delta reconciliation reaches the exact bound Workspace and Remote inventories before compare-and-swap cutover. A stale epoch, revision, ref inventory, missing replacement credential, or failed verification blocks publication or cutover without changing authority. Restart resumes durable progress; successful cutover makes the replacement authoritative and retains the old store as readable fallback without changing Object identities.
+Concurrency and interruption tests start publication before, during, and after baseline copy. Every publication under the migration intent verifies its Objects in both stores. Delta reconciliation reaches the exact bound Workspace and Remote inventories before compare-and-swap cutover. A stale epoch, revision, ref inventory, missing replacement credential, or failed verification blocks publication or cutover without changing authority. Restart resumes durable progress; successful cutover makes the replacement authoritative and retains the old store descriptor as readable fallback without changing Object identities. Tests cover a stale publisher after cutover and a fresh-device join whose replacement lookup misses: securely supplied old-store credentials or a credentialed peer fetch the old object, verify its content identity, backfill and verify the replacement, and only then hydrate it. No contract claims the fallback can be retired during `0.x`.
 ```
 
 #### DETACH-I012 Prepare every protected Object for full-local transition

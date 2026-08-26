@@ -1,5 +1,5 @@
 ---
-version: v2.1.11
+version: v2.1.12
 status: active
 epic: H
 ---
@@ -29,7 +29,7 @@ AST-H001 and PATH-H002 execute first. Their reports feed measured upstream evolu
 - **STOP Conditions:**
   - STOP if a candidate can't preserve untouched bytes or represent any required syntax/domain case.
   - STOP when the 3-day time box expires; record partial evidence without choosing by intuition.
-- **Description:** Compare mdast, Comrak, and a complete `pulldown-cmark`-derived model using the full canonical-AST contract and corpus.
+- **Description:** Compare mdast, Comrak, and complete models derived separately from `pulldown-cmark` 0.12.2 and 0.13.4 using the full canonical-AST contract and corpus.
 - **Acceptance:**
   - **Mode:** contract_test
   - **Evidence:**

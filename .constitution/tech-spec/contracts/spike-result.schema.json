@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": ["schemaVersion", "spikeId", "generatedAt", "corpus", "candidates", "gates", "runs", "recommendation", "unresolved"],
   "properties": {
-    "schemaVersion": { "const": 6 },
+    "schemaVersion": { "const": 7 },
     "spikeId": { "pattern": "^SPK-[A-Z]+-[A-Z][0-9]{3}$", "type": "string" },
     "generatedAt": { "format": "date-time", "type": "string" },
     "corpus": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
@@ -45,10 +45,29 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "role", "host", "toolchain", "commandResults", "measurements", "artifacts"],
+        "required": ["id", "role", "inputContext", "host", "toolchain", "commandResults", "measurements", "artifacts"],
         "properties": {
           "id": { "type": "string", "minLength": 1 },
           "role": { "type": "string", "minLength": 1 },
+          "inputContext": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["repositoryRevision", "repositoryTreeSha256", "lockfiles", "contractSha256", "schemaSha256", "probeSourceTreeSha256", "probeBinarySha256", "corpusManifestSha256"],
+            "properties": {
+              "repositoryRevision": { "type": "string", "pattern": "^[0-9a-f]{40,64}$" },
+              "repositoryTreeSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+              "lockfiles": {
+                "type": "object",
+                "minProperties": 1,
+                "additionalProperties": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+              },
+              "contractSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+              "schemaSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+              "probeSourceTreeSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+              "probeBinarySha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+              "corpusManifestSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+            }
+          },
           "host": {
             "type": "object",
             "additionalProperties": false,
