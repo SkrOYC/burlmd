@@ -1,5 +1,9 @@
 # Stage 3: Technical Implementation Changelog
 
+## v1.7.13-provisional
+
+PR #12 full review round 11 binds this provisional layer to Architecture v1.4.12. Asset-bearing Remote detach always retains the Object Store and requires exact-Remote reconnection before authenticated full-local preparation; direct detach remains available only to asset-free Workspaces.
+
 ## v1.7.12-provisional
 
 PR #12 full review round 10 advances the result schema to v9, restricts Git revisions to real SHA-1 or SHA-256 widths, and makes semantic RFC 3339 calendar parsing plus revision resolution mandatory result-validator work. GitHub device-flow contract v4 classifies the documented refresh-time configuration, protocol, and Writer-action errors instead of allowing generic retry.

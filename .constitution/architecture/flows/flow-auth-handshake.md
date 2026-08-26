@@ -24,13 +24,18 @@ stateDiagram-v2
     RefreshRetryable --> Refreshing: Retry condition clears
     Connected --> PausedPrivacy: Remote becomes public or access is lost
     AuthenticationRequired --> Authorizing: Reauthorize
-    AuthenticationRequired --> LocalOnly: Explicit detach
+    AuthenticationRequired --> LocalOnly: Asset-free explicit detach
+    AuthenticationRequired --> LocalWithObjectStore: Asset-bearing offline detach retains Object Store
     PausedPrivacy --> Connected: Private access restored
-    PausedPrivacy --> LocalOnly: Explicit detach
+    PausedPrivacy --> LocalOnly: Asset-free explicit detach
+    PausedPrivacy --> LocalWithObjectStore: Asset-bearing offline detach retains Object Store
     Connected --> AttachedUnauthenticated: Writer signs out; Remote remains attached
     AttachedUnauthenticated --> Authorizing: Reauthorize
-    AttachedUnauthenticated --> LocalOnly: Explicit detach
-    Connected --> LocalOnly: Explicit detach completes
+    AttachedUnauthenticated --> LocalOnly: Asset-free explicit detach
+    AttachedUnauthenticated --> LocalWithObjectStore: Asset-bearing offline detach retains Object Store
+    Connected --> LocalOnly: Asset-free explicit detach completes
+    Connected --> LocalWithObjectStore: Asset-bearing offline detach retains Object Store
+    LocalWithObjectStore --> Authorizing: Reconnect exact prior Remote
 ```
 
 ## Failure path
@@ -41,4 +46,4 @@ stateDiagram-v2
 - A first connection publishes only after Object prerequisites pass for an asset-bearing Workspace.
 - Consolidation returns to preparation; identity decisions alone never imply that prerequisites passed or initial publication completed.
 - First publication and later pushes stop if any commit reachable from a local publication ref contains `.github/workflows/**`. burlmd doesn't request GitHub workflow-modification permission; the Writer can Consolidate Notes and Assets into a clean Workspace.
-- Sign-out removes credentials but not Remote attachment. Offline Remote detach preserves local history and retains the Object Store connection. Full-local detach requires fresh authenticated published-ref enumeration and verified Protected Object hydration.
+- Sign-out removes credentials but not Remote attachment. Only an asset-free Workspace can detach directly to `LocalOnly`. Every asset-bearing detach enters `LocalWithObjectStore`, preserves local history and the Object Store connection, and has no direct fully-local transition. It must reconnect the exact prior Remote before fresh authenticated published-ref enumeration, verified Protected Object hydration, and atomic full-local detach.
