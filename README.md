@@ -1,9 +1,6 @@
 # burlmd
 
-A local-first, Git-backed note-taking application. Notes live as plain Markdown in
-a repository you own; the app gives you a Live Preview Markdown editor over them, a
-lateral knowledge graph on top of the directory tree, and background sync to a
-private repository over OAuth (GitHub first; GitLab planned) — with no central content broker in between.
+A local-first, Git-backed note-taking application. Notes live as plain Markdown in a repository you own; the app provides a Live Preview Markdown editor, a lateral knowledge graph over the directory tree, and a planned private GitHub Remote without a central content broker.
 
 A Flutter UI renders state produced by a Rust core engine across a
 `flutter_rust_bridge` boundary. The core owns Markdown parsing, the encrypted
@@ -26,13 +23,9 @@ full-text search, and recovery for unpersisted edits. The editor provides
 Live Preview, cross-Block selection and copy, structural editing, emphasis
 shortcuts, Link completion and follow, and atomic multi-Block range edits.
 
-The active backlog has zero story points, pending next-wave planning. For the
-deferred work, see [the critical path](.constitution/tasks/critical-path.md).
+The complete forward backlog is active: seven epics contain 77 tickets and 545 story points. Five decision Spikes are executable while Stage 3 remains provisional; production tickets are already planned but wait for measured Product Requirements and Architecture evolution, final Stage 3, and ticket adaptation. See [the critical path](.constitution/tasks/critical-path.md).
 
-Desktop targets remain Linux and macOS. Remote synchronization and conflict
-handling, the design and preferences work, and quality and portability work
-remain deferred. Mobile targets, multiple simultaneous Workspaces, graph
-visualization, and GitLab support are also deferred.
+Desktop targets are x86-64 Linux and Apple Silicon macOS. The forward plan covers durable desktop sessions, canonical Workspace authority, Assets and first-class S3-compatible Object Storage, Export and Consolidation, a private GitHub Remote, reconciliation, diagnostics, packaging, and unsigned `0.x` releases. Mobile targets, multiple simultaneous Workspaces, graph visualization, HTML Publishing, a second Remote provider, self-updating binaries, and prerelease signing remain deferred.
 
 ## Getting started
 
