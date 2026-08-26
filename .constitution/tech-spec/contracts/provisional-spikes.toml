@@ -1,5 +1,5 @@
 schema_version = 9
-stage = "tech-spec-v1.7.15-provisional"
+stage = "tech-spec-v1.7.16-provisional"
 production_implementation_authorized = false
 result_schema = ".constitution/tech-spec/contracts/spike-result.schema.json"
 
@@ -7,6 +7,7 @@ result_schema = ".constitution/tech-spec/contracts/spike-result.schema.json"
 write_policy = "allowlist"
 required_result = "results.json"
 commit_lockfiles = true
+declare_dependencies_with_cli_and_regenerate_lockfile_after_the_last_dependency_change = true
 record_exact_versions = true
 validate_declared_candidates_and_gates = true
 all_unlisted_repository_paths_are_read_only = true
@@ -59,7 +60,10 @@ id = "SPK-AST-H001"
 decision = "OD-04"
 path = ".constitution/prototypes/ast"
 write_allowlist = [".constitution/prototypes/ast", ".constitution/spikes/SPK-AST-H001.md"]
-create_commands = [{ workdir = ".", command = "cargo init --bin .constitution/prototypes/ast" }]
+create_commands = [
+  { workdir = ".", command = "cargo init --bin .constitution/prototypes/ast" },
+  { workdir = ".", command = "cargo generate-lockfile --manifest-path .constitution/prototypes/ast/Cargo.toml" },
+]
 verification_steps = [
   { workdir = ".", command = "cargo test --locked --manifest-path .constitution/prototypes/ast/Cargo.toml --all-targets" },
   { run_id = "linux-reference", run_role = "linux-reference-profile", workdir = ".", command = "cargo run --locked --release --manifest-path .constitution/prototypes/ast/Cargo.toml -- probe --run-id linux-reference --role linux-reference-profile --expected-os linux --expected-arch x86_64 --profile linux-i5-8250u-16gib --output .constitution/prototypes/ast/runs/linux-reference.json --handoff-bundle .constitution/prototypes/ast/handoff/outbox/linux-reference.tar.zst --handoff-sha256 .constitution/prototypes/ast/handoff/outbox/linux-reference.sha256" },
@@ -75,7 +79,10 @@ id = "SPK-PATH-H002"
 decision = "OD-05"
 path = ".constitution/prototypes/path"
 write_allowlist = [".constitution/prototypes/path", ".constitution/spikes/SPK-PATH-H002.md"]
-create_commands = [{ workdir = ".", command = "cargo init --bin .constitution/prototypes/path" }]
+create_commands = [
+  { workdir = ".", command = "cargo init --bin .constitution/prototypes/path" },
+  { workdir = ".", command = "cargo generate-lockfile --manifest-path .constitution/prototypes/path/Cargo.toml" },
+]
 verification_steps = [
   { workdir = ".", command = "cargo test --locked --manifest-path .constitution/prototypes/path/Cargo.toml --all-targets" },
   { run_id = "linux-default-filesystem", run_role = "linux-default-filesystem", workdir = ".", command = "cargo run --locked --release --manifest-path .constitution/prototypes/path/Cargo.toml -- probe --run-id linux-default-filesystem --role linux-default-filesystem --expected-os linux --expected-filesystem default --output .constitution/prototypes/path/runs/linux-default-filesystem.json --handoff-bundle .constitution/prototypes/path/handoff/outbox/linux-default-filesystem.tar.zst --handoff-sha256 .constitution/prototypes/path/handoff/outbox/linux-default-filesystem.sha256" },
@@ -91,7 +98,10 @@ id = "SPK-GIT-L001"
 decision = "ADR-015"
 path = ".constitution/prototypes/git-analysis"
 write_allowlist = [".constitution/prototypes/git-analysis", ".constitution/spikes/SPK-GIT-L001.md"]
-create_commands = [{ workdir = ".", command = "cargo init --bin .constitution/prototypes/git-analysis" }]
+create_commands = [
+  { workdir = ".", command = "cargo init --bin .constitution/prototypes/git-analysis" },
+  { workdir = ".", command = "cargo generate-lockfile --manifest-path .constitution/prototypes/git-analysis/Cargo.toml" },
+]
 verification_steps = [
   { workdir = ".", command = "cargo test --locked --manifest-path .constitution/prototypes/git-analysis/Cargo.toml --all-targets" },
   { run_id = "git-linux-default", run_role = "linux-default-filesystem", workdir = ".", command = "cargo run --locked --release --manifest-path .constitution/prototypes/git-analysis/Cargo.toml -- probe --run-id git-linux-default --role linux-default-filesystem --expected-os linux --expected-filesystem ext4 --git-command git --required-version 2.54.0 --contract .constitution/tech-spec/contracts/provisional-spikes.toml --schema .constitution/tech-spec/contracts/spike-result.schema.json --output .constitution/prototypes/git-analysis/runs/git-linux-default.json --handoff-bundle .constitution/prototypes/git-analysis/handoff/outbox/git-linux-default.tar.zst --handoff-sha256 .constitution/prototypes/git-analysis/handoff/outbox/git-linux-default.sha256" },
@@ -107,7 +117,10 @@ id = "SPK-ASSET-I001"
 decision = "OD-06,OD-07,ADR-016"
 path = ".constitution/prototypes/assets"
 write_allowlist = [".constitution/prototypes/assets", ".constitution/spikes/SPK-ASSET-I001.md"]
-create_commands = [{ workdir = ".", command = "cargo init --bin .constitution/prototypes/assets" }]
+create_commands = [
+  { workdir = ".", command = "cargo init --bin .constitution/prototypes/assets" },
+  { workdir = ".", command = "cargo generate-lockfile --manifest-path .constitution/prototypes/assets/Cargo.toml" },
+]
 verification_steps = [
   { workdir = ".", command = "cargo test --locked --manifest-path .constitution/prototypes/assets/Cargo.toml --all-targets" },
   { run_id = "linux-reference", run_role = "linux-reference-profile", workdir = ".", command = "cargo run --locked --release --manifest-path .constitution/prototypes/assets/Cargo.toml -- probe --run-id linux-reference --role linux-reference-profile --expected-os linux --expected-arch x86_64 --profile linux-i5-8250u-16gib --fixture-dir .constitution/prototypes/assets/fixtures --output .constitution/prototypes/assets/runs/linux-reference.json --handoff-bundle .constitution/prototypes/assets/handoff/outbox/linux-reference.tar.zst --handoff-sha256 .constitution/prototypes/assets/handoff/outbox/linux-reference.sha256" },
@@ -126,6 +139,7 @@ write_allowlist = [".constitution/prototypes/packaging", ".constitution/spikes/S
 create_commands = [
   { workdir = ".", command = "flutter create --platforms=linux,macos .constitution/prototypes/packaging/harness" },
   { workdir = ".", command = "cargo init --bin .constitution/prototypes/packaging/result-tool" },
+  { workdir = ".", command = "cargo generate-lockfile --manifest-path .constitution/prototypes/packaging/result-tool/Cargo.toml" },
 ]
 verification_steps = [
   { run_id = "linux-flake-check", run_role = "linux-flake-check", workdir = ".constitution/prototypes/packaging", command = "cargo run --locked --release --manifest-path result-tool/Cargo.toml -- execute --run-id linux-flake-check --role linux-flake-check --output runs/linux-flake-check.json --stdout logs/linux-flake-check.stdout --stderr logs/linux-flake-check.stderr --success-marker artifacts/linux-flake-check.ok -- nix flake check --print-build-logs" },

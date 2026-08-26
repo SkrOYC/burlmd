@@ -1,5 +1,9 @@
 # Stage 3: Technical Implementation Changelog
 
+## v1.7.16-provisional
+
+PR #12 full review round 15 makes every authorized Rust Spike executable from its scaffold: each `cargo init` is followed by explicit lockfile generation, dependency changes use the package CLI, and the final lockfile is regenerated and committed before any `--locked` command.
+
 ## v1.7.15-provisional
 
 PR #12 full review round 14 binds this provisional layer to PRD v1.3.6 and Architecture v1.4.14. Publication now directly consumes a fresh REG-K001 registration report and administrator-approved expiring-token attestation no older than 24 hours.
