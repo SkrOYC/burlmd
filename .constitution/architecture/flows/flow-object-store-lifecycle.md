@@ -17,6 +17,11 @@ stateDiagram-v2
     Connected --> Migrating: Replace Object Store
     Migrating --> Connected: Complete verified migration
     Migrating --> Connected: Failure keeps earlier store active
+    Connected --> DetachUnusedStore: Writer requests Object Store-only detach
+    DetachUnusedStore --> RemoteWithoutObjectStore: Complete protected set is empty; Object Store detaches and Remote remains
+    DetachUnusedStore --> Connected: Any protected reference exists or enumeration is stale/incomplete
+    RemoteWithoutObjectStore --> Validate: Writer reconnects an Object Store
+    RemoteWithoutObjectStore --> LocalOnly: Writer separately detaches the Remote
     Connected --> Detaching: Return Workspace to fully local
     Detaching --> LocalOnly: Every Protected State hydrated; Object Store and Remote detach
     Detaching --> Connected: Hydration incomplete
@@ -29,3 +34,4 @@ stateDiagram-v2
 - Missing or corrupt bytes never become visible before identity verification. Asset Recovery preserves every verified copy and exposes only valid recovery actions.
 - Cache eviction requires a verified Object Store copy. Authoritative deletion also requires 30 days of unreachability and complete published-history enumeration.
 - An asset-bearing Workspace never remains Remote-connected without a verified Object Store.
+- A Remote-connected Workspace with no protected Object references may detach only the Object Store after complete current, local-history, published-history, pending-reconciliation, and Consolidation enumeration proves the protected set empty. The Remote remains attached.

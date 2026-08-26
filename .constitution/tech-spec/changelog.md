@@ -1,5 +1,9 @@
 # Stage 3: Technical Implementation Changelog
 
+## v1.7.5-provisional
+
+PR #12 full review round 3 reconciled the provisional layer against Architecture v1.4.4, completed the access-token `401` recovery contract, and added integrity-checked cross-host Spike result handoff. GitHub App registration and settings drift now have explicit downstream ownership. Production implementation remains unauthorized.
+
 ## v1.7.4-provisional
 
 PR #12 full review round 2 bound Asset measurements to distinct verified operating systems and made the forward CI contract execute the real Flutter desktop integration suite on Linux and macOS. Production implementation remains unauthorized.

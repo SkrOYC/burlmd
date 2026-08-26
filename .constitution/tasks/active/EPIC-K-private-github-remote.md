@@ -1,5 +1,5 @@
 ---
-version: v2.1.6
+version: v2.1.7
 status: active
 epic: K
 ---
@@ -10,12 +10,38 @@ Implement the complete private GitHub reference connection through GitHub App de
 
 **Capability coverage:** CAP-SYNC-01, CAP-SYNC-05, CAP-SYNC-06, CAP-SYNC-07, CAP-SYNC-12, and the connection prerequisites in CAP-ASSET-03, CAP-ASSET-11, and CAP-ASSET-12. CAP-SYNC-08 is owned by Epic J.
 
-**Total Effort:** 61 story points
+**Total Effort:** 66 story points
+
+#### REG-K001 Register and release-gate the project GitHub App
+- **Type:** Security
+- **Effort:** 5
+- **Dependencies:** CI-M003
+- **Category:** Security
+- **Scope (In-Scope Files):**
+  - `config/github-app.release.toml`
+  - `docs/github-app-installation.md`
+  - `scripts/verify-github-app-registration.sh`
+  - `.github/workflows/**`
+  - `.constitution/reports/**`
+- **Scope (Out-of-Scope Files):**
+  - Embedding a client secret, GitHub App private key, or installation token minting authority
+- **Verification Command:** `./scripts/verify-github-app-registration.sh --manifest config/github-app.release.toml --installation-url "$BURLMD_GITHUB_APP_INSTALLATION_URL" --expected-client-id "$BURLMD_GITHUB_APP_CLIENT_ID" --require-device-flow --require-expiring-user-tokens --require-private-repository-permissions --output .constitution/reports/github-app-registration.json && git diff --check`
+- **Expected Success Output:** exit 0 with a non-placeholder public client ID, reachable installation URL, exact versioned permissions, enabled device flow, enabled expiring user tokens, and drift-free release report
+- **STOP Conditions:**
+  - STOP if release configuration uses a placeholder client ID, requires a client secret/private key in the binary or CI, omits the public installation URL, or differs from the versioned permission manifest.
+- **Description:** Register the project-owned GitHub App through the human administrator runbook, publish its installation URL, version its repository and account permissions, enable device flow and expiring user tokens, inject the public release client ID, and fail release verification when live settings drift from the manifest.
+- **Acceptance:**
+  - **Mode:** runbook_probe
+  - **Evidence:**
+
+```text
+The administrator runbook records registration and ownership without exporting secrets. The exact probe reads live App metadata and proves the published installation URL, non-placeholder release client ID, Contents/Administration/implicit Metadata permissions, device-flow setting, expiring-user-token setting, and manifest version. A changed or disabled setting fails before AUTH-K001 or release verification can pass.
+```
 
 #### AUTH-K001 Replace legacy OAuth with GitHub App device flow
 - **Type:** Security
 - **Effort:** 8
-- **Dependencies:** CI-M003
+- **Dependencies:** REG-K001, CI-M003
 - **Category:** Security
 - **Scope (In-Scope Files):**
   - `rust/src/api/auth.rs`
@@ -53,16 +79,16 @@ Protocol fixtures verify the pinned GitHub API contract, polling interval and `s
 - **Scope (Out-of-Scope Files):**
   - Workspace attachment and Git remote configuration
 - **Verification Command:** `cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh token-k002 && git diff --check`
-- **Expected Success Output:** exit 0 with secure-store, atomic rotation, concurrent refresh, transient failure, bad-refresh, and sign-out tests passing
+- **Expected Success Output:** exit 0 with secure-store, pre-expiry refresh, concurrent refresh, atomic rotation, one-401 retry, second-401 refusal, transient failure, bad-refresh, and sign-out tests passing
 - **STOP Conditions:**
   - STOP if tokens transit persistent Dart state, logs, diagnostics, Git config, a remote URL, or Workspace files.
-- **Description:** Store expiring access/refresh tokens only in Platform secure storage, serialize refresh, atomically rotate the pair, preserve credentials on transient failure, restart device flow on authoritative rejection, and implement sign-out without detach.
+- **Description:** Store expiring access/refresh tokens only in Platform secure storage, serialize refresh, atomically rotate the pair before expiry or after one authenticated `401`, replay the failed operation at most once, treat a second `401` as authentication-required, preserve credentials on transient failure, restart device flow only after definitive refresh-token rejection/expiry, and implement sign-out without detach.
 - **Acceptance:**
   - **Mode:** invariant
   - **Evidence:**
 
 ```text
-At most one refresh runs; readers observe either the old valid pair or the new complete pair; transient errors retain the pair and local operation; bad refresh returns to authorization; sign-out removes credentials but preserves Workspace Remote attachment and history.
+At most one refresh runs; readers observe either the old valid pair or the new complete pair; access-token expiry refreshes proactively; one authenticated `401` causes exactly one refresh and one replay; a second `401` stops as authentication-required; transient errors retain the pair and local operation; a definitively bad refresh returns to authorization; sign-out removes credentials but preserves Workspace Remote attachment and history.
 ```
 
 #### REPO-K003 Discover installations and select or provision a private repository

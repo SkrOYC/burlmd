@@ -1,5 +1,9 @@
 # Stage 2: Architecture changelog
 
+## v1.4.4 - 2026-08-26
+
+PR #12 full review round 3 restored independent Object Store detach for Remote-connected Workspaces whose complete Protected State contains no Object references. Asset-bearing Workspaces still require a verified Object Store, and full-local transition still detaches both external stores only after complete hydration.
+
 ## v1.4.3 - 2026-08-26
 
 PR #12 full review round 2 corrected the Asset failure flow. Missing or corrupt local Objects now enter Object recovery; Asset Decisions remain exclusive to competing Asset outcomes produced by Remote reconciliation. This preserves the product distinction between local recovery and synchronization decisions.

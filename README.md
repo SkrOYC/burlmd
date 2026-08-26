@@ -23,7 +23,7 @@ full-text search, and recovery for unpersisted edits. The editor provides
 Live Preview, cross-Block selection and copy, structural editing, emphasis
 shortcuts, Link completion and follow, and atomic multi-Block range edits.
 
-The complete forward backlog is active: seven epics contain 77 tickets and 545 story points. Five decision Spikes are executable while Stage 3 remains provisional; production tickets are already planned but wait for measured Product Requirements and Architecture evolution, final Stage 3, and ticket adaptation. See [the critical path](.constitution/tasks/critical-path.md).
+The complete forward backlog is active: seven epics contain 80 tickets and 558 story points. Five decision Spikes are executable while Stage 3 remains provisional; production tickets are already planned but wait for measured Product Requirements and Architecture evolution, final Stage 3, and ticket adaptation. See [the critical path](.constitution/tasks/critical-path.md).
 
 Desktop targets are x86-64 Linux and Apple Silicon macOS. The forward plan covers durable desktop sessions, canonical Workspace authority, Assets and first-class S3-compatible Object Storage, Export and Consolidation, a private GitHub Remote, reconciliation, diagnostics, packaging, and unsigned `0.x` releases. Mobile targets, multiple simultaneous Workspaces, graph visualization, HTML Publishing, a second Remote provider, self-updating binaries, and prerelease signing remain deferred.
 
