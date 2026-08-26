@@ -1,5 +1,5 @@
 ---
-version: v2.1.18
+version: v2.1.19
 status: active
 epic: K
 ---
@@ -27,7 +27,7 @@ Implement the complete private GitHub reference connection through GitHub App de
 - **Scope (Out-of-Scope Files):**
   - Embedding a client secret, GitHub App private key, or installation token minting authority
 - **Verification Command:** Run `./scripts/attest-github-app-token-expiration.sh --client-id "$BURLMD_GITHUB_APP_CLIENT_ID" --output .constitution/reports/github-app-token-expiration-attestation.json`, complete the displayed device-flow authorization as the project administrator, then run `./scripts/verify-github-app-registration.sh --manifest config/github-app.release.toml --installation-url "$BURLMD_GITHUB_APP_INSTALLATION_URL" --expected-client-id "$BURLMD_GITHUB_APP_CLIENT_ID" --require-device-flow --require-private-repository-permissions --forbid-permission workflows --token-expiration-attestation .constitution/reports/github-app-token-expiration-attestation.json --max-attestation-age-hours 24 --output .constitution/reports/github-app-registration.json && git diff --check`.
-- **Expected Success Output:** exit 0 with a non-placeholder public client ID, reachable installation URL, exact versioned Contents/Administration/implicit Metadata permissions, no Workflows permission, a successful device-code request, a fresh expiring-token attestation, and a drift-free release report
+- **Expected Success Output:** exit 0 with a non-placeholder public client ID, reachable installation URL, exact versioned Contents/Administration/implicit Metadata permissions, no Workflows permission, required versioned REST headers, a successful device-code request, a fresh expiring-token attestation, and a drift-free release report
 - **STOP Conditions:**
   - STOP if release configuration uses a placeholder client ID, requires a client secret/private key in the binary or CI, omits the public installation URL, or differs from the versioned permission manifest.
 - **Description:** Register the project-owned GitHub App through the administrator runbook, publish its installation URL, version its repository and account permissions, enable device flow and expiring user tokens, and inject the public release client ID. Automate public metadata, installation URL, permission, client-ID, and device-code checks. Require a fresh administrator-approved device-flow attestation for token expiration before release.
@@ -36,7 +36,7 @@ Implement the complete private GitHub reference connection through GitHub App de
   - **Evidence:**
 
 ```text
-The administrator runbook records registration and ownership without exporting secrets. The automated probe reads public App metadata and proves the installation URL, release client ID, exact Contents/Administration/implicit Metadata permissions, absence of Workflows permission, manifest version, and a successful device-code request. A human-approved device flow must issue `expires_in`, `refresh_token`, and `refresh_token_expires_in`. The attestation records their presence and lifetimes but never their values, securely discards the tokens, and expires after 24 hours. Missing or stale evidence blocks AUTH-K001 and release verification.
+The administrator runbook records registration and ownership without exporting secrets. The automated probe reads public App metadata and proves the installation URL, release client ID, exact Contents/Administration/implicit Metadata permissions, absence of Workflows permission, manifest version, required `Accept` and `X-GitHub-Api-Version: 2026-03-10` REST headers, and a successful device-code request. A human-approved device flow must issue `expires_in`, `refresh_token`, and `refresh_token_expires_in`. The attestation records their presence and lifetimes but never their values, securely discards the tokens, and expires after 24 hours. Missing or stale evidence blocks AUTH-K001 and release verification.
 ```
 
 #### AUTH-K001 Replace legacy OAuth with GitHub App device flow
@@ -114,7 +114,7 @@ At most one refresh runs. JSON fixtures require `access_token`, `expires_in`, `r
   - **Evidence:**
 
 ```text
-GitHub API fixtures cover user and organization installations, insufficient permission, selected-repository coverage, private provisioning, public/nonempty refusal, rate limits, and exact 2026-03-10 request headers.
+GitHub API fixtures cover user and organization installations, insufficient permission, selected-repository coverage, private provisioning, public/nonempty refusal, and rate limits. Every REST fixture asserts `Accept: application/vnd.github+json` and `X-GitHub-Api-Version: 2026-03-10`; OAuth device and token endpoints remain outside the REST-header rule.
 ```
 
 #### CONNECT-K004 Attach and publish an existing local Workspace

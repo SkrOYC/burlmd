@@ -1,5 +1,9 @@
 # Stage 3: Technical Implementation Changelog
 
+## v1.7.17-provisional
+
+PR #12 full review round 17 advances Spike results to schema v10. PATH aggregation now binds its roles to Linux/ext4 and macOS/APFS. Packaging binds Linux roles to Linux/x86-64 hosts and every named distribution candidate to system-captured guest runtime evidence. GitHub contract v5 requires the versioned REST headers on App, installation, repository, and release calls while excluding OAuth endpoints.
+
 ## v1.7.16-provisional
 
 PR #12 full review round 15 makes every authorized Rust Spike executable from its scaffold: each `cargo init` is followed by explicit lockfile generation, dependency changes use the package CLI, and the final lockfile is regenerated and committed before any `--locked` command.

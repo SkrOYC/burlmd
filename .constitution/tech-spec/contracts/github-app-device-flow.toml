@@ -1,10 +1,17 @@
-schema_version = 4
+schema_version = 5
 status = "accepted-provisional-contract"
 provider = "github"
 repository_visibility = "private-only"
 client_credential = "public-client-id"
 forbidden_embedded_credentials = ["client_secret", "github_app_private_key"]
 rest_api_version = "2026-03-10"
+
+[rest_api]
+base_url = "https://api.github.com"
+required_headers = { Accept = "application/vnd.github+json", X-GitHub-Api-Version = "2026-03-10" }
+applies_to = ["app metadata", "installations", "repositories", "releases"]
+exclude_oauth_endpoints = ["https://github.com/login/device/code", "https://github.com/login/oauth/access_token"]
+verify_headers_on_every_rest_fixture = true
 
 [permissions.repository]
 contents = "write"
