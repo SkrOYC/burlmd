@@ -1,5 +1,5 @@
 ---
-version: v2.1.9
+version: v2.1.10
 status: active
 epic: K
 ---
@@ -63,7 +63,7 @@ The administrator runbook records registration and ownership without exporting s
   - **Evidence:**
 
 ```text
-Protocol fixtures verify the pinned GitHub API contract, polling interval and `slow_down` handling, terminal denial/expiry, cancellation, public client ID only, and absence of every superseded redirect/secret path. `bad_verification_code` restarts device flow with a fresh code. `unverified_user_email` stops polling and guides the Writer to verify their primary email before restarting. `unsupported_grant_type`, `incorrect_client_credentials`, `incorrect_device_code`, and `device_flow_disabled` stop polling immediately and surface typed configuration or protocol failures.
+Protocol fixtures verify the pinned GitHub API contract, polling interval and `slow_down` handling, terminal denial/expiry, cancellation, public client ID only, and absence of every superseded redirect/secret path. Success requires the complete expiring token pair, both lifetimes, empty `scope`, and bearer `token_type` in JSON. `bad_verification_code` restarts device flow with a fresh code. `unverified_user_email` stops polling and guides the Writer to verify their primary email before restarting. `unsupported_grant_type`, `incorrect_client_credentials`, `incorrect_device_code`, and `device_flow_disabled` stop polling immediately and surface typed configuration or protocol failures.
 ```
 
 #### TOKEN-K002 Persist, refresh, and revoke the user token pair safely
@@ -89,7 +89,7 @@ Protocol fixtures verify the pinned GitHub API contract, polling interval and `s
   - **Evidence:**
 
 ```text
-At most one refresh runs; readers observe either the old valid pair or the new complete pair; access-token expiry refreshes proactively; one authenticated `401` causes exactly one refresh and one replay; a second `401` stops as authentication-required; transient errors retain the pair and local operation; a definitively bad refresh returns to authorization; sign-out removes credentials but preserves Workspace Remote attachment and history.
+At most one refresh runs. JSON fixtures require `access_token`, `expires_in`, `refresh_token`, `refresh_token_expires_in`, empty `scope`, and bearer `token_type` before rotation. Missing, malformed, or form-encoded success responses preserve the earlier pair and fail as protocol errors. Readers observe either the old valid pair or the new complete pair; access-token expiry refreshes proactively; one authenticated `401` causes exactly one refresh and one replay; a second `401` stops as authentication-required; transient errors retain the pair and local operation; a definitively bad refresh returns to authorization; sign-out removes credentials but preserves Workspace Remote attachment and history.
 ```
 
 #### REPO-K003 Discover installations and select or provision a private repository

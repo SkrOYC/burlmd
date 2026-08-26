@@ -1,5 +1,19 @@
 # Stage 4: Tasks changelog
 
+## v2.1.10 - 2026-08-26
+
+PR #12 full review round 6 found one P1 and four P2 contract gaps. This patch resolves all five and corrects one stale lineage banner.
+
+### Fixed
+
+- Expanded the Git-analysis Spike to distinct verified default Linux and macOS filesystems, with every candidate and host-dependent Git behavior required on both.
+- Required JSON refresh-token responses with every field needed for atomic access-token and refresh-token rotation.
+- Added the explicit local-with-Object-Store state, Remote reconnection, and safe retained-store removal after offline Remote detach.
+- Separated read-only find queries and navigation from editing, replacement, undo, and draft persistence.
+- Added the forbidden-debug-marker scan to both exact CI runner commands.
+- Updated the FFI forward-status banner to PRD v1.3.4, Architecture v1.4.7, and TechSpec v1.7.8-provisional.
+- Revalidated the unchanged 80-ticket, 558-point, 215-edge graph and 150-point critical path.
+
 ## v2.1.9 - 2026-08-26
 
 PR #12 full review round 5 found four P1 and two P2 contract gaps. This patch resolves all six.

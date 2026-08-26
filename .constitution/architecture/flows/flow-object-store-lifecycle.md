@@ -4,29 +4,41 @@
 
 ```mermaid
 stateDiagram-v2
-    [*] --> LocalOnly
-    LocalOnly --> Validate: Connect Object Store
-    Validate --> Connected: Private access and required operations verified
-    Validate --> LocalOnly: Validation fails
-    Connected --> Hydrating: Join or restore needs Objects
-    Hydrating --> Connected: Active Objects first; remaining current state verified
-    Connected --> AssetRecovery: Missing or corrupt Object pauses affected synchronization
-    Hydrating --> AssetRecovery: Identity verification fails
-    AssetRecovery --> Connected: Repair, replacement, or reference removal completes and verifies
-    AssetRecovery --> AssetRecovery: Retry remains unresolved
-    Connected --> Migrating: Replace Object Store
-    Migrating --> Connected: Complete verified migration
-    Migrating --> Connected: Failure keeps earlier store active
-    Connected --> DetachUnusedStore: Writer requests Object Store-only detach
+    [*] --> FullyLocal
+    FullyLocal --> ValidateLocalStore: Connect Object Store
+    ValidateLocalStore --> LocalWithObjectStore: Private access and required operations verified
+    ValidateLocalStore --> FullyLocal: Validation fails
+    FullyLocal --> RemoteWithoutObjectStore: Asset-free Remote connects
+    LocalWithObjectStore --> RemoteWithObjectStore: Remote connects
+    RemoteWithObjectStore --> LocalWithObjectStore: Offline Remote detach retains Object Store
+    LocalWithObjectStore --> HydratingForStoreDetach: Remove retained Object Store
+    HydratingForStoreDetach --> FullyLocal: Every local Protected Object verified; Object Store detaches
+    HydratingForStoreDetach --> LocalWithObjectStore: Hydration incomplete or revision advances
+    RemoteWithObjectStore --> HydratingRemote: Join or restore needs Objects
+    HydratingRemote --> RemoteWithObjectStore: Active Objects first; remaining current state verified
+    RemoteWithObjectStore --> RemoteAssetRecovery: Missing or corrupt Object pauses affected synchronization
+    LocalWithObjectStore --> LocalAssetRecovery: Missing or corrupt Object needs recovery
+    HydratingRemote --> RemoteAssetRecovery: Identity verification fails
+    RemoteAssetRecovery --> RemoteWithObjectStore: Repair, replacement, or reference removal verifies
+    RemoteAssetRecovery --> RemoteAssetRecovery: Retry remains unresolved
+    LocalAssetRecovery --> LocalWithObjectStore: Repair, replacement, or reference removal verifies
+    LocalAssetRecovery --> LocalAssetRecovery: Retry remains unresolved
+    RemoteWithObjectStore --> MigratingRemoteStore: Replace Object Store
+    MigratingRemoteStore --> RemoteWithObjectStore: Complete migration or keep earlier store after failure
+    LocalWithObjectStore --> MigratingLocalStore: Replace retained Object Store
+    MigratingLocalStore --> LocalWithObjectStore: Complete migration or keep earlier store after failure
+    RemoteWithObjectStore --> DetachUnusedStore: Writer requests Object Store-only detach
     DetachUnusedStore --> RemoteWithoutObjectStore: Complete protected set is empty; Object Store detaches and Remote remains
-    DetachUnusedStore --> Connected: Any protected reference exists or enumeration is stale/incomplete
-    RemoteWithoutObjectStore --> Validate: Writer reconnects an Object Store
-    RemoteWithoutObjectStore --> LocalOnly: Writer separately detaches the Remote
-    Connected --> RevalidatingRemote: Return Workspace to fully local
+    DetachUnusedStore --> RemoteWithObjectStore: Any protected reference exists or enumeration is stale/incomplete
+    RemoteWithoutObjectStore --> ValidateRemoteStore: Writer reconnects an Object Store
+    ValidateRemoteStore --> RemoteWithObjectStore: Private access and required operations verified
+    ValidateRemoteStore --> RemoteWithoutObjectStore: Validation fails
+    RemoteWithoutObjectStore --> FullyLocal: Writer detaches the Remote
+    RemoteWithObjectStore --> RevalidatingRemote: Return Workspace to fully local
     RevalidatingRemote --> Detaching: Fresh published refs and protected closure verified
-    RevalidatingRemote --> Connected: Offline, unauthorized, incomplete, or stale
-    Detaching --> LocalOnly: Every Protected State hydrated; Object Store and Remote detach
-    Detaching --> Connected: Bound revision advances before atomic detach
+    RevalidatingRemote --> RemoteWithObjectStore: Offline, unauthorized, incomplete, or stale
+    Detaching --> FullyLocal: Every Protected State hydrated; Object Store and Remote detach
+    Detaching --> RemoteWithObjectStore: Bound revision advances before atomic detach
 ```
 
 ## Failure path
@@ -37,4 +49,4 @@ stateDiagram-v2
 - Cache eviction requires a verified Object Store copy. Authoritative deletion also requires 30 days of unreachability and complete published-history enumeration.
 - An asset-bearing Workspace never remains Remote-connected without a verified Object Store.
 - A Remote-connected Workspace with no protected Object references may detach only the Object Store after complete current, local-history, published-history, pending-reconciliation, and Consolidation enumeration proves the protected set empty. The Remote remains attached.
-- Offline Remote detachment removes local attachment state only and retains the Object Store. A full-local transition requires authenticated online enumeration of every published Remote ref immediately before Protected Object hydration. The transition consumes a readiness result bound to that ref inventory and the Workspace revision, and refuses if either advances before atomic detach.
+- Offline Remote detachment moves `RemoteWithObjectStore` to `LocalWithObjectStore`; it removes local Remote attachment state and retains the Object Store. The Writer can reconnect the Remote or hydrate every locally protected Object before removing the retained Object Store. A full-local transition from an attached Remote requires authenticated online enumeration of every published Remote ref immediately before Protected Object hydration. The transition consumes a readiness result bound to that ref inventory and the Workspace revision, and refuses if either advances before atomic detach.

@@ -1,5 +1,9 @@
 # Stage 3: Technical Implementation Changelog
 
+## v1.7.8-provisional
+
+PR #12 full review round 6 binds this provisional layer to Architecture v1.4.7. Git analysis now runs every candidate on verified default Linux and macOS filesystems. GitHub token refresh explicitly requests and validates JSON rotation fields. The forward CI commands execute the forbidden-debug-marker gate, and the brownfield FFI banner identifies the current upstream lineage. Production implementation remains unauthorized.
+
 ## v1.7.7-provisional
 
 PR #12 full review round 5 binds this provisional layer to PRD v1.3.4 and Architecture v1.4.6. Spike results now capture complete reference-profile facts. The macOS packaging protocol tests one immutable artifact on both supported major versions and separates repeated construction from compatibility probes. Protected State includes every advertised fetchable Remote ref. The GitHub App keeps least privilege by rejecting reachable workflow history, and device flow classifies bad verification codes and unverified email addresses. Production implementation remains unauthorized.

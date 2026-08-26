@@ -18,7 +18,7 @@
 ## Codebase baseline
 
 - **State today:** Production uses `gix` for selected local operations and the Git CLI for pull/push, collapsing conflicts toward marker-bearing working-tree errors.
-- **Discovered constraints:** Structural and binary conflicts have no reliable marker representation; unrelated histories are refused; the release must ship the verified Git executable and runtime.
+- **Discovered constraints:** Structural and binary conflicts have no reliable marker representation; unrelated histories are refused; the release must ship the verified Git executable and runtime. Every candidate runs on distinct default Linux and macOS filesystems because case handling, Unicode precomposition, HFS protection, file modes, and checkout blockers vary by host. The hosts exchange opaque SHA-256-verified result bundles.
 
 ## Options and trade-offs
 
