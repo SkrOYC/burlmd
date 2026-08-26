@@ -1,5 +1,9 @@
 # Stage 2: Architecture changelog
 
+## v1.4.7 - 2026-08-26
+
+PR #12 full review round 6 adds an explicit local-with-Object-Store state after offline Remote detach, including Remote reconnection and verified Object Store removal. It also separates read-only find navigation from edit, replace, undo, and redo mutations.
+
 ## v1.4.6 - 2026-08-26
 
 Reviewed for PRD v1.3.4. Remote connection and synchronization preflight reject workflow-bearing publication history while local use remains available. Consolidation provides the clean-Workspace remediation without granting workflow-modification authority to the GitHub App.

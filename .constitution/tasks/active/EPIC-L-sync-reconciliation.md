@@ -1,5 +1,5 @@
 ---
-version: v2.1.9
+version: v2.1.10
 status: active
 epic: L
 ---
@@ -22,8 +22,8 @@ Deliver continuous Git synchronization and all three reconciliation forms: canon
   - `.constitution/spikes/SPK-GIT-L001.md`
 - **Scope (Out-of-Scope Files):**
   - Every repository path not listed above (don't touch production or active specifications)
-- **Verification Command:** `cargo test --locked --manifest-path .constitution/prototypes/git-analysis/Cargo.toml --all-targets && cargo run --locked --release --manifest-path .constitution/prototypes/git-analysis/Cargo.toml -- --git-command git --required-version 2.54.0 --contract .constitution/tech-spec/contracts/provisional-spikes.toml --schema .constitution/tech-spec/contracts/spike-result.schema.json --output .constitution/prototypes/git-analysis/results.json`
-- **Expected Success Output:** exit 0 with a finalized schema-valid hostile-corpus report
+- **Verification Command:** Run these exact commands on their named hosts: common: `cargo test --locked --manifest-path .constitution/prototypes/git-analysis/Cargo.toml --all-targets`; Linux default filesystem: `cargo run --locked --release --manifest-path .constitution/prototypes/git-analysis/Cargo.toml -- probe --run-id git-linux-default --role linux-default-filesystem --expected-os linux --expected-filesystem ext4 --git-command git --required-version 2.54.0 --contract .constitution/tech-spec/contracts/provisional-spikes.toml --schema .constitution/tech-spec/contracts/spike-result.schema.json --output .constitution/prototypes/git-analysis/runs/git-linux-default.json --handoff-bundle .constitution/prototypes/git-analysis/handoff/outbox/git-linux-default.tar.zst --handoff-sha256 .constitution/prototypes/git-analysis/handoff/outbox/git-linux-default.sha256`; macOS default filesystem: `cargo run --locked --release --manifest-path .constitution/prototypes/git-analysis/Cargo.toml -- probe --run-id git-macos-default --role macos-default-filesystem --expected-os macos --expected-filesystem apfs --git-command git --required-version 2.54.0 --contract .constitution/tech-spec/contracts/provisional-spikes.toml --schema .constitution/tech-spec/contracts/spike-result.schema.json --output .constitution/prototypes/git-analysis/runs/git-macos-default.json --handoff-bundle .constitution/prototypes/git-analysis/handoff/outbox/git-macos-default.tar.zst --handoff-sha256 .constitution/prototypes/git-analysis/handoff/outbox/git-macos-default.sha256`; coordinator transfer: `mkdir -p .constitution/prototypes/git-analysis/handoff/inbox && scp "$BURLMD_LINUX_HANDOFF_SOURCE/git-linux-default.tar.zst" "$BURLMD_LINUX_HANDOFF_SOURCE/git-linux-default.sha256" "$BURLMD_MACOS_HANDOFF_SOURCE/git-macos-default.tar.zst" "$BURLMD_MACOS_HANDOFF_SOURCE/git-macos-default.sha256" .constitution/prototypes/git-analysis/handoff/inbox/`; coordinator aggregation: `cargo run --locked --release --manifest-path .constitution/prototypes/git-analysis/Cargo.toml -- aggregate --contract .constitution/tech-spec/contracts/provisional-spikes.toml --schema .constitution/tech-spec/contracts/spike-result.schema.json --import-bundle .constitution/prototypes/git-analysis/handoff/inbox/git-linux-default.tar.zst --import-sha256 .constitution/prototypes/git-analysis/handoff/inbox/git-linux-default.sha256 --import-bundle .constitution/prototypes/git-analysis/handoff/inbox/git-macos-default.tar.zst --import-sha256 .constitution/prototypes/git-analysis/handoff/inbox/git-macos-default.sha256 --require-role linux-default-filesystem --require-role macos-default-filesystem --require-distinct-hosts 2 --require-distinct-operating-systems 2 --require-role-os linux-default-filesystem=linux --require-role-os macos-default-filesystem=macos --require-role-filesystem linux-default-filesystem=ext4 --require-role-filesystem macos-default-filesystem=apfs --require-every-candidate-on-every-role --output .constitution/prototypes/git-analysis/results.json`.
+- **Expected Success Output:** exit 0 with distinct Linux and macOS default-filesystem runs and one finalized schema-valid hostile-corpus report
 - **STOP Conditions:**
   - STOP if analysis parses human error prose, relies on markers, mutates the authoritative worktree, or executes repository-controlled behavior.
   - STOP at the 3-day time box and report uncovered conflict classes.
@@ -33,7 +33,7 @@ Deliver continuous Git synchronization and all three reconciliation forms: canon
   - **Evidence:**
 
 ```text
-Every declared candidate and conflict/security gate has attributed structured evidence, exact object/tree identities, crash/CAS inputs, worktree nonmutation proof, and redistribution obligations.
+Every declared candidate and conflict/security gate has attributed structured evidence on both default Linux and macOS filesystems. The result tool captures host fingerprints, filesystem facts, and effective `core.ignoreCase`, `core.precomposeUnicode`, `core.protectHFS`, and filemode behavior from system and Git probes. Aggregation rejects missing, same-host, same-operating-system, role-mismatched, or single-role candidate evidence. The report contains exact object/tree identities, crash/CAS inputs, worktree nonmutation proof, and redistribution obligations.
 ```
 
 #### ANALYZE-L002 Implement typed read-only Git reconciliation analysis

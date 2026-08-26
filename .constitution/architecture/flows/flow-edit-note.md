@@ -18,7 +18,11 @@ sequenceDiagram
     Core->>Model: Build source-backed Note state from authoritative working source
     Model-->>Core: Rendered and editable Note state
     Core-->>UI: Authoritative Note state
-    UI->>Core: Edit, structural operation, undo, redo, find, or replace
+    UI->>Core: Find query or next/previous match
+    Core->>Model: Locate matches without mutation
+    Model-->>Core: Match ranges and active match
+    Core-->>UI: Read-only find state
+    UI->>Core: Edit, structural operation, replace, undo, or redo
     Core->>Model: Apply one semantic operation
     Model-->>Core: Source-preserving result and inverse operation
     Core->>State: Persist recoverable draft and undo state
@@ -31,5 +35,6 @@ sequenceDiagram
 
 - If draft persistence fails, Core reports unwritten state and doesn't claim durability.
 - If the source revision changed, Core preserves the draft and routes the candidate disk change through the guest-change flow.
+- Find queries and match navigation are read-only. They don't create inverse operations, drafts, or undo entries.
 - Replace-all applies as one operation or leaves the Note unchanged.
 - A close warning or failure follows the desktop-session flow.
