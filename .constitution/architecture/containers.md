@@ -1,56 +1,209 @@
-# Logical Containers
+# Logical boundaries
+
+The System/Native archetype uses module, Platform, storage, external-service, and release-pipeline boundaries. These boundaries describe responsibilities and communication categories, not physical packages or protocols.
 
 ## Structure
 
 ```mermaid
-graph LR
-    UI[Presentation Container]
-    Core[Core Engine]
-    Local[Local Repository]
-    Sync[Sync Manager]
-    Sec[Secure Storage]
-    Remote[Remote Repository]
-    OS[Host OS]
+flowchart LR
+    Writer[Writer]
+    Agent[Agent]
+    UI[Presentation and Interaction\nmodule]
+    Core[Core Coordination\nmodule]
+    NoteModel[Canonical Note Model\nmodule]
+    WorkspaceModel[Workspace Model\nmodule]
+    Persist[Workspace Persistence\nstorage boundary]
+    LocalAssets[Local Asset Store\nstorage boundary]
+    Index[Derived Index\nstorage boundary]
+    State[Application State\nstorage boundary]
+    Observer[Workspace Observer\nmodule]
+    Sync[Remote Sync Coordinator\nmodule]
+    ObjectTransfer[Object Transfer Coordinator\nmodule]
+    Secure[Secure Storage\nPlatform boundary]
+    Host[Host Platform\nexternal boundary]
+    Provider[Provider\nexternal boundary]
+    Remote[Remote\nexternal storage]
+    ObjectStore[Object Store\nexternal storage]
+    Update[Release Update Coordinator\nmodule]
+    Release[Release Pipeline\npipeline boundary]
+    Distribution[Release Distribution\nexternal boundary]
 
-    UI <-- "in-process FFI call / structured return" --> Core
-    Core <-- "in-process call" --> Local
-    Sync -- "in-process call" --> Local
-    Sync <-. "network: Git smart protocol over HTTPS" .-> Remote
-    Core -- "OS credential API" --> Sec
-    Sync -- "OS credential API" --> Sec
-    Local -- "in-process call" --> Sec
-    Core -- "in-process notification" --> Sync
-    Sec --- OS
+    Writer -->|interaction| UI
+    Agent -->|guest filesystem write| Host
+    UI <-->|in-process request and state response| Core
+    Core <-->|in-process model operations| NoteModel
+    Core <-->|in-process model operations| WorkspaceModel
+    WorkspaceModel -->|Note semantic operations| NoteModel
+    Core <-->|durable state access| Persist
+    Core <-->|verified Object access| LocalAssets
+    Core <-->|derived query and rebuild| Index
+    Core <-->|device and Workspace state access| State
+    Host -->|filesystem event| Observer
+    Host <-->|filesystem operation| Persist
+    Host <-->|filesystem operation| LocalAssets
+    Persist -->|authoritative bytes for projection| Index
+    Index -->|key request| Secure
+    State -->|key request when needed| Secure
+    Observer -->|candidate change proposal| Core
+    Core <-->|asynchronous synchronization intent and result| Sync
+    Core <-->|asynchronous Object obligation and result| ObjectTransfer
+    Core -->|credential request| Secure
+    Sync -->|credential request| Secure
+    ObjectTransfer -->|credential request| Secure
+    Secure <-->|Platform credential access| Host
+    Sync <-->|authenticated service request| Provider
+    Sync <-->|authenticated history transfer| Remote
+    Sync <-->|history handoff| Persist
+    Sync <-->|durable synchronization state| State
+    Provider -->|hosts and locates| Remote
+    ObjectTransfer <-->|authenticated Object transfer| ObjectStore
+    ObjectTransfer <-->|local Object handoff| LocalAssets
+    ObjectTransfer <-->|durable Object state| State
+    WorkspaceModel -->|Protected State roots| LocalAssets
+    Persist -->|Asset references| LocalAssets
+    Core -->|asynchronous update check| Update
+    Update -->|release metadata request| Distribution
+    Release -->|artifact and provenance handoff| Distribution
 ```
 
-The synchronous editing path runs entirely through the left edge: keystrokes cross the FFI boundary, and the Core serves them from memory and the local index without ever touching the network. The dotted edge is the only asynchronous, potentially failing connection in the system, which is why it belongs to the Sync Manager alone. Local Repository's dependence on Secure Storage is drawn directly rather than left transitive through Core because the key read happens at index open, not per call; Core notifies Sync in-process when a commit tier fires, which is how the scheduler learns there is work.
+## Presentation and Interaction
 
-## 1. Presentation Container
-- **Logical Type:** UI Client (Flutter)
-- **Responsibility:** Captures user input and renders the hybrid Markdown editor interface based on state provided by the Core Engine. It is strictly stateless and maintains no persistent data of its own.
-- **Inputs / Outputs:** Receives structured Abstract Syntax Trees (AST) and search results; outputs keystrokes, block modifications, and interaction events.
-- **Depends on:** Core Engine.
+- **Boundary kind:** Module.
+- **Logical type:** Desktop interaction surface.
+- **Responsibility:** Captures Writer intent and renders authoritative state, warnings, Decisions, Suggestions, diagnostics, and release information.
+- **Inputs and outputs:** Sends interaction commands. Receives Note, Workspace, session, synchronization, and recovery state.
+- **Depends on:** Core Coordination.
 
-## 2. Core Engine
-- **Logical Type:** Application Logic, State Manager, & Crypto Boundary
-- **Responsibility:** Manages the active "draft" state of open notes, parses raw Markdown into structured ASTs, handles inline conflict resolution logic, encrypts/decrypts data flowing to the Local Repository, and acts as the bridge (via FFI) to the Presentation Container.
-- **Inputs / Outputs:** Receives UI events; outputs ASTs. Reads/writes encrypted payloads to Local Repository. Retrieves keys from Secure Storage.
-- **Depends on:** Local Repository, Sync Manager, Secure Storage.
+This boundary can own ephemeral selection and focus. Durable preferences and per-Workspace session state belong to Application State.
 
-## 3. Local Repository (Index & Storage)
-- **Logical Type:** Storage Boundary
-- **Responsibility:** Persists the Open Knowledge Format (OKF) directory tree and maintains an application-level-encrypted (SQLCipher) search index for graph relationships and full-text queries. The raw OKF directory tree itself is **not** encrypted by this container, so that native Git merge tooling can operate on plaintext files; whatever at-rest protection those files have comes from the host operating system and is not a guarantee this system delivers (see `prd/constraints.md`).
-- **Inputs / Outputs:** Receives finalized encrypted document commits and search queries; outputs queried encrypted documents.
-- **Depends on:** Secure Storage (retrieves the root key before the SQLCipher index can be opened; corrected from "None" once Epic B's implementation made this dependency concrete — see `rust/src/db/connection.rs`).
+## Core Coordination
 
-## 4. Sync Manager
-- **Logical Type:** Background Worker / Scheduler
-- **Responsibility:** Handles asynchronous communication with the Remote Repository. It pulls remote commits, pushes local commits, and manages OAuth tokens. **Optional at runtime:** a Workspace with no Remote attached is fully functional with this container idle, and every other container's responsibilities hold unchanged in that state. This corrects an implicit assumption in v1.0.x that a Remote always exists — see `prd/out-of-scope/mandatory-account-on-first-run.md` and `tech-spec/adrs/ADR-005-local-first-workspace.md`.
-- **Inputs / Outputs:** Reads commits from the Local Repository; pushes commits to the Remote Repository; reports synchronization state upward so the Presentation Container can render it.
-- **Depends on:** Local Repository, Remote Repository (when attached), Secure Storage.
+- **Boundary kind:** Module.
+- **Logical type:** Application coordinator and authority boundary.
+- **Responsibility:** Serializes commands against authoritative model state, enforces authority and conformance, and coordinates local and external state machines.
+- **Inputs and outputs:** Receives Writer actions, guest-change proposals, synchronization results, and Object results. Emits authoritative state and durable obligations.
+- **Depends on:** Canonical Note Model, Workspace Model, Workspace Persistence, Derived Index, Application State, Secure Storage, Workspace Observer, Remote Sync Coordinator, Object Transfer Coordinator, and Release Update Coordinator.
 
-## 5. Secure Storage (OS Boundary)
-- **Logical Type:** Hardware/OS Boundary
-- **Responsibility:** Safely stores OAuth refresh tokens and the AES-256 root encryption key for the Local Repository. The two are independent: the root key is created during Workspace bootstrap and exists whether or not any provider is ever authorized, while tokens exist only after an opt-in connection. v1.0.x coupled them by generating the root key inside the OAuth handshake, which made an unauthenticated user unable to open an index at all; corrected in `flows/flow-workspace-bootstrap.md`.
-- **Inputs / Outputs:** Receives tokens/keys for storage; outputs tokens/keys on request, including a readback path so a restart can restore an existing session rather than re-prompting.
-- **Depends on:** Host OS (Keychain/Keystore).
+## Canonical Note Model
+
+- **Boundary kind:** Module.
+- **Logical type:** Source-backed semantic model.
+- **Responsibility:** Defines Note-local values and operations for parsing, rendering, source-preserving edits, undo, find and replace, Links, Assets, Suggestion representation, and conformance.
+- **Inputs and outputs:** Accepts Note source and semantic operations. Returns structured Note state, source ranges, and source-preserving results.
+- **Depends on:** No other logical boundary.
+
+The boundary owns the logical model only. Stage 3 selects the physical schema, parser foundation, source-range representation, and inter-module projection.
+
+## Workspace Model
+
+- **Boundary kind:** Module.
+- **Logical type:** Workspace authority model.
+- **Responsibility:** Solely owns authoritative Workspace and session state: the Directory tree, canonical paths, Note identity, open-session registry, Protected State, lifecycle provenance, and the lifecycle of Suggestions, Lifecycle Decisions, Asset Decisions, and reconciliation records.
+- **Inputs and outputs:** Accepts Workspace operations and candidate external states. Returns authoritative tree state, Decisions, and retention roots.
+- **Depends on:** Canonical Note Model.
+
+## Workspace Persistence
+
+- **Boundary kind:** Storage boundary.
+- **Logical type:** Local authoritative storage.
+- **Responsibility:** Persists Note source, Directories, recoverable local history, and atomic lifecycle outcomes inside the Workspace boundary.
+- **Inputs and outputs:** Stores and retrieves authoritative Workspace bytes and Versions.
+- **Depends on:** Host Platform for filesystem operations.
+
+## Local Asset Store
+
+- **Boundary kind:** Storage boundary.
+- **Logical type:** Local authoritative Object storage.
+- **Responsibility:** Owns verified local Object bytes, active offline availability, hydration handoff, cache eviction, and retention of bytes reachable from Protected State.
+- **Inputs and outputs:** Accepts verified Object writes and retention roots. Returns verified bytes, availability, and eviction outcomes.
+- **Depends on:** Host Platform, Workspace Model for Protected State roots, and Workspace Persistence for Asset references.
+
+## Derived Index
+
+- **Boundary kind:** Storage boundary.
+- **Logical type:** Rebuildable local projection.
+- **Responsibility:** Supports search, title lookup, backlinks, conformance inventory, and incremental Workspace views without becoming authoritative.
+- **Inputs and outputs:** Accepts validated Workspace changes. Returns queries and rebuild progress.
+- **Depends on:** Workspace Persistence and Secure Storage.
+
+## Application State
+
+- **Boundary kind:** Storage boundary.
+- **Logical type:** Non-Workspace durable state.
+- **Responsibility:** Persists and restores snapshots of device preferences, per-Workspace session state, drafts, operation intents, reconciliation records, synchronization presentation, and migration metadata. It doesn't own authoritative session state.
+- **Inputs and outputs:** Persists and restores device or Workspace-scoped application state.
+- **Depends on:** Secure Storage when state contains encrypted aggregate Note data.
+
+Device preferences never enter Workspace content. Session and navigation state remain partitioned by Workspace.
+
+## Workspace Observer
+
+- **Boundary kind:** Module.
+- **Logical type:** Platform event adapter.
+- **Responsibility:** Converts filesystem event bursts into debounced change proposals without deciding authority or conformance.
+- **Inputs and outputs:** Receives Platform events and emits candidate creates, edits, moves, renames, and deletes.
+- **Depends on:** Host Platform and Core Coordination.
+
+## Remote Sync Coordinator
+
+- **Boundary kind:** Module.
+- **Logical type:** Optional asynchronous coordinator.
+- **Responsibility:** Connects a Workspace to a private Remote, detects local and incoming history, coordinates reconciliation, and reports distinct synchronization states.
+- **Inputs and outputs:** Accepts durable synchronization intents. Returns authentication, privacy, transfer, divergence, and completion outcomes.
+- **Depends on:** Provider, Remote, Secure Storage, Workspace Persistence, Application State, and Core Coordination.
+
+## Object Transfer Coordinator
+
+- **Boundary kind:** Module.
+- **Logical type:** Optional asynchronous Object coordinator.
+- **Responsibility:** Validates Object Store privacy, uploads and verifies required Objects before history publication, hydrates Objects, and coordinates migration, repair, rotation, and cleanup.
+- **Inputs and outputs:** Accepts Object obligations and retention roots. Returns verification, hydration, migration, and recovery outcomes.
+- **Depends on:** Object Store, Secure Storage, Local Asset Store, Application State, and Core Coordination.
+
+## Secure Storage
+
+- **Boundary kind:** Platform boundary.
+- **Logical type:** Credential and key persistence.
+- **Responsibility:** Persists index keys, Provider credentials, and Object Store credentials outside Workspace content and diagnostics.
+- **Inputs and outputs:** Stores, reads, rotates, and removes secret material for authorized callers.
+- **Depends on:** Host Platform.
+
+## Host Platform
+
+- **Boundary kind:** External boundary.
+- **Logical type:** Operating system and filesystem authority.
+- **Responsibility:** Owns window chrome, process lifecycle, filesystem events, secure storage, file selection, installation, and package-manager behavior.
+- **Inputs and outputs:** Provides Platform services and lifecycle signals.
+- **Depends on:** None.
+
+## Provider, Remote, and Object Store
+
+- **Boundary kind:** External service and storage boundaries.
+- **Logical type:** Optional user-controlled synchronization services.
+- **Responsibility:** The Provider authorizes and locates a private Remote. The Remote stores Workspace history. The Object Store stores immutable Object bytes under the Writer's control.
+- **Inputs and outputs:** Accept authenticated repository or Object operations and return explicit authorization, privacy, integrity, and availability outcomes.
+- **Depends on:** External network availability and user-controlled accounts.
+
+## Release Pipeline
+
+- **Boundary kind:** Pipeline boundary.
+- **Logical type:** Build, verification, and publication boundary.
+- **Responsibility:** Produces each supported artifact, runs the common release matrix, and publishes integrity and provenance information.
+- **Inputs and outputs:** Accepts a release revision and Platform matrix. Emits verified artifacts and metadata to Release Distribution.
+- **Depends on:** Supported Platform environments and Release Distribution.
+
+## Release Update Coordinator
+
+- **Boundary kind:** Module.
+- **Logical type:** Optional asynchronous metadata coordinator.
+- **Responsibility:** Checks compatible release metadata, reports a higher `0.x` release, and hands installation authority to the Host Platform or package manager.
+- **Inputs and outputs:** Receives update-check intent and returns compatible release information. It never replaces installed binaries.
+- **Depends on:** Release Distribution and Core Coordination.
+
+## Release Distribution
+
+- **Boundary kind:** External service boundary.
+- **Logical type:** Artifact and release-metadata distribution.
+- **Responsibility:** Publishes supported artifacts, integrity data, provenance, compatibility metadata, and release information without installing binaries.
+- **Inputs and outputs:** Accepts verified release outputs and serves immutable artifacts and compatible release metadata.
+- **Depends on:** External network availability and the Release Pipeline.

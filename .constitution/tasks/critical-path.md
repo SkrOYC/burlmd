@@ -1,104 +1,365 @@
 ---
-version: v1.9.1
+version: v2.1.4
 ---
 
-# Active Backlog Summary
+# Active backlog summary
 
-**Total Active Story Points:** 0
+**Total Active Story Points:** 545
 
-No active epics remain. Epics A through F are complete and archived under
-`completed/`; completed epics contribute nothing to the total or graph.
+The complete forward backlog contains 77 tickets across seven active epics. All specified P0 work is planned. The five decision-producing Spikes are the first tickets in the epics they govern.
 
-The delivered desktop Workspace opens without a login gate, navigates its
-Directory tree, persists and recovers Notes, and supports Live Preview,
-cross-Block selection and copy, structural editing, emphasis shortcuts, Link
-completion and follow, and atomic multi-Block range edits. Ticket gates record
-smoke captures for user-facing flows alongside their automated validation.
+## Shared execution and generated-output conventions
 
-## Critical Path
+- While Stage 3 remains provisional, only the five `Spike` tickets are executable. Every production ticket has an implicit STOP before implementation until measured Product Requirements and Architecture evolution is accepted, Stage 3 is final, and Stage 4 has adapted that ticket’s scope, estimate, dependencies, and exact verification command. This shared STOP applies even when a production ticket has no Spike dependency.
+- A ticket that scopes `rust/src/api/ffi_api.rs` also scopes regenerated `lib/src/rust/**` output. Its verification must regenerate bindings and fail on a stale generated diff. This convention avoids repeating generated files in every FFI ticket without transferring ownership away from the ticket.
 
-There is no active critical path. Active story points are zero because the
-`active/` directory contains no ticket-bearing Epic file.
+PR #11 remains the delivered redesign foundation and isn’t retroactively assigned to an epic. `SHELL-G001` removes the presentation-only Platform chrome that leaked from its prototype.
 
-**A dependency-modeling lesson from Epic D remains useful for later planning.**
-The published v1.4.0 graph had `WSPC-D006` (Lifecycle) depending only on
-`WSPC-D005`. In practice, it also needed `WSPC-D007` (Persistence Tiers): its
-acceptance criteria require pathspec-scoped commits and coherent open editing
-sessions. Later tickets that mutate files and must preserve open sessions must
-depend on the work that owns those sessions.
+## Critical path
 
-## Build Order Diagram
+The longest dependency path is **113 story points**:
 
-The active build graph is empty. Archived dependencies remain historical
-evidence, not active scheduling edges.
+1. `AST-H001`
+2. `MODEL-H003`
+3. `ADAPT-H004`
+4. `AUTH-H006`
+5. `STORE-I002`
+6. `TRANSFER-I005`
+7. `RETAIN-I007`
+8. `DETACH-I012`
+9. `DETACH-K006`
+10. `REMOTE-K007`
+11. `STATE-L009`
+12. `INTEG-L012`
+13. `APPIMAGE-M006`
+14. `RELEASE-M009`
+15. `GATE-M011`
+16. `PUBLISH-M014`
 
-## Phasing Strategy
+The path now carries the complete full-local detach and Writer-facing Remote workflow before synchronization integration. It terminates in publication only after immutable candidate construction and the installed AppImage gate. The Nix and macOS gates run in parallel and also block publication.
 
-### In-Scope (Current Phase)
-There is no active implementation scope. The completed local-only desktop
-Workspace supports creating, renaming, moving, and deleting Notes and
-Directories; editing every supported Block type; selecting and copying across
-Blocks; inserting and following Links; searching the full text; and recording
-each editing session in local version history.
+## Build order diagram
 
-Synchronization is **not** required for that outcome, and this is load-bearing rather than a compromise: in a local-first Workspace every close is a real commit to a real repository, so Notes are version-controlled and recoverable from the first one written. A Remote adds off-machine durability and multi-device access. Neither is a data-safety precondition.
+```mermaid
+flowchart LR
+    subgraph EpicG["Epic G"]
+        SHELLG001[SHELL-G001]
+        PREFG002[PREF-G002]
+        STATEG003[STATE-G003]
+        TABSG004[TABS-G004]
+        CLOSEG005[CLOSE-G005]
+        OPENG006[OPEN-G006]
+        NAVG007[NAV-G007]
+        EDITG008[EDIT-G008]
+        FINDG009[FIND-G009]
+        HISTG010[HIST-G010]
+        SHELLG011[SHELL-G011]
+    end
+    subgraph EpicH["Epic H"]
+        ASTH001[AST-H001]
+        PATHH002[PATH-H002]
+        MODELH003[MODEL-H003]
+        ADAPTH004[ADAPT-H004]
+        PATHH005[PATH-H005]
+        AUTHH006[AUTH-H006]
+        PREFLIGHTH007[PREFLIGHT-H007]
+        REPAIRH008[REPAIR-H008]
+        OBSH009[OBS-H009]
+        EXTH010[EXT-H010]
+        DECIDEH011[DECIDE-H011]
+        RESCANH012[RESCAN-H012]
+    end
+    subgraph EpicI["Epic I"]
+        ASSETI001[ASSET-I001]
+        STOREI002[STORE-I002]
+        IMAGEI003[IMAGE-I003]
+        OBJECTI004[OBJECT-I004]
+        TRANSFERI005[TRANSFER-I005]
+        RECOVERI006[RECOVER-I006]
+        RETAINI007[RETAIN-I007]
+        ROTATEI008[ROTATE-I008]
+        MIGRATEI011[MIGRATE-I011]
+        DETACHI012[DETACH-I012]
+        ADOPTI009[ADOPT-I009]
+        ASSETI010[ASSET-I010]
+    end
+    subgraph EpicJ["Epic J"]
+        EXPORTJ001[EXPORT-J001]
+        COPYJ002[COPY-J002]
+        ARCHIVEJ003[ARCHIVE-J003]
+        CONSJ004[CONS-J004]
+        COLLIDEJ005[COLLIDE-J005]
+        PORTJ006[PORT-J006]
+        CONSUIJ007[CONSUI-J007]
+    end
+    subgraph EpicK["Epic K"]
+        AUTHK001[AUTH-K001]
+        TOKENK002[TOKEN-K002]
+        REPOK003[REPO-K003]
+        CONNECTK004[CONNECT-K004]
+        CLONEK005[CLONE-K005]
+        DETACHK006[DETACH-K006]
+        REMOTEK007[REMOTE-K007]
+        CANARYK008[CANARY-K008]
+    end
+    subgraph EpicL["Epic L"]
+        GITL001[GIT-L001]
+        ANALYZEL002[ANALYZE-L002]
+        SCHEDL003[SCHED-L003]
+        SUGGESTL004[SUGGEST-L004]
+        SUGUIL005[SUGUI-L005]
+        LIFEL006[LIFE-L006]
+        ASSETL007[ASSET-L007]
+        FINALL008[FINAL-L008]
+        STATEL009[STATE-L009]
+        REFSL010[REFS-L010]
+        DELETEL011[DELETE-L011]
+        INTEGL012[INTEG-L012]
+    end
+    subgraph EpicM["Epic M"]
+        PKGM001[PKG-M001]
+        LOGM002[LOG-M002]
+        CIM003[CI-M003]
+        BENCHM004[BENCH-M004]
+        HEALTHM004[HEALTH-M004]
+        MIGRATEM005[MIGRATE-M005]
+        APPIMAGEM006[APPIMAGE-M006]
+        NIXM007[NIX-M007]
+        MACM008[MAC-M008]
+        RELEASEM009[RELEASE-M009]
+        UPDATEM010[UPDATE-M010]
+        GATEM011[GATE-M011]
+        GATEM012[GATE-M012]
+        GATEM013[GATE-M013]
+        PUBLISHM014[PUBLISH-M014]
+    end
+    STATEG003 --> TABSG004
+    TABSG004 --> CLOSEG005
+    CLOSEG005 --> OPENG006
+    PREFLIGHTH007 --> OPENG006
+    TABSG004 --> NAVG007
+    TABSG004 --> EDITG008
+    ADAPTH004 --> EDITG008
+    EDITG008 --> FINDG009
+    ADAPTH004 --> FINDG009
+    TABSG004 --> HISTG010
+    ADAPTH004 --> HISTG010
+    SHELLG001 --> SHELLG011
+    PREFG002 --> SHELLG011
+    OPENG006 --> SHELLG011
+    NAVG007 --> SHELLG011
+    FINDG009 --> SHELLG011
+    HISTG010 --> SHELLG011
+    ASTH001 --> MODELH003
+    MODELH003 --> ADAPTH004
+    PATHH002 --> PATHH005
+    ADAPTH004 --> AUTHH006
+    PATHH005 --> AUTHH006
+    AUTHH006 --> PREFLIGHTH007
+    PREFLIGHTH007 --> REPAIRH008
+    AUTHH006 --> OBSH009
+    OBSH009 --> EXTH010
+    PREFLIGHTH007 --> EXTH010
+    EXTH010 --> DECIDEH011
+    REPAIRH008 --> DECIDEH011
+    OBSH009 --> RESCANH012
+    ASSETI001 --> STOREI002
+    AUTHH006 --> STOREI002
+    STOREI002 --> IMAGEI003
+    ADAPTH004 --> IMAGEI003
+    ASSETI001 --> OBJECTI004
+    STOREI002 --> TRANSFERI005
+    OBJECTI004 --> TRANSFERI005
+    TRANSFERI005 --> RECOVERI006
+    TRANSFERI005 --> RETAINI007
+    AUTHH006 --> RETAINI007
+    TRANSFERI005 --> ROTATEI008
+    TRANSFERI005 --> MIGRATEI011
+    RETAINI007 --> MIGRATEI011
+    RETAINI007 --> DETACHI012
+    RECOVERI006 --> DETACHI012
+    STOREI002 --> ADOPTI009
+    PREFLIGHTH007 --> ADOPTI009
+    IMAGEI003 --> ASSETI010
+    RECOVERI006 --> ASSETI010
+    ROTATEI008 --> ASSETI010
+    MIGRATEI011 --> ASSETI010
+    DETACHI012 --> ASSETI010
+    ADOPTI009 --> ASSETI010
+    HISTG010 --> ASSETI010
+    CLOSEG005 --> EXPORTJ001
+    DECIDEH011 --> EXPORTJ001
+    RECOVERI006 --> EXPORTJ001
+    EXPORTJ001 --> COPYJ002
+    TRANSFERI005 --> COPYJ002
+    EXPORTJ001 --> ARCHIVEJ003
+    TRANSFERI005 --> ARCHIVEJ003
+    REPAIRH008 --> CONSJ004
+    ADOPTI009 --> CONSJ004
+    CONSJ004 --> COLLIDEJ005
+    COPYJ002 --> PORTJ006
+    ARCHIVEJ003 --> PORTJ006
+    COLLIDEJ005 --> CONSUIJ007
+    AUTHK001 --> TOKENK002
+    TOKENK002 --> REPOK003
+    REPOK003 --> CONNECTK004
+    TRANSFERI005 --> CONNECTK004
+    REPOK003 --> CLONEK005
+    REPAIRH008 --> CLONEK005
+    TRANSFERI005 --> CLONEK005
+    CONNECTK004 --> DETACHK006
+    DETACHI012 --> DETACHK006
+    CONNECTK004 --> REMOTEK007
+    PREFG002 --> REMOTEK007
+    CLONEK005 --> CANARYK008
+    DETACHK006 --> CANARYK008
+    GITL001 --> ANALYZEL002
+    ADAPTH004 --> ANALYZEL002
+    PATHH005 --> ANALYZEL002
+    ANALYZEL002 --> SCHEDL003
+    CONNECTK004 --> SCHEDL003
+    ANALYZEL002 --> SUGGESTL004
+    ADAPTH004 --> SUGGESTL004
+    SUGGESTL004 --> SUGUIL005
+    TABSG004 --> SUGUIL005
+    ANALYZEL002 --> LIFEL006
+    AUTHH006 --> LIFEL006
+    ANALYZEL002 --> ASSETL007
+    RECOVERI006 --> ASSETL007
+    SUGGESTL004 --> FINALL008
+    LIFEL006 --> FINALL008
+    ASSETL007 --> FINALL008
+    SCHEDL003 --> STATEL009
+    SUGUIL005 --> STATEL009
+    FINALL008 --> STATEL009
+    REMOTEK007 --> STATEL009
+    SCHEDL003 --> REFSL010
+    RETAINI007 --> REFSL010
+    SUGGESTL004 --> DELETEL011
+    LIFEL006 --> DELETEL011
+    STATEL009 --> INTEGL012
+    REFSL010 --> INTEGL012
+    DELETEL011 --> INTEGL012
+    CANARYK008 --> INTEGL012
+    SHELLG011 --> BENCHM004
+    RESCANH012 --> BENCHM004
+    ASSETI010 --> BENCHM004
+    INTEGL012 --> BENCHM004
+    HEALTHM004 --> BENCHM004
+    ASSETI001 --> HEALTHM004
+    HISTG010 --> HEALTHM004
+    STATEG003 --> MIGRATEM005
+    AUTHH006 --> MIGRATEM005
+    PKGM001 --> APPIMAGEM006
+    PORTJ006 --> APPIMAGEM006
+    CONSUIJ007 --> APPIMAGEM006
+    INTEGL012 --> APPIMAGEM006
+    SHELLG011 --> APPIMAGEM006
+    PKGM001 --> NIXM007
+    PORTJ006 --> NIXM007
+    CONSUIJ007 --> NIXM007
+    INTEGL012 --> NIXM007
+    PKGM001 --> MACM008
+    CIM003 --> MACM008
+    PORTJ006 --> MACM008
+    CONSUIJ007 --> MACM008
+    INTEGL012 --> MACM008
+    APPIMAGEM006 --> RELEASEM009
+    NIXM007 --> RELEASEM009
+    MACM008 --> RELEASEM009
+    UPDATEM010 --> RELEASEM009
+    PKGM001 --> UPDATEM010
+    PREFG002 --> UPDATEM010
+    LOGM002 --> GATEM011
+    CIM003 --> GATEM011
+    BENCHM004 --> GATEM011
+    MIGRATEM005 --> GATEM011
+    RELEASEM009 --> GATEM011
+    LOGM002 --> GATEM012
+    CIM003 --> GATEM012
+    BENCHM004 --> GATEM012
+    MIGRATEM005 --> GATEM012
+    RELEASEM009 --> GATEM012
+    LOGM002 --> GATEM013
+    CIM003 --> GATEM013
+    BENCHM004 --> GATEM013
+    MIGRATEM005 --> GATEM013
+    RELEASEM009 --> GATEM013
+    GATEM011 --> PUBLISHM014
+    GATEM012 --> PUBLISHM014
+    GATEM013 --> PUBLISHM014
+    CIM003 --> EDITG008
+    CIM003 --> FINDG009
+    CIM003 --> HISTG010
+    CIM003 --> ANALYZEL002
+    CIM003 --> SCHEDL003
+    CIM003 --> SUGGESTL004
+    CIM003 --> SUGUIL005
+    CIM003 --> LIFEL006
+    CIM003 --> ASSETL007
+    CIM003 --> FINALL008
+    CIM003 --> STATEL009
+    CIM003 --> DELETEL011
+    CIM003 --> LOGM002
+    CIM003 --> HEALTHM004
+    LOGM002 --> RELEASEM009
+    BENCHM004 --> RELEASEM009
+    MIGRATEM005 --> RELEASEM009
+    CIM003 --> UPDATEM010
+    CIM003 --> STOREI002
+    CIM003 --> IMAGEI003
+    CIM003 --> OBJECTI004
+    CIM003 --> TRANSFERI005
+    CIM003 --> RECOVERI006
+    CIM003 --> ROTATEI008
+    CIM003 --> MIGRATEI011
+    CIM003 --> DETACHI012
+    CIM003 --> ADOPTI009
+    CIM003 --> ASSETI010
+    CIM003 --> AUTHK001
+    CIM003 --> TOKENK002
+    CIM003 --> REPOK003
+    CIM003 --> CONNECTK004
+    CIM003 --> CLONEK005
+    CIM003 --> DETACHK006
+    CIM003 --> ADAPTH004
+    CIM003 --> AUTHH006
+    CIM003 --> PREFLIGHTH007
+    CIM003 --> REPAIRH008
+    CIM003 --> OBSH009
+    CIM003 --> EXTH010
+    CIM003 --> DECIDEH011
+    CIM003 --> EXPORTJ001
+    CIM003 --> COPYJ002
+    CIM003 --> ARCHIVEJ003
+    CIM003 --> CONSJ004
+    CIM003 --> COLLIDEJ005
+    CLONEK005 --> REMOTEK007
+    DETACHK006 --> REMOTEK007
+```
 
-### Deferred (Next Planning Wave)
-Wave 3 was shaped by the realignment interview (2026-08-21) rather than
-inherited. It has two parallel tracks: the sync and conflict backbone, and the
-interactive design epic. The handoff points follow open decision OD-03. Every
-capability added during realignment has a home or named deferral.
+## Phasing strategy
 
-**Track 1 — sync backbone:**
-- **Epic G — Sync Integration**, carrying: connect and detach (`CAP-SYNC-01/06`), second-device join via `clone_workspace` (`CAP-SYNC-07`) with guided consolidation (`CAP-SYNC-08`, `plan_consolidation`/`apply_consolidation`), session restore, credential readback, scheduler lifecycle wiring, the sync status indicator, bounding the scheduler's shutdown wait, and the post-conflict re-push timing question. Absorbs all six of Epic C's deferred follow-ups plus the `rust/src/api/auth.rs` rework, which is not a wiring item: `OAuthFlowStart` currently returns `code_verifier` and `state`; the contract returns a single-use `flow_id` and neither secret, and `authenticate_workspace(flow_id, auth_code, returned_state) -> SessionState` must raise `OAuthStateMismatch` before any token request. Until Epic G lands, the shipped code still mints a `state` nothing compares — the original CSRF defect, unchanged — and this supersedes Epic C's recorded position that the verifier transiting Dart was an accepted decision: under the current contract it does not transit Dart at all.
-- **Epic H — Conflict & Suggestions**: conflict-marker pre-processing, populating the Suggestion node, block-level accept/reject (`CAP-SYNC-04` as ruled at Q4), markers flowing freely through commits per B3, and the delete-vs-edit restore-and-suggest path from Q6. Prerequisite recorded in the contract: `Suggestion.base_content` requires the pull path to set a three-way conflict style.
-- **GitLab provider** (`CAP-SYNC-09`, P1) lands behind GitHub inside this track once the seam has one proven consumer (ADR-009, B5).
+### Phase 1: decision evidence
 
-**Track 2 — design system and surfaces:**
-- **Design & Preferences epic** (`CAP-PREF-01`): interactive by decision — human-driven design work expressed through `hitl_sil` and `visual_regression` acceptance modes, not Gherkin-by-default. Produces burlmd's design tokens. Owes the string externalization and `Semantics` pass recorded at `tech-spec/changelog.md` v1.4.0 — Epic E's widgets ship hardcoded literals with no accessibility labels, and retrofitting extraction across more surfaces only gets more expensive.
+Execute only the five Spikes. They produce reports, not production changes. When their evidence lands, run the required measured Product Requirements and Architecture evolution and final Stage 3 pass, then adapt every production ticket before implementation.
 
-**Handoff points between tracks (OD-03):** The design epic delivers tokens
-before the sync status indicator, editor chrome follow-ups, and
-`CAP-PORT-04`'s rendition build their final UI. When both tracks compete for
-the same time, Track 1's correctness work takes priority and the design work
-moves later.
+### Phase 2: canonical local application
 
-**Riding either track, placed by dependency rather than by theme:**
-- Undo (`CAP-EDIT-08`), version restore (`CAP-HIST-01`), and in-Note find and
-  replace (`CAP-FIND-03`) form a Wave 3 editor-depth cluster that builds on
-  Epic F's promotion model. Each consumes its declared contract surface:
-  `undo_note` and `redo_note`, `list_note_versions` and `restore_note_version`,
-  or `find_in_note` and `replace_all_in_note`.
-- Diagnostics export (`CAP-SUP-01`) — rides Epic I alongside CI, since ADR-011's log channel and the nightly benchmark share the observability work.
-- The three built-but-unsurfaced capabilities — backlinks (`CAP-GRAPH-05`), the title-prefix jump (`CAP-FIND-02`), and opening a foreign Workspace (`CAP-WS-05`) — surface as small UI tickets inside Track 1: they need only shell work over shipped Core, and the foreign-Workspace picker is a natural neighbor of `clone_workspace`'s destination selection.
-- **Epic I — Quality & Portability** (revised): continuous integration as the Linux+macOS matrix chosen at Q9, the nightly non-blocking benchmark job verifying every meter in `prd/constraints.md`, images (`CAP-EDIT-06`, `assets/` per Q7), Export surfacing (`CAP-PORT-02`, `export_workspace` + `.okf` archive), and the graph visualization (`CAP-GRAPH-06`).
+Build the canonical Note/Workspace/path model, authoritative sessions, conformance adoption/repair, observer, local editing/history/navigation, history-health warning, and the fully integrated local shell. PR #11’s design system is consumed rather than replanned.
 
-### Built, and still unsurfaced
-Three Core capabilities were built in Epic D with no consumer in Epics E or F.
-They remain unreachable from the running application. This section keeps that
-state visible because Epics A-C shipped Core components with no caller.
+### Phase 3: Assets, portability, and private Remote
 
-- **Backlinks** (`CAP-GRAPH-05`, P1). `WSPC-D009` built the query and `idx_links_target` backs it, but no ticket surfaces inbound Links in the UI. The index work was not wasted: the same table and index serve the link rewriting `WSPC-D006` depends on, which is why it was built then rather than deferred wholesale.
-- **Title-prefix jump** (`CAP-FIND-02`, P1). `WSPC-D009` built `find_notes_by_title`, but `SHEL-E006` is full-text search and no ticket surfaces the title jump. Two notes for whoever picks it up: it matches a **leading prefix only**, which is a deliberate Stage 3 narrowing of CAP-FIND-02's "part of its title" recorded in `tech-spec/contracts/ffi_api.rs`; and its per-keystroke cost is unmeasured, since `schema.sql` declares no index on `notes(title)` and the query scans the Workspace's rows. Measure it before putting it behind a palette.
-- **Opening a foreign Workspace** (`CAP-WS-05`, P1). `WSPC-D004` exposed it and the indexer tolerates non-conformant files for its sake, but no ticket adds a directory picker.
+Implement the Local Asset Store and S3-compatible Object Store, then complete Export, Consolidation, GitHub App authorization, repository lifecycle, second-device join, detach, and reconnect. Credential rotation, replacement-store migration, and full-local preparation remain separate delivery units. These tracks run in parallel wherever the graph permits.
 
-The Epic F planning pass closed three capability-traceability gaps:
+### Phase 4: synchronization and reconciliation
 
-- `EDIT-F002` explicitly covers `CAP-EDIT-02`, including thematic breaks.
-- `EDIT-F006` explicitly covers `CAP-GRAPH-03`, following a Link to its target.
-- `EDIT-F006` also covers `CAP-GRAPH-04`, creating a Note when a ghost Link is
-  followed.
+Implement typed Git analysis, the scheduler, content Suggestions, Lifecycle Decisions, Asset Decisions, compare-and-swap finalization, protected Remote refs, and end-to-end private GitHub synchronization.
 
-The capability sweep left four intentionally deferred items: `CAP-EDIT-06`
-(images) and `CAP-GRAPH-06` (graph visualization) in Epic I, `CAP-SYNC-02` in
-Epic G, and `CAP-EDIT-07`, which is redundant with the keyboard shortcuts in
-`EDIT-F005`. `WSPC-D007` and `WSPC-D004` cover `CAP-WS-02` and `CAP-WS-04`.
+### Phase 5: quality, candidates, gates, and publication
 
-The three built-but-unsurfaced capabilities above need shell work over shipped
-Core to become reachable. Epic E proved that shape by turning `search_notes`
-and the recovery and write-status queries into user-facing surfaces
-(`SHEL-E006`, `SHEL-E007`) without touching Rust. All three belong to Wave 3's
-Track 1. The traceability work closed during Epic F.
+Complete diagnostics, migration, nightly meters, production AppImage/Flake/macOS packaging, and update notification. Construct immutable unpublished candidates, run separate installed AppImage, Nix, and Apple Silicon macOS gates, and publish the GitHub `0.x` prerelease only after all three pass.
 
-### Deferred (Future Scope)
-Mobile targets, multiple simultaneous Workspaces, and adopting a non-empty Remote. Each has a standing entry under `prd/out-of-scope/` explaining the reasoning and the conditions that would reopen it.
+### Explicitly deferred
+
+Only the decisions already under `.constitution/prd/out-of-scope/` remain unplanned: GitLab/second Provider, S3-only Workspaces, HTML export and Publishing, graph visualization, floating formatting toolbar, full history diff viewer, Intel macOS, Linux ARM64, self-updating binaries, signing/notarization during `0.x`, mobile apps, simultaneous Workspaces, and independent-history merging.

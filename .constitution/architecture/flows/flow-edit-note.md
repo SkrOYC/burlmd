@@ -1,111 +1,35 @@
-# Execution Flow: Edit Note
+# Edit Note flow
 
-**Maps to PRD Capability:** CAP-EDIT-01 (the focused Block shows raw Markdown source while every other Block renders formatted), CAP-EDIT-02 (every structural Block type renders and edits under that model), CAP-EDIT-03 (create, split, merge and delete Blocks through ordinary typing), CAP-EDIT-04 (selection spanning multiple Blocks copies as faithful Markdown; range edits dispatch to the Core as single atomic operations), CAP-EDIT-05 (inline emphasis shortcuts wrap or unwrap the focused Block's source text), CAP-WS-02 (every editing session captured in local version history), CAP-WS-03 (in-progress edits survive abrupt termination).
+**Maps to delivered:** CAP-EDIT-01, CAP-EDIT-02, CAP-EDIT-03, CAP-EDIT-04, CAP-EDIT-05, CAP-WS-02, CAP-WS-03.
+
+**Maps to active:** CAP-EDIT-08, CAP-FIND-03.
 
 ```mermaid
 sequenceDiagram
-    participant UI as Presentation Container
-    participant Core as Core Engine
-    participant Local as Local Repository
+    participant UI as Presentation and Interaction
+    participant Core as Core Coordination
+    participant Model as Canonical Note Model
+    participant State as Application State
+    participant Workspace as Workspace Persistence
 
-    UI->>Core: Open Note (concept id)
-    Core->>Local: Read Markdown source
-    Local-->>Core: Raw source
-    Core->>Core: Hash the disk bytes -> base_revision
-    Core->>Local: Look for an unflushed draft row
-    alt A draft exists
-        Local-->>Core: Drafted source
-        Core->>Core: Parse THE DRAFT to AST + span map
-    else No draft
-        Core->>Core: Parse the disk source to AST + span map
-    end
-    Core-->>UI: NoteState (AST, base_revision, restored_from_draft)
-
-    UI->>UI: Render every Block formatted, inside one selection region
-
-    loop Focused Block
-        UI->>Core: Get Block source (block_path)
-        Core-->>UI: Raw Markdown for that Block
-        UI->>UI: Promote Block to raw editable field
-
-        loop Keystroke
-            UI->>Core: Update Block (block_path, new source)
-            Core->>Core: Substitute into working source; resize this span, shift later ones
-            Core->>Local: Write draft row (tier 1, every keystroke)
-            Core-->>UI: Acknowledge (no parse, no AST returned)
-        end
-
-        Note over Core,Local: ~1s idle may elapse while still focused
-        alt On-disk hash matches the current revision
-            Core->>Local: Atomic write (tier 2): writes the working source verbatim
-            Core->>Local: Clear the draft row — it now matches disk
-            Local-->>Core: New revision, which replaces the baseline
-        else Mismatch, or the write fails
-            Core->>Core: Record the error; leave the draft row in place
-            UI->>Core: note_write_status(note_id) — polled, not pushed
-            Core-->>UI: last_error, has_unwritten_edits
-        end
-
-        Note over UI,Core: Block loses focus
-        UI->>Core: Commit Block (block_path)
-        Core->>Core: Reparse the working source, rebuild the span map
-        Core-->>UI: NoteState (new AST)
-
-        Note over Core,Local: ~1s idle after the commit
-        alt On-disk hash matches the current revision
-            Core->>Local: Atomic write (tier 2): temp file + rename
-            Core->>Local: Clear the draft row — it now matches disk
-            Local-->>Core: New revision (content hash), which replaces the baseline
-        else Mismatch, or the write fails
-            Core->>Core: Record the error; leave the draft row in place
-            UI->>Core: note_write_status(note_id) — polled, not pushed
-            Core-->>UI: last_error, has_unwritten_edits
-        end
-    end
-
-    UI->>Core: Close Note (navigate away / quit)
-    Core->>Local: Flush pending write
-    alt This session changed the Note
-        Core->>Local: One Git commit for this session (tier 3)
-        Core->>Local: Clear draft row
-        Core->>Core: notify_activity() to the sync scheduler
-        Local-->>Core: Commit success
-    else Nothing to commit
-        Core->>Core: No commit, no notify — ADR-008 decision 3
-    end
+    UI->>Core: Open Note
+    Core->>Workspace: Read source and current Version
+    Core->>State: Read recoverable draft
+    Core->>Model: Build source-backed Note state from authoritative working source
+    Model-->>Core: Rendered and editable Note state
+    Core-->>UI: Authoritative Note state
+    UI->>Core: Edit, structural operation, undo, redo, find, or replace
+    Core->>Model: Apply one semantic operation
+    Model-->>Core: Source-preserving result and inverse operation
+    Core->>State: Persist recoverable draft and undo state
+    Core-->>UI: Updated Note state
+    UI->>Core: Close Note
+    Core->>Workspace: Flush source and record one changed session Version
 ```
 
-## Opening a Note with a recovered draft parses the draft
+## Failure path
 
-The branch in the open sequence is load-bearing, not presentational. A draft row exists precisely when its content differs from disk, so parsing the disk bytes and *then* reporting that a draft was restored would return an AST of the wrong document — and, worse, build the Core-side span map against bytes that are not the working source, so the first `commit_block` after a recovery would splice at offsets derived from a different file.
-
-The working source is therefore whichever of the two is authoritative, while `base_revision` stays the hash of what is **on disk**, because that is what the tier 2 write must compare against before overwriting it. The two are deliberately drawn from different places, and this is what `SHEL-E007`'s "shows the drafted content rather than the last content written to disk" criterion actually requires.
-
-## Selection across unfocused Blocks, and shortcuts
-
-Two behaviors in this flow's scope never enter the keystroke loop because they happen outside it:
-
-- **Cross-Block selection and copy** (CAP-EDIT-04): while no Block is focused, rendered Blocks participate in one selection region the Presentation Container hosts. Copying dispatches the selection to the Core — expressed as a rendered-text range — which resolves it against its span map and returns faithful Markdown of exactly the selected bytes; the UI never reconstructs source text from what it can see. Deleting or typing over such a selection is one atomic Core operation, not a sequence of per-Block edits: intermediate states the Core never sanctioned are precisely what atomicity forbids.
-- **Emphasis shortcuts** (CAP-EDIT-05): inside the focused Block, shortcut keys wrap the current selection in delimiter characters — ordinary source text manipulation. Because the editable surface already holds raw source, there is nothing to translate; undo sees them as the text edits they are.
-
-The keystroke loop above remains the only path a per-character cost can compound along; neither behavior adds work to it.
-
-## The save phase is a splice, not a serialization
-
-The previous version of this flow specified "Serialize final AST back to Markdown" — a phase that was never implemented, and that could not be implemented without first inventing a canonical Markdown form (bullet character, emphasis delimiter, heading style, wrap policy) that nothing ever specified.
-
-`prd/constraints.md`'s Edit Fidelity constraint makes that approach unusable regardless: writing a Note must leave every byte the user did not edit identical, and an AST-to-Markdown serializer rewrites the whole file by definition. Since CAP-EDIT-01 made editing *raw*, the editor already holds exactly the bytes belonging in the edited Block's span, so the save phase reduces to replacing those bytes. Nothing is reconstructed. See `tech-spec/adrs/ADR-007-span-preserving-splice-edits.md`.
-
-## Why three write tiers rather than one
-
-Draft rows absorb crash durability, so file writes need not be per-keystroke; file writes make the bundle correct on disk, so commits need not be per-write. The commit boundary is the editing *session* — closing the Note — rather than a timer, so that version history reads as one entry per Note per sitting instead of arbitrary time slices splitting a single thought. The accepted cost is that a Note left open for hours is written but uncommitted, and therefore unpushed, for hours. See `tech-spec/adrs/ADR-008-save-and-commit-granularity.md`.
-
-## Nothing parses on the typing path
-
-The keystroke loop above deliberately does not reparse and does not return an AST. While a Block is focused it displays raw source the Presentation Container already holds — the text the user just typed — and no other Block's rendering can change, so a per-keystroke AST would tell the caller nothing. The splice and reparse happen once, when the Block loses focus.
-
-This matters because the alternative is not merely wasteful: a whole-file reparse plus an encrypted draft write plus a full-AST payload, on a synchronous FFI call, is exactly the composition that would blow the 16ms budget in `prd/constraints.md`. An earlier draft of this flow placed the reparse inside the keystroke loop, contradicting `risks.md` risk 7 and both ADR-007 and ADR-008, all three of which claim the tiering keeps reparse off the typing path.
-
-## `block_path` is not stable across a commit
-
-A splice can change a Block's node shape — a paragraph that gains a leading `- ` reparses as a list. The Presentation Container must therefore re-derive focus from the returned `NoteState` rather than retaining a path across a mutation. This is a real constraint on the UI, not an implementation detail.
+- If draft persistence fails, Core reports unwritten state and doesn't claim durability.
+- If the source revision changed, Core preserves the draft and routes the candidate disk change through the guest-change flow.
+- Replace-all applies as one operation or leaves the Note unchanged.
+- A close warning or failure follows the desktop-session flow.

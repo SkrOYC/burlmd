@@ -1,8 +1,25 @@
 ---
-version: v1.6.12
+version: v1.7.2-provisional
 ---
 
 # Bill of Materials (BOM) & Stack
+
+## Forward reconciliation status
+
+This is a provisional Stage 3 specification. It authorizes the five research Spikes in `contracts/provisional-spikes.toml`; it does not authorize production implementation of the forward capabilities introduced by PRD v1.3.2 and Architecture v1.4.2. The final Stage 3 evolution must replace every candidate below with measured selections and reconcile the brownfield FFI and data contracts before implementation Tasks are adapted for execution.
+
+The delivered application remains on Flutter 3.44.3, Dart 3.12.2, Rust 1.97.1, Git 2.54.0, and the dependency versions recorded below. Current documentation and registries were checked on 2026-08-25; a registry result is evidence for a Spike candidate, not permission to add that package to production.
+
+| Decision area | Delivered baseline | Candidates to measure | Adoption state |
+| :--- | :--- | :--- | :--- |
+| Canonical Markdown AST | `pulldown-cmark =0.12.2` events projected into a reduced `AstNode` | `markdown` 1.0.0 mdast; Comrak 0.54.0; complete model over `pulldown-cmark` 0.12.2 and 0.13.4 | Spike; OD-04 open |
+| Reconciliation analysis | `gix` 0.86.0 plus ambient Git CLI | version-locked Git 2.54.0 CLI, including structured `merge-tree --write-tree -z --messages` output and plumbing fallbacks | Spike; final command protocol open |
+| Workspace observation | explicit Rescan only | `notify` 8.2.0 `RecommendedWatcher`, with polling fallback for unsupported or network filesystems | Candidate; final Stage 3 must pin and contract it |
+| S3-compatible objects | none | `aws-sdk-s3` 1.144.0 with `aws-config` 1.11.0; `object_store` 0.14.1 | Spike; client and compatibility floor open |
+| Image probing | Flutter decoder only | `image` 0.25.10 for deterministic metadata/decode measurements | Spike-only candidate |
+| Release construction | development builds only | Flutter release builds, x86-64 AppImage, release-tagged Nix Flake, Apple Silicon macOS archive | Spike; Linux baseline OD-08 open |
+
+`markdown::to_mdast(&str, &ParseOptions) -> Result<Node, Message>` and mdast node positions are confirmed in the 1.0.0 API. GitHub's current GitHub App device-flow and token documentation, the S3 SDK endpoint/path-style configuration surfaces, the local Git CLI help, and the pinned Flutter SDK are the external verification anchors for the provisional decisions. Each Spike must record exact resolved versions and immutable lock files in its result.
 
 ## Presentation Layer (UI Container)
 - **Framework:** Flutter (stable channel)

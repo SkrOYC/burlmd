@@ -1,3 +1,10 @@
+-- FORWARD STATUS (TechSpec v1.7.2-provisional): this is the delivered v2
+-- derived-index schema. It does not yet model application session state,
+-- excluded/repairable paths, Workspace observation, external-change
+-- decisions, asset/object state, or typed Git reconciliation. Research Tasks
+-- must not extend it. See provisional-forward-models.md; final Stage 3 owns
+-- the migration after the AST, path, Git, asset, and packaging evidence lands.
+--
 -- Physical schema for the SQLite Local Index (ENCRYPTED via SQLCipher).
 --
 -- This is the second of the Local Repository's two storage forms. The first is

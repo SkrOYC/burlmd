@@ -1,59 +1,30 @@
-# Execution Flow: Workspace Bootstrap & Encryption Setup
+# Workspace bootstrap and adoption flow
 
-**Maps to PRD Capability:** CAP-WS-01 (begin writing on first launch with no account, no provider authorization, and no network connection), CAP-WS-04 (local data protected at rest).
+**Maps to delivered:** CAP-WS-01, CAP-WS-04, CAP-WS-06.
 
-This flow contains no network step and no credential. That is the point: `prd/constraints.md`'s Local-First Mandate requires the application be fully functional disconnected, and this is the entire path from a cold start to a writable Workspace.
+**Maps to active:** CAP-WS-05, CAP-WS-13.
 
 ```mermaid
-sequenceDiagram
-    participant UI as Presentation Container
-    participant Core as Core Engine
-    participant OS as Secure Storage (Keychain)
-    participant Local as Local Repository
-
-    UI->>Core: Open Workspace (path: default)
-    Core->>Local: Resolve Workspace directory
-    alt Directory absent (first launch)
-        Core->>Local: Create directory
-        Core->>Local: Initialize Git repository in place
-        Local-->>Core: Empty repository, no Remote
-    end
-
-    Core->>OS: Read root encryption key
-    alt Key absent (first boot)
-        Core->>Core: Generate AES-256 root key (CSPRNG)
-        Core->>OS: Store root key
-        OS-->>Core: OK
-    end
-    OS-->>Core: Root key
-
-    Core->>Local: Open encrypted index with root key
-    Core->>Local: Write workspaces row (provider 'local', remote_url NULL)
-    Core->>Local: Scan bundle, build index
-    Local-->>Core: Notes, Directories, Links indexed
-
-    Core-->>UI: WorkspaceInfo (provider: "local", remote_url: null)
+stateDiagram-v2
+    [*] --> Select
+    Select --> CreateLocal: Create local Workspace
+    Select --> Preflight: Open or switch Workspace
+    Select --> JoinRemote: Join connected Workspace
+    Preflight --> RepairReview: Invalid Notes found
+    RepairReview --> Preflight: Repair or Exclude decisions complete
+    Preflight --> Initialize: Valid adoption set
+    CreateLocal --> Initialize
+    JoinRemote --> Initialize
+    Initialize --> Usable: Local history, secure index, and session scope ready
+    Usable --> Rescan: Writer requests recovery
+    Rescan --> Usable
 ```
 
-## Why the root key is generated here, not during authentication
-
-`flow-auth-handshake.md` previously generated and stored the root encryption key as a step of the OAuth handshake. The two were only ever adjacent in the original sequence, never causally related: the key encrypts the *local* index, which exists whether or not a Remote is ever attached. Placing the key behind authentication meant an unauthenticated user had no index, and therefore no application — see `prd/out-of-scope/mandatory-account-on-first-run.md`. Bootstrap owns it now, unconditionally.
-
-## Three bootstrap paths, one post-condition
-
-A Workspace can also arrive by **clone**, when a user attaches an existing Remote on a second device, or by **adoption** — `open_workspace`, pointing the application at a directory it did not create (CAP-WS-05). All three must converge on identical post-conditions — index initialized, root key present, `workspaces` row written, bundle indexed, **repository present** — so that no later code needs to ask which path produced the Workspace it is looking at.
-
-The last of those post-conditions is what makes adoption a real third path rather than a shortcut. Tier 3 makes a Git commit on every Note close, so a Workspace adopted from a directory with no history has nothing to commit into: `CAP-WS-02` would be unsatisfiable for every session in it and `close_note` would fail on the routine path. Adoption therefore initializes a repository when the directory has none, and adopts the existing history when it has one — see ADR-005 decision 8. Creating `.git/` in a directory the user pointed at is a real side effect, and the accepted one: the alternative is a Workspace that silently cannot keep history, discovered on the first close.
-
-## Indexing cost
-
-The scan step is bounded by `prd/constraints.md`'s Workspace Open Latency constraint: interaction must not block for more than 1 second regardless of Note count. For any Workspace large enough to exceed that, indexing continues incrementally in the background while the Workspace is already usable, per `risks.md` risk 3.
+Every entry path converges on one active Workspace with local history, secure aggregate indexing, authority state, and per-Workspace session scope.
 
 ## Failure path
 
-Bootstrap is the one flow whose failures are total: if it cannot converge on its post-conditions, there is no application to degrade gracefully within. Each failure therefore names its honest surface.
-
-- **Keychain unavailable:** the root key cannot be stored or read back, so the encrypted index cannot open. The application reports this at startup rather than silently falling back to an unencrypted index — the At-Rest Protection constraint makes that fallback a lie. Recovery belongs to the user (unlock the keychain, free disk space); retrying bootstrap converges because every step is idempotent.
-- **Workspace directory unwritable** (permissions, full disk): creation or repository initialization fails with a path-specific error naming the directory, before any index work begins. Nothing partial is left behind that a retry would trip over.
-- **Repository initialization fails:** adoption and initialize-local both report it and stop. A Workspace without history cannot honor CAP-WS-02, so proceeding without one would manufacture the exact silently-broken state ADR-005 decision 8 exists to prevent.
-- **Index build fails mid-scan:** the bundle on disk is untouched — the scan only reads. The Workspace opens with whatever indexed correctly and the rescan affordance rebuilds the rest; per the Local-First Mandate the user can still open and edit Notes while the index heals.
+- Secure index setup failure never falls back to an unprotected aggregate index.
+- Invalid Notes remain excluded and uneditable until previewed Repair or Exclude.
+- A Workspace switch runs the desktop-session close flow before changing the active Workspace.
+- Partial initialization is recoverable and doesn't rewrite guest Note bytes silently.

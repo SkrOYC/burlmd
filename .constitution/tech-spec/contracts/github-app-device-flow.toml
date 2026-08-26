@@ -1,0 +1,56 @@
+schema_version = 1
+status = "accepted-provisional-contract"
+provider = "github"
+repository_visibility = "private-only"
+client_credential = "public-client-id"
+forbidden_embedded_credentials = ["client_secret", "github_app_private_key"]
+rest_api_version = "2026-03-10"
+
+[permissions.repository]
+contents = "write"
+administration = "write"
+metadata = "read-implicit"
+
+[device_authorization]
+method = "POST"
+url = "https://github.com/login/device/code"
+required_fields = ["client_id"]
+accept = "application/json"
+response_fields = ["device_code", "user_code", "verification_uri", "expires_in", "interval"]
+
+[device_token_poll]
+method = "POST"
+url = "https://github.com/login/oauth/access_token"
+grant_type = "urn:ietf:params:oauth:grant-type:device_code"
+required_fields = ["client_id", "device_code", "grant_type"]
+accept = "application/json"
+respect_server_interval = true
+slow_down_adds_seconds = 5
+terminal_errors = ["expired_token", "access_denied"]
+transient_states = ["authorization_pending", "slow_down"]
+
+[refresh]
+method = "POST"
+url = "https://github.com/login/oauth/access_token"
+grant_type = "refresh_token"
+required_fields = ["client_id", "grant_type", "refresh_token"]
+rotate_pair_atomically = true
+on_bad_refresh_token = "restart-device-flow"
+
+[token_storage]
+location = "platform-secure-storage"
+values = ["access_token", "refresh_token", "access_token_expires_at", "refresh_token_expires_at"]
+forbidden_locations = ["workspace", "git-config", "remote-url", "diagnostics", "dart-persistent-state"]
+
+[git_http]
+username = "x-access-token"
+password_source = "current-user-access-token"
+credential_lifetime = "one-process-invocation"
+
+[connection]
+require_app_installation = true
+require_repository_covered_by_installation = true
+provisioned_repository_private = true
+provisioned_repository_empty = true
+existing_repository_private = true
+existing_repository_empty_or_exact_reconnect = true

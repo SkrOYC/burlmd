@@ -1,0 +1,101 @@
+schema_version = 3
+stage = "tech-spec-v1.7.2-provisional"
+production_implementation_authorized = false
+result_schema = ".constitution/tech-spec/contracts/spike-result.schema.json"
+
+[rules]
+write_policy = "allowlist"
+required_result = "results.json"
+commit_lockfiles = true
+record_exact_versions = true
+validate_declared_candidates_and_gates = true
+all_unlisted_repository_paths_are_read_only = true
+validate_unique_run_ids_and_required_roles = true
+validate_candidate_attribution = true
+validate_artifact_containment_existence_size_and_sha256 = true
+capture_command_exit_status_stdout_and_stderr = true
+
+[[spikes]]
+id = "SPK-AST-H001"
+decision = "OD-04"
+path = ".constitution/prototypes/ast"
+write_allowlist = [".constitution/prototypes/ast", ".constitution/spikes/SPK-AST-H001.md"]
+create_commands = [{ workdir = ".", command = "cargo init --bin .constitution/prototypes/ast" }]
+verification_steps = [
+  { workdir = ".", command = "cargo test --locked --manifest-path .constitution/prototypes/ast/Cargo.toml --all-targets" },
+  { workdir = ".", command = "cargo run --locked --release --manifest-path .constitution/prototypes/ast/Cargo.toml -- --contract .constitution/tech-spec/contracts/provisional-spikes.toml --schema .constitution/tech-spec/contracts/spike-result.schema.json --output .constitution/prototypes/ast/results.json" },
+]
+candidates = ["markdown 1.0.0 mdast", "comrak 0.54.0", "pulldown-cmark complete model"]
+required_gates = ["exhaustive CommonMark representation", "exhaustive selected GFM representation", "frontmatter", "raw HTML", "reference definitions", "tables", "footnotes", "images", "nested formatting", "malformed input", "exact byte positions", "byte-identical untouched source", "OKF link and ghost classification", "block paths", "rendered selections", "structural and range edits", "conflict representation", "existing note-size latency meters", "FFI projection size and latency"]
+
+[[spikes]]
+id = "SPK-PATH-H002"
+decision = "OD-05"
+path = ".constitution/prototypes/path"
+write_allowlist = [".constitution/prototypes/path", ".constitution/spikes/SPK-PATH-H002.md"]
+create_commands = [{ workdir = ".", command = "cargo init --bin .constitution/prototypes/path" }]
+verification_steps = [
+  { workdir = ".", command = "cargo test --locked --manifest-path .constitution/prototypes/path/Cargo.toml --all-targets" },
+  { run_id = "linux-default-filesystem", workdir = ".", command = "cargo run --locked --release --manifest-path .constitution/prototypes/path/Cargo.toml -- probe --run-id linux-default-filesystem --output .constitution/prototypes/path/runs/linux-default-filesystem.json" },
+  { run_id = "macos-default-filesystem", workdir = ".", command = "cargo run --locked --release --manifest-path .constitution/prototypes/path/Cargo.toml -- probe --run-id macos-default-filesystem --output .constitution/prototypes/path/runs/macos-default-filesystem.json" },
+  { workdir = ".", command = "cargo run --locked --release --manifest-path .constitution/prototypes/path/Cargo.toml -- aggregate --contract .constitution/tech-spec/contracts/provisional-spikes.toml --schema .constitution/tech-spec/contracts/spike-result.schema.json --require-run linux-default-filesystem --require-run macos-default-filesystem --output .constitution/prototypes/path/results.json" },
+]
+candidates = ["canonical encoded title-derived component", "canonical opaque path component with title in frontmatter"]
+required_gates = ["Unicode normalization", "case equivalence", "Windows reserved names and characters", "trailing dot and space handling", "component and path limits", "deterministic collision disambiguation", "case-only rename", "ghost-link inversion", "default Linux and macOS filesystem probes", "symlink and submodule rejection"]
+
+[[spikes]]
+id = "SPK-GIT-L001"
+decision = "ADR-015"
+path = ".constitution/prototypes/git-analysis"
+write_allowlist = [".constitution/prototypes/git-analysis", ".constitution/spikes/SPK-GIT-L001.md"]
+create_commands = [{ workdir = ".", command = "cargo init --bin .constitution/prototypes/git-analysis" }]
+verification_steps = [
+  { workdir = ".", command = "cargo test --locked --manifest-path .constitution/prototypes/git-analysis/Cargo.toml --all-targets" },
+  { workdir = ".", command = "cargo run --locked --release --manifest-path .constitution/prototypes/git-analysis/Cargo.toml -- --git-command git --required-version 2.54.0 --contract .constitution/tech-spec/contracts/provisional-spikes.toml --schema .constitution/tech-spec/contracts/spike-result.schema.json --output .constitution/prototypes/git-analysis/results.json" },
+]
+candidates = ["git merge-tree structured analysis", "temporary-index Git plumbing", "isolated temporary-worktree porcelain"]
+required_gates = ["clean and overlapping text edits", "add-add and modify-delete", "rename-edit rename-delete rename-rename rename-add and many-to-one rename", "file-directory conflicts and directory rename effects", "file mode symlink submodule and type changes", "binary assets", "case and Unicode path collisions", "dirty tracked files and untracked checkout blockers", "invalid merge bases and unrelated histories", "interruption and fault injection at every durable transition", "literal Markdown marker examples", "structured conflict records index stages tentative tree ids and exit status", "no mutation of the authoritative worktree", "deterministic NUL-delimited parsing without human error text", "hostile hooks filters merge drivers credential helpers and Git configuration disabled", "reconciliation crash resume and compare-and-swap inputs", "Git redistribution license obligations"]
+
+[[spikes]]
+id = "SPK-ASSET-I001"
+decision = "OD-06,OD-07,ADR-016"
+path = ".constitution/prototypes/assets"
+write_allowlist = [".constitution/prototypes/assets", ".constitution/spikes/SPK-ASSET-I001.md"]
+create_commands = [{ workdir = ".", command = "cargo init --bin .constitution/prototypes/assets" }]
+verification_steps = [
+  { workdir = ".", command = "cargo test --locked --manifest-path .constitution/prototypes/assets/Cargo.toml --all-targets" },
+  { run_id = "linux-reference", run_role = "linux-reference-profile", workdir = ".", command = "cargo run --locked --release --manifest-path .constitution/prototypes/assets/Cargo.toml -- probe --run-id linux-reference --profile linux-i5-8250u-16gib --fixture-dir .constitution/prototypes/assets/fixtures --output .constitution/prototypes/assets/runs/linux-reference.json" },
+  { run_id = "macos-reference", run_role = "macos-reference-profile", workdir = ".", command = "cargo run --locked --release --manifest-path .constitution/prototypes/assets/Cargo.toml -- probe --run-id macos-reference --profile macos-m1-8gib --fixture-dir .constitution/prototypes/assets/fixtures --output .constitution/prototypes/assets/runs/macos-reference.json" },
+  { workdir = ".", command = "cargo run --locked --release --manifest-path .constitution/prototypes/assets/Cargo.toml -- aggregate --contract .constitution/tech-spec/contracts/provisional-spikes.toml --schema .constitution/tech-spec/contracts/spike-result.schema.json --require-role linux-reference-profile --require-role macos-reference-profile --output .constitution/prototypes/assets/results.json" },
+]
+candidates = ["aws-sdk-s3 1.144.0 plus aws-config 1.11.0", "object_store 0.14.1"]
+required_gates = ["content identity and deduplication", "immutable manifest round trip", "device-local verification and hydration state", "decode memory and pixel dimensions", "Linux reference profile", "macOS reference profile", "UI Responsiveness Goal 99 percent frames within 16.7 milliseconds and input effect within 50 milliseconds", "UI Responsiveness Fail more than 1 percent frames over 33.3 milliseconds or input effect over 100 milliseconds", "Idle Memory Goal at most 400 MB", "Idle Memory Fail at least 1 GB or growth above 5 percent over four hours", "25 MiB provisional import limit", "leave OD-06 unresolved when the isolated harness cannot establish full UI or idle-memory meters", "offline hydration", "endpoint and path-style compatibility", "list read write delete validation", "anonymous-read rejection", "protected Git and reconciliation reachability", "30-day cache and authoritative deletion planning", "repository growth and maintenance meters"]
+
+[[spikes]]
+id = "SPK-PKG-M001"
+decision = "OD-08,ADR-018"
+path = ".constitution/prototypes/packaging"
+write_allowlist = [".constitution/prototypes/packaging", ".constitution/spikes/SPK-PKG-M001.md"]
+create_commands = [
+  { workdir = ".", command = "flutter create --platforms=linux,macos .constitution/prototypes/packaging/harness" },
+  { workdir = ".", command = "cargo init --bin .constitution/prototypes/packaging/result-tool" },
+]
+verification_steps = [
+  { run_id = "linux-flake-check", run_role = "linux-flake-check", workdir = ".constitution/prototypes/packaging", command = "cargo run --locked --release --manifest-path result-tool/Cargo.toml -- execute --run-id linux-flake-check --role linux-flake-check --output runs/linux-flake-check.json --stdout logs/linux-flake-check.stdout --stderr logs/linux-flake-check.stderr --success-marker artifacts/linux-flake-check.ok -- nix flake check --print-build-logs" },
+  { run_id = "linux-build", run_role = "linux-build", workdir = ".constitution/prototypes/packaging", command = "cargo run --locked --release --manifest-path result-tool/Cargo.toml -- execute --run-id linux-build --role linux-build --output runs/linux-build.json --stdout logs/linux-build.stdout --stderr logs/linux-build.stderr --artifact result-links/appimage -- nix build --print-build-logs --out-link result-links/appimage .#checks.x86_64-linux.appimage" },
+  { run_id = "linux-flake-install", run_role = "linux-flake-install", workdir = ".constitution/prototypes/packaging", command = "cargo run --locked --release --manifest-path result-tool/Cargo.toml -- execute --run-id linux-flake-install --role linux-flake-install --output runs/linux-flake-install.json --stdout logs/linux-flake-install.stdout --stderr logs/linux-flake-install.stderr --artifact result-links/flake-install -- nix build --print-build-logs --out-link result-links/flake-install .#checks.x86_64-linux.flake-install" },
+  { run_id = "linux-appimage-installed-probe", run_role = "linux-installed-runtime", workdir = ".constitution/prototypes/packaging", command = "cargo run --locked --release --manifest-path result-tool/Cargo.toml -- execute --run-id linux-appimage-installed-probe --role linux-installed-runtime --output runs/linux-appimage-installed-probe.json --stdout logs/linux-appimage-installed-probe.stdout --stderr logs/linux-appimage-installed-probe.stderr --artifact result-links/appimage-installed-probe -- nix build --print-build-logs --out-link result-links/appimage-installed-probe .#checks.x86_64-linux.appimage-installed-probe" },
+  { run_id = "linux-flake-installed-probe", run_role = "linux-installed-runtime", workdir = ".constitution/prototypes/packaging", command = "cargo run --locked --release --manifest-path result-tool/Cargo.toml -- execute --run-id linux-flake-installed-probe --role linux-installed-runtime --output runs/linux-flake-installed-probe.json --stdout logs/linux-flake-installed-probe.stdout --stderr logs/linux-flake-installed-probe.stderr --artifact result-links/flake-installed-probe -- nix build --print-build-logs --out-link result-links/flake-installed-probe .#checks.x86_64-linux.flake-installed-probe" },
+  { run_id = "ubuntu-22.04-x86_64", run_role = "linux-runtime-candidate", workdir = ".constitution/prototypes/packaging", command = "cargo run --locked --release --manifest-path result-tool/Cargo.toml -- execute --run-id ubuntu-22.04-x86_64 --role linux-runtime-candidate --output runs/ubuntu-22.04-x86_64.json --stdout logs/ubuntu-22.04.stdout --stderr logs/ubuntu-22.04.stderr --artifact result-links/ubuntu-22.04 -- nix build --print-build-logs --out-link result-links/ubuntu-22.04 .#checks.x86_64-linux.ubuntu-22_04" },
+  { run_id = "ubuntu-24.04-x86_64", run_role = "linux-runtime-candidate", workdir = ".constitution/prototypes/packaging", command = "cargo run --locked --release --manifest-path result-tool/Cargo.toml -- execute --run-id ubuntu-24.04-x86_64 --role linux-runtime-candidate --output runs/ubuntu-24.04-x86_64.json --stdout logs/ubuntu-24.04.stdout --stderr logs/ubuntu-24.04.stderr --artifact result-links/ubuntu-24.04 -- nix build --print-build-logs --out-link result-links/ubuntu-24.04 .#checks.x86_64-linux.ubuntu-24_04" },
+  { run_id = "ubuntu-26.04-x86_64", run_role = "linux-runtime-candidate", workdir = ".constitution/prototypes/packaging", command = "cargo run --locked --release --manifest-path result-tool/Cargo.toml -- execute --run-id ubuntu-26.04-x86_64 --role linux-runtime-candidate --output runs/ubuntu-26.04-x86_64.json --stdout logs/ubuntu-26.04.stdout --stderr logs/ubuntu-26.04.stderr --artifact result-links/ubuntu-26.04 -- nix build --print-build-logs --out-link result-links/ubuntu-26.04 .#checks.x86_64-linux.ubuntu-26_04" },
+  { run_id = "debian-12-x86_64", run_role = "linux-runtime-candidate", workdir = ".constitution/prototypes/packaging", command = "cargo run --locked --release --manifest-path result-tool/Cargo.toml -- execute --run-id debian-12-x86_64 --role linux-runtime-candidate --output runs/debian-12-x86_64.json --stdout logs/debian-12.stdout --stderr logs/debian-12.stderr --artifact result-links/debian-12 -- nix build --print-build-logs --out-link result-links/debian-12 .#checks.x86_64-linux.debian-12" },
+  { run_id = "debian-13-x86_64", run_role = "linux-runtime-candidate", workdir = ".constitution/prototypes/packaging", command = "cargo run --locked --release --manifest-path result-tool/Cargo.toml -- execute --run-id debian-13-x86_64 --role linux-runtime-candidate --output runs/debian-13-x86_64.json --stdout logs/debian-13.stdout --stderr logs/debian-13.stderr --artifact result-links/debian-13 -- nix build --print-build-logs --out-link result-links/debian-13 .#checks.x86_64-linux.debian-13" },
+  { run_id = "macos-current-aarch64", run_role = "macos-current-stable", workdir = ".constitution/prototypes/packaging/harness", command = "cargo run --locked --release --manifest-path ../result-tool/Cargo.toml -- execute --run-id macos-current-aarch64 --role macos-current-stable --output ../runs/macos-current-aarch64.json --stdout ../logs/macos-current.stdout --stderr ../logs/macos-current.stderr --artifact build/macos/Build/Products/Release --copy-artifact-to ../artifacts/macos-current -- flutter build macos --release" },
+  { run_id = "macos-current-aarch64", run_role = "macos-current-stable", workdir = ".constitution/prototypes/packaging/harness", command = "cargo run --locked --release --manifest-path ../result-tool/Cargo.toml -- execute --append --run-id macos-current-aarch64 --role macos-current-stable --output ../runs/macos-current-aarch64.json --stdout ../logs/macos-current-probe.stdout --stderr ../logs/macos-current-probe.stderr --artifact ../artifacts/macos-current-probe.json -- build/macos/Build/Products/Release/harness.app/Contents/MacOS/harness --burlmd-packaging-probe ../artifacts/macos-current-probe.json" },
+  { run_id = "macos-previous-aarch64", run_role = "macos-previous-stable", workdir = ".constitution/prototypes/packaging/harness", command = "cargo run --locked --release --manifest-path ../result-tool/Cargo.toml -- execute --run-id macos-previous-aarch64 --role macos-previous-stable --output ../runs/macos-previous-aarch64.json --stdout ../logs/macos-previous.stdout --stderr ../logs/macos-previous.stderr --artifact build/macos/Build/Products/Release --copy-artifact-to ../artifacts/macos-previous -- flutter build macos --release" },
+  { run_id = "macos-previous-aarch64", run_role = "macos-previous-stable", workdir = ".constitution/prototypes/packaging/harness", command = "cargo run --locked --release --manifest-path ../result-tool/Cargo.toml -- execute --append --run-id macos-previous-aarch64 --role macos-previous-stable --output ../runs/macos-previous-aarch64.json --stdout ../logs/macos-previous-probe.stdout --stderr ../logs/macos-previous-probe.stderr --artifact ../artifacts/macos-previous-probe.json -- build/macos/Build/Products/Release/harness.app/Contents/MacOS/harness --burlmd-packaging-probe ../artifacts/macos-previous-probe.json" },
+  { workdir = ".constitution/prototypes/packaging", command = "cargo run --locked --release --manifest-path result-tool/Cargo.toml -- aggregate --contract ../../tech-spec/contracts/provisional-spikes.toml --schema ../../tech-spec/contracts/spike-result.schema.json --require-role linux-flake-check --require-role linux-build --require-role linux-flake-install --require-role linux-installed-runtime=2 --require-role linux-runtime-candidate=5 --require-role macos-current-stable --require-role macos-previous-stable --require-distinct-macos-versions=2 --output results.json" },
+]
+candidates = ["x86-64 AppImage", "release-tagged Nix Flake", "Apple Silicon macOS release archive"]
+required_gates = ["launch installed representative harness", "version-locked Git CLI and runtime", "secure storage", "file picker", "bundled native library", "no emulated platform chrome", "lowest working Linux runtime", "named Linux distribution matrix", "two most recent macOS major versions", "Apple Silicon output", "checksum and provenance metadata", "secret-injection seams", "compatible 0.x prerelease update-channel selection", "GitHub Release artifact layout", "repeatable construction", "unsigned 0.x disclosure"]
