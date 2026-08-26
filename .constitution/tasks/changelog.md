@@ -1,5 +1,9 @@
 # Stage 4: Tasks changelog
 
+## v2.1.19 - 2026-08-26
+
+PR #12 full review round 17 closes two P1 and one P2 evidence gaps. PATH roles are bound to Linux/ext4 and macOS/APFS. Packaging requires Linux/x86-64 build hosts and system-captured guest evidence for every named Ubuntu and Debian runtime. GitHub REST fixtures assert the accepted media type and `X-GitHub-Api-Version` header. Ticket count, effort, dependencies, and critical path remain 80 tickets, 564 points, 217 edges, and 153 points.
+
 ## v2.1.18 - 2026-08-26
 
 PR #12 full review round 15 fixes the executable Spike bootstrap. Every Rust prototype now creates and commits a lockfile before its first `--locked` command and regenerates that lock after CLI-declared dependency changes. Ticket count, effort, dependencies, and critical path remain 80 tickets, 564 points, 217 edges, and 153 points.
