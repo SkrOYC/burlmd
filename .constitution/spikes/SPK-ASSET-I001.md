@@ -18,7 +18,7 @@
 ## Codebase baseline
 
 - **State today:** No production asset/object schema or S3-compatible client exists; images aren't complete user-facing behavior.
-- **Discovered constraints:** AST references are authoritative for active use; protected Git/reconciliation states override age; credentials remain in Platform secure storage; local Note work survives Object Store failure. Reference-profile evidence must come from distinct Linux and macOS hosts whose CPU, cores, memory, storage, graphics, display, power, and thermal facts are captured through system APIs and match the PRD. The hosts exchange only opaque SHA-256-verified handoff bundles.
+- **Discovered constraints:** AST references are authoritative for active use; protected Git/reconciliation states override age; credentials remain in Platform secure storage; local Note work survives Object Store failure. During `0.x`, burlmd can evict verified local cache copies but can't delete authoritative Object Store bytes because Git publication and generic S3-compatible deletion aren't atomic. Reference-profile evidence must come from distinct Linux and macOS hosts whose CPU, cores, memory, storage, graphics, display, power, and thermal facts are captured through system APIs and match the PRD. The hosts exchange only opaque SHA-256-verified handoff bundles.
 
 ## Options and trade-offs
 

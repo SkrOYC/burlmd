@@ -1,5 +1,5 @@
 ---
-version: v2.1.10
+version: v2.1.11
 status: active
 epic: I
 ---
@@ -8,9 +8,9 @@ epic: I
 
 Deliver inline images through a portable Local Asset Store and a first-class, user-controlled S3-compatible Object Store. ASSET-I001 runs first; dependent tickets adapt to the measured manifest, client, limits, and repository-health contract accepted by the upstream evolution pass.
 
-**Capability coverage:** CAP-EDIT-06, CAP-ASSET-01, CAP-ASSET-02, CAP-ASSET-03, CAP-ASSET-04, CAP-ASSET-05, CAP-ASSET-06, CAP-ASSET-07, CAP-ASSET-08, CAP-ASSET-09, CAP-ASSET-10, CAP-ASSET-11, CAP-ASSET-12.
+**Capability coverage:** CAP-EDIT-06, CAP-ASSET-01, CAP-ASSET-02, CAP-ASSET-03, CAP-ASSET-04, CAP-ASSET-05, CAP-ASSET-06, CAP-ASSET-08, CAP-ASSET-09, CAP-ASSET-10, CAP-ASSET-11, CAP-ASSET-12.
 
-**Total Effort:** 92 story points
+**Total Effort:** 98 story points
 
 #### ASSET-I001 Measure the hybrid Asset and Object Store contract
 - **Type:** Spike
@@ -45,22 +45,25 @@ Candidate-attributed results cover both reference profiles, all declared gates, 
 - **Scope (In-Scope Files):**
   - `rust/src/assets/**`
   - `rust/src/workspace/**`
+  - `rust/src/git/operations.rs`
   - `rust/src/api/ffi_api.rs`
   - `rust/Cargo.toml`
   - `rust/Cargo.lock`
+  - `test/**`
 - **Scope (Out-of-Scope Files):**
   - Remote transfer and mutable device state owned by later tickets
 - **Verification Command:** `cargo test --manifest-path rust/Cargo.toml && cargo clippy --workspace --all-targets --manifest-path rust/Cargo.toml -- -D warnings && ./scripts/check-generated-bindings.sh && git diff --check`
-- **Expected Success Output:** exit 0 with identity, dedupe, manifest, atomic-copy, and containment tests passing
+- **Expected Success Output:** exit 0 with identity, dedupe, manifest, atomic-copy, containment, and Git-payload-exclusion tests passing
 - **STOP Conditions:**
   - STOP if final TechSpec hasn't accepted ASSET-I001 or mutable device state enters the Git manifest.
-- **Description:** Add the accepted content identity, canonical `assets/` path, immutable textual manifest, atomic imported-byte adoption, deduplication, and local verification state.
+  - STOP if commit safety depends on a writable, readable, present, or trustworthy `.gitignore` file.
+- **Description:** Add the accepted content identity, canonical `assets/objects/` payload path, immutable textual manifest, atomic imported-byte adoption, deduplication, and local verification state. Enforce a Core commit-path exclusion for `assets/objects/**` before staging, independent of ignore files and ambient Git configuration. Stage only authoritative Note and textual-manifest paths selected by the operation.
 - **Acceptance:**
   - **Mode:** invariant
   - **Evidence:**
 
 ```text
-Byte-identical imports share one Object; distinct bytes never collide; active bytes are copied inside the contained Workspace before reference; the manifest contains only accepted immutable facts; and device-local hydration/verification state never enters Git.
+Byte-identical imports share one Object; distinct bytes never collide; active bytes are copied inside the contained Workspace before reference; the manifest contains only accepted immutable facts; and device-local hydration/verification state never enters Git. Missing, modified, unreadable, or symlinked `.gitignore` fixtures can't place payload bytes in the index or a commit. Existing tracked payload paths, broad commit requests, and adversarial path aliases fail closed before staging, while the textual manifest remains committable.
 ```
 
 #### IMAGE-I003 Complete inline image import and rendering
@@ -199,16 +202,16 @@ And resume occurs only after the resulting Object verifies
 - **Scope (Out-of-Scope Files):**
   - Pruning Git history
 - **Verification Command:** `cargo test --manifest-path rust/Cargo.toml && cargo clippy --workspace --all-targets --manifest-path rust/Cargo.toml -- -D warnings && git diff --check`
-- **Expected Success Output:** exit 0 with generated-history reachability and 30-day decision simulations passing
+- **Expected Success Output:** exit 0 with generated-history reachability, 30-day local cache eviction, and remote-deletion refusal simulations passing
 - **STOP Conditions:**
-  - STOP if age overrides reachability or incomplete Remote enumeration permits authoritative deletion.
-- **Description:** Derive Object reachability from canonical AST references across every Protected State, separate local cache eviction from authoritative deletion, and fail closed on incomplete history.
+  - STOP if age overrides reachability, cache eviction lacks a verified remote copy, or any path can delete an authoritative Object Store byte.
+- **Description:** Derive Object reachability from canonical AST references across every Protected State, evict only verified inactive local cache copies after 30 days, and prohibit authoritative Object Store deletion during `0.x`.
 - **Acceptance:**
   - **Mode:** invariant
   - **Evidence:**
 
 ```text
-Property tests generate branches, tags, local/unpushed history, reconciliation, Consolidation, and unreachable Objects. Every reachable Object survives regardless of age; eviction requires a verified remote copy and no current offline need; authoritative deletion requires complete enumeration and 30 days of unreachability.
+Property tests generate arbitrary advertised refs, local or unpublished history, reconciliation, Consolidation, and unreachable Objects. Every reachable Object survives regardless of age. Local eviction requires a verified remote copy, 30 unused days, and no active offline need. No production path issues delete for an authoritative Object; delete remains limited to disposable connection probes.
 ```
 
 #### ROTATE-I008 Rotate Object Store credentials atomically
@@ -239,32 +242,36 @@ Fault injection proves the active credential reference is always either the veri
 
 #### MIGRATE-I011 Migrate protected Objects to a replacement store
 - **Type:** Feature
-- **Effort:** 5
+- **Effort:** 8
 - **Dependencies:** TRANSFER-I005, RETAIN-I007, REFS-L010, CI-M003
 - **Category:** Correctness
 - **Scope (In-Scope Files):**
   - `rust/src/object_store/**`
+  - `rust/src/sync/**`
+  - `rust/src/workspace/**`
   - `rust/src/api/ffi_api.rs`
   - `lib/src/components/**`
   - `test/**`
 - **Scope (Out-of-Scope Files):**
   - Credential rotation and S3-only Workspaces
 - **Verification Command:** `cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh migrate-i011 && git diff --check`
-- **Expected Success Output:** exit 0 with protected-set copy, verification, cutover, resume, and rollback tests passing
+- **Expected Success Output:** exit 0 with durable intent, dual-write, baseline/delta copy, revision-bound cutover, resume, and rollback tests passing
 - **STOP Conditions:**
   - STOP if the old store can retire before every Protected Object is verified in the replacement.
-- **Description:** Copy the complete Protected Object closure to a replacement private store, resume safely after interruption, verify every identity, and atomically cut over without changing Object identities.
+  - STOP if any device can publish during migration without first verifying each new Object in both stores, or if a device without replacement credentials can publish after cutover.
+  - STOP if a Remote-detached Workspace with prior published history attempts replacement migration; reconnect for coordinated migration or hydrate and remove the retained store.
+- **Description:** Publish a durable migration intent with non-secret old/new store identities. While the intent is active, every connected device dual-writes and verifies new Objects before publication; devices without replacement credentials pause publication but keep local use. Copy and verify the baseline Protected Object closure, repeatedly reconcile deltas against complete advertised refs and local publication state, then publish a compare-and-swap cutover bound to the migration epoch, Workspace revision, and Remote-ref inventory. Keep the old store as a readable fallback because authoritative deletion is disabled during `0.x`.
 - **Acceptance:**
   - **Mode:** invariant
   - **Evidence:**
 
 ```text
-Every protected Object remains available throughout migration; restart resumes from durable verified progress; cutover occurs only after full verification; and failure preserves the old store as authority without duplicate identities.
+Concurrency and interruption tests start publication before, during, and after baseline copy. Every publication under the migration intent verifies its Objects in both stores. Delta reconciliation reaches the exact bound Workspace and Remote inventories before compare-and-swap cutover. A stale epoch, revision, ref inventory, missing replacement credential, or failed verification blocks publication or cutover without changing authority. Restart resumes durable progress; successful cutover makes the replacement authoritative and retains the old store as readable fallback without changing Object identities.
 ```
 
 #### DETACH-I012 Prepare every protected Object for full-local transition
 - **Type:** Feature
-- **Effort:** 5
+- **Effort:** 8
 - **Dependencies:** RETAIN-I007, RECOVER-I006, REFS-L010, CI-M003
 - **Category:** Correctness
 - **Scope (In-Scope Files):**
@@ -275,23 +282,30 @@ Every protected Object remains available throughout migration; restart resumes f
 - **Scope (Out-of-Scope Files):**
   - Remote/Object Store attachment mutation owned by DETACH-K006 and S3-only Workspace operation
 - **Verification Command:** `cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh detach-i012 && git diff --check`
-- **Expected Success Output:** exit 0 with online Remote revalidation, full hydration, readiness-token, refusal, and offline restart-after-preparation tests passing
+- **Expected Success Output:** exit 0 with attached-Remote revalidation, detached-Remote local hydration, readiness-token, refusal, and restart tests passing
 - **STOP Conditions:**
   - STOP if readiness can be issued while any Protected Object is missing, unverified, or based on stale reachability.
-  - STOP if the full-local preparation can't authenticate online and re-enumerate all published Remote refs immediately before closure computation.
-- **Description:** Authenticate online and re-enumerate every published Remote ref, compute the complete Protected Object closure from that fresh authority, hydrate and verify it locally, and issue a revision-bound readiness result for DETACH-K006 without changing either external connection.
+  - STOP if attached-Remote preparation can't authenticate online and re-enumerate all published Remote refs immediately before closure computation.
+  - STOP if `LocalWithObjectStore` preparation consults a detached Remote, omits any locally protected state, or can remove the retained store before every protected byte verifies locally.
+- **Description:** Support two explicit preparation modes. With an attached Remote, authenticate online, re-enumerate every published Remote ref, compute the complete Protected Object closure, and bind readiness to the ref inventory and Workspace revision. In `LocalWithObjectStore`, derive the closure from current state, retained or unpublished local history, pending reconciliation, and Consolidation without consulting the detached Remote; hydrate and verify every byte, then bind readiness to the complete local revision. Neither mode changes an external connection.
 - **Acceptance:**
   - **Mode:** gherkin
   - **Evidence:**
 
 ```gherkin
-Given an authenticated online Workspace has protected Objects that may not be local
-When burlmd prepares a full-local transition
+Given a Workspace has an attached Remote and protected Objects that may not be local
+When burlmd prepares a full-local transition while online and authenticated
 Then it freshly enumerates every published Remote ref
 And hydrates and verifies every protected Object reachable from that authority
 And returns readiness bound to the Remote-ref inventory and Workspace revision
 And leaves both external connections unchanged
-And restart preserves the prepared bytes but requires online revalidation before detach if either bound revision can be stale
+
+Given a Workspace is in LocalWithObjectStore after offline Remote detach
+When the Writer prepares removal of the retained Object Store
+Then burlmd derives every locally Protected State without consulting the detached Remote
+And hydrates and verifies every protected Object
+And returns readiness bound to the complete local revision
+And restart preserves prepared bytes but requires renewed readiness after local revision advance
 ```
 
 #### UNLINK-I013 Detach an unused Object Store without detaching the Remote

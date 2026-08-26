@@ -1,5 +1,9 @@
 # Stage 2: Architecture changelog
 
+## v1.4.8 - 2026-08-26
+
+Reviewed for PRD v1.3.5. The architecture prohibits authoritative Object Store deletion during `0.x`, requires dual-write and revision-bound replacement-store migration, and makes Git payload exclusion independent of guest ignore files. It also assigns direct retained-store removal to the local-with-Object-Store path.
+
 ## v1.4.7 - 2026-08-26
 
 PR #12 full review round 6 adds an explicit local-with-Object-Store state after offline Remote detach, including Remote reconnection and verified Object Store removal. It also separates read-only find navigation from edit, replace, undo, and redo mutations.

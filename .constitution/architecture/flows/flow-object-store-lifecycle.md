@@ -1,6 +1,6 @@
 # Object Store lifecycle flow
 
-**Maps to:** CAP-ASSET-03, CAP-ASSET-04, CAP-ASSET-05, CAP-ASSET-06, CAP-ASSET-07, CAP-ASSET-08, CAP-ASSET-11, CAP-ASSET-12.
+**Maps to:** CAP-ASSET-03, CAP-ASSET-04, CAP-ASSET-05, CAP-ASSET-06, CAP-ASSET-08, CAP-ASSET-11, CAP-ASSET-12.
 
 ```mermaid
 stateDiagram-v2
@@ -23,9 +23,9 @@ stateDiagram-v2
     RemoteAssetRecovery --> RemoteAssetRecovery: Retry remains unresolved
     LocalAssetRecovery --> LocalWithObjectStore: Repair, replacement, or reference removal verifies
     LocalAssetRecovery --> LocalAssetRecovery: Retry remains unresolved
-    RemoteWithObjectStore --> MigratingRemoteStore: Replace Object Store
+    RemoteWithObjectStore --> MigratingRemoteStore: Publish migration intent; begin dual write
     MigratingRemoteStore --> RemoteWithObjectStore: Complete migration or keep earlier store after failure
-    LocalWithObjectStore --> MigratingLocalStore: Replace retained Object Store
+    LocalWithObjectStore --> MigratingLocalStore: Replace before any Remote attachment
     MigratingLocalStore --> LocalWithObjectStore: Complete migration or keep earlier store after failure
     RemoteWithObjectStore --> DetachUnusedStore: Writer requests Object Store-only detach
     DetachUnusedStore --> RemoteWithoutObjectStore: Complete protected set is empty; Object Store detaches and Remote remains
@@ -46,7 +46,8 @@ stateDiagram-v2
 - Anonymous readability or unknown privacy refuses connection.
 - Credential rotation validates replacements before removing earlier local credentials.
 - Missing or corrupt bytes never become visible before identity verification. Asset Recovery preserves every verified copy and exposes only valid recovery actions.
-- Cache eviction requires a verified Object Store copy. Authoritative deletion also requires 30 days of unreachability and complete published-history enumeration.
+- Cache eviction requires a verified Object Store copy and 30 days without use. burlmd doesn't delete authoritative Object Store bytes during `0.x`.
 - An asset-bearing Workspace never remains Remote-connected without a verified Object Store.
 - A Remote-connected Workspace with no protected Object references may detach only the Object Store after complete current, local-history, published-history, pending-reconciliation, and Consolidation enumeration proves the protected set empty. The Remote remains attached.
 - Offline Remote detachment moves `RemoteWithObjectStore` to `LocalWithObjectStore`; it removes local Remote attachment state and retains the Object Store. The Writer can reconnect the Remote or hydrate every locally protected Object before removing the retained Object Store. A full-local transition from an attached Remote requires authenticated online enumeration of every published Remote ref immediately before Protected Object hydration. The transition consumes a readiness result bound to that ref inventory and the Workspace revision, and refuses if either advances before atomic detach.
+- Replacing the store for a connected Workspace publishes a durable migration intent. Every publisher dual-writes until baseline and delta reconciliation reach the bound Workspace and Remote inventories. A Remote-detached Workspace that previously published must reconnect before replacement migration; it can instead hydrate locally and remove the retained store.

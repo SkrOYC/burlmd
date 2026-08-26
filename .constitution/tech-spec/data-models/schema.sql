@@ -1,4 +1,4 @@
--- FORWARD STATUS (TechSpec v1.7.8-provisional): this is the delivered v2
+-- FORWARD STATUS (TechSpec v1.7.9-provisional): this is the delivered v2
 -- derived-index schema. It does not yet model application session state,
 -- excluded/repairable paths, Workspace observation, external-change
 -- decisions, asset/object state, or typed Git reconciliation. Research Tasks

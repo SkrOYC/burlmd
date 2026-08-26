@@ -1,5 +1,5 @@
 ---
-version: v2.1.10
+version: v2.1.11
 status: active
 epic: L
 ---
@@ -273,15 +273,14 @@ And Decision pauses do not block local editing or history
 - **Verification Command:** `cargo test --manifest-path rust/Cargo.toml && cargo clippy --workspace --all-targets --manifest-path rust/Cargo.toml -- -D warnings && git diff --check`
 - **Expected Success Output:** exit 0 with unfiltered advertised-ref enumeration, quarantined no-prune fetch, incomplete stop, and deletion integration tests passing
 - **STOP Conditions:**
-  - STOP if authoritative Object deletion proceeds without complete unfiltered `git ls-remote --refs` enumeration and reachable-history fetch for every advertised ref.
   - STOP if an advertised ref is excluded or can't be fetched into quarantine without an accepted upstream classification that proves it isn't published history.
-- **Description:** Run unfiltered `git ls-remote --refs` against the attached Remote, parse every advertised `refs/*` entry, and fetch each Object ID into an isolated no-prune quarantine namespace without mutating Workspace refs. Extend Protected State roots with every fetched history and fail closed before authoritative Object deletion when enumeration, classification, or fetch completeness is unproven.
+- **Description:** Run unfiltered `git ls-remote --refs` against the attached Remote, parse every advertised `refs/*` entry, and fetch each Object ID into an isolated no-prune quarantine namespace without mutating Workspace refs. Extend Protected State roots with every fetched history for recovery, migration, detach, cache-retention, and reconciliation decisions. Fail closed when enumeration, classification, or fetch completeness is unproven.
 - **Acceptance:**
   - **Mode:** invariant
   - **Evidence:**
 
 ```text
-Generated Remote namespaces include branches, annotated and lightweight tags, pull-request refs, and arbitrary advertised ref hierarchies. Every fetchable advertised Object ID expands Protected State. Reflog-only and non-advertised Provider-internal refs don't expand authority. An unclassified or unfetchable advertised ref, authorization failure, enumeration failure, or fetch failure stops authoritative deletion while independent verified local cache eviction remains possible.
+Generated Remote namespaces include branches, annotated and lightweight tags, pull-request refs, and arbitrary advertised ref hierarchies. Every fetchable advertised Object ID expands Protected State. Reflog-only and non-advertised Provider-internal refs don't expand authority. An unclassified or unfetchable advertised ref, authorization failure, enumeration failure, or fetch failure stops any decision that requires complete published history. Independent verified local cache eviction remains possible; authoritative remote deletion doesn't exist during `0.x`.
 ```
 
 #### DELETE-L011 Resolve delete-versus-edit without content loss

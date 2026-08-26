@@ -106,7 +106,7 @@ The Goal corpus contains 10,000 Notes with a 4 KiB median, a 64 KiB 95th percent
 - **Guest Authority Boundary:** burlmd must validate guest filesystem writes before they enter authoritative Workspace state. Invalid input must not replace the last known-good Note or trigger silent repair.
 - **Cross-Platform Path Identity:** A path that burlmd creates must retain one identity under supported Linux and macOS filesystems and Windows-compatible path rules. Case, Unicode normalization, reserved names, and trailing characters must not create an ambiguous second identity.
 - **Object Integrity:** burlmd must verify Object bytes against their content identity before exposing, publishing, migrating, restoring, or deleting them.
-- **Protected History:** burlmd must retain every Object reachable from a Protected State, including current Workspace state, all retained or unpublished local history, all reachable published Remote history, pending reconciliation, and Consolidation. Authoritative deletion must stop until burlmd has enumerated complete published Remote history.
+- **Protected History:** burlmd must retain every Object reachable from a Protected State, including current Workspace state, all retained or unpublished local history, all reachable published Remote history, pending reconciliation, and Consolidation. During `0.x`, burlmd must not delete authoritative Object Store bytes; only verified local cache copies can be evicted.
 - **Workspace Containment:** Workspace-controlled paths and indirections must never grant access outside the Workspace boundary. burlmd must reject unsupported filesystem aliases or nested external repositories during adoption, monitoring, and synchronization.
 
 ## Security and sovereignty

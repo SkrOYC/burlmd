@@ -29,6 +29,7 @@
 - Transient Provider failures retain credentials and enter retryable states. Only an authoritative credential rejection enters authentication-required state.
 - Before local history can reference a new Object, Application State records a durable operation intent and Object obligation.
 - Before history publication, Object Transfer verifies every required Object in the Object Store. Startup and prepublication reconciliation derive missing obligations from unpublished history.
+- During replacement-store migration, a durable intent makes every publisher verify new Objects in both stores. Cutover uses compare-and-swap against the migration epoch, Workspace revision, and complete Remote-ref inventory after baseline and delta copy. Devices without replacement credentials pause publication but keep local use.
 - Pull or join validates referenced Object manifests before authoritative materialization and hydrates active Assets first.
 - An asset-bearing connected Workspace can't detach its Object Store alone. Offline Remote detachment retains the Object Store. Returning to fully local operation requires fresh authenticated enumeration of all published Remote refs, complete protected hydration, and atomic revision-bound detachment of both external storage boundaries.
 
@@ -36,8 +37,7 @@
 
 - Workspace Model derives Protected State from current state, retained or unpublished local history, reachable published Remote history, pending reconciliation, and Consolidation.
 - Core Coordination exposes bytes only after Object identity verification.
-- Local cache eviction requires a verified Object Store copy. Authoritative deletion also requires 30 days of unreachability and complete published-history enumeration.
-- If published-history completeness can't be proven, authoritative deletion stops.
+- Local cache eviction requires a verified Object Store copy and no active offline need. burlmd doesn't delete authoritative Object Store bytes during `0.x` because Git publication and generic S3-compatible deletion can't form one atomic transaction.
 
 ## Security and privacy
 

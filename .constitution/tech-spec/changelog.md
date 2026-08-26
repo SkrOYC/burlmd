@@ -1,5 +1,9 @@
 # Stage 3: Technical Implementation Changelog
 
+## v1.7.9-provisional
+
+PR #12 full review round 7 binds this provisional layer to PRD v1.3.5 and Architecture v1.4.8. Authoritative Object Store deletion is disabled during `0.x`. Store replacement uses durable intent, dual-write, delta reconciliation, and revision-bound cutover. Core commit paths exclude binary payloads independently of ignore files. Result schema v6 permits honest empty stdout or stderr capture. Production implementation remains unauthorized.
+
 ## v1.7.8-provisional
 
 PR #12 full review round 6 binds this provisional layer to Architecture v1.4.7. Git analysis now runs every candidate on verified default Linux and macOS filesystems. GitHub token refresh explicitly requests and validates JSON rotation fields. The forward CI commands execute the forbidden-debug-marker gate, and the brownfield FFI banner identifies the current upstream lineage. Production implementation remains unauthorized.
