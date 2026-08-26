@@ -1,5 +1,9 @@
 # Stage 4: Tasks changelog
 
+## v2.1.18 - 2026-08-26
+
+PR #12 full review round 15 fixes the executable Spike bootstrap. Every Rust prototype now creates and commits a lockfile before its first `--locked` command and regenerates that lock after CLI-declared dependency changes. Ticket count, effort, dependencies, and critical path remain 80 tickets, 564 points, 217 edges, and 153 points.
+
 ## v2.1.17 - 2026-08-26
 
 PR #12 full review round 14 closes two P1 gaps. Privacy-paused Object synchronization resumes only after the complete negative anonymous List, Get, Put, and Delete probe. PUBLISH-M014 now depends directly on REG-K001 and reruns its drift check with administrator-approved token-expiration evidence no older than 24 hours. The new direct dependency produces 217 edges; ticket count, effort, and critical path remain 80 tickets, 564 points, and 153 points.
