@@ -1,5 +1,9 @@
 # Stage 2: Architecture changelog
 
+## v1.4.3 - 2026-08-26
+
+PR #12 full review round 2 corrected the Asset failure flow. Missing or corrupt local Objects now enter Object recovery; Asset Decisions remain exclusive to competing Asset outcomes produced by Remote reconciliation. This preserves the product distinction between local recovery and synchronization decisions.
+
 ## v1.4.2 - 2026-08-26
 
 Reviewed for PRD v1.3.2. The Link graph flow already models delivered ghost-Link creation and now classifies CAP-GRAPH-04 as delivered rather than active. No boundary or flow change is required.

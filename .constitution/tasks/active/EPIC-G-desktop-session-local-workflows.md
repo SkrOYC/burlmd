@@ -1,5 +1,5 @@
 ---
-version: v2.1.5
+version: v2.1.6
 status: active
 epic: G
 ---
@@ -107,10 +107,11 @@ Round-trip and migration tests prove Workspace partitioning, atomic replacement,
   - `lib/src/providers/note_providers.dart`
   - `lib/src/providers/workspace_provider.dart`
   - `lib/src/screens/workspace.dart`
+  - `scripts/smoke-shot.sh`
   - `test/**`
 - **Scope (Out-of-Scope Files):**
   - Canonical AST and path implementation owned by Epic H
-- **Verification Command:** `cargo test --manifest-path rust/Cargo.toml && flutter_rust_bridge_codegen generate && flutter test && dart analyze && ./scripts/smoke-shot.sh tabs-g004 && git diff --check`
+- **Verification Command:** `cargo test --manifest-path rust/Cargo.toml && flutter_rust_bridge_codegen generate && flutter test && dart analyze && BURLMD_SMOKE_TABS_G004=1 ./scripts/smoke-shot.sh tabs-g004 && git diff --check`
 - **Expected Success Output:** exit 0 and a smoke capture with multiple Core-backed tabs
 - **STOP Conditions:**
   - STOP if Flutter invents or restores a writable Note session that Core doesn't own.
@@ -120,7 +121,7 @@ Round-trip and migration tests prove Workspace partitioning, atomic replacement,
   - **Evidence:**
 
 ```gherkin
-Given a Workspace snapshot names several open Notes and one missing Note
+Given the `BURLMD_SMOKE_TABS_G004` scenario stages several Core-backed open Notes and one missing Note
 When the Workspace is restored and the active tab later closes
 Then available Notes reopen as Core sessions
 And the missing Note is reported without blocking startup

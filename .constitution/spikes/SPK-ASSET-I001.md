@@ -18,7 +18,7 @@
 ## Codebase baseline
 
 - **State today:** No production asset/object schema or S3-compatible client exists; images aren't complete user-facing behavior.
-- **Discovered constraints:** AST references are authoritative for active use; protected Git/reconciliation states override age; credentials remain in Platform secure storage; local Note work survives Object Store failure.
+- **Discovered constraints:** AST references are authoritative for active use; protected Git/reconciliation states override age; credentials remain in Platform secure storage; local Note work survives Object Store failure; reference-profile evidence must come from verified, distinct Linux and macOS hosts rather than trusted run labels.
 
 ## Options and trade-offs
 

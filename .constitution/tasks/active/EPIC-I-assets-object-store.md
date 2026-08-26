@@ -1,5 +1,5 @@
 ---
-version: v2.1.5
+version: v2.1.6
 status: active
 epic: I
 ---
@@ -22,7 +22,7 @@ Deliver inline images through a portable Local Asset Store and a first-class, us
   - `.constitution/spikes/SPK-ASSET-I001.md`
 - **Scope (Out-of-Scope Files):**
   - Every repository path not listed above (don't touch production or active specifications)
-- **Verification Command:** Run these exact commands in order on their named hosts: common: `cargo test --locked --manifest-path .constitution/prototypes/assets/Cargo.toml --all-targets`; Linux reference profile: `cargo run --locked --release --manifest-path .constitution/prototypes/assets/Cargo.toml -- probe --run-id linux-reference --profile linux-i5-8250u-16gib --fixture-dir .constitution/prototypes/assets/fixtures --output .constitution/prototypes/assets/runs/linux-reference.json`; macOS reference profile: `cargo run --locked --release --manifest-path .constitution/prototypes/assets/Cargo.toml -- probe --run-id macos-reference --profile macos-m1-8gib --fixture-dir .constitution/prototypes/assets/fixtures --output .constitution/prototypes/assets/runs/macos-reference.json`; coordinator after both runs: `cargo run --locked --release --manifest-path .constitution/prototypes/assets/Cargo.toml -- aggregate --contract .constitution/tech-spec/contracts/provisional-spikes.toml --schema .constitution/tech-spec/contracts/spike-result.schema.json --require-role linux-reference-profile --require-role macos-reference-profile --output .constitution/prototypes/assets/results.json`.
+- **Verification Command:** Run these exact commands in order on their named hosts: common: `cargo test --locked --manifest-path .constitution/prototypes/assets/Cargo.toml --all-targets`; Linux reference profile: `cargo run --locked --release --manifest-path .constitution/prototypes/assets/Cargo.toml -- probe --run-id linux-reference --role linux-reference-profile --expected-os linux --profile linux-i5-8250u-16gib --fixture-dir .constitution/prototypes/assets/fixtures --output .constitution/prototypes/assets/runs/linux-reference.json`; macOS reference profile: `cargo run --locked --release --manifest-path .constitution/prototypes/assets/Cargo.toml -- probe --run-id macos-reference --role macos-reference-profile --expected-os macos --profile macos-m1-8gib --fixture-dir .constitution/prototypes/assets/fixtures --output .constitution/prototypes/assets/runs/macos-reference.json`; coordinator after both runs: `cargo run --locked --release --manifest-path .constitution/prototypes/assets/Cargo.toml -- aggregate --contract .constitution/tech-spec/contracts/provisional-spikes.toml --schema .constitution/tech-spec/contracts/spike-result.schema.json --require-role linux-reference-profile --require-role macos-reference-profile --require-distinct-hosts 2 --require-distinct-operating-systems 2 --output .constitution/prototypes/assets/results.json`.
 - **Expected Success Output:** exit 0 with a finalized schema-valid report and explicit OD-06/OD-07 disposition
 - **STOP Conditions:**
   - STOP if credentials would enter committed files or evidence.
@@ -34,7 +34,7 @@ Deliver inline images through a portable Local Asset Store and a first-class, us
   - **Evidence:**
 
 ```text
-Candidate-attributed results cover both reference profiles, all declared gates, exact tool/service configurations without secrets, UI Responsiveness and Idle Memory disposition, and a recommendation for client and thresholds or an explicit unresolved outcome.
+Candidate-attributed results cover both reference profiles, all declared gates, exact tool/service configurations without secrets, UI Responsiveness and Idle Memory disposition, and a recommendation for client and thresholds or an explicit unresolved outcome. Aggregation verifies recorded host facts and rejects a missing role, duplicate host, duplicate operating system, or role/operating-system mismatch.
 ```
 
 #### STORE-I002 Implement the Local Asset Store and immutable manifest
@@ -240,7 +240,7 @@ Fault injection proves the active credential reference is always either the veri
 #### MIGRATE-I011 Migrate protected Objects to a replacement store
 - **Type:** Feature
 - **Effort:** 5
-- **Dependencies:** TRANSFER-I005, RETAIN-I007, CI-M003
+- **Dependencies:** TRANSFER-I005, RETAIN-I007, REFS-L010, CI-M003
 - **Category:** Correctness
 - **Scope (In-Scope Files):**
   - `rust/src/object_store/**`
@@ -265,7 +265,7 @@ Every protected Object remains available throughout migration; restart resumes f
 #### DETACH-I012 Prepare every protected Object for full-local transition
 - **Type:** Feature
 - **Effort:** 5
-- **Dependencies:** RETAIN-I007, RECOVER-I006, CI-M003
+- **Dependencies:** RETAIN-I007, RECOVER-I006, REFS-L010, CI-M003
 - **Category:** Correctness
 - **Scope (In-Scope Files):**
   - `rust/src/object_store/**`

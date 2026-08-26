@@ -1,5 +1,19 @@
 # Stage 4: Tasks changelog
 
+## v2.1.6 - 2026-08-26
+
+PR #12 full review round 2 found five P1 and two P2 gaps. This patch resolves all seven.
+
+### Fixed
+
+- Bound Asset-Spike reference-profile evidence to verified, distinct Linux and macOS hosts.
+- Made both CI runners execute the real desktop `integration_test/` suite on their named device target, with Xvfb on Linux.
+- Required replacement-store migration and full-local preparation to wait for complete published Remote branch/tag enumeration.
+- Required Rescan to wait for the guest-change decision pipeline it preserves.
+- Staged a real Core-backed multi-tab smoke scenario rather than using the screenshot name as implied setup.
+- Updated the repository README to describe the active 77-ticket, 545-point roadmap and current deferrals.
+- Recomputed 206 dependency edges and the 129-point critical path. Ticket count and effort are unchanged.
+
 ## v2.1.5 - 2026-08-26
 
 PR #12 full review round 1 found three P1 and five low-cost P2 contract gaps. This patch resolves all of them without changing ticket count, effort, dependencies, or the critical path.

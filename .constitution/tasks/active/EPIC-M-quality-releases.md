@@ -1,5 +1,5 @@
 ---
-version: v2.1.5
+version: v2.1.6
 status: active
 epic: M
 ---
@@ -90,8 +90,8 @@ Generated content, credential, signed-location, and content-derived canaries nev
   - `scripts/**`
 - **Scope (Out-of-Scope Files):**
   - Live canary secrets on fork-originated PRs
-- **Verification Command:** `cargo fmt --manifest-path rust/Cargo.toml -- --check && cargo clippy --workspace --all-targets --all-features --manifest-path rust/Cargo.toml -- -D warnings && cargo test --manifest-path rust/Cargo.toml && dart format --output=none --set-exit-if-changed lib test integration_test && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && actionlint && ./scripts/assert-ci-matrix.sh --workflow .github/workflows/ci.yml --require-os linux --require-arch x86_64 --require-os macos --require-arch arm64 && git diff --check`
-- **Expected Success Output:** local equivalent exits 0 and workflow syntax/matrix validation passes
+- **Verification Command:** x86-64 Linux runner: `cargo fmt --manifest-path rust/Cargo.toml -- --check && cargo clippy --workspace --all-targets --all-features --manifest-path rust/Cargo.toml -- -D warnings && cargo test --manifest-path rust/Cargo.toml && dart format --output=none --set-exit-if-changed lib test integration_test && ./scripts/check-generated-bindings.sh && flutter test && xvfb-run -a flutter test integration_test -d linux -r github && dart analyze && actionlint && ./scripts/assert-ci-matrix.sh --workflow .github/workflows/ci.yml --require-os linux --require-arch x86_64 --require-os macos --require-arch arm64 && git diff --check`; Apple Silicon macOS runner: `cargo fmt --manifest-path rust/Cargo.toml -- --check && cargo clippy --workspace --all-targets --all-features --manifest-path rust/Cargo.toml -- -D warnings && cargo test --manifest-path rust/Cargo.toml && dart format --output=none --set-exit-if-changed lib test integration_test && ./scripts/check-generated-bindings.sh && flutter test && flutter test integration_test -d macos -r github && dart analyze && actionlint && ./scripts/assert-ci-matrix.sh --workflow .github/workflows/ci.yml --require-os linux --require-arch x86_64 --require-os macos --require-arch arm64 && git diff --check`.
+- **Expected Success Output:** both runners exit 0, execute the desktop integration suite on their actual device target, and pass workflow syntax/matrix validation
 - **STOP Conditions:**
   - STOP if CI uses unpinned ambient Git/toolchains or exposes protected secrets to fork workflows.
 - **Description:** Add a non-mutating `scripts/check-generated-bindings.sh` gate that snapshots `lib/src/rust/**` and `rust/src/frb_generated.rs`, reruns the final Stage 3 generator, compares every byte, restores both outputs after a mismatch, and fails when regeneration changes either side. Run that gate with formatting, static analysis, workflow lint/matrix assertions, Rust/Flutter tests, and hermetic integration tests on x86-64 Linux and Apple Silicon macOS using the repository's reproducibility boundary.
@@ -100,7 +100,7 @@ Generated content, credential, signed-location, and content-derived canaries nev
   - **Evidence:**
 
 ```text
-Both required runners execute equivalent gates from pinned inputs. Fixture tests prove the generated-binding gate covers the Dart and Rust FRB outputs, exits 0 for idempotent output, exits nonzero for either stale side, reports the changed paths, and leaves the pre-check working tree unchanged. Formatting, Clippy, workflow syntax, and matrix assertions are executable; CI also detects forbidden debug markers, caches without weakening lock verification, and keeps live credentials outside untrusted PR jobs.
+Both required runners execute equivalent gates from pinned inputs, including every `integration_test/` file on the actual Linux or macOS desktop target; the Linux job provisions its display through Xvfb. Fixture tests prove the generated-binding gate covers the Dart and Rust FRB outputs, exits 0 for idempotent output, exits nonzero for either stale side, reports the changed paths, and leaves the pre-check working tree unchanged. Formatting, Clippy, workflow syntax, and matrix assertions are executable; CI also detects forbidden debug markers, caches without weakening lock verification, and keeps live credentials outside untrusted PR jobs.
 ```
 
 #### BENCH-M004 Implement deterministic nightly PRD meters

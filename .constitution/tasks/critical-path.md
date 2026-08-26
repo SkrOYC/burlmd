@@ -1,5 +1,5 @@
 ---
-version: v2.1.5
+version: v2.1.6
 ---
 
 # Active backlog summary
@@ -17,7 +17,7 @@ PR #11 remains the delivered redesign foundation and isn’t retroactively assig
 
 ## Critical path
 
-The longest dependency path is **113 story points**:
+The longest dependency path is **129 story points**:
 
 1. `AST-H001`
 2. `MODEL-H003`
@@ -25,18 +25,20 @@ The longest dependency path is **113 story points**:
 4. `AUTH-H006`
 5. `STORE-I002`
 6. `TRANSFER-I005`
-7. `RETAIN-I007`
-8. `DETACH-I012`
-9. `DETACH-K006`
-10. `REMOTE-K007`
-11. `STATE-L009`
-12. `INTEG-L012`
-13. `APPIMAGE-M006`
-14. `RELEASE-M009`
-15. `GATE-M011`
-16. `PUBLISH-M014`
+7. `CONNECT-K004`
+8. `SCHED-L003`
+9. `REFS-L010`
+10. `DETACH-I012`
+11. `DETACH-K006`
+12. `REMOTE-K007`
+13. `STATE-L009`
+14. `INTEG-L012`
+15. `APPIMAGE-M006`
+16. `RELEASE-M009`
+17. `GATE-M011`
+18. `PUBLISH-M014`
 
-The path now carries the complete full-local detach and Writer-facing Remote workflow before synchronization integration. It terminates in publication only after immutable candidate construction and the installed AppImage gate. The Nix and macOS gates run in parallel and also block publication.
+The path now establishes scheduling and complete published-Remote ref enumeration before full-local Object preparation, detach, and the Writer-facing Remote workflow. It terminates in publication only after synchronization integration, immutable candidate construction, and the installed AppImage gate. The Nix and macOS gates run in parallel and also block publication.
 
 ## Build order diagram
 
@@ -336,6 +338,9 @@ flowchart LR
     CIM003 --> COLLIDEJ005
     CLONEK005 --> REMOTEK007
     DETACHK006 --> REMOTEK007
+    REFSL010 --> MIGRATEI011
+    REFSL010 --> DETACHI012
+    DECIDEH011 --> RESCANH012
 ```
 
 ## Phasing strategy

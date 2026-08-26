@@ -1,5 +1,9 @@
 # Stage 3: Technical Implementation Changelog
 
+## v1.7.4-provisional
+
+PR #12 full review round 2 bound Asset measurements to distinct verified operating systems and made the forward CI contract execute the real Flutter desktop integration suite on Linux and macOS. Production implementation remains unauthorized.
+
 ## v1.7.3-provisional
 
 PR #12 full review round 1 hardened the executable research and forward-verification contracts. AST and path evidence now proves distinct target hosts, packaging copies Nix results inside the write allowlist before hashing, FRB checks cover both generated sides, device-flow errors are exhaustive against current GitHub documentation, and result tools validate RFC 3339 timestamps independently of optional schema plugins. Production implementation remains unauthorized.

@@ -1,5 +1,5 @@
 ---
-version: v2.1.5
+version: v2.1.6
 status: active
 epic: H
 ---
@@ -310,7 +310,7 @@ Both versions remain recoverable through every decision; the reviewed guest revi
 #### RESCAN-H012 Retain Rescan as observation recovery
 - **Type:** Feature
 - **Effort:** 5
-- **Dependencies:** OBS-H009
+- **Dependencies:** OBS-H009, DECIDE-H011
 - **Category:** Correctness
 - **Scope (In-Scope Files):**
   - `rust/src/index/scan.rs`

@@ -1,5 +1,5 @@
 ---
-version: v1.7.3-provisional
+version: v1.7.4-provisional
 ---
 
 # Bill of Materials (BOM) & Stack

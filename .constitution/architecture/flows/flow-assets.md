@@ -1,6 +1,6 @@
 # Asset import and adoption flow
 
-**Maps to:** CAP-EDIT-06, CAP-ASSET-01, CAP-ASSET-02, CAP-ASSET-05, CAP-ASSET-09, CAP-ASSET-10.
+**Maps to:** CAP-EDIT-06, CAP-ASSET-01, CAP-ASSET-02, CAP-ASSET-05, CAP-ASSET-06, CAP-ASSET-09, CAP-ASSET-10.
 
 ```mermaid
 sequenceDiagram
@@ -35,6 +35,6 @@ sequenceDiagram
 ## Failure path
 
 - Imported source locations never remain dependencies after a successful copy.
-- Same bytes reuse one Object. Different bytes for one logical reference require an Asset Decision.
-- Missing or corrupt Objects preserve every verified copy, enter an Asset Decision, pause affected synchronization, and offer Retry, Repair from local copy, Choose replacement, or Remove reference when valid.
+- Same bytes reuse one Object. Different local bytes for one reference enter Object recovery; competing Asset outcomes produced by Remote reconciliation require an Asset Decision.
+- Missing or corrupt local Objects preserve every verified copy and enter the Object recovery flow, which offers Retry, Repair from local copy, Choose replacement, or Remove reference when valid. Local corruption doesn't create an Asset Decision. Synchronization pauses only when Object availability or a separately created reconciliation decision makes publication unsafe.
 - A failed adoption leaves the preflighted Workspace unchanged unless one complete local migration outcome already committed.
