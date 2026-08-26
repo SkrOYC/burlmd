@@ -1,5 +1,5 @@
 ---
-version: v2.1.12
+version: v2.1.13
 status: active
 epic: H
 ---
@@ -319,7 +319,7 @@ Both versions remain recoverable through every decision; the reviewed guest revi
   - `test/screens/workspace_rescan_test.dart`
 - **Scope (Out-of-Scope Files):**
   - A second authority or alternate conformance path
-- **Verification Command:** `cargo test --manifest-path rust/Cargo.toml && flutter_rust_bridge_codegen generate && flutter test && dart analyze && ./scripts/smoke-shot.sh rescan-h012 && git diff --check`
+- **Verification Command:** `cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && ./scripts/smoke-shot.sh rescan-h012 && git diff --check`
 - **Expected Success Output:** exit 0 with observer-recovery and decision-preservation tests passing
 - **STOP Conditions:**
   - STOP if Rescan bypasses live-monitor validation/decision rules or discards pending decisions.

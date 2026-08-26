@@ -12,7 +12,7 @@ stateDiagram-v2
     Selecting --> Preparing: Eligible private Remote selected or provisioned
     Preparing --> Connected: Prerequisites verified and local history published
     Preparing --> Consolidating: Writer selects another local Workspace
-    Consolidating --> Connected: Identity decisions complete; source unchanged
+    Consolidating --> Preparing: Identity decisions complete; source unchanged
     Connected --> Refreshing: Authorization nearing expiry
     Refreshing --> Connected: Credentials rotate
     Refreshing --> AuthenticationRequired: Authoritative rejection or revocation
@@ -39,5 +39,6 @@ stateDiagram-v2
 - Transport, service, and rate-limit failures don't become authentication-required states.
 - Refresh retry states preserve Remote attachment and the current credential pair until rotation succeeds or the Provider authoritatively rejects it.
 - A first connection publishes only after Object prerequisites pass for an asset-bearing Workspace.
+- Consolidation returns to preparation; identity decisions alone never imply that prerequisites passed or initial publication completed.
 - First publication and later pushes stop if any commit reachable from a local publication ref contains `.github/workflows/**`. burlmd doesn't request GitHub workflow-modification permission; the Writer can Consolidate Notes and Assets into a clean Workspace.
 - Sign-out removes credentials but not Remote attachment. Offline Remote detach preserves local history and retains the Object Store connection. Full-local detach requires fresh authenticated published-ref enumeration and verified Protected Object hydration.

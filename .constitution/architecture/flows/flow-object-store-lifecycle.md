@@ -17,6 +17,8 @@ stateDiagram-v2
     RemoteWithObjectStore --> HydratingRemote: Join or restore needs Objects
     HydratingRemote --> RemoteWithObjectStore: Active Objects first; remaining current state verified
     RemoteWithObjectStore --> RemoteAssetRecovery: Missing or corrupt Object pauses affected synchronization
+    RemoteWithObjectStore --> PausedObjectPrivacy: Scheduled or prepublication privacy probe is stale or fails
+    PausedObjectPrivacy --> RemoteWithObjectStore: Fresh probe disproves anonymous read
     LocalWithObjectStore --> LocalAssetRecovery: Missing or corrupt Object needs recovery
     HydratingRemote --> RemoteAssetRecovery: Identity verification fails
     RemoteAssetRecovery --> RemoteWithObjectStore: Repair, replacement, or reference removal verifies
@@ -43,7 +45,7 @@ stateDiagram-v2
 
 ## Failure path
 
-- Anonymous readability or unknown privacy refuses connection.
+- Anonymous readability or unknown privacy refuses connection. While synchronized, privacy is revalidated on startup, before publication batches, and periodically; stale or failed evidence pauses Object transfer and history publication while local work remains available.
 - Credential rotation validates replacements before removing earlier local credentials.
 - Missing or corrupt bytes never become visible before identity verification. Asset Recovery preserves every verified copy and exposes only valid recovery actions.
 - Cache eviction requires a verified Object Store copy and 30 days without use. burlmd doesn't delete authoritative Object Store bytes during `0.x`.

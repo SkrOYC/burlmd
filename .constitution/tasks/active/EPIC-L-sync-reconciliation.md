@@ -1,5 +1,5 @@
 ---
-version: v2.1.12
+version: v2.1.13
 status: active
 epic: L
 ---
@@ -329,7 +329,7 @@ And deletion occurs only after the Writer explicitly confirms that outcome
   - `integration_test/**`
 - **Scope (Out-of-Scope Files):**
   - GitLab and resident background services
-- **Verification Command:** `cargo test --manifest-path rust/Cargo.toml && flutter_rust_bridge_codegen generate && flutter test && dart analyze && ./scripts/smoke-shot.sh integ-l012 && git diff --check`
+- **Verification Command:** `cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && ./scripts/smoke-shot.sh integ-l012 && git diff --check`
 - **Expected Success Output:** exit 0 with hermetic and private canary lifecycle evidence passing
 - **STOP Conditions:**
   - STOP if any full-lifecycle path loses local/incoming state, publishes a Note before its Objects, or blocks local editing on network state.

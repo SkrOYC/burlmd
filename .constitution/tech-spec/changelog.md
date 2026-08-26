@@ -1,5 +1,9 @@
 # Stage 3: Technical Implementation Changelog
 
+## v1.7.11-provisional
+
+PR #12 full review round 9 keeps authenticated GitHub Actions attestation work in the production release workflow instead of assigning it to the prototype-only packaging Spike. Result schema v8 requires complete profile facts for profile-bound runs, adds the integrated-graphics fact, and uses an inline timestamp shape while the result tool performs strict RFC 3339 calendar validation without an optional schema-format plugin.
+
 ## v1.7.10-provisional
 
 PR #12 full review round 8 binds multi-host Spike results to immutable input-context hashes and advances the result schema to v7. The AST Spike now evaluates both pinned and current `pulldown-cmark` models independently. Packaging constructs, extracts, transfers, probes, and byte-compares the actual deterministic macOS release archive. Release provenance is authenticated through repository-, workflow-, revision-, and subject-bound GitHub Actions attestations while Platform signing remains deferred. The forward contracts also add same-corpus nightly aggregation, fresh macOS support-pair checks, bounded advertised-ref quarantine, and stale-device replacement-store backfill.

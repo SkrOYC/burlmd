@@ -1,5 +1,5 @@
 ---
-version: v2.1.12
+version: v2.1.13
 status: active
 epic: G
 ---
@@ -84,7 +84,7 @@ And no Workspace file or Git change contains the preference
   - `test/providers/**`
 - **Scope (Out-of-Scope Files):**
   - Note bodies, credentials, and device-global preferences
-- **Verification Command:** `cargo test --manifest-path rust/Cargo.toml && flutter_rust_bridge_codegen generate && flutter test && dart analyze && ./scripts/smoke-shot.sh state-g003 && git diff --check`
+- **Verification Command:** `cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && ./scripts/smoke-shot.sh state-g003 && git diff --check`
 - **Expected Success Output:** exit 0 with schema/migration and provider restore tests passing
 - **STOP Conditions:**
   - STOP if a snapshot can become authoritative Note/session state or contain Note content or secrets.
@@ -111,7 +111,7 @@ Round-trip and migration tests prove Workspace partitioning, atomic replacement,
   - `test/**`
 - **Scope (Out-of-Scope Files):**
   - Canonical AST and path implementation owned by Epic H
-- **Verification Command:** `cargo test --manifest-path rust/Cargo.toml && flutter_rust_bridge_codegen generate && flutter test && dart analyze && BURLMD_SMOKE_TABS_G004=1 ./scripts/smoke-shot.sh tabs-g004 && git diff --check`
+- **Verification Command:** `cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && BURLMD_SMOKE_TABS_G004=1 ./scripts/smoke-shot.sh tabs-g004 && git diff --check`
 - **Expected Success Output:** exit 0 and a smoke capture with multiple Core-backed tabs
 - **STOP Conditions:**
   - STOP if Flutter invents or restores a writable Note session that Core doesn't own.
@@ -142,7 +142,7 @@ And focus moves to the following tab or the preceding tab at the end
   - `integration_test/**`
 - **Scope (Out-of-Scope Files):**
   - Remote shutdown synchronization owned by Epic L
-- **Verification Command:** `cargo test --manifest-path rust/Cargo.toml && flutter_rust_bridge_codegen generate && flutter test && dart analyze && ./scripts/smoke-shot.sh close-g005 && git diff --check`
+- **Verification Command:** `cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && ./scripts/smoke-shot.sh close-g005 && git diff --check`
 - **Expected Success Output:** exit 0 with all close-entry and partial-batch scenarios passing
 - **STOP Conditions:**
   - STOP if any tab button, middle click, shortcut, Close Others, Close All, Workspace switch, or orderly shutdown removes a tab before Core returns its terminal close outcome.
@@ -168,7 +168,7 @@ For every close entry point and injected result sequence, processed Notes preser
   - `integration_test/**`
 - **Scope (Out-of-Scope Files):**
   - Preflight validation and repair rules owned by Epic H
-- **Verification Command:** `cargo test --manifest-path rust/Cargo.toml && flutter_rust_bridge_codegen generate && flutter test && dart analyze && ./scripts/smoke-shot.sh open-g006 && git diff --check`
+- **Verification Command:** `cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && ./scripts/smoke-shot.sh open-g006 && git diff --check`
 - **Expected Success Output:** exit 0 with startup, picker, switch, and cancellation flows passing
 - **STOP Conditions:**
   - STOP if switching bypasses CLOSE-G005 or permits two active Workspaces.
@@ -312,7 +312,7 @@ And requests any referenced Object that is not locally hydrated
   - `scripts/visual-regression.sh`
 - **Scope (Out-of-Scope Files):**
   - Assets, Remote sync, and release surfaces owned by later epics
-- **Verification Command:** Linux: `cargo test --manifest-path rust/Cargo.toml && flutter_rust_bridge_codegen generate && flutter test && dart analyze && ./scripts/visual-regression.sh shell-g011 --baseline test/goldens/shell-g011-linux.png --max-different-pixels 0 && git diff --check && ! rg -n '\[DEBUG-' lib rust test scripts`; Apple Silicon macOS: `cargo test --manifest-path rust/Cargo.toml && flutter_rust_bridge_codegen generate && flutter test && dart analyze && ./scripts/visual-regression.sh shell-g011 --baseline test/goldens/shell-g011-macos.png --max-different-pixels 0 && git diff --check && ! rg -n '\[DEBUG-' lib rust test scripts`.
+- **Verification Command:** Linux: `cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && ./scripts/visual-regression.sh shell-g011 --baseline test/goldens/shell-g011-linux.png --max-different-pixels 0 && git diff --check && ! rg -n '\[DEBUG-' lib rust test scripts`; Apple Silicon macOS: `cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && ./scripts/visual-regression.sh shell-g011 --baseline test/goldens/shell-g011-macos.png --max-different-pixels 0 && git diff --check && ! rg -n '\[DEBUG-' lib rust test scripts`.
 - **Expected Success Output:** exit 0 with the local feature matrix and reviewed visual evidence passing
 - **STOP Conditions:**
   - STOP if any pointer action lacks keyboard reachability, user string bypasses localization, or state shown by the shell isn't authoritative.

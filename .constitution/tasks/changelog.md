@@ -1,5 +1,9 @@
 # Stage 4: Tasks changelog
 
+## v2.1.13 - 2026-08-26
+
+PR #12 full review round 9 closes three P1 and three P2 execution gaps. Consolidation must return through prerequisite verification and initial publication. Object Store privacy is revalidated on startup, periodically, and before publication, with drift pausing synchronization. Authenticated attestations stay with RELEASE-M009 and PUBLISH-M014 instead of the prototype-only packaging Spike. Stable Export leases now bind empty Directories, profile-bound Spike results require complete hardware facts, and UI-only tickets no longer mutate unscoped generated FFI outputs during verification. Ticket count, effort, dependencies, and the 153-point critical path remain unchanged at 80 tickets, 564 points, and 216 edges.
+
 ## v2.1.12 - 2026-08-26
 
 PR #12 full review round 8 closes four P1 and four P2 execution gaps. Spike result schema v7 binds multi-host evidence to the same immutable inputs, the AST Spike evaluates both `pulldown-cmark` versions independently, and the packaging Spike tests the actual deterministic macOS archive. Release tickets require authenticated GitHub Actions attestations, nightly aggregation rejects corpus or meter-definition drift, publication rechecks the current macOS support pair, and complete advertised-ref analysis has explicit resource limits and cleanup. Replacement-store migration retains an old-store fallback and CLONE-K005 exercises it from a fresh device. The added `MIGRATE-I011` → `CLONE-K005` dependency produces 216 edges; the backlog remains 80 tickets and 564 points, and the recomputed critical path remains 153 points with migration and fresh-device recovery now on it.
