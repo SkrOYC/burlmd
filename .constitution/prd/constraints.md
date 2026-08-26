@@ -115,6 +115,7 @@ The Goal corpus contains 10,000 Notes with a 4 KiB median, a 64 KiB 95th percent
 - **Credential Isolation:** Remote and Object Store credentials must never be persisted outside operating-system secure storage, and must never be written to logs, diagnostics, or version history.
 - **Non-Proprietary Storage:** Every Note must remain a plain-text file in a published, openly specified format, fully readable and editable with any text editor and with no tooling produced by this project.
 - **Private Remote Boundary:** A connected Remote must remain private. burlmd must pause synchronization if the Remote becomes public or if required access is lost.
+- **Remote Automation Boundary:** burlmd must not request GitHub workflow-modification authority or publish a commit reachable from a local publication ref when that commit contains `.github/workflows/**`. Local Workspace access remains available. Remote preflight or synchronization must stop and offer Consolidation into a clean Workspace.
 - **Private Object Store Boundary:** burlmd must refuse an Object Store connection when anonymous read access is detected or when storage privacy can't be established.
 
 ## Privacy

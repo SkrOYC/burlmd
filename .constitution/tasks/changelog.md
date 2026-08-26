@@ -1,5 +1,18 @@
 # Stage 4: Tasks changelog
 
+## v2.1.9 - 2026-08-26
+
+PR #12 full review round 5 found four P1 and two P2 contract gaps. This patch resolves all six.
+
+### Fixed
+
+- Added schema v5 system-captured CPU, core, memory, storage, graphics, display, power, and thermal facts, then bound AST and Asset evidence to the complete PRD reference profiles.
+- Reworked the macOS packaging protocol so one immutable SHA-256-identical artifact runs on distinct macOS 26 and macOS 15 hosts. A separate same-host repeated construction proves reproducibility.
+- Expanded Protected State enumeration from branches and tags to every fetchable ref advertised by unfiltered `git ls-remote --refs`; unclassified or unfetchable advertised refs block authoritative deletion.
+- Kept the GitHub App at least privilege by refusing current or historical `.github/workflows/**` publication instead of requesting Workflows permission. Consolidation into a clean Workspace is the recovery path.
+- Added typed `bad_verification_code` restart and `unverified_user_email` guidance to the GitHub device-flow contract and fixtures.
+- Revalidated the unchanged 80-ticket, 558-point, 215-edge graph and 150-point critical path.
+
 ## v2.1.8 - 2026-08-26
 
 PR #12 full review round 4 found six P1 and two P2 contract gaps. This patch resolves all eight.

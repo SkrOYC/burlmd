@@ -1,5 +1,9 @@
 # Stage 3: Technical Implementation Changelog
 
+## v1.7.7-provisional
+
+PR #12 full review round 5 binds this provisional layer to PRD v1.3.4 and Architecture v1.4.6. Spike results now capture complete reference-profile facts. The macOS packaging protocol tests one immutable artifact on both supported major versions and separates repeated construction from compatibility probes. Protected State includes every advertised fetchable Remote ref. The GitHub App keeps least privilege by rejecting reachable workflow history, and device flow classifies bad verification codes and unverified email addresses. Production implementation remains unauthorized.
+
 ## v1.7.6-provisional
 
 PR #12 full review round 4 binds this provisional layer to PRD v1.3.3 and Architecture v1.4.5. It also binds AST and macOS packaging evidence to verified host facts and makes installed probes execute copied artifacts. GitHub App verification now separates public drift checks from a fresh administrator-approved expiring-token attestation. The forward contracts require fresh online Remote authority for full-local transition, integrate Consolidation into initial connection, and reconcile ADR-011 with the content-derived telemetry prohibition. Production implementation remains unauthorized.

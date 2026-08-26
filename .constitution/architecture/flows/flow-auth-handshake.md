@@ -39,4 +39,5 @@ stateDiagram-v2
 - Transport, service, and rate-limit failures don't become authentication-required states.
 - Refresh retry states preserve Remote attachment and the current credential pair until rotation succeeds or the Provider authoritatively rejects it.
 - A first connection publishes only after Object prerequisites pass for an asset-bearing Workspace.
+- First publication and later pushes stop if any commit reachable from a local publication ref contains `.github/workflows/**`. burlmd doesn't request GitHub workflow-modification permission; the Writer can Consolidate Notes and Assets into a clean Workspace.
 - Sign-out removes credentials but not Remote attachment. Offline Remote detach preserves local history and retains the Object Store connection. Full-local detach requires fresh authenticated published-ref enumeration and verified Protected Object hydration.

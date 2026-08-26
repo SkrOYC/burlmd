@@ -1,5 +1,5 @@
 ---
-version: v2.1.8
+version: v2.1.9
 status: active
 epic: L
 ---
@@ -78,16 +78,17 @@ The complete Spike corpus maps deterministically into typed outcomes without wor
 - **Scope (Out-of-Scope Files):**
   - Resident daemon or operating-system background service
 - **Verification Command:** `cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh sched-l003 && cargo run --release --manifest-path rust/Cargo.toml --bin sync-freshness-meter -- --private-remote "$BURLMD_TEST_PRIVATE_REMOTE_URL" --local-versions 100 --incoming-versions 100 --offline-cycles 10 --offline-duration-seconds 3600 --output target/sync-meters/sched-l003.json && git diff --check`
-- **Expected Success Output:** exit 0 with debounce, backoff, offline, refresh, bounded shutdown, restart, privacy-pause, and machine-readable freshness measurements passing
+- **Expected Success Output:** exit 0 with debounce, backoff, offline, refresh, workflow-history pause, bounded shutdown, restart, privacy-pause, and machine-readable freshness measurements passing
 - **STOP Conditions:**
   - STOP if network work blocks editing, shutdown waits without a bound, or an abrupt kill loses durable sync intent.
-- **Description:** Wire commit activity and application lifecycle into durable fetch/analyze/reconcile/push scheduling, retry/backoff, authorization/privacy pauses, and one bounded final shutdown attempt.
+  - STOP before push if any commit reachable from a local publication ref contains `.github/workflows/**`; preserve durable intent and offer Consolidation into a clean Workspace.
+- **Description:** Wire commit activity and application lifecycle into durable fetch/analyze/reconcile/push scheduling, retry/backoff, authorization/privacy pauses, workflow-history refusal, and one bounded final shutdown attempt.
 - **Acceptance:**
   - **Mode:** benchmark
   - **Evidence:**
 
 ```text
-Against the isolated private Remote named by the exact verification command, all 100 healthy local Versions publish within the 60-second Sync Latency Goal and all 100 incoming Versions surface within the 60-second Remote Freshness Goal. Ten offline/reconnect cycles include an explicit 3,600-second offline interval, honor the 15-minute maximum backoff, and surface incoming changes within 60 seconds of the one-hour reconnect. Editing remains nonblocking; shutdown obeys its bound; and restart resumes every incomplete durable intent without a daemon.
+Against the isolated private Remote named by the exact verification command, all 100 healthy local Versions publish within the 60-second Sync Latency Goal and all 100 incoming Versions surface within the 60-second Remote Freshness Goal. A current or historical `.github/workflows/**` path pauses push without requesting Workflows permission or blocking local use. Ten offline/reconnect cycles include an explicit 3,600-second offline interval, honor the 15-minute maximum backoff, and surface incoming changes within 60 seconds of the one-hour reconnect. Editing remains nonblocking; shutdown obeys its bound; and restart resumes every incomplete durable intent without a daemon.
 ```
 
 #### SUGGEST-L004 Materialize content conflicts as canonical AST Suggestions
@@ -268,18 +269,19 @@ And Decision pauses do not block local editing or history
   - `rust/src/object_store/**`
   - `test/**`
 - **Scope (Out-of-Scope Files):**
-  - Provider-internal and reflog-only refs as Protected State
+  - Reflog-only and non-advertised Provider-internal refs as Protected State
 - **Verification Command:** `cargo test --manifest-path rust/Cargo.toml && cargo clippy --workspace --all-targets --manifest-path rust/Cargo.toml -- -D warnings && git diff --check`
-- **Expected Success Output:** exit 0 with branch/tag enumeration, no-prune fetch, incomplete stop, and deletion integration tests passing
+- **Expected Success Output:** exit 0 with unfiltered advertised-ref enumeration, quarantined no-prune fetch, incomplete stop, and deletion integration tests passing
 - **STOP Conditions:**
-  - STOP if authoritative Object deletion proceeds without complete `refs/heads/*` and `refs/tags/*` enumeration and reachable-history fetch.
-- **Description:** Enumerate attached Remote branches and tags, fetch reachable history/tags without pruning, extend Protected State roots, and fail closed before authoritative Object deletion when completeness is unproven.
+  - STOP if authoritative Object deletion proceeds without complete unfiltered `git ls-remote --refs` enumeration and reachable-history fetch for every advertised ref.
+  - STOP if an advertised ref is excluded or can't be fetched into quarantine without an accepted upstream classification that proves it isn't published history.
+- **Description:** Run unfiltered `git ls-remote --refs` against the attached Remote, parse every advertised `refs/*` entry, and fetch each Object ID into an isolated no-prune quarantine namespace without mutating Workspace refs. Extend Protected State roots with every fetched history and fail closed before authoritative Object deletion when enumeration, classification, or fetch completeness is unproven.
 - **Acceptance:**
   - **Mode:** invariant
   - **Evidence:**
 
 ```text
-Generated Remote namespaces prove all reachable Objects survive; provider-internal/reflog-only refs don't expand authority; enumeration, authorization, fetch, or tag failure stops remote deletion while independent verified local cache eviction remains possible.
+Generated Remote namespaces include branches, annotated and lightweight tags, pull-request refs, and arbitrary advertised ref hierarchies. Every fetchable advertised Object ID expands Protected State. Reflog-only and non-advertised Provider-internal refs don't expand authority. An unclassified or unfetchable advertised ref, authorization failure, enumeration failure, or fetch failure stops authoritative deletion while independent verified local cache eviction remains possible.
 ```
 
 #### DELETE-L011 Resolve delete-versus-edit without content loss

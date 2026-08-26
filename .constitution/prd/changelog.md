@@ -1,5 +1,11 @@
 # Stage 1: Product Requirements Changelog
 
+## v1.3.4 - 2026-08-26
+
+### Added
+
+- Added the Remote Automation Boundary. burlmd keeps local Workspaces usable but refuses to publish reachable `.github/workflows/**` history instead of requesting GitHub workflow-modification authority.
+
 ## v1.3.3 - 2026-08-26
 
 ### Fixed

@@ -1,5 +1,9 @@
 # Stage 2: Architecture changelog
 
+## v1.4.6 - 2026-08-26
+
+Reviewed for PRD v1.3.4. Remote connection and synchronization preflight reject workflow-bearing publication history while local use remains available. Consolidation provides the clean-Workspace remediation without granting workflow-modification authority to the GitHub App.
+
 ## v1.4.5 - 2026-08-26
 
 Reviewed for PRD v1.3.3. PR #12 full review round 4 distinguishes offline Remote detachment from the full-local transition. Offline detachment retains the Object Store. Full-local transition requires authenticated online enumeration of all published Remote refs, verified hydration of the resulting Protected Object closure, and an atomic revision-bound detach.

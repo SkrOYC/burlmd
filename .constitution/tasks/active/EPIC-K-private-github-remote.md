@@ -1,5 +1,5 @@
 ---
-version: v2.1.8
+version: v2.1.9
 status: active
 epic: K
 ---
@@ -26,8 +26,8 @@ Implement the complete private GitHub reference connection through GitHub App de
   - `.constitution/reports/**`
 - **Scope (Out-of-Scope Files):**
   - Embedding a client secret, GitHub App private key, or installation token minting authority
-- **Verification Command:** Run `./scripts/attest-github-app-token-expiration.sh --client-id "$BURLMD_GITHUB_APP_CLIENT_ID" --output .constitution/reports/github-app-token-expiration-attestation.json`, complete the displayed device-flow authorization as the project administrator, then run `./scripts/verify-github-app-registration.sh --manifest config/github-app.release.toml --installation-url "$BURLMD_GITHUB_APP_INSTALLATION_URL" --expected-client-id "$BURLMD_GITHUB_APP_CLIENT_ID" --require-device-flow --require-private-repository-permissions --token-expiration-attestation .constitution/reports/github-app-token-expiration-attestation.json --max-attestation-age-hours 24 --output .constitution/reports/github-app-registration.json && git diff --check`.
-- **Expected Success Output:** exit 0 with a non-placeholder public client ID, reachable installation URL, exact versioned permissions, a successful device-code request, a fresh expiring-token attestation, and a drift-free release report
+- **Verification Command:** Run `./scripts/attest-github-app-token-expiration.sh --client-id "$BURLMD_GITHUB_APP_CLIENT_ID" --output .constitution/reports/github-app-token-expiration-attestation.json`, complete the displayed device-flow authorization as the project administrator, then run `./scripts/verify-github-app-registration.sh --manifest config/github-app.release.toml --installation-url "$BURLMD_GITHUB_APP_INSTALLATION_URL" --expected-client-id "$BURLMD_GITHUB_APP_CLIENT_ID" --require-device-flow --require-private-repository-permissions --forbid-permission workflows --token-expiration-attestation .constitution/reports/github-app-token-expiration-attestation.json --max-attestation-age-hours 24 --output .constitution/reports/github-app-registration.json && git diff --check`.
+- **Expected Success Output:** exit 0 with a non-placeholder public client ID, reachable installation URL, exact versioned Contents/Administration/implicit Metadata permissions, no Workflows permission, a successful device-code request, a fresh expiring-token attestation, and a drift-free release report
 - **STOP Conditions:**
   - STOP if release configuration uses a placeholder client ID, requires a client secret/private key in the binary or CI, omits the public installation URL, or differs from the versioned permission manifest.
 - **Description:** Register the project-owned GitHub App through the administrator runbook, publish its installation URL, version its repository and account permissions, enable device flow and expiring user tokens, and inject the public release client ID. Automate public metadata, installation URL, permission, client-ID, and device-code checks. Require a fresh administrator-approved device-flow attestation for token expiration before release.
@@ -36,7 +36,7 @@ Implement the complete private GitHub reference connection through GitHub App de
   - **Evidence:**
 
 ```text
-The administrator runbook records registration and ownership without exporting secrets. The automated probe reads public App metadata and proves the installation URL, release client ID, permissions, manifest version, and a successful device-code request. A human-approved device flow must issue `expires_in`, `refresh_token`, and `refresh_token_expires_in`. The attestation records their presence and lifetimes but never their values, securely discards the tokens, and expires after 24 hours. Missing or stale evidence blocks AUTH-K001 and release verification.
+The administrator runbook records registration and ownership without exporting secrets. The automated probe reads public App metadata and proves the installation URL, release client ID, exact Contents/Administration/implicit Metadata permissions, absence of Workflows permission, manifest version, and a successful device-code request. A human-approved device flow must issue `expires_in`, `refresh_token`, and `refresh_token_expires_in`. The attestation records their presence and lifetimes but never their values, securely discards the tokens, and expires after 24 hours. Missing or stale evidence blocks AUTH-K001 and release verification.
 ```
 
 #### AUTH-K001 Replace legacy OAuth with GitHub App device flow
@@ -54,7 +54,7 @@ The administrator runbook records registration and ownership without exporting s
 - **Scope (Out-of-Scope Files):**
   - OAuth redirect listener, client secret, GitHub App private key, and GitLab
 - **Verification Command:** `cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh auth-k001 && git diff --check && ! rg -n '\[DEBUG-' lib rust test scripts`
-- **Expected Success Output:** exit 0 with device-code, polling, slowdown, denial, expiry, cancellation, and every documented fatal device-flow error contract test passing
+- **Expected Success Output:** exit 0 with device-code, polling, slowdown, denial, expiry, cancellation, bad-code restart, unverified-email guidance, and every documented fatal device-flow error contract test passing
 - **STOP Conditions:**
   - STOP if implementation needs an embedded client secret, App private key, callback listener, or automated browser approval.
 - **Description:** Implement the accepted GitHub App device-code request and polling contract, expose verification URI/code and typed progress, and remove the old PKCE redirect/client-secret path.
@@ -63,7 +63,7 @@ The administrator runbook records registration and ownership without exporting s
   - **Evidence:**
 
 ```text
-Protocol fixtures verify the pinned GitHub API contract, polling interval and `slow_down` handling, terminal denial/expiry, cancellation, public client ID only, and absence of every superseded redirect/secret path. `unsupported_grant_type`, `incorrect_client_credentials`, `incorrect_device_code`, and `device_flow_disabled` stop polling immediately and surface typed configuration or protocol failures.
+Protocol fixtures verify the pinned GitHub API contract, polling interval and `slow_down` handling, terminal denial/expiry, cancellation, public client ID only, and absence of every superseded redirect/secret path. `bad_verification_code` restarts device flow with a fresh code. `unverified_user_email` stops polling and guides the Writer to verify their primary email before restarting. `unsupported_grant_type`, `incorrect_client_credentials`, `incorrect_device_code`, and `device_flow_disabled` stop polling immediately and surface typed configuration or protocol failures.
 ```
 
 #### TOKEN-K002 Persist, refresh, and revoke the user token pair safely
@@ -132,16 +132,17 @@ GitHub API fixtures cover user and organization installations, insufficient perm
 - **Scope (Out-of-Scope Files):**
   - Reconciliation against a populated unrelated repository
 - **Verification Command:** `cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test integration_test/connect_consolidation_flow_test.dart -d linux && dart analyze && git diff --check`
-- **Expected Success Output:** exit 0 with prerequisite, optional prepublication Consolidation, ephemeral credential, publish, rollback, and privacy-recheck tests passing
+- **Expected Success Output:** exit 0 with prerequisite, workflow-history refusal, optional prepublication Consolidation, ephemeral credential, publish, rollback, and privacy-recheck tests passing
 - **STOP Conditions:**
   - STOP if protected Objects aren't verified in the Object Store or Git credentials would persist beyond one process invocation.
-- **Description:** Recheck private/empty eligibility and Object readiness, then enter the connection `Preparing` state. Before initial publication, let the Writer either continue with the active Workspace or complete the typed Consolidation workflow from Epic J. Attach the Remote without rehoming local state, publish with an ephemeral user token, and persist attachment only after success.
+  - STOP if any commit reachable from a local publication ref contains `.github/workflows/**`; keep the Workspace local and offer Consolidation into a clean Workspace.
+- **Description:** Recheck private/empty eligibility, Object readiness, and the complete local publication closure, then enter the connection `Preparing` state. Refuse workflow-bearing history without requesting Workflows permission. Before initial publication, let the Writer either continue with the active Workspace or complete the typed Consolidation workflow from Epic J. Attach the Remote without rehoming local state, publish with an ephemeral user token, and persist attachment only after success.
 - **Acceptance:**
   - **Mode:** invariant
   - **Evidence:**
 
 ```text
-No Note history publishes before protected Objects verify and the Writer completes or declines Consolidation. The connection integration test drives `Preparing → Consolidating → Connected`, including a collision decision, and proves the source stays unchanged. Git receives credentials only through the ephemeral adapter. Failure leaves the local Workspace and history intact and unattached; success records the exact private Remote without credentials in configuration or URL.
+No Note history publishes before protected Objects verify and the Writer completes or declines Consolidation. Generated refs prove that a workflow path in current or historical commits refuses publication while local use remains available. The connection integration test drives `Preparing → Consolidating → Connected`, including a collision decision, and proves the source stays unchanged. Git receives credentials only through the ephemeral adapter. Failure leaves the local Workspace and history intact and unattached; success records the exact private Remote without credentials in configuration or URL.
 ```
 
 #### CLONE-K005 Join a connected Workspace on another device
