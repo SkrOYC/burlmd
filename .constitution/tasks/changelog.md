@@ -1,5 +1,9 @@
 # Stage 4: Tasks changelog
 
+## v2.1.12 - 2026-08-26
+
+PR #12 full review round 8 closes four P1 and four P2 execution gaps. Spike result schema v7 binds multi-host evidence to the same immutable inputs, the AST Spike evaluates both `pulldown-cmark` versions independently, and the packaging Spike tests the actual deterministic macOS archive. Release tickets require authenticated GitHub Actions attestations, nightly aggregation rejects corpus or meter-definition drift, publication rechecks the current macOS support pair, and complete advertised-ref analysis has explicit resource limits and cleanup. Replacement-store migration retains an old-store fallback and CLONE-K005 exercises it from a fresh device. The added `MIGRATE-I011` → `CLONE-K005` dependency produces 216 edges; the backlog remains 80 tickets and 564 points, and the recomputed critical path remains 153 points with migration and fresh-device recovery now on it.
+
 ## v2.1.11 - 2026-08-26
 
 PR #12 full review round 7 found four P1 integrity gaps and one P2 schema defect. This patch resolves all five.

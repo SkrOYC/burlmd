@@ -1,5 +1,9 @@
 # Stage 2: Architecture changelog
 
+## v1.4.9 - 2026-08-26
+
+PR #12 full review round 8 closes three cross-boundary gaps. Replacement-store cutover now retains a discoverable old-store fallback path for stale publishers and fresh devices. Complete Remote-ref analysis is explicitly bounded and fails closed without blocking local work. The Release Pipeline now authenticates artifact provenance against its repository, workflow, revision, and subject identity while leaving Platform signing deferred.
+
 ## v1.4.8 - 2026-08-26
 
 Reviewed for PRD v1.3.5. The architecture prohibits authoritative Object Store deletion during `0.x`, requires dual-write and revision-bound replacement-store migration, and makes Git payload exclusion independent of guest ignore files. It also assigns direct retained-store removal to the local-with-Object-Store path.

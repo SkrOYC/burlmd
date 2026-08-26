@@ -1,5 +1,5 @@
 ---
-version: v1.4.8
+version: v1.4.9
 ---
 
 # Architectural strategy
@@ -8,7 +8,7 @@ version: v1.4.8
 
 burlmd remains a local-first modular desktop application. One authoritative Core boundary coordinates a Canonical Note Model, Workspace state, local durability, guest-change reconciliation, and optional external synchronization. The editing path stays local and synchronous. Remote and Object transfers run asynchronously and can't become prerequisites for local writing.
 
-A separate release pipeline produces installable artifacts for the supported Platform matrix. The runtime can inspect release metadata and notify the Writer, but installation remains under the Platform or package manager's authority.
+A separate release pipeline produces installable artifacts for the supported Platform matrix and authenticates their build provenance against its repository and workflow identity. The runtime can inspect release metadata and notify the Writer, but installation remains under the Platform or package manager's authority.
 
 ## Why this pattern fits
 

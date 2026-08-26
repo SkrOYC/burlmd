@@ -22,7 +22,7 @@
 
 ## Options and trade-offs
 
-- Compare `markdown` 1.0.0 mdast, Comrak 0.54.0, and a complete burlmd model derived from `pulldown-cmark` events using the exact contract corpus and measurements.
+- Compare `markdown` 1.0.0 mdast, Comrak 0.54.0, and separate complete burlmd models derived from `pulldown-cmark` 0.12.2 and 0.13.4 events using the exact contract corpus and measurements.
 
 ## Recommendation
 

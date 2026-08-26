@@ -1,5 +1,5 @@
 ---
-version: v2.1.11
+version: v2.1.12
 status: active
 epic: K
 ---
@@ -148,7 +148,7 @@ No Note history publishes before protected Objects verify and the Writer complet
 #### CLONE-K005 Join a connected Workspace on another device
 - **Type:** Feature
 - **Effort:** 8
-- **Dependencies:** REPO-K003, REPAIR-H008, TRANSFER-I005, CI-M003
+- **Dependencies:** REPO-K003, REPAIR-H008, TRANSFER-I005, MIGRATE-I011, CI-M003
 - **Category:** Feature-Evolution
 - **Scope (In-Scope Files):**
   - `rust/src/workspace/bootstrap.rs`
@@ -160,17 +160,18 @@ No Note history publishes before protected Objects verify and the Writer complet
   - `test/**`
 - **Scope (Out-of-Scope Files):**
   - Consolidating another archive, owned by Epic J
+  - Choosing or retiring Object Store migration authority, owned by MIGRATE-I011
 - **Verification Command:** `cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && dart analyze && ./scripts/verify-second-device-join.sh --private-remote "$BURLMD_TEST_PRIVATE_REMOTE_URL" --object-endpoint "$BURLMD_TEST_S3_ENDPOINT" --output target/runbooks/clone-k005.json && git diff --check`
-- **Expected Success Output:** exit 0 with empty-destination, live clone, preflight, index, Object configuration, immediate text access, and progressive hydration probes passing
+- **Expected Success Output:** exit 0 with empty-destination, live clone, preflight, index, Object configuration, migration fallback onboarding, immediate text access, and progressive hydration probes passing
 - **STOP Conditions:**
-  - STOP if destination isn't empty/absent, Remote isn't private/accessible, or asset-bearing history lacks a verified Object Store configuration.
-- **Description:** Authorize, select an accessible private Remote, clone into a safe destination, run canonical preflight/bootstrap, configure Object access, open text promptly, and hydrate active Assets progressively.
+  - STOP if destination isn't empty/absent, Remote isn't private/accessible, asset-bearing history lacks a verified Object Store configuration, or a retained migration fallback can't be credentialed or serviced by an already credentialed peer.
+- **Description:** Authorize, select an accessible private Remote, clone into a safe destination, run canonical preflight/bootstrap, configure authoritative replacement Object access, and detect any retained old-store fallback descriptor. Store supplied fallback credentials only in secure storage; otherwise allow a connected credentialed peer to service verified on-demand backfill. Open text promptly and hydrate active Assets progressively from the replacement, invoking the MIGRATE-I011 fallback path on a verified replacement miss.
 - **Acceptance:**
   - **Mode:** runbook_probe
   - **Evidence:**
 
 ```text
-The exact runbook command starts from a clean second-device state, joins the isolated private Remote, and reaches an authoritative local Workspace with full history and index, immediate Note editing, and progressive verified Asset hydration. Its machine-readable log proves no source archive mutation, no credential persisted in the clone, and bounded cleanup of test state.
+The exact runbook command starts from a clean second-device state, joins the isolated private Remote, and reaches an authoritative local Workspace with full history and index, immediate Note editing, and progressive verified Asset hydration. A migration fixture proves a replacement miss invokes the retained old-store fallback through securely supplied credentials or a credentialed peer, verifies the fetched content hash, backfills and verifies the replacement, and hydrates only from that replacement. Its machine-readable log proves no source archive mutation, no credential persisted in the clone, and bounded cleanup of test state.
 ```
 
 #### DETACH-K006 Separate sign-out, detach, reconnect, and full-local transition

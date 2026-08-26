@@ -188,7 +188,7 @@ Device preferences never enter Workspace content. Session and navigation state r
 
 - **Boundary kind:** Pipeline boundary.
 - **Logical type:** Build, verification, and publication boundary.
-- **Responsibility:** Produces each supported artifact, runs the common release matrix, and publishes integrity and provenance information.
+- **Responsibility:** Produces each supported artifact, runs the common release matrix, and publishes integrity plus cryptographically authenticated build provenance bound to the expected repository, workflow, source revision, and artifact identity.
 - **Inputs and outputs:** Accepts a release revision and Platform matrix. Emits verified artifacts and metadata to Release Distribution.
 - **Depends on:** Supported Platform environments and Release Distribution.
 
@@ -204,6 +204,6 @@ Device preferences never enter Workspace content. Session and navigation state r
 
 - **Boundary kind:** External service boundary.
 - **Logical type:** Artifact and release-metadata distribution.
-- **Responsibility:** Publishes supported artifacts, integrity data, provenance, compatibility metadata, and release information without installing binaries.
+- **Responsibility:** Publishes supported artifacts, integrity data, authenticated provenance, compatibility metadata, and release information without installing binaries.
 - **Inputs and outputs:** Accepts verified release outputs and serves immutable artifacts and compatible release metadata.
 - **Depends on:** External network availability and the Release Pipeline.

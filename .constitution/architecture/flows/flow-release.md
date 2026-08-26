@@ -8,7 +8,7 @@ stateDiagram-v2
     BuildMatrix --> VerifyInstalled: Artifacts produced for each supported system
     VerifyInstalled --> Publish: Common feature matrix passes
     VerifyInstalled --> Failed: Any supported system fails
-    Publish --> Available: Artifacts, integrity, provenance, and compatibility metadata published
+    Publish --> Available: Artifacts, integrity, authenticated provenance, and compatibility metadata published
     Available --> Notify: Running app detects compatible higher 0.x release
     Notify --> PlatformInstall: Writer opens release information
     PlatformInstall --> Migrating: Platform or package manager installs release

@@ -1,5 +1,9 @@
 # Stage 3: Technical Implementation Changelog
 
+## v1.7.10-provisional
+
+PR #12 full review round 8 binds multi-host Spike results to immutable input-context hashes and advances the result schema to v7. The AST Spike now evaluates both pinned and current `pulldown-cmark` models independently. Packaging constructs, extracts, transfers, probes, and byte-compares the actual deterministic macOS release archive. Release provenance is authenticated through repository-, workflow-, revision-, and subject-bound GitHub Actions attestations while Platform signing remains deferred. The forward contracts also add same-corpus nightly aggregation, fresh macOS support-pair checks, bounded advertised-ref quarantine, and stale-device replacement-store backfill.
+
 ## v1.7.9-provisional
 
 PR #12 full review round 7 binds this provisional layer to PRD v1.3.5 and Architecture v1.4.8. Authoritative Object Store deletion is disabled during `0.x`. Store replacement uses durable intent, dual-write, delta reconciliation, and revision-bound cutover. Core commit paths exclude binary payloads independently of ignore files. Result schema v6 permits honest empty stdout or stderr capture. Production implementation remains unauthorized.

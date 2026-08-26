@@ -1,5 +1,5 @@
 ---
-version: v2.1.11
+version: v2.1.12
 ---
 
 # Active backlog summary
@@ -31,8 +31,8 @@ The longest dependency path is **153 story points**:
 10. `CONNECT-K004`
 11. `SCHED-L003`
 12. `REFS-L010`
-13. `DETACH-I012`
-14. `DETACH-K006`
+13. `MIGRATE-I011`
+14. `CLONE-K005`
 15. `REMOTE-K007`
 16. `STATE-L009`
 17. `INTEG-L012`
@@ -41,7 +41,7 @@ The longest dependency path is **153 story points**:
 20. `GATE-M011`
 21. `PUBLISH-M014`
 
-The path establishes canonical Workspace repair and connection-time Consolidation before initial Remote publication. It then establishes scheduling and complete published-Remote ref enumeration before full-local Object preparation, detach, and the Writer-facing Remote workflow. It terminates in publication only after synchronization integration, immutable candidate construction, and the installed AppImage gate. The Nix and macOS gates run in parallel and also block publication.
+The path establishes canonical Workspace repair and connection-time Consolidation before initial Remote publication. It then establishes scheduling and complete published-Remote ref enumeration before replacement-store migration, a fresh-device join that can consume the retained fallback, and the Writer-facing Remote workflow. It terminates in publication only after synchronization integration, immutable candidate construction, and the installed AppImage gate. The Nix and macOS gates run in parallel and also block publication.
 
 ## Build order diagram
 
@@ -216,6 +216,7 @@ flowchart LR
     REPOK003 --> CLONEK005
     REPAIRH008 --> CLONEK005
     TRANSFERI005 --> CLONEK005
+    MIGRATEI011 --> CLONEK005
     CONNECTK004 --> DETACHK006
     DETACHI012 --> DETACHK006
     CONNECTK004 --> REMOTEK007
