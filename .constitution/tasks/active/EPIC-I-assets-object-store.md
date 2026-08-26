@@ -1,5 +1,5 @@
 ---
-version: v2.1.13
+version: v2.1.14
 status: active
 epic: I
 ---
@@ -262,14 +262,15 @@ Fault injection proves the active credential reference is always either the veri
   - STOP if the old store can retire before every Protected Object is verified in the replacement.
   - STOP if any device can publish during migration without first verifying each new Object in both stores, or if a device without replacement credentials can publish after cutover.
   - STOP if cutover discards the non-secret old-store fallback descriptor or a replacement-store miss can strand a protected Object that remains verifiable in the retained old store.
-  - STOP if a Remote-detached Workspace with prior published history attempts replacement migration; reconnect for coordinated migration or hydrate and remove the retained store.
-- **Description:** Publish a durable migration intent with non-secret old/new store identities. While the intent is active, every connected device dual-writes and verifies new Objects before publication; devices without replacement credentials pause publication but keep local use. Copy and verify the baseline Protected Object closure, repeatedly reconcile deltas against complete advertised refs and local publication state, then publish a compare-and-swap cutover bound to the migration epoch, Workspace revision, and Remote-ref inventory. Keep the old store's non-secret fallback descriptor in Workspace authority because authoritative deletion is disabled during `0.x`. On a replacement miss, use securely stored old-store credentials or request them from the Writer; alternatively, a connected device that retains those credentials may perform the same on-demand backfill. Verify the old bytes by content hash, write and verify the replacement, then hydrate from the replacement.
+  - STOP before migration intent, copy, or dual-write if the replacement hasn't passed the complete OBJECT-I004 private-store validation; pause migration and publication if that privacy evidence fails or becomes older than 15 minutes.
+  - STOP if a Remote-detached Workspace with prior published history attempts replacement migration; reconnect the exact prior Remote for coordinated migration or remain in `LocalWithObjectStore`.
+- **Description:** Route the replacement through the complete OBJECT-I004 private-store validation before publishing migration intent or copying any Object. Publish a durable migration intent with non-secret old/new store identities only after that succeeds. Revalidate replacement privacy before each publication batch and at least every 15 minutes throughout baseline copy, delta reconciliation, and dual-write operation. Privacy failure or stale evidence pauses migration and publication, leaves the old store authoritative, and keeps local use available. While the intent is active, every connected device dual-writes and verifies new Objects before publication; devices without replacement credentials pause publication but keep local use. Copy and verify the baseline Protected Object closure, repeatedly reconcile deltas against complete advertised refs and local publication state, then publish a compare-and-swap cutover bound to the migration epoch, Workspace revision, and Remote-ref inventory. Keep the old store's non-secret fallback descriptor in Workspace authority because authoritative deletion is disabled during `0.x`. On a replacement miss, use securely stored old-store credentials or request them from the Writer; alternatively, a connected device that retains those credentials may perform the same on-demand backfill. Verify the old bytes by content hash, write and verify the replacement, then hydrate from the replacement.
 - **Acceptance:**
   - **Mode:** invariant
   - **Evidence:**
 
 ```text
-Concurrency and interruption tests start publication before, during, and after baseline copy. Every publication under the migration intent verifies its Objects in both stores. Delta reconciliation reaches the exact bound Workspace and Remote inventories before compare-and-swap cutover. A stale epoch, revision, ref inventory, missing replacement credential, or failed verification blocks publication or cutover without changing authority. Restart resumes durable progress; successful cutover makes the replacement authoritative and retains the old store descriptor as readable fallback without changing Object identities. Tests cover a stale publisher after cutover and a fresh-device join whose replacement lookup misses: securely supplied old-store credentials or a credentialed peer fetch the old object, verify its content identity, backfill and verify the replacement, and only then hydrate it. No contract claims the fallback can be retired during `0.x`.
+Concurrency and interruption tests start publication before, during, and after baseline copy. Initial validation rejects an anonymously readable replacement before intent or copy. A policy-drift fixture makes it anonymously readable during baseline and delta work; the next scheduled or prepublication probe pauses copying, dual writes, and publication with the old store still authoritative. Every publication under the migration intent verifies fresh replacement privacy and its Objects in both stores. Delta reconciliation reaches the exact bound Workspace and Remote inventories before compare-and-swap cutover. A stale epoch, revision, ref inventory, privacy result, missing replacement credential, or failed verification blocks publication or cutover without changing authority. Restart resumes durable progress only after fresh private-store validation; successful cutover makes the replacement authoritative and retains the old store descriptor as readable fallback without changing Object identities. Tests cover a stale publisher after cutover and a fresh-device join whose replacement lookup misses: securely supplied old-store credentials or a credentialed peer fetch the old object, verify its content identity, backfill and verify the replacement, and only then hydrate it. No contract claims the fallback can be retired during `0.x`.
 ```
 
 #### DETACH-I012 Prepare every protected Object for full-local transition
@@ -285,30 +286,24 @@ Concurrency and interruption tests start publication before, during, and after b
 - **Scope (Out-of-Scope Files):**
   - Remote/Object Store attachment mutation owned by DETACH-K006 and S3-only Workspace operation
 - **Verification Command:** `cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh detach-i012 && git diff --check`
-- **Expected Success Output:** exit 0 with attached-Remote revalidation, detached-Remote local hydration, readiness-token, refusal, and restart tests passing
+- **Expected Success Output:** exit 0 with authenticated Remote revalidation, reconnect requirement, readiness-token, refusal, and restart tests passing
 - **STOP Conditions:**
   - STOP if readiness can be issued while any Protected Object is missing, unverified, or based on stale reachability.
-  - STOP if attached-Remote preparation can't authenticate online and re-enumerate all published Remote refs immediately before closure computation.
-  - STOP if `LocalWithObjectStore` preparation consults a detached Remote, omits any locally protected state, or can remove the retained store before every protected byte verifies locally.
-- **Description:** Support two explicit preparation modes. With an attached Remote, authenticate online, re-enumerate every published Remote ref, compute the complete Protected Object closure, and bind readiness to the ref inventory and Workspace revision. In `LocalWithObjectStore`, derive the closure from current state, retained or unpublished local history, pending reconciliation, and Consolidation without consulting the detached Remote; hydrate and verify every byte, then bind readiness to the complete local revision. Neither mode changes an external connection.
+  - STOP if preparation can't authenticate online and re-enumerate all published Remote refs immediately before closure computation.
+  - STOP if `LocalWithObjectStore` can issue readiness before reconnecting the exact prior Remote.
+- **Description:** Require an attached, authenticated Remote for full-local preparation. A Workspace in `LocalWithObjectStore` first reconnects the exact prior Remote. Then re-enumerate every published Remote ref, compute the complete Protected Object closure across Remote and local state, hydrate and verify every byte, and bind readiness to the ref inventory and Workspace revision. Preparation doesn't detach either external connection.
 - **Acceptance:**
   - **Mode:** gherkin
   - **Evidence:**
 
 ```gherkin
-Given a Workspace has an attached Remote and protected Objects that may not be local
+Given a Workspace has an attached Remote, or has reconnected the exact prior Remote after offline detach, and protected Objects may not be local
 When burlmd prepares a full-local transition while online and authenticated
 Then it freshly enumerates every published Remote ref
 And hydrates and verifies every protected Object reachable from that authority
 And returns readiness bound to the Remote-ref inventory and Workspace revision
 And leaves both external connections unchanged
-
-Given a Workspace is in LocalWithObjectStore after offline Remote detach
-When the Writer prepares removal of the retained Object Store
-Then burlmd derives every locally Protected State without consulting the detached Remote
-And hydrates and verifies every protected Object
-And returns readiness bound to the complete local revision
-And restart preserves prepared bytes but requires renewed readiness after local revision advance
+And restart preserves prepared bytes but requires renewed authenticated readiness after the ref inventory or Workspace revision advances
 ```
 
 #### UNLINK-I013 Detach an unused Object Store without detaching the Remote

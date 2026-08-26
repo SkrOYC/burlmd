@@ -1,5 +1,9 @@
 # Stage 3: Technical Implementation Changelog
 
+## v1.7.12-provisional
+
+PR #12 full review round 10 advances the result schema to v9, restricts Git revisions to real SHA-1 or SHA-256 widths, and makes semantic RFC 3339 calendar parsing plus revision resolution mandatory result-validator work. GitHub device-flow contract v4 classifies the documented refresh-time configuration, protocol, and Writer-action errors instead of allowing generic retry.
+
 ## v1.7.11-provisional
 
 PR #12 full review round 9 keeps authenticated GitHub Actions attestation work in the production release workflow instead of assigning it to the prototype-only packaging Spike. Result schema v8 requires complete profile facts for profile-bound runs, adds the integrated-graphics fact, and uses an inline timestamp shape while the result tool performs strict RFC 3339 calendar validation without an optional schema-format plugin.

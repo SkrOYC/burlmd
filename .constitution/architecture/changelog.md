@@ -1,5 +1,9 @@
 # Stage 2: Architecture changelog
 
+## v1.4.11 - 2026-08-26
+
+PR #12 full review round 10 routes every replacement Object Store through initial and recurring privacy validation before migration can copy or publish. It also removes the contradictory direct retained-store removal path after offline Remote detach: returning fully local requires reconnecting the exact prior Remote and obtaining fresh authenticated published-ref authority, as CAP-ASSET-11 requires.
+
 ## v1.4.10 - 2026-08-26
 
 PR #12 full review round 9 routes completed Consolidation back through prerequisite verification and initial publication instead of treating identity decisions as connection success. Object Store privacy now has a recurring and prepublication revalidation path whose failure pauses synchronization without blocking local work.
