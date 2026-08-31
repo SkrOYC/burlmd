@@ -84,8 +84,8 @@ And no Workspace file or Git change contains the preference
 PREF-G002 implements round-trip restore tests, corrupt- and unknown-version fallback tests, and an exclusion check that no Workspace or Git path contains these keys.
 
 ##### PREF-G002 Deviations & Justifications
-- **Touched Files:** `pubspec.yaml`, `pubspec.lock`, `lib/l10n/**`, `linux/flutter/generated_plugins.cmake`
-- **Justification:** Device-preference JSON persistence uses `path_provider` for Platform application-support. Flutter regenerates the Linux plugin cmake when that dependency is added. Localization strings for the new update-notification control live in `lib/l10n/**`.
+- **Touched Files:** `pubspec.yaml`, `pubspec.lock`, `lib/l10n/**`, `linux/flutter/generated_plugins.cmake`, `.constitution/tasks/active/EPIC-G-desktop-session-local-workflows.md`
+- **Justification:** Device-preference JSON persistence uses `path_provider` for Platform application-support. Flutter regenerates the Linux plugin cmake when that dependency is added. Localization strings for the new update-notification control live in `lib/l10n/**`. This task file records the test-scope deviation.
 
 #### STATE-G003 Persist versioned per-Workspace session snapshots
 - **Type:** Feature
