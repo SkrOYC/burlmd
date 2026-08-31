@@ -1,5 +1,9 @@
 # Stage 3: Technical Implementation Changelog
 
+## v1.8.1-provisional - 2026-08-31
+
+Correct the managed viewport contract. A role's `viewport.verified` value now records whether its own probe observed the exact required viewport. Only performance, Linux platform-regression, and authoritative macOS visual evidence require `true`. The CI bootstrap can therefore accept false macOS viewport records without adding a host-display probe. Aggregate acceptance defers viewport enforcement to the role schema, preserving exact ticket profiles, gate matching, and macOS 15 exclusions.
+
 ## v1.8.0-provisional - 2026-08-31
 
 Evolution pass for PRD v1.3.7 and Architecture v1.4.15. This version replaces physical workstation evidence with managed, identity-bound validation and leaves unresolved technology choices provisional.
