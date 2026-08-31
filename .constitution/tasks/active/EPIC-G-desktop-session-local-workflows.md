@@ -37,7 +37,7 @@ Complete the PR #11 shell as a real local-first desktop application. This epic r
   - `scripts/visual-regression.sh`
 - **Scope (Out-of-Scope Files):**
   - `linux/**` and `macos/**` (the Platform already owns real chrome; don't add a replacement)
-- **Verification Command:** M0 milestone gate: `flutter test && dart analyze && ./scripts/visual-regression.sh shell-g001 --baseline test/goldens/shell-g001-linux.png --max-different-pixels 0 && git diff --check && ! rg -n '\[DEBUG-' lib rust test scripts`. `CI-M003` later reruns common functional evidence on `ubuntu-24.04`, Apple Silicon `macos-26`, and Apple Silicon `macos-15`; Linux exact visual evidence uses the private headless Sway and Wayland environment, and macOS 26 alone updates the authoritative macOS baseline.
+- **Verification Command:** M0 milestone gate: `flutter test && dart analyze && ./scripts/visual-regression.sh shell-g001 --baseline test/goldens/shell-g001-linux.png --max-different-pixels 0 && git diff --check && ! rg -n '\[DEBUG-' lib rust test scripts`. `CI-M003` later reruns common functional evidence on `ubuntu-24.04`, Apple Silicon `macos-26`, and Apple Silicon `macos-15`; required Linux exact platform-regression evidence uses the private headless Sway and Wayland environment, and macOS 26 alone updates the authoritative product visual baseline.
 - **Expected Success Output:** exit 0 and a smoke capture showing only host-owned window chrome
 - **STOP Conditions:**
   - STOP if any production or executable test surface still selects, renders, or labels emulated macOS/Linux chrome; remove the obsolete contract instead of hiding it.
@@ -48,7 +48,7 @@ Complete the PR #11 shell as a real local-first desktop application. This epic r
   - **Evidence:**
 
 ```text
-The rebuilt `test/goldens/` shell baselines contain no simulated traffic lights, Linux title controls, Platform selector, or reserved fake-titlebar spacing. The M0 command allows zero different Linux pixels. After `CI-M003` merges, Linux exact visual evidence comes only from its owned headless environment, macOS 26 owns the sole macOS baseline, and macOS 15 remains functional-only. Production and executable tests contain no preference or code path that recreates emulated chrome. CAP-SHELL-04 passes with host-owned chrome.
+The rebuilt `test/goldens/` shell baselines contain no simulated traffic lights, Linux title controls, Platform selector, or reserved fake-titlebar spacing. The M0 command allows zero different Linux pixels. After `CI-M003` merges, required Linux exact platform-regression evidence comes only from its owned headless environment and isn't authoritative product visual evidence. macOS 26 owns the sole authoritative product visual baseline, and macOS 15 remains functional-only. Production and executable tests contain no preference or code path that recreates emulated chrome. CAP-SHELL-04 passes with host-owned chrome.
 ```
 
 #### PREF-G002 Persist device-global preferences
@@ -68,7 +68,7 @@ The rebuilt `test/goldens/` shell baselines contain no simulated traffic lights,
 - **Expected Success Output:** exit 0 with restart tests passing
 - **STOP Conditions:**
   - STOP if persistence requires storing appearance or update choices in the Workspace; keep them device-global.
-- **Description:** Persist theme, font scale, prose measure, focus mode, and update-notification choices through the Platform application-state seam defined by `device-preferences.schema.json`, with atomic replacement and corrupt- or unknown-version fallback.
+- **Description:** Persist theme, font scale, prose measure, focus mode, and update-notification choices through the Platform application-state seam defined by `device-preferences.schema.json`, with atomic replacement for supported state. Quarantine and preserve corrupt or unsupported later-version bytes without migration or overwrite while using in-memory defaults.
 - **Acceptance:**
   - **Mode:** gherkin
   - **Evidence:**
@@ -80,7 +80,7 @@ Then every preference is restored on that device
 And no Workspace file or Git change contains the preference
 ```
 
-PREF-G002 implements round-trip restore tests, corrupt- and unknown-version fallback tests, and an exclusion check that no Workspace or Git path contains these keys.
+PREF-G002 implements round-trip restore tests; corrupt- and unsupported-later-version fallback tests that prove original bytes remain unchanged; and an exclusion check that no Workspace or Git path contains these keys. It doesn't write defaults over preserved bytes. A later supported current file is permitted only through the explicitly safe isolated path owned by MIGRATE-M005.
 
 #### STATE-G003 Persist versioned per-Workspace session snapshots
 - **Type:** Feature
@@ -102,13 +102,13 @@ PREF-G002 implements round-trip restore tests, corrupt- and unknown-version fall
 - **Expected Success Output:** exit 0 with schema, fallback, and provider restore tests passing
 - **STOP Conditions:**
   - STOP if a snapshot can become authoritative Note/session state or contain Note content or secrets.
-- **Description:** Implement the Core-owned `workspace-session-snapshot.schema.json` contract and its active-Workspace FFI for versioned, atomic snapshots of open Note identities, active Note, tree expansion, last search state, and synchronization presentation.
+- **Description:** Implement the Core-owned `workspace-session-snapshot.schema.json` contract and its active-Workspace FFI for versioned, atomic snapshots of open Note identities, active Note, tree expansion, last search state, and synchronization presentation. Quarantine and preserve corrupt or unsupported later-version bytes without migration or overwrite while using an empty in-memory session for that Workspace.
 - **Acceptance:**
   - **Mode:** contract_test
   - **Evidence:**
 
 ```text
-STATE-G003 implements round-trip, Workspace-partition, atomic-replace, corrupt-fallback, and content, credential, and device-preference exclusion tests.
+STATE-G003 implements round-trip, Workspace-partition, atomic-replace, corrupt- and unsupported-later-version fallback, and content, credential, and device-preference exclusion tests. Fallback proves the original bytes remain unchanged and doesn't save defaults over them. A later supported current snapshot is permitted only through the explicitly safe isolated path owned by MIGRATE-M005.
 ```
 
 #### TABS-G004 Replace visual-only tabs with authoritative Note sessions
@@ -342,5 +342,5 @@ And requests any referenced Object that is not locally hydrated
   - **Evidence:**
 
 ```text
-The pipeline-owned Linux environment compares its exact capture with the named Linux baseline at a zero-different-pixel threshold without reading the Writer's desktop. The actual hosted macOS 26 GUI verifies its logical viewport and compares with the one authoritative macOS baseline. macOS 15 runs the same functional matrix without performance or visual evidence. Authenticated role bundles and the accepted aggregate bind every result to the same source, workflow execution, base, build, corpus, run, image, signer, and artifact identity. Together with integration logs, the gates cover preferences, restored tabs, every close path, Workspace switch, title jump, backlinks, undo/redo, find/replace, and history restore. The shell preserves PR #11 design parity without fake Platform chrome, unreachable actions, hardcoded Writer-facing copy, or nonauthoritative placeholder state.
+The pipeline-owned Linux environment compares its exact capture with the named Linux baseline at a zero-different-pixel threshold without reading the Writer's desktop. This required platform-regression gate isn't authoritative product visual evidence. The actual hosted macOS 26 GUI verifies its logical viewport and compares with the sole authoritative product visual baseline. macOS 15 runs the same functional matrix without performance or visual evidence. Authenticated role bundles and the accepted aggregate bind every result to the same source, workflow execution, base, build, corpus, run, image, signer, and artifact identity. Together with integration logs, the gates cover preferences, restored tabs, every close path, Workspace switch, title jump, backlinks, undo/redo, find/replace, and history restore. The shell preserves PR #11 design parity without fake Platform chrome, unreachable actions, hardcoded Writer-facing copy, or nonauthoritative placeholder state.
 ```

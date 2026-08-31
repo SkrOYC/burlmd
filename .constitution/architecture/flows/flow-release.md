@@ -6,8 +6,8 @@
 flowchart TD
     Build[Build supported artifacts]
     Expected[Authoritative expected identity\ntested source, workflow execution, base, build, corpus, run, and required roles]
-    Linux[Linux x86-64 common functional and performance\nowned isolated environment]
-    MacReference[Apple Silicon macOS 26 common functional, performance, and visual\nowned isolated environment]
+    Linux[Linux x86-64 common functional, performance, and non-authoritative exact platform regression\nowned isolated environment]
+    MacReference[Apple Silicon macOS 26 common functional, performance, and authoritative product visual\nowned isolated environment]
     MacCompatibility[macOS 15 common functional compatibility only\nowned isolated environment]
     Integrity[Authenticate managed validation origin and verify complete evidence bundle integrity]
     Identity[Compare captured identity with authoritative expected identity]
@@ -61,7 +61,7 @@ flowchart TD
 - Aggregation compares captured identity with the expected identity supplied directly by Release Pipeline. Self-description alone is insufficient.
 - A captured identity that is mismatched or stale is rejected. Evidence from another run can't satisfy the current release gate.
 - The later evidence-only report commit remains distinct from the tested source. A report commit that changes anything except evidence can't represent that run.
-- All three roles must pass the common functional matrix. macOS 15 can't replace either performance role or the macOS 26 visual role.
+- All three roles must pass the common functional matrix. Linux must also pass its exact non-authoritative platform-regression gate. macOS 15 can't replace either performance role, Linux platform-regression evidence, or the macOS 26 authoritative product visual role.
 - A launch-only result can't admit a system to the supported matrix.
 - Update notification never replaces installed binaries.
 - Unsigned prerelease status and Platform installation guidance remain explicit.

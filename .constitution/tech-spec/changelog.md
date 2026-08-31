@@ -13,9 +13,9 @@ Evolution pass for PRD v1.3.7 and Architecture v1.4.15. This version replaces ph
 
 ### Changed
 
-- Advanced provisional Spike contracts and result profiles to schema version 11. AST and Asset measurements use the Linux and macOS 26 performance roles. Packaging evidence binds macOS 26 and macOS 15 to their managed profiles.
+- Advanced provisional Spike contracts and result profiles to schema version 12. AST and Asset measurements use the Linux and macOS 26 performance roles. Packaging evidence binds macOS 26 and macOS 15 to their managed profiles.
 - Replaced physical CPU, disk, graphics, power, and throttling assumptions with hosted image identity, observed system resources, and a verified 1920x1080 at 60 Hz logical viewport. OS-major labels remain mutable weekly image channels and can't guarantee a physical host or identical reruns.
-- Bound Linux exact visual proof to the committed private headless Sway and Wayland implementation. Its current `1878x989` capture must reach the PRD viewport before acceptance. macOS 26 must use the actual hosted GUI and one reviewed macOS baseline set; macOS 15 has no visual role.
+- Bound Linux exact platform-regression proof to the committed private headless Sway and Wayland implementation. Its current `1878x989` capture must reach the PRD viewport before acceptance. This required zero-pixel implementation gate isn't a product visual reference. macOS 26 must use the actual hosted GUI and owns the sole authoritative product visual baseline set; macOS 15 has no visual role.
 - Made the Release Pipeline's expected identity authoritative. Aggregation verifies role-specific GitHub Sigstore signer provenance, independently checks artifact transport and hosted job labels, then compares captured identity instead of trusting artifact self-description.
 - Replaced the global all-Spike production stop with contract-scoped authorization. Epic G M0 remains unchanged. `FLAKE-M002` and `CI-M003` may implement their bootstrap. Every other production ticket waits only for its own decision evidence and Stage 3 and Stage 4 adaptation.
 - Permitted the installed Flutter Rust Bridge `2.12.0` triple and committed generated-binding checker for CI bootstrap. Final Stage 3 must revalidate both after evidence-driven dependency choices, and the current checker must run in a disposable checkout until mismatch cleanup is hardened.
@@ -30,6 +30,8 @@ Evolution pass for PRD v1.3.7 and Architecture v1.4.15. This version replaces ph
 - Removed the circular requirement for a role manifest to contain the service-assigned ID and digest of the artifact that contains it. Roles attest immutable pre-upload bundle bytes; the coordinator adds bundle, upload, and attestation facts only to the final report.
 - Replaced unsupported artifact-to-job REST correlation with three distinct static local reusable-workflow signers resolved from the workflow execution commit. Signed builder identity binds each bundle to its role workflow, and the job API corroborates that workflow's fixed hosted label without trusting a manifest-supplied job name or ID.
 - Made final aggregation a discriminated accepted or rejected result. Rejected reports allow missing or partial role evidence and require typed reasons. Each role's evidence-class sequence is exact, so Linux and macOS can't claim the other platform's visual proof.
+- Renamed the Linux evidence class to `linux-platform-regression` and its gate to `linuxPlatformRegression`, separating required exact Linux implementation evidence from macOS 26 product visual authority.
+- Aligned device-preference and Workspace-session forward-version handling with migration policy. Unsupported later-version and corrupt bytes are quarantined and preserved byte-for-byte; runtime defaults stay in memory, and any later current-format write uses an explicitly safe isolated path.
 
 ### Security
 

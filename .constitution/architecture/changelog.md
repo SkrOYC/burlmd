@@ -10,7 +10,7 @@ Reviewed for PRD v1.3.7. This Evolution pass replaces workstation-dependent vali
 
 ### Changed
 
-- Assigned performance evidence to Linux x86-64 and Apple Silicon macOS 26. The macOS 26 role also supplies visual evidence. macOS 15 supplies functional compatibility evidence only.
+- Assigned performance evidence to Linux x86-64 and Apple Silicon macOS 26. Linux also supplies required non-authoritative exact platform-regression evidence. The macOS 26 role supplies the sole authoritative product visual evidence. macOS 15 supplies functional compatibility evidence only.
 - Required every evidence handoff to carry captured environment, build, corpus, role, and run identity. Aggregation rejects missing, corrupt, mismatched, or stale evidence.
 - Updated release resilience, observability, threat notes, risks, and failure behavior so incomplete proof can't publish as a complete release result.
 
@@ -20,6 +20,7 @@ Reviewed for PRD v1.3.7. This Evolution pass replaces workstation-dependent vali
 - Made Release Pipeline the authority for expected release, build, corpus, run, and required-role identities. Aggregation receives that expectation directly, authenticates the validation origin, verifies artifact integrity, and compares captured identity instead of trusting self-description.
 - Distinguished the tested source, workflow execution, base, and later evidence-only report state. Each role hands off one complete evidence bundle, and aggregation rejects an unmanaged origin or a bundle that omits bytes named by its manifest.
 - Clarified that a degraded close continues only a single Note-to-Note replacement with no enclosing operation. A batch or wider lifecycle operation stops after removing the retired warned tab and preserves every unprocessed tab.
+- Distinguished Linux exact platform-regression evidence from authoritative product visual evidence. The Linux gate remains required but can't replace the sole authoritative macOS 26 visual role.
 
 ## v1.4.14 - 2026-08-26
 

@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": ["schemaVersion", "expectedIdentity", "expectedIdentitySha256", "roleEvidence"],
   "properties": {
-    "schemaVersion": { "const": 2 },
+    "schemaVersion": { "const": 3 },
     "expectedIdentity": { "$ref": "#/$defs/expectedIdentity" },
     "expectedIdentitySha256": { "$ref": "#/$defs/sha256" },
     "roleEvidence": { "$ref": "#/$defs/roleEvidence" }
@@ -126,11 +126,11 @@
     "gates": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["commonFunctional", "performance", "linuxExactVisual", "macosAuthoritativeVisual"],
+      "required": ["commonFunctional", "performance", "linuxPlatformRegression", "macosAuthoritativeVisual"],
       "properties": {
         "commonFunctional": { "type": "boolean" },
         "performance": { "type": "boolean" },
-        "linuxExactVisual": { "type": "boolean" },
+        "linuxPlatformRegression": { "type": "boolean" },
         "macosAuthoritativeVisual": { "type": "boolean" }
       }
     },
@@ -160,7 +160,7 @@
         "evidenceClasses": {
           "type": "array",
           "uniqueItems": true,
-          "items": { "enum": ["common-functional", "performance", "linux-exact-visual", "macos-authoritative-visual"] }
+          "items": { "enum": ["common-functional", "performance", "linux-platform-regression", "macos-authoritative-visual"] }
         },
         "gates": { "$ref": "#/$defs/gates" },
         "toolchain": { "type": "object", "minProperties": 1, "additionalProperties": { "type": "string", "minLength": 1 } },
@@ -174,7 +174,7 @@
             "environment": { "type": "object", "properties": {
               "runnerLabel": { "const": "ubuntu-24.04" }, "architecture": { "const": "x86_64" }, "logicalCpuCount": { "const": 4 }, "documentedMemoryBytes": { "const": 16000000000 }, "documentedStorageBytes": { "const": 14000000000 }
             } },
-            "evidenceClasses": { "const": ["common-functional", "performance", "linux-exact-visual"] },
+            "evidenceClasses": { "const": ["common-functional", "performance", "linux-platform-regression"] },
             "gates": { "type": "object", "properties": { "macosAuthoritativeVisual": { "const": false } } }
           } }
         },
@@ -186,7 +186,7 @@
               "runnerLabel": { "const": "macos-26" }, "architecture": { "const": "aarch64" }, "logicalCpuCount": { "const": 3 }, "documentedMemoryBytes": { "const": 7000000000 }, "documentedStorageBytes": { "const": 14000000000 }
             } },
             "evidenceClasses": { "const": ["common-functional", "performance", "macos-authoritative-visual"] },
-            "gates": { "type": "object", "properties": { "linuxExactVisual": { "const": false } } }
+            "gates": { "type": "object", "properties": { "linuxPlatformRegression": { "const": false } } }
           } }
         },
         {
@@ -197,7 +197,7 @@
               "runnerLabel": { "const": "macos-15" }, "architecture": { "const": "aarch64" }, "logicalCpuCount": { "const": 3 }, "documentedMemoryBytes": { "const": 7000000000 }, "documentedStorageBytes": { "const": 14000000000 }
             } },
             "evidenceClasses": { "const": ["common-functional"] },
-            "gates": { "type": "object", "properties": { "performance": { "const": false }, "linuxExactVisual": { "const": false }, "macosAuthoritativeVisual": { "const": false } } }
+            "gates": { "type": "object", "properties": { "performance": { "const": false }, "linuxPlatformRegression": { "const": false }, "macosAuthoritativeVisual": { "const": false } } }
           } }
         }
       ]

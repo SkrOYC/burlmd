@@ -55,8 +55,8 @@
 - Release Pipeline establishes authoritative tested-source, workflow-execution, base, release, build, corpus, run, and required-role identities. It hands the same expectation directly to validation and aggregation.
 - Every validation role hands off one complete bundle containing its manifest and every named evidence file. The handoff authenticates managed validation origin and protects upload and bundle integrity.
 - Evidence Aggregation compares captured identity with the authoritative expected identity. It rejects self-description alone, an unmanaged or untrusted origin, incomplete or corrupt bundles, mismatches, and stale evidence. A later report state can't replace the tested source identity.
-- All three roles supply common functional-matrix evidence. Linux x86-64 and Apple Silicon macOS 26 also supply performance evidence. macOS 26 alone supplies visual evidence.
-- macOS 15 supplies functional compatibility evidence only. It can't replace either performance role or macOS 26 visual evidence.
+- All three roles supply common functional-matrix evidence. Linux x86-64 and Apple Silicon macOS 26 also supply performance evidence. Linux supplies required exact platform-regression evidence, which is non-authoritative implementation evidence and can't replace product visual proof. macOS 26 alone supplies authoritative product visual evidence.
+- macOS 15 supplies functional compatibility evidence only. It can't replace either performance role, Linux platform-regression evidence, or macOS 26 authoritative visual evidence.
 - A partial run remains incomplete. Each retry receives a distinct run identity instead of reusing an earlier result.
 
 ## Observability

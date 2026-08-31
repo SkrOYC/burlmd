@@ -10,7 +10,7 @@ burlmd remains a local-first modular desktop application. One authoritative Core
 
 A separate release pipeline produces installable artifacts for the supported Platform matrix. Pipeline-owned isolated environments run validation without using the Writer's active desktop. Each environment owns its display, compositor, input, and process state.
 
-All three validation roles run the common functional matrix. Linux x86-64 and Apple Silicon macOS 26 are also performance-reference roles. The macOS 26 role also owns visual reference evidence. macOS 15 provides functional compatibility evidence only.
+All three validation roles run the common functional matrix. Linux x86-64 and Apple Silicon macOS 26 are also performance-reference roles. Linux additionally supplies required exact platform-regression evidence for its implementation, but that evidence isn't a product visual reference. The macOS 26 role owns the sole authoritative product visual reference. macOS 15 provides functional compatibility evidence only.
 
 The Release Pipeline establishes the authoritative expected identity for each run. It distinguishes tested source, workflow execution, base, release, build, corpus, run, and required-role identities. The pipeline hands this identity independently to validation and aggregation. Each validation role returns one complete evidence bundle that includes its manifest and every named result. The handoff authenticates managed origin and protects bundle integrity. A later evidence-only report state remains distinct from the tested source.
 

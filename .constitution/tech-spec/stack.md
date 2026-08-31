@@ -21,7 +21,7 @@ The delivered application remains on Flutter 3.44.3, Dart 3.12.2, Rust 1.97.1, G
 
 ## Managed validation bootstrap
 
-The common functional matrix runs on standard public GitHub-hosted runners with OS-major labels. Linux x86-64 uses `ubuntu-24.04`. Apple Silicon macOS 26 uses `macos-26`. It also runs performance meters and owns the sole authoritative macOS visual-baseline set. Apple Silicon macOS 15 uses `macos-15` for functional compatibility only. Linux and macOS 26 both run the PRD performance meters. Linux exact visual proof uses the committed private headless Sway and Wayland capture path and never the Writer's desktop.
+The common functional matrix runs on standard public GitHub-hosted runners with OS-major labels. Linux x86-64 uses `ubuntu-24.04`. Apple Silicon macOS 26 uses `macos-26`. It also runs performance meters and owns the sole authoritative product visual-baseline set. Apple Silicon macOS 15 uses `macos-15` for functional compatibility only. Linux and macOS 26 both run the PRD performance meters. Linux exact platform-regression proof uses the committed private headless Sway and Wayland capture path and never the Writer's desktop. This required zero-pixel implementation gate isn't a product visual reference and can't substitute for macOS 26 visual evidence.
 
 GitHub documents 4 CPUs, 16 GB of memory, and 14 GB of storage for standard x86-64 Linux runners. It documents 3 M1 CPUs, 7 GB of memory, and 14 GB of storage for standard arm64 macOS runners. These allocations define the reference classes, but they don't pin a physical host. CPU scheduling, storage throughput, and host contention remain outside the project's control.
 
