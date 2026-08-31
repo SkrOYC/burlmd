@@ -1,5 +1,5 @@
 ---
-version: v1.8.0-provisional
+version: v1.8.1-provisional
 ---
 
 # Bill of Materials (BOM) & Stack
@@ -25,7 +25,7 @@ The standard public runner labels define evidence capabilities, not a universal 
 
 GitHub documents 4 CPUs, 16 GB of memory, and 14 GB of storage for standard x86-64 Linux runners. It documents 3 M1 CPUs, 7 GB of memory, and 14 GB of storage for standard arm64 macOS runners. These allocations define the reference classes, but they don't pin a physical host. CPU scheduling, storage throughput, and host contention remain outside the project's control.
 
-The `ubuntu-24.04`, `macos-26`, and `macos-15` labels pin the operating-system major, not an immutable image. GitHub updates hosted images weekly. Every run must therefore capture `ImageOS`, `ImageVersion`, the full OS release, architecture, CPU model and count, memory, storage, and the verified 1920x1080 at 60 Hz logical viewport. Aggregation must not combine performance or visual evidence across different image versions. Repository toolchains remain pinned through Nix inputs, `rust-toolchain.toml`, `Cargo.lock`, and `pubspec.lock`.
+The `ubuntu-24.04`, `macos-26`, and `macos-15` labels pin the operating-system major, not an immutable image. GitHub updates hosted images weekly. Every run must therefore capture `ImageOS`, `ImageVersion`, the full OS release, architecture, CPU model and count, memory, storage, and its 1920x1080 at 60 Hz logical viewport record. `viewport.verified` is true only when a role-owned probe observes that exact viewport. A false value doesn't claim an observed viewport. Roles that provide `performance`, `linux-platform-regression`, or `macos-authoritative-visual` must record true. `CI-M003` provides none of those classes, so its macOS roles can record false and it must not add a host-display probe. Aggregation must not combine performance or visual evidence across different image versions. Repository toolchains remain pinned through Nix inputs, `rust-toolchain.toml`, `Cargo.lock`, and `pubspec.lock`.
 
 Role output has two schemas. The `contracts/ci-role-evidence.schema.json` file validates the candidate manifest and the separate pre-completion sealing receipt. The receipt records `job.check_run_id` and immutable identity and digest facts, but it has no final job state. The `contracts/ci-evidence.schema.json` file validates the coordinator's accepted or rejected aggregate after post-completion job, artifact, and provenance enrichment. These contracts keep receipt and bundle hashes outside the bytes they describe.
 

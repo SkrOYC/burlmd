@@ -1,5 +1,9 @@
 # Stage 4: Tasks changelog
 
+## v2.2.1 - 2026-08-31
+
+Reviewed TechSpec v1.8.1-provisional. The conditional viewport evidence correction changes no ticket, dependency, scope, acceptance mode, effort estimate, or execution order.
+
 ## v2.2.0 - 2026-08-31
 
 Evolution pass for PRD v1.3.7, Architecture v1.4.15, and TechSpec v1.8.0-provisional. The backlog remains 80 tickets and 564 active story points. The dependency graph now has 226 edges, and the recomputed critical path is 180 points.
