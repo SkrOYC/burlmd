@@ -1,12 +1,12 @@
 ---
-version: v2.1.20
+version: v2.2.0
 status: active
 epic: I
 ---
 
 # Epic I: Assets and Object Store
 
-Deliver inline images through a portable Local Asset Store and a first-class, user-controlled S3-compatible Object Store. ASSET-I001 runs first; dependent tickets adapt to the measured manifest, client, limits, and repository-health contract accepted by the upstream evolution pass.
+Deliver inline images through a portable Local Asset Store and a first-class, user-controlled S3-compatible Object Store. ASSET-I001 runs after merged `CI-M003`; dependent tickets adapt to the measured manifest, client, limits, and repository-health contract accepted by the upstream evolution pass. Production tickets remain blocked until their evidence, required upstream finalization, and Stage 4 adaptation are merged.
 
 **Capability coverage:** CAP-EDIT-06, CAP-ASSET-01, CAP-ASSET-02, CAP-ASSET-03, CAP-ASSET-04, CAP-ASSET-05, CAP-ASSET-06, CAP-ASSET-08, CAP-ASSET-09, CAP-ASSET-10, CAP-ASSET-11, CAP-ASSET-12.
 
@@ -15,18 +15,19 @@ Deliver inline images through a portable Local Asset Store and a first-class, us
 #### ASSET-I001 Measure the hybrid Asset and Object Store contract
 - **Type:** Spike
 - **Effort:** 8
-- **Dependencies:** None
+- **Dependencies:** CI-M003
 - **Category:** Feature-Evolution
 - **Scope (In-Scope Files):**
   - `.constitution/prototypes/assets/**`
   - `.constitution/spikes/SPK-ASSET-I001.md`
 - **Scope (Out-of-Scope Files):**
   - Every repository path not listed above (don't touch production or active specifications)
-- **Verification Command:** Run these exact commands in order on their named hosts: common: `cargo test --locked --manifest-path .constitution/prototypes/assets/Cargo.toml --all-targets`; Linux reference profile: `cargo run --locked --release --manifest-path .constitution/prototypes/assets/Cargo.toml -- probe --run-id linux-reference --role linux-reference-profile --expected-os linux --expected-arch x86_64 --profile linux-i5-8250u-16gib --fixture-dir .constitution/prototypes/assets/fixtures --output .constitution/prototypes/assets/runs/linux-reference.json --handoff-bundle .constitution/prototypes/assets/handoff/outbox/linux-reference.tar.zst --handoff-sha256 .constitution/prototypes/assets/handoff/outbox/linux-reference.sha256`; macOS reference profile: `cargo run --locked --release --manifest-path .constitution/prototypes/assets/Cargo.toml -- probe --run-id macos-reference --role macos-reference-profile --expected-os macos --expected-arch aarch64 --profile macos-m1-8gib --fixture-dir .constitution/prototypes/assets/fixtures --output .constitution/prototypes/assets/runs/macos-reference.json --handoff-bundle .constitution/prototypes/assets/handoff/outbox/macos-reference.tar.zst --handoff-sha256 .constitution/prototypes/assets/handoff/outbox/macos-reference.sha256`; coordinator transfer: `mkdir -p .constitution/prototypes/assets/handoff/inbox && scp "$BURLMD_LINUX_HANDOFF_SOURCE/linux-reference.tar.zst" "$BURLMD_LINUX_HANDOFF_SOURCE/linux-reference.sha256" "$BURLMD_MACOS_HANDOFF_SOURCE/macos-reference.tar.zst" "$BURLMD_MACOS_HANDOFF_SOURCE/macos-reference.sha256" .constitution/prototypes/assets/handoff/inbox/`; coordinator aggregation: `cargo run --locked --release --manifest-path .constitution/prototypes/assets/Cargo.toml -- aggregate --contract .constitution/tech-spec/contracts/provisional-spikes.toml --schema .constitution/tech-spec/contracts/spike-result.schema.json --import-bundle .constitution/prototypes/assets/handoff/inbox/linux-reference.tar.zst --import-sha256 .constitution/prototypes/assets/handoff/inbox/linux-reference.sha256 --import-bundle .constitution/prototypes/assets/handoff/inbox/macos-reference.tar.zst --import-sha256 .constitution/prototypes/assets/handoff/inbox/macos-reference.sha256 --require-role linux-reference-profile --require-role macos-reference-profile --require-distinct-hosts 2 --require-distinct-operating-systems 2 --require-role-os linux-reference-profile=linux --require-role-arch linux-reference-profile=x86_64 --require-role-profile linux-reference-profile=linux-i5-8250u-16gib --require-role-os macos-reference-profile=macos --require-role-arch macos-reference-profile=aarch64 --require-role-profile macos-reference-profile=macos-m1-8gib --output .constitution/prototypes/assets/results.json`.
+- **Verification Command:** In a candidate-branch draft pull request based on merged `CI-M003`, run `cargo test --locked --manifest-path .constitution/prototypes/assets/Cargo.toml --all-targets` on all three managed functional roles. Run the exact `SPK-ASSET-I001` Linux x86-64 and macOS 26 performance probe and coordinator aggregation commands from `.constitution/tech-spec/contracts/provisional-spikes.toml`. Validate the pre-upload manifests and final aggregate through the authenticated two-phase evidence protocol.
 - **Expected Success Output:** exit 0 with a finalized schema-valid report and explicit OD-06/OD-07 disposition
 - **STOP Conditions:**
   - STOP if credentials would enter committed files or evidence.
   - STOP if a result weakens Protected State or deletion safety.
+  - STOP if `CI-M003` isn't merged or if evidence is missing, stale, mismatched, corrupt, unauthenticated, or assigned to the wrong role.
   - STOP at the 3-day time box and leave thresholds unresolved when full meters aren't established.
 - **Description:** Compare the accepted S3 client candidates and measure content identity, immutable manifests, image limits, hydration, reachability, retention, and repository health.
 - **Acceptance:**
@@ -34,7 +35,7 @@ Deliver inline images through a portable Local Asset Store and a first-class, us
   - **Evidence:**
 
 ```text
-Candidate-attributed results cover both reference profiles, all declared gates, exact tool/service configurations without secrets, UI Responsiveness and Idle Memory disposition, and a recommendation for client and thresholds or an explicit unresolved outcome. The result tool captures CPU, core count, memory, storage, graphics, display, power, and thermal facts from system APIs. Aggregation matches them to the PRD profiles and rejects a missing role, duplicate host, duplicate operating system, or role/profile mismatch.
+Candidate-attributed results cover all three common functional roles, both performance roles, every declared gate, exact tool and service configurations without secrets, UI Responsiveness and Idle Memory disposition, and a recommendation or explicit unresolved outcome. Linux x86-64 `ubuntu-24.04` supplies performance evidence with 4 CPUs and 16 GB; Apple Silicon `macos-26` supplies performance evidence with 3 M1 CPUs and 7 GB; `macos-15` is functional compatibility-only. Each role captures the verified logical viewport and complete image, environment, build, corpus, run, signer, and artifact identity. Aggregation rejects a missing, stale, mismatched, corrupt, unauthenticated, duplicate, or role-invalid result.
 ```
 
 #### STORE-I002 Implement the Local Asset Store and immutable manifest

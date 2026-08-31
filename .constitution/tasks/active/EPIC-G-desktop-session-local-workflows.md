@@ -1,5 +1,5 @@
 ---
-version: v2.1.21
+version: v2.2.0
 status: active
 epic: G
 ---
@@ -12,7 +12,9 @@ Complete the PR #11 shell as a real local-first desktop application. This epic r
 
 **Total Effort:** 71 story points
 
-**M0 authorization:** M0 authorizes `SHELL-G001`, `PREF-G002`, `STATE-G003`, `TABS-G004`, `CLOSE-G005`, and `NAV-G007` to write production code. M0 defers the remaining Epic G tickets in this epic. Every other production ticket remains blocked.
+**M0 authorization:** M0 authorizes `SHELL-G001`, `PREF-G002`, `STATE-G003`, `TABS-G004`, `CLOSE-G005`, and `NAV-G007` to write production code. M0 defers the remaining Epic G tickets until their declared H foundation, accepted upstream finalization, and Stage 4 adaptation are merged. An unrelated open Spike doesn't block an otherwise authorized ticket.
+
+**Tranche integration:** Execute and review each M0 ticket as one milestone on the coordinating `feat/epic-g-desktop-session` branch, but don't merge that unrebased branch as a dependency. After the M bootstrap, H Spike, constitution evidence-finalization, and H foundation pull requests merge, recreate the Epic G branch from merged `master`. Surgically replay only the reviewed M0 ticket and review-fix changes that aren't already supplied by merged CI. Preserve the CI-owned workflow, evidence, and headless-capture foundation instead of reapplying an older branch copy. Then execute `OPEN-G006`, `EDIT-G008`, `FIND-G009`, `HIST-G010`, and `SHELL-G011` in dependency order. Each ticket receives one full milestone review before the next ticket starts. An unmerged branch never satisfies a dependency, and a partial replay doesn't archive Epic G.
 
 ##### M0 Deviations & Justifications
 - **Touched Files:** README.md, .constitution/tech-spec/stack.md, .constitution/tech-spec/data-models/schema.sql
@@ -35,17 +37,18 @@ Complete the PR #11 shell as a real local-first desktop application. This epic r
   - `scripts/visual-regression.sh`
 - **Scope (Out-of-Scope Files):**
   - `linux/**` and `macos/**` (the Platform already owns real chrome; don't add a replacement)
-- **Verification Command:** On Linux, this command is the executable gate: `flutter test && dart analyze && ./scripts/visual-regression.sh shell-g001 --baseline test/goldens/shell-g001-linux.png --max-different-pixels 0 && git diff --check && ! rg -n '\[DEBUG-' lib rust test scripts`. Before SHELL-G011 closeout or release, run this command on a live Apple Silicon macOS host: `flutter test && dart analyze && ./scripts/visual-regression.sh shell-g001 --baseline test/goldens/shell-g001-macos.png --max-different-pixels 0 && git diff --check && ! rg -n '\[DEBUG-' lib rust test scripts`. Do not capture or fake macOS goldens on Linux.
+- **Verification Command:** M0 milestone gate: `flutter test && dart analyze && ./scripts/visual-regression.sh shell-g001 --baseline test/goldens/shell-g001-linux.png --max-different-pixels 0 && git diff --check && ! rg -n '\[DEBUG-' lib rust test scripts`. `CI-M003` later reruns common functional evidence on `ubuntu-24.04`, Apple Silicon `macos-26`, and Apple Silicon `macos-15`; Linux exact visual evidence uses the private headless Sway and Wayland environment, and macOS 26 alone updates the authoritative macOS baseline.
 - **Expected Success Output:** exit 0 and a smoke capture showing only host-owned window chrome
 - **STOP Conditions:**
   - STOP if any production or executable test surface still selects, renders, or labels emulated macOS/Linux chrome; remove the obsolete contract instead of hiding it.
+  - STOP before claiming managed reference evidence if the viewport isn't verified at 1920x1080 at 60 Hz, Linux capture touches the Writer's desktop, or macOS 15 contributes visual evidence.
 - **Description:** Remove the Platform-chrome preference, state, widgets, localized copy, fixtures, tests, and executable visual assumptions introduced for prototype presentation. Preserve design provenance only in non-executable documentation.
 - **Acceptance:**
   - **Mode:** visual_regression
   - **Evidence:**
 
 ```text
-The rebuilt `test/goldens/` Linux and macOS shell baselines contain no simulated traffic lights, Linux title controls, Platform selector, or reserved fake-titlebar spacing. The named verification commands allow zero different pixels. Production and executable tests contain no preference or code path that recreates them. CAP-SHELL-04 passes with host-owned chrome.
+The rebuilt `test/goldens/` shell baselines contain no simulated traffic lights, Linux title controls, Platform selector, or reserved fake-titlebar spacing. The M0 command allows zero different Linux pixels. After `CI-M003` merges, Linux exact visual evidence comes only from its owned headless environment, macOS 26 owns the sole macOS baseline, and macOS 15 remains functional-only. Production and executable tests contain no preference or code path that recreates emulated chrome. CAP-SHELL-04 passes with host-owned chrome.
 ```
 
 #### PREF-G002 Persist device-global preferences
@@ -328,15 +331,16 @@ And requests any referenced Object that is not locally hydrated
   - `scripts/visual-regression.sh`
 - **Scope (Out-of-Scope Files):**
   - Assets, Remote sync, and release surfaces owned by later epics
-- **Verification Command:** On Linux, this command is the executable gate: `cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && ./scripts/visual-regression.sh shell-g011 --baseline test/goldens/shell-g011-linux.png --max-different-pixels 0 && git diff --check && ! rg -n '\[DEBUG-' lib rust test scripts`. Before SHELL-G011 closeout or release, run this command on a live Apple Silicon macOS host: `cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && ./scripts/visual-regression.sh shell-g011 --baseline test/goldens/shell-g011-macos.png --max-different-pixels 0 && git diff --check && ! rg -n '\[DEBUG-' lib rust test scripts`. Do not capture or fake macOS goldens on Linux.
+- **Verification Command:** `ubuntu-24.04`: `cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && ./scripts/visual-regression.sh shell-g011 --baseline test/goldens/shell-g011-linux.png --max-different-pixels 0 && git diff --check && ! rg -n '\[DEBUG-' lib rust test scripts`; Apple Silicon `macos-26`: `cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && ./scripts/visual-regression.sh shell-g011 --baseline test/goldens/shell-g011-macos.png --max-different-pixels 0 && git diff --check && ! rg -n '\[DEBUG-' lib rust test scripts`; Apple Silicon `macos-15`: `cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && git diff --check`. Validate all results through the authenticated `CI-M003` role and aggregate schemas.
 - **Expected Success Output:** exit 0 with the local feature matrix and reviewed visual evidence passing
 - **STOP Conditions:**
   - STOP if any pointer action lacks keyboard reachability, Writer-facing string bypasses localization, or state shown by the shell isn't authoritative.
+  - STOP if the final aggregate is rejected, Linux capture can observe the Writer's desktop, macOS 26 geometry isn't verified, or macOS 15 creates or updates a visual baseline.
 - **Description:** Integrate the completed local workflows into the delivered design system, finish keyboard/focus/Semantics/localization coverage, and rebuild visual evidence after Platform-chrome removal.
 - **Acceptance:**
   - **Mode:** visual_regression
   - **Evidence:**
 
 ```text
-The Linux executable gate compares its capture with the named `test/goldens/` baseline at a zero-different-pixel threshold. Before SHELL-G011 closeout or release, the Apple Silicon macOS command runs on a live Apple Silicon host and compares its own capture with the named macOS baseline. Do not capture or fake macOS goldens on Linux. Together with integration logs, the gates cover preferences, restored tabs, every close path, Workspace switch, title jump, backlinks, undo/redo, find/replace, and history restore. The shell preserves PR #11 design parity without fake Platform chrome, unreachable actions, hardcoded Writer-facing copy, or nonauthoritative placeholder state.
+The pipeline-owned Linux environment compares its exact capture with the named Linux baseline at a zero-different-pixel threshold without reading the Writer's desktop. The actual hosted macOS 26 GUI verifies its logical viewport and compares with the one authoritative macOS baseline. macOS 15 runs the same functional matrix without performance or visual evidence. Authenticated manifests and the accepted aggregate bind every result to the same build, corpus, run, image, signer, and artifact identity. Together with integration logs, the gates cover preferences, restored tabs, every close path, Workspace switch, title jump, backlinks, undo/redo, find/replace, and history restore. The shell preserves PR #11 design parity without fake Platform chrome, unreachable actions, hardcoded Writer-facing copy, or nonauthoritative placeholder state.
 ```
