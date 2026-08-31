@@ -365,19 +365,31 @@ class LifecycleActions {
     // presentation entry rather than leaving a writable Dart-only buffer.
     if (_ref.mounted) {
       _ref.read(activeNoteProvider.notifier).discardRetiredTab(noteId);
-      // A same-id state may have mounted while close_note was pending. Once
-      // its tab has been discarded, its selection is no longer retryable and
-      // must not outlive the retired Core session.
-      if (_ref.read(selectedNoteIdProvider) == noteId &&
-          !_hasMountedSameIdSession(noteId)) {
-        final activeNoteId = _ref.read(activeNoteProvider)?.metadata.id;
-        final selection = _ref.read(selectedNoteIdProvider.notifier);
-        if (activeNoteId == null) {
-          selection.clear();
-        } else {
-          selection.selectForLifecycle(activeNoteId);
-        }
-      }
+      _reconcileSelectionAfterRetiredCreatedSession();
+    }
+  }
+
+  /// Reconciles the tree after a stale create's delayed Core close retires a
+  /// session that mounted in the meantime. The selected Core-backed tab wins:
+  /// its normal listener could have fired while lifecycle admission was
+  /// blocked, so it cannot be relied on to re-open itself after the retired
+  /// active session is discarded. If selection cannot be backed by a tab,
+  /// reflect another still-active Core session; otherwise clear the stale
+  /// highlight rather than leaving it pointed at a Dart-only absence.
+  void _reconcileSelectionAfterRetiredCreatedSession() {
+    final controller = _ref.read(activeNoteProvider.notifier);
+    final selectedNoteId = _ref.read(selectedNoteIdProvider);
+    if (selectedNoteId != null &&
+        controller.activateExistingTab(selectedNoteId)) {
+      return;
+    }
+
+    final activeNoteId = _ref.read(activeNoteProvider)?.metadata.id;
+    final selection = _ref.read(selectedNoteIdProvider.notifier);
+    if (activeNoteId != null) {
+      selection.selectForLifecycle(activeNoteId);
+    } else {
+      selection.clear();
     }
   }
 

@@ -51,6 +51,7 @@ class _LifecycleApi extends RustApi {
   Completer<void>? deleteDirectoryGate;
   LifecycleWarning? lifecycleWarning;
   Object? closeNoteError;
+  Completer<void>? closeNoteGate;
 
   /// What `open_note` returns per id — for already-open Notes the live
   /// session state (post-rewrite, post-remap), which is exactly what the
@@ -152,6 +153,8 @@ class _LifecycleApi extends RustApi {
     calls.add('closeNote:$noteId');
     final error = closeNoteError;
     if (error != null) throw error;
+    final gate = closeNoteGate;
+    if (gate != null && !gate.isCompleted) await gate.future;
   }
 
   @override
@@ -1336,7 +1339,10 @@ void main() {
     expect(api.calls, ['createNote::Created', 'closeNote:Created']);
     expect(outcome.warning, same(warning));
     expect(container.read(activeNoteProvider)!.metadata.id, 'Old');
-    expect(container.read(selectedNoteIdProvider), 'Elsewhere');
+    // The intercepted target has no Core-backed tab, so delayed cleanup
+    // restores the surviving active Core session instead of retaining an
+    // unmounted selection that cannot re-emit while admission is blocked.
+    expect(container.read(selectedNoteIdProvider), 'Old');
     expect(container.read(lifecycleEditingProvider), 0);
   });
 
@@ -1483,6 +1489,67 @@ void main() {
     expect(container.read(noteCloseFailureProvider), isA<CloseNoteWarning>());
     expect(api.calls, ['createNote::Created', 'closeNote:Created']);
   });
+
+  testWidgets(
+    'a delayed stale-create close activates the selected surviving Core tab',
+    (tester) async {
+      final createGate = Completer<void>();
+      final closeGate = Completer<void>();
+      final old = stateFor('Old');
+      final elsewhere = stateFor('Elsewhere');
+      final created = stateFor('Created');
+      final api = _LifecycleApi()
+        ..createNoteResult = created
+        ..createNoteGate = createGate
+        ..closeNoteGate = closeGate
+        ..openStates = {'Old': old, 'Elsewhere': elsewhere};
+      late ProviderContainer container;
+      await tester.pumpWidget(_probeHarness(api, (c) => container = c));
+      addTearDown(container.dispose);
+      final controller = container.read(activeNoteProvider.notifier);
+      await controller.openAsTab('Old');
+      await controller.openAsTab('Elsewhere');
+      await controller.openAsTab('Old');
+      container.read(selectedNoteIdProvider.notifier).select('Old');
+
+      final create = container
+          .read(lifecycleActionsProvider)
+          .createNote('', 'Created');
+      await tester.pump();
+      // The create becomes stale before Core returns it, so cleanup starts a
+      // terminal close rather than admitting a new presentation tab.
+      container
+          .read(selectedNoteIdProvider.notifier)
+          .selectForLifecycle('Elsewhere');
+      createGate.complete();
+      await tester.pump();
+      expect(api.calls, ['createNote::Created', 'closeNote:Created']);
+
+      // A same-id Core response becomes the active editor while close_note is
+      // pending. A different existing tab is selected while lifecycle
+      // admission blocks its normal listener, so cleanup must activate it
+      // directly without another Core open or close.
+      controller.adopt(created);
+      container
+          .read(selectedNoteIdProvider.notifier)
+          .selectForLifecycle('Elsewhere');
+      expect(container.read(activeNoteProvider), same(created));
+      expect(container.read(selectedNoteIdProvider), 'Elsewhere');
+      expect(container.read(openNoteSessionsProvider), [
+        same(created),
+        same(elsewhere),
+      ]);
+
+      closeGate.complete();
+      expect(await create, isA<LifecycleCompleted>());
+
+      expect(container.read(activeNoteProvider), same(elsewhere));
+      expect(container.read(selectedNoteIdProvider), 'Elsewhere');
+      expect(container.read(openNoteSessionsProvider), [same(elsewhere)]);
+      expect(api.calls, ['createNote::Created', 'closeNote:Created']);
+      expect(api.openNoteCalls, ['Old', 'Elsewhere']);
+    },
+  );
 
   group('deletion', () {
     testWidgets('the deleted open note closes in the editor', (tester) async {
