@@ -251,9 +251,23 @@ class LifecycleActions {
     )) {
       return LifecycleCompleted('Deleted directory', warning: result.warning);
     }
+    final successor = _successorAfterActiveTabDeletion(
+      operation.active?.metadata.id,
+      result.removed.toSet(),
+    );
     for (final noteId in result.removed) {
       _discardRetiredTab(noteId);
       _clearIfSelected(noteId);
+    }
+    // Directory deletion retires all contained Core sessions in the same
+    // transaction as a Note deletion. If it removed the active tab, retain
+    // the normal following-then-preceding tab behavior for survivors.
+    if (successor != null &&
+        _isCurrentOperation(operation) &&
+        _ref.read(activeNoteProvider) == null &&
+        _ref.read(selectedNoteIdProvider) == null &&
+        _ref.read(activeNoteProvider.notifier).activateExistingTab(successor)) {
+      _ref.read(selectedNoteIdProvider.notifier).selectForLifecycle(successor);
     }
     return LifecycleCompleted('Deleted directory', warning: result.warning);
   });
@@ -325,6 +339,11 @@ class LifecycleActions {
   /// it. A terminal close warning is intentionally non-fatal: Core has
   /// already retired the session, so retrying here would address a dead id.
   Future<void> _retireUnadoptedCreatedSession(NoteState created) async {
+    // Core owns one session for each id. A newer authoritative state for this
+    // id therefore represents that same Core session, not a second session
+    // the stale create result may retire. Closing by id here would kill the
+    // retained editor instead of only the stale Dart result.
+    if (_hasNewerSameIdSession(created)) return;
     try {
       await _api.closeNote(created.metadata.id);
     } on CloseNoteWarning catch (warning) {
@@ -337,12 +356,26 @@ class LifecycleActions {
     // `openForLifecycle` may already have put this Core-returned state in a
     // tab before a newer selection won. Core has now retired that session, so
     // remove the presentation entry as well; otherwise a later tab selection
-    // would revive a writable Dart cache for a dead id.
-    if (_ref.mounted) {
+    // would revive a writable Dart cache for a dead id. Recheck after the
+    // await: an authoritative replacement can land while close_note runs.
+    if (_ref.mounted && !_hasNewerSameIdSession(created)) {
       _ref
           .read(activeNoteProvider.notifier)
           .discardRetiredTab(created.metadata.id, expectedState: created);
     }
+  }
+
+  /// Whether a stale create result's Core session is now represented by a
+  /// different authoritative Dart state. Either the active editor or its tab
+  /// is sufficient: Core has exactly one session per id.
+  bool _hasNewerSameIdSession(NoteState created) {
+    final noteId = created.metadata.id;
+    final active = _ref.read(activeNoteProvider);
+    if (active?.metadata.id == noteId && !identical(active, created)) {
+      return true;
+    }
+    final tab = _ref.read(openNoteSessionsProvider.notifier).byId(noteId);
+    return tab != null && !identical(tab, created);
   }
 
   bool _isCurrentOperation(_LifecycleOperation operation) =>
@@ -617,6 +650,10 @@ class LifecycleActions {
         // fetched, the old Dart buffer must not remain selectable or writable.
         if (_isCurrentOperation(operation) &&
             identical(tabs.openTabState(remap.oldId), stale)) {
+          // Removing the stale old-id tab alone would orphan Core's live
+          // new-id session. This is lifecycle cleanup, not CLOSE-G005 tab
+          // close orchestration.
+          await _retireFailedInactiveRefresh(remap.newId);
           tabs.discardRetiredTab(remap.oldId, expectedState: stale);
         }
         rethrow;
@@ -641,6 +678,23 @@ class LifecycleActions {
           tabs.discardRetiredTab(noteId, expectedState: stale);
         }
         rethrow;
+      }
+    }
+  }
+
+  /// Retires the Core session that a failed inactive remap refresh cannot
+  /// safely present. A close warning is terminal, while a close refusal is
+  /// reported alongside the refresh failure without replacing that failure.
+  Future<void> _retireFailedInactiveRefresh(String noteId) async {
+    try {
+      await _api.closeNote(noteId);
+    } on CloseNoteWarning catch (warning) {
+      if (_ref.mounted) {
+        _ref.read(noteCloseFailureProvider.notifier).report(warning);
+      }
+    } catch (error) {
+      if (_ref.mounted) {
+        _ref.read(noteCloseFailureProvider.notifier).report(error);
       }
     }
   }

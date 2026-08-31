@@ -637,6 +637,9 @@ void main() {
         ['A'],
       );
       expect(container.read(activeNoteProvider)!.metadata.id, 'A');
+      // B's Core session has moved to Renamed/B. Removing the stale Dart tab
+      // alone would orphan that live session with no UI path to close it.
+      expect(api.calls, ['renameDirectory::Renamed', 'closeNote:Renamed/B']);
     });
 
     testWidgets('a failed inactive rewrite refresh removes the stale tab', (
@@ -1337,6 +1340,42 @@ void main() {
     expect(container.read(lifecycleEditingProvider), 0);
   });
 
+  testWidgets('a stale created session does not close a newer same-id tab', (
+    tester,
+  ) async {
+    final gate = Completer<void>();
+    final created = stateFor('Created', title: 'stale create response');
+    final newer = stateFor('Created', title: 'newer Core session');
+    final api = _LifecycleApi()
+      ..createNoteResult = created
+      ..createNoteGate = gate
+      ..openStates = {'Old': stateFor('Old')};
+    late ProviderContainer container;
+    await tester.pumpWidget(_probeHarness(api, (c) => container = c));
+    addTearDown(container.dispose);
+    final controller = container.read(activeNoteProvider.notifier);
+    await controller.openAsTab('Old');
+    container.read(selectedNoteIdProvider.notifier).select('Old');
+
+    final create = container
+        .read(lifecycleActionsProvider)
+        .createNote('', 'Created');
+    await tester.pump();
+    // A newer authoritative response has replaced the Core's single session
+    // for Created while the first create was still in flight.
+    controller.adopt(newer);
+    container
+        .read(selectedNoteIdProvider.notifier)
+        .selectForLifecycle('Created');
+    gate.complete();
+
+    expect(await create, isA<LifecycleCompleted>());
+    expect(api.calls, ['createNote::Created']);
+    expect(container.read(activeNoteProvider), same(newer));
+    expect(container.read(selectedNoteIdProvider), 'Created');
+    expect(container.read(openNoteSessionsProvider), [same(newer)]);
+  });
+
   testWidgets('a stale created session reports its terminal close warning '
       'once through the one-shot close status', (tester) async {
     final gate = Completer<void>();
@@ -1604,6 +1643,37 @@ void main() {
       expect(outcome, isA<LifecycleCompleted>());
       expect(container.read(activeNoteProvider), isNull);
       expect(container.read(selectedNoteIdProvider), isNull);
+    });
+
+    testWidgets('deleting a directory selects its following surviving tab', (
+      tester,
+    ) async {
+      final api = _LifecycleApi()
+        ..deleteDirectoryResult = ['inside/A']
+        ..openStates = {
+          'inside/A': stateFor('inside/A'),
+          'outside/B': stateFor('outside/B'),
+        };
+      late ProviderContainer container;
+      await tester.pumpWidget(_probeHarness(api, (c) => container = c));
+      addTearDown(container.dispose);
+      final controller = container.read(activeNoteProvider.notifier);
+      await controller.openAsTab('inside/A');
+      await controller.openAsTab('outside/B');
+      await controller.openAsTab('inside/A');
+      container.read(selectedNoteIdProvider.notifier).select('inside/A');
+
+      await container.read(lifecycleActionsProvider).deleteDirectory('inside');
+
+      expect(container.read(activeNoteProvider)!.metadata.id, 'outside/B');
+      expect(container.read(selectedNoteIdProvider), 'outside/B');
+      expect(
+        container
+            .read(openNoteSessionsProvider)
+            .map((note) => note.metadata.id),
+        ['outside/B'],
+      );
+      expect(api.calls, ['deleteDirectory:inside']);
     });
 
     testWidgets('a delayed note delete cannot close a recreated selection', (
