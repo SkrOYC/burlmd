@@ -37,7 +37,7 @@ Complete the PR #11 shell as a real local-first desktop application. This epic r
   - `scripts/visual-regression.sh`
 - **Scope (Out-of-Scope Files):**
   - `linux/**` and `macos/**` (the Platform already owns real chrome; don't add a replacement)
-- **Verification Command:** M0 milestone gate: `flutter test && dart analyze && ./scripts/visual-regression.sh shell-g001 --baseline test/goldens/shell-g001-linux.png --max-different-pixels 0 && git diff --check && ! rg -n '\[DEBUG-' lib rust test scripts`. `CI-M003` later reruns common functional evidence on `ubuntu-24.04`, Apple Silicon `macos-26`, and Apple Silicon `macos-15`; required Linux exact platform-regression evidence uses the private headless Sway and Wayland environment, and macOS 26 alone updates the authoritative product visual baseline.
+- **Verification Command:** M0 milestone gate: `flutter test && dart analyze && ./scripts/visual-regression.sh shell-g001 --baseline test/goldens/shell-g001-linux.png --max-different-pixels 0 && git diff --check && ! rg -n '\[DEBUG-' lib rust test scripts`. `CI-M003` later proves common functional bootstrap evidence on `ubuntu-24.04`, Apple Silicon `macos-26`, and Apple Silicon `macos-15` without claiming performance or visual classes. `SHELL-G011` owns the later managed Linux platform-regression and authoritative macOS 26 visual gates.
 - **Expected Success Output:** exit 0 and a smoke capture showing only host-owned window chrome
 - **STOP Conditions:**
   - STOP if any production or executable test surface still selects, renders, or labels emulated macOS/Linux chrome; remove the obsolete contract instead of hiding it.
@@ -48,7 +48,7 @@ Complete the PR #11 shell as a real local-first desktop application. This epic r
   - **Evidence:**
 
 ```text
-The rebuilt `test/goldens/` shell baselines contain no simulated traffic lights, Linux title controls, Platform selector, or reserved fake-titlebar spacing. The M0 command allows zero different Linux pixels. After both `CI-M003` pull requests merge, required Linux exact platform-regression evidence comes only from its owned headless environment and isn't authoritative product visual evidence. macOS 26 owns the sole authoritative product visual baseline, and macOS 15 remains functional-only. Production and executable tests contain no preference or code path that recreates emulated chrome. CAP-SHELL-04 passes with host-owned chrome.
+The rebuilt `test/goldens/` shell baselines contain no simulated traffic lights, Linux title controls, Platform selector, or reserved fake-titlebar spacing. The M0 command allows zero different Linux pixels. After both `CI-M003` pull requests merge, `SHELL-G011` obtains required Linux exact platform-regression evidence from the owned headless environment and authoritative product visual evidence from macOS 26. macOS 15 remains functional-only. Production and executable tests contain no preference or code path that recreates emulated chrome. CAP-SHELL-04 passes with host-owned chrome.
 ```
 
 #### PREF-G002 Persist device-global preferences

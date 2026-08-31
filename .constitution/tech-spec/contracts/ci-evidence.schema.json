@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": ["schemaVersion", "expectedIdentity", "expectedIdentitySha256", "expectedIdentityArtifact", "generatedAt", "mode", "status", "roleEvidence", "coordinatorExecution", "aggregationChecks", "rejectionReasons"],
   "properties": {
-    "schemaVersion": { "const": 9 },
+    "schemaVersion": { "const": 10 },
     "expectedIdentity": { "$ref": "ci-role-evidence.schema.json#/$defs/expectedIdentity" },
     "expectedIdentitySha256": { "$ref": "#/$defs/sha256" },
     "expectedIdentityArtifact": {
@@ -21,13 +21,14 @@
     "aggregationChecks": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["rolesComplete", "identityCompared", "trustAnchorVerified", "trustedSurfacesUnchanged", "sourceAllowlistVerified", "roleResultsPassed", "originAuthenticated", "hostedOriginVerified", "jobTopologyVerified", "artifactNamesVerified", "artifactIntegrityVerified", "bundleContentsVerified", "imageVersionsCompatible"],
+      "required": ["rolesComplete", "identityCompared", "trustAnchorVerified", "trustedSurfacesUnchanged", "sourceAllowlistVerified", "evidenceProfileVerified", "roleResultsPassed", "originAuthenticated", "hostedOriginVerified", "jobTopologyVerified", "artifactNamesVerified", "artifactIntegrityVerified", "bundleContentsVerified", "imageVersionsCompatible"],
       "properties": {
         "rolesComplete": { "type": "boolean" },
         "identityCompared": { "type": "boolean" },
         "trustAnchorVerified": { "type": "boolean" },
         "trustedSurfacesUnchanged": { "type": "boolean" },
         "sourceAllowlistVerified": { "type": "boolean" },
+        "evidenceProfileVerified": { "type": "boolean" },
         "roleResultsPassed": { "type": "boolean" },
         "originAuthenticated": { "type": "boolean" },
         "hostedOriginVerified": { "type": "boolean" },
@@ -52,18 +53,15 @@
             "allOf": [
               { "contains": { "type": "object", "properties": { "manifest": { "type": "object", "properties": { "roleEvidence": { "type": "object", "properties": {
                 "role": { "const": "linux-x86_64" },
-                "viewport": { "type": "object", "properties": { "verified": { "const": true } } },
-                "gates": { "type": "object", "properties": { "commonFunctional": { "const": true }, "performance": { "const": true }, "linuxPlatformRegression": { "const": true }, "macosAuthoritativeVisual": { "const": false } } }
+                "viewport": { "type": "object", "properties": { "verified": { "const": true } } }
               } } } } } } },
               { "contains": { "type": "object", "properties": { "manifest": { "type": "object", "properties": { "roleEvidence": { "type": "object", "properties": {
                 "role": { "const": "macos-26-arm64" },
-                "viewport": { "type": "object", "properties": { "verified": { "const": true } } },
-                "gates": { "type": "object", "properties": { "commonFunctional": { "const": true }, "performance": { "const": true }, "linuxPlatformRegression": { "const": false }, "macosAuthoritativeVisual": { "const": true } } }
+                "viewport": { "type": "object", "properties": { "verified": { "const": true } } }
               } } } } } } },
               { "contains": { "type": "object", "properties": { "manifest": { "type": "object", "properties": { "roleEvidence": { "type": "object", "properties": {
                 "role": { "const": "macos-15-arm64" },
-                "viewport": { "type": "object", "properties": { "verified": { "const": true } } },
-                "gates": { "type": "object", "properties": { "commonFunctional": { "const": true }, "performance": { "const": false }, "linuxPlatformRegression": { "const": false }, "macosAuthoritativeVisual": { "const": false } } }
+                "viewport": { "type": "object", "properties": { "verified": { "const": true } } }
               } } } } } } }
             ]
           },
@@ -79,6 +77,7 @@
             "trustAnchorVerified": { "const": true },
             "trustedSurfacesUnchanged": { "const": true },
             "sourceAllowlistVerified": { "const": true },
+            "evidenceProfileVerified": { "const": true },
             "roleResultsPassed": { "const": true },
             "originAuthenticated": { "const": true },
             "hostedOriginVerified": { "const": true },
@@ -208,6 +207,7 @@
       }
     },
     "enrichedRoleEvidence": {
+      "$comment": "Semantic validation requires manifest.roleEvidence.evidenceClasses and the exact gates key set to equal manifest.expectedIdentity.requiredEvidenceClasses for that role. Every gate must be true. Accepted aggregation rejects both missing assigned classes and unassigned extra classes.",
       "type": "object",
       "additionalProperties": false,
       "required": ["manifest", "manifestSha256", "origin"],
@@ -290,7 +290,7 @@
       "additionalProperties": false,
       "required": ["code", "detail"],
       "properties": {
-        "code": { "enum": ["expected-identity-invalid", "artifact-name-invalid", "artifact-name-collision", "artifact-digest-mismatch", "trust-anchor-mismatch", "candidate-control-surface-changed", "source-allowlist-violation", "candidate-job-failed", "sealing-job-in-progress", "sealing-job-failed", "sealing-job-missing", "sealing-job-mismatch", "job-topology-mismatch", "role-manifest-invalid", "role-bundle-invalid", "missing-role", "duplicate-role", "unexpected-role", "role-gate-failed", "identity-mismatch", "stale-evidence", "workflow-signer-mismatch", "runner-label-mismatch", "runner-environment-mismatch", "untrusted-origin", "attestation-unavailable", "artifact-api-mismatch", "artifact-corrupt", "mixed-image-version", "coordinator-identity-mismatch", "coordinator-isolation-failed", "coordinator-credential-exposure", "aggregation-error"] },
+        "code": { "enum": ["expected-identity-invalid", "evidence-profile-mismatch", "artifact-name-invalid", "artifact-name-collision", "artifact-digest-mismatch", "trust-anchor-mismatch", "candidate-control-surface-changed", "source-allowlist-violation", "candidate-job-failed", "sealing-job-in-progress", "sealing-job-failed", "sealing-job-missing", "sealing-job-mismatch", "job-topology-mismatch", "role-manifest-invalid", "role-bundle-invalid", "missing-role", "duplicate-role", "unexpected-role", "role-gate-failed", "identity-mismatch", "stale-evidence", "workflow-signer-mismatch", "runner-label-mismatch", "runner-environment-mismatch", "untrusted-origin", "attestation-unavailable", "artifact-api-mismatch", "artifact-corrupt", "mixed-image-version", "coordinator-identity-mismatch", "coordinator-isolation-failed", "coordinator-credential-exposure", "aggregation-error"] },
         "role": { "$ref": "#/$defs/role" },
         "jobId": { "type": "integer", "minimum": 1 },
         "jobStatus": { "enum": ["queued", "in_progress", "completed"] },

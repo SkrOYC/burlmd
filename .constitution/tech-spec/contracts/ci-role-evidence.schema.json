@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": ["schemaVersion", "expectedIdentity", "expectedIdentitySha256", "roleEvidence"],
   "properties": {
-    "schemaVersion": { "const": 7 },
+    "schemaVersion": { "const": 8 },
     "expectedIdentity": { "$ref": "#/$defs/expectedIdentity" },
     "expectedIdentitySha256": { "$ref": "#/$defs/sha256" },
     "roleEvidence": { "$ref": "#/$defs/roleEvidence" }
@@ -15,6 +15,9 @@
     "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
     "gitSha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
     "role": { "enum": ["linux-x86_64", "macos-26-arm64", "macos-15-arm64"] },
+    "evidenceClass": {
+      "enum": ["common-functional", "performance", "linux-platform-regression", "macos-authoritative-visual", "managed-evidence-protocol", "managed-evidence-security", "managed-evidence-isolation", "generated-binding-check", "static-analysis", "desktop-integration", "ast-measurement", "filesystem-compatibility", "git-protocol", "asset-measurement", "packaging-runtime", "packaging-runtime-compatibility", "repeatable-construction"]
+    },
     "signer": {
       "type": "object",
       "additionalProperties": false,
@@ -74,7 +77,7 @@
       "$comment": "Semantic validation must require runIdentity to equal 'managed:' concatenated with artifactNonce. artifactNonce is derived, never independently chosen.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["ticketIdentity", "releaseIdentity", "trustAnchorSha", "testedSourceSha", "workflowSignerSha", "workflowSignerRef", "baseSha", "workflowEvent", "evidenceReportCommitPolicy", "sourceWriteAllowlist", "buildIdentity", "corpusIdentity", "runIdentity", "artifactNonce", "requiredRoleIdentities", "requiredRoleSigners"],
+      "required": ["ticketIdentity", "releaseIdentity", "trustAnchorSha", "testedSourceSha", "workflowSignerSha", "workflowSignerRef", "baseSha", "workflowEvent", "evidenceReportCommitPolicy", "sourceWriteAllowlist", "buildIdentity", "corpusIdentity", "runIdentity", "artifactNonce", "requiredRoleIdentities", "requiredRoleSigners", "requiredEvidenceClasses"],
       "properties": {
         "ticketIdentity": { "enum": ["CI-M003", "AST-H001", "PATH-H002", "ASSET-I001", "GIT-L001", "PKG-M001"] },
         "releaseIdentity": { "type": "string", "minLength": 1 },
@@ -129,8 +132,69 @@
               ]
             }
           }
+        },
+        "requiredEvidenceClasses": {
+          "$comment": "The launcher copies the exact profile for ticketIdentity from provisional-spikes.toml. Semantic validation requires each role manifest's evidenceClasses and gates keys to equal its assigned array exactly, with every gate true and no unassigned class.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["linux-x86_64", "macos-26-arm64", "macos-15-arm64"],
+          "properties": {
+            "linux-x86_64": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/evidenceClass" } },
+            "macos-26-arm64": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/evidenceClass" } },
+            "macos-15-arm64": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/evidenceClass" } }
+          }
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "ticketIdentity": { "const": "CI-M003" } }, "required": ["ticketIdentity"] },
+          "then": { "properties": { "requiredEvidenceClasses": { "const": {
+            "linux-x86_64": ["common-functional", "managed-evidence-protocol", "managed-evidence-security", "managed-evidence-isolation", "generated-binding-check", "static-analysis", "desktop-integration"],
+            "macos-26-arm64": ["common-functional", "managed-evidence-protocol", "managed-evidence-security", "static-analysis", "desktop-integration"],
+            "macos-15-arm64": ["common-functional", "managed-evidence-protocol", "managed-evidence-security", "static-analysis", "desktop-integration"]
+          } } } }
+        },
+        {
+          "if": { "properties": { "ticketIdentity": { "const": "AST-H001" } }, "required": ["ticketIdentity"] },
+          "then": { "properties": { "requiredEvidenceClasses": { "const": {
+            "linux-x86_64": ["common-functional", "performance", "ast-measurement"],
+            "macos-26-arm64": ["common-functional", "performance", "ast-measurement"],
+            "macos-15-arm64": ["common-functional"]
+          } } } }
+        },
+        {
+          "if": { "properties": { "ticketIdentity": { "const": "PATH-H002" } }, "required": ["ticketIdentity"] },
+          "then": { "properties": { "requiredEvidenceClasses": { "const": {
+            "linux-x86_64": ["common-functional", "filesystem-compatibility"],
+            "macos-26-arm64": ["common-functional", "filesystem-compatibility"],
+            "macos-15-arm64": ["common-functional"]
+          } } } }
+        },
+        {
+          "if": { "properties": { "ticketIdentity": { "const": "ASSET-I001" } }, "required": ["ticketIdentity"] },
+          "then": { "properties": { "requiredEvidenceClasses": { "const": {
+            "linux-x86_64": ["common-functional", "performance", "asset-measurement"],
+            "macos-26-arm64": ["common-functional", "performance", "asset-measurement"],
+            "macos-15-arm64": ["common-functional"]
+          } } } }
+        },
+        {
+          "if": { "properties": { "ticketIdentity": { "const": "GIT-L001" } }, "required": ["ticketIdentity"] },
+          "then": { "properties": { "requiredEvidenceClasses": { "const": {
+            "linux-x86_64": ["common-functional", "filesystem-compatibility", "git-protocol"],
+            "macos-26-arm64": ["common-functional", "filesystem-compatibility", "git-protocol"],
+            "macos-15-arm64": ["common-functional"]
+          } } } }
+        },
+        {
+          "if": { "properties": { "ticketIdentity": { "const": "PKG-M001" } }, "required": ["ticketIdentity"] },
+          "then": { "properties": { "requiredEvidenceClasses": { "const": {
+            "linux-x86_64": ["packaging-runtime"],
+            "macos-26-arm64": ["packaging-runtime", "repeatable-construction"],
+            "macos-15-arm64": ["packaging-runtime-compatibility"]
+          } } } }
+        }
+      ]
     },
     "capturedIdentity": {
       "$comment": "Semantic validation must require runIdentity to equal 'managed:' concatenated with artifactNonce and both values to equal expectedIdentity.",
@@ -189,15 +253,12 @@
       }
     },
     "gates": {
+      "$comment": "The keys must exactly equal roleEvidence.evidenceClasses and expectedIdentity.requiredEvidenceClasses[role], and every value must be true. The semantic validator enforces that cross-object equality.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["commonFunctional", "performance", "linuxPlatformRegression", "macosAuthoritativeVisual"],
-      "properties": {
-        "commonFunctional": { "type": "boolean" },
-        "performance": { "type": "boolean" },
-        "linuxPlatformRegression": { "type": "boolean" },
-        "macosAuthoritativeVisual": { "type": "boolean" }
-      }
+      "minProperties": 1,
+      "propertyNames": { "$ref": "#/$defs/evidenceClass" },
+      "patternProperties": { ".*": { "const": true } }
     },
     "internalArtifact": {
       "type": "object",
@@ -224,8 +285,9 @@
         "viewport": { "$ref": "#/$defs/viewport" },
         "evidenceClasses": {
           "type": "array",
+          "minItems": 1,
           "uniqueItems": true,
-          "items": { "enum": ["common-functional", "performance", "linux-platform-regression", "macos-authoritative-visual"] }
+          "items": { "$ref": "#/$defs/evidenceClass" }
         },
         "gates": { "$ref": "#/$defs/gates" },
         "toolchain": { "type": "object", "minProperties": 1, "additionalProperties": { "type": "string", "minLength": 1 } },
@@ -239,8 +301,7 @@
             "environment": { "type": "object", "properties": {
               "runnerLabel": { "const": "ubuntu-24.04" }, "architecture": { "const": "x86_64" }, "logicalCpuCount": { "const": 4 }, "documentedMemoryBytes": { "const": 16000000000 }, "documentedStorageBytes": { "const": 14000000000 }
             } },
-            "evidenceClasses": { "const": ["common-functional", "performance", "linux-platform-regression"] },
-            "gates": { "type": "object", "properties": { "macosAuthoritativeVisual": { "const": false } } }
+            "evidenceClasses": { "type": "array", "not": { "contains": { "enum": ["macos-authoritative-visual", "packaging-runtime-compatibility"] } } }
           } }
         },
         {
@@ -250,8 +311,7 @@
             "environment": { "type": "object", "properties": {
               "runnerLabel": { "const": "macos-26" }, "architecture": { "const": "aarch64" }, "logicalCpuCount": { "const": 3 }, "documentedMemoryBytes": { "const": 7000000000 }, "documentedStorageBytes": { "const": 14000000000 }
             } },
-            "evidenceClasses": { "const": ["common-functional", "performance", "macos-authoritative-visual"] },
-            "gates": { "type": "object", "properties": { "linuxPlatformRegression": { "const": false } } }
+            "evidenceClasses": { "type": "array", "not": { "contains": { "enum": ["linux-platform-regression", "packaging-runtime-compatibility"] } } }
           } }
         },
         {
@@ -261,8 +321,7 @@
             "environment": { "type": "object", "properties": {
               "runnerLabel": { "const": "macos-15" }, "architecture": { "const": "aarch64" }, "logicalCpuCount": { "const": 3 }, "documentedMemoryBytes": { "const": 7000000000 }, "documentedStorageBytes": { "const": 14000000000 }
             } },
-            "evidenceClasses": { "const": ["common-functional"] },
-            "gates": { "type": "object", "properties": { "performance": { "const": false }, "linuxPlatformRegression": { "const": false }, "macosAuthoritativeVisual": { "const": false } } }
+            "evidenceClasses": { "type": "array", "items": { "enum": ["common-functional", "managed-evidence-protocol", "managed-evidence-security", "static-analysis", "desktop-integration", "packaging-runtime-compatibility"] } }
           } }
         }
       ]

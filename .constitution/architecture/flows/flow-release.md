@@ -6,10 +6,10 @@
 flowchart TD
     Build[Build supported artifacts]
     Trust[Immutable reviewed validation trust anchor]
-    Expected[Authoritative expected identity\ntrust anchor, workflow signer, tested source, base, build, corpus, run, and required roles]
-    Linux[Linux x86-64 candidate execution\ncommon functional, performance, and non-authoritative exact platform regression]
-    MacReference[Apple Silicon macOS 26 candidate execution\ncommon functional, performance, and authoritative product visual]
-    MacCompatibility[macOS 15 candidate execution\ncommon functional compatibility only]
+    Expected[Authoritative expected identity\ntrust anchor, workflow signer, tested source, base, build, corpus, run, roles, and required evidence classes]
+    Linux[Linux x86-64 validation role\nassigned subset of functional, performance, and exact platform regression]
+    MacReference[Apple Silicon macOS 26 validation role\nassigned subset of functional, performance, and authoritative product visual]
+    MacCompatibility[macOS 15 validation role\nassigned functional compatibility classes only]
     Seal[Fresh pipeline-owned sealing environments\nvalidate bundle and record immutable handoff identity]
     Observe[Post-completion observation\nrequire successful sealing environment]
     Integrity[Authenticate managed validation origin and verify complete evidence bundle integrity]
@@ -63,7 +63,7 @@ flowchart TD
 
 - Every validation environment owns its display, compositor, input, and process state. If ownership isn't proven, it produces no acceptable evidence.
 - The Writer's active desktop never supplies visual proof. The Writer's desktop state in a capture invalidates the complete run.
-- Missing authoritative trust-anchor, workflow-signer, tested-source, base, release, build, corpus, run, or required-role identity prevents evidence acceptance.
+- Missing authoritative trust-anchor, workflow-signer, tested-source, base, release, build, corpus, run, required-role, or role-specific evidence-class identity prevents evidence acceptance.
 - A candidate-defined launcher, signer workflow, expected identity, or change outside the ticket's declared write boundary prevents dispatch or evidence acceptance.
 - Candidate execution has no origin-signing authority. A sealing environment can't attest its own final result before it finishes. Aggregation must observe one completed successful sealing environment independently; an in-progress, failed, missing, duplicate, substituted, or role-inconsistent handoff prevents evidence acceptance.
 - Validation bootstrap needs a reviewed implementation integration followed by a reviewed evidence-only integration. The validation capability remains incomplete between them.
@@ -72,7 +72,7 @@ flowchart TD
 - Aggregation compares captured identity with the expected identity supplied directly by Release Pipeline. Self-description alone is insufficient.
 - A captured identity that is mismatched or stale is rejected. Evidence from another run can't satisfy the current release gate.
 - The later evidence commit remains distinct from the tested source. A commit that changes anything except declared evidence can't represent that run.
-- All three roles must pass the common functional matrix. Linux must also pass its exact non-authoritative platform-regression gate. macOS 15 can't replace either performance role, Linux platform-regression evidence, or the macOS 26 authoritative product visual role.
+- Every role must pass exactly the evidence classes assigned by the current gate. An environment capability isn't required unless the gate assigns it. macOS 15 can't replace either performance role, Linux platform-regression evidence, or the macOS 26 authoritative product visual role.
 - A launch-only result can't admit a system to the supported matrix.
 - Update notification never replaces installed binaries.
 - Unsigned prerelease status and Platform installation guidance remain explicit.

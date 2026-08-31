@@ -195,14 +195,14 @@ Device preferences never enter Workspace content. Session and navigation state r
 - **Boundary kind:** Pipeline boundary.
 - **Logical type:** Build, verification, and publication boundary.
 - **Responsibility:** Produces each supported artifact, assigns validation roles, establishes authoritative expected identity, requires complete accepted evidence, and publishes artifact integrity with authenticated build provenance.
-- **Inputs and outputs:** Accepts a release identity and Platform matrix. From an immutable reviewed validation anchor, sends validation and aggregation the expected trust-anchor, workflow-signer, tested-source, base, release, build, corpus, run, and required-role identities. Emits verified artifacts, evidence, and metadata to Release Distribution.
+- **Inputs and outputs:** Accepts a release identity and Platform matrix. From an immutable reviewed validation anchor, sends validation and aggregation the expected trust-anchor, workflow-signer, tested-source, base, release, build, corpus, run, required-role, and role-specific evidence-class identities. Emits verified artifacts, evidence, and metadata to Release Distribution.
 - **Depends on:** Isolated Validation Environment, Evidence Aggregation, supported Platform environments, and Release Distribution.
 
 The pipeline assigns the following validation roles:
 
-- Linux x86-64 provides common functional-matrix, performance, and required exact platform-regression evidence. Its platform regression isn't authoritative product visual evidence.
-- Apple Silicon macOS 26 provides common functional-matrix, performance, and the sole authoritative product visual evidence.
-- macOS 15 provides common functional-matrix evidence for compatibility only.
+- Linux x86-64 can provide common functional-matrix, performance, and exact platform-regression evidence. Its platform regression isn't authoritative product visual evidence.
+- Apple Silicon macOS 26 can provide common functional-matrix, performance, and the sole authoritative product visual evidence.
+- macOS 15 can provide common functional-matrix evidence for compatibility only.
 
 ## Isolated validation environment
 
@@ -220,7 +220,7 @@ The pipeline assigns the following validation roles:
 - **Inputs and outputs:** Accepts expected trust-anchor, workflow-signer, tested-source, base, release, build, corpus, run, and required-role identities from Release Pipeline. Accepts one authenticated sealed bundle per role and the pipeline-owned candidate and sealing environment records. Credentialed acquisition produces verified read-only inputs. A separate credential-free, non-networked coordinator produces machine results through one writable output boundary. Returns an accepted complete set or explicit unmanaged, candidate-controlled, out-of-boundary, untrusted, missing, duplicated, mismatched, stale, corrupt, unsealed, credential-exposed, or isolation-failed outcomes.
 - **Depends on:** Isolated Validation Environment and Release Pipeline.
 
-All three roles must satisfy the common functional matrix. macOS 15 evidence can't satisfy a performance, Linux platform-regression, or authoritative visual role. Linux platform-regression evidence can't satisfy the macOS 26 authoritative product visual role. Evidence from the Writer's active desktop is invalid even when the captured output appears correct.
+Each validation request names the evidence classes that each role must provide. Acceptance requires that exact profile: neither a missing assigned class nor an extra unassigned class is valid. macOS 15 evidence can't satisfy performance, Linux platform-regression, or authoritative visual evidence. Linux platform-regression evidence can't satisfy the macOS 26 authoritative product visual role. Evidence from the Writer's active desktop is invalid even when the captured output appears correct.
 
 ## Release Update Coordinator
 
