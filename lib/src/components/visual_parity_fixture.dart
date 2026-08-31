@@ -190,17 +190,6 @@ class _FixtureDiffLine extends StatelessWidget {
   );
 }
 
-class _FixtureDot extends StatelessWidget {
-  const _FixtureDot(this.color);
-  final int color;
-  @override
-  Widget build(BuildContext context) => Container(
-    width: 10,
-    height: 10,
-    decoration: BoxDecoration(color: Color(color), shape: BoxShape.circle),
-  );
-}
-
 /// The capture shell uses one small local model rather than independent story
 /// panels.  It mirrors the prototype's selection/theme/editor transitions but
 /// intentionally does not reach the production provider graph.
@@ -916,12 +905,6 @@ class _FixtureReferenceShellV2State extends State<FixtureReferenceShell> {
                 height: 36,
                 child: Row(
                   children: [
-                    _FixtureDot(0xffec6a5f),
-                    const SizedBox(width: 6),
-                    _FixtureDot(0xfff4bf4f),
-                    const SizedBox(width: 6),
-                    _FixtureDot(0xff61c554),
-                    const SizedBox(width: 10),
                     Container(
                       key: const ValueKey('fixture-narrow-workspace-badge'),
                       width: 20,
@@ -986,12 +969,6 @@ class _FixtureReferenceShellV2State extends State<FixtureReferenceShell> {
             ] else ...[
               Row(
                 children: [
-                  _FixtureDot(0xffec6a5f),
-                  SizedBox(width: 6),
-                  _FixtureDot(0xfff4bf4f),
-                  SizedBox(width: 6),
-                  _FixtureDot(0xff61c554),
-                  SizedBox(width: 12),
                   const Expanded(
                     child: Text(
                       'Personal Vault',
@@ -2964,8 +2941,7 @@ class _FixtureReferenceShellV2State extends State<FixtureReferenceShell> {
         _preferenceCaption(c, 'Appearance Theme', 76),
         _preferenceCaption(c, 'Base Reading Size', 180),
         _preferenceCaption(c, 'Prose Line Measure', 310),
-        _preferenceCaption(c, 'Desktop Platform Chrome', 485),
-        _preferenceCaption(c, 'Editor Features', 567),
+        _preferenceCaption(c, 'Editor Features', 485),
         _preferenceSlot(
           c,
           label: 'Appearance Theme',
@@ -3021,19 +2997,9 @@ class _FixtureReferenceShellV2State extends State<FixtureReferenceShell> {
           heights: const [36, 37, 37],
           selected: 1,
         ),
-        ..._preferenceMatrixSlots(
-          c,
-          label: 'Desktop Platform Chrome',
-          values: const ['Macos', 'Linux', 'Minimal'],
-          rowTops: const [510],
-          columns: 3,
-          widths: const [130, 131, 130],
-          heights: const [33],
-          selected: 0,
-        ),
         Positioned(
           left: 21,
-          top: 592,
+          top: 510,
           width: 407,
           height: 55,
           child: _preferenceFocusMode(c),
@@ -3176,13 +3142,6 @@ class _FixtureReferenceShellV2State extends State<FixtureReferenceShell> {
                 '85ch (Code & Tables)',
                 'Full Width',
               ], 1),
-              _preferenceCards(
-                c,
-                'Desktop Platform Chrome',
-                ['Macos', 'Linux', 'Minimal'],
-                0,
-                cols: 3,
-              ),
               Text('EDITOR FEATURES', style: _caption(c)),
               const SizedBox(height: 9),
               _preferenceFocusMode(c),

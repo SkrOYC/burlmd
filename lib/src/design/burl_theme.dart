@@ -1,5 +1,3 @@
-import 'package:flutter/foundation.dart'
-    show TargetPlatform, defaultTargetPlatform;
 import 'package:flutter/material.dart';
 
 /// Font families embedded solely for the deterministic visual-parity fixture.
@@ -43,44 +41,31 @@ enum BurlMeasure {
   final double maxWidth;
 }
 
-enum BurlPlatformChrome { macos, linux, minimal }
-
 @immutable
 class BurlPreferences {
   const BurlPreferences({
     this.theme = BurlThemePreference.system,
     this.fontScale = BurlFontScale.standard,
     this.measure = BurlMeasure.standard,
-    this.platformChrome = BurlPlatformChrome.macos,
     this.focusMode = false,
   });
 
   final BurlThemePreference theme;
   final BurlFontScale fontScale;
   final BurlMeasure measure;
-  final BurlPlatformChrome platformChrome;
   final bool focusMode;
 
-  /// The host window owns its titlebar on Linux, so drawing a second set of
-  /// macOS traffic controls there is misleading by default. The preference
-  /// remains explicit and can still be changed in the drawer.
-  factory BurlPreferences.defaults() => BurlPreferences(
-    platformChrome: defaultTargetPlatform == TargetPlatform.linux
-        ? BurlPlatformChrome.minimal
-        : BurlPlatformChrome.macos,
-  );
+  factory BurlPreferences.defaults() => const BurlPreferences();
 
   BurlPreferences copyWith({
     BurlThemePreference? theme,
     BurlFontScale? fontScale,
     BurlMeasure? measure,
-    BurlPlatformChrome? platformChrome,
     bool? focusMode,
   }) => BurlPreferences(
     theme: theme ?? this.theme,
     fontScale: fontScale ?? this.fontScale,
     measure: measure ?? this.measure,
-    platformChrome: platformChrome ?? this.platformChrome,
     focusMode: focusMode ?? this.focusMode,
   );
 }

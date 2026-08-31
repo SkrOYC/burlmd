@@ -205,9 +205,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get workspaceProseLineMeasure => 'Prose line measure';
 
   @override
-  String get workspaceDesktopPlatformChrome => 'Desktop platform chrome';
-
-  @override
   String get workspaceFocusMode => 'Focus Mode (Zen)';
 
   @override
@@ -252,15 +249,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get measureFull => 'Full width';
-
-  @override
-  String get platformChromeMacos => 'macOS';
-
-  @override
-  String get platformChromeLinux => 'Linux';
-
-  @override
-  String get platformChromeMinimal => 'Minimal';
 
   @override
   String get syncInspectorTitle => 'Sync & Storage';

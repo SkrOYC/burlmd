@@ -326,51 +326,6 @@ class _BurlWorkspaceShellState extends ConsumerState<BurlWorkspaceShell> {
 
 enum _ShellTier { wide, rail, compact }
 
-class _PlatformChrome extends ConsumerWidget {
-  const _PlatformChrome();
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final platform = ref.watch(burlPreferencesProvider).platformChrome;
-    return switch (platform) {
-      BurlPlatformChrome.macos => const Row(
-        key: Key('platform-chrome-macos'),
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _ChromeDot(0xffec6a5f),
-          SizedBox(width: 6),
-          _ChromeDot(0xfff4bf4f),
-          SizedBox(width: 6),
-          _ChromeDot(0xff61c554),
-        ],
-      ),
-      BurlPlatformChrome.linux => const Text(
-        key: Key('platform-chrome-linux'),
-        '─  □',
-        style: TextStyle(fontFamily: 'monospace', fontSize: 11),
-      ),
-      BurlPlatformChrome.minimal => const SizedBox(
-        key: Key('platform-chrome-minimal'),
-        width: 20,
-      ),
-    };
-  }
-}
-
-class _ChromeDot extends StatelessWidget {
-  const _ChromeDot(this.value);
-  final int value;
-  @override
-  Widget build(BuildContext context) => Container(
-    width: 10,
-    height: 10,
-    decoration: BoxDecoration(
-      color: Color(value),
-      shape: BoxShape.circle,
-      border: Border.all(color: const Color(0x55000000)),
-    ),
-  );
-}
-
 class _NavigatorPane extends StatelessWidget {
   const _NavigatorPane({
     required this.workspaceName,
@@ -400,8 +355,6 @@ class _NavigatorPane extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Row(
                 children: [
-                  const _PlatformChrome(),
-                  const SizedBox(width: 10),
                   Expanded(
                     child: Text(
                       workspaceName,
@@ -1580,18 +1533,6 @@ class _PreferencesDrawer extends ConsumerWidget {
                                   .setMeasure,
                             ),
                           ),
-                          section(
-                            l10n.workspaceDesktopPlatformChrome,
-                            options(
-                              'platform-chrome',
-                              BurlPlatformChrome.values,
-                              p.platformChrome,
-                              (v) => _platformChromeLabel(v, l10n),
-                              ref
-                                  .read(burlPreferencesProvider.notifier)
-                                  .setPlatformChrome,
-                            ),
-                          ),
                           SwitchListTile(
                             key: const ValueKey('preferences-focus-mode'),
                             contentPadding: EdgeInsets.zero,
@@ -1651,13 +1592,6 @@ String _measureLabel(BurlMeasure measure, AppLocalizations l10n) =>
       BurlMeasure.wide => l10n.measureWide,
       BurlMeasure.technical => l10n.measureTechnical,
       BurlMeasure.full => l10n.measureFull,
-    };
-
-String _platformChromeLabel(BurlPlatformChrome chrome, AppLocalizations l10n) =>
-    switch (chrome) {
-      BurlPlatformChrome.macos => l10n.platformChromeMacos,
-      BurlPlatformChrome.linux => l10n.platformChromeLinux,
-      BurlPlatformChrome.minimal => l10n.platformChromeMinimal,
     };
 
 enum _SyncVisualState {

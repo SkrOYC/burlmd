@@ -412,12 +412,6 @@ abstract class AppLocalizations {
   /// **'Prose line measure'**
   String get workspaceProseLineMeasure;
 
-  /// Preferences section label for desktop chrome style.
-  ///
-  /// In en, this message translates to:
-  /// **'Desktop platform chrome'**
-  String get workspaceDesktopPlatformChrome;
-
   /// Preferences toggle title for focus mode.
   ///
   /// In en, this message translates to:
@@ -507,24 +501,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Full width'**
   String get measureFull;
-
-  /// Desktop chrome preference for macOS-style controls.
-  ///
-  /// In en, this message translates to:
-  /// **'macOS'**
-  String get platformChromeMacos;
-
-  /// Desktop chrome preference for Linux-style controls.
-  ///
-  /// In en, this message translates to:
-  /// **'Linux'**
-  String get platformChromeLinux;
-
-  /// Desktop chrome preference without controls.
-  ///
-  /// In en, this message translates to:
-  /// **'Minimal'**
-  String get platformChromeMinimal;
 
   /// Title of the local workspace inspector.
   ///

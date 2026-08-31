@@ -473,8 +473,7 @@ void main() {
       ('Appearance-Theme', 76.0),
       ('Base-Reading-Size', 180.0),
       ('Prose-Line-Measure', 310.0),
-      ('Desktop-Platform-Chrome', 485.0),
-      ('Editor-Features', 567.0),
+      ('Editor-Features', 485.0),
     ]) {
       final caption = tester.getTopLeft(
         find.byKey(ValueKey('fixture-preferences-section-$key')),
@@ -527,26 +526,21 @@ void main() {
         'fixture-preferences-Prose-Line-Measure-4',
         const Rect.fromLTWH(1013, 425, 200, 37),
       ),
-      (
-        'fixture-preferences-Desktop-Platform-Chrome-0',
-        const Rect.fromLTWH(1013, 510, 130, 33),
-      ),
-      (
-        'fixture-preferences-Desktop-Platform-Chrome-1',
-        const Rect.fromLTWH(1151, 510, 131, 33),
-      ),
-      (
-        'fixture-preferences-Desktop-Platform-Chrome-2',
-        const Rect.fromLTWH(1290, 510, 130, 33),
-      ),
     ]) {
       _expectRectNear(tester, find.byKey(ValueKey(key)), rect);
     }
     _expectRectNear(
       tester,
       find.byKey(const ValueKey('fixture-preferences-focus-mode')),
-      const Rect.fromLTWH(1013, 592, 407, 55),
+      const Rect.fromLTWH(1013, 510, 407, 55),
     );
+    for (final key in [
+      'fixture-preferences-Desktop-Platform-Chrome-0',
+      'fixture-preferences-Desktop-Platform-Chrome-1',
+      'fixture-preferences-Desktop-Platform-Chrome-2',
+    ]) {
+      expect(find.byKey(ValueKey(key)), findsNothing);
+    }
     expect(find.text('Preferences saved locally'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('fixture-preferences-done')));
     await tester.pumpAndSettle();
@@ -937,7 +931,7 @@ void main() {
     _expectRectNear(
       tester,
       find.byKey(const ValueKey('fixture-preferences-focus-mode')),
-      const Rect.fromLTWH(1013, 592, 407, 55),
+      const Rect.fromLTWH(1013, 510, 407, 55),
     );
     expect(
       tester.getSize(

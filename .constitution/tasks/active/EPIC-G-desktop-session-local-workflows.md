@@ -15,7 +15,7 @@ Complete the PR #11 shell as a real local-first desktop application. This epic r
 **M0 authorization:** M0 authorizes `SHELL-G001`, `PREF-G002`, `STATE-G003`, `TABS-G004`, `CLOSE-G005`, and `NAV-G007` to write production code. M0 defers the remaining Epic G tickets in this epic. Every other production ticket remains blocked.
 
 ##### M0 Deviations & Justifications
-- **Touched Files:** README.md, .constitution/tech-spec/stack.md, .constitution/tech-spec/data-models/schema.sql
+- **Touched Files:** README.md, .constitution/tech-spec/stack.md, .constitution/tech-spec/data-models/schema.sql, .constitution/tech-spec/data-models/okf-bundle.md
 - **Justification:** Review found restated production-stop and version banners outside the original M0 file list. Those copies would instruct executors to stop the authorized Epic G tickets.
 
 #### SHELL-G001 Remove emulated Platform chrome

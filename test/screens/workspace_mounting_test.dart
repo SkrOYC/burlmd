@@ -261,6 +261,28 @@ void main() {
     expect(find.text('Recovered drafts'), findsNothing);
   });
 
+  testWidgets('the workspace shell offers no emulated platform chrome', (
+    tester,
+  ) async {
+    await _pumpShell(tester, _MountingRustApi([_treeNode('a', 'Alpha')]));
+
+    expect(find.byKey(const Key('platform-chrome-macos')), findsNothing);
+    expect(find.byKey(const Key('platform-chrome-linux')), findsNothing);
+    expect(find.byKey(const Key('platform-chrome-minimal')), findsNothing);
+    expect(
+      find.byKey(const Key('preferences-platform-chrome-macos')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const Key('preferences-platform-chrome-linux')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const Key('preferences-platform-chrome-minimal')),
+      findsNothing,
+    );
+  });
+
   testWidgets('a write-tier failure on the open note surfaces above the '
       'editor, and the write-tier monitor is armed while the shell is up', (
     tester,
@@ -958,22 +980,14 @@ void main() {
     expect(find.byIcon(LucideIcons.check), findsOneWidget);
   });
 
-  testWidgets('narrow chrome hides metadata detail, clamps preferences, and '
-      'keeps explicit platform-chrome choices visible', (tester) async {
+  testWidgets('narrow layout hides metadata detail and clamps preferences', (
+    tester,
+  ) async {
     final api = _MountingRustApi([_treeNode('a', 'Alpha')]);
-    final container = await _pumpShell(tester, api);
-
-    container
-        .read(burlPreferencesProvider.notifier)
-        .setPlatformChrome(BurlPlatformChrome.minimal);
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('platform-chrome-minimal')), findsOneWidget);
+    await _pumpShell(tester, api);
 
     await tester.tap(find.text('Preferences'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('macOS'));
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('platform-chrome-macos')), findsOneWidget);
 
     tester.view.physicalSize = const Size(420, 800);
     await tester.pumpAndSettle();
