@@ -151,10 +151,10 @@ class _LifecycleApi extends RustApi {
   @override
   Future<void> closeNote(String noteId) async {
     calls.add('closeNote:$noteId');
-    final error = closeNoteError;
-    if (error != null) throw error;
     final gate = closeNoteGate;
     if (gate != null && !gate.isCompleted) await gate.future;
+    final error = closeNoteError;
+    if (error != null) throw error;
   }
 
   @override
@@ -1491,7 +1491,7 @@ void main() {
   });
 
   testWidgets(
-    'a delayed stale-create close activates the selected surviving Core tab',
+    'a delayed stale-create terminal warning survives selected-tab reconciliation',
     (tester) async {
       final createGate = Completer<void>();
       final closeGate = Completer<void>();
@@ -1502,6 +1502,7 @@ void main() {
         ..createNoteResult = created
         ..createNoteGate = createGate
         ..closeNoteGate = closeGate
+        ..closeNoteError = const CloseNoteWarning('terminal cleanup failed')
         ..openStates = {'Old': old, 'Elsewhere': elsewhere};
       late ProviderContainer container;
       await tester.pumpWidget(_probeHarness(api, (c) => container = c));
@@ -1548,6 +1549,23 @@ void main() {
       expect(container.read(openNoteSessionsProvider), [same(elsewhere)]);
       expect(api.calls, ['createNote::Created', 'closeNote:Created']);
       expect(api.openNoteCalls, ['Old', 'Elsewhere']);
+      expect(container.read(noteCloseFailureProvider), isA<CloseNoteWarning>());
+
+      var consumedWarnings = 0;
+      final statusListener = container.listen<Object?>(
+        noteCloseFailureProvider,
+        (_, warning) {
+          if (warning == null) return;
+          consumedWarnings++;
+          container.read(noteCloseFailureProvider.notifier).acknowledge();
+        },
+        fireImmediately: true,
+      );
+      addTearDown(statusListener.close);
+      expect(consumedWarnings, 1);
+      expect(container.read(noteCloseFailureProvider), isNull);
+      await tester.pump();
+      expect(consumedWarnings, 1);
     },
   );
 

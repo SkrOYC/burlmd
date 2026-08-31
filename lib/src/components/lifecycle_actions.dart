@@ -351,6 +351,7 @@ class LifecycleActions {
       _reconcileMountedCreatedSession(noteId);
       return;
     }
+    CloseNoteWarning? terminalWarning;
     try {
       await _api.closeNote(noteId);
     } on CloseNoteWarning catch (warning) {
@@ -359,6 +360,7 @@ class LifecycleActions {
       // status seam. Its listener acknowledges before displaying, so a stale
       // create cannot leak a session or replay this warning on a rebuild.
       _ref.read(noteCloseFailureProvider.notifier).report(warning);
+      terminalWarning = warning;
     }
     // A state can mount while close_note is in flight. Core has nevertheless
     // retired its one session for this id, so remove every same-id
@@ -366,6 +368,13 @@ class LifecycleActions {
     if (_ref.mounted) {
       _ref.read(activeNoteProvider.notifier).discardRetiredTab(noteId);
       _reconcileSelectionAfterRetiredCreatedSession();
+      // Activating the selected tab clears stale close reports as part of its
+      // ordinary successful-open bookkeeping. Re-publish only the warning
+      // this terminal close just produced, after reconciliation, so the
+      // normal one-shot status listener can consume it exactly once.
+      if (terminalWarning != null) {
+        _ref.read(noteCloseFailureProvider.notifier).report(terminalWarning);
+      }
     }
   }
 
