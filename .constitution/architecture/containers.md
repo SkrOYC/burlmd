@@ -65,9 +65,10 @@ flowchart LR
     Persist -->|Asset references| LocalAssets
     Core -->|asynchronous update check| Update
     Update -->|release metadata request| Distribution
-    Release -->|validation request with build and corpus identity| Validation
-    Validation -->|integrity-checked evidence artifact handoff| Evidence
-    Evidence -->|identity-matched evidence set| Release
+    Release -->|validation request and authoritative expected-identity handoff| Validation
+    Release -->|authoritative expected-identity handoff| Evidence
+    Validation -->|authenticated-origin and integrity-checked evidence artifact handoff| Evidence
+    Evidence -->|expected-identity-matched evidence set| Release
     Release -->|artifact, evidence, and provenance handoff| Distribution
 ```
 
@@ -193,33 +194,33 @@ Device preferences never enter Workspace content. Session and navigation state r
 
 - **Boundary kind:** Pipeline boundary.
 - **Logical type:** Build, verification, and publication boundary.
-- **Responsibility:** Produces each supported artifact, assigns validation roles, requires a complete accepted evidence set, and publishes artifact integrity with authenticated build provenance.
-- **Inputs and outputs:** Accepts a release identity and Platform matrix. Sends validation requests with build and corpus identity. Emits verified artifacts, evidence, and metadata to Release Distribution.
+- **Responsibility:** Produces each supported artifact, assigns validation roles, establishes authoritative expected identity, requires complete accepted evidence, and publishes artifact integrity with authenticated build provenance.
+- **Inputs and outputs:** Accepts a release identity and Platform matrix. Sends validation and aggregation the expected release, build, corpus, run, and required-role identities. Emits verified artifacts, evidence, and metadata to Release Distribution.
 - **Depends on:** Isolated Validation Environment, Evidence Aggregation, supported Platform environments, and Release Distribution.
 
 The pipeline assigns the following validation roles:
 
-- Linux x86-64 provides performance evidence.
-- Apple Silicon macOS 26 provides performance and visual evidence.
-- macOS 15 provides functional compatibility evidence only.
+- Linux x86-64 provides common functional-matrix and performance evidence.
+- Apple Silicon macOS 26 provides common functional-matrix, performance, and visual evidence.
+- macOS 15 provides common functional-matrix evidence for compatibility only.
 
 ## Isolated validation environment
 
 - **Boundary kind:** Execution boundary.
 - **Logical type:** Pipeline-owned System/Native validation environment.
 - **Responsibility:** Runs one assigned validation role while owning its display, compositor, input, and process state independently of the Writer's active desktop.
-- **Inputs and outputs:** Accepts an artifact, build identity, corpus identity, and validation role. Emits evidence with captured environment, build, corpus, and role identity.
+- **Inputs and outputs:** Accepts an artifact, run identity, required role, and authoritative expected release, build, and corpus identities. Emits evidence with captured environment and observed release, build, corpus, run, and role identities.
 - **Depends on:** Release Pipeline.
 
 ## Evidence aggregation
 
 - **Boundary kind:** Pipeline stage.
 - **Logical type:** Evidence integrity and acceptance boundary.
-- **Responsibility:** Verifies evidence integrity, identity, freshness, and role before combining results into one release evidence set.
-- **Inputs and outputs:** Accepts evidence artifacts through an integrity-checked handoff. Returns an accepted complete set or explicit missing, mismatched, stale, or corrupt outcomes.
+- **Responsibility:** Authenticates validation origin, verifies artifact integrity, and compares captured identity with authoritative expected identity before aggregation.
+- **Inputs and outputs:** Accepts expected release, build, corpus, run, and required-role identities from Release Pipeline. Accepts evidence through an authenticated-origin and integrity-checked artifact handoff. Returns an accepted complete set or explicit untrusted, missing, mismatched, stale, or corrupt outcomes.
 - **Depends on:** Isolated Validation Environment and Release Pipeline.
 
-macOS 15 evidence can't satisfy a performance or visual role. Evidence from the Writer's active desktop is invalid even when the captured output appears correct.
+All three roles must satisfy the common functional matrix. macOS 15 evidence can't satisfy a performance or visual role. Evidence from the Writer's active desktop is invalid even when the captured output appears correct.
 
 ## Release Update Coordinator
 

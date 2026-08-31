@@ -5,11 +5,12 @@
 ```mermaid
 flowchart TD
     Build[Build supported artifacts]
-    Linux[Linux x86-64 performance\nowned isolated environment]
-    MacReference[Apple Silicon macOS 26 performance and visual\nowned isolated environment]
-    MacCompatibility[macOS 15 functional compatibility\nowned isolated environment]
-    Integrity[Verify evidence artifact integrity]
-    Identity[Match environment, build, corpus, role, and run identity]
+    Expected[Authoritative expected identity\nrelease, build, corpus, run, and required roles]
+    Linux[Linux x86-64 common functional and performance\nowned isolated environment]
+    MacReference[Apple Silicon macOS 26 common functional, performance, and visual\nowned isolated environment]
+    MacCompatibility[macOS 15 common functional compatibility only\nowned isolated environment]
+    Integrity[Authenticate validation origin and verify evidence artifact integrity]
+    Identity[Compare captured identity with authoritative expected identity]
     Complete[Require complete current evidence set]
     Publish[Publish artifacts, evidence, provenance, and compatibility metadata]
     Available[Compatible higher 0.x release available]
@@ -21,19 +22,24 @@ flowchart TD
     Failed[Release evidence incomplete]
     Rejected[Reject evidence]
 
-    Build -->|validation request with build and corpus identity| Linux
-    Build -->|validation request with build and corpus identity| MacReference
-    Build -->|validation request with build and corpus identity| MacCompatibility
-    Linux -->|integrity-checked evidence artifact handoff| Integrity
-    MacReference -->|integrity-checked evidence artifact handoff| Integrity
-    MacCompatibility -->|integrity-checked evidence artifact handoff| Integrity
+    Build -->|release candidate and required roles| Expected
+    Build -->|artifact and validation request| Linux
+    Build -->|artifact and validation request| MacReference
+    Build -->|artifact and validation request| MacCompatibility
+    Expected -->|authoritative expected-identity handoff| Linux
+    Expected -->|authoritative expected-identity handoff| MacReference
+    Expected -->|authoritative expected-identity handoff| MacCompatibility
+    Expected -->|authoritative expected-identity handoff| Identity
+    Linux -->|authenticated-origin and integrity-checked evidence artifact handoff| Integrity
+    MacReference -->|authenticated-origin and integrity-checked evidence artifact handoff| Integrity
+    MacCompatibility -->|authenticated-origin and integrity-checked evidence artifact handoff| Integrity
     Linux -->|ownership or validation failure| Failed
     MacReference -->|ownership or validation failure| Failed
     MacCompatibility -->|ownership or validation failure| Failed
-    Integrity -->|artifact valid| Identity
-    Integrity -->|missing or corrupt artifact| Rejected
-    Identity -->|identity current and matched| Complete
-    Identity -->|mismatched or stale identity| Rejected
+    Integrity -->|origin and artifact valid| Identity
+    Integrity -->|untrusted origin, missing artifact, or corrupt artifact| Rejected
+    Identity -->|captured identity matches expected identity| Complete
+    Identity -->|expected identity missing or captured identity mismatched or stale| Rejected
     Complete -->|all assigned roles accepted| Publish
     Complete -->|required role missing| Failed
     Publish --> Available
@@ -48,9 +54,11 @@ flowchart TD
 
 - Every validation environment owns its display, compositor, input, and process state. If ownership isn't proven, it produces no acceptable evidence.
 - The Writer's active desktop never supplies visual proof. The Writer's desktop state in a capture invalidates the complete run.
-- Missing or corrupt evidence fails integrity verification before aggregation.
-- Mismatched environment, build, corpus, role, or run identity is rejected. Stale evidence can't satisfy a current release gate.
-- macOS 15 evidence can satisfy only functional compatibility. It can't replace either performance role or the macOS 26 visual role.
+- Missing authoritative release, build, corpus, run, or required-role identity prevents evidence acceptance.
+- An untrusted validation origin or missing or corrupt evidence fails verification before aggregation.
+- Aggregation compares captured identity with the expected identity supplied directly by Release Pipeline. Self-description alone is insufficient.
+- A captured identity that is mismatched or stale is rejected. Evidence from another run can't satisfy the current release gate.
+- All three roles must pass the common functional matrix. macOS 15 can't replace either performance role or the macOS 26 visual role.
 - A launch-only result can't admit a system to the supported matrix.
 - Update notification never replaces installed binaries.
 - Unsigned prerelease status and Platform installation guidance remain explicit.

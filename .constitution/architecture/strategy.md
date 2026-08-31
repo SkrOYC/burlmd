@@ -10,7 +10,9 @@ burlmd remains a local-first modular desktop application. One authoritative Core
 
 A separate release pipeline produces installable artifacts for the supported Platform matrix. Pipeline-owned isolated environments run validation without using the Writer's active desktop. Each environment owns its display, compositor, input, and process state.
 
-Linux x86-64 and Apple Silicon macOS 26 are performance-reference roles. The macOS 26 role also owns visual reference evidence. macOS 15 provides functional compatibility evidence only. Each run captures its environment, build, and corpus identity. Integrity-checked evidence artifacts reach aggregation only through an explicit handoff.
+All three validation roles run the common functional matrix. Linux x86-64 and Apple Silicon macOS 26 are also performance-reference roles. The macOS 26 role also owns visual reference evidence. macOS 15 provides functional compatibility evidence only.
+
+The Release Pipeline establishes the authoritative expected identity for each run. It contains the release, build, corpus, run, and required-role identities. The pipeline hands this identity independently to validation and aggregation. Validation evidence records captured environment and observed release, build, corpus, run, and role identities. Its artifact handoff authenticates the pipeline-owned origin and protects integrity.
 
 The runtime can inspect release metadata and notify the Writer, but installation remains under the Platform or package manager's authority.
 
@@ -20,7 +22,7 @@ The pattern keeps every local capability available without a Provider or network
 
 Remote synchronization and Object transfer are separate logical boundaries because they fail independently and don't share a transaction. A coordination state machine prevents published Note history from referencing unavailable Objects. Explicit Suggestion, Lifecycle Decision, Asset Decision, and guest-write paths keep distinct conflict classes from collapsing into one unsafe workflow.
 
-Release validation is separate from evidence aggregation because execution and acceptance fail independently. Isolation keeps the Writer's desktop state out of visual proof. Identity and integrity checks prevent evidence from another environment, build, corpus, or run from satisfying the current release gate.
+Release validation is separate from evidence aggregation because execution and acceptance fail independently. Isolation keeps the Writer's desktop state out of visual proof. Aggregation authenticates the evidence origin and compares captured identity with the authoritative expected identity. It doesn't trust evidence self-description alone.
 
 ## Accepted trade-offs
 
