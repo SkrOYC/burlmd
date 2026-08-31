@@ -2484,6 +2484,9 @@ impl NoteSession {
         self.clear_draft_through(seq)?;
         self.index_written_source(source, &new_revision)?;
 
+        #[cfg(test)]
+        self.0.workspace.run_before_session_settlement();
+
         let mut state = self.lock_state_for_retirement();
         state.metadata.last_modified = unix_now();
         state.last_written_at = Some(unix_now());
@@ -5423,6 +5426,13 @@ mod tests {
             wait_until(Duration::from_millis(300), || f.draft("a").is_none()),
             "tier 2 did not clear the longer retry's draft row"
         );
+        assert!(
+            wait_until(Duration::from_secs(3), || {
+                let timer = session.0.timer.state.lock().unwrap();
+                !timer.running && timer.deadline.is_none()
+            }),
+            "the longer retry timer did not finish before the shorter refusal"
+        );
 
         let state_before_shorter = session.note_state().unwrap();
         let sequence_before_shorter = session.edit_seq();
@@ -6396,9 +6406,15 @@ mod tests {
         let f = fixture_with_idle(Duration::from_millis(100));
         let original = note("A", "First paragraph.\n\nSecond paragraph.");
         f.write("a.md", &original);
+        let path = f.root().join("a.md");
+        std::fs::File::open(&path)
+            .unwrap()
+            .set_modified(UNIX_EPOCH + Duration::from_secs(1))
+            .unwrap();
         let session = f.open("a");
         session.update_block(&[0], "First edited.\n").unwrap();
-        let revision_before = session.note_state().unwrap().base_revision;
+        let state_before = session.note_state().unwrap();
+        assert_eq!(state_before.metadata.last_modified, 1);
         let expected = note("A", "First edited.\n\nInserted.\n\nSecond paragraph.");
 
         f.inject_failure(
@@ -6434,6 +6450,31 @@ mod tests {
             })
             .unwrap();
 
+        let (settlement_entered_tx, settlement_entered_rx) = std::sync::mpsc::sync_channel(1);
+        let (settlement_release_tx, settlement_release_rx) = std::sync::mpsc::sync_channel(0);
+        let settlement_release_rx = Arc::new(Mutex::new(settlement_release_rx));
+        let settlement_release_for_hook = Arc::clone(&settlement_release_rx);
+        let settlement_hook_calls = Arc::new(AtomicUsize::new(0));
+        let settlement_hook_calls_for_hook = Arc::clone(&settlement_hook_calls);
+        f.workspace
+            .set_before_session_settlement(Some(Arc::new(move || {
+                // The structural failure below re-arms the timer after this
+                // first write has published. Only the first settlement is the
+                // controlled pause; a recovery write must be able to pass
+                // through this hook without another release from the test.
+                if settlement_hook_calls_for_hook.fetch_add(1, Ordering::SeqCst) != 0 {
+                    return;
+                }
+                settlement_entered_tx
+                    .send(())
+                    .expect("the test must observe the paused tier 2 settlement");
+                settlement_release_for_hook
+                    .lock()
+                    .unwrap()
+                    .recv()
+                    .expect("the test must release the tier 2 settlement");
+            })));
+
         let structural = {
             let session = session.clone();
             std::thread::spawn(move || session.insert_block(&[1], "Inserted.".to_string()))
@@ -6443,7 +6484,7 @@ mod tests {
             .expect("the structural write never reached the deterministic pause");
         assert!(
             wait_until(Duration::from_secs(3), || {
-                session.note_state().unwrap().base_revision != revision_before
+                session.note_state().unwrap().base_revision != state_before.base_revision
                     && f.read("a.md") == expected
             }),
             "tier 2 did not publish the structural source while tier 1 was paused"
@@ -6452,6 +6493,9 @@ mod tests {
         release_tx
             .send(())
             .expect("the paused structural write stopped unexpectedly");
+        settlement_entered_rx
+            .recv_timeout(Duration::from_secs(3))
+            .expect("tier 2 did not reach the deterministic settlement pause");
         let returned = structural
             .join()
             .expect("the structural thread must not panic")
@@ -6463,15 +6507,41 @@ mod tests {
         assert_eq!(*session.working_source().unwrap(), expected);
         assert_eq!(f.read("a.md"), expected);
         assert_ne!(
-            returned.base_revision, revision_before,
+            returned.base_revision, state_before.base_revision,
             "the successful result retained the pre-publication revision"
         );
+        assert_eq!(
+            returned.metadata.last_modified, state_before.metadata.last_modified,
+            "the authoritative-success result did not match the paused session state"
+        );
+        settlement_release_tx
+            .send(())
+            .expect("the paused tier 2 settlement stopped unexpectedly");
+        assert!(
+            wait_until(Duration::from_secs(3), || {
+                session.note_state().unwrap().metadata.last_modified
+                    > state_before.metadata.last_modified
+            }),
+            "tier 2 did not settle a post-publication timestamp"
+        );
+        assert!(
+            wait_until(Duration::from_secs(3), || {
+                settlement_hook_calls.load(Ordering::SeqCst) >= 2
+            }),
+            "the recovery timer did not reach the nonblocking second settlement hook"
+        );
+        f.workspace.set_before_session_settlement(None);
         assert!(
             wait_until(Duration::from_secs(3), || {
                 let timer = session.0.timer.state.lock().unwrap();
                 !timer.running && timer.deadline.is_none()
             }),
             "the recovery timer did not finish before the fixture was dropped"
+        );
+        assert_eq!(
+            settlement_hook_calls.load(Ordering::SeqCst),
+            2,
+            "the one-shot settlement hook observed an unexpected extra timer write"
         );
     }
 
