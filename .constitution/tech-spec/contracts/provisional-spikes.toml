@@ -44,6 +44,8 @@ status = "bootstrap-authorized-provisional"
 candidate_phase = "candidate-branch-draft-pull-request"
 aggregation = "coordinator-job-or-authenticated-local"
 report_phase = "reviewed-evidence-commit-before-milestone-review"
+caller_workflow = ".github/workflows/ci.yml"
+api_version = "2026-03-10"
 expected_identity_fields = ["release", "build", "corpus", "run", "required-roles", "required-role-signers"]
 capture_fields = ["ImageOS", "ImageVersion", "os-release", "architecture", "cpu-model", "logical-cpu-count", "memory-bytes", "storage-bytes", "logical-viewport", "build", "corpus", "run", "role"]
 role_phase = "Validate immutable pre-upload bytes against ci-role-evidence.schema.json, compute their SHA-256 digest, attest that digest, then upload the unchanged manifest. The manifest never contains a service-assigned artifact ID or upload digest."
@@ -53,6 +55,37 @@ caller_permissions = ["contents:read", "id-token:write", "attestations:write"]
 signer_permissions = ["contents:read", "id-token:write", "attestations:write"]
 aggregate_permissions = ["contents:read", "actions:read", "attestations:read"]
 reject = ["expected-identity-invalid", "role-manifest-invalid", "missing-role", "duplicate-role", "unexpected-role", "role-gate-failed", "identity-mismatch", "stale-evidence", "workflow-signer-mismatch", "runner-label-mismatch", "untrusted-origin", "attestation-unavailable", "artifact-api-mismatch", "artifact-corrupt", "mixed-image-version", "aggregation-error"]
+
+[ci_bootstrap.cli]
+entrypoint = "./scripts/managed-evidence.sh"
+authentication_environment = "GH_TOKEN"
+token_must_not_appear_in_arguments_logs_reports_or_artifacts = true
+expected_identity_artifact = "managed-evidence-expected-{run_id}-{run_attempt}"
+expected_identity_member = "expected-identity.json"
+role_artifact = "managed-evidence-{role}-{run_id}-{run_attempt}"
+role_artifact_member = "ci-role-evidence.json"
+output_schema = ".constitution/tech-spec/contracts/ci-evidence.schema.json"
+stdout_fields = ["status", "runId", "runAttempt", "report"]
+stderr = "diagnostics-only"
+output_write = "atomic-replace"
+exit_0 = "The output report is schema-valid and accepted."
+exit_1 = "The output report is schema-valid and rejected."
+exit_2 = "Invalid arguments, insufficient API permission, dispatch failure, interruption, timeout before authoritative identity is available, or output failure prevented a schema-valid report."
+
+[ci_bootstrap.cli.collect]
+usage = "./scripts/managed-evidence.sh collect --pull-request PULL_REQUEST_NUMBER --run-id RUN_ID --attempt RUN_ATTEMPT --head-sha HEAD_SHA --output REPORT_JSON"
+permissions = ["actions:read", "attestations:read", "pull-requests:read"]
+required_event = "pull_request"
+required_pull_request_state = "open-draft"
+behavior = "Verify the pull-request head, caller workflow path, run, attempt, and head SHA. Download the separately produced expected-identity artifact and all exact role artifacts for that run. Verify identity, hashes, artifact metadata, attestations, signer workflows, and hosted labels, then write accepted or rejected aggregate evidence. Never select a run by recency or trust a self-reported job name or ID."
+
+[ci_bootstrap.cli.run]
+usage = "./scripts/managed-evidence.sh run --ticket TICKET_ID --ref GIT_REF --head-sha HEAD_SHA --output REPORT_JSON"
+permissions = ["actions:write", "attestations:read", "contents:read"]
+allowed_tickets = ["AST-H001", "PATH-H002", "ASSET-I001", "GIT-L001", "PKG-M001"]
+timeout_seconds = 7200
+initial_attempt = 1
+behavior = "Resolve the ref to the supplied full SHA, dispatch the fixed caller workflow with the ticket and SHA, use the API-returned workflow-run ID, wait for attempt 1 to finish, then perform the collect protocol without a pull-request requirement. Never identify the run by list order, time, branch alone, or a self-reported job name or ID."
 
 [ci_bootstrap.role_workflows."linux-x86_64"]
 workflow_path = ".github/workflows/ci-role-linux-x86-64.yml"

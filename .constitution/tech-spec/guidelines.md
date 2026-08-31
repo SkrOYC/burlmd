@@ -16,6 +16,15 @@ Research Tasks stop on a failed safety or fidelity gate. A performance miss is e
 
 `CI-M003` implements only the bootstrap described here. A candidate branch opens a draft pull request and produces an authoritative expected-identity document before fan-out. That document contains release, build, corpus, run, and required-role identities. Its SHA-256 digest is passed independently to each validation role and to aggregation.
 
+The one repository-owned entry point is `./scripts/managed-evidence.sh`; `CI-M003` implements it as a narrow client for this protocol, not as a general workflow framework. It uses GitHub REST API version `2026-03-10` and the fixed caller `.github/workflows/ci.yml`. `GH_TOKEN` supplies authentication and must never appear in an argument, log, report, or artifact. The command has exactly two forms:
+
+- `./scripts/managed-evidence.sh collect --pull-request PULL_REQUEST_NUMBER --run-id RUN_ID --attempt RUN_ATTEMPT --head-sha HEAD_SHA --output REPORT_JSON` verifies an existing candidate draft-pull-request run. It requires an open draft pull request whose head is `HEAD_SHA`, and requires the named run and attempt to use the `pull_request` event, `.github/workflows/ci.yml`, and that same head.
+- `./scripts/managed-evidence.sh run --ticket TICKET_ID --ref GIT_REF --head-sha HEAD_SHA --output REPORT_JSON` is available after `CI-M003` merges. It accepts only a decision ticket declared in `contracts/provisional-spikes.toml`, resolves `GIT_REF` to `HEAD_SHA`, dispatches `.github/workflows/ci.yml` with that ticket and SHA, takes the returned run ID as authoritative, waits up to 7,200 seconds for attempt 1 to finish, and then performs the same collection and verification. It never selects a run by recency or a self-reported job name.
+
+Before fan-out, the caller uploads `managed-evidence-expected-RUN_ID-RUN_ATTEMPT`, containing only `expected-identity.json`. Each signer uploads `managed-evidence-ROLE-RUN_ID-RUN_ATTEMPT`, containing only `ci-role-evidence.json`. Collection obtains the expected identity separately from the role artifacts, verifies that every artifact belongs to the exact repository, run, attempt, and head, and applies the signer and artifact checks below. It writes exactly one aggregate conforming to `contracts/ci-evidence.schema.json` at `REPORT_JSON`, replacing that file atomically. Standard output is one JSON object with `status`, `runId`, `runAttempt`, and `report`; diagnostics go to standard error.
+
+Exit status `0` means the written report is `accepted`. Exit status `1` means the written report is schema-valid but `rejected`; evidence failure never suppresses its durable report. Exit status `2` means invalid arguments, insufficient API permission, dispatch failure, interruption, timeout before authoritative identity is available, or an output failure prevented a schema-valid report. After authoritative identity is available, service, timeout, missing-artifact, and verification failures instead produce a rejected report and exit `1`. `collect` needs Actions, attestations, and pull-request read access. `run` needs Actions write, attestations read, and contents read access; Actions write is used only to dispatch the fixed caller workflow.
+
 For a draft run, release identity is `candidate:` followed by the 40-hex head commit. Build identity is the SHA-256 of an exact input manifest containing that commit, repository tree, lockfiles, toolchain pins, action pins, and build configuration. Corpus identity is the SHA-256 of the generated corpus manifest. Run identity is the decimal workflow-run ID and run attempt joined by `:`. Required roles are exactly `linux-x86_64`, `macos-26-arm64`, and `macos-15-arm64`. The expected identity also assigns one signer to each role:
 
 - `linux-x86_64`: `.github/workflows/ci-role-linux-x86-64.yml`
@@ -89,11 +98,10 @@ The repository follows the default `flutter_rust_bridge` template structure to m
 │   │   └── screens/         # Full-screen routes (workspace.dart, login.dart —
 │   │                        #   login retained for the deferred connect flow,
 │   │                        #   no longer a startup gate since SHEL-E002)
-├── scripts/                 # `smoke-shot.sh` is the manual-QA smoke harness
-│                              every UI ticket gates on (SHEL-E001).
-│                              SHELL-G001 introduces
-│                              `visual-regression.sh` alongside it; both write
-│                              screenshots to `.qa/`, which is gitignored
+├── scripts/                 # Repository-owned validation entry points
+│   ├── smoke-shot.sh        # Manual QA gate for every UI ticket (SHEL-E001)
+│   ├── visual-regression.sh # Exact visual gate introduced by SHELL-G001
+│   └── managed-evidence.sh  # Managed evidence client implemented by CI-M003
 ├── test/                    # Dart widget tests
 ├── rust/                    # Rust Core Engine source code
 │   └── src/frb_generated.rs # Auto-generated FRB Rust bridge; changes with Dart bindings
