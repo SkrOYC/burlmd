@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": ["schemaVersion", "expectedIdentity", "expectedIdentitySha256", "generatedAt", "mode", "status", "roleEvidence", "aggregationChecks", "rejectionReasons"],
   "properties": {
-    "schemaVersion": { "const": 3 },
+    "schemaVersion": { "const": 4 },
     "expectedIdentity": { "$ref": "ci-role-evidence.schema.json#/$defs/expectedIdentity" },
     "expectedIdentitySha256": { "$ref": "#/$defs/sha256" },
     "generatedAt": { "$ref": "#/$defs/rfc3339" },
@@ -43,17 +43,17 @@
               { "contains": { "type": "object", "properties": { "manifest": { "type": "object", "properties": { "roleEvidence": { "type": "object", "properties": {
                 "role": { "const": "linux-x86_64" },
                 "viewport": { "type": "object", "properties": { "verified": { "const": true } } },
-                "gates": { "type": "object", "properties": { "commonFunctional": { "const": true }, "performance": { "const": true }, "linuxExactVisual": { "const": true }, "macosAuthoritativeVisual": { "const": false } } }
+                "gates": { "type": "object", "properties": { "commonFunctional": { "const": true }, "performance": { "const": true }, "linuxPlatformRegression": { "const": true }, "macosAuthoritativeVisual": { "const": false } } }
               } } } } } } },
               { "contains": { "type": "object", "properties": { "manifest": { "type": "object", "properties": { "roleEvidence": { "type": "object", "properties": {
                 "role": { "const": "macos-26-arm64" },
                 "viewport": { "type": "object", "properties": { "verified": { "const": true } } },
-                "gates": { "type": "object", "properties": { "commonFunctional": { "const": true }, "performance": { "const": true }, "linuxExactVisual": { "const": false }, "macosAuthoritativeVisual": { "const": true } } }
+                "gates": { "type": "object", "properties": { "commonFunctional": { "const": true }, "performance": { "const": true }, "linuxPlatformRegression": { "const": false }, "macosAuthoritativeVisual": { "const": true } } }
               } } } } } } },
               { "contains": { "type": "object", "properties": { "manifest": { "type": "object", "properties": { "roleEvidence": { "type": "object", "properties": {
                 "role": { "const": "macos-15-arm64" },
                 "viewport": { "type": "object", "properties": { "verified": { "const": true } } },
-                "gates": { "type": "object", "properties": { "commonFunctional": { "const": true }, "performance": { "const": false }, "linuxExactVisual": { "const": false }, "macosAuthoritativeVisual": { "const": false } } }
+                "gates": { "type": "object", "properties": { "commonFunctional": { "const": true }, "performance": { "const": false }, "linuxPlatformRegression": { "const": false }, "macosAuthoritativeVisual": { "const": false } } }
               } } } } } } }
             ]
           },

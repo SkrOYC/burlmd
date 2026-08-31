@@ -200,8 +200,8 @@ Device preferences never enter Workspace content. Session and navigation state r
 
 The pipeline assigns the following validation roles:
 
-- Linux x86-64 provides common functional-matrix and performance evidence.
-- Apple Silicon macOS 26 provides common functional-matrix, performance, and visual evidence.
+- Linux x86-64 provides common functional-matrix, performance, and required exact platform-regression evidence. Its platform regression isn't authoritative product visual evidence.
+- Apple Silicon macOS 26 provides common functional-matrix, performance, and the sole authoritative product visual evidence.
 - macOS 15 provides common functional-matrix evidence for compatibility only.
 
 ## Isolated validation environment
@@ -220,7 +220,7 @@ The pipeline assigns the following validation roles:
 - **Inputs and outputs:** Accepts expected source, execution, base, release, build, corpus, run, and required-role identities from Release Pipeline. Accepts one complete evidence bundle from each role through an authenticated-origin and integrity-checked handoff. Returns an accepted complete set or explicit unmanaged, untrusted, missing, mismatched, stale, or corrupt outcomes.
 - **Depends on:** Isolated Validation Environment and Release Pipeline.
 
-All three roles must satisfy the common functional matrix. macOS 15 evidence can't satisfy a performance or visual role. Evidence from the Writer's active desktop is invalid even when the captured output appears correct.
+All three roles must satisfy the common functional matrix. macOS 15 evidence can't satisfy a performance, Linux platform-regression, or authoritative visual role. Linux platform-regression evidence can't satisfy the macOS 26 authoritative product visual role. Evidence from the Writer's active desktop is invalid even when the captured output appears correct.
 
 ## Release Update Coordinator
 

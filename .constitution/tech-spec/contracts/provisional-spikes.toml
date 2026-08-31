@@ -1,4 +1,4 @@
-schema_version = 11
+schema_version = 12
 stage = "tech-spec-v1.8.0-provisional"
 production_implementation_authorized = false
 # The Epic G entries preserve the M0 exception. FLAKE-M002 and CI-M003 may
@@ -49,8 +49,8 @@ caller_workflow = ".github/workflows/ci.yml"
 api_version = "2026-03-10"
 expected_identity_fields = ["release", "tested-source-head-sha", "workflow-execution-sha", "workflow-execution-ref", "base-sha", "workflow-event", "evidence-report-commit-policy", "build", "corpus", "run", "required-roles", "required-role-signers"]
 capture_fields = ["ImageOS", "ImageVersion", "os-release", "architecture", "cpu-model", "logical-cpu-count", "memory-bytes", "storage-bytes", "logical-viewport", "tested-source-head-sha", "workflow-execution-sha", "workflow-execution-ref", "base-sha", "build", "corpus", "run", "role"]
-ci_role_evidence_schema_version = 2
-ci_evidence_schema_version = 3
+ci_role_evidence_schema_version = 3
+ci_evidence_schema_version = 4
 role_phase = "Write every result, log, raw measurement, and handoff first. Record each relative path, size, and SHA-256 digest in internalArtifacts. Validate ci-role-evidence.json, then create deterministic ci-role-evidence.tar.zst containing the manifest and every named file. Attest the exact bundle bytes and upload an artifact containing only that unchanged bundle. The manifest never contains bundle, artifact, upload, or attestation fields."
 aggregate_phase = "Verify the upload digest, attested role-bundle digest, safe bundle extraction, manifest schema, and every internalArtifacts path, size, and hash before validating accepted or rejected coordinator output against ci-evidence.schema.json. Accepted output requires all roles and successful checks. Rejected output permits partial or missing roles and records typed reasons."
 origin_authentication = "Trigger the caller from a pushed source branch and call each same-repository role workflow through a static ./.github/workflows path, which resolves from the caller's workflow execution commit. Verify the attestation's signed builder identity against the expected role-specific path, execution ref, and execution SHA and verify its invocation run and attempt. Require signed OIDC runner_environment to equal github-hosted and retain that fact in aggregate origin; reject self-hosted regardless of labels. Query the versioned job API only to corroborate the fixed hosted label. Artifact and job REST objects are not directly correlated, and an artifact-supplied job name or ID is never trusted. Private/internal repository attestation requires GitHub Enterprise Cloud; without it evidence remains rejected and there is no hash-only fallback."
@@ -139,7 +139,7 @@ storage_bytes = 14000000000
 logical_viewport_width = 1920
 logical_viewport_height = 1080
 logical_viewport_refresh_hz = 60
-roles = ["common-functional", "performance", "linux-exact-visual"]
+roles = ["common-functional", "performance", "linux-platform-regression"]
 image_mutable = true
 visual_environment = "private-headless-sway-wayland"
 

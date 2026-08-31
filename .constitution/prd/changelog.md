@@ -11,6 +11,7 @@
 ### Fixed
 
 - Clarified the existing degraded-close behavior. A warning can continue one Note-to-Note replacement only when no batch or wider lifecycle operation exists. Batch close stops with unprocessed tabs preserved, and an enclosing Workspace switch or orderly shutdown is canceled.
+- Distinguished the required Linux zero-pixel platform-regression gate from product visual authority. macOS 26 remains the sole authoritative product visual reference, and Linux regression output can't substitute for it.
 
 ## v1.3.6 - 2026-08-26
 

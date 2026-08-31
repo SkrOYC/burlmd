@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://burlmd.local/schemas/workspace-session-snapshot.schema.json",
   "title": "Workspace session snapshot",
-  "description": "This JSON representation stores Core-owned, versioned session state outside Note files, Git history, and `schema.sql` derived-index tables. Storage is partitioned by Workspace ID. The persistence layer replaces each snapshot atomically by writing a temporary file and renaming it. Corrupt bytes produce an empty default session for only that Workspace, isolate the corrupt bytes, and do not crash the application. The snapshot contains no Note body, credential, or device preference. The current schema version is 1.",
+  "description": "This JSON representation stores Core-owned, versioned session state outside Note files, Git history, and `schema.sql` derived-index tables. Storage is partitioned by Workspace ID. The persistence layer replaces supported snapshots atomically by writing a temporary file and renaming it. Corrupt bytes and unsupported later `schema_version` values are quarantined and preserved byte-for-byte without migration or overwrite; runtime uses an empty in-memory session for only that Workspace. A supported current snapshot may be written later only at an explicitly safe path isolated from the preserved bytes. The snapshot contains no Note body, credential, or device preference. The current schema version is 1.",
   "type": "object",
   "required": [
     "schema_version",

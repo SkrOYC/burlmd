@@ -1305,9 +1305,12 @@ pub struct ActiveWorkspaceSessionSnapshot {
 
 /// Loads the active Workspace session snapshot.
 ///
-/// For corrupt bytes or an unknown schema version, Core isolates the snapshot
-/// and returns the empty default session for the active Workspace. The result
-/// contains no Note body, credential, or device preference.
+/// For corrupt bytes or an unsupported later schema version, Core quarantines
+/// and preserves the original bytes without migration or overwrite, then
+/// returns the empty in-memory default session for the active Workspace. A
+/// later supported snapshot may be written only at an explicitly safe path
+/// isolated from the preserved bytes. The result contains no Note body,
+/// credential, or device preference.
 #[frb]
 pub async fn load_active_workspace_session_snapshot(
 ) -> Result<ActiveWorkspaceSessionSnapshot, AppError> {
@@ -1317,7 +1320,10 @@ pub async fn load_active_workspace_session_snapshot(
 /// Saves a session snapshot for the active Workspace.
 ///
 /// Core writes the versioned payload with atomic replace. It determines the
-/// Workspace ID and schema version instead of accepting either through FFI.
+/// Workspace ID and schema version instead of accepting either through FFI. If
+/// the normal snapshot path has quarantined unsupported later-version bytes,
+/// Core refuses to overwrite it and may save only through the explicitly safe
+/// current-format path isolated from those preserved bytes.
 #[frb]
 pub async fn save_active_workspace_session_snapshot(
     snapshot: ActiveWorkspaceSessionSnapshot,

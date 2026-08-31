@@ -13,7 +13,7 @@ Each run uses a fixed 1920x1080 logical viewport at 60 Hz. Before measurement, e
 
 The Goal corpus contains 10,000 Notes with a 4 KiB median, a 64 KiB 95th percentile, and a 1 MiB maximum Note. The scripted editing Note contains 2,000 Blocks across every supported syntax class and is 1 MiB before edits. The Technical Implementation stage must publish deterministic corpus generation and reference-class setup specifications.
 
-Functional release gates run on every named supported system. macOS 15 is a release-blocking functional compatibility target only. It doesn't define a performance baseline or visual reference. Performance gates run on both reference classes, and deterministic visual comparisons use the macOS 26 reference class.
+Functional release gates run on every named supported system. macOS 15 is a release-blocking functional compatibility target only. It doesn't define a performance baseline or visual reference. Performance gates run on both reference classes. macOS 26 is the sole authoritative product visual reference. Linux also requires exact zero-pixel platform-regression evidence from its isolated environment, but that implementation-specific gate isn't a product visual reference and can't substitute for macOS 26 visual evidence.
 
 ## Performance
 
