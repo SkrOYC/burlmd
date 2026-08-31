@@ -1410,8 +1410,49 @@ void main() {
     expect(await create, isA<LifecycleCompleted>());
     expect(api.calls, ['createNote::Created']);
     expect(container.read(activeNoteProvider), same(created));
+    expect(container.read(selectedNoteIdProvider), created.metadata.id);
     expect(container.read(openNoteSessionsProvider), [
       same(old),
+      same(created),
+    ]);
+  });
+
+  testWidgets('a stale create activates an already-open selected tab', (
+    tester,
+  ) async {
+    final opened = Completer<NoteState>();
+    final old = stateFor('Old');
+    final elsewhere = stateFor('Elsewhere');
+    final created = stateFor('Created');
+    final api = _LifecycleApi()
+      ..createNoteResult = created
+      ..openStates = {'Old': old, 'Elsewhere': elsewhere}
+      ..openNoteGates['Created'] = opened;
+    late ProviderContainer container;
+    await tester.pumpWidget(_probeHarness(api, (c) => container = c));
+    addTearDown(container.dispose);
+    final controller = container.read(activeNoteProvider.notifier);
+    await controller.openAsTab('Old');
+    await controller.openAsTab('Elsewhere');
+    await controller.openAsTab('Old');
+    container.read(selectedNoteIdProvider.notifier).select('Old');
+
+    final create = container
+        .read(lifecycleActionsProvider)
+        .createNote('', 'Created');
+    await tester.pump();
+    container
+        .read(selectedNoteIdProvider.notifier)
+        .selectForLifecycle('Elsewhere');
+    opened.complete(created);
+
+    expect(await create, isA<LifecycleCompleted>());
+    expect(api.calls, ['createNote::Created']);
+    expect(container.read(activeNoteProvider), same(elsewhere));
+    expect(container.read(selectedNoteIdProvider), elsewhere.metadata.id);
+    expect(container.read(openNoteSessionsProvider), [
+      same(old),
+      same(elsewhere),
       same(created),
     ]);
   });

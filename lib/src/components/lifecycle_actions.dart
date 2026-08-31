@@ -344,8 +344,13 @@ class LifecycleActions {
     // even the exact object returned to this stale create — is that session's
     // live representation, never an independently closable Dart copy. Keep
     // this check directly adjacent to closeNote: a mounted tab or editor must
-    // always win over retiring a stale create result.
-    if (_hasMountedSameIdSession(noteId)) return;
+    // always win over retiring a stale create result. It must still resolve a
+    // selection made while the created tab was opening: leaving the created
+    // editor active beneath another tree selection would make both states lie.
+    if (_hasMountedSameIdSession(noteId)) {
+      _reconcileMountedCreatedSession(noteId);
+      return;
+    }
     try {
       await _api.closeNote(noteId);
     } on CloseNoteWarning catch (warning) {
@@ -360,6 +365,52 @@ class LifecycleActions {
     // presentation entry rather than leaving a writable Dart-only buffer.
     if (_ref.mounted) {
       _ref.read(activeNoteProvider.notifier).discardRetiredTab(noteId);
+      // A same-id state may have mounted while close_note was pending. Once
+      // its tab has been discarded, its selection is no longer retryable and
+      // must not outlive the retired Core session.
+      if (_ref.read(selectedNoteIdProvider) == noteId &&
+          !_hasMountedSameIdSession(noteId)) {
+        final activeNoteId = _ref.read(activeNoteProvider)?.metadata.id;
+        final selection = _ref.read(selectedNoteIdProvider.notifier);
+        if (activeNoteId == null) {
+          selection.clear();
+        } else {
+          selection.selectForLifecycle(activeNoteId);
+        }
+      }
+    }
+  }
+
+  /// Resolves a stale create that found Core's same-id session mounted.
+  ///
+  /// The selected tab wins when it exists. Otherwise retain the session that
+  /// is actually active, rather than leaving the tree on an unmounted id.
+  void _reconcileMountedCreatedSession(String createdNoteId) {
+    final active = _ref.read(activeNoteProvider);
+    final selectedNoteId = _ref.read(selectedNoteIdProvider);
+    if (active?.metadata.id == selectedNoteId) return;
+
+    final controller = _ref.read(activeNoteProvider.notifier);
+    if (selectedNoteId != null &&
+        controller.activateExistingTab(selectedNoteId)) {
+      return;
+    }
+
+    final activeNoteId = _ref.read(activeNoteProvider)?.metadata.id;
+    if (activeNoteId != null) {
+      _ref
+          .read(selectedNoteIdProvider.notifier)
+          .selectForLifecycle(activeNoteId);
+      return;
+    }
+
+    // The same-id session can be inactive when another host replacement
+    // cleared the editor. It is still a Core-backed tab, so activate it
+    // before reflecting it in tree selection.
+    if (controller.activateExistingTab(createdNoteId)) {
+      _ref
+          .read(selectedNoteIdProvider.notifier)
+          .selectForLifecycle(createdNoteId);
     }
   }
 

@@ -3055,6 +3055,7 @@ void main() {
 
       expect(container.read(activeNoteProvider), isNull);
       expect(container.read(openNoteSessionsProvider), isEmpty);
+      expect(container.read(selectedNoteIdProvider), isNull);
       expect(
         controller.updateBlock([0], 'must not become a Dart-only draft'),
         isFalse,
