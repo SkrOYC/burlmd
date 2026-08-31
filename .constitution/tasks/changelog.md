@@ -19,11 +19,11 @@ Evolution pass for PRD v1.3.7, Architecture v1.4.15, and TechSpec v1.8.0-provisi
 
 ### Fixed
 
-- Replaced pull-request merge-revision validation with source-branch push runs. CI and managed Spike commands name the source ref, tested source head, and base SHA; workflows record execution SHA and ref separately, and evidence lands in a later declared-evidence commit.
+- Replaced candidate-owned source-branch validation with trust-anchor dispatch. CI and managed Spike commands run the launcher from a clean immutable anchor checkout, name the separate tested source and ticket base, and dispatch trusted `master` workflows that check out candidate bytes as data.
 - Required each role to attest one complete bundle containing its manifest and every named result, log, raw measurement, and handoff. Acceptance requires signed `runner_environment=github-hosted` provenance and rejects self-hosted evidence regardless of labels.
 - Clarified the close-warning invariant. A standalone Note-to-Note replacement continues after removing the warned retired tab. Batch close stops with unprocessed tabs preserved, and an enclosing Workspace switch or orderly shutdown is canceled.
 - Restored the real desktop integration gates in `CI-M003`: Linux runs the complete `integration_test/` directory on the Linux device inside its owned headless environment, and both macOS roles run it on the macOS device. Each role retains the Flutter unit and analyzer gates and proves that every discovered integration test ran.
-- Bound CI self-bootstrap to the exact Stage 3 `managed-evidence.sh collect` command and AST, path, Asset, and packaging Spike verification to its post-merge `run` command. The commands produce durable accepted or rejected reports and don't trust run recency or prose-only handoff claims.
+- Bound CI self-bootstrap and all five managed Spikes to the exact Stage 3 `managed-evidence.sh run` command. The command creates expected identity, uses the dispatch response's run ID, enforces trusted-control and source-allowlist guards, and produces durable accepted or rejected reports.
 - Clarified that merge-before-dependency applies across tranches and branches. Earlier milestones in the same declared tranche satisfy the next ticket only after commit, validation, and independent review. After adding the managed `CI-M003` prerequisite to `GIT-L001`, ticket count, effort, dependency edges, and critical path are 80 tickets, 564 points, 226 edges, and 180 points.
 - Added the managed `CI-M003` dependency and evidence command to `GIT-L001`, synchronized the README authorization banner, and made the build graph match the fifth managed Spike.
 - Distinguished required Linux exact platform-regression evidence from the sole authoritative macOS 26 product visual reference across every affected ticket.
@@ -34,6 +34,8 @@ Evolution pass for PRD v1.3.7, Architecture v1.4.15, and TechSpec v1.8.0-provisi
 - Advanced the modified Epic L marker to `v2.2.0`; the modified Epic G and Epic M files already use `v2.2.0`.
 - Replaced every managed Spike's manual cross-role handoff with authenticated role-bundle staging and exact coordinator steps. AST, path, Git, Asset, and packaging milestones now require their declared `results.json`, accepted managed report, and executor-authored human report in one evidence commit. Packaging passes the macOS archive to the compatibility role only through a verified staged bundle.
 - Split managed evidence at the credential boundary. `CI-M003` must prepare and identify each locked coordinator before authentication, restrict authenticated work to evidence acquisition, destroy credentials and descriptors, and then run the prebuilt executable in pinned Bubblewrap with no network, read-only inputs, and only its output writable. Exact canary fixtures cover both role commands and all five managed-Spike coordinators.
+- Added the two-pull-request trust-on-first-merge exception. `chore/epic-m-ci-foundation` lands the reviewed implementation and establishes its immutable anchor. `docs/epic-m-ci-evidence` contains only the accepted CI report and completion record. `CI-M003` satisfies no dependency until the second reviewed pull request merges.
+- Assigned descriptor closure to the trusted launcher. A non-`CLOEXEC` canary proves that it enumerates and closes every nonallowlisted descriptor before Bubblewrap supplies namespace, network, and filesystem isolation.
 
 ## v2.1.21 - 2026-08-30
 

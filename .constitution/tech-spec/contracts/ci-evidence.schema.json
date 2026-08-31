@@ -6,21 +6,24 @@
   "additionalProperties": false,
   "required": ["schemaVersion", "expectedIdentity", "expectedIdentitySha256", "generatedAt", "mode", "status", "roleEvidence", "coordinatorExecution", "aggregationChecks", "rejectionReasons"],
   "properties": {
-    "schemaVersion": { "const": 6 },
+    "schemaVersion": { "const": 7 },
     "expectedIdentity": { "$ref": "ci-role-evidence.schema.json#/$defs/expectedIdentity" },
     "expectedIdentitySha256": { "$ref": "#/$defs/sha256" },
     "generatedAt": { "$ref": "#/$defs/rfc3339" },
-    "mode": { "enum": ["coordinator-job", "authenticated-local"] },
+    "mode": { "const": "trusted-anchor-local" },
     "status": { "enum": ["accepted", "rejected"] },
     "roleEvidence": { "type": "array", "maxItems": 3, "items": { "$ref": "#/$defs/enrichedRoleEvidence" } },
     "coordinatorExecution": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/coordinatorExecution" }] },
     "aggregationChecks": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["rolesComplete", "identityCompared", "roleResultsPassed", "originAuthenticated", "hostedOriginVerified", "artifactIntegrityVerified", "bundleContentsVerified", "imageVersionsCompatible"],
+      "required": ["rolesComplete", "identityCompared", "trustAnchorVerified", "trustedSurfacesUnchanged", "sourceAllowlistVerified", "roleResultsPassed", "originAuthenticated", "hostedOriginVerified", "artifactIntegrityVerified", "bundleContentsVerified", "imageVersionsCompatible"],
       "properties": {
         "rolesComplete": { "type": "boolean" },
         "identityCompared": { "type": "boolean" },
+        "trustAnchorVerified": { "type": "boolean" },
+        "trustedSurfacesUnchanged": { "type": "boolean" },
+        "sourceAllowlistVerified": { "type": "boolean" },
         "roleResultsPassed": { "type": "boolean" },
         "originAuthenticated": { "type": "boolean" },
         "hostedOriginVerified": { "type": "boolean" },
@@ -61,6 +64,9 @@
           "aggregationChecks": { "type": "object", "properties": {
             "rolesComplete": { "const": true },
             "identityCompared": { "const": true },
+            "trustAnchorVerified": { "const": true },
+            "trustedSurfacesUnchanged": { "const": true },
+            "sourceAllowlistVerified": { "const": true },
             "roleResultsPassed": { "const": true },
             "originAuthenticated": { "const": true },
             "hostedOriginVerified": { "const": true },
@@ -113,20 +119,21 @@
         "workflowPath": { "type": "string", "minLength": 1 },
         "jobWorkflowRef": { "type": "string", "minLength": 1 },
         "jobWorkflowSha": { "$ref": "#/$defs/gitSha" },
-        "builderId": { "type": "string", "pattern": "^https://github\\.com/SkrOYC/burlmd/\\.github/workflows/.+@refs/heads/[A-Za-z0-9._/-]+$" }
+        "builderId": { "type": "string", "pattern": "^https://github\\.com/SkrOYC/burlmd/\\.github/workflows/.+@refs/heads/master$" }
       }
     },
     "origin": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["repositoryId", "workflowRunId", "runAttempt", "testedSourceHeadSha", "workflowExecutionSha", "workflowExecutionRef", "baseSha", "runnerEnvironment", "signerWorkflow", "workflowJobLabels", "attestationIssuer", "attestationSubjectDigest", "attestationBundleSha256", "attestationVerified", "roleBundleSha256", "artifactId", "artifactDigest", "restApiVersion", "verifiedAt"],
+      "required": ["repositoryId", "workflowRunId", "runAttempt", "trustAnchorSha", "testedSourceSha", "workflowSignerSha", "workflowSignerRef", "baseSha", "runnerEnvironment", "signerWorkflow", "workflowJobLabels", "attestationIssuer", "attestationSubjectDigest", "attestationBundleSha256", "attestationVerified", "roleBundleSha256", "artifactId", "artifactDigest", "restApiVersion", "verifiedAt"],
       "properties": {
         "repositoryId": { "type": "integer", "minimum": 1 },
         "workflowRunId": { "type": "integer", "minimum": 1 },
         "runAttempt": { "type": "integer", "minimum": 1 },
-        "testedSourceHeadSha": { "$ref": "#/$defs/gitSha" },
-        "workflowExecutionSha": { "$ref": "#/$defs/gitSha" },
-        "workflowExecutionRef": { "type": "string", "pattern": "^refs/heads/[A-Za-z0-9._/-]+$" },
+        "trustAnchorSha": { "$ref": "#/$defs/gitSha" },
+        "testedSourceSha": { "$ref": "#/$defs/gitSha" },
+        "workflowSignerSha": { "$ref": "#/$defs/gitSha" },
+        "workflowSignerRef": { "const": "refs/heads/master" },
         "baseSha": { "$ref": "#/$defs/gitSha" },
         "runnerEnvironment": {
           "$comment": "Retained only after verifying the signed SLSA internalParameters.github.runner_environment value derived from the OIDC runner_environment claim.",
@@ -163,8 +170,8 @@
           "then": { "properties": { "origin": { "type": "object", "properties": {
             "signerWorkflow": { "type": "object", "properties": {
               "workflowPath": { "const": ".github/workflows/ci-role-linux-x86-64.yml" },
-              "jobWorkflowRef": { "type": "string", "pattern": "^SkrOYC/burlmd/\\.github/workflows/ci-role-linux-x86-64\\.yml@refs/heads/[A-Za-z0-9._/-]+$" },
-              "builderId": { "type": "string", "pattern": "^https://github\\.com/SkrOYC/burlmd/\\.github/workflows/ci-role-linux-x86-64\\.yml@refs/heads/[A-Za-z0-9._/-]+$" }
+              "jobWorkflowRef": { "const": "SkrOYC/burlmd/.github/workflows/ci-role-linux-x86-64.yml@refs/heads/master" },
+              "builderId": { "const": "https://github.com/SkrOYC/burlmd/.github/workflows/ci-role-linux-x86-64.yml@refs/heads/master" }
             } },
             "workflowJobLabels": { "type": "array", "contains": { "const": "ubuntu-24.04" } }
           } } } }
@@ -174,8 +181,8 @@
           "then": { "properties": { "origin": { "type": "object", "properties": {
             "signerWorkflow": { "type": "object", "properties": {
               "workflowPath": { "const": ".github/workflows/ci-role-macos-26-arm64.yml" },
-              "jobWorkflowRef": { "type": "string", "pattern": "^SkrOYC/burlmd/\\.github/workflows/ci-role-macos-26-arm64\\.yml@refs/heads/[A-Za-z0-9._/-]+$" },
-              "builderId": { "type": "string", "pattern": "^https://github\\.com/SkrOYC/burlmd/\\.github/workflows/ci-role-macos-26-arm64\\.yml@refs/heads/[A-Za-z0-9._/-]+$" }
+              "jobWorkflowRef": { "const": "SkrOYC/burlmd/.github/workflows/ci-role-macos-26-arm64.yml@refs/heads/master" },
+              "builderId": { "const": "https://github.com/SkrOYC/burlmd/.github/workflows/ci-role-macos-26-arm64.yml@refs/heads/master" }
             } },
             "workflowJobLabels": { "type": "array", "contains": { "const": "macos-26" } }
           } } } }
@@ -185,8 +192,8 @@
           "then": { "properties": { "origin": { "type": "object", "properties": {
             "signerWorkflow": { "type": "object", "properties": {
               "workflowPath": { "const": ".github/workflows/ci-role-macos-15-arm64.yml" },
-              "jobWorkflowRef": { "type": "string", "pattern": "^SkrOYC/burlmd/\\.github/workflows/ci-role-macos-15-arm64\\.yml@refs/heads/[A-Za-z0-9._/-]+$" },
-              "builderId": { "type": "string", "pattern": "^https://github\\.com/SkrOYC/burlmd/\\.github/workflows/ci-role-macos-15-arm64\\.yml@refs/heads/[A-Za-z0-9._/-]+$" }
+              "jobWorkflowRef": { "const": "SkrOYC/burlmd/.github/workflows/ci-role-macos-15-arm64.yml@refs/heads/master" },
+              "builderId": { "const": "https://github.com/SkrOYC/burlmd/.github/workflows/ci-role-macos-15-arm64.yml@refs/heads/master" }
             } },
             "workflowJobLabels": { "type": "array", "contains": { "const": "macos-15" } }
           } } } }
@@ -222,7 +229,7 @@
       "additionalProperties": false,
       "required": ["code", "detail"],
       "properties": {
-        "code": { "enum": ["expected-identity-invalid", "role-manifest-invalid", "role-bundle-invalid", "missing-role", "duplicate-role", "unexpected-role", "role-gate-failed", "identity-mismatch", "stale-evidence", "workflow-signer-mismatch", "runner-label-mismatch", "runner-environment-mismatch", "untrusted-origin", "attestation-unavailable", "artifact-api-mismatch", "artifact-corrupt", "mixed-image-version", "coordinator-identity-mismatch", "coordinator-isolation-failed", "coordinator-credential-exposure", "aggregation-error"] },
+        "code": { "enum": ["expected-identity-invalid", "trust-anchor-mismatch", "candidate-control-surface-changed", "source-allowlist-violation", "role-manifest-invalid", "role-bundle-invalid", "missing-role", "duplicate-role", "unexpected-role", "role-gate-failed", "identity-mismatch", "stale-evidence", "workflow-signer-mismatch", "runner-label-mismatch", "runner-environment-mismatch", "untrusted-origin", "attestation-unavailable", "artifact-api-mismatch", "artifact-corrupt", "mixed-image-version", "coordinator-identity-mismatch", "coordinator-isolation-failed", "coordinator-credential-exposure", "aggregation-error"] },
         "role": { "$ref": "#/$defs/role" },
         "detail": { "type": "string", "minLength": 1 }
       }

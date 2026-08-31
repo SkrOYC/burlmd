@@ -195,7 +195,7 @@ Device preferences never enter Workspace content. Session and navigation state r
 - **Boundary kind:** Pipeline boundary.
 - **Logical type:** Build, verification, and publication boundary.
 - **Responsibility:** Produces each supported artifact, assigns validation roles, establishes authoritative expected identity, requires complete accepted evidence, and publishes artifact integrity with authenticated build provenance.
-- **Inputs and outputs:** Accepts a release identity and Platform matrix. Sends validation and aggregation the expected tested-source, workflow-execution, base, release, build, corpus, run, and required-role identities. Emits verified artifacts, evidence, and metadata to Release Distribution.
+- **Inputs and outputs:** Accepts a release identity and Platform matrix. From an immutable reviewed validation anchor, sends validation and aggregation the expected trust-anchor, workflow-signer, tested-source, base, release, build, corpus, run, and required-role identities. Emits verified artifacts, evidence, and metadata to Release Distribution.
 - **Depends on:** Isolated Validation Environment, Evidence Aggregation, supported Platform environments, and Release Distribution.
 
 The pipeline assigns the following validation roles:
@@ -216,8 +216,8 @@ The pipeline assigns the following validation roles:
 
 - **Boundary kind:** Pipeline stage.
 - **Logical type:** Evidence integrity and acceptance boundary.
-- **Responsibility:** Authenticates managed validation origin, verifies complete bundle integrity, and compares captured identity with authoritative expected identity before isolated aggregation.
-- **Inputs and outputs:** Accepts expected source, execution, base, release, build, corpus, run, and required-role identities from Release Pipeline. Accepts one complete evidence bundle from each role through an authenticated-origin and integrity-checked handoff. Credentialed acquisition produces verified read-only inputs. A separate credential-free, non-networked coordinator produces machine results through one writable output boundary. Returns an accepted complete set or explicit unmanaged, untrusted, missing, mismatched, stale, corrupt, credential-exposed, or isolation-failed outcomes.
+- **Responsibility:** Authenticates managed validation origin, verifies the trust-anchor relationship and ticket write boundary, verifies complete bundle integrity, and compares captured identity with authoritative expected identity before isolated aggregation.
+- **Inputs and outputs:** Accepts expected trust-anchor, workflow-signer, tested-source, base, release, build, corpus, run, and required-role identities from Release Pipeline. Accepts one complete evidence bundle from each role through an authenticated-origin and integrity-checked handoff. Credentialed acquisition produces verified read-only inputs. A separate credential-free, non-networked coordinator produces machine results through one writable output boundary. Returns an accepted complete set or explicit unmanaged, candidate-controlled, out-of-boundary, untrusted, missing, mismatched, stale, corrupt, credential-exposed, or isolation-failed outcomes.
 - **Depends on:** Isolated Validation Environment and Release Pipeline.
 
 All three roles must satisfy the common functional matrix. macOS 15 evidence can't satisfy a performance, Linux platform-regression, or authoritative visual role. Linux platform-regression evidence can't satisfy the macOS 26 authoritative product visual role. Evidence from the Writer's active desktop is invalid even when the captured output appears correct.

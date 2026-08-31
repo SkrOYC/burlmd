@@ -5,14 +5,15 @@
 ```mermaid
 flowchart TD
     Build[Build supported artifacts]
-    Expected[Authoritative expected identity\ntested source, workflow execution, base, build, corpus, run, and required roles]
+    Trust[Immutable reviewed validation trust anchor]
+    Expected[Authoritative expected identity\ntrust anchor, workflow signer, tested source, base, build, corpus, run, and required roles]
     Linux[Linux x86-64 common functional, performance, and non-authoritative exact platform regression\nowned isolated environment]
     MacReference[Apple Silicon macOS 26 common functional, performance, and authoritative product visual\nowned isolated environment]
     MacCompatibility[macOS 15 common functional compatibility only\nowned isolated environment]
     Integrity[Authenticate managed validation origin and verify complete evidence bundle integrity]
     Identity[Compare captured identity with authoritative expected identity]
     Complete[Require complete current evidence set]
-    Report[Commit evidence-only report after tested source]
+    Report[Review evidence-only integration after tested source]
     Publish[Publish artifacts, evidence, provenance, and compatibility metadata]
     Available[Compatible higher 0.x release available]
     Notify[Notify Writer and open release information]
@@ -23,6 +24,7 @@ flowchart TD
     Failed[Release evidence incomplete]
     Rejected[Reject evidence]
 
+    Trust -->|trusted identity authority| Expected
     Build -->|release candidate and required roles| Expected
     Build -->|artifact and validation request| Linux
     Build -->|artifact and validation request| MacReference
@@ -43,7 +45,7 @@ flowchart TD
     Identity -->|expected identity missing or captured identity mismatched or stale| Rejected
     Complete -->|all assigned roles accepted| Report
     Complete -->|required role missing| Failed
-    Report -->|evidence-only commit remains distinct from tested source| Publish
+    Report -->|reviewed evidence state remains distinct from tested source| Publish
     Publish --> Available
     Available --> Notify
     Notify --> PlatformInstall
@@ -56,7 +58,9 @@ flowchart TD
 
 - Every validation environment owns its display, compositor, input, and process state. If ownership isn't proven, it produces no acceptable evidence.
 - The Writer's active desktop never supplies visual proof. The Writer's desktop state in a capture invalidates the complete run.
-- Missing authoritative tested-source, workflow-execution, base, release, build, corpus, run, or required-role identity prevents evidence acceptance.
+- Missing authoritative trust-anchor, workflow-signer, tested-source, base, release, build, corpus, run, or required-role identity prevents evidence acceptance.
+- A candidate-defined launcher, signer workflow, expected identity, or change outside the ticket's declared write boundary prevents dispatch or evidence acceptance.
+- Validation bootstrap needs a reviewed implementation integration followed by a reviewed evidence-only integration. The validation capability remains incomplete between them.
 - An untrusted or unmanaged validation origin, an incomplete evidence bundle, or corrupt evidence fails verification before aggregation.
 - Candidate-controlled aggregation never shares the authenticated acquisition context. Missing coordinator identity, reachable credentials or user configuration, writable inputs, an extra writable filesystem boundary, or available network access rejects the run.
 - Aggregation compares captured identity with the expected identity supplied directly by Release Pipeline. Self-description alone is insufficient.
