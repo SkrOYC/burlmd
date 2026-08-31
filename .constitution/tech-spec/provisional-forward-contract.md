@@ -21,7 +21,7 @@ This document prevents the research wave from becoming an accidental implementat
 
 ## Contract-scoped production authorization
 
-The existing Epic G M0 production exceptions remain in force. `FLAKE-M002` and `CI-M003` may also implement the reproducibility and managed-validation bootstrap in this TechSpec. Their authorization doesn't settle any open AST, path, asset, Git, observer, packaging, or release choice.
+The existing Epic G M0 production exceptions remain in force. `FLAKE-M002` and `CI-M003` may also implement the reproducibility and managed-validation bootstrap in this TechSpec. `CI-M003` owns the missing `scripts/check-generated-bindings.sh` file and must create the non-mutating checker before any bootstrap gate invokes it. The checker snapshots and backs up both generated surfaces, runs the provisional Flutter Rust Bridge `2.12.0` generator, compares file sets and bytes, reports stale output, and restores the exact precheck state before exit. Implementation must follow the accepted contract without importing or cherry-picking the coordinating Epic G branch. This authorization doesn't settle any open AST, path, asset, Git, observer, packaging, or release choice.
 
 Every other production ticket remains blocked until its own decision evidence lands. Product Requirements and Architecture are reviewed when that evidence changes an upstream assumption. Final Stage 3 then replaces that ticket's provisional physical contract, and Stage 4 adapts the ticket before implementation. A ticket doesn't wait for an unrelated Spike, and one completed Spike doesn't authorize neighboring production work.
 

@@ -29,6 +29,9 @@ Evolution pass for PRD v1.3.7, Architecture v1.4.15, and TechSpec v1.8.0-provisi
 - Distinguished required Linux exact platform-regression evidence from the sole authoritative macOS 26 product visual reference across every affected ticket.
 - Aligned device-preference and Workspace-snapshot later-version handling with `MIGRATE-M005`: preserve unsupported bytes unchanged, use in-memory defaults, and isolate any later current-format write.
 - Made the provisional Spike contract the sole authority for `PKG-M001` inner command order and added `test_driver` to the `CI-M003` format gate.
+- Made `CI-M003` implement the missing non-mutating generated-binding checker before its ordered gate invokes that file. The checker preserves both generated surfaces on clean, stale, failed-generator, premodified, and interrupted runs.
+- Tightened `STATE-G003` with nonempty and unique identity schema rules plus Core validation for active Workspace and active Note membership. Malformed bytes remain preserved in quarantine, and runtime receives an empty writable default.
+- Advanced the modified Epic L marker to `v2.2.0`; the modified Epic G and Epic M files already use `v2.2.0`.
 
 ## v2.1.21 - 2026-08-30
 

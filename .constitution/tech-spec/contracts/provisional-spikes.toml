@@ -1,4 +1,4 @@
-schema_version = 12
+schema_version = 13
 stage = "tech-spec-v1.8.0-provisional"
 production_implementation_authorized = false
 # The Epic G entries preserve the M0 exception. FLAKE-M002 and CI-M003 may
@@ -41,6 +41,10 @@ reject_cross_host_repository_tree_lockfile_contract_schema_probe_source_or_corpu
 
 [ci_bootstrap]
 status = "bootstrap-authorized-provisional"
+generated_binding_checker = "scripts/check-generated-bindings.sh"
+generated_binding_checker_owner = "CI-M003"
+generated_binding_checker_base_state = "absent"
+generated_binding_checker_behavior = "Before any gate invokes the checker, implement it without importing or cherry-picking the coordinating Epic G branch. Snapshot a path-sorted SHA-256 manifest and byte-for-byte backup of rust/src/frb_generated.rs and every regular file under lib/src/rust. Run flutter_rust_bridge_codegen generate using provisional version 2.12.0. Compare file sets and bytes, fail on generator error or stale output, and restore and verify the exact precheck state on success, failure, or interruption."
 candidate_phase = "pushed-source-branch"
 draft_pull_request = "optional-visibility-only"
 aggregation = "coordinator-job-or-authenticated-local"

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://burlmd.local/schemas/workspace-session-snapshot.schema.json",
   "title": "Workspace session snapshot",
-  "description": "This JSON representation stores Core-owned, versioned session state outside Note files, Git history, and `schema.sql` derived-index tables. Storage is partitioned by Workspace ID. The persistence layer replaces supported snapshots atomically by writing a temporary file and renaming it. Corrupt bytes and unsupported later `schema_version` values are quarantined and preserved byte-for-byte without migration or overwrite; runtime uses an empty in-memory session for only that Workspace. A supported current snapshot may be written later only at an explicitly safe path isolated from the preserved bytes. The snapshot contains no Note body, credential, or device preference. The current schema version is 1.",
+  "description": "This JSON representation stores Core-owned, versioned session state outside Note files, Git history, and `schema.sql` derived-index tables. Storage is partitioned by Workspace ID. The persistence layer replaces supported snapshots atomically by writing a temporary file and renaming it. Corrupt bytes, schema-valid but semantically invalid state, and unsupported later `schema_version` values are quarantined and preserved byte-for-byte without migration or overwrite. Runtime uses an empty session for only the active Workspace and never restores malformed state. For malformed current-version state, the default is writable at the normal path after quarantine. A supported current snapshot after a later-version refusal may be written only at an explicitly safe path isolated from the preserved bytes. Core additionally validates active-Workspace equality, identity validity, and active-Note membership because JSON Schema can't express those runtime relationships portably. The snapshot contains no Note body, credential, or device preference. The current schema version is 1.",
   "type": "object",
   "required": [
     "schema_version",
@@ -21,28 +21,34 @@
       "const": 1
     },
     "workspace_id": {
-      "description": "Identity of the Workspace that owns this snapshot.",
-      "type": "string"
+      "description": "Nonempty identity of the Workspace that owns this snapshot. Core requires it to equal the active Workspace identity before restore.",
+      "type": "string",
+      "minLength": 1
     },
     "open_note_ids": {
-      "description": "Concept IDs of open Notes, in restore order.",
+      "description": "Unique, nonempty Concept IDs of open Notes, in restore order.",
       "type": "array",
+      "uniqueItems": true,
       "items": {
-        "type": "string"
+        "type": "string",
+        "minLength": 1
       }
     },
     "active_note_id": {
-      "description": "Concept ID of the active Note, or null when no Note is active.",
+      "description": "Nonempty Concept ID of the active Note, or null when no Note is active. Core requires a non-null value to appear in `open_note_ids`.",
       "type": [
         "string",
         "null"
-      ]
+      ],
+      "minLength": 1
     },
     "expanded_directory_ids": {
-      "description": "Directory concept IDs or bundle-relative paths used by the Workspace tree.",
+      "description": "Unique, nonempty Directory concept IDs or bundle-relative paths used by the Workspace tree.",
       "type": "array",
+      "uniqueItems": true,
       "items": {
-        "type": "string"
+        "type": "string",
+        "minLength": 1
       }
     },
     "search_query": {
