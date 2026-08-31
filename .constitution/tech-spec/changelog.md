@@ -7,8 +7,8 @@ Evolution pass for PRD v1.3.7 and Architecture v1.4.15. This version replaces ph
 ### Added
 
 - Added concrete standard public runner roles. x86-64 `ubuntu-24.04` and Apple Silicon `macos-26` run the common functional matrix and performance meters. `macos-26` owns the authoritative macOS visual baseline. Apple Silicon `macos-15` runs common functional compatibility only.
-- Added `ci-role-evidence.schema.json` for immutable pre-upload role manifests and `ci-evidence.schema.json` for coordinator-enriched aggregate reports. The Spike result root requires a real Spike identity and can't represent a CI run without falsely labeling it as research.
-- Added an authenticated two-phase evidence protocol. Candidate-branch draft runs capture role evidence; local or coordinator aggregation verifies origin, integrity, identity, and freshness; an evidence commit then precedes milestone review.
+- Added `ci-role-evidence.schema.json` for manifests inside immutable pre-upload role bundles and `ci-evidence.schema.json` for coordinator-enriched aggregate reports. The Spike result root requires a real Spike identity and can't represent a CI run without falsely labeling it as research.
+- Added an authenticated two-phase evidence protocol. Source-branch push runs capture role evidence; local or coordinator aggregation verifies origin, bundle integrity, identity, and freshness; an evidence-only commit then precedes milestone review.
 - Added full commit-SHA pins for checkout, Nix installation, artifact upload and download, and release attestation actions.
 
 ### Changed
@@ -22,14 +22,18 @@ Evolution pass for PRD v1.3.7 and Architecture v1.4.15. This version replaces ph
 
 ### Fixed
 
-- Defined `scripts/managed-evidence.sh` as the sole managed-evidence client. Its `collect` form authenticates an existing candidate draft-pull-request run for CI self-bootstrap; its post-merge `run` form dispatches the fixed caller for an allowed decision ticket and ref, waits on the API-returned run ID, and performs the same fail-closed collection. The contract fixes artifact names, flags, permissions, output, and exit statuses without introducing a general workflow framework.
-- Removed the circular requirement for a role manifest to contain the service-assigned ID and digest of the artifact that contains it. Roles attest immutable pre-upload manifest bytes; the coordinator adds upload and attestation facts only to the final report.
-- Replaced unsupported artifact-to-job REST correlation with three distinct single-job reusable-workflow signers pinned to the candidate SHA. Signed builder identity binds each manifest to its role workflow, and the job API corroborates that workflow's fixed hosted label without trusting a manifest-supplied job name or ID.
+- Replaced the pull-request merge-revision bootstrap with source-branch `push` identity. The caller uses static local reusable-workflow paths that GitHub resolves from the workflow execution commit. Expected identity separates the tested source head, workflow execution SHA and ref, base SHA, run, and later evidence-only report commit.
+- Replaced manifest-only uploads with one attested deterministic role bundle. The bundle contains `ci-role-evidence.json` and every result, log, raw measurement, and handoff named by `internalArtifacts`; aggregation verifies the bundle before consuming any result.
+- Required the signed OIDC `runner_environment` claim to equal `github-hosted`, retained that verified fact in aggregate origin, and added an explicit rejection for self-hosted evidence regardless of custom labels.
+- Clarified `close_note` warning handling without changing the FFI shape. Only a standalone Note-to-Note replacement continues; batch close stops with unprocessed tabs preserved, and a Workspace switch or orderly shutdown is canceled.
+- Defined `scripts/managed-evidence.sh` as the sole managed-evidence client. Its `collect` form authenticates an existing source-branch push run for CI self-bootstrap. Its post-merge `run` form finds the exact pushed ticket and source-ref run, waits for it, and performs the same fail-closed collection. The contract fixes bundle names, flags, permissions, output, and exit statuses without introducing a general workflow framework.
+- Removed the circular requirement for a role manifest to contain the service-assigned ID and digest of the artifact that contains it. Roles attest immutable pre-upload bundle bytes; the coordinator adds bundle, upload, and attestation facts only to the final report.
+- Replaced unsupported artifact-to-job REST correlation with three distinct static local reusable-workflow signers resolved from the workflow execution commit. Signed builder identity binds each bundle to its role workflow, and the job API corroborates that workflow's fixed hosted label without trusting a manifest-supplied job name or ID.
 - Made final aggregation a discriminated accepted or rejected result. Rejected reports allow missing or partial role evidence and require typed reasons. Each role's evidence-class sequence is exact, so Linux and macOS can't claim the other platform's visual proof.
 
 ### Security
 
-- Evidence acceptance now requires both SHA-256 integrity and authenticated pipeline-owned origin. Private-repository attestation eligibility isn't guaranteed; without it, aggregation is rejected. Typed reasons cover missing, duplicate, unexpected-role, untrusted, corrupt, mismatched, stale, or mixed-image evidence.
+- Evidence acceptance now requires bundle integrity and authenticated GitHub-hosted origin. Private-repository attestation eligibility isn't guaranteed; without it, aggregation is rejected. Typed reasons cover incomplete bundles, self-hosted origin, missing, duplicate, unexpected-role, untrusted, corrupt, mismatched, stale, or mixed-image evidence.
 
 ## v1.7.19-provisional - 2026-08-30
 

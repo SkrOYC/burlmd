@@ -11,7 +11,8 @@ stateDiagram-v2
     Active --> Active: Device preference persists outside Workspace
     Active --> Closing: Close tab, switch Workspace, or exit
     Closing --> Active: Clean close; continue serial batch
-    Closing --> Partial: Session retired with degraded durability
+    Closing --> Active: Single replacement warning; continue to target Note
+    Closing --> Partial: Batch or wider operation warning; stop and cancel
     Closing --> Partial: Close failure
     Partial --> Active: Preserve unprocessed sessions
     Closing --> [*]: Orderly exit completes
@@ -21,7 +22,8 @@ The Host Platform owns window chrome throughout this flow. Device preferences an
 
 ## Failure path
 
-- A degraded-durability warning removes the retired tab, reports the warning, stops the batch, and cancels a switch or exit.
+- For one Note-to-Note replacement with no batch or wider lifecycle operation, a degraded-durability warning removes the retired tab, reports the warning, and continues to the target Note.
+- During a batch, Workspace switch, or orderly exit, a degraded-durability warning removes the retired tab, reports the warning, stops the batch, preserves every unprocessed tab, and cancels the wider operation.
 - A close failure keeps the failed and unprocessed tabs open, reports partial progress, and cancels a switch or exit.
 - After an active-tab close, Presentation selects the following tab or the preceding tab when needed.
 - Missing restored Notes are reported and skipped without blocking startup.

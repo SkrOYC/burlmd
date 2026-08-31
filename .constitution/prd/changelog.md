@@ -8,6 +8,10 @@
 - Kept every performance threshold and corpus size unchanged. Each run uses a deterministic logical viewport and records enough environment identity to reproduce and compare its evidence.
 - Made macOS 26 the performance and visual reference. macOS 15 remains a release-blocking functional compatibility target but doesn't define performance or visual baselines.
 
+### Fixed
+
+- Clarified the existing degraded-close behavior. A warning can continue one Note-to-Note replacement only when no batch or wider lifecycle operation exists. Batch close stops with unprocessed tabs preserved, and an enclosing Workspace switch or orderly shutdown is canceled.
+
 ## v1.3.6 - 2026-08-26
 
 ### Fixed

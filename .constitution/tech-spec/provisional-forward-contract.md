@@ -16,7 +16,7 @@ This document prevents the research wave from becoming an accidental implementat
 | Atomic Export | Brownfield contract permits partial output | AST, path, and asset closure contracts first | Copy and `.okf` schemas, stable-revision lease, collision and atomic publication contracts |
 | Local assets and Object Store | No physical contract | SPK-ASSET-I001 plus measured PRD/Architecture review | Asset manifest schema, identity/hash/key format, secure configuration schema, hydration and retention state machine |
 | Private GitHub Remote | Old OAuth redirect and marker-centric merge | ADR-017 plus SPK-GIT-L001 | Device-flow FFI, GitHub API contract, typed analysis and decision schemas, credential adapter |
-| Releases and updates | Development builds plus committed Epic G headless capture | SPK-PKG-M001 for package choices; CI-M003 for managed validation bootstrap | Pre-upload role manifests, role-specific workflow signers, accepted or rejected authenticated aggregation, update metadata, installed-app release matrix |
+| Releases and updates | Development builds plus committed Epic G headless capture | SPK-PKG-M001 for package choices; CI-M003 for managed validation bootstrap | Pre-upload role bundles, role-specific workflow signers, accepted or rejected authenticated aggregation, update metadata, installed-app release matrix |
 | Platform chrome | PR #11 presentation prototype leaked into production | Settled product decision | Remove preference/state/rendering/copy/tests and regenerate visual evidence; no replacement window-frame abstraction |
 
 ## Contract-scoped production authorization

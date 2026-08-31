@@ -41,20 +41,32 @@ reject_cross_host_repository_tree_lockfile_contract_schema_probe_source_or_corpu
 
 [ci_bootstrap]
 status = "bootstrap-authorized-provisional"
-candidate_phase = "candidate-branch-draft-pull-request"
+candidate_phase = "pushed-source-branch"
+draft_pull_request = "optional-visibility-only"
 aggregation = "coordinator-job-or-authenticated-local"
-report_phase = "reviewed-evidence-commit-before-milestone-review"
+report_phase = "evidence-only-commit-parented-directly-by-tested-source-before-milestone-review"
 caller_workflow = ".github/workflows/ci.yml"
 api_version = "2026-03-10"
-expected_identity_fields = ["release", "build", "corpus", "run", "required-roles", "required-role-signers"]
-capture_fields = ["ImageOS", "ImageVersion", "os-release", "architecture", "cpu-model", "logical-cpu-count", "memory-bytes", "storage-bytes", "logical-viewport", "build", "corpus", "run", "role"]
-role_phase = "Validate immutable pre-upload bytes against ci-role-evidence.schema.json, compute their SHA-256 digest, attest that digest, then upload the unchanged manifest. The manifest never contains a service-assigned artifact ID or upload digest."
-aggregate_phase = "Validate accepted or rejected coordinator output against ci-evidence.schema.json. Accepted output requires all roles and successful checks. Rejected output permits partial or missing roles and records typed reasons."
-origin_authentication = "Call each single-job reusable role workflow at the candidate's full commit SHA. Verify the attestation's signed builder identity against the expected role-specific job_workflow_ref path and SHA and verify its invocation run and attempt. Download the artifact, compare the service digest, and compare the extracted manifest bytes with the attested subject digest. Query the versioned job API for that run and require the signer workflow's fixed hosted label. Artifact and job REST objects are not directly correlated, and an artifact-supplied job name or ID is never trusted. Private/internal repository attestation requires GitHub Enterprise Cloud; without it evidence remains rejected and there is no hash-only fallback."
+expected_identity_fields = ["release", "tested-source-head-sha", "workflow-execution-sha", "workflow-execution-ref", "base-sha", "workflow-event", "evidence-report-commit-policy", "build", "corpus", "run", "required-roles", "required-role-signers"]
+capture_fields = ["ImageOS", "ImageVersion", "os-release", "architecture", "cpu-model", "logical-cpu-count", "memory-bytes", "storage-bytes", "logical-viewport", "tested-source-head-sha", "workflow-execution-sha", "workflow-execution-ref", "base-sha", "build", "corpus", "run", "role"]
+ci_role_evidence_schema_version = 2
+ci_evidence_schema_version = 3
+role_phase = "Write every result, log, raw measurement, and handoff first. Record each relative path, size, and SHA-256 digest in internalArtifacts. Validate ci-role-evidence.json, then create deterministic ci-role-evidence.tar.zst containing the manifest and every named file. Attest the exact bundle bytes and upload an artifact containing only that unchanged bundle. The manifest never contains bundle, artifact, upload, or attestation fields."
+aggregate_phase = "Verify the upload digest, attested role-bundle digest, safe bundle extraction, manifest schema, and every internalArtifacts path, size, and hash before validating accepted or rejected coordinator output against ci-evidence.schema.json. Accepted output requires all roles and successful checks. Rejected output permits partial or missing roles and records typed reasons."
+origin_authentication = "Trigger the caller from a pushed source branch and call each same-repository role workflow through a static ./.github/workflows path, which resolves from the caller's workflow execution commit. Verify the attestation's signed builder identity against the expected role-specific path, execution ref, and execution SHA and verify its invocation run and attempt. Require signed OIDC runner_environment to equal github-hosted and retain that fact in aggregate origin; reject self-hosted regardless of labels. Query the versioned job API only to corroborate the fixed hosted label. Artifact and job REST objects are not directly correlated, and an artifact-supplied job name or ID is never trusted. Private/internal repository attestation requires GitHub Enterprise Cloud; without it evidence remains rejected and there is no hash-only fallback."
 caller_permissions = ["contents:read", "id-token:write", "attestations:write"]
 signer_permissions = ["contents:read", "id-token:write", "attestations:write"]
 aggregate_permissions = ["contents:read", "actions:read", "attestations:read"]
-reject = ["expected-identity-invalid", "role-manifest-invalid", "missing-role", "duplicate-role", "unexpected-role", "role-gate-failed", "identity-mismatch", "stale-evidence", "workflow-signer-mismatch", "runner-label-mismatch", "untrusted-origin", "attestation-unavailable", "artifact-api-mismatch", "artifact-corrupt", "mixed-image-version", "aggregation-error"]
+reject = ["expected-identity-invalid", "role-manifest-invalid", "role-bundle-invalid", "missing-role", "duplicate-role", "unexpected-role", "role-gate-failed", "identity-mismatch", "stale-evidence", "workflow-signer-mismatch", "runner-label-mismatch", "runner-environment-mismatch", "untrusted-origin", "attestation-unavailable", "artifact-api-mismatch", "artifact-corrupt", "mixed-image-version", "aggregation-error"]
+
+[ci_bootstrap.source_push]
+required_event = "push"
+local_reusable_workflow_syntax = "./.github/workflows/{WORKFLOW_FILE}"
+expressions_or_ref_suffixes_in_job_uses_forbidden = true
+tested_source_head_equals_workflow_execution_sha = true
+ignored_evidence_only_paths = [".constitution/reports/**", ".constitution/prototypes/**/managed-evidence.json"]
+report_commit_parent = "tested-source-head-sha"
+report_commit_diff = "exact-output-report-only"
 
 [ci_bootstrap.cli]
 entrypoint = "./scripts/managed-evidence.sh"
@@ -63,47 +75,48 @@ token_must_not_appear_in_arguments_logs_reports_or_artifacts = true
 expected_identity_artifact = "managed-evidence-expected-{run_id}-{run_attempt}"
 expected_identity_member = "expected-identity.json"
 role_artifact = "managed-evidence-{role}-{run_id}-{run_attempt}"
-role_artifact_member = "ci-role-evidence.json"
+role_artifact_member = "ci-role-evidence.tar.zst"
+role_bundle_manifest = "ci-role-evidence.json"
+role_bundle_internal_artifacts = "exactly-every-manifest-internalArtifacts-entry-and-no-other-files"
 output_schema = ".constitution/tech-spec/contracts/ci-evidence.schema.json"
 stdout_fields = ["status", "runId", "runAttempt", "report"]
 stderr = "diagnostics-only"
 output_write = "atomic-replace"
 exit_0 = "The output report is schema-valid and accepted."
 exit_1 = "The output report is schema-valid and rejected."
-exit_2 = "Invalid arguments, insufficient API permission, dispatch failure, interruption, timeout before authoritative identity is available, or output failure prevented a schema-valid report."
+exit_2 = "Invalid arguments, insufficient API permission, interruption, no unique push run, timeout before authoritative identity is available, or output failure prevented a schema-valid report."
 
 [ci_bootstrap.cli.collect]
-usage = "./scripts/managed-evidence.sh collect --pull-request PULL_REQUEST_NUMBER --run-id RUN_ID --attempt RUN_ATTEMPT --head-sha HEAD_SHA --output REPORT_JSON"
-permissions = ["actions:read", "attestations:read", "pull-requests:read"]
-required_event = "pull_request"
-required_pull_request_state = "open-draft"
-behavior = "Verify the pull-request head, caller workflow path, run, attempt, and head SHA. Download the separately produced expected-identity artifact and all exact role artifacts for that run. Verify identity, hashes, artifact metadata, attestations, signer workflows, and hosted labels, then write accepted or rejected aggregate evidence. Never select a run by recency or trust a self-reported job name or ID."
+usage = "./scripts/managed-evidence.sh collect --source-ref SOURCE_REF --run-id RUN_ID --attempt RUN_ATTEMPT --source-head-sha SOURCE_HEAD_SHA --base-sha BASE_SHA --output REPORT_JSON"
+permissions = ["actions:read", "attestations:read", "contents:read"]
+required_event = "push"
+behavior = "Require the remote source ref to resolve to the supplied source head. Verify caller workflow path, event, run, attempt, source ref, source head, workflow execution SHA and ref, and base SHA. Download the separately produced expected-identity artifact and every exact role-bundle artifact for that run. Verify identity, hashes, bundle contents, artifact metadata, attestations, static signer workflows, signed github-hosted origin, and hosted labels, then write accepted or rejected aggregate evidence. Never select a run by recency or trust a self-reported job name or ID."
 
 [ci_bootstrap.cli.run]
-usage = "./scripts/managed-evidence.sh run --ticket TICKET_ID --ref GIT_REF --head-sha HEAD_SHA --output REPORT_JSON"
-permissions = ["actions:write", "attestations:read", "contents:read"]
+usage = "./scripts/managed-evidence.sh run --ticket TICKET_ID --source-ref SOURCE_REF --source-head-sha SOURCE_HEAD_SHA --base-sha BASE_SHA --output REPORT_JSON"
+permissions = ["actions:read", "attestations:read", "contents:read"]
 allowed_tickets = ["AST-H001", "PATH-H002", "ASSET-I001", "GIT-L001", "PKG-M001"]
 timeout_seconds = 7200
 initial_attempt = 1
-behavior = "Resolve the ref to the supplied full SHA, dispatch the fixed caller workflow with the ticket and SHA, use the API-returned workflow-run ID, wait for attempt 1 to finish, then perform the collect protocol without a pull-request requirement. Never identify the run by list order, time, branch alone, or a self-reported job name or ID."
+behavior = "Require the source commit to be pushed and the remote source ref to resolve to the supplied full SHA. Find exactly one push-triggered fixed-caller run matching the ticket's declared prototype allowlist, source ref, and source head, wait for attempt 1 to finish, then perform the collect protocol. Reject zero or multiple matches. Never identify the run by list order, time, branch alone, pull-request state, or a self-reported job name or ID."
 
 [ci_bootstrap.role_workflows."linux-x86_64"]
 workflow_path = ".github/workflows/ci-role-linux-x86-64.yml"
 runner_label = "ubuntu-24.04"
 job_count = 1
-call_ref = "candidate-head-full-commit-sha"
+call_ref = "static-local-path-at-workflow-execution-sha"
 
 [ci_bootstrap.role_workflows."macos-26-arm64"]
 workflow_path = ".github/workflows/ci-role-macos-26-arm64.yml"
 runner_label = "macos-26"
 job_count = 1
-call_ref = "candidate-head-full-commit-sha"
+call_ref = "static-local-path-at-workflow-execution-sha"
 
 [ci_bootstrap.role_workflows."macos-15-arm64"]
 workflow_path = ".github/workflows/ci-role-macos-15-arm64.yml"
 runner_label = "macos-15"
 job_count = 1
-call_ref = "candidate-head-full-commit-sha"
+call_ref = "static-local-path-at-workflow-execution-sha"
 
 [ci_bootstrap.actions]
 checkout = "actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09"

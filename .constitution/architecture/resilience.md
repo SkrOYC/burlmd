@@ -52,9 +52,9 @@
 
 - Each validation run owns an isolated display, compositor, input channel, and process lifecycle. If it can't prove ownership, the run emits no acceptable evidence.
 - The Writer's active desktop never supplies visual proof or validation input. A captured Writer window or desktop state invalidates the run.
-- Release Pipeline establishes authoritative expected release, build, corpus, run, and required-role identities. It hands the same expectation directly to validation and aggregation.
-- Every evidence artifact carries captured environment and observed release, build, corpus, role, and run identities. The handoff authenticates its pipeline-owned validation origin and protects integrity.
-- Evidence Aggregation compares captured identity with the authoritative expected identity. It rejects self-description alone, an untrusted origin, missing or corrupt artifacts, mismatches, and stale evidence.
+- Release Pipeline establishes authoritative tested-source, workflow-execution, base, release, build, corpus, run, and required-role identities. It hands the same expectation directly to validation and aggregation.
+- Every validation role hands off one complete bundle containing its manifest and every named evidence file. The handoff authenticates managed validation origin and protects upload and bundle integrity.
+- Evidence Aggregation compares captured identity with the authoritative expected identity. It rejects self-description alone, an unmanaged or untrusted origin, incomplete or corrupt bundles, mismatches, and stale evidence. A later report state can't replace the tested source identity.
 - All three roles supply common functional-matrix evidence. Linux x86-64 and Apple Silicon macOS 26 also supply performance evidence. macOS 26 alone supplies visual evidence.
 - macOS 15 supplies functional compatibility evidence only. It can't replace either performance role or macOS 26 visual evidence.
 - A partial run remains incomplete. Each retry receives a distinct run identity instead of reusing an earlier result.

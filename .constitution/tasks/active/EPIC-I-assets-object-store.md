@@ -22,7 +22,7 @@ Deliver inline images through a portable Local Asset Store and a first-class, us
   - `.constitution/spikes/SPK-ASSET-I001.md`
 - **Scope (Out-of-Scope Files):**
   - Every repository path not listed above (don't touch production or active specifications)
-- **Verification Command:** After `CI-M003` merges, run `./scripts/managed-evidence.sh run --ticket ASSET-I001 --ref GIT_REF --head-sha HEAD_SHA --output .constitution/prototypes/assets/managed-evidence.json && git diff --check`. The managed workflow runs `cargo test --locked --manifest-path .constitution/prototypes/assets/Cargo.toml --all-targets` on all three functional roles and the exact `SPK-ASSET-I001` Linux x86-64 and macOS 26 performance probes from `.constitution/tech-spec/contracts/provisional-spikes.toml`.
+- **Verification Command:** After `CI-M003` merges and the source commit is pushed, run `./scripts/managed-evidence.sh run --ticket ASSET-I001 --source-ref SOURCE_REF --source-head-sha SOURCE_HEAD_SHA --base-sha BASE_SHA --output .constitution/prototypes/assets/managed-evidence.json && git diff --check`. The managed workflow runs `cargo test --locked --manifest-path .constitution/prototypes/assets/Cargo.toml --all-targets` on all three functional roles and the exact `SPK-ASSET-I001` Linux x86-64 and macOS 26 performance probes from `.constitution/tech-spec/contracts/provisional-spikes.toml`.
 - **Expected Success Output:** exit 0 with a finalized schema-valid report and explicit OD-06/OD-07 disposition
 - **STOP Conditions:**
   - STOP if credentials would enter committed files or evidence.
@@ -35,7 +35,7 @@ Deliver inline images through a portable Local Asset Store and a first-class, us
   - **Evidence:**
 
 ```text
-Candidate-attributed results cover all three common functional roles, both performance roles, every declared gate, exact tool and service configurations without secrets, UI Responsiveness and Idle Memory disposition, and a recommendation or explicit unresolved outcome. Linux x86-64 `ubuntu-24.04` supplies performance evidence with 4 CPUs and 16 GB; Apple Silicon `macos-26` supplies performance evidence with 3 M1 CPUs and 7 GB; `macos-15` is functional compatibility-only. Each role captures the verified logical viewport and complete image, environment, build, corpus, run, signer, and artifact identity. Aggregation rejects a missing, stale, mismatched, corrupt, unauthenticated, duplicate, or role-invalid result.
+Candidate-attributed results cover all three common functional roles, both performance roles, every declared gate, exact tool and service configurations without secrets, UI Responsiveness and Idle Memory disposition, and a recommendation or explicit unresolved outcome. Linux x86-64 `ubuntu-24.04` supplies performance evidence with 4 CPUs and 16 GB; Apple Silicon `macos-26` supplies performance evidence with 3 M1 CPUs and 7 GB; `macos-15` is functional compatibility-only. Each role captures the verified logical viewport and complete image, environment, build, corpus, run, signer, and artifact identity in one role bundle. Aggregation rejects a self-hosted origin or a missing, incomplete, stale, mismatched, corrupt, unauthenticated, duplicate, or role-invalid result.
 ```
 
 #### STORE-I002 Implement the Local Asset Store and immutable manifest
