@@ -99,16 +99,17 @@ PREF-G002 implements round-trip restore tests; corrupt- and unsupported-later-ve
 - **Scope (Out-of-Scope Files):**
   - Note bodies, credentials, and device-global preferences
 - **Verification Command:** `cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh state-g003 && git diff --check`
-- **Expected Success Output:** exit 0 with schema, fallback, and provider restore tests passing
+- **Expected Success Output:** exit 0 with strict schema, semantic validation, quarantine, fallback, and provider restore tests passing
 - **STOP Conditions:**
   - STOP if a snapshot can become authoritative Note/session state or contain Note content or secrets.
-- **Description:** Implement the Core-owned `workspace-session-snapshot.schema.json` contract and its active-Workspace FFI for versioned, atomic snapshots of open Note identities, active Note, tree expansion, last search state, and synchronization presentation. Quarantine and preserve corrupt or unsupported later-version bytes without migration or overwrite while using an empty in-memory session for that Workspace.
+  - STOP if Core restores a snapshot with empty, invalid, or duplicate identities; a mismatched Workspace ID; or an active Note outside the open-Note list.
+- **Description:** Implement the Core-owned `workspace-session-snapshot.schema.json` contract and its active-Workspace FFI for versioned, atomic snapshots of open Note identities, active Note, tree expansion, last search state, and synchronization presentation. Enforce JSON Schema and Core semantic validation before restore. Quarantine and preserve corrupt, malformed current-version, or unsupported later-version bytes without migration or overwrite while using an empty session for the active Workspace.
 - **Acceptance:**
   - **Mode:** contract_test
   - **Evidence:**
 
 ```text
-STATE-G003 implements round-trip, Workspace-partition, atomic-replace, corrupt- and unsupported-later-version fallback, and content, credential, and device-preference exclusion tests. Fallback proves the original bytes remain unchanged and doesn't save defaults over them. A later supported current snapshot is permitted only through the explicitly safe isolated path owned by MIGRATE-M005.
+STATE-G003 implements round-trip, Workspace-partition, atomic-replace, fallback, and content, credential, and device-preference exclusion tests. Valid fixtures cover null and present active Notes. Adversarial fixtures cover an empty Workspace ID; empty, invalid, or duplicate Note and Directory identities; a Workspace ID that differs from the active Workspace; and an active Note absent from `open_note_ids`. Core rejects every malformed fixture before restore, quarantines and preserves its bytes, and returns an empty writable default for the active Workspace. Corrupt and unsupported-later-version fixtures also preserve the original bytes. A later supported current snapshot is permitted only through the explicitly safe isolated path owned by MIGRATE-M005.
 ```
 
 #### TABS-G004 Replace visual-only tabs with authoritative Note sessions

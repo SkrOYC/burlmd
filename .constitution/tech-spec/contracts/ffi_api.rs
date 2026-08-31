@@ -1305,12 +1305,17 @@ pub struct ActiveWorkspaceSessionSnapshot {
 
 /// Loads the active Workspace session snapshot.
 ///
-/// For corrupt bytes or an unsupported later schema version, Core quarantines
-/// and preserves the original bytes without migration or overwrite, then
-/// returns the empty in-memory default session for the active Workspace. A
-/// later supported snapshot may be written only at an explicitly safe path
-/// isolated from the preserved bytes. The result contains no Note body,
-/// credential, or device preference.
+/// Before restore, Core requires every identity to be valid and nonempty,
+/// rejects duplicates, requires the persisted Workspace ID to equal the active
+/// Workspace, and requires a non-null active Note ID to occur in the open-Note
+/// list. For corrupt bytes, an unsupported later schema version, or any semantic
+/// violation, Core quarantines and preserves the original bytes without
+/// migration or overwrite and returns the empty session for the active
+/// Workspace. It never restores malformed state. A malformed current-version
+/// snapshot leaves the normal default path writable after quarantine. After a
+/// later-version refusal, Core may write a supported snapshot only at an
+/// explicitly safe path isolated from the preserved bytes. The result contains
+/// no Note body, credential, or device preference.
 #[frb]
 pub async fn load_active_workspace_session_snapshot(
 ) -> Result<ActiveWorkspaceSessionSnapshot, AppError> {
@@ -1331,11 +1336,12 @@ pub async fn save_active_workspace_session_snapshot(
     unimplemented!()
 }
 
-/// Clears an isolated corrupt snapshot for the active Workspace.
+/// Clears an isolated invalid current-version snapshot for the active Workspace.
 ///
-/// Core preserves the corrupt bytes outside the active session path before it
-/// clears that Workspace's snapshot. The call does not affect another
-/// Workspace.
+/// Core preserves corrupt, schema-invalid, or semantically invalid bytes outside
+/// the active session path before it clears that Workspace's snapshot. This
+/// call doesn't delete quarantined unsupported later-version bytes and doesn't
+/// affect another Workspace.
 #[frb]
 pub async fn clear_corrupt_active_workspace_session_snapshot() -> Result<(), AppError> {
     unimplemented!()

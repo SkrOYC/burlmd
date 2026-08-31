@@ -12,6 +12,20 @@ Command execution records exit status and separate standard-output and standard-
 
 Research Tasks stop on a failed safety or fidelity gate. A performance miss is evidence, not permission to weaken the PRD: the result records it and final Product Requirements or Technical Implementation evolution decides the response. A production ticket starts only after its own decision evidence settles its physical contract and Stage 4 adapts that ticket. Unrelated unresolved Spikes don't form a global stop.
 
+## Generated-binding bootstrap checker
+
+The merged base for `CI-M003` doesn't contain `scripts/check-generated-bindings.sh`. Before any validation gate invokes that path, `CI-M003` must implement the checker under its existing `scripts/**` scope. The implementation must not import or cherry-pick the coordinating Epic G branch.
+
+The checker must perform these steps in order:
+
+1. Capture a path-sorted SHA-256 manifest and a byte-for-byte backup of `rust/src/frb_generated.rs` and every regular file under `lib/src/rust/**`.
+2. Run `flutter_rust_bridge_codegen generate` with the provisional `2.12.0` generator.
+3. Capture a second path-sorted SHA-256 manifest. Compare both file sets and every file byte-for-byte. Fail if generation exits nonzero or adds, removes, or changes a generated file.
+4. On success, failure, or interruption, restore both generated surfaces exactly to their precheck state. Remove generated files that weren't present before the check, restore files that generation changed or removed, and preserve preexisting modifications.
+5. Before exit, verify that both generated surfaces match the precheck manifest. Exit nonzero if restoration or verification fails.
+
+The stale-binding diagnostic names both generated surfaces and instructs the developer to regenerate and review the changes. The checker leaves the precheck working tree unchanged, including when it detects stale bindings.
+
 ## Managed validation evidence protocol
 
 `CI-M003` implements only the bootstrap described here. Validation starts when a source commit is pushed to its source branch. A draft pull request can make the branch visible, but pull-request state and the synthetic merge revision never define validation identity. The caller produces an authoritative expected-identity document before fan-out. It distinguishes the tested source head SHA, workflow execution SHA and ref, base SHA, release, build, corpus, run, required roles, and role signers. Its SHA-256 digest is passed independently to each validation role and to aggregation.
@@ -227,6 +241,10 @@ All commands below assume the `devenv` shell (`devenv shell`, or automatic via
 
 ## Persistence lock rules
 
+Before restoring a current-version Workspace session snapshot, Core performs semantic validation after JSON Schema validation. `workspace_id` must equal the active Workspace identity. Every Note and Directory identity must be nonempty, unique in its array, and valid under Core's applicable identity rules. `active_note_id` must be null or one of the `open_note_ids` values. Core rejects duplicate identities and every cross-field violation.
+
+For any malformed current-version snapshot, Core quarantines and preserves the original bytes and returns an empty writable session for the active Workspace. It never restores malformed state. The normal current-version snapshot path remains writable after quarantine, without changing the preserved bytes. Unsupported later-version snapshots keep the separate isolation behavior defined by `workspace-session-snapshot.schema.json`.
+
 `rust/src/workspace/persist.rs` uses this acquisition order: lifecycle, tier 2 write, tier 1, state, then connection. A caller can take a suffix of this order, but it must not acquire these locks in reverse order.
 
 - The per-Note tier 1 lock serializes a source mutation through its draft write and serializes lifecycle state installation with that mutation.
@@ -311,7 +329,7 @@ all of it inside the commit. The standing suggestion is unchanged and still not
 acted on: consider moving clippy to the `pre-push` stage, leaving `cargo fmt` on
 `pre-commit`.
 
-The coordinating Epic G branch contains the first generated-binding and private headless visual gates, but the base branch has no accepted managed CI evidence yet. `CI-M003` may bootstrap those gates under this contract. Until an evidence commit passes milestone review, the broader testing standard, Rust async-avoidance rule, and Dart widget-statelessness rule remain review obligations.
+The coordinating Epic G branch proves the hash-and-regenerate drift check and contains the first private headless visual gate. The merged base doesn't contain the generated-binding checker or accepted managed CI evidence. `CI-M003` implements the stronger non-mutating checker from the preceding contract and may bootstrap both gates without importing the Epic G branch. Until an evidence commit passes milestone review, the broader testing standard, Rust async-avoidance rule, and Dart widget-statelessness rule remain review obligations.
 
 ## Running the real app (manual visual verification)
 
