@@ -34,6 +34,7 @@ Evolution pass for PRD v1.3.7 and Architecture v1.4.15. This version replaces ph
 - Aligned device-preference and Workspace-session forward-version handling with migration policy. Unsupported later-version and corrupt bytes are quarantined and preserved byte-for-byte; runtime defaults stay in memory, and any later current-format write uses an explicitly safe isolated path.
 - Made `CI-M003` create a non-mutating generated-binding checker before its ordered gate invokes the file. The checker hashes and backs up both generated surfaces, detects any file-set or byte drift with the provisional generator, and restores the exact precheck state on every exit path.
 - Tightened the Workspace-session schema to reject empty and duplicate identities. Core semantic validation also rejects a Workspace mismatch, invalid identity, or active Note outside the open-Note list. Rejected bytes remain quarantined and preserved, and runtime uses an empty writable default instead of malformed state.
+- Removed the alternative persisted-format escape hatch for Workspace sessions. Persisted snapshots must be schema-valid JSON; Core may use an equivalent in-memory representation only after validation and deserialization.
 
 ### Security
 
