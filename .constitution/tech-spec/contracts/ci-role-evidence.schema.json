@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": ["schemaVersion", "expectedIdentity", "expectedIdentitySha256", "roleEvidence"],
   "properties": {
-    "schemaVersion": { "const": 5 },
+    "schemaVersion": { "const": 6 },
     "expectedIdentity": { "$ref": "#/$defs/expectedIdentity" },
     "expectedIdentitySha256": { "$ref": "#/$defs/sha256" },
     "roleEvidence": { "$ref": "#/$defs/roleEvidence" }
@@ -26,9 +26,10 @@
       }
     },
     "expectedIdentity": {
+      "$comment": "Semantic validation must require runIdentity to equal 'managed:' concatenated with artifactNonce. artifactNonce is derived, never independently chosen.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["ticketIdentity", "releaseIdentity", "trustAnchorSha", "testedSourceSha", "workflowSignerSha", "workflowSignerRef", "baseSha", "workflowEvent", "evidenceReportCommitPolicy", "sourceWriteAllowlist", "buildIdentity", "corpusIdentity", "runIdentity", "requiredRoleIdentities", "requiredRoleSigners"],
+      "required": ["ticketIdentity", "releaseIdentity", "trustAnchorSha", "testedSourceSha", "workflowSignerSha", "workflowSignerRef", "baseSha", "workflowEvent", "evidenceReportCommitPolicy", "sourceWriteAllowlist", "buildIdentity", "corpusIdentity", "runIdentity", "artifactNonce", "requiredRoleIdentities", "requiredRoleSigners"],
       "properties": {
         "ticketIdentity": { "enum": ["CI-M003", "AST-H001", "PATH-H002", "ASSET-I001", "GIT-L001", "PKG-M001"] },
         "releaseIdentity": { "type": "string", "minLength": 1 },
@@ -48,6 +49,7 @@
         "buildIdentity": { "$ref": "#/$defs/sha256" },
         "corpusIdentity": { "$ref": "#/$defs/sha256" },
         "runIdentity": { "type": "string", "pattern": "^managed:[0-9a-f]{32}$" },
+        "artifactNonce": { "type": "string", "pattern": "^[0-9a-f]{32}$" },
         "requiredRoleIdentities": { "const": ["linux-x86_64", "macos-26-arm64", "macos-15-arm64"] },
         "requiredRoleSigners": {
           "type": "object",
@@ -86,9 +88,10 @@
       }
     },
     "capturedIdentity": {
+      "$comment": "Semantic validation must require runIdentity to equal 'managed:' concatenated with artifactNonce and both values to equal expectedIdentity.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["ticketIdentity", "releaseIdentity", "trustAnchorSha", "testedSourceSha", "workflowSignerSha", "workflowSignerRef", "baseSha", "workflowEvent", "sourceWriteAllowlist", "buildIdentity", "corpusIdentity", "runIdentity", "roleIdentity"],
+      "required": ["ticketIdentity", "releaseIdentity", "trustAnchorSha", "testedSourceSha", "workflowSignerSha", "workflowSignerRef", "baseSha", "workflowEvent", "sourceWriteAllowlist", "buildIdentity", "corpusIdentity", "runIdentity", "artifactNonce", "roleIdentity"],
       "properties": {
         "ticketIdentity": { "enum": ["CI-M003", "AST-H001", "PATH-H002", "ASSET-I001", "GIT-L001", "PKG-M001"] },
         "releaseIdentity": { "type": "string", "minLength": 1 },
@@ -107,6 +110,7 @@
         "buildIdentity": { "$ref": "#/$defs/sha256" },
         "corpusIdentity": { "$ref": "#/$defs/sha256" },
         "runIdentity": { "type": "string", "pattern": "^managed:[0-9a-f]{32}$" },
+        "artifactNonce": { "type": "string", "pattern": "^[0-9a-f]{32}$" },
         "roleIdentity": { "$ref": "#/$defs/role" }
       }
     },
