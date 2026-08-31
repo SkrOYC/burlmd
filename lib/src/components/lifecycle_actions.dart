@@ -339,13 +339,15 @@ class LifecycleActions {
   /// it. A terminal close warning is intentionally non-fatal: Core has
   /// already retired the session, so retrying here would address a dead id.
   Future<void> _retireUnadoptedCreatedSession(NoteState created) async {
-    // Core owns one session for each id. A newer authoritative state for this
-    // id therefore represents that same Core session, not a second session
-    // the stale create result may retire. Closing by id here would kill the
-    // retained editor instead of only the stale Dart result.
-    if (_hasNewerSameIdSession(created)) return;
+    final noteId = created.metadata.id;
+    // Core owns one session per id. Any presentation state under this id —
+    // even the exact object returned to this stale create — is that session's
+    // live representation, never an independently closable Dart copy. Keep
+    // this check directly adjacent to closeNote: a mounted tab or editor must
+    // always win over retiring a stale create result.
+    if (_hasMountedSameIdSession(noteId)) return;
     try {
-      await _api.closeNote(created.metadata.id);
+      await _api.closeNote(noteId);
     } on CloseNoteWarning catch (warning) {
       // The create result retains its own lifecycle warning, while this
       // independently terminal close warning uses the existing one-shot
@@ -353,30 +355,20 @@ class LifecycleActions {
       // create cannot leak a session or replay this warning on a rebuild.
       _ref.read(noteCloseFailureProvider.notifier).report(warning);
     }
-    // `openForLifecycle` may already have put this Core-returned state in a
-    // tab before a newer selection won. Core has now retired that session, so
-    // remove the presentation entry as well; otherwise a later tab selection
-    // would revive a writable Dart cache for a dead id. Recheck after the
-    // await: an authoritative replacement can land while close_note runs.
-    if (_ref.mounted && !_hasNewerSameIdSession(created)) {
-      _ref
-          .read(activeNoteProvider.notifier)
-          .discardRetiredTab(created.metadata.id, expectedState: created);
+    // A state can mount while close_note is in flight. Core has nevertheless
+    // retired its one session for this id, so remove every same-id
+    // presentation entry rather than leaving a writable Dart-only buffer.
+    if (_ref.mounted) {
+      _ref.read(activeNoteProvider.notifier).discardRetiredTab(noteId);
     }
   }
 
-  /// Whether a stale create result's Core session is now represented by a
-  /// different authoritative Dart state. Either the active editor or its tab
-  /// is sufficient: Core has exactly one session per id.
-  bool _hasNewerSameIdSession(NoteState created) {
-    final noteId = created.metadata.id;
-    final active = _ref.read(activeNoteProvider);
-    if (active?.metadata.id == noteId && !identical(active, created)) {
-      return true;
-    }
-    final tab = _ref.read(openNoteSessionsProvider.notifier).byId(noteId);
-    return tab != null && !identical(tab, created);
-  }
+  /// Whether any presentation state currently represents this Core session.
+  /// Core has one session per Note id, so either an active editor or tab is
+  /// enough to make a stale create's close unsafe.
+  bool _hasMountedSameIdSession(String noteId) =>
+      _ref.read(activeNoteProvider)?.metadata.id == noteId ||
+      _ref.read(openNoteSessionsProvider.notifier).byId(noteId) != null;
 
   bool _isCurrentOperation(_LifecycleOperation operation) =>
       _ref.mounted &&

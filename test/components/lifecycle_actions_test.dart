@@ -1376,6 +1376,46 @@ void main() {
     expect(container.read(openNoteSessionsProvider), [same(newer)]);
   });
 
+  testWidgets('a stale create does not close its own mounted same-id state', (
+    tester,
+  ) async {
+    final opened = Completer<NoteState>();
+    final old = stateFor('Old');
+    final created = stateFor('Created', title: 'created response');
+    final api = _LifecycleApi()
+      ..createNoteResult = created
+      ..openStates = {'Old': old}
+      ..openNoteGates['Created'] = opened;
+    late ProviderContainer container;
+    await tester.pumpWidget(_probeHarness(api, (c) => container = c));
+    addTearDown(container.dispose);
+    final controller = container.read(activeNoteProvider.notifier);
+    await controller.openAsTab('Old');
+    container.read(selectedNoteIdProvider.notifier).select('Old');
+
+    final create = container
+        .read(lifecycleActionsProvider)
+        .createNote('', 'Created');
+    await tester.pump();
+    expect(api.openNoteCalls, ['Old', 'Created']);
+
+    // The Core-created response mounts before the stale selection is noticed.
+    // It still represents Core's one Created session, so the stale action
+    // must never close it merely because it is the exact returned object.
+    container
+        .read(selectedNoteIdProvider.notifier)
+        .selectForLifecycle('Elsewhere');
+    opened.complete(created);
+
+    expect(await create, isA<LifecycleCompleted>());
+    expect(api.calls, ['createNote::Created']);
+    expect(container.read(activeNoteProvider), same(created));
+    expect(container.read(openNoteSessionsProvider), [
+      same(old),
+      same(created),
+    ]);
+  });
+
   testWidgets('a stale created session reports its terminal close warning '
       'once through the one-shot close status', (tester) async {
     final gate = Completer<void>();

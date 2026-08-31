@@ -180,6 +180,8 @@ class _LifecycleEditorApi extends _FakeRustApi {
   LifecycleResult? moveResult;
   LifecycleResult? renameDirectoryResult;
   Completer<void>? createGate;
+  Completer<void>? closeGate;
+  final List<String> closeNoteCalls = [];
   final Map<String, NoteState> openStates = {};
 
   @override
@@ -209,7 +211,11 @@ class _LifecycleEditorApi extends _FakeRustApi {
       openStates[noteId] ?? (throw StateError('no open state for $noteId'));
 
   @override
-  Future<void> closeNote(String noteId) async {}
+  Future<void> closeNote(String noteId) async {
+    closeNoteCalls.add(noteId);
+    final gate = closeGate;
+    if (gate != null && !gate.isCompleted) await gate.future;
+  }
 }
 
 class _LinkResolutionApi extends _FakeRustApi {
@@ -3000,6 +3006,62 @@ void main() {
     expect(container.read(selectedNoteIdProvider), newer.metadata.id);
     expect(find.textContaining('stale warning'), findsOneWidget);
   });
+
+  testWidgets(
+    'a same-id state adopted during a stale create close is not writable after Core retires it',
+    (tester) async {
+      final createGate = Completer<void>();
+      final closeGate = Completer<void>();
+      final created = _noteState('created', [_plainParagraph('created')]);
+      final newer = _noteState('created', [_plainParagraph('newer')]);
+      final api = _LifecycleEditorApi()
+        ..createGate = createGate
+        ..closeGate = closeGate
+        ..createResult = LifecycleResult(
+          state: created,
+          effects: const LifecycleEffects(remapped: [], rewritten: []),
+          removed: const [],
+        );
+      final container = await pumpEditor(tester, [
+        _plainParagraph('source'),
+      ], api: api);
+      final controller = container.read(activeNoteProvider.notifier);
+
+      final create = container
+          .read(lifecycleActionsProvider)
+          .createNote('', 'created');
+      await tester.pump();
+      // Make the create stale before its response returns, so it must retire
+      // the unadopted Core session.
+      container
+          .read(selectedNoteIdProvider.notifier)
+          .selectForLifecycle('Elsewhere');
+      createGate.complete();
+      await tester.pump();
+      expect(api.closeNoteCalls, ['created']);
+
+      // A newer response for Core's same session lands while close_note is
+      // pending. It cannot remain editable once that close completes.
+      controller.adopt(newer);
+      container.read(openNoteSessionsProvider.notifier).upsert(newer);
+      container
+          .read(selectedNoteIdProvider.notifier)
+          .selectForLifecycle('created');
+      expect(container.read(activeNoteProvider), same(newer));
+      expect(container.read(openNoteSessionsProvider), [same(newer)]);
+      closeGate.complete();
+      expect(await create, isA<LifecycleCompleted>());
+      await tester.pump();
+
+      expect(container.read(activeNoteProvider), isNull);
+      expect(container.read(openNoteSessionsProvider), isEmpty);
+      expect(
+        controller.updateBlock([0], 'must not become a Dart-only draft'),
+        isFalse,
+      );
+      expect(_writableFields(), findsNothing);
+    },
+  );
 
   // -- SHEL-E004 ----------------------------------------------------------
 
