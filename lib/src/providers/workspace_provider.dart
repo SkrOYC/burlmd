@@ -169,12 +169,22 @@ class WorkspaceSession extends Notifier<WorkspaceSessionState> {
     final oldIndex = openNoteIds.indexOf(oldNoteId);
     if (oldIndex == -1) {
       if (!openNoteIds.contains(newNoteId)) openNoteIds.add(newNoteId);
-    } else {
-      openNoteIds[oldIndex] = newNoteId;
+    } else if (oldNoteId != newNoteId) {
+      // `openAsTab` may already have admitted the new Core session while a
+      // stale snapshot still names its old identity. Rekeying must collapse
+      // those two presentation entries rather than persisting one tab twice.
+      if (openNoteIds.contains(newNoteId)) {
+        openNoteIds.removeAt(oldIndex);
+      } else {
+        openNoteIds[oldIndex] = newNoteId;
+      }
     }
     state = state.copyWith(
       openNoteIds: List.unmodifiable(openNoteIds),
-      activeNoteId: newNoteId,
+      activeNoteId: state.activeNoteId == oldNoteId
+          ? newNoteId
+          : state.activeNoteId,
+      clearActiveNoteId: state.activeNoteId == null,
     );
     _scheduleSave();
   }

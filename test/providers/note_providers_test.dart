@@ -20,6 +20,7 @@ class _SwitchingRustApi extends RustApi {
   final List<String> blockUpdates = [];
   final Completer<void>? closeGate;
   Completer<NoteState>? reloadGate;
+  final Map<String, Completer<NoteState>> openNoteGates = {};
   Object? reloadError;
   var _hasFailedOpen = false;
 
@@ -36,6 +37,8 @@ class _SwitchingRustApi extends RustApi {
   @override
   Future<NoteState> openNote(String noteId) async {
     calls.add('open:$noteId');
+    final gate = openNoteGates[noteId];
+    if (gate != null) return gate.future;
     if (noteId == failFirstOpenOf && !_hasFailedOpen) {
       _hasFailedOpen = true;
       throw StateError('the incoming Note is temporarily unavailable');
@@ -207,6 +210,65 @@ void main() {
       expect(container.read(selectedNoteIdProvider), 'b');
       expect(container.read(activeNoteProvider)!.metadata.id, 'b');
       expect(api.calls, ['open:a', 'close:a', 'open:b']);
+    },
+  );
+
+  test(
+    'a later tab selection wins when its Core result returns before an earlier selection',
+    () async {
+      final b = Completer<NoteState>();
+      final c = Completer<NoteState>();
+      final api = _SwitchingRustApi()
+        ..openNoteGates['b'] = b
+        ..openNoteGates['c'] = c;
+      final container = _containerFor(api);
+      final controller = container.read(activeNoteProvider.notifier);
+
+      await controller.openAsTab('a');
+      final openB = controller.openAsTab('b');
+      await Future<void>.delayed(Duration.zero);
+      expect(api.calls, ['open:a', 'open:b']);
+
+      final openC = controller.openAsTab('c');
+      // C's Core reply is ready first. The request may be held behind B for
+      // serialization, but B must never mount over this newer selection.
+      c.complete(
+        const NoteState(
+          ast: [],
+          metadata: NoteMetadata(
+            id: 'c',
+            path: 'c.md',
+            title: 'c',
+            lastModified: 0,
+            okfConformant: true,
+          ),
+          baseRevision: 'head',
+          restoredFromDraft: false,
+        ),
+      );
+      b.complete(
+        const NoteState(
+          ast: [],
+          metadata: NoteMetadata(
+            id: 'b',
+            path: 'b.md',
+            title: 'b',
+            lastModified: 0,
+            okfConformant: true,
+          ),
+          baseRevision: 'head',
+          restoredFromDraft: false,
+        ),
+      );
+      await Future.wait([openB, openC]);
+
+      expect(container.read(activeNoteProvider)!.metadata.id, 'c');
+      expect(
+        container
+            .read(openNoteSessionsProvider)
+            .map((note) => note.metadata.id),
+        ['a', 'c'],
+      );
     },
   );
 

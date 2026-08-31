@@ -175,9 +175,23 @@ class WorkspaceRescan extends Notifier<RescanState> {
     // any open Note whose write tier still holds unwritten edits refuses
     // the rescan outright. A poll that cannot be answered at all counts as
     // dirty — the guard fails closed.
-    final open = ref.read(activeNoteProvider);
-    if (open != null &&
-        noteHoldsUnwrittenEdits(ref.read(rustApiProvider), open.metadata.id)) {
+    final openSessions = {
+      for (final note in ref.read(openNoteSessionsProvider))
+        note.metadata.id: note,
+    };
+    // Legacy callers can still have an active session without a mounted tab;
+    // include it in the same conservative guard until those callers retire.
+    final active = ref.read(activeNoteProvider);
+    if (active != null) {
+      openSessions.putIfAbsent(active.metadata.id, () => active);
+    }
+    for (final open in openSessions.values) {
+      if (!noteHoldsUnwrittenEdits(
+        ref.read(rustApiProvider),
+        open.metadata.id,
+      )) {
+        continue;
+      }
       state = RescanState(
         refusedReason:
             'Rescan unavailable: "${open.metadata.title}" still has '

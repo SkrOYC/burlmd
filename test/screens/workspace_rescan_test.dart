@@ -358,6 +358,38 @@ void main() {
   );
 
   testWidgets(
+    'a dirty inactive tab refuses rescan while the active tab is clean',
+    (tester) async {
+      final api = _RescanRustApi([_note('a', 'Alpha'), _note('b', 'Beta')])
+        ..unwrittenEditsByNote['a'] = true
+        ..unwrittenEditsByNote['b'] = false;
+      var reindexCalls = 0;
+      final container = await _pumpShell(
+        tester,
+        api,
+        reindex: () async {
+          reindexCalls++;
+          return 2;
+        },
+      );
+
+      await tester.tap(find.text('Alpha'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Beta'));
+      await tester.pumpAndSettle();
+      expect(container.read(activeNoteProvider)!.metadata.id, 'b');
+
+      await container.read(rescanStateProvider.notifier).run();
+
+      expect(reindexCalls, 0);
+      expect(
+        container.read(rescanStateProvider).refusedReason,
+        contains('unsaved edits'),
+      );
+    },
+  );
+
+  testWidgets(
     'a delayed switch to restored dirty B refuses rescan until its draft is clean',
     (tester) async {
       final api = _RescanRustApi([_note('a', 'Alpha'), _note('b', 'Beta')]);

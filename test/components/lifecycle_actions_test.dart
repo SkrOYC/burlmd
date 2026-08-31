@@ -357,6 +357,37 @@ void main() {
       expect(api.workspaceTreeCalls, 2);
     });
 
+    testWidgets('creating a Note retains an existing tab Core session for '
+        'later selection', (tester) async {
+      final created = stateFor('Created');
+      final api = _LifecycleApi()
+        ..createNoteResult = created
+        ..openStates = {'A': stateFor('A')};
+      late ProviderContainer container;
+      await tester.pumpWidget(_probeHarness(api, (c) => container = c));
+      addTearDown(container.dispose);
+      final controller = container.read(activeNoteProvider.notifier);
+
+      await controller.openAsTab('A');
+      container.read(selectedNoteIdProvider.notifier).select('A');
+      await container.read(lifecycleActionsProvider).createNote('', 'Created');
+
+      expect(api.calls, ['createNote::Created']);
+      expect(
+        container
+            .read(openNoteSessionsProvider)
+            .map((note) => note.metadata.id),
+        ['A', 'Created'],
+      );
+      expect(container.read(activeNoteProvider)!.metadata.id, 'Created');
+
+      // A was never retired by the lifecycle-created tab switch, so selecting
+      // it reuses the Core-owned session rather than inventing a Dart buffer.
+      await controller.openAsTab('A');
+      expect(container.read(activeNoteProvider)!.metadata.id, 'A');
+      expect(api.openNoteCalls, ['A', 'Created']);
+    });
+
     testWidgets('a name collision reports the Core refusal and never retries '
         'under an altered name', (tester) async {
       final api = _LifecycleApi()
@@ -511,6 +542,93 @@ void main() {
       expect(find.text('created source'), findsOneWidget);
       expect(writable, findsNothing);
       expect(find.textContaining('The change is applied'), findsOneWidget);
+    });
+  });
+
+  group('inactive lifecycle tab reconciliation', () {
+    Future<(ProviderContainer, NoteController)> openTabs(
+      WidgetTester tester,
+      _LifecycleApi api,
+    ) async {
+      late ProviderContainer container;
+      await tester.pumpWidget(_probeHarness(api, (c) => container = c));
+      addTearDown(container.dispose);
+      final controller = container.read(activeNoteProvider.notifier);
+      await controller.openAsTab('A');
+      await controller.openAsTab('B');
+      await controller.openAsTab('A');
+      container.read(selectedNoteIdProvider.notifier).select('A');
+      return (container, controller);
+    }
+
+    testWidgets("a rename reconciles an inactive tab to Core's returned id", (
+      tester,
+    ) async {
+      final renamed = stateFor('Renamed/B');
+      final api = _LifecycleApi()
+        ..openStates = {'A': stateFor('A'), 'B': stateFor('B')}
+        ..renameNoteResult = (renamed, effects());
+      final (container, controller) = await openTabs(tester, api);
+
+      await container.read(lifecycleActionsProvider).renameNote('B', 'Renamed');
+
+      expect(
+        container
+            .read(openNoteSessionsProvider)
+            .map((note) => note.metadata.id),
+        ['A', 'Renamed/B'],
+      );
+      expect(container.read(activeNoteProvider)!.metadata.id, 'A');
+      await controller.openAsTab('Renamed/B');
+      expect(api.openNoteCalls, ['A', 'B']);
+    });
+
+    testWidgets('a directory remap reopens an inactive tab under its new id', (
+      tester,
+    ) async {
+      final remapped = stateFor('Renamed/B');
+      final api = _LifecycleApi()
+        ..openStates = {
+          'A': stateFor('A'),
+          'B': stateFor('B'),
+          'Renamed/B': remapped,
+        }
+        ..renameDirectoryResult = effects(
+          remapped: [IdRemap(oldId: 'B', newId: 'Renamed/B')],
+        );
+      final (container, controller) = await openTabs(tester, api);
+
+      await container
+          .read(lifecycleActionsProvider)
+          .renameDirectory('', 'Renamed');
+
+      expect(
+        container
+            .read(openNoteSessionsProvider)
+            .map((note) => note.metadata.id),
+        ['A', 'Renamed/B'],
+      );
+      expect(api.openNoteCalls, ['A', 'B', 'Renamed/B']);
+      await controller.openAsTab('Renamed/B');
+      expect(api.openNoteCalls, ['A', 'B', 'Renamed/B']);
+    });
+
+    testWidgets('a lifecycle delete removes an inactive retired tab', (
+      tester,
+    ) async {
+      final api = _LifecycleApi()
+        ..openStates = {'A': stateFor('A'), 'B': stateFor('B')};
+      final (container, _) = await openTabs(tester, api);
+
+      await container.read(lifecycleActionsProvider).deleteNote('B');
+
+      expect(
+        container
+            .read(openNoteSessionsProvider)
+            .map((note) => note.metadata.id),
+        ['A'],
+      );
+      expect(api.calls, ['deleteNote:B']);
     });
   });
 

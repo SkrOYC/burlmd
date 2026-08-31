@@ -186,7 +186,7 @@ class LifecycleActions {
           return LifecycleCompleted('Deleted', warning: result.warning);
         }
         for (final removed in result.removed) {
-          _closeIfOpen(removed);
+          _discardRetiredTab(removed);
           _clearIfSelected(removed);
         }
         return LifecycleCompleted('Deleted', warning: result.warning);
@@ -236,7 +236,7 @@ class LifecycleActions {
       return LifecycleCompleted('Deleted directory', warning: result.warning);
     }
     for (final noteId in result.removed) {
-      _closeIfOpen(noteId);
+      _discardRetiredTab(noteId);
       _clearIfSelected(noteId);
     }
     return LifecycleCompleted('Deleted directory', warning: result.warning);
@@ -317,6 +317,13 @@ class LifecycleActions {
       // status seam. Its listener acknowledges before displaying, so a stale
       // create cannot leak a session or replay this warning on a rebuild.
       _ref.read(noteCloseFailureProvider.notifier).report(warning);
+    }
+    // `openForLifecycle` may already have put this Core-returned state in a
+    // tab before a newer selection won. Core has now retired that session, so
+    // remove the presentation entry as well; otherwise a later tab selection
+    // would revive a writable Dart cache for a dead id.
+    if (_ref.mounted) {
+      _ref.read(activeNoteProvider.notifier).discardRetiredTab(noteId);
     }
   }
 
@@ -560,7 +567,60 @@ class LifecycleActions {
       if (rewritten == null) return;
       _ref.read(activeNoteProvider.notifier).adopt(rewritten);
     }
+
+    await _reconcileInactiveTabs(
+      operation: operation,
+      invokedNoteId: invokedNoteId,
+      returnedState: returnedState,
+      effects: effects,
+    );
   }
+
+  /// Reconciles tabs the active-editor paths above did not touch. A tab is a
+  /// Core session, not a cache of a former editor: a remapped or rewritten
+  /// inactive tab must receive a fresh Core state before it can be selected.
+  Future<void> _reconcileInactiveTabs({
+    required _LifecycleOperation operation,
+    required String? invokedNoteId,
+    required NoteState? returnedState,
+    required LifecycleEffects effects,
+  }) async {
+    final tabs = _ref.read(activeNoteProvider.notifier);
+    if (invokedNoteId != null && returnedState != null) {
+      tabs.reconcileTabSession(oldNoteId: invokedNoteId, state: returnedState);
+    }
+
+    for (final remap in effects.remapped) {
+      if (!tabs.hasOpenTab(remap.oldId)) continue;
+      final opened = await _openCurrentTabSession(operation, remap.newId);
+      if (opened == null) return;
+      tabs.reconcileTabSession(oldNoteId: remap.oldId, state: opened);
+    }
+
+    for (final noteId in effects.rewritten) {
+      if (!tabs.hasOpenTab(noteId) ||
+          _ref.read(activeNoteProvider)?.metadata.id == noteId) {
+        continue;
+      }
+      final opened = await _openCurrentTabSession(operation, noteId);
+      if (opened == null) return;
+      tabs.reconcileTabSession(oldNoteId: noteId, state: opened);
+    }
+  }
+
+  /// Opens an affected inactive tab only while this lifecycle operation still
+  /// owns the exact presentation state it is reconciling. The returned state
+  /// replaces the tab only after this Core round trip; a Dart-only remap
+  /// would create a selectable session Core might no longer own.
+  Future<NoteState?> _openCurrentTabSession(
+    _LifecycleOperation operation,
+    String noteId,
+  ) => _openForExpectedSession(
+    operation,
+    expectedActive: _ref.read(activeNoteProvider),
+    expectedSelectedId: _ref.read(selectedNoteIdProvider),
+    noteId: noteId,
+  );
 
   /// Emits a rekey proof only across the synchronous state adoption that
   /// carries the Core session forward. Clearing it before any subsequent
@@ -670,20 +730,17 @@ class LifecycleActions {
     }
   }
 
-  /// Closes `noteId` in the editor if it is the open one: clears both the
-  /// active-note state and the selection. No `close_note` crosses the
-  /// boundary — the deletion already discarded the session Core-side, and
-  /// addressing it again would only raise `NotFound`.
-  void _closeIfOpen(String noteId) {
-    final active = _ref.read(activeNoteProvider);
-    if (active == null || active.metadata.id != noteId) return;
-    _ref.read(activeNoteProvider.notifier).clear();
-    _ref.read(selectedNoteIdProvider.notifier).clear();
+  /// Drops a tab only after the lifecycle delete has already retired its Core
+  /// session. No `close_note` crosses the boundary here: addressing a removed
+  /// id again would fail, while retaining its Dart state would make a later
+  /// tab selection writable against a session Core no longer owns.
+  void _discardRetiredTab(String noteId) {
+    _ref.read(activeNoteProvider.notifier).discardRetiredTab(noteId);
   }
 
   /// An intercepted A -> B open can leave B selected but not mounted when B
-  /// is deleted. Clear that dead selection as well as the normal open session
-  /// case handled by [_closeIfOpen].
+  /// is deleted. Clear that dead selection as well as the normal mounted-tab
+  /// case handled by [_discardRetiredTab].
   void _clearIfSelected(String noteId) {
     if (_ref.read(selectedNoteIdProvider) != noteId) return;
     // A prior incoming open can have closed the old session and then failed
