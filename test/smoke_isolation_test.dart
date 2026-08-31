@@ -157,24 +157,28 @@ void main() {
     );
 
     test(
-      'harness publishes its launched PID only to a pre-created file',
+      'harness publishes its launched PID through an inherited FD',
       () async {
         final script = await File('scripts/smoke-shot.sh').readAsString();
 
+        expect(script, contains(r'APP_PID_FD="${BURLMD_SMOKE_APP_PID_FD:-}"'));
+        expect(script, contains(r'"/proc/self/fd/$APP_PID_FD"'));
         expect(
           script,
-          contains(r'APP_PID_FILE="${BURLMD_SMOKE_APP_PID_FILE:-}"'),
-        );
-        expect(
-          script,
-          contains(r'[[ -n "$APP_PID_FILE" && ! -f "$APP_PID_FILE" ]]'),
-        );
-        expect(
-          script,
-          contains(r'''printf '%s\n' "$APP_PID" > "$APP_PID_FILE"'''),
+          contains(r'''printf '%s\n' "$APP_PID" >&"$APP_PID_FD"'''),
         );
       },
     );
+
+    test('PID handoff rejects a caller-supplied pathname attack', () async {
+      final script = await File('scripts/smoke-shot.sh').readAsString();
+
+      // A malicious caller can replace a path with a symlink between checks
+      // and redirection. The harness accepts only an inherited descriptor, so
+      // it cannot resolve or truncate that pathname after startup.
+      expect(script, isNot(contains('BURLMD_SMOKE_APP_PID_FILE')));
+      expect(script, isNot(contains(r'> "$APP_PID_FILE"')));
+    });
 
     test(
       'visual gate owns a headless compositor and checks the launched PID',
@@ -186,7 +190,8 @@ void main() {
         expect(script, contains("'WLR_BACKENDS=headless'"));
         expect(script, contains("'WLR_HEADLESS_OUTPUTS=1'"));
         expect(script, contains(r'sway_client_geometry "$APP_PID"'));
-        expect(script, contains(r'BURLMD_SMOKE_APP_PID_FILE="$APP_PID_FILE"'));
+        expect(script, contains(r'BURLMD_SMOKE_APP_PID_FD="$APP_PID_FD"'));
+        expect(script, contains(r'exec {APP_PID_FD}<> "$APP_PID_FILE"'));
         expect(script, isNot(contains('hyprctl clients -j')));
       },
     );

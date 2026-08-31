@@ -47,13 +47,16 @@ APP_BIN="$APP_BUNDLE/burlmd"
 cd "$REPO_ROOT"
 mkdir -p "$QA_DIR"
 
-# A parent visual gate may supply a private, pre-created regular file to bind
-# its compositor capture to this exact launched process. Never create or
-# remove a caller-selected path: smoke-shot merely publishes its child PID
-# after the exec succeeds.
-APP_PID_FILE="${BURLMD_SMOKE_APP_PID_FILE:-}"
-if [[ -n "$APP_PID_FILE" && ! -f "$APP_PID_FILE" ]]; then
-  echo "smoke-shot: BURLMD_SMOKE_APP_PID_FILE must name an existing regular file" >&2
+# A parent visual gate may supply an inherited, private regular-file FD to
+# bind its compositor capture to this exact launched process. Smoke-shot never
+# resolves a caller-supplied pathname, so a symlink swap cannot redirect or
+# truncate an unrelated file.
+APP_PID_FD="${BURLMD_SMOKE_APP_PID_FD:-}"
+if [[ -n "$APP_PID_FD" &&
+    ( ! "$APP_PID_FD" =~ ^[1-9][0-9]*$ ||
+      ! -f "/proc/self/fd/$APP_PID_FD" ||
+      ! -O "/proc/self/fd/$APP_PID_FD" ) ]]; then
+  echo "smoke-shot: BURLMD_SMOKE_APP_PID_FD must name an inherited owned regular-file FD" >&2
   exit 64
 fi
 
@@ -216,8 +219,8 @@ env "${SCENARIO_ENV[@]}" \
   "BURLMD_DB_PATH=$SMOKE_DB_PATH" \
   "$APP_BIN" &
 APP_PID=$!
-if [[ -n "$APP_PID_FILE" ]]; then
-  printf '%s\n' "$APP_PID" > "$APP_PID_FILE" \
+if [[ -n "$APP_PID_FD" ]]; then
+  printf '%s\n' "$APP_PID" >&"$APP_PID_FD" \
     || fail "could not publish the launched application PID"
 fi
 

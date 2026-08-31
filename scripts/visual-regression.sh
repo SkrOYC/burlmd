@@ -16,6 +16,8 @@ shift
 BASELINE=""
 MAX_DIFFERENT_PIXELS=""
 WRITE_BASELINE=0
+CANONICAL_WIDTH=1878
+CANONICAL_HEIGHT=989
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --baseline)
@@ -66,7 +68,8 @@ SHOT="$CAPTURE_DIR/$NAME.png"
 mkdir -p "$CAPTURE_DIR"
 CAPTURE_PPM="$(mktemp "$CAPTURE_DIR/.visual-regression-${NAME}.capture.XXXXXX.ppm")"
 BASELINE_PPM="$(mktemp "$CAPTURE_DIR/.visual-regression-${NAME}.baseline.XXXXXX.ppm")"
-APP_PID_FILE="$(mktemp "$CAPTURE_DIR/.visual-regression-${NAME}.app-pid.XXXXXX")"
+APP_PID_FILE=""
+APP_PID_FD=""
 VISUAL_RUNTIME_DIR=""
 VISUAL_SWAY_CONFIG=""
 VISUAL_SWAY_LOG=""
@@ -84,7 +87,10 @@ cleanup() {
     kill "$COMPOSITOR_PID" 2>/dev/null || true
     wait "$COMPOSITOR_PID" 2>/dev/null || true
   fi
-  rm -f "$CAPTURE_PPM" "$BASELINE_PPM" "$APP_PID_FILE"
+  if [[ -n "$APP_PID_FD" ]]; then
+    exec {APP_PID_FD}>&- || true
+  fi
+  rm -f "$CAPTURE_PPM" "$BASELINE_PPM"
   if [[ -n "$VISUAL_RUNTIME_DIR" && -d "$VISUAL_RUNTIME_DIR" && "$VISUAL_RUNTIME_DIR" == /tmp/burlmd-visual-wayland.* ]]; then
     rm -rf -- "$VISUAL_RUNTIME_DIR"
   fi
@@ -443,8 +449,9 @@ DART
 
 smoke_app_pid() {
   local app_pid
-  [[ -s "$APP_PID_FILE" ]] || return 1
-  IFS= read -r app_pid < "$APP_PID_FILE"
+  [[ "$APP_PID_FD" =~ ^[1-9][0-9]*$ ]] || return 1
+  [[ -f "/proc/self/fd/$APP_PID_FD" && -O "/proc/self/fd/$APP_PID_FD" ]] || return 1
+  app_pid="$(head -n 1 "/proc/self/fd/$APP_PID_FD")" || return 1
   [[ "$app_pid" =~ ^[1-9][0-9]*$ ]] || return 1
   kill -0 "$app_pid" 2>/dev/null || return 1
   printf '%s\n' "$app_pid"
@@ -505,14 +512,23 @@ start_private_sway() {
 }
 
 cd "$REPO_ROOT"
-read -r BASELINE_WIDTH BASELINE_HEIGHT <<< "$(baseline_dimensions)" || {
-  echo "visual-regression: could not read baseline dimensions from $BASELINE" >&2
-  exit 1
-}
-[[ "$BASELINE_WIDTH" =~ ^[1-9][0-9]*$ && "$BASELINE_HEIGHT" =~ ^[1-9][0-9]*$ ]] || {
-  echo "visual-regression: invalid baseline dimensions: ${BASELINE_WIDTH:-?}x${BASELINE_HEIGHT:-?}" >&2
-  exit 1
-}
+if [[ "$WRITE_BASELINE" -eq 1 ]]; then
+  BASELINE_WIDTH="$CANONICAL_WIDTH"
+  BASELINE_HEIGHT="$CANONICAL_HEIGHT"
+else
+  read -r BASELINE_WIDTH BASELINE_HEIGHT <<< "$(baseline_dimensions)" || {
+    echo "visual-regression: could not read baseline dimensions from $BASELINE" >&2
+    exit 1
+  }
+  [[ "$BASELINE_WIDTH" =~ ^[1-9][0-9]*$ && "$BASELINE_HEIGHT" =~ ^[1-9][0-9]*$ ]] || {
+    echo "visual-regression: invalid baseline dimensions: ${BASELINE_WIDTH:-?}x${BASELINE_HEIGHT:-?}" >&2
+    exit 1
+  }
+  if [[ "$BASELINE_WIDTH" != "$CANONICAL_WIDTH" || "$BASELINE_HEIGHT" != "$CANONICAL_HEIGHT" ]]; then
+    echo "visual-regression: baseline must use canonical ${CANONICAL_WIDTH}x${CANONICAL_HEIGHT}, got ${BASELINE_WIDTH}x${BASELINE_HEIGHT}" >&2
+    exit 1
+  fi
+fi
 command -v sway >/dev/null 2>&1 || {
   echo "visual-regression: sway is required for the isolated Linux visual gate" >&2
   exit 1
@@ -522,10 +538,18 @@ if ! start_private_sway "$BASELINE_WIDTH" "$BASELINE_HEIGHT"; then
   [[ -n "$VISUAL_SWAY_LOG" ]] && sed -n '1,160p' "$VISUAL_SWAY_LOG" >&2 || true
   exit 1
 fi
+APP_PID_FILE="$(mktemp "$VISUAL_RUNTIME_DIR/.visual-regression-${NAME}.app-pid.XXXXXX")" || {
+  echo "visual-regression: could not create the private PID handoff" >&2
+  exit 1
+}
+exec {APP_PID_FD}<> "$APP_PID_FILE" || {
+  echo "visual-regression: could not open the private PID handoff" >&2
+  exit 1
+}
 
 XDG_RUNTIME_DIR="$VISUAL_RUNTIME_DIR" WAYLAND_DISPLAY="$VISUAL_WAYLAND_DISPLAY" \
   SWAYSOCK="$VISUAL_SWAY_SOCKET" GDK_BACKEND=wayland \
-  BURLMD_SMOKE_SHOT_DIR="$CAPTURE_DIR" BURLMD_SMOKE_APP_PID_FILE="$APP_PID_FILE" \
+  BURLMD_SMOKE_SHOT_DIR="$CAPTURE_DIR" BURLMD_SMOKE_APP_PID_FD="$APP_PID_FD" \
   "$REPO_ROOT/scripts/smoke-shot.sh" "$NAME" &
 SMOKE_PID=$!
 # GTK's HeaderBar occupies the first 47 rows in this reproducible Linux

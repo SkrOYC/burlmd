@@ -457,7 +457,8 @@ void main() {
 
     await focusStarterRaw();
     await sendPrimary(LogicalKeyboardKey.keyW);
-    expectCommittedSourceWhileModalOwnsFocus();
+    expect(find.byKey(const ValueKey('raw-editor-1')), findsNothing);
+    expect(find.text('Select a note to open it'), findsOneWidget);
     expect(container.read(activeNoteProvider), isNull);
     expect(container.read(selectedNoteIdProvider), isNull);
     expect(api.calls, contains('close:starter'));
