@@ -28,7 +28,7 @@ Deliver inline images through a portable Local Asset Store and a first-class, us
   - STOP if credentials would enter committed files or evidence.
   - STOP if a result weakens Protected State or deletion safety.
   - STOP if the `CI-M003` evidence pull request isn't merged or if evidence is missing, stale, mismatched, corrupt, unauthenticated, or assigned to the wrong role.
-  - STOP if a role lacks distinct successful candidate and sealing jobs on its fixed hosted label, the sealing job doesn't run on a fresh environment, or an expected, candidate, or sealed artifact name is invalid, missing, duplicate, extra, or inconsistent with the run nonce.
+  - STOP if post-completion API observation doesn't resolve the receipt locator to one completed successful sealing job on the fixed hosted label, or if an expected, candidate, or sealed artifact name or normalized digest is invalid, missing, duplicate, extra, or inconsistent with the run nonce.
   - STOP if the launcher isn't the clean trust-anchor copy, a trusted control file differs at the signer SHA, or the base-to-source diff leaves the Asset write allowlist.
   - STOP if the machine result is missing or invalid, or if the evidence commit doesn't contain that result, the accepted managed report, and the executor-authored Spike report together.
   - STOP if a candidate process or coordinator can observe a credential canary, coordinator identity changes after preparation, isolation or network denial fails, an input is writable, or any path except the coordinator output is writable.

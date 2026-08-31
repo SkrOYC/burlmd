@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": ["schemaVersion", "expectedIdentity", "expectedIdentitySha256", "expectedIdentityArtifact", "generatedAt", "mode", "status", "roleEvidence", "coordinatorExecution", "aggregationChecks", "rejectionReasons"],
   "properties": {
-    "schemaVersion": { "const": 8 },
+    "schemaVersion": { "const": 9 },
     "expectedIdentity": { "$ref": "ci-role-evidence.schema.json#/$defs/expectedIdentity" },
     "expectedIdentitySha256": { "$ref": "#/$defs/sha256" },
     "expectedIdentityArtifact": {
@@ -137,22 +137,25 @@
       }
     },
     "jobObservation": {
-      "$comment": "For candidate, runnerEnvironment comes from the trusted post-candidate wrapper output and is corroborated by the immutable runs-on definition and job API labels. For seal, it is additionally bound by signed OIDC provenance.",
+      "$comment": "The coordinator constructs this observation after the job API reports status completed. checkRunId comes from the API check_run_url. Accepted evidence requires conclusion success. For seal, runnerEnvironment is also bound by signed OIDC provenance and the pre-completion receipt locator.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["jobId", "workflowJobKey", "runnerLabels", "runnerEnvironment", "conclusion"],
+      "required": ["jobId", "checkRunId", "workflowJobKey", "runnerLabels", "runnerEnvironment", "status", "conclusion"],
       "properties": {
         "jobId": { "type": "integer", "minimum": 1 },
+        "checkRunId": { "type": "integer", "minimum": 1 },
         "workflowJobKey": { "enum": ["candidate", "seal"] },
         "runnerLabels": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
         "runnerEnvironment": { "const": "github-hosted" },
+        "status": { "const": "completed" },
         "conclusion": { "const": "success" }
       }
     },
     "artifactObservation": {
+      "$comment": "The pinned upload action emits uploadActionDigest as bare lowercase hexadecimal. The REST API and this aggregate use artifactDigest in canonical sha256:<hex> form. Semantic validation must require artifactDigest to equal 'sha256:' concatenated with uploadActionDigest.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["artifactId", "artifactName", "artifactDigest"],
+      "required": ["artifactId", "artifactName", "uploadActionDigest", "artifactDigest"],
       "properties": {
         "artifactId": { "type": "integer", "minimum": 1 },
         "artifactName": {
@@ -160,14 +163,15 @@
           "type": "string",
           "pattern": "^managed-evidence-(expected-[0-9a-f]{32}|(candidate|sealed)-(linux-x86_64|macos-26-arm64|macos-15-arm64)-[0-9a-f]{32})$"
         },
+        "uploadActionDigest": { "$ref": "#/$defs/sha256" },
         "artifactDigest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
       }
     },
     "origin": {
-      "$comment": "The candidateJob, sealingJob, candidateArtifact, and roleBundleSha256 values come from the trusted sealing receipt inside the attested sealed bundle and are revalidated against the run APIs. Semantic validation requires distinct candidate and sealing job IDs; candidate and sealed artifact IDs and names; exact role-specific names derived from expectedIdentity.artifactNonce; one artifact per reserved name; and no other candidate, sealed, or expected artifact for that nonce.",
+      "$comment": "The attested sealing receipt is a separate artifact written before seal completes. It supplies the sealing check-run locator and immutable identity, candidate and sealed artifact, and bundle facts, but no final job state. After the workflow attempt completes, the coordinator resolves exactly one job API object through sealingCheckRunId and constructs sealingJob. Semantic validation requires sealingJob.checkRunId to equal sealingCheckRunId, distinct candidate and sealing job IDs, canonical digest equality, exact role-specific names derived from expectedIdentity.artifactNonce, one artifact per reserved name, and no other candidate, sealed, expected, or receipt artifact for that nonce.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["repositoryId", "workflowRunId", "runAttempt", "trustAnchorSha", "testedSourceSha", "workflowSignerSha", "workflowSignerRef", "baseSha", "candidateJob", "sealingJob", "signerWorkflow", "candidateArtifact", "sealedArtifact", "attestationIssuer", "attestationSubjectDigest", "attestationBundleSha256", "attestationVerified", "roleBundleSha256", "sealedBundleSha256", "restApiVersion", "verifiedAt"],
+      "required": ["repositoryId", "workflowRunId", "runAttempt", "trustAnchorSha", "testedSourceSha", "workflowSignerSha", "workflowSignerRef", "baseSha", "candidateJob", "sealingCheckRunId", "sealingJob", "signerWorkflow", "candidateArtifact", "sealedArtifact", "sealingReceiptSha256", "attestationIssuer", "sealedAttestationSubjectDigest", "sealedAttestationBundleSha256", "sealedAttestationVerified", "sealingReceiptAttestationSubjectDigest", "sealingReceiptAttestationBundleSha256", "sealingReceiptAttestationVerified", "roleBundleSha256", "sealedBundleSha256", "restApiVersion", "verifiedAt"],
       "properties": {
         "repositoryId": { "type": "integer", "minimum": 1 },
         "workflowRunId": { "type": "integer", "minimum": 1 },
@@ -178,20 +182,25 @@
         "workflowSignerRef": { "const": "refs/heads/master" },
         "baseSha": { "$ref": "#/$defs/gitSha" },
         "candidateJob": { "$ref": "#/$defs/jobObservation" },
+        "sealingCheckRunId": { "type": "integer", "minimum": 1 },
         "sealingJob": { "$ref": "#/$defs/jobObservation" },
         "signerWorkflow": { "$ref": "#/$defs/signerWorkflow" },
         "candidateArtifact": { "$ref": "#/$defs/artifactObservation" },
         "sealedArtifact": { "$ref": "#/$defs/artifactObservation" },
+        "sealingReceiptSha256": { "$ref": "#/$defs/sha256" },
         "attestationIssuer": { "const": "https://token.actions.githubusercontent.com" },
-        "attestationSubjectDigest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
-        "attestationBundleSha256": { "$ref": "#/$defs/sha256" },
-        "attestationVerified": { "const": true },
+        "sealedAttestationSubjectDigest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "sealedAttestationBundleSha256": { "$ref": "#/$defs/sha256" },
+        "sealedAttestationVerified": { "const": true },
+        "sealingReceiptAttestationSubjectDigest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "sealingReceiptAttestationBundleSha256": { "$ref": "#/$defs/sha256" },
+        "sealingReceiptAttestationVerified": { "const": true },
         "roleBundleSha256": {
           "$comment": "Digest of the unchanged inner ci-role-evidence.tar.zst candidate bundle.",
           "$ref": "#/$defs/sha256"
         },
         "sealedBundleSha256": {
-          "$comment": "Digest of the outer sealed bundle containing the unchanged role bundle and trusted sealing receipt. The aggregator must require attestationSubjectDigest to equal sha256: followed by this value.",
+          "$comment": "Digest of the sealed bundle, which contains only the unchanged role bundle. The separate sealing receipt contains this digest, avoiding self-reference. The aggregator must require sealedAttestationSubjectDigest to equal sha256: followed by this value, and sealingReceiptAttestationSubjectDigest to equal sha256: followed by sealingReceiptSha256.",
           "$ref": "#/$defs/sha256"
         },
         "restApiVersion": { "const": "2026-03-10" },
@@ -281,8 +290,11 @@
       "additionalProperties": false,
       "required": ["code", "detail"],
       "properties": {
-        "code": { "enum": ["expected-identity-invalid", "artifact-name-invalid", "artifact-name-collision", "trust-anchor-mismatch", "candidate-control-surface-changed", "source-allowlist-violation", "candidate-job-failed", "sealing-job-missing", "job-topology-mismatch", "role-manifest-invalid", "role-bundle-invalid", "missing-role", "duplicate-role", "unexpected-role", "role-gate-failed", "identity-mismatch", "stale-evidence", "workflow-signer-mismatch", "runner-label-mismatch", "runner-environment-mismatch", "untrusted-origin", "attestation-unavailable", "artifact-api-mismatch", "artifact-corrupt", "mixed-image-version", "coordinator-identity-mismatch", "coordinator-isolation-failed", "coordinator-credential-exposure", "aggregation-error"] },
+        "code": { "enum": ["expected-identity-invalid", "artifact-name-invalid", "artifact-name-collision", "artifact-digest-mismatch", "trust-anchor-mismatch", "candidate-control-surface-changed", "source-allowlist-violation", "candidate-job-failed", "sealing-job-in-progress", "sealing-job-failed", "sealing-job-missing", "sealing-job-mismatch", "job-topology-mismatch", "role-manifest-invalid", "role-bundle-invalid", "missing-role", "duplicate-role", "unexpected-role", "role-gate-failed", "identity-mismatch", "stale-evidence", "workflow-signer-mismatch", "runner-label-mismatch", "runner-environment-mismatch", "untrusted-origin", "attestation-unavailable", "artifact-api-mismatch", "artifact-corrupt", "mixed-image-version", "coordinator-identity-mismatch", "coordinator-isolation-failed", "coordinator-credential-exposure", "aggregation-error"] },
         "role": { "$ref": "#/$defs/role" },
+        "jobId": { "type": "integer", "minimum": 1 },
+        "jobStatus": { "enum": ["queued", "in_progress", "completed"] },
+        "jobConclusion": { "type": ["string", "null"], "enum": ["success", "failure", "cancelled", "skipped", "timed_out", "action_required", "neutral", "stale", "startup_failure", null] },
         "detail": { "type": "string", "minLength": 1 }
       }
     }

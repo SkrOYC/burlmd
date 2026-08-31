@@ -31,7 +31,7 @@ AST-H001 and PATH-H002 execute after both `CI-M003` pull requests merge. Their r
 - **STOP Conditions:**
   - STOP if a candidate can't preserve untouched bytes or represent any required syntax/domain case.
   - STOP if the `CI-M003` evidence pull request isn't merged, expected identity differs between roles, evidence is missing, mismatched, stale, corrupt, or unauthenticated, or aggregation is `rejected`.
-  - STOP if a role lacks distinct successful candidate and sealing jobs on its fixed hosted label, the sealing job doesn't run on a fresh environment, or an expected, candidate, or sealed artifact name is invalid, missing, duplicate, extra, or inconsistent with the run nonce.
+  - STOP if post-completion API observation doesn't resolve the receipt locator to one completed successful sealing job on the fixed hosted label, or if an expected, candidate, or sealed artifact name or normalized digest is invalid, missing, duplicate, extra, or inconsistent with the run nonce.
   - STOP if the launcher isn't the clean trust-anchor copy, a trusted control file differs at the signer SHA, or the base-to-source diff leaves the AST write allowlist.
   - STOP if the machine result is missing or invalid, or if the evidence commit doesn't contain that result, the accepted managed report, and the executor-authored Spike report together.
   - STOP if a candidate process or coordinator can observe a credential canary, coordinator identity changes after preparation, isolation or network denial fails, an input is writable, or any path except the coordinator output is writable.
@@ -60,7 +60,7 @@ Every declared candidate and gate has attributed evidence for syntax, positions,
 - **STOP Conditions:**
   - STOP if identity remains host-dependent or an accepted path can escape/alias the Workspace.
   - STOP if the `CI-M003` evidence pull request isn't merged into the tranche base, `AST-H001` isn't committed, validated, and independently reviewed in this tranche, either filesystem role lacks authenticated evidence, or the aggregate is `rejected`.
-  - STOP if a role lacks distinct successful candidate and sealing jobs on its fixed hosted label, the sealing job doesn't run on a fresh environment, or an expected, candidate, or sealed artifact name is invalid, missing, duplicate, extra, or inconsistent with the run nonce.
+  - STOP if post-completion API observation doesn't resolve the receipt locator to one completed successful sealing job on the fixed hosted label, or if an expected, candidate, or sealed artifact name or normalized digest is invalid, missing, duplicate, extra, or inconsistent with the run nonce.
   - STOP if the launcher isn't the clean trust-anchor copy, a trusted control file differs at the signer SHA, or the reviewed AST milestone-to-PATH diff leaves the PATH write allowlist.
   - STOP if the machine result is missing or invalid, or if the evidence commit doesn't contain that result, the accepted managed report, and the executor-authored Spike report together.
   - STOP if a candidate process or coordinator can observe a credential canary, coordinator identity changes after preparation, isolation or network denial fails, an input is writable, or any path except the coordinator output is writable.

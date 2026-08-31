@@ -23,6 +23,7 @@ Reviewed for PRD v1.3.7. This Evolution pass replaces workstation-dependent vali
 - Distinguished Linux exact platform-regression evidence from authoritative product visual evidence. The Linux gate remains required but can't replace the sole authoritative macOS 26 visual role.
 - Split Evidence Aggregation into credentialed acquisition and credential-free coordinator execution. Candidate-controlled aggregation receives only verified read-only inputs, one writable output boundary, and no network or inherited user state; any isolation failure rejects the evidence.
 - Split every validation role into candidate execution without origin-signing authority and a fresh pipeline-owned sealing environment. Only the sealing environment authenticates a validated immutable bundle; missing, failed, duplicate, substituted, or role-mismatched handoffs fail closed.
+- Required Evidence Aggregation to observe a sealing environment's final success after that environment finishes. A sealing handoff records pre-completion identity and locator facts but can't authenticate its own final outcome.
 - Moved validation authority out of the tested source. A reviewed merged implementation establishes an immutable trust anchor; trusted validation checks the separate source against its ticket boundary. A second reviewed evidence-only integration completes the bootstrap, and later trust-surface changes repeat it.
 
 ## v1.4.14 - 2026-08-26
