@@ -208,16 +208,16 @@ The pipeline assigns the following validation roles:
 
 - **Boundary kind:** Execution boundary.
 - **Logical type:** Pipeline-owned System/Native validation environment.
-- **Responsibility:** Runs one assigned validation role while owning its display, compositor, input, and process state independently of the Writer's active desktop.
-- **Inputs and outputs:** Accepts an artifact, run identity, required role, and authoritative expected source, execution, base, release, build, and corpus identities. Emits one complete bundle containing the role manifest and every named evidence file.
+- **Responsibility:** Runs one assigned validation role while owning its display, compositor, input, and process state independently of the Writer's active desktop. Candidate execution and evidence sealing use separate fresh pipeline-owned environments.
+- **Inputs and outputs:** Candidate execution accepts an artifact, run identity, required role, and authoritative expected source, execution, base, release, build, and corpus identities without origin-signing authority. It emits one complete untrusted bundle containing the role manifest and every named evidence file. A fresh sealing environment validates that bundle and the candidate environment identity before it authenticates an immutable sealed handoff.
 - **Depends on:** Release Pipeline.
 
 ## Evidence aggregation
 
 - **Boundary kind:** Pipeline stage.
 - **Logical type:** Evidence integrity and acceptance boundary.
-- **Responsibility:** Authenticates managed validation origin, verifies the trust-anchor relationship and ticket write boundary, verifies complete bundle integrity, and compares captured identity with authoritative expected identity before isolated aggregation.
-- **Inputs and outputs:** Accepts expected trust-anchor, workflow-signer, tested-source, base, release, build, corpus, run, and required-role identities from Release Pipeline. Accepts one complete evidence bundle from each role through an authenticated-origin and integrity-checked handoff. Credentialed acquisition produces verified read-only inputs. A separate credential-free, non-networked coordinator produces machine results through one writable output boundary. Returns an accepted complete set or explicit unmanaged, candidate-controlled, out-of-boundary, untrusted, missing, mismatched, stale, corrupt, credential-exposed, or isolation-failed outcomes.
+- **Responsibility:** Authenticates the fresh sealing environment as managed origin, verifies the trust-anchor relationship and ticket write boundary, verifies candidate and sealed handoff identities and complete bundle integrity, and compares captured identity with authoritative expected identity before isolated aggregation.
+- **Inputs and outputs:** Accepts expected trust-anchor, workflow-signer, tested-source, base, release, build, corpus, run, and required-role identities from Release Pipeline. Accepts one authenticated sealed bundle per role and the pipeline-owned candidate and sealing environment records. Credentialed acquisition produces verified read-only inputs. A separate credential-free, non-networked coordinator produces machine results through one writable output boundary. Returns an accepted complete set or explicit unmanaged, candidate-controlled, out-of-boundary, untrusted, missing, duplicated, mismatched, stale, corrupt, unsealed, credential-exposed, or isolation-failed outcomes.
 - **Depends on:** Isolated Validation Environment and Release Pipeline.
 
 All three roles must satisfy the common functional matrix. macOS 15 evidence can't satisfy a performance, Linux platform-regression, or authoritative visual role. Linux platform-regression evidence can't satisfy the macOS 26 authoritative product visual role. Evidence from the Writer's active desktop is invalid even when the captured output appears correct.
