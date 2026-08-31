@@ -48,6 +48,10 @@ Complete the PR #11 shell as a real local-first desktop application. This epic r
 The rebuilt `test/goldens/` Linux and macOS shell baselines contain no simulated traffic lights, Linux title controls, Platform selector, or reserved fake-titlebar spacing. The named verification commands allow zero different pixels. Production and executable tests contain no preference or code path that recreates them. CAP-SHELL-04 passes with host-owned chrome.
 ```
 
+##### SHELL-G001 Deviations & Justifications
+- **Touched Files:** `.constitution/tasks/active/EPIC-G-desktop-session-local-workflows.md`
+- **Justification:** Record the M0 P2 path (`okf-bundle.md`) in the existing M0 deviation list so the recorded scope matches commit dad33d8 / this follow-up.
+
 #### PREF-G002 Persist device-global preferences
 - **Type:** Feature
 - **Effort:** 5
