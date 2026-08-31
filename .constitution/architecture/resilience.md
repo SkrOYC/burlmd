@@ -48,9 +48,20 @@
 - Structured local diagnostics exclude Note content, Asset content, credentials, signed locations, and content-derived telemetry.
 - No diagnostic or usage information leaves the device automatically. The Writer creates and shares a Diagnostics Export explicitly.
 
+## Validation evidence
+
+- Each validation run owns an isolated display, compositor, input channel, and process lifecycle. If it can't prove ownership, the run emits no acceptable evidence.
+- The Writer's active desktop never supplies visual proof or validation input. A captured Writer window or desktop state invalidates the run.
+- Every evidence artifact carries captured environment, build, corpus, validation-role, and run identity through an integrity-checked handoff.
+- Evidence Aggregation rejects missing or corrupt artifacts before reading results. It rejects mismatched identities and stale evidence before combining results.
+- macOS 15 supplies functional compatibility evidence only. It can't replace Linux x86-64 or Apple Silicon macOS 26 performance evidence, or macOS 26 visual evidence.
+- A partial run remains incomplete. Retry creates evidence for the current identities rather than reusing an earlier run's accepted result.
+
 ## Observability
 
 Every durable state machine emits structured local events for transitions, retry class, partial outcome, recovery action, and correlation identity. Events contain identifiers needed for support without Note or Asset bytes. Diagnostics include application and schema versions so a report can be interpreted after upgrades.
+
+Release validation records isolation ownership, evidence handoff, identity rejection, freshness rejection, and aggregation outcomes. These records correlate a release identity without including the Writer's desktop content.
 
 ## Configuration
 

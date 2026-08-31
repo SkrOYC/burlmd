@@ -26,6 +26,8 @@ flowchart LR
     ObjectStore[Object Store\nexternal storage]
     Update[Release Update Coordinator\nmodule]
     Release[Release Pipeline\npipeline boundary]
+    Validation[Isolated Validation Environment\nexecution boundary]
+    Evidence[Evidence Aggregation\npipeline stage]
     Distribution[Release Distribution\nexternal boundary]
 
     Writer -->|interaction| UI
@@ -63,7 +65,10 @@ flowchart LR
     Persist -->|Asset references| LocalAssets
     Core -->|asynchronous update check| Update
     Update -->|release metadata request| Distribution
-    Release -->|artifact and provenance handoff| Distribution
+    Release -->|validation request with build and corpus identity| Validation
+    Validation -->|integrity-checked evidence artifact handoff| Evidence
+    Evidence -->|identity-matched evidence set| Release
+    Release -->|artifact, evidence, and provenance handoff| Distribution
 ```
 
 ## Presentation and Interaction
@@ -188,9 +193,33 @@ Device preferences never enter Workspace content. Session and navigation state r
 
 - **Boundary kind:** Pipeline boundary.
 - **Logical type:** Build, verification, and publication boundary.
-- **Responsibility:** Produces each supported artifact, runs the common release matrix, and publishes integrity plus cryptographically authenticated build provenance bound to the expected repository, workflow, source revision, and artifact identity.
-- **Inputs and outputs:** Accepts a release revision and Platform matrix. Emits verified artifacts and metadata to Release Distribution.
-- **Depends on:** Supported Platform environments and Release Distribution.
+- **Responsibility:** Produces each supported artifact, assigns validation roles, requires a complete accepted evidence set, and publishes artifact integrity with authenticated build provenance.
+- **Inputs and outputs:** Accepts a release identity and Platform matrix. Sends validation requests with build and corpus identity. Emits verified artifacts, evidence, and metadata to Release Distribution.
+- **Depends on:** Isolated Validation Environment, Evidence Aggregation, supported Platform environments, and Release Distribution.
+
+The pipeline assigns the following validation roles:
+
+- Linux x86-64 provides performance evidence.
+- Apple Silicon macOS 26 provides performance and visual evidence.
+- macOS 15 provides functional compatibility evidence only.
+
+## Isolated validation environment
+
+- **Boundary kind:** Execution boundary.
+- **Logical type:** Pipeline-owned System/Native validation environment.
+- **Responsibility:** Runs one assigned validation role while owning its display, compositor, input, and process state independently of the Writer's active desktop.
+- **Inputs and outputs:** Accepts an artifact, build identity, corpus identity, and validation role. Emits evidence with captured environment, build, corpus, and role identity.
+- **Depends on:** Release Pipeline.
+
+## Evidence aggregation
+
+- **Boundary kind:** Pipeline stage.
+- **Logical type:** Evidence integrity and acceptance boundary.
+- **Responsibility:** Verifies evidence integrity, identity, freshness, and role before combining results into one release evidence set.
+- **Inputs and outputs:** Accepts evidence artifacts through an integrity-checked handoff. Returns an accepted complete set or explicit missing, mismatched, stale, or corrupt outcomes.
+- **Depends on:** Isolated Validation Environment and Release Pipeline.
+
+macOS 15 evidence can't satisfy a performance or visual role. Evidence from the Writer's active desktop is invalid even when the captured output appears correct.
 
 ## Release Update Coordinator
 

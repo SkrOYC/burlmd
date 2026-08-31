@@ -1,5 +1,19 @@
 # Stage 2: Architecture changelog
 
+## v1.4.15 - 2026-08-31
+
+Reviewed for PRD v1.3.7. This Evolution pass replaces workstation-dependent validation with pipeline-owned isolated execution and integrity-checked evidence aggregation.
+
+### Added
+
+- Added Isolated Validation Environment and Evidence Aggregation as logical release-pipeline stages. Validation owns display, compositor, input, and process state without using the Writer's active desktop.
+
+### Changed
+
+- Assigned performance evidence to Linux x86-64 and Apple Silicon macOS 26. The macOS 26 role also supplies visual evidence. macOS 15 supplies functional compatibility evidence only.
+- Required every evidence handoff to carry captured environment, build, corpus, role, and run identity. Aggregation rejects missing, corrupt, mismatched, or stale evidence.
+- Updated release resilience, observability, threat notes, risks, and failure behavior so incomplete proof can't publish as a complete release result.
+
 ## v1.4.14 - 2026-08-26
 
 Reviewed for PRD v1.3.6. PR #12 full review round 14 aligns privacy-paused recovery and the Object Store risk boundary with the complete negative anonymous List, Get, Put, and Delete probe.

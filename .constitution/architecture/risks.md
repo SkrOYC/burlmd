@@ -10,6 +10,7 @@ The following table summarizes the Stage 2 trust boundaries:
 | Provider and Remote | Spoofing, tampering, information disclosure, denial of service | Use explicit authorization and privacy states. Validate incoming history and keep local work available. |
 | Object Store | Tampering, information disclosure, denial of service | Refuse anonymous list, read, write, and delete access; verify Object identity; isolate credentials; and pause dependent history publication. |
 | Platform secure storage | Information disclosure, elevation of privilege | Persist secrets only through Platform facilities and limit transient exposure. |
+| Validation Environment to Evidence Aggregation | Spoofing, tampering, information disclosure, denial of service | Own execution state, capture environment, build, corpus, role, and run identity, verify artifact integrity, and reject missing, mismatched, or stale evidence. |
 | Release Distribution | Tampering, spoofing | Publish common-matrix evidence, integrity data, and provenance for every artifact. |
 
 Repudiation isn't a release claim because burlmd is a single-Writer local product and doesn't provide third-party authorship attestation.
@@ -70,3 +71,9 @@ Repudiation isn't a release claim because burlmd is a single-Writer local produc
 
 - **Risk:** Replacing the smaller rendering projection with the Canonical Note Model can regress delivered editing, selection, Links, or lifecycle behavior.
 - **Mitigation:** Treat delivered A-F behavior as compatibility evidence. The AST Spike and final implementation contracts must preserve source fidelity and existing acceptance suites.
+
+## Contaminated or misattributed validation evidence
+
+- **Risk:** Validation can capture the Writer's desktop or accept evidence from another environment, build, corpus, role, or run.
+- **Sensitivity point:** Weak isolation or identity matching can make deterministic output look valid while proving the wrong system state.
+- **Mitigation:** Use pipeline-owned environments that control display, compositor, input, and process state. Transfer evidence as integrity-checked artifacts and reject missing, mismatched, stale, or corrupt inputs before aggregation.
