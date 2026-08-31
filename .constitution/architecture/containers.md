@@ -216,8 +216,8 @@ The pipeline assigns the following validation roles:
 
 - **Boundary kind:** Pipeline stage.
 - **Logical type:** Evidence integrity and acceptance boundary.
-- **Responsibility:** Authenticates managed validation origin, verifies complete bundle integrity, and compares captured identity with authoritative expected identity before aggregation.
-- **Inputs and outputs:** Accepts expected source, execution, base, release, build, corpus, run, and required-role identities from Release Pipeline. Accepts one complete evidence bundle from each role through an authenticated-origin and integrity-checked handoff. Returns an accepted complete set or explicit unmanaged, untrusted, missing, mismatched, stale, or corrupt outcomes.
+- **Responsibility:** Authenticates managed validation origin, verifies complete bundle integrity, and compares captured identity with authoritative expected identity before isolated aggregation.
+- **Inputs and outputs:** Accepts expected source, execution, base, release, build, corpus, run, and required-role identities from Release Pipeline. Accepts one complete evidence bundle from each role through an authenticated-origin and integrity-checked handoff. Credentialed acquisition produces verified read-only inputs. A separate credential-free, non-networked coordinator produces machine results through one writable output boundary. Returns an accepted complete set or explicit unmanaged, untrusted, missing, mismatched, stale, corrupt, credential-exposed, or isolation-failed outcomes.
 - **Depends on:** Isolated Validation Environment and Release Pipeline.
 
 All three roles must satisfy the common functional matrix. macOS 15 evidence can't satisfy a performance, Linux platform-regression, or authoritative visual role. Linux platform-regression evidence can't satisfy the macOS 26 authoritative product visual role. Evidence from the Writer's active desktop is invalid even when the captured output appears correct.

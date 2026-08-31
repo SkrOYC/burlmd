@@ -33,6 +33,7 @@ Evolution pass for PRD v1.3.7, Architecture v1.4.15, and TechSpec v1.8.0-provisi
 - Tightened `STATE-G003` with nonempty and unique identity schema rules plus Core validation for active Workspace and active Note membership. Malformed bytes remain preserved in quarantine, and runtime receives an empty writable default.
 - Advanced the modified Epic L marker to `v2.2.0`; the modified Epic G and Epic M files already use `v2.2.0`.
 - Replaced every managed Spike's manual cross-role handoff with authenticated role-bundle staging and exact coordinator steps. AST, path, Git, Asset, and packaging milestones now require their declared `results.json`, accepted managed report, and executor-authored human report in one evidence commit. Packaging passes the macOS archive to the compatibility role only through a verified staged bundle.
+- Split managed evidence at the credential boundary. `CI-M003` must prepare and identify each locked coordinator before authentication, restrict authenticated work to evidence acquisition, destroy credentials and descriptors, and then run the prebuilt executable in pinned Bubblewrap with no network, read-only inputs, and only its output writable. Exact canary fixtures cover both role commands and all five managed-Spike coordinators.
 
 ## v2.1.21 - 2026-08-30
 

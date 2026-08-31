@@ -10,7 +10,7 @@ The following table summarizes the Stage 2 trust boundaries:
 | Provider and Remote | Spoofing, tampering, information disclosure, denial of service | Use explicit authorization and privacy states. Validate incoming history and keep local work available. |
 | Object Store | Tampering, information disclosure, denial of service | Refuse anonymous list, read, write, and delete access; verify Object identity; isolate credentials; and pause dependent history publication. |
 | Platform secure storage | Information disclosure, elevation of privilege | Persist secrets only through Platform facilities and limit transient exposure. |
-| Validation Environment to Evidence Aggregation | Spoofing, tampering, information disclosure, denial of service | Accept expected identity from Release Pipeline, authenticate managed validation origin, verify the complete evidence bundle, compare captured identity, and reject missing, mismatched, or stale evidence. |
+| Validation Environment to Evidence Aggregation | Spoofing, tampering, information disclosure, denial of service, elevation of privilege | Accept expected identity from Release Pipeline, authenticate managed validation origin, verify the complete evidence bundle, compare captured identity, and run candidate-controlled aggregation only after destroying the credential context inside a non-networked, filesystem-restricted execution boundary. |
 | Release Distribution | Tampering, spoofing | Publish common-matrix evidence, integrity data, and provenance for every artifact. |
 
 Repudiation isn't a release claim because burlmd is a single-Writer local product and doesn't provide third-party authorship attestation.
@@ -74,6 +74,6 @@ Repudiation isn't a release claim because burlmd is a single-Writer local produc
 
 ## Contaminated or misattributed validation evidence
 
-- **Risk:** Validation can capture the Writer's desktop or accept evidence from another environment, build, corpus, role, or run.
-- **Sensitivity point:** Weak isolation or identity matching can make deterministic output look valid while proving the wrong system state.
-- **Mitigation:** Release Pipeline sends authoritative tested-source, workflow-execution, base, build, corpus, run, and role identity directly to validation and aggregation. Aggregation authenticates managed origin, verifies every complete evidence bundle, and rejects unmanaged, missing, mismatched, stale, or corrupt evidence. The later report state remains distinct from tested source.
+- **Risk:** Validation can capture the Writer's desktop, accept evidence from another environment, or expose aggregation credentials to candidate-controlled code.
+- **Sensitivity point:** Weak execution isolation or identity matching can make deterministic output look valid while proving the wrong system state or leaking remote authority.
+- **Mitigation:** Release Pipeline sends authoritative tested-source, workflow-execution, base, build, corpus, run, and role identity directly to validation and aggregation. Aggregation authenticates managed origin and verifies every complete evidence bundle without running candidate code. It then destroys remote credentials and runs the identified coordinator without network or ambient user state. It rejects unmanaged, missing, mismatched, stale, corrupt, or insufficiently isolated evidence. The later report state remains distinct from tested source.

@@ -58,9 +58,10 @@ flowchart TD
 - The Writer's active desktop never supplies visual proof. The Writer's desktop state in a capture invalidates the complete run.
 - Missing authoritative tested-source, workflow-execution, base, release, build, corpus, run, or required-role identity prevents evidence acceptance.
 - An untrusted or unmanaged validation origin, an incomplete evidence bundle, or corrupt evidence fails verification before aggregation.
+- Candidate-controlled aggregation never shares the authenticated acquisition context. Missing coordinator identity, reachable credentials or user configuration, writable inputs, an extra writable filesystem boundary, or available network access rejects the run.
 - Aggregation compares captured identity with the expected identity supplied directly by Release Pipeline. Self-description alone is insufficient.
 - A captured identity that is mismatched or stale is rejected. Evidence from another run can't satisfy the current release gate.
-- The later evidence-only report commit remains distinct from the tested source. A report commit that changes anything except evidence can't represent that run.
+- The later evidence commit remains distinct from the tested source. A commit that changes anything except declared evidence can't represent that run.
 - All three roles must pass the common functional matrix. Linux must also pass its exact non-authoritative platform-regression gate. macOS 15 can't replace either performance role, Linux platform-regression evidence, or the macOS 26 authoritative product visual role.
 - A launch-only result can't admit a system to the supported matrix.
 - Update notification never replaces installed binaries.

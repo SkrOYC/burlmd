@@ -13,7 +13,7 @@ Evolution pass for PRD v1.3.7 and Architecture v1.4.15. This version replaces ph
 
 ### Changed
 
-- Advanced provisional Spike contracts and result profiles to schema version 14. Role evidence is schema version 4, and aggregate evidence is schema version 5. AST and Asset measurements use the Linux and macOS 26 performance roles. Packaging evidence binds macOS 26 and macOS 15 to their managed profiles.
+- Advanced provisional Spike contracts and result profiles to schema version 15. Role evidence remains schema version 4, and aggregate evidence is schema version 6. AST and Asset measurements use the Linux and macOS 26 performance roles. Packaging evidence binds macOS 26 and macOS 15 to their managed profiles.
 - Replaced physical CPU, disk, graphics, power, and throttling assumptions with hosted image identity, observed system resources, and a verified 1920x1080 at 60 Hz logical viewport. OS-major labels remain mutable weekly image channels and can't guarantee a physical host or identical reruns.
 - Bound Linux exact platform-regression proof to the committed private headless Sway and Wayland implementation. Its current `1878x989` capture must reach the PRD viewport before acceptance. This required zero-pixel implementation gate isn't a product visual reference. macOS 26 must use the actual hosted GUI and owns the sole authoritative product visual baseline set; macOS 15 has no visual role.
 - Made the Release Pipeline's expected identity authoritative. Aggregation verifies role-specific GitHub Sigstore signer provenance, independently checks artifact transport and hosted job labels, then compares captured identity instead of trusting artifact self-description.
@@ -36,10 +36,12 @@ Evolution pass for PRD v1.3.7 and Architecture v1.4.15. This version replaces ph
 - Tightened the Workspace-session schema to reject empty and duplicate identities. Core semantic validation also rejects a Workspace mismatch, invalid identity, or active Note outside the open-Note list. Rejected bytes remain quarantined and preserved, and runtime uses an empty writable default instead of malformed state.
 - Removed the alternative persisted-format escape hatch for Workspace sessions. Persisted snapshots must be schema-valid JSON; Core may use an equivalent in-memory representation only after validation and deserialization.
 - Replaced every manual cross-role Spike handoff with verified role-bundle staging under a fixed coordinator root. Expected and captured identity now bind the exact ticket. All five managed Spikes declare exact machine-result, evidence-report, human-report, and coordinator-step contracts. Acceptance requires a schema-valid `results.json`; packaging transfers the macOS archive to the compatibility role only through an authenticated staged bundle.
+- Split managed-Spike coordination into credential-separated phases. The trusted client builds and identifies each locked coordinator before authentication, limits the authenticated phase to evidence acquisition and verification, destroys credentials, and then runs the prepared executable with no network, read-only inputs, and only its output writable. Role commands receive the same ambient-credential exclusion, and canary fixtures make both boundaries executable.
 
 ### Security
 
 - Evidence acceptance now requires bundle integrity and authenticated GitHub-hosted origin. Private-repository attestation eligibility isn't guaranteed; without it, aggregation is rejected. Typed reasons cover incomplete bundles, self-hosted origin, missing, duplicate, unexpected-role, untrusted, corrupt, mismatched, stale, or mixed-image evidence.
+- Managed coordinator acceptance additionally requires a recorded executable and closure identity, successful Bubblewrap isolation, absent credential canaries and clients, closed descriptors, and a representative result. Isolation has no credential-clearing-only fallback.
 
 ## v1.7.19-provisional - 2026-08-30
 

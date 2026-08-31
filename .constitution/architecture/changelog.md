@@ -21,6 +21,7 @@ Reviewed for PRD v1.3.7. This Evolution pass replaces workstation-dependent vali
 - Distinguished the tested source, workflow execution, base, and later evidence-only report state. Each role hands off one complete evidence bundle, and aggregation rejects an unmanaged origin or a bundle that omits bytes named by its manifest.
 - Clarified that a degraded close continues only a single Note-to-Note replacement with no enclosing operation. A batch or wider lifecycle operation stops after removing the retired warned tab and preserves every unprocessed tab.
 - Distinguished Linux exact platform-regression evidence from authoritative product visual evidence. The Linux gate remains required but can't replace the sole authoritative macOS 26 visual role.
+- Split Evidence Aggregation into credentialed acquisition and credential-free coordinator execution. Candidate-controlled aggregation receives only verified read-only inputs, one writable output boundary, and no network or inherited user state; any isolation failure rejects the evidence.
 
 ## v1.4.14 - 2026-08-26
 
