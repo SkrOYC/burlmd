@@ -263,6 +263,9 @@ void main() {
       await Future.wait([openB, openC]);
 
       expect(container.read(activeNoteProvider)!.metadata.id, 'c');
+      // B's reply created a Core session even though C had already won.
+      // Retire that superseded session instead of leaking its draft/timers.
+      expect(api.calls, ['open:a', 'open:b', 'close:b', 'open:c']);
       expect(
         container
             .read(openNoteSessionsProvider)

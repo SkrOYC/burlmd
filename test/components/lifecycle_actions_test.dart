@@ -613,6 +613,57 @@ void main() {
       expect(api.openNoteCalls, ['A', 'B', 'Renamed/B']);
     });
 
+    testWidgets('a failed inactive remap refresh removes the stale tab', (
+      tester,
+    ) async {
+      final api = _LifecycleApi()
+        ..openStates = {'A': stateFor('A'), 'B': stateFor('B')}
+        ..renameDirectoryResult = effects(
+          remapped: [IdRemap(oldId: 'B', newId: 'Renamed/B')],
+        );
+      final (container, _) = await openTabs(tester, api);
+
+      final outcome = await container
+          .read(lifecycleActionsProvider)
+          .renameDirectory('', 'Renamed');
+
+      expect(outcome, isA<LifecycleFailed>());
+      // Core already rekeyed B, so its pre-remap buffer must no longer be a
+      // tab the Writer can select or edit.
+      expect(
+        container
+            .read(openNoteSessionsProvider)
+            .map((note) => note.metadata.id),
+        ['A'],
+      );
+      expect(container.read(activeNoteProvider)!.metadata.id, 'A');
+    });
+
+    testWidgets('a failed inactive rewrite refresh removes the stale tab', (
+      tester,
+    ) async {
+      final api = _LifecycleApi()
+        ..openStates = {'A': stateFor('A'), 'B': stateFor('B')}
+        ..renameDirectoryResult = effects(rewritten: ['B']);
+      final (container, _) = await openTabs(tester, api);
+      // The initial tab open succeeded. This is the post-rewrite refresh
+      // failure after Core has changed B's bytes under its unchanged id.
+      api.openStates.remove('B');
+
+      final outcome = await container
+          .read(lifecycleActionsProvider)
+          .renameDirectory('', 'Renamed');
+
+      expect(outcome, isA<LifecycleFailed>());
+      expect(
+        container
+            .read(openNoteSessionsProvider)
+            .map((note) => note.metadata.id),
+        ['A'],
+      );
+      expect(container.read(activeNoteProvider)!.metadata.id, 'A');
+    });
+
     testWidgets('a lifecycle delete removes an inactive retired tab', (
       tester,
     ) async {
@@ -786,7 +837,10 @@ void main() {
       expect(outcome, isA<LifecycleCompleted>());
       await tester.pump();
       await tester.pump();
-      final snapshot = api.savedSessionSnapshots.last;
+      // The lifecycle-admitted open rekeys B directly; it must not first
+      // persist a separate new-id tab and then rewrite that snapshot again.
+      expect(api.savedSessionSnapshots, hasLength(1));
+      final snapshot = api.savedSessionSnapshots.single;
       expect(snapshot.openNoteIds, ['Renamed/B']);
       expect(snapshot.openNoteIds, isNot(contains('B')));
       expect(snapshot.activeNoteId, 'Renamed/B');
@@ -1351,6 +1405,41 @@ void main() {
         expect(container.read(noteCloseFailureProvider), isNull);
       },
     );
+
+    testWidgets('deleting the active tab selects its following tab', (
+      tester,
+    ) async {
+      final api = _LifecycleApi()
+        ..openStates = {
+          'A': stateFor('A'),
+          'B': stateFor('B'),
+          'C': stateFor('C'),
+        };
+      late ProviderContainer container;
+      await tester.pumpWidget(_probeHarness(api, (c) => container = c));
+      addTearDown(container.dispose);
+      final controller = container.read(activeNoteProvider.notifier);
+      await controller.openAsTab('A');
+      await controller.openAsTab('B');
+      await controller.openAsTab('C');
+      await controller.openAsTab('A');
+      container.read(selectedNoteIdProvider.notifier).select('A');
+
+      await container.read(lifecycleActionsProvider).deleteNote('A');
+
+      // CAP-SHELL-08: select the following tab before falling back to the
+      // preceding one. B stays Core-backed, so no second open is needed.
+      expect(container.read(activeNoteProvider)!.metadata.id, 'B');
+      expect(container.read(selectedNoteIdProvider), 'B');
+      expect(
+        container
+            .read(openNoteSessionsProvider)
+            .map((note) => note.metadata.id),
+        ['B', 'C'],
+      );
+      expect(api.openNoteCalls, ['A', 'B', 'C']);
+      expect(api.calls, ['deleteNote:A']);
+    });
 
     testWidgets('deleting another note leaves the editor alone', (
       tester,

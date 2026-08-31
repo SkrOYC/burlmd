@@ -293,32 +293,36 @@ class NoteController extends Notifier<NoteState?> {
   Future<void> openAsTab(String noteId) =>
       _enqueueOpen((ticket) => _openAsTabExclusive(ticket, noteId));
 
-  Future<void> _openAsTab(String noteId, {required bool admittedByLifecycle}) =>
-      _enqueueOpen(
-        (ticket) => _openAsTabExclusive(
-          ticket,
-          noteId,
-          admittedByLifecycle: admittedByLifecycle,
-        ),
-      );
+  Future<void> _openAsTab(
+    String noteId, {
+    required bool admittedByLifecycle,
+    String? rekeyedFrom,
+  }) => _enqueueOpen(
+    (ticket) => _openAsTabExclusive(
+      ticket,
+      noteId,
+      admittedByLifecycle: admittedByLifecycle,
+      rekeyedFrom: rekeyedFrom,
+    ),
+  );
 
   Future<void> _openAsTabExclusive(
     int ticket,
     String noteId, {
     bool admittedByLifecycle = false,
+    String? rekeyedFrom,
   }) async {
     if (ticket != _openRequests ||
         (!admittedByLifecycle && ref.read(noteSelectionBlockedProvider))) {
       return;
     }
     final admission = ref.read(lifecycleAdmissionProvider);
+    final api = ref.read(rustApiProvider);
     final sessions = ref.read(openNoteSessionsProvider.notifier);
     final current = state;
     if (current?.metadata.id == noteId) {
       sessions.upsert(current!);
-      final snapshot = ref.read(workspaceSessionProvider.notifier);
-      snapshot.addOpenNoteId(noteId);
-      snapshot.setActiveNoteId(noteId);
+      _recordOpenedTabAsActive(noteId, rekeyedFrom: rekeyedFrom);
       return;
     }
     final existing = sessions.byId(noteId);
@@ -329,28 +333,23 @@ class NoteController extends Notifier<NoteState?> {
       )) {
         return;
       }
-      state = existing;
-      ref.read(workspaceSessionProvider.notifier).setActiveNoteId(noteId);
-      ref.read(editorErrorProvider.notifier).report(null);
-      ref.read(noteCloseFailureProvider.notifier).acknowledge();
-      ref.read(keystrokeWriteFailureProvider.notifier).report(null);
+      _activateExistingTab(noteId, rekeyedFrom: rekeyedFrom);
       return;
     }
 
     try {
-      final opened = await ref.read(rustApiProvider).openNote(noteId);
+      final opened = await api.openNote(noteId);
       if (ticket != _openRequests ||
           !_isOpenAdmissionCurrent(
             admission,
             admittedByLifecycle: admittedByLifecycle,
           )) {
+        await _retireSupersededTabOpen(api, opened.metadata.id);
         return;
       }
       sessions.upsert(opened);
       state = opened;
-      final snapshot = ref.read(workspaceSessionProvider.notifier);
-      snapshot.addOpenNoteId(opened.metadata.id);
-      snapshot.setActiveNoteId(opened.metadata.id);
+      _recordOpenedTabAsActive(opened.metadata.id, rekeyedFrom: rekeyedFrom);
       ref.read(editorErrorProvider.notifier).report(null);
       ref.read(noteCloseFailureProvider.notifier).acknowledge();
       ref.read(keystrokeWriteFailureProvider.notifier).report(null);
@@ -365,6 +364,42 @@ class NoteController extends Notifier<NoteState?> {
       // Leave the current session untouched. A selected unavailable id is
       // retryable, but it never gets a presentation-created tab or buffer.
       ref.read(editorErrorProvider.notifier).report(error);
+    }
+  }
+
+  void _recordOpenedTabAsActive(String noteId, {String? rekeyedFrom}) {
+    final snapshot = ref.read(workspaceSessionProvider.notifier);
+    if (rekeyedFrom != null && rekeyedFrom != noteId) {
+      snapshot.rekeyOpenNoteId(
+        oldNoteId: rekeyedFrom,
+        newNoteId: noteId,
+        makeActive: true,
+      );
+      return;
+    }
+    snapshot.recordOpenedNoteAsActive(noteId);
+  }
+
+  bool _activateExistingTab(String noteId, {String? rekeyedFrom}) {
+    final existing = openTabState(noteId);
+    if (existing == null) return false;
+    state = existing;
+    _recordOpenedTabAsActive(noteId, rekeyedFrom: rekeyedFrom);
+    ref.read(editorErrorProvider.notifier).report(null);
+    ref.read(noteCloseFailureProvider.notifier).acknowledge();
+    ref.read(keystrokeWriteFailureProvider.notifier).report(null);
+    return true;
+  }
+
+  /// An open result can be superseded after Core has allocated its session.
+  /// Retire it even though no tab adopts it, otherwise its draft/timers leak.
+  Future<void> _retireSupersededTabOpen(RustApi api, String noteId) async {
+    try {
+      await api.closeNote(noteId);
+    } catch (error) {
+      if (ref.mounted) {
+        ref.read(noteCloseFailureProvider.notifier).report(error);
+      }
     }
   }
 
@@ -414,8 +449,16 @@ class NoteController extends Notifier<NoteState?> {
   }
 
   /// Whether this Core-returned session currently backs a visible tab.
-  bool hasOpenTab(String noteId) =>
-      ref.read(openNoteSessionsProvider.notifier).byId(noteId) != null;
+  bool hasOpenTab(String noteId) => openTabState(noteId) != null;
+
+  /// The Core state currently backing one visible tab, if any.
+  NoteState? openTabState(String noteId) =>
+      ref.read(openNoteSessionsProvider.notifier).byId(noteId);
+
+  /// Makes an already-open Core tab active without another `open_note` call.
+  /// Lifecycle deletion uses this after Core retires the active tab and picks
+  /// its CAP-SHELL-08 successor.
+  bool activateExistingTab(String noteId) => _activateExistingTab(noteId);
 
   /// Replaces one tab's authoritative Core state after a lifecycle operation
   /// has carried it to a new identity or rewritten its source. This never
@@ -438,14 +481,22 @@ class NoteController extends Notifier<NoteState?> {
   /// Drops a tab whose Core session a lifecycle delete has already retired.
   /// It deliberately does not call `close_note`: Core removed the target as
   /// part of the lifecycle transaction, so addressing the dead id again
-  /// would fail and cannot make the tab safe.
-  void discardRetiredTab(String noteId) {
-    if (state?.metadata.id == noteId) {
+  /// would fail and cannot make the tab safe. [expectedState] prevents a
+  /// stale create or refresh from discarding a newer authoritative same-id
+  /// replacement.
+  void discardRetiredTab(String noteId, {NoteState? expectedState}) {
+    final active = state;
+    if (active?.metadata.id == noteId) {
+      if (expectedState != null && !identical(active, expectedState)) return;
       clear();
       return;
     }
     final sessions = ref.read(openNoteSessionsProvider.notifier);
-    if (sessions.byId(noteId) == null) return;
+    final session = sessions.byId(noteId);
+    if (session == null ||
+        (expectedState != null && !identical(session, expectedState))) {
+      return;
+    }
     sessions.remove(noteId);
     ref.read(workspaceSessionProvider.notifier).removeOpenNoteId(noteId);
   }
@@ -506,12 +557,16 @@ class NoteController extends Notifier<NoteState?> {
   /// listener-driven switch, so a lifecycle warning could otherwise surface
   /// before the authoritative Note is mounted. The caller publishes the
   /// selection only after this method reports success.
-  Future<bool> openForLifecycle(String noteId) async {
+  Future<bool> openForLifecycle(String noteId, {String? rekeyedFrom}) async {
     // A lifecycle-created Note is another Core session, not a reason to
     // retire the tab the Writer was already editing. Keeping both entries
     // preserves the Core ownership that lets the previous tab be selected
     // safely after the lifecycle action settles.
-    await _openAsTab(noteId, admittedByLifecycle: true);
+    await _openAsTab(
+      noteId,
+      admittedByLifecycle: true,
+      rekeyedFrom: rekeyedFrom,
+    );
     return ref.mounted && state?.metadata.id == noteId;
   }
 
@@ -627,9 +682,7 @@ class NoteController extends Notifier<NoteState?> {
       // fallback coherent prevents another caller from leaving a cache for a
       // session it just retired.
       ref.read(openNoteSessionsProvider.notifier).upsert(opened);
-      final snapshot = ref.read(workspaceSessionProvider.notifier);
-      snapshot.addOpenNoteId(opened.metadata.id);
-      snapshot.setActiveNoteId(opened.metadata.id);
+      _recordOpenedTabAsActive(opened.metadata.id);
       // A successful open clears any earlier failure so the surface
       // reflects the present, not the last thing that went wrong — both
       // surfaces: the old Note's keystroke-write failure belongs to a
@@ -742,6 +795,7 @@ class NoteController extends Notifier<NoteState?> {
           .rekeyOpenNoteId(
             oldNoteId: previousId,
             newNoteId: newState.metadata.id,
+            makeActive: true,
           );
     }
   }

@@ -123,6 +123,32 @@ class WorkspaceSession extends Notifier<WorkspaceSessionState> {
     _scheduleSave();
   }
 
+  /// Atomically records a Core-opened tab and makes it active. A restored
+  /// active identity already names the session being reopened, so defer
+  /// materializing it in `openNoteIds` until another active tab displaces it;
+  /// this lets an immediate lifecycle rekey persist only the new identity.
+  void recordOpenedNoteAsActive(String noteId) {
+    final openNoteIds = List.of(state.openNoteIds);
+    final priorActiveNoteId = state.activeNoteId;
+    if (priorActiveNoteId != null &&
+        priorActiveNoteId != noteId &&
+        !openNoteIds.contains(priorActiveNoteId)) {
+      openNoteIds.add(priorActiveNoteId);
+    }
+    if (priorActiveNoteId != noteId && !openNoteIds.contains(noteId)) {
+      openNoteIds.add(noteId);
+    }
+    if (state.activeNoteId == noteId &&
+        openNoteIds.length == state.openNoteIds.length) {
+      return;
+    }
+    state = state.copyWith(
+      openNoteIds: List.unmodifiable(openNoteIds),
+      activeNoteId: noteId,
+    );
+    _scheduleSave();
+  }
+
   /// Removes an identity only after Core has retired its session. A closed
   /// active id cannot remain as the snapshot's active identity.
   void removeOpenNoteId(String noteId) {
@@ -164,7 +190,11 @@ class WorkspaceSession extends Notifier<WorkspaceSessionState> {
   /// Carries a Core-open session across an identity-changing lifecycle
   /// operation. The old slot remains in its restore position; if a legacy
   /// snapshot did not record it, append the rekeyed identity instead.
-  void rekeyOpenNoteId({required String oldNoteId, required String newNoteId}) {
+  void rekeyOpenNoteId({
+    required String oldNoteId,
+    required String newNoteId,
+    bool makeActive = false,
+  }) {
     final openNoteIds = List.of(state.openNoteIds);
     final oldIndex = openNoteIds.indexOf(oldNoteId);
     if (oldIndex == -1) {
@@ -181,7 +211,7 @@ class WorkspaceSession extends Notifier<WorkspaceSessionState> {
     }
     state = state.copyWith(
       openNoteIds: List.unmodifiable(openNoteIds),
-      activeNoteId: state.activeNoteId == oldNoteId
+      activeNoteId: makeActive || state.activeNoteId == oldNoteId
           ? newNoteId
           : state.activeNoteId,
       clearActiveNoteId: state.activeNoteId == null,

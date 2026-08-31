@@ -152,8 +152,8 @@ And focus moves to the following tab or the preceding tab at the end
 ```
 
 ##### TABS-G004 Deviations & Justifications
-- **Touched Files:** `lib/main.dart`, `lib/l10n/**`, `test/components/editor_test.dart`, `test/screens/workspace_rescan_test.dart`, `.constitution/tasks/active/EPIC-G-desktop-session-local-workflows.md`
-- **Justification:** The smoke scenario must save its Core-backed snapshot before `WorkspaceScreen` restores it. The localized startup report names unavailable saved Note identities once. Existing shell, editor, and rescan tests now verify Core-backed tab selection instead of visual-only tab behavior.
+- **Touched Files:** `lib/main.dart`, `lib/l10n/**`, `lib/src/components/lifecycle_actions.dart`, `test/components/editor_test.dart`, `test/screens/workspace_rescan_test.dart`, `.constitution/tasks/active/EPIC-G-desktop-session-local-workflows.md`
+- **Justification:** The smoke scenario must save its Core-backed snapshot before `WorkspaceScreen` restores it. Lifecycle actions retire stale Core sessions, reconcile invalidated tab states, and select a surviving tab after a lifecycle deletion. The localized startup report names unavailable saved Note identities once. Existing shell, editor, and rescan tests now verify Core-backed tab selection instead of visual-only tab behavior.
 
 #### CLOSE-G005 Serialize every Note-close and batch-close lifecycle
 - **Type:** Feature

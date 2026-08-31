@@ -174,23 +174,39 @@ class LifecycleActions {
   /// Deletes a Note after the caller has confirmed with the user. When the
   /// deleted Note was the open one, the editor closes it instead of keeping
   /// it mounted against a removed file.
-  Future<LifecycleOutcome> deleteNote(String noteId) =>
-      _guard((operation) async {
-        final result = await _request(() => _api.deleteNote(noteId));
-        _ref.invalidate(workspaceTreeProvider);
-        if (!_isExpectedSession(
-          operation,
-          operation.active,
-          operation.selectedId,
-        )) {
-          return LifecycleCompleted('Deleted', warning: result.warning);
-        }
-        for (final removed in result.removed) {
-          _discardRetiredTab(removed);
-          _clearIfSelected(removed);
-        }
-        return LifecycleCompleted('Deleted', warning: result.warning);
-      });
+  Future<LifecycleOutcome> deleteNote(String noteId) => _guard((
+    operation,
+  ) async {
+    final result = await _request(() => _api.deleteNote(noteId));
+    _ref.invalidate(workspaceTreeProvider);
+    if (!_isExpectedSession(
+      operation,
+      operation.active,
+      operation.selectedId,
+    )) {
+      return LifecycleCompleted('Deleted', warning: result.warning);
+    }
+    final successor = _successorAfterActiveTabDeletion(
+      operation.active?.metadata.id,
+      result.removed.toSet(),
+    );
+    for (final removed in result.removed) {
+      _discardRetiredTab(removed);
+      _clearIfSelected(removed);
+    }
+    // Match a user tab close: Core has already retired A, so reuse the
+    // following tab session (or the preceding one at the end) without a
+    // second Core open. This is intentionally only the selection needed
+    // for lifecycle deletion, not CLOSE-G005 batch-close orchestration.
+    if (successor != null &&
+        _isCurrentOperation(operation) &&
+        _ref.read(activeNoteProvider) == null &&
+        _ref.read(selectedNoteIdProvider) == null &&
+        _ref.read(activeNoteProvider.notifier).activateExistingTab(successor)) {
+      _ref.read(selectedNoteIdProvider.notifier).selectForLifecycle(successor);
+    }
+    return LifecycleCompleted('Deleted', warning: result.warning);
+  });
 
   /// Creates a Directory, intermediate levels included.
   Future<LifecycleOutcome> createDirectory(String path) => _guard((_) async {
@@ -279,7 +295,7 @@ class LifecycleActions {
       operation.active,
       operation.selectedId,
     )) {
-      await _retireUnadoptedCreatedSession(created.metadata.id);
+      await _retireUnadoptedCreatedSession(created);
       return false;
     }
     final opened = await _ref
@@ -287,11 +303,11 @@ class LifecycleActions {
         .openForLifecycle(created.metadata.id);
     if (!_isCurrentOperation(operation) ||
         _ref.read(selectedNoteIdProvider) != operation.selectedId) {
-      await _retireUnadoptedCreatedSession(created.metadata.id);
+      await _retireUnadoptedCreatedSession(created);
       return false;
     }
     if (!opened) {
-      await _retireUnadoptedCreatedSession(created.metadata.id);
+      await _retireUnadoptedCreatedSession(created);
       throw StateError(
         'Core could not open the Note it created for this lifecycle action.',
       );
@@ -308,9 +324,9 @@ class LifecycleActions {
   /// an invisible session survives without a later navigation path to close
   /// it. A terminal close warning is intentionally non-fatal: Core has
   /// already retired the session, so retrying here would address a dead id.
-  Future<void> _retireUnadoptedCreatedSession(String noteId) async {
+  Future<void> _retireUnadoptedCreatedSession(NoteState created) async {
     try {
-      await _api.closeNote(noteId);
+      await _api.closeNote(created.metadata.id);
     } on CloseNoteWarning catch (warning) {
       // The create result retains its own lifecycle warning, while this
       // independently terminal close warning uses the existing one-shot
@@ -323,7 +339,9 @@ class LifecycleActions {
     // remove the presentation entry as well; otherwise a later tab selection
     // would revive a writable Dart cache for a dead id.
     if (_ref.mounted) {
-      _ref.read(activeNoteProvider.notifier).discardRetiredTab(noteId);
+      _ref
+          .read(activeNoteProvider.notifier)
+          .discardRetiredTab(created.metadata.id, expectedState: created);
     }
   }
 
@@ -502,7 +520,10 @@ class LifecycleActions {
         operation.selectedId == invokedNoteId) {
       final opened = await _ref
           .read(activeNoteProvider.notifier)
-          .openForLifecycle(returnedState.metadata.id);
+          .openForLifecycle(
+            returnedState.metadata.id,
+            rekeyedFrom: invokedNoteId,
+          );
       // The lifecycle-admitted open may complete after a newer lifecycle
       // operation or a new user selection. In either case it must not
       // republish this operation's selection. A failed open leaves the
@@ -518,12 +539,6 @@ class LifecycleActions {
           'Core could not open the Note returned by this lifecycle action.',
         );
       }
-      _ref
-          .read(workspaceSessionProvider.notifier)
-          .rekeyOpenNoteId(
-            oldNoteId: invokedNoteId,
-            newNoteId: returnedState.metadata.id,
-          );
       _ref
           .read(selectedNoteIdProvider.notifier)
           .selectForLifecycle(returnedState.metadata.id);
@@ -591,20 +606,42 @@ class LifecycleActions {
     }
 
     for (final remap in effects.remapped) {
-      if (!tabs.hasOpenTab(remap.oldId)) continue;
-      final opened = await _openCurrentTabSession(operation, remap.newId);
-      if (opened == null) return;
-      tabs.reconcileTabSession(oldNoteId: remap.oldId, state: opened);
+      final stale = tabs.openTabState(remap.oldId);
+      if (stale == null) continue;
+      try {
+        final opened = await _openCurrentTabSession(operation, remap.newId);
+        if (opened == null) return;
+        tabs.reconcileTabSession(oldNoteId: remap.oldId, state: opened);
+      } catch (_) {
+        // Core has already moved this session. If its fresh state cannot be
+        // fetched, the old Dart buffer must not remain selectable or writable.
+        if (_isCurrentOperation(operation) &&
+            identical(tabs.openTabState(remap.oldId), stale)) {
+          tabs.discardRetiredTab(remap.oldId, expectedState: stale);
+        }
+        rethrow;
+      }
     }
 
     for (final noteId in effects.rewritten) {
-      if (!tabs.hasOpenTab(noteId) ||
+      final stale = tabs.openTabState(noteId);
+      if (stale == null ||
           _ref.read(activeNoteProvider)?.metadata.id == noteId) {
         continue;
       }
-      final opened = await _openCurrentTabSession(operation, noteId);
-      if (opened == null) return;
-      tabs.reconcileTabSession(oldNoteId: noteId, state: opened);
+      try {
+        final opened = await _openCurrentTabSession(operation, noteId);
+        if (opened == null) return;
+        tabs.reconcileTabSession(oldNoteId: noteId, state: opened);
+      } catch (_) {
+        // A same-id rewrite invalidates the cached bytes just as a rekey
+        // invalidates the old id; remove the stale session on a live failure.
+        if (_isCurrentOperation(operation) &&
+            identical(tabs.openTabState(noteId), stale)) {
+          tabs.discardRetiredTab(noteId, expectedState: stale);
+        }
+        rethrow;
+      }
     }
   }
 
@@ -728,6 +765,27 @@ class LifecycleActions {
         'Core could not restore the selected Note after this lifecycle action.',
       );
     }
+  }
+
+  /// Returns the following surviving tab, or the preceding survivor when the
+  /// deleted active tab was at the end. This mirrors CAP-SHELL-08 tab close.
+  String? _successorAfterActiveTabDeletion(
+    String? activeId,
+    Set<String> removedIds,
+  ) {
+    if (activeId == null || !removedIds.contains(activeId)) return null;
+    final sessions = _ref.read(openNoteSessionsProvider);
+    final index = sessions.indexWhere((tab) => tab.metadata.id == activeId);
+    if (index == -1) return null;
+    for (var i = index + 1; i < sessions.length; i++) {
+      final candidate = sessions[i].metadata.id;
+      if (!removedIds.contains(candidate)) return candidate;
+    }
+    for (var i = index - 1; i >= 0; i--) {
+      final candidate = sessions[i].metadata.id;
+      if (!removedIds.contains(candidate)) return candidate;
+    }
+    return null;
   }
 
   /// Drops a tab only after the lifecycle delete has already retired its Core
