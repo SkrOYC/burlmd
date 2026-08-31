@@ -1,6 +1,8 @@
+import 'package:burlmd/src/providers/note_providers.dart';
 import 'package:burlmd/src/providers/rust_api_provider.dart';
 import 'package:burlmd/src/providers/search_provider.dart';
 import 'package:burlmd/src/providers/workspace_provider.dart';
+import 'package:burlmd/src/rust/draft.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -9,6 +11,7 @@ class _SessionSnapshotRustApi extends RustApi {
 
   final ActiveWorkspaceSessionSnapshot snapshot;
   final List<ActiveWorkspaceSessionSnapshot> savedSnapshots = [];
+  NoteState? openedNote;
   var openNoteCalls = 0;
 
   @override
@@ -32,11 +35,26 @@ class _SessionSnapshotRustApi extends RustApi {
   }
 
   @override
-  Future<Never> openNote(String noteId) async {
+  Future<NoteState> openNote(String noteId) async {
     openNoteCalls++;
+    final note = openedNote;
+    if (note != null && note.metadata.id == noteId) return note;
     throw StateError('session snapshot restore must not open a Note session');
   }
 }
+
+NoteState _noteState(String id) => NoteState(
+  ast: const [],
+  metadata: NoteMetadata(
+    id: id,
+    path: '$id.md',
+    title: id,
+    lastModified: 0,
+    okfConformant: true,
+  ),
+  baseRevision: 'revision-$id',
+  restoredFromDraft: false,
+);
 
 void main() {
   test(
@@ -68,6 +86,79 @@ void main() {
       expect(container.read(searchQueryProvider), 'durable session');
       expect(api.openNoteCalls, 0);
       expect(api.savedSnapshots, isEmpty);
+    },
+  );
+
+  test(
+    'adopting a renamed Note rekeys the persisted session identities',
+    () async {
+      final api = _SessionSnapshotRustApi(
+        const ActiveWorkspaceSessionSnapshot(
+          openNoteIds: ['inbox/today', 'projects/old', 'projects/future'],
+          activeNoteId: 'projects/old',
+          expandedDirectoryIds: [],
+          searchQuery: '',
+          syncPresentation: SessionSyncPresentation.local,
+        ),
+      )..openedNote = _noteState('projects/old');
+      final container = ProviderContainer(
+        overrides: [rustApiProvider.overrideWithValue(api)],
+      );
+      addTearDown(container.dispose);
+      await container.read(workspaceSessionSnapshotProvider.future);
+
+      await container.read(activeNoteProvider.notifier).open('projects/old');
+      container
+          .read(activeNoteProvider.notifier)
+          .adopt(_noteState('archive/renamed'));
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(api.savedSnapshots, hasLength(1));
+      expect(api.savedSnapshots.single.openNoteIds, [
+        'inbox/today',
+        'archive/renamed',
+        'projects/future',
+      ]);
+      expect(api.savedSnapshots.single.activeNoteId, 'archive/renamed');
+      expect(
+        api.savedSnapshots.single.openNoteIds,
+        isNot(contains('projects/old')),
+      );
+    },
+  );
+
+  test(
+    'adopting a renamed Note appends the new identity when the old one is absent',
+    () async {
+      final api = _SessionSnapshotRustApi(
+        const ActiveWorkspaceSessionSnapshot(
+          openNoteIds: ['inbox/today'],
+          activeNoteId: 'projects/old',
+          expandedDirectoryIds: [],
+          searchQuery: '',
+          syncPresentation: SessionSyncPresentation.local,
+        ),
+      )..openedNote = _noteState('projects/old');
+      final container = ProviderContainer(
+        overrides: [rustApiProvider.overrideWithValue(api)],
+      );
+      addTearDown(container.dispose);
+      await container.read(workspaceSessionSnapshotProvider.future);
+
+      await container.read(activeNoteProvider.notifier).open('projects/old');
+      container
+          .read(activeNoteProvider.notifier)
+          .adopt(_noteState('archive/renamed'));
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(api.savedSnapshots, hasLength(1));
+      expect(api.savedSnapshots.single.openNoteIds, [
+        'inbox/today',
+        'archive/renamed',
+      ]);
+      expect(api.savedSnapshots.single.activeNoteId, 'archive/renamed');
     },
   );
 

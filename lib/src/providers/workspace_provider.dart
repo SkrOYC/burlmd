@@ -125,6 +125,24 @@ class WorkspaceSession extends Notifier<WorkspaceSessionState> {
     _scheduleSave();
   }
 
+  /// Carries a Core-open session across an identity-changing lifecycle
+  /// operation. The old slot remains in its restore position; if a legacy
+  /// snapshot did not record it, append the rekeyed identity instead.
+  void rekeyOpenNoteId({required String oldNoteId, required String newNoteId}) {
+    final openNoteIds = List.of(state.openNoteIds);
+    final oldIndex = openNoteIds.indexOf(oldNoteId);
+    if (oldIndex == -1) {
+      if (!openNoteIds.contains(newNoteId)) openNoteIds.add(newNoteId);
+    } else {
+      openNoteIds[oldIndex] = newNoteId;
+    }
+    state = state.copyWith(
+      openNoteIds: List.unmodifiable(openNoteIds),
+      activeNoteId: newNoteId,
+    );
+    _scheduleSave();
+  }
+
   void _scheduleSave() {
     if (!_restored) return;
     final snapshot = state.toSnapshot();

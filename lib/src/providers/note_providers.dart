@@ -483,7 +483,16 @@ class NoteController extends Notifier<NoteState?> {
   /// authoritative; adopting it directly keeps the editor anchored to the
   /// same live session under its new id.
   void adopt(NoteState newState) {
+    final previousId = state?.metadata.id;
     state = newState;
+    if (previousId != null && previousId != newState.metadata.id) {
+      ref
+          .read(workspaceSessionProvider.notifier)
+          .rekeyOpenNoteId(
+            oldNoteId: previousId,
+            newNoteId: newState.metadata.id,
+          );
+    }
   }
 
   /// Closes the editor without touching the Core (`SHEL-E005`): the Note it
