@@ -37,4 +37,4 @@ The final model must persist enough typed analysis state to resume or safely aba
 
 ## Release metadata
 
-The final release contract must identify version, source revision, platform, architecture, artifact kind, checksum, minimum runtime, signature state, feature-matrix result, and GitHub Release URL. SPK-PKG-M001 settles the Linux runtime values and construction inputs. Signing remains explicitly absent during `0.x`.
+The final release contract must identify version, source revision, platform, architecture, artifact kind, checksum, minimum runtime, signature state, feature-matrix result, and GitHub Release URL. Managed validation additionally uses the authoritative release, build, corpus, run, and required-role identity in `ci-evidence.schema.json`. Each accepted role records hosted image and system facts, the expected-identity digest, authenticated workflow origin, artifact API identity and digest, and internal artifact hashes. SPK-PKG-M001 settles the Linux runtime values and construction inputs. Signing remains explicitly absent during `0.x`.

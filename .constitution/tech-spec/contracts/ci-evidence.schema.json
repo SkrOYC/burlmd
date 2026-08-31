@@ -1,0 +1,376 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://burlmd.local/schemas/ci-evidence.schema.json",
+  "title": "burlmd managed CI evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "expectedIdentity",
+    "expectedIdentitySha256",
+    "roleEvidence",
+    "aggregation"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "expectedIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "releaseIdentity",
+        "buildIdentity",
+        "corpusIdentity",
+        "runIdentity",
+        "requiredRoleIdentities"
+      ],
+      "properties": {
+        "releaseIdentity": { "type": "string", "minLength": 1 },
+        "buildIdentity": { "$ref": "#/$defs/sha256" },
+        "corpusIdentity": { "$ref": "#/$defs/sha256" },
+        "runIdentity": { "type": "string", "pattern": "^[0-9]+:[1-9][0-9]*$" },
+        "requiredRoleIdentities": {
+          "const": [
+            "linux-x86_64",
+            "macos-26-arm64",
+            "macos-15-arm64"
+          ]
+        }
+      }
+    },
+    "expectedIdentitySha256": { "$ref": "#/$defs/sha256" },
+    "roleEvidence": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": { "$ref": "#/$defs/roleEvidence" },
+      "allOf": [
+        { "type": "array", "contains": { "type": "object", "properties": { "role": { "const": "linux-x86_64" } }, "required": ["role"] } },
+        { "type": "array", "contains": { "type": "object", "properties": { "role": { "const": "macos-26-arm64" } }, "required": ["role"] } },
+        { "type": "array", "contains": { "type": "object", "properties": { "role": { "const": "macos-15-arm64" } }, "required": ["role"] } }
+      ]
+    },
+    "aggregation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "generatedAt",
+        "mode",
+        "status",
+        "identityCompared",
+        "originAuthenticated",
+        "artifactIntegrityVerified",
+        "imageVersionsDistinctByRole",
+        "rejections"
+      ],
+      "properties": {
+        "generatedAt": { "$ref": "#/$defs/rfc3339" },
+        "mode": { "enum": ["coordinator-job", "authenticated-local"] },
+        "status": { "const": "accepted" },
+        "identityCompared": { "const": true },
+        "originAuthenticated": { "const": true },
+        "artifactIntegrityVerified": { "const": true },
+        "imageVersionsDistinctByRole": { "const": true },
+        "rejections": { "type": "array", "maxItems": 0 }
+      }
+    }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "gitSha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "rfc3339": {
+      "$comment": "The aggregator must parse this value and reject impossible calendar dates; this pattern checks shape only.",
+      "type": "string",
+      "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-([0-2][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\\.[0-9]+)?(Z|[+-]([01][0-9]|2[0-3]):[0-5][0-9])$"
+    },
+    "role": {
+      "enum": [
+        "linux-x86_64",
+        "macos-26-arm64",
+        "macos-15-arm64"
+      ]
+    },
+    "roleEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "role",
+        "expectedIdentitySha256",
+        "capturedIdentity",
+        "environment",
+        "viewport",
+        "evidenceClasses",
+        "gates",
+        "toolchain",
+        "origin",
+        "artifacts"
+      ],
+      "properties": {
+        "role": { "$ref": "#/$defs/role" },
+        "expectedIdentitySha256": { "$ref": "#/$defs/sha256" },
+        "capturedIdentity": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "releaseIdentity",
+            "buildIdentity",
+            "corpusIdentity",
+            "runIdentity",
+            "roleIdentity"
+          ],
+          "properties": {
+            "releaseIdentity": { "type": "string", "minLength": 1 },
+            "buildIdentity": { "$ref": "#/$defs/sha256" },
+            "corpusIdentity": { "$ref": "#/$defs/sha256" },
+            "runIdentity": { "type": "string", "pattern": "^[0-9]+:[1-9][0-9]*$" },
+            "roleIdentity": { "$ref": "#/$defs/role" }
+          }
+        },
+        "environment": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "runnerLabel",
+            "imageOS",
+            "imageVersion",
+            "osRelease",
+            "architecture",
+            "cpuModel",
+            "logicalCpuCount",
+            "documentedMemoryBytes",
+            "documentedStorageBytes",
+            "observedMemoryBytes",
+            "observedStorageAvailableBytes"
+          ],
+          "properties": {
+            "runnerLabel": { "enum": ["ubuntu-24.04", "macos-26", "macos-15"] },
+            "imageOS": { "type": "string", "minLength": 1 },
+            "imageVersion": { "type": "string", "minLength": 1 },
+            "osRelease": { "type": "string", "minLength": 1 },
+            "architecture": { "enum": ["x86_64", "aarch64"] },
+            "cpuModel": { "type": "string", "minLength": 1 },
+            "logicalCpuCount": { "type": "integer", "minimum": 1 },
+            "documentedMemoryBytes": { "type": "integer", "minimum": 1 },
+            "documentedStorageBytes": { "type": "integer", "minimum": 1 },
+            "observedMemoryBytes": { "type": "integer", "minimum": 1 },
+            "observedStorageAvailableBytes": { "type": "integer", "minimum": 1 }
+          }
+        },
+        "viewport": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["width", "height", "refreshHz", "verified"],
+          "properties": {
+            "width": { "const": 1920 },
+            "height": { "const": 1080 },
+            "refreshHz": { "const": 60 },
+            "verified": { "const": true }
+          }
+        },
+        "evidenceClasses": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "common-functional",
+              "performance",
+              "linux-exact-visual",
+              "macos-authoritative-visual"
+            ]
+          }
+        },
+        "gates": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["commonFunctional", "performance", "exactVisual", "authoritativeMacosVisual"],
+          "properties": {
+            "commonFunctional": { "type": "boolean" },
+            "performance": { "type": "boolean" },
+            "exactVisual": { "type": "boolean" },
+            "authoritativeMacosVisual": { "type": "boolean" }
+          }
+        },
+        "toolchain": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": { "type": "string", "minLength": 1 }
+        },
+        "origin": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "repositoryId",
+            "workflowRunId",
+            "runAttempt",
+            "workflowSha",
+            "headSha",
+            "workflowJobId",
+            "workflowJobLabels",
+            "attestationIssuer",
+            "attestationBundleSha256",
+            "attestationVerified",
+            "artifactId",
+            "artifactDigest",
+            "restApiVersion",
+            "verifiedAt"
+          ],
+          "properties": {
+            "repositoryId": { "type": "integer", "minimum": 1 },
+            "workflowRunId": { "type": "integer", "minimum": 1 },
+            "runAttempt": { "type": "integer", "minimum": 1 },
+            "workflowSha": { "$ref": "#/$defs/gitSha" },
+            "headSha": { "$ref": "#/$defs/gitSha" },
+            "workflowJobId": { "type": "integer", "minimum": 1 },
+            "workflowJobLabels": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": { "type": "string", "minLength": 1 }
+            },
+            "attestationIssuer": { "const": "https://token.actions.githubusercontent.com" },
+            "attestationBundleSha256": { "$ref": "#/$defs/sha256" },
+            "attestationVerified": { "const": true },
+            "artifactId": { "type": "integer", "minimum": 1 },
+            "artifactDigest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+            "restApiVersion": { "const": "2026-03-10" },
+            "verifiedAt": { "$ref": "#/$defs/rfc3339" }
+          }
+        },
+        "artifacts": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "bytes", "sha256"],
+            "properties": {
+              "name": { "type": "string", "minLength": 1 },
+              "bytes": { "type": "integer", "minimum": 0 },
+              "sha256": { "$ref": "#/$defs/sha256" }
+            }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "role": { "const": "linux-x86_64" } }, "required": ["role"] },
+          "then": {
+            "properties": {
+              "environment": {
+                "type": "object",
+                "properties": {
+                  "runnerLabel": { "const": "ubuntu-24.04" },
+                  "architecture": { "const": "x86_64" },
+                  "logicalCpuCount": { "const": 4 },
+                  "documentedMemoryBytes": { "const": 16000000000 },
+                  "documentedStorageBytes": { "const": 14000000000 }
+                }
+              },
+              "evidenceClasses": {
+                "type": "array",
+                "allOf": [
+                  { "type": "array", "contains": { "const": "common-functional" } },
+                  { "type": "array", "contains": { "const": "performance" } },
+                  { "type": "array", "contains": { "const": "linux-exact-visual" } }
+                ]
+              },
+              "origin": {
+                "type": "object",
+                "properties": {
+                  "workflowJobLabels": { "type": "array", "contains": { "const": "ubuntu-24.04" } }
+                }
+              },
+              "gates": {
+                "type": "object",
+                "properties": {
+                  "commonFunctional": { "const": true },
+                  "performance": { "const": true },
+                  "exactVisual": { "const": true },
+                  "authoritativeMacosVisual": { "const": false }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "role": { "const": "macos-26-arm64" } }, "required": ["role"] },
+          "then": {
+            "properties": {
+              "environment": {
+                "type": "object",
+                "properties": {
+                  "runnerLabel": { "const": "macos-26" },
+                  "architecture": { "const": "aarch64" },
+                  "logicalCpuCount": { "const": 3 },
+                  "documentedMemoryBytes": { "const": 7000000000 },
+                  "documentedStorageBytes": { "const": 14000000000 }
+                }
+              },
+              "evidenceClasses": {
+                "type": "array",
+                "allOf": [
+                  { "type": "array", "contains": { "const": "common-functional" } },
+                  { "type": "array", "contains": { "const": "performance" } },
+                  { "type": "array", "contains": { "const": "macos-authoritative-visual" } }
+                ]
+              },
+              "origin": {
+                "type": "object",
+                "properties": {
+                  "workflowJobLabels": { "type": "array", "contains": { "const": "macos-26" } }
+                }
+              },
+              "gates": {
+                "type": "object",
+                "properties": {
+                  "commonFunctional": { "const": true },
+                  "performance": { "const": true },
+                  "exactVisual": { "const": true },
+                  "authoritativeMacosVisual": { "const": true }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "role": { "const": "macos-15-arm64" } }, "required": ["role"] },
+          "then": {
+            "properties": {
+              "environment": {
+                "type": "object",
+                "properties": {
+                  "runnerLabel": { "const": "macos-15" },
+                  "architecture": { "const": "aarch64" },
+                  "logicalCpuCount": { "const": 3 },
+                  "documentedMemoryBytes": { "const": 7000000000 },
+                  "documentedStorageBytes": { "const": 14000000000 }
+                }
+              },
+              "evidenceClasses": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 1,
+                "contains": { "const": "common-functional" }
+              },
+              "origin": {
+                "type": "object",
+                "properties": {
+                  "workflowJobLabels": { "type": "array", "contains": { "const": "macos-15" } }
+                }
+              },
+              "gates": {
+                "type": "object",
+                "properties": {
+                  "commonFunctional": { "const": true },
+                  "performance": { "const": false },
+                  "exactVisual": { "const": false },
+                  "authoritativeMacosVisual": { "const": false }
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

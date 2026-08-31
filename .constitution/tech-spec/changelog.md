@@ -1,5 +1,29 @@
 # Stage 3: Technical Implementation Changelog
 
+## v1.8.0-provisional - 2026-08-31
+
+Evolution pass for PRD v1.3.7 and Architecture v1.4.15. This version replaces physical workstation evidence with managed, identity-bound validation and leaves unresolved technology choices provisional.
+
+### Added
+
+- Added concrete standard public runner roles. x86-64 `ubuntu-24.04` and Apple Silicon `macos-26` run the common functional matrix and performance meters. `macos-26` owns the authoritative macOS visual baseline. Apple Silicon `macos-15` runs common functional compatibility only.
+- Added `ci-evidence.schema.json` because the Spike result root requires a real Spike identity and can't represent a CI run without falsely labeling it as research. The CI schema binds expected release, build, corpus, run, and required-role identities to three authenticated per-role artifacts.
+- Added an authenticated two-phase evidence protocol. Candidate-branch draft runs capture role evidence; local or coordinator aggregation verifies origin, integrity, identity, and freshness; an evidence commit then precedes milestone review.
+- Added full commit-SHA pins for checkout, Nix installation, artifact upload and download, and release attestation actions.
+
+### Changed
+
+- Advanced provisional Spike contracts and result profiles to schema version 11. AST and Asset measurements use the Linux and macOS 26 performance roles. Packaging evidence binds macOS 26 and macOS 15 to their managed profiles.
+- Replaced physical CPU, disk, graphics, power, and throttling assumptions with hosted image identity, observed system resources, and a verified 1920x1080 at 60 Hz logical viewport. OS-major labels remain mutable weekly image channels and can't guarantee a physical host or identical reruns.
+- Bound Linux exact visual proof to the committed private headless Sway and Wayland implementation. Its current `1878x989` capture must reach the PRD viewport before acceptance. macOS 26 must use the actual hosted GUI and one reviewed macOS baseline set; macOS 15 has no visual role.
+- Made the Release Pipeline's expected identity authoritative. Aggregation verifies GitHub Sigstore attestations and versioned job and artifact API metadata, then compares captured identity instead of trusting artifact self-description.
+- Replaced the global all-Spike production stop with contract-scoped authorization. Epic G M0 remains unchanged. `FLAKE-M002` and `CI-M003` may implement their bootstrap. Every other production ticket waits only for its own decision evidence and Stage 3 and Stage 4 adaptation.
+- Permitted the installed Flutter Rust Bridge `2.12.0` triple and committed generated-binding checker for CI bootstrap. Final Stage 3 must revalidate both after evidence-driven dependency choices, and the current checker must run in a disposable checkout until mismatch cleanup is hardened.
+
+### Security
+
+- Evidence acceptance now requires both SHA-256 integrity and authenticated pipeline-owned origin. Private-repository attestation eligibility isn't guaranteed; without it, evidence remains unaccepted. Aggregation rejects missing, duplicate, unexpected-role, untrusted, corrupt, mismatched, stale, or mixed-image evidence.
+
 ## v1.7.19-provisional - 2026-08-30
 
 M0 adds a narrow Epic G production exception while `production_implementation_authorized` remains `false`. Only `SHELL-G001`, `PREF-G002`, `STATE-G003`, `TABS-G004`, `CLOSE-G005`, and `NAV-G007` may write production code. The `stack.md`, `README.md`, and `data-models/schema.sql` status banners now match that exception.
