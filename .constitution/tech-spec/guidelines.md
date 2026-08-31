@@ -2,15 +2,15 @@
 
 ## Provisional research boundary
 
-TechSpec v1.7.18-provisional permits research code only under `.constitution/prototypes/`. Production directories (`lib/`, `rust/`, `linux/`, and `macos/`) are read-only inputs to this research wave. A Spike may create an isolated Rust or Flutter harness through the relevant CLI and add dependencies through `cargo add` or `flutter pub add`. Every Rust scaffold runs the declared `cargo generate-lockfile` command; after the last dependency change, the Spike reruns it and commits the generated lockfile before any `--locked` verification. The Spike must not add a candidate dependency to the production manifests.
+TechSpec v1.7.19-provisional permits research code only under `.constitution/prototypes/`. `SHELL-G001`, `PREF-G002`, `STATE-G003`, `TABS-G004`, `CLOSE-G005`, and `NAV-G007` are the only production-code exceptions. Every other production ticket remains blocked. Except for those tickets, production directories (`lib/`, `rust/`, `linux/`, and `macos/`) are read-only inputs to this research wave. A Spike may create an isolated Rust or Flutter harness through the relevant CLI and add dependencies through `cargo add` or `flutter pub add`. Every Rust scaffold runs the declared `cargo generate-lockfile` command. After the last dependency change, the Spike reruns it and commits the generated lockfile before any `--locked` verification. A Spike must not add a candidate dependency to the production manifests.
 
-The five exact prototype roots and verification commands are machine-readable in `contracts/provisional-spikes.toml`. Its allowlist is exhaustive: each Spike may write only its named prototype root and report path; every unlisted repository path is read-only. Framework bookkeeping may update the owning active Task after the Spike process exits, but that isn't part of the Spike's write authority.
+The five exact prototype roots and verification commands are machine-readable in `contracts/provisional-spikes.toml`. Its allowlist is exhaustive: each Spike may write only its named prototype root and report path. Every unlisted repository path is read-only. Framework bookkeeping may update the owning active Task after the Spike process exits, but that isn't part of the Spike's write authority.
 
 Each harness writes one `results.json` that validates against `contracts/spike-result.schema.json`, records each platform run and exact tool and dependency versions, names its corpus, reports every required measurement, and makes one evidence-backed recommendation. Every gate and measurement names the candidate it evaluates or the reserved `cross-cutting` value. The harness must also read its own TOML entry and fail unless its result contains exactly the declared candidate names and required gate names, every candidate has attributed outcomes, run IDs are unique, and every required run role is present; JSON Schema alone can't enforce those cross-file constraints. The mandatory result validator semantically parses every timestamp as RFC 3339 and rejects impossible calendar dates rather than trusting the schema's shape pattern. It also resolves each recorded 40- or 64-hex Git revision in the captured checkout and requires it to equal that run's captured revision.
 
 Command execution records exit status and separate standard-output and standard-error artifacts. Before aggregation, the harness verifies that every referenced evidence and artifact path is inside the Spike's write allowlist, exists, matches its byte count and SHA-256 digest, and isn't replaced by a later command. Raw fixtures and measurements stay beside the result. A conclusion without reproducible evidence does not settle an open decision.
 
-Research Tasks stop on a failed safety or fidelity gate. A performance miss is evidence, not permission to weaken the PRD: the result records it and final Product Requirements or Technical Implementation evolution decides the response. Production implementation remains blocked until the final TechSpec replaces the provisional ADRs, FFI banner, on-disk path and asset contracts, and bill of materials.
+Research Tasks stop on a failed safety or fidelity gate. A performance miss is evidence, not permission to weaken the PRD: the result records it and final Product Requirements or Technical Implementation evolution decides the response. Except for the listed Epic G production exceptions, production implementation remains blocked until the final TechSpec replaces the provisional ADRs, FFI banner, on-disk path and asset contracts, and bill of materials.
 
 ## Commits
 This repository uses [Conventional Commits](https://www.conventionalcommits.org/):
@@ -45,9 +45,11 @@ The repository follows the default `flutter_rust_bridge` template structure to m
 │   │   └── screens/         # Full-screen routes (workspace.dart, login.dart —
 │   │                        #   login retained for the deferred connect flow,
 │   │                        #   no longer a startup gate since SHEL-E002)
-├── scripts/                 # smoke-shot.sh — the manual-QA smoke harness
-│                              every UI ticket gates on (SHEL-E001); writes
-│                              screenshots to .qa/, which is gitignored
+├── scripts/                 # `smoke-shot.sh` is the manual-QA smoke harness
+│                              every UI ticket gates on (SHEL-E001).
+│                              SHELL-G001 introduces
+│                              `visual-regression.sh` alongside it; both write
+│                              screenshots to `.qa/`, which is gitignored
 ├── test/                    # Dart widget tests
 ├── rust/                    # Rust Core Engine source code
 │   └── src/frb_generated.rs # Auto-generated FRB Rust bridge; changes with Dart bindings
