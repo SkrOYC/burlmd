@@ -2,7 +2,7 @@
 
 ## Status
 
-These are required physical model families, not final schemas. Names, columns, serialization formats, hashes, and migration versions remain blocked by the Spikes named below. Research Tasks must not modify `schema.sql` to guess them.
+These are required physical model families. The device-preference and Workspace-session contracts are specified for the Epic G production exceptions. Names, columns, serialization formats, hashes, and migration versions for the remaining families remain blocked by the Spikes named below. Research Tasks must not modify `schema.sql` to guess them.
 
 ## Canonical Core state
 
@@ -10,7 +10,9 @@ The final model must define one Workspace tree containing Directory, Note, and L
 
 ## Device and Workspace application state
 
-Device-global appearance and update-notification preferences live in Platform application data, never in the Workspace or Git. Per-Workspace state stores open Note identities, active Note, tree expansion, last search state, and sync presentation. It contains no Note body or credential. Final Stage 3 must define versioned schemas, atomic writes, corrupt-state fallback, and migration behavior.
+Device preferences use one versioned JSON file in Platform application-support data. The file is not part of a Workspace, Git history, or `schema.sql`. The persistence layer replaces it atomically by writing a temporary file and renaming it. Unknown `schema_version` values or corrupt bytes produce in-memory defaults, isolate the corrupt file, and do not crash the application. Version 1 defines `schema_version`, `theme`, `font_scale`, `measure`, `focus_mode`, and `update_notifications` in `device-preferences.schema.json`. `platform_chrome` must not appear because SHELL-G001 removes that preference. When `update_notifications` is true, burlmd checks for and notifies the Writer about compatible higher `0.x` releases under UPDATE-M010. When it is false, burlmd does not check.
+
+The Core owns each versioned Workspace session snapshot. The JSON representation, or an equivalent Core format, is outside Note files, Git history, and `schema.sql` derived-index tables. Snapshot storage is partitioned by Workspace ID. The persistence layer replaces a snapshot atomically by writing a temporary file and renaming it. Corrupt bytes produce an empty default session for only the affected Workspace, isolate the corrupt bytes, and do not crash the application. A snapshot contains no Note body, credential, or device preference. Version 1 in `workspace-session-snapshot.schema.json` defines `schema_version`, `workspace_id`, `open_note_ids` in restore order, `active_note_id`, `expanded_directory_ids`, `search_query`, and presentation-only `sync_presentation`. The closed v1 `sync_presentation` values are `local`, `connected`, and `paused`. A later value requires a schema-version bump and does not define a Git reconciliation state machine.
 
 ## Conformance and external-change state
 

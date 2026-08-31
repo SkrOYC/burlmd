@@ -1,5 +1,9 @@
 # Stage 4: Tasks changelog
 
+## v2.1.21 - 2026-08-30
+
+M0 authorizes the six Epic G production exceptions: SHELL-G001, PREF-G002, STATE-G003, TABS-G004, CLOSE-G005, and NAV-G007. The contracts define device preferences, per-Workspace session snapshots, active-Workspace FFI, and Linux/macOS visual-regression gates. OPEN-G006, EDIT-G008, FIND-G009, HIST-G010, and SHELL-G011 remain in Epic G with live owners.
+
 ## v2.1.20 - 2026-08-26
 
 PR #12 full review round 18 closes the device-flow expiry identifier gap. AUTH-K001 tests and accepts both `expired_token` and GitHub's documented `token_expired` wording as restart outcomes. Ticket count, effort, dependencies, and critical path remain 80 tickets, 564 points, 217 edges, and 153 points.

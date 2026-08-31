@@ -1,6 +1,17 @@
 schema_version = 10
-stage = "tech-spec-v1.7.18-provisional"
+stage = "tech-spec-v1.7.19-provisional"
 production_implementation_authorized = false
+# These Epic G tickets may write production code. Every other production
+# ticket remains blocked. Spike write allowlists below remain exhaustive for
+# Spike work.
+production_exceptions = [
+  "SHELL-G001",
+  "PREF-G002",
+  "STATE-G003",
+  "TABS-G004",
+  "CLOSE-G005",
+  "NAV-G007",
+]
 result_schema = ".constitution/tech-spec/contracts/spike-result.schema.json"
 
 [rules]

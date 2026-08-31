@@ -1,5 +1,5 @@
 ---
-version: v2.1.20
+version: v2.1.21
 ---
 
 # Active backlog summary
@@ -10,7 +10,7 @@ The complete forward backlog contains 80 tickets across seven active epics. All 
 
 ## Shared execution and generated-output conventions
 
-- While Stage 3 remains provisional, only the five `Spike` tickets are executable. Every production ticket has an implicit STOP before implementation until measured Product Requirements and Architecture evolution is accepted, Stage 3 is final, and Stage 4 has adapted that ticket’s scope, estimate, dependencies, and exact verification command. This shared STOP applies even when a production ticket has no Spike dependency.
+- While Stage 3 remains provisional, production implementation remains blocked except for `SHELL-G001`, `PREF-G002`, `STATE-G003`, `TABS-G004`, `CLOSE-G005`, and `NAV-G007`. Those Epic G exceptions are executable and may write production code. The five `Spike` tickets remain executable only within their exhaustive write allowlists. Every other production ticket has an implicit STOP before implementation until measured Product Requirements and Architecture evolution is accepted, Stage 3 is final, and Stage 4 has adapted that ticket's scope, estimate, dependencies, and exact verification command. This shared STOP applies even when a production ticket has no Spike dependency.
 - A ticket that scopes `rust/src/api/ffi_api.rs` also scopes both generated outputs: `lib/src/rust/**` and `rust/src/frb_generated.rs`. Its verification must regenerate and compare both byte for byte, fail on stale output, and leave the pre-check working tree unchanged. This convention avoids repeating generated files in every FFI ticket without transferring ownership away from the ticket.
 
 PR #11 remains the delivered redesign foundation and isn’t retroactively assigned to an epic. `SHELL-G001` removes the presentation-only Platform chrome that leaked from its prototype.
@@ -362,9 +362,9 @@ flowchart LR
 
 ## Phasing strategy
 
-### Phase 1: decision evidence
+### Phase 1: decision evidence and Epic G exceptions
 
-Execute only the five Spikes. They produce reports, not production changes. When their evidence lands, run the required measured Product Requirements and Architecture evolution and final Stage 3 pass, then adapt every production ticket before implementation.
+Execute the five Spikes within their prototype allowlists and the six Epic G production exceptions: `SHELL-G001`, `PREF-G002`, `STATE-G003`, `TABS-G004`, `CLOSE-G005`, and `NAV-G007`. The Spikes produce reports, not production changes. The exceptions may write production code only under their ticket contracts. When the Spike evidence lands, run the required measured Product Requirements and Architecture evolution and final Stage 3 pass, then adapt every other production ticket before implementation.
 
 ### Phase 2: canonical local application
 
