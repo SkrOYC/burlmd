@@ -29,9 +29,8 @@ import 'package:flutter_lucide/flutter_lucide.dart';
 /// (`workspaceTreeProvider`, the `WSPC-D009` contract), so expanding or
 /// collapsing a Directory only filters what is *rendered* from data already
 /// in memory: no further round trip, and no Workspace-wide reload per level.
-/// The set of expanded paths is ephemeral UI state — the one kind
-/// `tech-spec/guidelines.md` permits in widget state. No Note content is
-/// ever held here.
+/// The set of expanded paths is presentation-only Workspace session state
+/// restored from Core's sidecar. No Note content is ever held here.
 ///
 /// Directories sort before Notes at each level, each group by name; empty
 /// Directories appear (which is why they are indexed at all). Selecting a
@@ -56,14 +55,9 @@ class WorkspaceTree extends ConsumerStatefulWidget {
 class _WorkspaceTreeState extends ConsumerState<WorkspaceTree> {
   static const _rowHeight = 28.0;
 
-  /// Paths of currently expanded Directories. Ephemeral UI state only.
-  final Set<String> _expanded = {};
-
-  void _toggle(String directoryPath) {
-    setState(() {
-      if (!_expanded.remove(directoryPath)) _expanded.add(directoryPath);
-    });
-  }
+  void _toggle(String directoryPath) => ref
+      .read(workspaceSessionProvider.notifier)
+      .toggleDirectory(directoryPath);
 
   @override
   Widget build(BuildContext context) {
@@ -81,6 +75,9 @@ class _WorkspaceTreeState extends ConsumerState<WorkspaceTree> {
     // tap (the P2 carried over from E003's review) — with a watch, a
     // selection change rebuilds the rows and moves the highlight.
     final selectedId = ref.watch(selectedNoteIdProvider);
+    final expandedDirectoryIds = ref
+        .watch(workspaceSessionProvider)
+        .expandedDirectoryIds;
     // A lifecycle result can atomically replace the active Note's identity
     // or source. Keep navigation and every lifecycle menu behind the same
     // admission boundary until that result has settled, rather than letting a
@@ -108,7 +105,12 @@ class _WorkspaceTreeState extends ConsumerState<WorkspaceTree> {
                   ? null
                   : () => _createRootDirectory(context),
             ),
-            ..._rows(root, selectedId, lifecycleActive: lifecycleActive),
+            ..._rows(
+              root,
+              selectedId,
+              expandedDirectoryIds: expandedDirectoryIds,
+              lifecycleActive: lifecycleActive,
+            ),
           ],
         ),
       ),
@@ -119,6 +121,7 @@ class _WorkspaceTreeState extends ConsumerState<WorkspaceTree> {
     List<TreeNode> nodes,
     String? selectedId, {
     int depth = 0,
+    required Set<String> expandedDirectoryIds,
     required bool lifecycleActive,
   }) {
     // Defensive ordering: the Core contract already returns Directories
@@ -134,15 +137,16 @@ class _WorkspaceTreeState extends ConsumerState<WorkspaceTree> {
         _DirectoryRow(
           node: directory,
           depth: depth,
-          expanded: _expanded.contains(directory.path),
+          expanded: expandedDirectoryIds.contains(directory.path),
           onTap: lifecycleActive ? null : () => _toggle(directory.path),
           lifecycleActive: lifecycleActive,
         ),
-        if (_expanded.contains(directory.path))
+        if (expandedDirectoryIds.contains(directory.path))
           ..._rows(
             directory.children,
             selectedId,
             depth: depth + 1,
+            expandedDirectoryIds: expandedDirectoryIds,
             lifecycleActive: lifecycleActive,
           ),
       ],

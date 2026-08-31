@@ -11,6 +11,7 @@ import '../markdown/ast.dart';
 import '../workspace/bootstrap.dart';
 import '../workspace/lifecycle.dart';
 import '../workspace/persist.dart';
+import '../workspace/session_snapshot.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 part 'ffi_api.freezed.dart';
@@ -464,6 +465,34 @@ RangeEditResult replaceWholeNote({
   noteId: noteId,
   replacement: replacement,
 );
+
+/// Loads the presentation-only, durable session snapshot for the active
+/// Workspace.
+///
+/// The Core selects the active Workspace, validates the versioned sidecar,
+/// and returns an empty snapshot after isolating corrupt or unknown-version
+/// bytes. Snapshot data is never Note content, a credential, or a device
+/// preference, and it never establishes an authoritative Note session.
+Future<ActiveWorkspaceSessionSnapshot> loadActiveWorkspaceSessionSnapshot() =>
+    RustLib.instance.api.crateApiFfiApiLoadActiveWorkspaceSessionSnapshot();
+
+/// Atomically saves presentation-only session identities and UI state for the
+/// active Workspace.
+///
+/// Core supplies the schema version and Workspace identifier; neither crosses
+/// this FFI boundary from Dart.
+Future<void> saveActiveWorkspaceSessionSnapshot({
+  required ActiveWorkspaceSessionSnapshot snapshot,
+}) => RustLib.instance.api.crateApiFfiApiSaveActiveWorkspaceSessionSnapshot(
+  snapshot: snapshot,
+);
+
+/// Clears the active Workspace's live corrupt snapshot without deleting its
+/// bytes: Core first moves them to an isolated sidecar for diagnosis.
+Future<void> clearCorruptActiveWorkspaceSessionSnapshot() => RustLib
+    .instance
+    .api
+    .crateApiFfiApiClearCorruptActiveWorkspaceSessionSnapshot();
 
 /// Full-text search within the active Workspace (CAP-FIND-01), bm25-ranked.
 ///

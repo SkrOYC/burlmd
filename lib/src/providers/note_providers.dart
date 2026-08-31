@@ -354,6 +354,9 @@ class NoteController extends Notifier<NoteState?> {
             return;
           }
         }
+        // Core has retired the outgoing session. Until a replacement reaches
+        // Core successfully, no active identity is persisted.
+        ref.read(workspaceSessionProvider.notifier).setActiveNoteId(null);
         if (!_isOpenAdmissionCurrent(
           lifecycleAdmission,
           admittedByLifecycle: admittedByLifecycle,
@@ -377,6 +380,11 @@ class NoteController extends Notifier<NoteState?> {
         return;
       }
       state = opened;
+      // The snapshot records an identity only after Core has actually opened
+      // it. It does not create or stand in for this Note session.
+      ref
+          .read(workspaceSessionProvider.notifier)
+          .setActiveNoteId(opened.metadata.id);
       // A successful open clears any earlier failure so the surface
       // reflects the present, not the last thing that went wrong — both
       // surfaces: the old Note's keystroke-write failure belongs to a
@@ -488,6 +496,7 @@ class NoteController extends Notifier<NoteState?> {
   /// an impossibility. This mirrors what a successful open does.
   void clear() {
     state = null;
+    ref.read(workspaceSessionProvider.notifier).setActiveNoteId(null);
     ref.read(noteSwitchingProvider.notifier).set(false);
     ref.read(editorErrorProvider.notifier).report(null);
     ref.read(noteCloseFailureProvider.notifier).acknowledge();

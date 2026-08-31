@@ -20,6 +20,16 @@ class _StubRustApi extends RustApi {
     openOrCreateCalls++;
     return workspace;
   }
+
+  @override
+  Future<ActiveWorkspaceSessionSnapshot>
+  loadActiveWorkspaceSessionSnapshot() async =>
+      const ActiveWorkspaceSessionSnapshot(
+        openNoteIds: [],
+        expandedDirectoryIds: [],
+        searchQuery: '',
+        syncPresentation: SessionSyncPresentation.local,
+      );
 }
 
 WorkspaceInfo _localWorkspace() => const WorkspaceInfo(

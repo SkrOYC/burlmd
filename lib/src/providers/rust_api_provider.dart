@@ -5,6 +5,7 @@ import 'package:burlmd/src/rust/index/query.dart';
 import 'package:burlmd/src/rust/workspace/bootstrap.dart' as bootstrap_ffi;
 import 'package:burlmd/src/rust/workspace/lifecycle.dart';
 import 'package:burlmd/src/rust/workspace/persist.dart';
+import 'package:burlmd/src/rust/workspace/session_snapshot.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart'
     show Uint64List;
@@ -19,6 +20,8 @@ export 'package:burlmd/src/rust/api/ffi_api.dart'
         RangeEditCaret_Phantom,
         RangeEditResult,
         StructuralEdit;
+export 'package:burlmd/src/rust/workspace/session_snapshot.dart'
+    show ActiveWorkspaceSessionSnapshot, SessionSyncPresentation;
 export 'package:burlmd/src/rust/index/query.dart'
     show
         LinkCompletion,
@@ -114,6 +117,23 @@ class RustApi {
   /// Notes with an unflushed draft from a previous session, for surfacing
   /// recovered work on startup (CAP-WS-03).
   Future<List<NoteMetadata>> pendingDrafts() => ffi.pendingDrafts();
+
+  /// Loads Core's durable, presentation-only snapshot for the active
+  /// Workspace. The returned data identifies UI state only; it never opens or
+  /// creates a Note session by itself.
+  Future<ActiveWorkspaceSessionSnapshot> loadActiveWorkspaceSessionSnapshot() =>
+      ffi.loadActiveWorkspaceSessionSnapshot();
+
+  /// Saves presentation-only session identities and UI state for the active
+  /// Workspace. Core supplies the version and Workspace identity.
+  Future<void> saveActiveWorkspaceSessionSnapshot(
+    ActiveWorkspaceSessionSnapshot snapshot,
+  ) => ffi.saveActiveWorkspaceSessionSnapshot(snapshot: snapshot);
+
+  /// Moves a live corrupt snapshot out of the active path without deleting
+  /// its bytes. This affects the Core-selected Workspace only.
+  Future<void> clearCorruptActiveWorkspaceSessionSnapshot() =>
+      ffi.clearCorruptActiveWorkspaceSessionSnapshot();
 
   /// The raw Markdown source of one Block, including its delimiters and
   /// terminating newline, for populating the editable field on focus

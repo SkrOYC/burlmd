@@ -21,6 +21,28 @@ class WorkspaceScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final workspace = ref.watch(workspaceProvider);
+    final sessionSnapshot = ref.watch(workspaceSessionSnapshotProvider);
+    ref.listen<AsyncValue<WorkspaceSessionState>>(
+      workspaceSessionSnapshotProvider,
+      (_, next) {
+        final activeNoteId = switch (next) {
+          AsyncData(:final value) => value.activeNoteId,
+          _ => null,
+        };
+        if (activeNoteId == null) return;
+        // The shell's selected-note listener mounts the authoritative Core
+        // session. Delay this identity publication one frame so that listener
+        // exists before restore; the snapshot itself never creates a session.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!context.mounted ||
+              ref.read(selectedNoteIdProvider) != null ||
+              ref.read(workspaceSessionProvider).activeNoteId != activeNoteId) {
+            return;
+          }
+          ref.read(selectedNoteIdProvider.notifier).select(activeNoteId);
+        });
+      },
+    );
     // Rescan outcomes surface here rather than inside the button widget, so
     // both the failure branch ("names the failure") and the refusal branch
     // of SHEL-E008 report through one SnackBar path on the shell's Scaffold.
@@ -56,13 +78,15 @@ class WorkspaceScreen extends ConsumerWidget {
             ),
           ),
         ),
-        data: (info) => BurlWorkspaceShell(
-          workspaceName: info.name,
-          workspacePath: info.localPath.isEmpty ? null : info.localPath,
-          rescanButton: const WorkspaceRescanButton(),
-          onRescan: () => ref.read(rescanStateProvider.notifier).run(),
-          fixtureCaptureController: fixtureCaptureController,
-        ),
+        data: (info) => sessionSnapshot.isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : BurlWorkspaceShell(
+                workspaceName: info.name,
+                workspacePath: info.localPath.isEmpty ? null : info.localPath,
+                rescanButton: const WorkspaceRescanButton(),
+                onRescan: () => ref.read(rescanStateProvider.notifier).run(),
+                fixtureCaptureController: fixtureCaptureController,
+              ),
       ),
     );
   }

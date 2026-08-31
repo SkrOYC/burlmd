@@ -116,6 +116,10 @@ PREF-G002 implements round-trip restore tests, corrupt- and unknown-version fall
 STATE-G003 implements round-trip, Workspace-partition, atomic-replace, corrupt-fallback, and content, credential, and device-preference exclusion tests.
 ```
 
+##### STATE-G003 Deviations & Justifications
+- **Touched Files:** `lib/src/providers/rust_api_provider.dart`, `lib/src/providers/note_providers.dart`, `lib/src/components/workspace_tree.dart`, `lib/src/screens/workspace.dart`, `scripts/check-generated-bindings.sh`, `test/widget_test.dart`, `test/screens/workspace_mounting_test.dart`, `test/screens/workspace_rescan_test.dart`, `test/components/editor_test.dart`, `.constitution/tasks/active/EPIC-G-desktop-session-local-workflows.md`
+- **Justification:** The Rust API wrapper lets provider tests use a Core fake. The Note provider persists an active identity only after Core opens or retires a session. The tree reads Core-restored expansion state, and the screen publishes a restored active identity after the shell listener mounts. Existing shell fakes return an empty session snapshot. The generated-binding validation script was absent and is required by this ticket's verification command.
+
 #### TABS-G004 Replace visual-only tabs with authoritative Note sessions
 - **Type:** Feature
 - **Effort:** 8

@@ -1,21 +1,24 @@
 import 'package:burlmd/src/providers/rust_api_provider.dart';
+import 'package:burlmd/src/providers/workspace_provider.dart';
 import 'package:burlmd/src/rust/draft.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// The text currently typed into the search surface (`SHEL-E006`).
 ///
-/// Ephemeral UI state, not Note content (`tech-spec/guidelines.md`) —
-/// exactly what a small [Notifier] may hold. Watching it re-runs
+/// Presentation-only Workspace session state, not Note content. Core stores
+/// it in the versioned session sidecar; watching it re-runs
 /// [searchResultsProvider] per keystroke, but each run is one indexed Core
 /// round trip (`search_notes`, bm25-ranked), not client-side filtering, so
 /// the sub-100ms constraint holds without debouncing.
 class SearchQuery extends Notifier<String> {
   @override
-  String build() => '';
+  String build() => ref.watch(workspaceSessionProvider).searchQuery;
 
-  void set(String query) => state = query;
+  /// Updates the Core-owned snapshot's presentation state, never a Note.
+  void set(String query) =>
+      ref.read(workspaceSessionProvider.notifier).setSearchQuery(query);
 
-  void clear() => state = '';
+  void clear() => set('');
 }
 
 final searchQueryProvider = NotifierProvider<SearchQuery, String>(

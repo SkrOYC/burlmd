@@ -22,6 +22,9 @@ pub use crate::workspace::WorkspaceInfo;
 // ADR-008's machinery and the type it reports through, and the `#[frb]`
 // functions below are wrappers over it.
 pub use crate::workspace::persist::StructuralEditInsertionSlot;
+pub use crate::workspace::session_snapshot::{
+    ActiveWorkspaceSessionSnapshot, SessionSyncPresentation,
+};
 pub use crate::workspace::NoteWriteStatus;
 // Same reason again for the lifecycle domain: `workspace::lifecycle` owns the
 // atomic create/rename/move/delete machinery and the two shapes it reports
@@ -811,6 +814,48 @@ fn range_edit_caret_from_persist(
             RangeEditCaret::Phantom { insertion_index }
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Workspace session snapshots (STATE-G003)
+// ---------------------------------------------------------------------------
+
+/// Loads the presentation-only, durable session snapshot for the active
+/// Workspace.
+///
+/// The Core selects the active Workspace, validates the versioned sidecar,
+/// and returns an empty snapshot after isolating corrupt or unknown-version
+/// bytes. Snapshot data is never Note content, a credential, or a device
+/// preference, and it never establishes an authoritative Note session.
+#[frb]
+pub async fn load_active_workspace_session_snapshot(
+) -> Result<ActiveWorkspaceSessionSnapshot, AppError> {
+    let workspace_id = crate::db::connection::active_workspace_id()?;
+    crate::workspace::session_snapshot::SessionSnapshotStore::application_support()?
+        .load(&workspace_id)
+}
+
+/// Atomically saves presentation-only session identities and UI state for the
+/// active Workspace.
+///
+/// Core supplies the schema version and Workspace identifier; neither crosses
+/// this FFI boundary from Dart.
+#[frb]
+pub async fn save_active_workspace_session_snapshot(
+    snapshot: ActiveWorkspaceSessionSnapshot,
+) -> Result<(), AppError> {
+    let workspace_id = crate::db::connection::active_workspace_id()?;
+    crate::workspace::session_snapshot::SessionSnapshotStore::application_support()?
+        .save(&workspace_id, &snapshot)
+}
+
+/// Clears the active Workspace's live corrupt snapshot without deleting its
+/// bytes: Core first moves them to an isolated sidecar for diagnosis.
+#[frb]
+pub async fn clear_corrupt_active_workspace_session_snapshot() -> Result<(), AppError> {
+    let workspace_id = crate::db::connection::active_workspace_id()?;
+    crate::workspace::session_snapshot::SessionSnapshotStore::application_support()?
+        .clear_corrupt(&workspace_id)
 }
 
 /// FTS5's bare `MATCH` syntax is a full query language (boolean operators,

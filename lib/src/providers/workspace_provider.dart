@@ -21,15 +21,155 @@ final workspaceProvider = FutureProvider.autoDispose<WorkspaceInfo>((
   return ref.watch(rustApiProvider).openOrCreateLocalWorkspace();
 });
 
+/// Presentation-only state restored from Core's durable sidecar.
+///
+/// These fields remain identifiers and UI affordances, not Note bytes or
+/// writable Core sessions. In particular, [openNoteIds] tells a later tabs
+/// workflow which identities it may ask Core to reopen; it never claims that
+/// a Dart-side session exists.
+class WorkspaceSessionState {
+  const WorkspaceSessionState({
+    required this.openNoteIds,
+    required this.activeNoteId,
+    required this.expandedDirectoryIds,
+    required this.searchQuery,
+    required this.syncPresentation,
+  });
+
+  const WorkspaceSessionState.empty()
+    : openNoteIds = const [],
+      activeNoteId = null,
+      expandedDirectoryIds = const {},
+      searchQuery = '',
+      syncPresentation = SessionSyncPresentation.local;
+
+  final List<String> openNoteIds;
+  final String? activeNoteId;
+  final Set<String> expandedDirectoryIds;
+  final String searchQuery;
+  final SessionSyncPresentation syncPresentation;
+
+  factory WorkspaceSessionState.fromSnapshot(
+    ActiveWorkspaceSessionSnapshot snapshot,
+  ) => WorkspaceSessionState(
+    openNoteIds: List.unmodifiable(snapshot.openNoteIds),
+    activeNoteId: snapshot.activeNoteId,
+    expandedDirectoryIds: Set.unmodifiable(snapshot.expandedDirectoryIds),
+    searchQuery: snapshot.searchQuery,
+    syncPresentation: snapshot.syncPresentation,
+  );
+
+  ActiveWorkspaceSessionSnapshot toSnapshot() => ActiveWorkspaceSessionSnapshot(
+    openNoteIds: List.of(openNoteIds),
+    activeNoteId: activeNoteId,
+    expandedDirectoryIds: expandedDirectoryIds.toList(),
+    searchQuery: searchQuery,
+    syncPresentation: syncPresentation,
+  );
+
+  WorkspaceSessionState copyWith({
+    List<String>? openNoteIds,
+    String? activeNoteId,
+    bool clearActiveNoteId = false,
+    Set<String>? expandedDirectoryIds,
+    String? searchQuery,
+    SessionSyncPresentation? syncPresentation,
+  }) => WorkspaceSessionState(
+    openNoteIds: openNoteIds ?? this.openNoteIds,
+    activeNoteId: clearActiveNoteId
+        ? null
+        : (activeNoteId ?? this.activeNoteId),
+    expandedDirectoryIds: expandedDirectoryIds ?? this.expandedDirectoryIds,
+    searchQuery: searchQuery ?? this.searchQuery,
+    syncPresentation: syncPresentation ?? this.syncPresentation,
+  );
+}
+
+/// Coordinates Core-owned snapshot restore and best-effort persistence of the
+/// presentation state that exists today. A persistence failure cannot alter a
+/// Note or create a Core Note session; the next UI change retries the sidecar
+/// write with the current identity-only state.
+class WorkspaceSession extends Notifier<WorkspaceSessionState> {
+  Future<void> _writes = Future<void>.value();
+  var _restored = false;
+
+  @override
+  WorkspaceSessionState build() => const WorkspaceSessionState.empty();
+
+  void restore(ActiveWorkspaceSessionSnapshot snapshot) {
+    state = WorkspaceSessionState.fromSnapshot(snapshot);
+    _restored = true;
+  }
+
+  void setSearchQuery(String searchQuery) {
+    if (state.searchQuery == searchQuery) return;
+    state = state.copyWith(searchQuery: searchQuery);
+    _scheduleSave();
+  }
+
+  void toggleDirectory(String directoryId) {
+    final expanded = {...state.expandedDirectoryIds};
+    if (!expanded.remove(directoryId)) expanded.add(directoryId);
+    state = state.copyWith(expandedDirectoryIds: Set.unmodifiable(expanded));
+    _scheduleSave();
+  }
+
+  /// Records only an identity after Core has opened that Note successfully.
+  /// It does not add an entry to [WorkspaceSessionState.openNoteIds]: multiple
+  /// authoritative sessions are TABS-G004's responsibility.
+  void setActiveNoteId(String? noteId) {
+    if (state.activeNoteId == noteId) return;
+    state = noteId == null
+        ? state.copyWith(clearActiveNoteId: true)
+        : state.copyWith(activeNoteId: noteId);
+    _scheduleSave();
+  }
+
+  void _scheduleSave() {
+    if (!_restored) return;
+    final snapshot = state.toSnapshot();
+    _writes = _writes.then((_) async {
+      try {
+        await ref
+            .read(rustApiProvider)
+            .saveActiveWorkspaceSessionSnapshot(snapshot);
+      } catch (_) {
+        // Snapshot loss affects only optional presentation restore. Keep the
+        // in-memory state intact and retry on a later UI-state change.
+      }
+    });
+  }
+}
+
+final workspaceSessionProvider =
+    NotifierProvider<WorkspaceSession, WorkspaceSessionState>(
+      WorkspaceSession.new,
+    );
+
+/// Loads the active Workspace snapshot after Core has established which
+/// Workspace is active. This is deliberately separate from [workspaceProvider]
+/// so a snapshot sidecar failure cannot make workspace bootstrap pretend the
+/// Workspace itself failed to open.
+final workspaceSessionSnapshotProvider =
+    FutureProvider.autoDispose<WorkspaceSessionState>((ref) async {
+      await ref.watch(workspaceProvider.future);
+      final snapshot = await ref
+          .watch(rustApiProvider)
+          .loadActiveWorkspaceSessionSnapshot();
+      final controller = ref.read(workspaceSessionProvider.notifier);
+      controller.restore(snapshot);
+      return ref.read(workspaceSessionProvider);
+    });
+
 /// The Workspace's Directory/Note hierarchy (`WSPC-D009`'s single-call
 /// contract), fetched in one `workspace_tree()` round trip for the sidebar
 /// (`SHEL-E003`). Directories before Notes at each level, sorted by name,
 /// with empty Directories included — all Core-guaranteed properties of this
 /// one call.
 ///
-/// Expansion is *not* modeled here: expanding or collapsing a Directory
-/// filters what the already-fetched tree renders and must not re-run this
-/// query. Only lifecycle operations and rescans (`SHEL-E008`) invalidate it.
+/// Expansion is modeled separately in [workspaceSessionProvider]. It filters
+/// the already-fetched tree without re-running this query. Only lifecycle
+/// operations and rescans (`SHEL-E008`) invalidate the tree.
 final workspaceTreeProvider = FutureProvider.autoDispose<List<TreeNode>>((
   ref,
 ) async {

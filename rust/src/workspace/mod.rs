@@ -12,6 +12,7 @@ pub mod lifecycle;
 /// forbids.
 mod links_rewrite;
 pub mod persist;
+pub mod session_snapshot;
 
 pub use bootstrap::{default_workspace_dir, WorkspaceInfo};
 pub use lifecycle::{

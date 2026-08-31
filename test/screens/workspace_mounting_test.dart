@@ -53,6 +53,16 @@ class _MountingRustApi extends RustApi {
       );
 
   @override
+  Future<ActiveWorkspaceSessionSnapshot>
+  loadActiveWorkspaceSessionSnapshot() async =>
+      const ActiveWorkspaceSessionSnapshot(
+        openNoteIds: [],
+        expandedDirectoryIds: [],
+        searchQuery: '',
+        syncPresentation: SessionSyncPresentation.local,
+      );
+
+  @override
   Future<List<TreeNode>> workspaceTree() async => tree;
 
   @override
