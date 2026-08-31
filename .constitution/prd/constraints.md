@@ -2,45 +2,52 @@
 
 Scalar constraints use Planguage fields: **Scale** (what is measured), **Meter** (how), **Goal** (target to hit), **Stretch** (optional better target), **Fail** (level that makes the design unacceptable). Constraints without an honest meter stay prose and say so.
 
-## Reference profiles
+## Reference classes
 
-Performance meters run on both reference desktop profiles. The macOS profile is a base Apple M1 system with 8 GiB of memory, an internal SSD, integrated graphics, and a 1920x1080 60 Hz display. The Linux profile is a four-core Intel Core i5-8250U system with 16 GiB of memory, an NVMe SSD, integrated graphics, and the same display profile. Tests use AC power and no thermal throttling.
+Performance meters run in reproducible managed continuous-integration environments for both reference classes:
 
-The Goal corpus contains 10,000 Notes with a 4 KiB median, a 64 KiB 95th percentile, and a 1 MiB maximum Note. The scripted editing Note contains 2,000 Blocks across every supported syntax class and is 1 MiB before edits. The Technical Implementation stage must publish deterministic corpus generation and reference-profile setup commands. Release gates run the same meters on every named supported system, which must meet the accepted thresholds.
+- **Linux x86-64 performance reference:** 4 logical CPUs and 16 GB of available memory.
+- **Apple Silicon macOS performance and visual reference:** M1-class compute, 3 logical CPUs, and 7 GB of available memory on macOS 26.
+
+Each run uses a fixed 1920x1080 logical viewport at 60 Hz. Before measurement, each run records the environment image identity, operating-system release, architecture, CPU allocation and model class, available memory, and storage characteristics. It also records the viewport, refresh rate, build identity, and corpus identity. Evidence without this identity is invalid.
+
+The Goal corpus contains 10,000 Notes with a 4 KiB median, a 64 KiB 95th percentile, and a 1 MiB maximum Note. The scripted editing Note contains 2,000 Blocks across every supported syntax class and is 1 MiB before edits. The Technical Implementation stage must publish deterministic corpus generation and reference-class setup specifications.
+
+Functional release gates run on every named supported system. macOS 15 is a release-blocking functional compatibility target only. It doesn't define a performance baseline or visual reference. Performance gates run on both reference classes, and deterministic visual comparisons use the macOS 26 reference class.
 
 ## Performance
 
 - **Search Latency**
   - **Scale:** Time from submitting a full-text search or title-filter query to receiving results.
-  - **Meter:** The 95th percentile over 1,000 deterministic queries against the Goal corpus on each reference desktop profile.
+  - **Meter:** The 95th percentile over 1,000 deterministic queries against the Goal corpus on each reference class.
   - **Goal:** Under 100 milliseconds.
   - **Stretch:** Under 25 milliseconds.
   - **Fail:** Over 250 milliseconds at 10,000 Notes, or over 100 milliseconds at 1,000 Notes.
 
 - **UI Responsiveness**
   - **Scale:** Frame time of writing and editing interactions, including the transition of a Block into and out of its raw editing state.
-  - **Meter:** Frame timing over a 5-minute scripted session on the editing Note and each reference desktop profile.
+  - **Meter:** Frame timing over a 5-minute scripted session on the editing Note and each reference class.
   - **Goal:** At least 99% of frames complete within 16.7 milliseconds, with no input-to-effect delay above 50 milliseconds.
   - **Stretch:** At least 99.9% of frames complete within 16.7 milliseconds.
   - **Fail:** More than 1% of frames exceed 33.3 milliseconds or any input-to-effect delay exceeds 100 milliseconds.
 
 - **Workspace Open Latency**
   - **Scale:** Time from launch request to an interactable shell with the Workspace open.
-  - **Meter:** The 95th percentile of 20 opens of the Goal corpus on each reference desktop profile.
+  - **Meter:** The 95th percentile of 20 opens of the Goal corpus on each reference class.
   - **Goal:** No more than 1 second at the Corpus Scale Goal. Remaining index construction proceeds without blocking Workspace use.
   - **Stretch:** No more than 1 second at the Corpus Scale Stretch.
   - **Fail:** Open blocking longer than 3 seconds at the Corpus Scale Goal.
 
 - **Cold Start**
   - **Scale:** Time from process launch to the interactive shell, cold — no warm caches assumed.
-  - **Meter:** The 95th percentile of 20 cold launches on each reference desktop profile, including secure-storage and encrypted-index access.
+  - **Meter:** The 95th percentile of 20 cold launches on each reference class, including secure-storage and encrypted-index access.
   - **Goal:** 1 second.
   - **Stretch:** 500 milliseconds.
   - **Fail:** 3 seconds. The Goal is deliberately aggressive, chosen by operator intent to force optimization rather than neglect; if first measurement lands above it, rebaseline explicitly through this file rather than silently accepting.
 
 - **Idle Memory**
   - **Scale:** Resident memory at rest, after opening a Workspace at the Corpus Scale Goal and letting activity settle.
-  - **Meter:** Resident memory sampled each second for 10 minutes after a 5-minute settling period on each reference desktop profile.
+  - **Meter:** Resident memory sampled each second for 10 minutes after a 5-minute settling period on each reference class.
   - **Goal:** 400 MB.
   - **Stretch:** 250 MB.
   - **Fail:** 1 GB, or growth above 5% during a 4-hour idle run after the settling period.
@@ -129,4 +136,4 @@ The Goal corpus contains 10,000 Notes with a 4 KiB median, a 64 KiB 95th percent
 
 ## Verification
 
-Every scalar meter above is verified by a scheduled nightly benchmark run once continuous integration exists, reporting regressions without blocking merges; until then they are verified ticket-by-ticket when work touches their path. A meter nobody measures again after the spike that first reads it will drift silently — this project has already shipped one persistence-cost assumption that measurement proved wrong by roughly 36× against what a naive benchmark reported (recorded in `tech-spec/changelog.md` v1.2.0).
+Every scalar meter above is verified in each applicable reference class by scheduled nightly benchmark runs in managed continuous integration. The runs report regressions without blocking merges and capture the required environment identity. A meter that isn't measured after its first spike drifts silently. This project has shipped a persistence-cost assumption that measurement disproved by roughly 36×. `tech-spec/changelog.md` v1.2.0 records the result.
