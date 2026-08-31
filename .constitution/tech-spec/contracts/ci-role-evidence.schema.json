@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": ["schemaVersion", "expectedIdentity", "expectedIdentitySha256", "roleEvidence"],
   "properties": {
-    "schemaVersion": { "const": 6 },
+    "schemaVersion": { "const": 7 },
     "expectedIdentity": { "$ref": "#/$defs/expectedIdentity" },
     "expectedIdentitySha256": { "$ref": "#/$defs/sha256" },
     "roleEvidence": { "$ref": "#/$defs/roleEvidence" }
@@ -23,6 +23,51 @@
         "workflowPath": { "type": "string", "minLength": 1 },
         "jobWorkflowRef": { "type": "string", "minLength": 1 },
         "jobWorkflowSha": { "$ref": "#/$defs/gitSha" }
+      }
+    },
+    "artifactReceipt": {
+      "$comment": "Semantic validation must require artifactDigest to equal 'sha256:' concatenated with uploadActionDigest.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifactId", "artifactName", "uploadActionDigest", "artifactDigest"],
+      "properties": {
+        "artifactId": { "type": "integer", "minimum": 1 },
+        "artifactName": {
+          "type": "string",
+          "pattern": "^managed-evidence-(expected-[0-9a-f]{32}|(candidate|sealed)-(linux-x86_64|macos-26-arm64|macos-15-arm64)-[0-9a-f]{32})$"
+        },
+        "uploadActionDigest": { "$ref": "#/$defs/sha256" },
+        "artifactDigest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+      }
+    },
+    "sealingReceipt": {
+      "$comment": "The seal job writes this receipt before it completes. Semantic validation compares every identity and artifact nonce with expectedIdentity, requires each REST digest to equal 'sha256:' plus the corresponding uploadActionDigest, and requires the artifact names to match the role and nonce. The receipt deliberately has no status, conclusion, or completion field. Post-completion aggregation owns those observations.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "expectedIdentitySha256", "repositoryId", "workflowRunId", "runAttempt", "sealingCheckRunId", "workflowPath", "workflowSignerSha", "workflowSignerRef", "trustAnchorSha", "testedSourceSha", "baseSha", "role", "artifactNonce", "runnerEnvironmentClaim", "expectedArtifact", "candidateArtifact", "sealedArtifact", "roleBundleSha256", "sealedBundleSha256"],
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "expectedIdentitySha256": { "$ref": "#/$defs/sha256" },
+        "repositoryId": { "type": "integer", "minimum": 1 },
+        "workflowRunId": { "type": "integer", "minimum": 1 },
+        "runAttempt": { "type": "integer", "minimum": 1 },
+        "sealingCheckRunId": { "type": "integer", "minimum": 1 },
+        "workflowPath": {
+          "enum": [".github/workflows/ci-role-linux-x86-64.yml", ".github/workflows/ci-role-macos-26-arm64.yml", ".github/workflows/ci-role-macos-15-arm64.yml"]
+        },
+        "workflowSignerSha": { "$ref": "#/$defs/gitSha" },
+        "workflowSignerRef": { "const": "refs/heads/master" },
+        "trustAnchorSha": { "$ref": "#/$defs/gitSha" },
+        "testedSourceSha": { "$ref": "#/$defs/gitSha" },
+        "baseSha": { "$ref": "#/$defs/gitSha" },
+        "role": { "$ref": "#/$defs/role" },
+        "artifactNonce": { "type": "string", "pattern": "^[0-9a-f]{32}$" },
+        "runnerEnvironmentClaim": { "const": "github-hosted" },
+        "expectedArtifact": { "$ref": "#/$defs/artifactReceipt" },
+        "candidateArtifact": { "$ref": "#/$defs/artifactReceipt" },
+        "sealedArtifact": { "$ref": "#/$defs/artifactReceipt" },
+        "roleBundleSha256": { "$ref": "#/$defs/sha256" },
+        "sealedBundleSha256": { "$ref": "#/$defs/sha256" }
       }
     },
     "expectedIdentity": {

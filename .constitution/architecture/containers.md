@@ -216,7 +216,7 @@ The pipeline assigns the following validation roles:
 
 - **Boundary kind:** Pipeline stage.
 - **Logical type:** Evidence integrity and acceptance boundary.
-- **Responsibility:** Authenticates the fresh sealing environment as managed origin, verifies the trust-anchor relationship and ticket write boundary, verifies candidate and sealed handoff identities and complete bundle integrity, and compares captured identity with authoritative expected identity before isolated aggregation.
+- **Responsibility:** Authenticates the fresh sealing environment as managed origin, independently observes its final state after completion, verifies the trust-anchor relationship and ticket write boundary, verifies candidate and sealed handoff identities and complete bundle integrity, and compares captured identity with authoritative expected identity before isolated aggregation.
 - **Inputs and outputs:** Accepts expected trust-anchor, workflow-signer, tested-source, base, release, build, corpus, run, and required-role identities from Release Pipeline. Accepts one authenticated sealed bundle per role and the pipeline-owned candidate and sealing environment records. Credentialed acquisition produces verified read-only inputs. A separate credential-free, non-networked coordinator produces machine results through one writable output boundary. Returns an accepted complete set or explicit unmanaged, candidate-controlled, out-of-boundary, untrusted, missing, duplicated, mismatched, stale, corrupt, unsealed, credential-exposed, or isolation-failed outcomes.
 - **Depends on:** Isolated Validation Environment and Release Pipeline.
 

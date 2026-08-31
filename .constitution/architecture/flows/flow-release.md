@@ -10,7 +10,8 @@ flowchart TD
     Linux[Linux x86-64 candidate execution\ncommon functional, performance, and non-authoritative exact platform regression]
     MacReference[Apple Silicon macOS 26 candidate execution\ncommon functional, performance, and authoritative product visual]
     MacCompatibility[macOS 15 candidate execution\ncommon functional compatibility only]
-    Seal[Fresh pipeline-owned sealing environments\nvalidate role bundle and environment identity]
+    Seal[Fresh pipeline-owned sealing environments\nvalidate bundle and record immutable handoff identity]
+    Observe[Post-completion observation\nrequire successful sealing environment]
     Integrity[Authenticate managed validation origin and verify complete evidence bundle integrity]
     Identity[Compare captured identity with authoritative expected identity]
     Complete[Require complete current evidence set]
@@ -37,11 +38,12 @@ flowchart TD
     Linux -->|complete untrusted role bundle| Seal
     MacReference -->|complete untrusted role bundle| Seal
     MacCompatibility -->|complete untrusted role bundle| Seal
-    Seal -->|authenticated immutable sealed bundles| Integrity
+    Seal -->|authenticated bundle and pre-completion locator| Observe
+    Observe -->|completed successful sealing handoff| Integrity
     Linux -->|ownership or validation failure| Failed
     MacReference -->|ownership or validation failure| Failed
     MacCompatibility -->|ownership or validation failure| Failed
-    Seal -->|missing, failed, duplicate, substituted, or mismatched handoff| Rejected
+    Observe -->|in-progress, failed, missing, duplicate, substituted, or mismatched handoff| Rejected
     Integrity -->|origin and artifact valid| Identity
     Integrity -->|untrusted origin, missing artifact, or corrupt artifact| Rejected
     Identity -->|captured identity matches expected identity| Complete
@@ -63,7 +65,7 @@ flowchart TD
 - The Writer's active desktop never supplies visual proof. The Writer's desktop state in a capture invalidates the complete run.
 - Missing authoritative trust-anchor, workflow-signer, tested-source, base, release, build, corpus, run, or required-role identity prevents evidence acceptance.
 - A candidate-defined launcher, signer workflow, expected identity, or change outside the ticket's declared write boundary prevents dispatch or evidence acceptance.
-- Candidate execution has no origin-signing authority. Missing separation between candidate execution and a fresh sealing environment, a failed candidate, a missing seal, a duplicate or substituted handoff, or role-inconsistent environment identity prevents evidence acceptance.
+- Candidate execution has no origin-signing authority. A sealing environment can't attest its own final result before it finishes. Aggregation must observe one completed successful sealing environment independently; an in-progress, failed, missing, duplicate, substituted, or role-inconsistent handoff prevents evidence acceptance.
 - Validation bootstrap needs a reviewed implementation integration followed by a reviewed evidence-only integration. The validation capability remains incomplete between them.
 - An untrusted or unmanaged validation origin, an incomplete evidence bundle, or corrupt evidence fails verification before aggregation.
 - Candidate-controlled aggregation never shares the authenticated acquisition context. Missing coordinator identity, reachable credentials or user configuration, writable inputs, an extra writable filesystem boundary, or available network access rejects the run.
