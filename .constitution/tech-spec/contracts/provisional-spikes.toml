@@ -1,9 +1,10 @@
-schema_version = 10
-stage = "tech-spec-v1.7.19-provisional"
+schema_version = 11
+stage = "tech-spec-v1.8.0-provisional"
 production_implementation_authorized = false
-# These Epic G tickets may write production code. Every other production
-# ticket remains blocked. Spike write allowlists below remain exhaustive for
-# Spike work.
+# The Epic G entries preserve the M0 exception. FLAKE-M002 and CI-M003 may
+# implement only the reproducibility and managed-validation bootstrap. Every
+# other production ticket remains blocked by its own evidence and Stage 3/4
+# adaptation. Spike write allowlists below remain exhaustive for Spike work.
 production_exceptions = [
   "SHELL-G001",
   "PREF-G002",
@@ -11,8 +12,11 @@ production_exceptions = [
   "TABS-G004",
   "CLOSE-G005",
   "NAV-G007",
+  "FLAKE-M002",
+  "CI-M003",
 ]
 result_schema = ".constitution/tech-spec/contracts/spike-result.schema.json"
+ci_evidence_schema = ".constitution/tech-spec/contracts/ci-evidence.schema.json"
 
 [rules]
 write_policy = "allowlist"
@@ -34,41 +38,77 @@ capture_repository_revision_tree_lockfile_contract_schema_probe_source_probe_bin
 resolve_recorded_repository_revision_to_the_captured_checkout = true
 reject_cross_host_repository_tree_lockfile_contract_schema_probe_source_or_corpus_mismatch = true
 
+[ci_bootstrap]
+status = "bootstrap-authorized-provisional"
+candidate_phase = "candidate-branch-draft-pull-request"
+aggregation = "coordinator-job-or-authenticated-local"
+report_phase = "reviewed-evidence-commit-before-milestone-review"
+expected_identity_fields = ["release", "build", "corpus", "run", "required-roles"]
+capture_fields = ["ImageOS", "ImageVersion", "os-release", "architecture", "cpu-model", "logical-cpu-count", "memory-bytes", "storage-bytes", "logical-viewport", "build", "corpus", "run", "role"]
+origin_authentication = "Use the pinned actions/attest commit to authenticate each evidence-manifest digest with GitHub Sigstore. Verify the attestation against expected repository, workflow identity, head SHA, and artifact subject. Query the versioned workflow-job and artifact APIs with authenticated read access and compare job ID, required hosted label, repository IDs, workflow-run ID, run attempt, head SHA, artifact ID, and service-reported SHA-256 digest. Private/internal repository attestation requires GitHub Enterprise Cloud; without it evidence remains unaccepted and there is no hash-only fallback."
+reject = ["missing", "duplicate", "unexpected-role", "untrusted-origin", "corrupt", "mismatched", "stale", "mixed-image-version"]
+
+[ci_bootstrap.actions]
+checkout = "actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09"
+install_nix = "cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24"
+upload_artifact = "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a"
+download_artifact = "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c"
+attest = "actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6"
+
 [multi_host_handoff]
 transport = "Each source host exports an opaque tar.zst bundle plus SHA-256 sidecar into its Spike outbox. The result tool captures host facts from system APIs and derives a per-Spike SHA-256 host fingerprint from the operating-system machine identity; expected flags are assertions, not evidence sources. Every run records repository revision and tree, every lockfile, contract, schema, probe source tree, platform probe binary, and corpus manifest SHA-256. The coordinator copies both files through an explicit SSH/SCP artifact channel into the Spike inbox. Before importing results, aggregation verifies sidecars, run identity, role, distinct host fingerprints, host facts, containment, and artifact digests. It rejects any cross-host mismatch in repository revision/tree, lockfile set, contract, schema, probe source, or corpus; platform probe-binary hashes remain required and attributed but can differ. A shared checkout path or caller-supplied run label is not evidence."
 source_environment = ["BURLMD_LINUX_HANDOFF_SOURCE", "BURLMD_MACOS_HANDOFF_SOURCE", "BURLMD_MACOS_CURRENT_HANDOFF_SOURCE", "BURLMD_MACOS_PREVIOUS_HANDOFF_SOURCE"]
 
-[reference_profiles.linux-i5-8250u-16gib]
+[reference_profiles.github-ubuntu-24_04-x86_64]
+runner_label = "ubuntu-24.04"
 os = "linux"
 architecture = "x86_64"
-cpu_model_contains = "i5-8250U"
-physical_core_count = 4
-memory_bytes = 17179869184
-storage_kind = "nvme-ssd"
-integrated_graphics = true
-display_width_pixels = 1920
-display_height_pixels = 1080
-display_refresh_hz = 60
-power_source = "ac"
-thermal_throttling = false
+logical_cpu_count = 4
+memory_bytes = 16000000000
+storage_bytes = 14000000000
+logical_viewport_width = 1920
+logical_viewport_height = 1080
+logical_viewport_refresh_hz = 60
+roles = ["common-functional", "performance", "linux-exact-visual"]
+image_mutable = true
+visual_environment = "private-headless-sway-wayland"
 
-[reference_profiles.macos-m1-8gib]
+[reference_profiles.github-macos-26-arm64]
+runner_label = "macos-26"
 os = "macos"
 architecture = "aarch64"
-cpu_model = "Apple M1"
-physical_core_count = 8
-memory_bytes = 8589934592
-storage_kind = "internal-ssd"
-integrated_graphics = true
-display_width_pixels = 1920
-display_height_pixels = 1080
-display_refresh_hz = 60
-power_source = "ac"
-thermal_throttling = false
+os_major = 26
+cpu_model_contains = "Apple M1"
+logical_cpu_count = 3
+memory_bytes = 7000000000
+storage_bytes = 14000000000
+logical_viewport_width = 1920
+logical_viewport_height = 1080
+logical_viewport_refresh_hz = 60
+roles = ["common-functional", "performance", "macos-authoritative-visual"]
+image_mutable = true
+visual_environment = "actual-hosted-macos-gui"
+
+[reference_profiles.github-macos-15-arm64]
+runner_label = "macos-15"
+os = "macos"
+architecture = "aarch64"
+os_major = 15
+cpu_model_contains = "Apple M1"
+logical_cpu_count = 3
+memory_bytes = 7000000000
+storage_bytes = 14000000000
+logical_viewport_width = 1920
+logical_viewport_height = 1080
+logical_viewport_refresh_hz = 60
+roles = ["common-functional-compatibility"]
+image_mutable = true
+visual_environment = "none"
 
 [[spikes]]
 id = "SPK-AST-H001"
 decision = "OD-04"
+evidence_profiles = ["github-ubuntu-24_04-x86_64", "github-macos-26-arm64"]
 path = ".constitution/prototypes/ast"
 write_allowlist = [".constitution/prototypes/ast", ".constitution/spikes/SPK-AST-H001.md"]
 create_commands = [
@@ -77,10 +117,10 @@ create_commands = [
 ]
 verification_steps = [
   { workdir = ".", command = "cargo test --locked --manifest-path .constitution/prototypes/ast/Cargo.toml --all-targets" },
-  { run_id = "linux-reference", run_role = "linux-reference-profile", workdir = ".", command = "cargo run --locked --release --manifest-path .constitution/prototypes/ast/Cargo.toml -- probe --run-id linux-reference --role linux-reference-profile --expected-os linux --expected-arch x86_64 --profile linux-i5-8250u-16gib --output .constitution/prototypes/ast/runs/linux-reference.json --handoff-bundle .constitution/prototypes/ast/handoff/outbox/linux-reference.tar.zst --handoff-sha256 .constitution/prototypes/ast/handoff/outbox/linux-reference.sha256" },
-  { run_id = "macos-reference", run_role = "macos-reference-profile", workdir = ".", command = "cargo run --locked --release --manifest-path .constitution/prototypes/ast/Cargo.toml -- probe --run-id macos-reference --role macos-reference-profile --expected-os macos --expected-arch aarch64 --profile macos-m1-8gib --output .constitution/prototypes/ast/runs/macos-reference.json --handoff-bundle .constitution/prototypes/ast/handoff/outbox/macos-reference.tar.zst --handoff-sha256 .constitution/prototypes/ast/handoff/outbox/macos-reference.sha256" },
+  { run_id = "linux-reference", run_role = "linux-x86_64-performance", workdir = ".", command = "cargo run --locked --release --manifest-path .constitution/prototypes/ast/Cargo.toml -- probe --run-id linux-reference --role linux-x86_64-performance --expected-os linux --expected-arch x86_64 --profile github-ubuntu-24_04-x86_64 --output .constitution/prototypes/ast/runs/linux-reference.json --handoff-bundle .constitution/prototypes/ast/handoff/outbox/linux-reference.tar.zst --handoff-sha256 .constitution/prototypes/ast/handoff/outbox/linux-reference.sha256" },
+  { run_id = "macos-reference", run_role = "macos-26-performance-visual", workdir = ".", command = "cargo run --locked --release --manifest-path .constitution/prototypes/ast/Cargo.toml -- probe --run-id macos-reference --role macos-26-performance-visual --expected-os macos --expected-arch aarch64 --profile github-macos-26-arm64 --output .constitution/prototypes/ast/runs/macos-reference.json --handoff-bundle .constitution/prototypes/ast/handoff/outbox/macos-reference.tar.zst --handoff-sha256 .constitution/prototypes/ast/handoff/outbox/macos-reference.sha256" },
   { workdir = ".", command = "mkdir -p .constitution/prototypes/ast/handoff/inbox && scp \"$BURLMD_LINUX_HANDOFF_SOURCE/linux-reference.tar.zst\" \"$BURLMD_LINUX_HANDOFF_SOURCE/linux-reference.sha256\" \"$BURLMD_MACOS_HANDOFF_SOURCE/macos-reference.tar.zst\" \"$BURLMD_MACOS_HANDOFF_SOURCE/macos-reference.sha256\" .constitution/prototypes/ast/handoff/inbox/" },
-  { workdir = ".", command = "cargo run --locked --release --manifest-path .constitution/prototypes/ast/Cargo.toml -- aggregate --contract .constitution/tech-spec/contracts/provisional-spikes.toml --schema .constitution/tech-spec/contracts/spike-result.schema.json --import-bundle .constitution/prototypes/ast/handoff/inbox/linux-reference.tar.zst --import-sha256 .constitution/prototypes/ast/handoff/inbox/linux-reference.sha256 --import-bundle .constitution/prototypes/ast/handoff/inbox/macos-reference.tar.zst --import-sha256 .constitution/prototypes/ast/handoff/inbox/macos-reference.sha256 --require-role linux-reference-profile --require-role macos-reference-profile --require-distinct-hosts 2 --require-distinct-operating-systems 2 --require-role-os linux-reference-profile=linux --require-role-arch linux-reference-profile=x86_64 --require-role-profile linux-reference-profile=linux-i5-8250u-16gib --require-role-os macos-reference-profile=macos --require-role-arch macos-reference-profile=aarch64 --require-role-profile macos-reference-profile=macos-m1-8gib --output .constitution/prototypes/ast/results.json" },
+  { workdir = ".", command = "cargo run --locked --release --manifest-path .constitution/prototypes/ast/Cargo.toml -- aggregate --contract .constitution/tech-spec/contracts/provisional-spikes.toml --schema .constitution/tech-spec/contracts/spike-result.schema.json --import-bundle .constitution/prototypes/ast/handoff/inbox/linux-reference.tar.zst --import-sha256 .constitution/prototypes/ast/handoff/inbox/linux-reference.sha256 --import-bundle .constitution/prototypes/ast/handoff/inbox/macos-reference.tar.zst --import-sha256 .constitution/prototypes/ast/handoff/inbox/macos-reference.sha256 --require-role linux-x86_64-performance --require-role macos-26-performance-visual --require-distinct-hosts 2 --require-distinct-operating-systems 2 --require-role-os linux-x86_64-performance=linux --require-role-arch linux-x86_64-performance=x86_64 --require-role-profile linux-x86_64-performance=github-ubuntu-24_04-x86_64 --require-role-os macos-26-performance-visual=macos --require-role-arch macos-26-performance-visual=aarch64 --require-role-profile macos-26-performance-visual=github-macos-26-arm64 --output .constitution/prototypes/ast/results.json" },
 ]
 candidates = ["markdown 1.0.0 mdast", "comrak 0.54.0", "pulldown-cmark 0.12.2 complete model", "pulldown-cmark 0.13.4 complete model"]
 required_gates = ["exhaustive CommonMark representation", "exhaustive selected GFM representation", "frontmatter", "raw HTML", "reference definitions", "tables", "footnotes", "images", "nested formatting", "malformed input", "exact byte positions", "byte-identical untouched source", "OKF link and ghost classification", "block paths", "rendered selections", "structural and range edits", "conflict representation", "existing note-size latency meters", "FFI projection size and latency"]
@@ -126,6 +166,7 @@ required_gates = ["clean and overlapping text edits", "add-add and modify-delete
 [[spikes]]
 id = "SPK-ASSET-I001"
 decision = "OD-06,OD-07,ADR-016"
+evidence_profiles = ["github-ubuntu-24_04-x86_64", "github-macos-26-arm64"]
 path = ".constitution/prototypes/assets"
 write_allowlist = [".constitution/prototypes/assets", ".constitution/spikes/SPK-ASSET-I001.md"]
 create_commands = [
@@ -134,17 +175,18 @@ create_commands = [
 ]
 verification_steps = [
   { workdir = ".", command = "cargo test --locked --manifest-path .constitution/prototypes/assets/Cargo.toml --all-targets" },
-  { run_id = "linux-reference", run_role = "linux-reference-profile", workdir = ".", command = "cargo run --locked --release --manifest-path .constitution/prototypes/assets/Cargo.toml -- probe --run-id linux-reference --role linux-reference-profile --expected-os linux --expected-arch x86_64 --profile linux-i5-8250u-16gib --fixture-dir .constitution/prototypes/assets/fixtures --output .constitution/prototypes/assets/runs/linux-reference.json --handoff-bundle .constitution/prototypes/assets/handoff/outbox/linux-reference.tar.zst --handoff-sha256 .constitution/prototypes/assets/handoff/outbox/linux-reference.sha256" },
-  { run_id = "macos-reference", run_role = "macos-reference-profile", workdir = ".", command = "cargo run --locked --release --manifest-path .constitution/prototypes/assets/Cargo.toml -- probe --run-id macos-reference --role macos-reference-profile --expected-os macos --expected-arch aarch64 --profile macos-m1-8gib --fixture-dir .constitution/prototypes/assets/fixtures --output .constitution/prototypes/assets/runs/macos-reference.json --handoff-bundle .constitution/prototypes/assets/handoff/outbox/macos-reference.tar.zst --handoff-sha256 .constitution/prototypes/assets/handoff/outbox/macos-reference.sha256" },
+  { run_id = "linux-reference", run_role = "linux-x86_64-performance", workdir = ".", command = "cargo run --locked --release --manifest-path .constitution/prototypes/assets/Cargo.toml -- probe --run-id linux-reference --role linux-x86_64-performance --expected-os linux --expected-arch x86_64 --profile github-ubuntu-24_04-x86_64 --fixture-dir .constitution/prototypes/assets/fixtures --output .constitution/prototypes/assets/runs/linux-reference.json --handoff-bundle .constitution/prototypes/assets/handoff/outbox/linux-reference.tar.zst --handoff-sha256 .constitution/prototypes/assets/handoff/outbox/linux-reference.sha256" },
+  { run_id = "macos-reference", run_role = "macos-26-performance-visual", workdir = ".", command = "cargo run --locked --release --manifest-path .constitution/prototypes/assets/Cargo.toml -- probe --run-id macos-reference --role macos-26-performance-visual --expected-os macos --expected-arch aarch64 --profile github-macos-26-arm64 --fixture-dir .constitution/prototypes/assets/fixtures --output .constitution/prototypes/assets/runs/macos-reference.json --handoff-bundle .constitution/prototypes/assets/handoff/outbox/macos-reference.tar.zst --handoff-sha256 .constitution/prototypes/assets/handoff/outbox/macos-reference.sha256" },
   { workdir = ".", command = "mkdir -p .constitution/prototypes/assets/handoff/inbox && scp \"$BURLMD_LINUX_HANDOFF_SOURCE/linux-reference.tar.zst\" \"$BURLMD_LINUX_HANDOFF_SOURCE/linux-reference.sha256\" \"$BURLMD_MACOS_HANDOFF_SOURCE/macos-reference.tar.zst\" \"$BURLMD_MACOS_HANDOFF_SOURCE/macos-reference.sha256\" .constitution/prototypes/assets/handoff/inbox/" },
-  { workdir = ".", command = "cargo run --locked --release --manifest-path .constitution/prototypes/assets/Cargo.toml -- aggregate --contract .constitution/tech-spec/contracts/provisional-spikes.toml --schema .constitution/tech-spec/contracts/spike-result.schema.json --import-bundle .constitution/prototypes/assets/handoff/inbox/linux-reference.tar.zst --import-sha256 .constitution/prototypes/assets/handoff/inbox/linux-reference.sha256 --import-bundle .constitution/prototypes/assets/handoff/inbox/macos-reference.tar.zst --import-sha256 .constitution/prototypes/assets/handoff/inbox/macos-reference.sha256 --require-role linux-reference-profile --require-role macos-reference-profile --require-distinct-hosts 2 --require-distinct-operating-systems 2 --require-role-os linux-reference-profile=linux --require-role-arch linux-reference-profile=x86_64 --require-role-profile linux-reference-profile=linux-i5-8250u-16gib --require-role-os macos-reference-profile=macos --require-role-arch macos-reference-profile=aarch64 --require-role-profile macos-reference-profile=macos-m1-8gib --output .constitution/prototypes/assets/results.json" },
+  { workdir = ".", command = "cargo run --locked --release --manifest-path .constitution/prototypes/assets/Cargo.toml -- aggregate --contract .constitution/tech-spec/contracts/provisional-spikes.toml --schema .constitution/tech-spec/contracts/spike-result.schema.json --import-bundle .constitution/prototypes/assets/handoff/inbox/linux-reference.tar.zst --import-sha256 .constitution/prototypes/assets/handoff/inbox/linux-reference.sha256 --import-bundle .constitution/prototypes/assets/handoff/inbox/macos-reference.tar.zst --import-sha256 .constitution/prototypes/assets/handoff/inbox/macos-reference.sha256 --require-role linux-x86_64-performance --require-role macos-26-performance-visual --require-distinct-hosts 2 --require-distinct-operating-systems 2 --require-role-os linux-x86_64-performance=linux --require-role-arch linux-x86_64-performance=x86_64 --require-role-profile linux-x86_64-performance=github-ubuntu-24_04-x86_64 --require-role-os macos-26-performance-visual=macos --require-role-arch macos-26-performance-visual=aarch64 --require-role-profile macos-26-performance-visual=github-macos-26-arm64 --output .constitution/prototypes/assets/results.json" },
 ]
 candidates = ["aws-sdk-s3 1.144.0 plus aws-config 1.11.0", "object_store 0.14.1"]
-required_gates = ["content identity and deduplication", "immutable manifest round trip", "device-local verification and hydration state", "decode memory and pixel dimensions", "Linux reference profile", "macOS reference profile", "UI Responsiveness Goal 99 percent frames within 16.7 milliseconds and input effect within 50 milliseconds", "UI Responsiveness Fail more than 1 percent frames over 33.3 milliseconds or input effect over 100 milliseconds", "Idle Memory Goal at most 400 MB", "Idle Memory Fail at least 1 GB or growth above 5 percent over four hours", "25 MiB provisional import limit", "leave OD-06 unresolved when the isolated harness cannot establish full UI or idle-memory meters", "offline hydration", "endpoint and path-style compatibility", "list read write delete validation for disposable probe objects only", "anonymous list read write and delete rejection", "protected Git and reconciliation reachability", "30-day verified local cache eviction", "no authoritative Object Store deletion during 0.x", "repository growth and maintenance meters"]
+required_gates = ["content identity and deduplication", "immutable manifest round trip", "device-local verification and hydration state", "decode memory and pixel dimensions", "Linux x86-64 managed performance profile", "macOS 26 managed performance profile", "UI Responsiveness Goal 99 percent frames within 16.7 milliseconds and input effect within 50 milliseconds", "UI Responsiveness Fail more than 1 percent frames over 33.3 milliseconds or input effect over 100 milliseconds", "Idle Memory Goal at most 400 MB", "Idle Memory Fail at least 1 GB or growth above 5 percent over four hours", "25 MiB provisional import limit", "leave OD-06 unresolved when the isolated harness cannot establish full UI or idle-memory meters", "offline hydration", "endpoint and path-style compatibility", "list read write delete validation for disposable probe objects only", "anonymous list read write and delete rejection", "protected Git and reconciliation reachability", "30-day verified local cache eviction", "no authoritative Object Store deletion during 0.x", "repository growth and maintenance meters"]
 
 [[spikes]]
 id = "SPK-PKG-M001"
 decision = "OD-08,ADR-018"
+evidence_profiles = ["github-ubuntu-24_04-x86_64", "github-macos-26-arm64", "github-macos-15-arm64"]
 path = ".constitution/prototypes/packaging"
 write_allowlist = [".constitution/prototypes/packaging", ".constitution/spikes/SPK-PKG-M001.md"]
 create_commands = [
@@ -163,18 +205,18 @@ verification_steps = [
   { run_id = "ubuntu-26.04-x86_64", run_role = "linux-runtime-candidate", workdir = ".constitution/prototypes/packaging", command = "cargo run --locked --release --manifest-path result-tool/Cargo.toml -- execute --run-id ubuntu-26.04-x86_64 --role linux-runtime-candidate --output runs/ubuntu-26.04-x86_64.json --stdout logs/ubuntu-26.04.stdout --stderr logs/ubuntu-26.04.stderr --artifact result-links/ubuntu-26.04 --copy-artifact-to artifacts/ubuntu-26.04 -- nix build --print-build-logs --out-link result-links/ubuntu-26.04 .#checks.x86_64-linux.ubuntu-26_04" },
   { run_id = "debian-12-x86_64", run_role = "linux-runtime-candidate", workdir = ".constitution/prototypes/packaging", command = "cargo run --locked --release --manifest-path result-tool/Cargo.toml -- execute --run-id debian-12-x86_64 --role linux-runtime-candidate --output runs/debian-12-x86_64.json --stdout logs/debian-12.stdout --stderr logs/debian-12.stderr --artifact result-links/debian-12 --copy-artifact-to artifacts/debian-12 -- nix build --print-build-logs --out-link result-links/debian-12 .#checks.x86_64-linux.debian-12" },
   { run_id = "debian-13-x86_64", run_role = "linux-runtime-candidate", workdir = ".constitution/prototypes/packaging", command = "cargo run --locked --release --manifest-path result-tool/Cargo.toml -- execute --run-id debian-13-x86_64 --role linux-runtime-candidate --output runs/debian-13-x86_64.json --stdout logs/debian-13.stdout --stderr logs/debian-13.stderr --artifact result-links/debian-13 --copy-artifact-to artifacts/debian-13 -- nix build --print-build-logs --out-link result-links/debian-13 .#checks.x86_64-linux.debian-13" },
-  { run_id = "macos-release-a", run_role = "macos-current-stable", workdir = ".constitution/prototypes/packaging/harness", command = "cargo run --locked --release --manifest-path ../result-tool/Cargo.toml -- execute --run-id macos-release-a --role macos-current-stable --expected-os macos --expected-arch aarch64 --expected-os-major 26 --output ../runs/macos-release-a.json --stdout ../logs/macos-release-a.stdout --stderr ../logs/macos-release-a.stderr --artifact ../artifacts/burlmd-macos-aarch64-a.tar.gz -- ./scripts/build-macos-release.sh --output-archive ../artifacts/burlmd-macos-aarch64-a.tar.gz --source-date-epoch-from-git HEAD" },
+  { run_id = "macos-release-a", run_role = "macos-current-stable", workdir = ".constitution/prototypes/packaging/harness", command = "cargo run --locked --release --manifest-path ../result-tool/Cargo.toml -- execute --run-id macos-release-a --role macos-current-stable --expected-os macos --expected-arch aarch64 --expected-os-major 26 --profile github-macos-26-arm64 --output ../runs/macos-release-a.json --stdout ../logs/macos-release-a.stdout --stderr ../logs/macos-release-a.stderr --artifact ../artifacts/burlmd-macos-aarch64-a.tar.gz -- ./scripts/build-macos-release.sh --output-archive ../artifacts/burlmd-macos-aarch64-a.tar.gz --source-date-epoch-from-git HEAD" },
   { run_id = "macos-release-a-extract", run_role = "macos-current-stable", workdir = ".constitution/prototypes/packaging", command = "cargo run --locked --release --manifest-path result-tool/Cargo.toml -- archive extract --run-id macos-release-a --append-run runs/macos-release-a.json --archive artifacts/burlmd-macos-aarch64-a.tar.gz --output-dir artifacts/macos-release-a-extracted --require-single-app harness.app --preserve-mode --preserve-symlinks --preserve-xattrs --reject-path-escape" },
-  { run_id = "macos-release-a", run_role = "macos-current-stable", workdir = ".constitution/prototypes/packaging/harness", command = "cargo run --locked --release --manifest-path ../result-tool/Cargo.toml -- execute --append --run-id macos-release-a --role macos-current-stable --expected-os macos --expected-arch aarch64 --expected-os-major 26 --output ../runs/macos-release-a.json --stdout ../logs/macos-release-a-probe.stdout --stderr ../logs/macos-release-a-probe.stderr --artifact ../artifacts/burlmd-macos-aarch64-a.tar.gz --artifact ../artifacts/macos-release-a-probe.json -- ../artifacts/macos-release-a-extracted/harness.app/Contents/MacOS/harness --burlmd-packaging-probe ../artifacts/macos-release-a-probe.json" },
-  { run_id = "macos-release-b", run_role = "macos-repeat-construction", workdir = ".constitution/prototypes/packaging/harness", command = "cargo run --locked --release --manifest-path ../result-tool/Cargo.toml -- execute --run-id macos-release-b --role macos-repeat-construction --expected-os macos --expected-arch aarch64 --expected-os-major 26 --output ../runs/macos-release-b.json --stdout ../logs/macos-release-b.stdout --stderr ../logs/macos-release-b.stderr --artifact ../artifacts/burlmd-macos-aarch64-b.tar.gz -- ./scripts/build-macos-release.sh --output-archive ../artifacts/burlmd-macos-aarch64-b.tar.gz --source-date-epoch-from-git HEAD" },
+  { run_id = "macos-release-a", run_role = "macos-current-stable", workdir = ".constitution/prototypes/packaging/harness", command = "cargo run --locked --release --manifest-path ../result-tool/Cargo.toml -- execute --append --run-id macos-release-a --role macos-current-stable --expected-os macos --expected-arch aarch64 --expected-os-major 26 --profile github-macos-26-arm64 --output ../runs/macos-release-a.json --stdout ../logs/macos-release-a-probe.stdout --stderr ../logs/macos-release-a-probe.stderr --artifact ../artifacts/burlmd-macos-aarch64-a.tar.gz --artifact ../artifacts/macos-release-a-probe.json -- ../artifacts/macos-release-a-extracted/harness.app/Contents/MacOS/harness --burlmd-packaging-probe ../artifacts/macos-release-a-probe.json" },
+  { run_id = "macos-release-b", run_role = "macos-repeat-construction", workdir = ".constitution/prototypes/packaging/harness", command = "cargo run --locked --release --manifest-path ../result-tool/Cargo.toml -- execute --run-id macos-release-b --role macos-repeat-construction --expected-os macos --expected-arch aarch64 --expected-os-major 26 --profile github-macos-26-arm64 --output ../runs/macos-release-b.json --stdout ../logs/macos-release-b.stdout --stderr ../logs/macos-release-b.stderr --artifact ../artifacts/burlmd-macos-aarch64-b.tar.gz -- ./scripts/build-macos-release.sh --output-archive ../artifacts/burlmd-macos-aarch64-b.tar.gz --source-date-epoch-from-git HEAD" },
   { run_id = "macos-current-handoff", run_role = "macos-current-stable", workdir = ".constitution/prototypes/packaging", command = "cargo run --locked --release --manifest-path result-tool/Cargo.toml -- handoff export --run-id macos-current-handoff --run-file runs/macos-release-a.json --run-file runs/macos-release-b.json --artifact artifacts/burlmd-macos-aarch64-a.tar.gz --artifact artifacts/burlmd-macos-aarch64-b.tar.gz --output handoff/outbox/macos-current-construction.tar.zst --sha256-output handoff/outbox/macos-current-construction.sha256" },
   { workdir = ".constitution/prototypes/packaging", command = "mkdir -p handoff/current-inbox && scp \"$BURLMD_MACOS_CURRENT_HANDOFF_SOURCE/macos-current-construction.tar.zst\" \"$BURLMD_MACOS_CURRENT_HANDOFF_SOURCE/macos-current-construction.sha256\" handoff/current-inbox/" },
   { run_id = "macos-previous-import", run_role = "macos-previous-stable", workdir = ".constitution/prototypes/packaging", command = "cargo run --locked --release --manifest-path result-tool/Cargo.toml -- handoff import --bundle handoff/current-inbox/macos-current-construction.tar.zst --sha256 handoff/current-inbox/macos-current-construction.sha256 --artifact artifacts/burlmd-macos-aarch64-a.tar.gz --copy-artifact-to artifacts/burlmd-macos-aarch64-under-test.tar.gz" },
   { run_id = "macos-previous-extract", run_role = "macos-previous-stable", workdir = ".constitution/prototypes/packaging", command = "cargo run --locked --release --manifest-path result-tool/Cargo.toml -- archive extract --archive artifacts/burlmd-macos-aarch64-under-test.tar.gz --output-dir artifacts/macos-release-under-test --require-single-app harness.app --preserve-mode --preserve-symlinks --preserve-xattrs --reject-path-escape" },
-  { run_id = "macos-previous-aarch64", run_role = "macos-previous-stable", workdir = ".constitution/prototypes/packaging/harness", command = "cargo run --locked --release --manifest-path ../result-tool/Cargo.toml -- execute --run-id macos-previous-aarch64 --role macos-previous-stable --expected-os macos --expected-arch aarch64 --expected-os-major 15 --output ../runs/macos-previous-aarch64.json --stdout ../logs/macos-previous-probe.stdout --stderr ../logs/macos-previous-probe.stderr --artifact ../artifacts/burlmd-macos-aarch64-under-test.tar.gz --artifact ../artifacts/macos-previous-probe.json -- ../artifacts/macos-release-under-test/harness.app/Contents/MacOS/harness --burlmd-packaging-probe ../artifacts/macos-previous-probe.json" },
+  { run_id = "macos-previous-aarch64", run_role = "macos-previous-stable", workdir = ".constitution/prototypes/packaging/harness", command = "cargo run --locked --release --manifest-path ../result-tool/Cargo.toml -- execute --run-id macos-previous-aarch64 --role macos-previous-stable --expected-os macos --expected-arch aarch64 --expected-os-major 15 --profile github-macos-15-arm64 --output ../runs/macos-previous-aarch64.json --stdout ../logs/macos-previous-probe.stdout --stderr ../logs/macos-previous-probe.stderr --artifact ../artifacts/burlmd-macos-aarch64-under-test.tar.gz --artifact ../artifacts/macos-previous-probe.json -- ../artifacts/macos-release-under-test/harness.app/Contents/MacOS/harness --burlmd-packaging-probe ../artifacts/macos-previous-probe.json" },
   { run_id = "macos-previous-handoff", run_role = "macos-previous-stable", workdir = ".constitution/prototypes/packaging", command = "cargo run --locked --release --manifest-path result-tool/Cargo.toml -- handoff export --run-id macos-previous-handoff --run-file runs/macos-previous-aarch64.json --artifact artifacts/burlmd-macos-aarch64-under-test.tar.gz --output handoff/outbox/macos-previous-probe.tar.zst --sha256-output handoff/outbox/macos-previous-probe.sha256" },
   { workdir = ".constitution/prototypes/packaging", command = "mkdir -p handoff/inbox && scp \"$BURLMD_MACOS_CURRENT_HANDOFF_SOURCE/macos-current-construction.tar.zst\" \"$BURLMD_MACOS_CURRENT_HANDOFF_SOURCE/macos-current-construction.sha256\" \"$BURLMD_MACOS_PREVIOUS_HANDOFF_SOURCE/macos-previous-probe.tar.zst\" \"$BURLMD_MACOS_PREVIOUS_HANDOFF_SOURCE/macos-previous-probe.sha256\" handoff/inbox/" },
-  { workdir = ".constitution/prototypes/packaging", command = "cargo run --locked --release --manifest-path result-tool/Cargo.toml -- aggregate --contract ../../tech-spec/contracts/provisional-spikes.toml --schema ../../tech-spec/contracts/spike-result.schema.json --import-bundle handoff/inbox/macos-current-construction.tar.zst --import-sha256 handoff/inbox/macos-current-construction.sha256 --import-bundle handoff/inbox/macos-previous-probe.tar.zst --import-sha256 handoff/inbox/macos-previous-probe.sha256 --require-role linux-flake-check --require-role linux-build --require-role linux-flake-install --require-role linux-installed-runtime=2 --require-role linux-runtime-candidate=5 --require-role macos-current-stable --require-role macos-repeat-construction --require-role macos-previous-stable --require-role-os linux-flake-check=linux --require-role-os linux-build=linux --require-role-os linux-flake-install=linux --require-role-os linux-installed-runtime=linux --require-role-os linux-runtime-candidate=linux --require-role-arch linux-flake-check=x86_64 --require-role-arch linux-build=x86_64 --require-role-arch linux-flake-install=x86_64 --require-role-arch linux-installed-runtime=x86_64 --require-role-arch linux-runtime-candidate=x86_64 --require-verified-runtime ubuntu-22.04-x86_64=ubuntu:22.04:x86_64 --require-verified-runtime ubuntu-24.04-x86_64=ubuntu:24.04:x86_64 --require-verified-runtime ubuntu-26.04-x86_64=ubuntu:26.04:x86_64 --require-verified-runtime debian-12-x86_64=debian:12:x86_64 --require-verified-runtime debian-13-x86_64=debian:13:x86_64 --require-distinct-role-hosts macos-current-stable=macos-previous-stable --require-same-role-host macos-current-stable=macos-repeat-construction --require-role-os macos-current-stable=macos --require-role-os macos-previous-stable=macos --require-role-arch macos-current-stable=aarch64 --require-role-arch macos-previous-stable=aarch64 --require-role-os-major macos-current-stable=26 --require-role-os-major macos-previous-stable=15 --require-same-artifact-sha256 macos-current-stable:artifacts/burlmd-macos-aarch64-a.tar.gz=macos-previous-stable:artifacts/burlmd-macos-aarch64-under-test.tar.gz --require-repeatable-artifact macos-current-stable:artifacts/burlmd-macos-aarch64-a.tar.gz=macos-repeat-construction:artifacts/burlmd-macos-aarch64-b.tar.gz --output results.json" },
+  { workdir = ".constitution/prototypes/packaging", command = "cargo run --locked --release --manifest-path result-tool/Cargo.toml -- aggregate --contract ../../tech-spec/contracts/provisional-spikes.toml --schema ../../tech-spec/contracts/spike-result.schema.json --import-bundle handoff/inbox/macos-current-construction.tar.zst --import-sha256 handoff/inbox/macos-current-construction.sha256 --import-bundle handoff/inbox/macos-previous-probe.tar.zst --import-sha256 handoff/inbox/macos-previous-probe.sha256 --require-role linux-flake-check --require-role linux-build --require-role linux-flake-install --require-role linux-installed-runtime=2 --require-role linux-runtime-candidate=5 --require-role macos-current-stable --require-role macos-repeat-construction --require-role macos-previous-stable --require-role-os linux-flake-check=linux --require-role-os linux-build=linux --require-role-os linux-flake-install=linux --require-role-os linux-installed-runtime=linux --require-role-os linux-runtime-candidate=linux --require-role-arch linux-flake-check=x86_64 --require-role-arch linux-build=x86_64 --require-role-arch linux-flake-install=x86_64 --require-role-arch linux-installed-runtime=x86_64 --require-role-arch linux-runtime-candidate=x86_64 --require-verified-runtime ubuntu-22.04-x86_64=ubuntu:22.04:x86_64 --require-verified-runtime ubuntu-24.04-x86_64=ubuntu:24.04:x86_64 --require-verified-runtime ubuntu-26.04-x86_64=ubuntu:26.04:x86_64 --require-verified-runtime debian-12-x86_64=debian:12:x86_64 --require-verified-runtime debian-13-x86_64=debian:13:x86_64 --require-distinct-role-hosts macos-current-stable=macos-previous-stable --require-same-role-host macos-current-stable=macos-repeat-construction --require-role-os macos-current-stable=macos --require-role-os macos-previous-stable=macos --require-role-arch macos-current-stable=aarch64 --require-role-arch macos-previous-stable=aarch64 --require-role-os-major macos-current-stable=26 --require-role-os-major macos-previous-stable=15 --require-role-profile macos-current-stable=github-macos-26-arm64 --require-role-profile macos-previous-stable=github-macos-15-arm64 --require-same-artifact-sha256 macos-current-stable:artifacts/burlmd-macos-aarch64-a.tar.gz=macos-previous-stable:artifacts/burlmd-macos-aarch64-under-test.tar.gz --require-repeatable-artifact macos-current-stable:artifacts/burlmd-macos-aarch64-a.tar.gz=macos-repeat-construction:artifacts/burlmd-macos-aarch64-b.tar.gz --output results.json" },
 ]
 candidates = ["x86-64 AppImage", "release-tagged Nix Flake", "Apple Silicon macOS release archive"]
 required_gates = ["launch installed representative harness", "version-locked Git CLI and runtime", "secure storage", "file picker", "bundled native library", "no emulated platform chrome", "lowest working Linux runtime", "named Linux distribution matrix", "two most recent macOS major versions", "Apple Silicon output", "actual macOS release archive construction extraction and byte reproducibility", "checksum and provenance metadata layout", "secret-injection seams", "compatible 0.x prerelease update-channel selection", "GitHub Release artifact layout", "repeatable construction", "unsigned 0.x disclosure"]

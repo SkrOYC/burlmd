@@ -2,7 +2,7 @@
 
 ## Provisional research boundary
 
-TechSpec v1.7.19-provisional permits research code only under `.constitution/prototypes/`. `SHELL-G001`, `PREF-G002`, `STATE-G003`, `TABS-G004`, `CLOSE-G005`, and `NAV-G007` are the only production-code exceptions. Every other production ticket remains blocked. Except for those tickets, production directories (`lib/`, `rust/`, `linux/`, and `macos/`) are read-only inputs to this research wave. A Spike may create an isolated Rust or Flutter harness through the relevant CLI and add dependencies through `cargo add` or `flutter pub add`. Every Rust scaffold runs the declared `cargo generate-lockfile` command. After the last dependency change, the Spike reruns it and commits the generated lockfile before any `--locked` verification. A Spike must not add a candidate dependency to the production manifests.
+TechSpec v1.8.0-provisional permits research code only under `.constitution/prototypes/`. The existing Epic G M0 production exceptions remain unchanged. `FLAKE-M002` and `CI-M003` may write production code only for their reproducibility and validation bootstrap. Every other production ticket remains blocked by its own decision evidence and a matching Stage 3 and Stage 4 adaptation. Except for these contract-scoped exceptions, production directories (`lib/`, `rust/`, `linux/`, and `macos/`) are read-only inputs to this research wave.
 
 The five exact prototype roots and verification commands are machine-readable in `contracts/provisional-spikes.toml`. Its allowlist is exhaustive: each Spike may write only its named prototype root and report path. Every unlisted repository path is read-only. Framework bookkeeping may update the owning active Task after the Spike process exits, but that isn't part of the Spike's write authority.
 
@@ -10,7 +10,41 @@ Each harness writes one `results.json` that validates against `contracts/spike-r
 
 Command execution records exit status and separate standard-output and standard-error artifacts. Before aggregation, the harness verifies that every referenced evidence and artifact path is inside the Spike's write allowlist, exists, matches its byte count and SHA-256 digest, and isn't replaced by a later command. Raw fixtures and measurements stay beside the result. A conclusion without reproducible evidence does not settle an open decision.
 
-Research Tasks stop on a failed safety or fidelity gate. A performance miss is evidence, not permission to weaken the PRD: the result records it and final Product Requirements or Technical Implementation evolution decides the response. Except for the listed Epic G production exceptions, production implementation remains blocked until the final TechSpec replaces the provisional ADRs, FFI banner, on-disk path and asset contracts, and bill of materials.
+Research Tasks stop on a failed safety or fidelity gate. A performance miss is evidence, not permission to weaken the PRD: the result records it and final Product Requirements or Technical Implementation evolution decides the response. A production ticket starts only after its own decision evidence settles its physical contract and Stage 4 adapts that ticket. Unrelated unresolved Spikes don't form a global stop.
+
+## Managed validation evidence protocol
+
+`CI-M003` implements only the bootstrap described here. A candidate branch opens a draft pull request and produces an authoritative expected-identity document before fan-out. That document contains release, build, corpus, run, and required-role identities. Its SHA-256 digest is passed independently to each validation role and to aggregation.
+
+For a draft run, release identity is `candidate:` followed by the 40-hex head commit. Build identity is the SHA-256 of an exact input manifest containing that commit, repository tree, lockfiles, toolchain pins, action pins, and build configuration. Corpus identity is the SHA-256 of the generated corpus manifest. Run identity is the decimal workflow-run ID and run attempt joined by `:`. Required roles are exactly `linux-x86_64`, `macos-26-arm64`, and `macos-15-arm64`. The expected-identity digest covers the exact generated JSON bytes; roles receive that immutable file rather than reconstructing it.
+
+Each role writes one artifact that validates against `contracts/ci-evidence.schema.json`. The artifact captures the hosted image, OS, architecture, CPU, memory, storage, logical viewport, repository tree, lockfiles, toolchains, corpus, build, run, and role. The role also records its artifact ID and digest. The candidate workflow grants no release or repository-content publication authority and receives no live product credentials. It grants only the read and attestation permissions required by ADR-018.
+
+Each role uses the pinned attestation action to authenticate the evidence-manifest digest with GitHub's Sigstore service. Aggregation runs either in a coordinator job or locally with authenticated read access. It verifies the attestation against the expected repository, workflow identity, head SHA, and artifact subject. It also queries the versioned workflow-job and artifact APIs. The API response must match job ID, required hosted label, workflow-run ID, run attempt, head SHA, artifact ID, and service-reported digest. Digest equality without the attestation and API checks is insufficient.
+
+GitHub artifact attestations for private or internal repositories require GitHub Enterprise Cloud. Repository plan eligibility isn't guaranteed by this specification. If the candidate repository can't create and verify the attestation, `CI-M003` must report authenticated origin as unavailable and leave managed evidence unaccepted. It must not substitute a hash-only protocol.
+
+Aggregation then verifies each artifact's internal hashes and compares its captured identities with the independently supplied expected identity. Missing, duplicate, stale, mismatched, unexpected-role, untrusted-origin, or corrupt evidence fails the aggregate. An operator commits the accepted aggregate report to the candidate branch; the workflow never pushes repository content. Milestone review starts only from that evidence commit. A draft-run status alone is not evidence.
+
+The hosted OS labels are mutable image channels. Every result records `ImageOS` and `ImageVersion`, and performance or visual aggregation refuses mixed image versions. GitHub doesn't guarantee physical host identity, CPU scheduling, storage throughput, or absence of neighboring load. Repeated samples and captured resource facts bound the claim; they don't turn a hosted label into physical-workstation proof.
+
+The required evidence consumers are:
+
+| Consumer | `ubuntu-24.04` | `macos-26` | `macos-15` |
+| :--- | :--- | :--- | :--- |
+| Common functional matrix | Required | Required | Required; compatibility only |
+| AST and FFI projection measurements | Performance reference | Performance reference | Not accepted |
+| Asset decode and memory measurements | Performance reference | Performance reference | Not accepted |
+| Workspace-observer latency | Performance reference | Performance reference | Functional behavior only |
+| Nightly PRD meters | Performance reference | Performance reference | Not accepted |
+| Packaging and installed-app proof | x86-64 Linux artifact | Apple Silicon macOS 26 artifact | Same Apple Silicon artifact on macOS 15 |
+| Exact visual regression | Private headless Sway and Wayland proof | Sole authoritative macOS baseline | Not accepted |
+
+Linux visual capture extends the committed private headless Sway and Wayland implementation. It owns compositor, display, input, process, state directory, and application PID. The current committed capture is `1878x989`; `CI-M003` must reconcile it to the PRD's verified 1920x1080 at 60 Hz logical viewport before claiming reference-class evidence. It must not fall back to the Writer's desktop.
+
+macOS 26 visual capture runs the actual Apple Silicon hosted desktop application. It produces one reviewed baseline set for macOS and verifies the 1920x1080 logical application viewport before capture. The installed Flutter 3.44.3 source provides `FlutterDriver.screenshot`, but it doesn't guarantee the host window geometry. `CI-M003` must prove geometry on the hosted GUI or leave the visual role failed. Widget-test or Linux output can't substitute. macOS 15 never creates or updates visual baselines.
+
+All workflow actions use the full commit SHAs in `stack.md`. The workflow uses the repository's Nix, Rust, Cargo, and Pub locks rather than hosted preinstalled tool versions. It captures any unavoidable host utility version. The OS-major labels and image versions remain evidence inputs, not lockfile replacements.
 
 ## Commits
 This repository uses [Conventional Commits](https://www.conventionalcommits.org/):
@@ -102,7 +136,7 @@ The repository follows the default `flutter_rust_bridge` template structure to m
 └── flutter_rust_bridge.yaml # FRB configuration
 ```
 
-The directories marked **Planned** are the physical homes for the forward boundaries already accepted by Architecture v1.4.14. They remain absent until their owning implementation ticket begins. A Spike never creates them. Final Stage 3 may refine files inside a planned directory after evidence, but moving responsibility to a different boundary requires Architecture review and a Tasks adaptation.
+The directories marked **Planned** are the physical homes for the forward boundaries already accepted by Architecture v1.4.15. They remain absent until their owning implementation ticket begins. A Spike never creates them. Final Stage 3 may refine files inside a planned directory after evidence, but moving responsibility to a different boundary requires Architecture review and a Tasks adaptation.
 
 `android/` and `ios/` are absent by design: mobile targets are deferred per
 `tasks/critical-path.md`, and no mobile toolchain is provisioned. `ANDROID_HOME`
@@ -252,9 +286,7 @@ all of it inside the commit. The standing suggestion is unchanged and still not
 acted on: consider moving clippy to the `pre-push` stage, leaving `cargo fmt` on
 `pre-commit`.
 
-Nothing enforces the rest, and no CI runs today. The testing standard, the Rust
-async-avoidance rule and the Dart widget-statelessness rule are review
-obligations, not gated checks.
+The coordinating Epic G branch contains the first generated-binding and private headless visual gates, but the base branch has no accepted managed CI evidence yet. `CI-M003` may bootstrap those gates under this contract. Until an evidence commit passes milestone review, the broader testing standard, Rust async-avoidance rule, and Dart widget-statelessness rule remain review obligations.
 
 ## Running the real app (manual visual verification)
 

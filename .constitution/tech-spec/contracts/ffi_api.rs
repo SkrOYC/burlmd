@@ -1,7 +1,7 @@
-// FORWARD STATUS (TechSpec v1.7.19-provisional): this is the delivered
+// FORWARD STATUS (TechSpec v1.8.0-provisional): this is the delivered
 // brownfield interface, with the Epic G session-restore exception specified.
-// It is not otherwise an implementation-ready contract for PRD v1.3.6 and
-// Architecture v1.4.14.
+// It is not otherwise an implementation-ready contract for PRD v1.3.7 and
+// Architecture v1.4.15.
 // In particular, AstNode is a rendering projection rather than the required
 // canonical extended AST; the OAuth redirect flow is superseded by the
 // GitHub App device-flow decision; title-verbatim path derivation is under
@@ -9,8 +9,10 @@
 // reconciliation-decision, and release surfaces remain absent.
 // Research-only Tasks must use contracts/provisional-spikes.toml and must not
 // implement or extend this FFI. The named Epic G exceptions may implement
-// their specified contracts. Final Stage 3 reconciles the remaining gaps after
-// the five Spikes produce evidence.
+// their specified contracts. FLAKE-M002 and CI-M003 may bootstrap validation
+// but may not change this interface. Each remaining production contract waits
+// only for its own evidence, final Stage 3 reconciliation, and Stage 4
+// adaptation.
 //
 // Raw Rust interface contract exposed to Flutter via flutter_rust_bridge.
 // This defines the exact shapes passing over the FFI boundary.

@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": ["schemaVersion", "spikeId", "generatedAt", "corpus", "candidates", "gates", "runs", "recommendation", "unresolved"],
   "properties": {
-    "schemaVersion": { "const": 10 },
+    "schemaVersion": { "const": 11 },
     "spikeId": { "pattern": "^SPK-[A-Z]+-[A-Z][0-9]{3}$", "type": "string" },
     "generatedAt": { "$comment": "The mandatory result validator must semantically parse this value as RFC 3339 and reject impossible calendar dates; this pattern checks shape only.", "type": "string", "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-([0-2][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\\.[0-9]+)?(Z|[+-]([01][0-9]|2[0-3]):[0-5][0-9])$" },
     "corpus": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
@@ -47,8 +47,8 @@
         "additionalProperties": false,
         "allOf": [
           {
-            "if": { "properties": { "role": { "type": "string", "pattern": "-profile$" } }, "required": ["role"] },
-            "then": { "properties": { "host": { "type": "object", "required": ["profile"] } } }
+            "if": { "properties": { "role": { "enum": ["linux-x86_64-performance", "macos-26-performance-visual", "macos-current-stable", "macos-repeat-construction", "macos-previous-stable"] } }, "required": ["role"] },
+            "then": { "properties": { "host": { "type": "object", "required": ["profile"], "properties": { "profile": {} } } } }
           }
         ],
         "required": ["id", "role", "inputContext", "host", "toolchain", "commandResults", "measurements", "artifacts"],
@@ -89,19 +89,25 @@
               "profile": {
                 "type": "object",
                 "additionalProperties": false,
-                "required": ["cpuModel", "physicalCoreCount", "memoryBytes", "storageKind", "integratedGraphics", "graphicsModel", "displayWidthPixels", "displayHeightPixels", "displayRefreshHz", "powerSource", "thermalThrottling"],
+                "required": ["runnerLabel", "imageOS", "imageVersion", "cpuModel", "logicalCpuCount", "memoryBytes", "storageBytes", "logicalViewportWidth", "logicalViewportHeight", "logicalViewportRefreshHz", "logicalViewportVerified", "roles"],
                 "properties": {
+                  "runnerLabel": { "enum": ["ubuntu-24.04", "macos-26", "macos-15"] },
+                  "imageOS": { "type": "string", "minLength": 1 },
+                  "imageVersion": { "type": "string", "minLength": 1 },
                   "cpuModel": { "type": "string", "minLength": 1 },
-                  "physicalCoreCount": { "type": "integer", "minimum": 1 },
+                  "logicalCpuCount": { "type": "integer", "minimum": 1 },
                   "memoryBytes": { "type": "integer", "minimum": 1 },
-                  "storageKind": { "enum": ["internal-ssd", "nvme-ssd", "other"] },
-                  "integratedGraphics": { "type": "boolean" },
-                  "graphicsModel": { "type": "string", "minLength": 1 },
-                  "displayWidthPixels": { "type": "integer", "minimum": 1 },
-                  "displayHeightPixels": { "type": "integer", "minimum": 1 },
-                  "displayRefreshHz": { "type": "number", "exclusiveMinimum": 0 },
-                  "powerSource": { "enum": ["ac", "battery", "unknown"] },
-                  "thermalThrottling": { "type": "boolean" }
+                  "storageBytes": { "type": "integer", "minimum": 1 },
+                  "logicalViewportWidth": { "const": 1920 },
+                  "logicalViewportHeight": { "const": 1080 },
+                  "logicalViewportRefreshHz": { "const": 60 },
+                  "logicalViewportVerified": { "const": true },
+                  "roles": {
+                    "type": "array",
+                    "minItems": 1,
+                    "uniqueItems": true,
+                    "items": { "enum": ["common-functional", "common-functional-compatibility", "performance", "linux-exact-visual", "macos-authoritative-visual"] }
+                  }
                 }
               }
             }
