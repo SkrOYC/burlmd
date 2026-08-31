@@ -4,15 +4,16 @@
   "title": "burlmd managed CI aggregate evidence",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "expectedIdentity", "expectedIdentitySha256", "generatedAt", "mode", "status", "roleEvidence", "aggregationChecks", "rejectionReasons"],
+  "required": ["schemaVersion", "expectedIdentity", "expectedIdentitySha256", "generatedAt", "mode", "status", "roleEvidence", "coordinatorExecution", "aggregationChecks", "rejectionReasons"],
   "properties": {
-    "schemaVersion": { "const": 5 },
+    "schemaVersion": { "const": 6 },
     "expectedIdentity": { "$ref": "ci-role-evidence.schema.json#/$defs/expectedIdentity" },
     "expectedIdentitySha256": { "$ref": "#/$defs/sha256" },
     "generatedAt": { "$ref": "#/$defs/rfc3339" },
     "mode": { "enum": ["coordinator-job", "authenticated-local"] },
     "status": { "enum": ["accepted", "rejected"] },
     "roleEvidence": { "type": "array", "maxItems": 3, "items": { "$ref": "#/$defs/enrichedRoleEvidence" } },
+    "coordinatorExecution": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/coordinatorExecution" }] },
     "aggregationChecks": {
       "type": "object",
       "additionalProperties": false,
@@ -68,7 +69,29 @@
             "imageVersionsCompatible": { "const": true }
           } },
           "rejectionReasons": { "type": "array", "maxItems": 0 }
-        }
+        },
+        "allOf": [
+          {
+            "if": { "properties": { "expectedIdentity": { "type": "object", "properties": { "ticketIdentity": { "const": "CI-M003" } } } } },
+            "then": { "properties": { "coordinatorExecution": { "type": "null" } } },
+            "else": { "properties": { "coordinatorExecution": {
+              "allOf": [
+                { "$ref": "#/$defs/coordinatorExecution" },
+                { "type": "object", "properties": {
+                  "networkIsolated": { "const": true },
+                  "credentialsSanitized": { "const": true },
+                  "descriptorsClosed": { "const": true },
+                  "emptyUserState": { "const": true },
+                  "inputsReadOnly": { "const": true },
+                  "outputOnlyWritable": { "const": true },
+                  "forbiddenToolsAbsent": { "const": true },
+                  "credentialCanariesAbsent": { "const": true },
+                  "representativeResultPassed": { "const": true }
+                } }
+              ]
+            } } }
+          }
+        ]
       },
       "else": { "properties": { "rejectionReasons": { "type": "array", "minItems": 1 } } }
     }
@@ -170,12 +193,36 @@
         }
       ]
     },
+    "coordinatorExecution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["executableSha256", "sourceTreeSha256", "lockfileSha256", "toolchainClosureSha256", "executionClosureSha256", "contractSha256", "buildCommandSha256", "sandbox", "networkIsolated", "credentialsSanitized", "descriptorsClosed", "emptyUserState", "inputsReadOnly", "outputOnlyWritable", "forbiddenToolsAbsent", "credentialCanariesAbsent", "representativeResultPassed"],
+      "properties": {
+        "executableSha256": { "$ref": "#/$defs/sha256" },
+        "sourceTreeSha256": { "$ref": "#/$defs/sha256" },
+        "lockfileSha256": { "$ref": "#/$defs/sha256" },
+        "toolchainClosureSha256": { "$ref": "#/$defs/sha256" },
+        "executionClosureSha256": { "$ref": "#/$defs/sha256" },
+        "contractSha256": { "$ref": "#/$defs/sha256" },
+        "buildCommandSha256": { "$ref": "#/$defs/sha256" },
+        "sandbox": { "const": "bubblewrap-0.11.2" },
+        "networkIsolated": { "type": "boolean" },
+        "credentialsSanitized": { "type": "boolean" },
+        "descriptorsClosed": { "type": "boolean" },
+        "emptyUserState": { "type": "boolean" },
+        "inputsReadOnly": { "type": "boolean" },
+        "outputOnlyWritable": { "type": "boolean" },
+        "forbiddenToolsAbsent": { "type": "boolean" },
+        "credentialCanariesAbsent": { "type": "boolean" },
+        "representativeResultPassed": { "type": "boolean" }
+      }
+    },
     "rejectionReason": {
       "type": "object",
       "additionalProperties": false,
       "required": ["code", "detail"],
       "properties": {
-        "code": { "enum": ["expected-identity-invalid", "role-manifest-invalid", "role-bundle-invalid", "missing-role", "duplicate-role", "unexpected-role", "role-gate-failed", "identity-mismatch", "stale-evidence", "workflow-signer-mismatch", "runner-label-mismatch", "runner-environment-mismatch", "untrusted-origin", "attestation-unavailable", "artifact-api-mismatch", "artifact-corrupt", "mixed-image-version", "aggregation-error"] },
+        "code": { "enum": ["expected-identity-invalid", "role-manifest-invalid", "role-bundle-invalid", "missing-role", "duplicate-role", "unexpected-role", "role-gate-failed", "identity-mismatch", "stale-evidence", "workflow-signer-mismatch", "runner-label-mismatch", "runner-environment-mismatch", "untrusted-origin", "attestation-unavailable", "artifact-api-mismatch", "artifact-corrupt", "mixed-image-version", "coordinator-identity-mismatch", "coordinator-isolation-failed", "coordinator-credential-exposure", "aggregation-error"] },
         "role": { "$ref": "#/$defs/role" },
         "detail": { "type": "string", "minLength": 1 }
       }
