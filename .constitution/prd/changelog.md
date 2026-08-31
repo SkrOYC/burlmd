@@ -1,5 +1,13 @@
 # Stage 1: Product Requirements Changelog
 
+## v1.3.7 - 2026-08-31
+
+### Changed
+
+- Replaced physical workstation performance profiles with reproducible managed continuous-integration reference classes. The Linux x86-64 class has 4 logical CPUs and 16 GB of memory. The Apple Silicon macOS 26 class has M1-class compute, 3 logical CPUs, and 7 GB of memory.
+- Kept every performance threshold and corpus size unchanged. Each run uses a deterministic logical viewport and records enough environment identity to reproduce and compare its evidence.
+- Made macOS 26 the performance and visual reference. macOS 15 remains a release-blocking functional compatibility target but doesn't define performance or visual baselines.
+
 ## v1.3.6 - 2026-08-26
 
 ### Fixed
