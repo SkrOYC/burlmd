@@ -22,6 +22,7 @@ Evolution pass for PRD v1.3.7 and Architecture v1.4.15. This version replaces ph
 
 ### Fixed
 
+- Defined `scripts/managed-evidence.sh` as the sole managed-evidence client. Its `collect` form authenticates an existing candidate draft-pull-request run for CI self-bootstrap; its post-merge `run` form dispatches the fixed caller for an allowed decision ticket and ref, waits on the API-returned run ID, and performs the same fail-closed collection. The contract fixes artifact names, flags, permissions, output, and exit statuses without introducing a general workflow framework.
 - Removed the circular requirement for a role manifest to contain the service-assigned ID and digest of the artifact that contains it. Roles attest immutable pre-upload manifest bytes; the coordinator adds upload and attestation facts only to the final report.
 - Replaced unsupported artifact-to-job REST correlation with three distinct single-job reusable-workflow signers pinned to the candidate SHA. Signed builder identity binds each manifest to its role workflow, and the job API corroborates that workflow's fixed hosted label without trusting a manifest-supplied job name or ID.
 - Made final aggregation a discriminated accepted or rejected result. Rejected reports allow missing or partial role evidence and require typed reasons. Each role's evidence-class sequence is exact, so Linux and macOS can't claim the other platform's visual proof.
