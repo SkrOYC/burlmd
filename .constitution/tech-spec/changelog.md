@@ -8,12 +8,12 @@ Evolution pass for PRD v1.3.7 and Architecture v1.4.15. This version replaces ph
 
 - Added concrete standard public runner roles. x86-64 `ubuntu-24.04` and Apple Silicon `macos-26` run the common functional matrix and performance meters. `macos-26` owns the authoritative macOS visual baseline. Apple Silicon `macos-15` runs common functional compatibility only.
 - Added `ci-role-evidence.schema.json` for manifests inside immutable pre-upload role bundles and `ci-evidence.schema.json` for coordinator-enriched aggregate reports. The Spike result root requires a real Spike identity and can't represent a CI run without falsely labeling it as research.
-- Added an authenticated two-phase evidence protocol. Source-branch push runs capture role evidence; local or coordinator aggregation verifies origin, bundle integrity, identity, and freshness; an evidence-only commit then precedes milestone review.
+- Added an authenticated two-phase evidence protocol. Source-branch push runs capture role evidence. Local or coordinator aggregation verifies origin, bundle integrity, identity, and freshness before an evidence commit precedes milestone review.
 - Added full commit-SHA pins for checkout, Nix installation, artifact upload and download, and release attestation actions.
 
 ### Changed
 
-- Advanced provisional Spike contracts and result profiles to schema version 13. AST and Asset measurements use the Linux and macOS 26 performance roles. Packaging evidence binds macOS 26 and macOS 15 to their managed profiles.
+- Advanced provisional Spike contracts and result profiles to schema version 14. Role evidence is schema version 4, and aggregate evidence is schema version 5. AST and Asset measurements use the Linux and macOS 26 performance roles. Packaging evidence binds macOS 26 and macOS 15 to their managed profiles.
 - Replaced physical CPU, disk, graphics, power, and throttling assumptions with hosted image identity, observed system resources, and a verified 1920x1080 at 60 Hz logical viewport. OS-major labels remain mutable weekly image channels and can't guarantee a physical host or identical reruns.
 - Bound Linux exact platform-regression proof to the committed private headless Sway and Wayland implementation. Its current `1878x989` capture must reach the PRD viewport before acceptance. This required zero-pixel implementation gate isn't a product visual reference. macOS 26 must use the actual hosted GUI and owns the sole authoritative product visual baseline set; macOS 15 has no visual role.
 - Made the Release Pipeline's expected identity authoritative. Aggregation verifies role-specific GitHub Sigstore signer provenance, independently checks artifact transport and hosted job labels, then compares captured identity instead of trusting artifact self-description.
@@ -22,7 +22,7 @@ Evolution pass for PRD v1.3.7 and Architecture v1.4.15. This version replaces ph
 
 ### Fixed
 
-- Replaced the pull-request merge-revision bootstrap with source-branch `push` identity. The caller uses static local reusable-workflow paths that GitHub resolves from the workflow execution commit. Expected identity separates the tested source head, workflow execution SHA and ref, base SHA, run, and later evidence-only report commit.
+- Replaced the pull-request merge-revision bootstrap with source-branch `push` identity. The caller uses static local reusable-workflow paths that GitHub resolves from the workflow execution commit. Expected identity separates the tested source head, workflow execution SHA and ref, base SHA, run, and later declared-evidence commit.
 - Replaced manifest-only uploads with one attested deterministic role bundle. The bundle contains `ci-role-evidence.json` and every result, log, raw measurement, and handoff named by `internalArtifacts`; aggregation verifies the bundle before consuming any result.
 - Required the signed OIDC `runner_environment` claim to equal `github-hosted`, retained that verified fact in aggregate origin, and added an explicit rejection for self-hosted evidence regardless of custom labels.
 - Clarified `close_note` warning handling without changing the FFI shape. Only a standalone Note-to-Note replacement continues; batch close stops with unprocessed tabs preserved, and a Workspace switch or orderly shutdown is canceled.
@@ -35,6 +35,7 @@ Evolution pass for PRD v1.3.7 and Architecture v1.4.15. This version replaces ph
 - Made `CI-M003` create a non-mutating generated-binding checker before its ordered gate invokes the file. The checker hashes and backs up both generated surfaces, detects any file-set or byte drift with the provisional generator, and restores the exact precheck state on every exit path.
 - Tightened the Workspace-session schema to reject empty and duplicate identities. Core semantic validation also rejects a Workspace mismatch, invalid identity, or active Note outside the open-Note list. Rejected bytes remain quarantined and preserved, and runtime uses an empty writable default instead of malformed state.
 - Removed the alternative persisted-format escape hatch for Workspace sessions. Persisted snapshots must be schema-valid JSON; Core may use an equivalent in-memory representation only after validation and deserialization.
+- Replaced every manual cross-role Spike handoff with verified role-bundle staging under a fixed coordinator root. Expected and captured identity now bind the exact ticket. All five managed Spikes declare exact machine-result, evidence-report, human-report, and coordinator-step contracts. Acceptance requires a schema-valid `results.json`; packaging transfers the macOS archive to the compatibility role only through an authenticated staged bundle.
 
 ### Security
 

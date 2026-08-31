@@ -19,7 +19,7 @@ Evolution pass for PRD v1.3.7, Architecture v1.4.15, and TechSpec v1.8.0-provisi
 
 ### Fixed
 
-- Replaced pull-request merge-revision validation with source-branch push runs. CI and managed Spike commands name the source ref, tested source head, and base SHA; workflows record execution SHA and ref separately, and evidence lands in a later report-only commit.
+- Replaced pull-request merge-revision validation with source-branch push runs. CI and managed Spike commands name the source ref, tested source head, and base SHA; workflows record execution SHA and ref separately, and evidence lands in a later declared-evidence commit.
 - Required each role to attest one complete bundle containing its manifest and every named result, log, raw measurement, and handoff. Acceptance requires signed `runner_environment=github-hosted` provenance and rejects self-hosted evidence regardless of labels.
 - Clarified the close-warning invariant. A standalone Note-to-Note replacement continues after removing the warned retired tab. Batch close stops with unprocessed tabs preserved, and an enclosing Workspace switch or orderly shutdown is canceled.
 - Restored the real desktop integration gates in `CI-M003`: Linux runs the complete `integration_test/` directory on the Linux device inside its owned headless environment, and both macOS roles run it on the macOS device. Each role retains the Flutter unit and analyzer gates and proves that every discovered integration test ran.
@@ -32,6 +32,7 @@ Evolution pass for PRD v1.3.7, Architecture v1.4.15, and TechSpec v1.8.0-provisi
 - Made `CI-M003` implement the missing non-mutating generated-binding checker before its ordered gate invokes that file. The checker preserves both generated surfaces on clean, stale, failed-generator, premodified, and interrupted runs.
 - Tightened `STATE-G003` with nonempty and unique identity schema rules plus Core validation for active Workspace and active Note membership. Malformed bytes remain preserved in quarantine, and runtime receives an empty writable default.
 - Advanced the modified Epic L marker to `v2.2.0`; the modified Epic G and Epic M files already use `v2.2.0`.
+- Replaced every managed Spike's manual cross-role handoff with authenticated role-bundle staging and exact coordinator steps. AST, path, Git, Asset, and packaging milestones now require their declared `results.json`, accepted managed report, and executor-authored human report in one evidence commit. Packaging passes the macOS archive to the compatibility role only through a verified staged bundle.
 
 ## v2.1.21 - 2026-08-30
 
