@@ -48,25 +48,99 @@ class BurlPreferences {
     this.fontScale = BurlFontScale.standard,
     this.measure = BurlMeasure.standard,
     this.focusMode = false,
+    this.updateNotifications = true,
   });
 
   final BurlThemePreference theme;
   final BurlFontScale fontScale;
   final BurlMeasure measure;
   final bool focusMode;
+  final bool updateNotifications;
 
   factory BurlPreferences.defaults() => const BurlPreferences();
+
+  /// Parses exactly the current device-preferences schema payload.
+  ///
+  /// Invalid values return null so the persistence boundary can quarantine
+  /// the file and preserve an in-memory default without exposing malformed
+  /// data to the rest of the application.
+  static BurlPreferences? fromJson(Object? value) {
+    if (value is! Map<String, Object?>) return null;
+    const expectedKeys = {
+      'schema_version',
+      'theme',
+      'font_scale',
+      'measure',
+      'focus_mode',
+      'update_notifications',
+    };
+    if (value.length != expectedKeys.length ||
+        !value.keys.every(expectedKeys.contains) ||
+        value['schema_version'] != 1) {
+      return null;
+    }
+
+    final theme = switch (value['theme']) {
+      'system' => BurlThemePreference.system,
+      'light' => BurlThemePreference.light,
+      'dark' => BurlThemePreference.dark,
+      _ => null,
+    };
+    final fontScale = switch (value['font_scale']) {
+      'compact' => BurlFontScale.compact,
+      'standard' => BurlFontScale.standard,
+      'comfortable' => BurlFontScale.comfortable,
+      'spacious' => BurlFontScale.spacious,
+      _ => null,
+    };
+    final measure = switch (value['measure']) {
+      'narrow' => BurlMeasure.narrow,
+      'standard' => BurlMeasure.standard,
+      'wide' => BurlMeasure.wide,
+      'technical' => BurlMeasure.technical,
+      'full' => BurlMeasure.full,
+      _ => null,
+    };
+    final focusMode = value['focus_mode'];
+    final updateNotifications = value['update_notifications'];
+    if (theme == null ||
+        fontScale == null ||
+        measure == null ||
+        focusMode is! bool ||
+        updateNotifications is! bool) {
+      return null;
+    }
+
+    return BurlPreferences(
+      theme: theme,
+      fontScale: fontScale,
+      measure: measure,
+      focusMode: focusMode,
+      updateNotifications: updateNotifications,
+    );
+  }
+
+  Map<String, Object> toJson() => {
+    'schema_version': 1,
+    'theme': theme.name,
+    'font_scale': fontScale.name,
+    'measure': measure.name,
+    'focus_mode': focusMode,
+    'update_notifications': updateNotifications,
+  };
 
   BurlPreferences copyWith({
     BurlThemePreference? theme,
     BurlFontScale? fontScale,
     BurlMeasure? measure,
     bool? focusMode,
+    bool? updateNotifications,
   }) => BurlPreferences(
     theme: theme ?? this.theme,
     fontScale: fontScale ?? this.fontScale,
     measure: measure ?? this.measure,
     focusMode: focusMode ?? this.focusMode,
+    updateNotifications: updateNotifications ?? this.updateNotifications,
   );
 }
 

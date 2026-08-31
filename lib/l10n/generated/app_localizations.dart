@@ -424,6 +424,18 @@ abstract class AppLocalizations {
   /// **'Dim non-active blocks while editing'**
   String get workspaceFocusModeDescription;
 
+  /// Preferences toggle title for release-update notifications.
+  ///
+  /// In en, this message translates to:
+  /// **'Update notifications'**
+  String get workspaceUpdateNotifications;
+
+  /// Preferences toggle description for release-update notifications.
+  ///
+  /// In en, this message translates to:
+  /// **'Notify me about compatible new releases'**
+  String get workspaceUpdateNotificationsDescription;
+
   /// Generic close or completion action in workspace surfaces.
   ///
   /// In en, this message translates to:

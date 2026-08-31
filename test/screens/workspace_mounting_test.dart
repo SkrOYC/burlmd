@@ -772,32 +772,66 @@ void main() {
     expect(tester.getRect(find.byKey(const ValueKey('entry-1'))), before);
   });
 
-  testWidgets('preferences update the in-session theme choice', (tester) async {
+  testWidgets('preferences drawer updates every device preference', (
+    tester,
+  ) async {
     final api = _MountingRustApi([_treeNode('a', 'Alpha')]);
     final container = await _pumpShell(tester, api);
 
     await tester.tap(find.text('Preferences'));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('preferences-drawer')), findsOneWidget);
-    await tester.tap(find.text('Dark'));
-    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('preferences-theme-dark')));
+    await tester.pump();
     expect(
       container.read(burlPreferencesProvider).theme,
       BurlThemePreference.dark,
     );
 
-    await tester.tap(find.text('Light'));
-    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('preferences-font-scale-spacious')),
+    );
+    await tester.pump();
     expect(
-      container.read(burlPreferencesProvider).theme,
-      BurlThemePreference.light,
+      container.read(burlPreferencesProvider).fontScale,
+      BurlFontScale.spacious,
     );
 
-    await tester.tap(find.text('System'));
-    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('preferences-measure-technical')),
+    );
+    await tester.pump();
     expect(
-      container.read(burlPreferencesProvider).theme,
-      BurlThemePreference.system,
+      container.read(burlPreferencesProvider).measure,
+      BurlMeasure.technical,
+    );
+
+    final drawerScroll = find.descendant(
+      of: find.byKey(const Key('preferences-drawer')),
+      matching: find.byType(Scrollable),
+    );
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('preferences-focus-mode')),
+      180,
+      scrollable: drawerScroll,
+    );
+    await tester.tap(find.byKey(const ValueKey('preferences-focus-mode')));
+    await tester.pump();
+    expect(container.read(burlPreferencesProvider).focusMode, isTrue);
+
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('preferences-update-notifications')),
+      180,
+      scrollable: drawerScroll,
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('preferences-update-notifications')),
+    );
+    await tester.pump();
+    expect(
+      container.read(burlPreferencesProvider).updateNotifications,
+      isFalse,
     );
   });
 

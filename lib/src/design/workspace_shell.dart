@@ -1543,6 +1543,20 @@ class _PreferencesDrawer extends ConsumerWidget {
                             title: Text(l10n.workspaceFocusMode),
                             subtitle: Text(l10n.workspaceFocusModeDescription),
                           ),
+                          SwitchListTile(
+                            key: const ValueKey(
+                              'preferences-update-notifications',
+                            ),
+                            contentPadding: EdgeInsets.zero,
+                            value: p.updateNotifications,
+                            onChanged: ref
+                                .read(burlPreferencesProvider.notifier)
+                                .setUpdateNotifications,
+                            title: Text(l10n.workspaceUpdateNotifications),
+                            subtitle: Text(
+                              l10n.workspaceUpdateNotificationsDescription,
+                            ),
+                          ),
                         ],
                       ),
                     ),
