@@ -1,5 +1,5 @@
 ---
-version: v2.1.20
+version: v2.1.21
 status: active
 epic: G
 ---
@@ -11,6 +11,8 @@ Complete the PR #11 shell as a real local-first desktop application. This epic r
 **Capability coverage:** CAP-PREF-01, CAP-SHELL-02, CAP-SHELL-03, CAP-SHELL-04, CAP-SHELL-05, CAP-SHELL-06, CAP-SHELL-07, CAP-SHELL-08, CAP-WS-13, CAP-FIND-02, CAP-FIND-03, CAP-GRAPH-05, CAP-EDIT-08, CAP-HIST-01.
 
 **Total Effort:** 71 story points
+
+**M0 authorization:** M0 authorizes `SHELL-G001`, `PREF-G002`, `STATE-G003`, `TABS-G004`, `CLOSE-G005`, and `NAV-G007` to write production code. M0 defers the remaining Epic G tickets in this epic. Every other production ticket remains blocked.
 
 #### SHELL-G001 Remove emulated Platform chrome
 - **Type:** Chore
@@ -29,7 +31,7 @@ Complete the PR #11 shell as a real local-first desktop application. This epic r
   - `scripts/visual-regression.sh`
 - **Scope (Out-of-Scope Files):**
   - `linux/**` and `macos/**` (the Platform already owns real chrome; don't add a replacement)
-- **Verification Command:** Linux: `flutter test && dart analyze && ./scripts/visual-regression.sh shell-g001 --baseline test/goldens/shell-g001-linux.png --max-different-pixels 0 && git diff --check && ! rg -n '\[DEBUG-' lib rust test scripts`; Apple Silicon macOS: `flutter test && dart analyze && ./scripts/visual-regression.sh shell-g001 --baseline test/goldens/shell-g001-macos.png --max-different-pixels 0 && git diff --check && ! rg -n '\[DEBUG-' lib rust test scripts`.
+- **Verification Command:** On Linux, this command is the executable gate: `flutter test && dart analyze && ./scripts/visual-regression.sh shell-g001 --baseline test/goldens/shell-g001-linux.png --max-different-pixels 0 && git diff --check && ! rg -n '\[DEBUG-' lib rust test scripts`. Before SHELL-G011 closeout or release, run this command on a live Apple Silicon macOS host: `flutter test && dart analyze && ./scripts/visual-regression.sh shell-g001 --baseline test/goldens/shell-g001-macos.png --max-different-pixels 0 && git diff --check && ! rg -n '\[DEBUG-' lib rust test scripts`. Do not capture or fake macOS goldens on Linux.
 - **Expected Success Output:** exit 0 and a smoke capture showing only host-owned window chrome
 - **STOP Conditions:**
   - STOP if any production or executable test surface still selects, renders, or labels emulated macOS/Linux chrome; remove the obsolete contract instead of hiding it.
@@ -59,7 +61,7 @@ The rebuilt `test/goldens/` Linux and macOS shell baselines contain no simulated
 - **Expected Success Output:** exit 0 with restart tests passing
 - **STOP Conditions:**
   - STOP if persistence requires storing appearance or update choices in the Workspace; keep them device-global.
-- **Description:** Persist theme, font scale, prose measure, focus mode, and update-notification choices through the Platform application-state seam with corrupt-state fallback.
+- **Description:** Persist theme, font scale, prose measure, focus mode, and update-notification choices through the Platform application-state seam defined by `device-preferences.schema.json`, with atomic replacement and corrupt- or unknown-version fallback.
 - **Acceptance:**
   - **Mode:** gherkin
   - **Evidence:**
@@ -71,6 +73,8 @@ Then every preference is restored on that device
 And no Workspace file or Git change contains the preference
 ```
 
+PREF-G002 implements round-trip restore tests, corrupt- and unknown-version fallback tests, and an exclusion check that no Workspace or Git path contains these keys.
+
 #### STATE-G003 Persist versioned per-Workspace session snapshots
 - **Type:** Feature
 - **Effort:** 5
@@ -81,20 +85,23 @@ And no Workspace file or Git change contains the preference
   - `lib/src/providers/search_provider.dart`
   - `rust/src/db/**`
   - `rust/src/workspace/**`
+  - `rust/src/api/ffi_api.rs`
+  - `rust/src/frb_generated.rs`
+  - `lib/src/rust/**`
   - `test/providers/**`
 - **Scope (Out-of-Scope Files):**
   - Note bodies, credentials, and device-global preferences
-- **Verification Command:** `cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && ./scripts/smoke-shot.sh state-g003 && git diff --check`
-- **Expected Success Output:** exit 0 with schema/migration and provider restore tests passing
+- **Verification Command:** `cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh state-g003 && git diff --check`
+- **Expected Success Output:** exit 0 with schema, fallback, and provider restore tests passing
 - **STOP Conditions:**
   - STOP if a snapshot can become authoritative Note/session state or contain Note content or secrets.
-- **Description:** Add versioned, atomic per-Workspace snapshots for open Note identities, active Note, tree expansion, last search state, and synchronization presentation, with corrupt-state isolation and forward migration.
+- **Description:** Implement the Core-owned `workspace-session-snapshot.schema.json` contract and its active-Workspace FFI for versioned, atomic snapshots of open Note identities, active Note, tree expansion, last search state, and synchronization presentation.
 - **Acceptance:**
   - **Mode:** contract_test
   - **Evidence:**
 
 ```text
-Round-trip and migration tests prove Workspace partitioning, atomic replacement, corrupt-snapshot fallback, content/credential exclusion, and separation from device preferences.
+STATE-G003 implements round-trip, Workspace-partition, atomic-replace, corrupt-fallback, and content, credential, and device-preference exclusion tests.
 ```
 
 #### TABS-G004 Replace visual-only tabs with authoritative Note sessions
@@ -157,6 +164,7 @@ For every close entry point and injected result sequence, processed Notes preser
 
 #### OPEN-G006 Restore and explicitly switch the active Workspace
 - **Type:** Feature
+- **Deferred:** M0 defers implementation. **Owner:** `PREFLIGHT-H007`.
 - **Effort:** 8
 - **Dependencies:** CLOSE-G005, PREFLIGHT-H007
 - **Category:** Feature-Evolution
@@ -215,6 +223,7 @@ And the selected Note opens in an authoritative tab
 
 #### EDIT-G008 Implement Core-owned undo and redo
 - **Type:** Feature
+- **Deferred:** M0 defers implementation. **Owner:** `ADAPT-H004`, `CI-M003`.
 - **Effort:** 8
 - **Dependencies:** TABS-G004, ADAPT-H004, CI-M003
 - **Category:** Correctness
@@ -242,6 +251,7 @@ For every covered content operation, applying undo restores byte-identical prior
 
 #### FIND-G009 Implement in-Note find and atomic replace
 - **Type:** Feature
+- **Deferred:** M0 defers implementation. **Owner:** `EDIT-G008`, `ADAPT-H004`, `CI-M003`.
 - **Effort:** 8
 - **Dependencies:** EDIT-G008, ADAPT-H004, CI-M003
 - **Category:** Feature-Evolution
@@ -268,6 +278,7 @@ Fixtures cover inline syntax, nested Blocks, Unicode, empty/no-match cases, sing
 
 #### HIST-G010 Surface and restore local Note history
 - **Type:** Feature
+- **Deferred:** M0 defers implementation. **Owner:** `ADAPT-H004`, `CI-M003`.
 - **Effort:** 5
 - **Dependencies:** TABS-G004, ADAPT-H004, CI-M003
 - **Category:** Feature-Evolution
@@ -298,6 +309,7 @@ And requests any referenced Object that is not locally hydrated
 
 #### SHELL-G011 Integrate and harden the feature-complete local shell
 - **Type:** Feature
+- **Deferred:** M0 defers implementation. **Owner:** `OPEN-G006`, `FIND-G009`, `HIST-G010`.
 - **Effort:** 8
 - **Dependencies:** SHELL-G001, PREF-G002, OPEN-G006, NAV-G007, FIND-G009, HIST-G010
 - **Category:** Correctness
@@ -312,15 +324,15 @@ And requests any referenced Object that is not locally hydrated
   - `scripts/visual-regression.sh`
 - **Scope (Out-of-Scope Files):**
   - Assets, Remote sync, and release surfaces owned by later epics
-- **Verification Command:** Linux: `cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && ./scripts/visual-regression.sh shell-g011 --baseline test/goldens/shell-g011-linux.png --max-different-pixels 0 && git diff --check && ! rg -n '\[DEBUG-' lib rust test scripts`; Apple Silicon macOS: `cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && ./scripts/visual-regression.sh shell-g011 --baseline test/goldens/shell-g011-macos.png --max-different-pixels 0 && git diff --check && ! rg -n '\[DEBUG-' lib rust test scripts`.
+- **Verification Command:** On Linux, this command is the executable gate: `cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && ./scripts/visual-regression.sh shell-g011 --baseline test/goldens/shell-g011-linux.png --max-different-pixels 0 && git diff --check && ! rg -n '\[DEBUG-' lib rust test scripts`. Before SHELL-G011 closeout or release, run this command on a live Apple Silicon macOS host: `cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && ./scripts/visual-regression.sh shell-g011 --baseline test/goldens/shell-g011-macos.png --max-different-pixels 0 && git diff --check && ! rg -n '\[DEBUG-' lib rust test scripts`. Do not capture or fake macOS goldens on Linux.
 - **Expected Success Output:** exit 0 with the local feature matrix and reviewed visual evidence passing
 - **STOP Conditions:**
-  - STOP if any pointer action lacks keyboard reachability, user string bypasses localization, or state shown by the shell isn't authoritative.
+  - STOP if any pointer action lacks keyboard reachability, Writer-facing string bypasses localization, or state shown by the shell isn't authoritative.
 - **Description:** Integrate the completed local workflows into the delivered design system, finish keyboard/focus/Semantics/localization coverage, and rebuild visual evidence after Platform-chrome removal.
 - **Acceptance:**
   - **Mode:** visual_regression
   - **Evidence:**
 
 ```text
-Linux and Apple Silicon macOS captures compared with the named `test/goldens/` baselines at a zero-different-pixel threshold, plus integration logs, cover preferences, restored tabs, every close path, Workspace switch, title jump, backlinks, undo/redo, find/replace, and history restore. The shell preserves PR #11 design parity without fake Platform chrome, unreachable actions, hardcoded user copy, or nonauthoritative placeholder state.
+The Linux executable gate compares its capture with the named `test/goldens/` baseline at a zero-different-pixel threshold. Before SHELL-G011 closeout or release, the Apple Silicon macOS command runs on a live Apple Silicon host and compares its own capture with the named macOS baseline. Do not capture or fake macOS goldens on Linux. Together with integration logs, the gates cover preferences, restored tabs, every close path, Workspace switch, title jump, backlinks, undo/redo, find/replace, and history restore. The shell preserves PR #11 design parity without fake Platform chrome, unreachable actions, hardcoded Writer-facing copy, or nonauthoritative placeholder state.
 ```

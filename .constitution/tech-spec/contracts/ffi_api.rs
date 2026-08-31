@@ -1,14 +1,16 @@
-// FORWARD STATUS (TechSpec v1.7.18-provisional): this is the delivered
-// brownfield interface, not an implementation-ready contract for PRD v1.3.6
-// and Architecture v1.4.14.
+// FORWARD STATUS (TechSpec v1.7.19-provisional): this is the delivered
+// brownfield interface, with the Epic G session-restore exception specified.
+// It is not otherwise an implementation-ready contract for PRD v1.3.6 and
+// Architecture v1.4.14.
 // In particular, AstNode is a rendering projection rather than the required
 // canonical extended AST; the OAuth redirect flow is superseded by the
 // GitHub App device-flow decision; title-verbatim path derivation is under
 // OD-05; export predates atomic object-complete export; and asset, monitoring,
-// reconciliation-decision, session-restore, and release surfaces are absent.
+// reconciliation-decision, and release surfaces remain absent.
 // Research-only Tasks must use contracts/provisional-spikes.toml and must not
-// implement or extend this FFI. Final Stage 3 evolution reconciles this file
-// after the five Spikes produce evidence.
+// implement or extend this FFI. The named Epic G exceptions may implement
+// their specified contracts. Final Stage 3 reconciles the remaining gaps after
+// the five Spikes produce evidence.
 //
 // Raw Rust interface contract exposed to Flutter via flutter_rust_bridge.
 // This defines the exact shapes passing over the FFI boundary.
@@ -1259,6 +1261,73 @@ pub async fn close_note(note_id: String) -> Result<CloseNoteResult, AppError> {
 /// recovered work on startup (CAP-WS-03).
 #[frb]
 pub async fn pending_drafts() -> Result<Vec<NoteMetadata>, AppError> {
+    unimplemented!()
+}
+
+// ---------------------------------------------------------------------------
+// Workspace session snapshots (STATE-G003)
+// ---------------------------------------------------------------------------
+
+/// Defines the saved presentation-only synchronization label.
+///
+/// This closed set serializes as `local`, `connected`, and `paused` in the
+/// session schema. It is not a Git reconciliation state machine. Add a value
+/// only with a session-snapshot schema-version bump.
+#[frb]
+pub enum SessionSyncPresentation {
+    Local,
+    Connected,
+    Paused,
+}
+
+/// Carries session state for the active Workspace.
+///
+/// Core supplies the persisted `schema_version` and `workspace_id`. The FFI
+/// never accepts a Workspace ID because rule 2 scopes every call to the active
+/// Workspace.
+#[frb]
+pub struct ActiveWorkspaceSessionSnapshot {
+    /// Concept IDs of open Notes, in restore order.
+    pub open_note_ids: Vec<String>,
+    /// Concept ID of the active Note, or `None` when no Note is active.
+    pub active_note_id: Option<String>,
+    /// Directory concept IDs or bundle-relative paths used by the tree.
+    pub expanded_directory_ids: Vec<String>,
+    /// The most recent search-box text. An empty string is valid.
+    pub search_query: String,
+    /// Presentation-only synchronization state.
+    pub sync_presentation: SessionSyncPresentation,
+}
+
+/// Loads the active Workspace session snapshot.
+///
+/// For corrupt bytes or an unknown schema version, Core isolates the snapshot
+/// and returns the empty default session for the active Workspace. The result
+/// contains no Note body, credential, or device preference.
+#[frb]
+pub async fn load_active_workspace_session_snapshot(
+) -> Result<ActiveWorkspaceSessionSnapshot, AppError> {
+    unimplemented!()
+}
+
+/// Saves a session snapshot for the active Workspace.
+///
+/// Core writes the versioned payload with atomic replace. It determines the
+/// Workspace ID and schema version instead of accepting either through FFI.
+#[frb]
+pub async fn save_active_workspace_session_snapshot(
+    snapshot: ActiveWorkspaceSessionSnapshot,
+) -> Result<(), AppError> {
+    unimplemented!()
+}
+
+/// Clears an isolated corrupt snapshot for the active Workspace.
+///
+/// Core preserves the corrupt bytes outside the active session path before it
+/// clears that Workspace's snapshot. The call does not affect another
+/// Workspace.
+#[frb]
+pub async fn clear_corrupt_active_workspace_session_snapshot() -> Result<(), AppError> {
     unimplemented!()
 }
 

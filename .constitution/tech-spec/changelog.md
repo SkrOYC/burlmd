@@ -1,5 +1,11 @@
 # Stage 3: Technical Implementation Changelog
 
+## v1.7.19-provisional - 2026-08-30
+
+M0 adds a narrow Epic G production exception while `production_implementation_authorized` remains `false`. Only `SHELL-G001`, `PREF-G002`, `STATE-G003`, `TABS-G004`, `CLOSE-G005`, and `NAV-G007` may write production code.
+
+The milestone defines the versioned device-preferences and per-Workspace session-snapshot schemas, active-Workspace snapshot FFI, corrupt-state isolation, and atomic-replace contracts. It defers the remaining Epic G production tickets and preserves the exhaustive Spike write allowlists.
+
 ## v1.7.18-provisional
 
 PR #12 full review round 18 advances GitHub contract to v6 and deliberately supports both `expired_token` and the current GitHub documentation's `token_expired` wording. Either expiry response discards the unusable code and restarts device authorization.

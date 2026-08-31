@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://burlmd.local/schemas/workspace-session-snapshot.schema.json",
+  "title": "Workspace session snapshot",
+  "description": "This JSON representation stores Core-owned, versioned session state outside Note files, Git history, and `schema.sql` derived-index tables. Storage is partitioned by Workspace ID. The persistence layer replaces each snapshot atomically by writing a temporary file and renaming it. Corrupt bytes produce an empty default session for only that Workspace, isolate the corrupt bytes, and do not crash the application. The snapshot contains no Note body, credential, or device preference. The current schema version is 1.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "workspace_id",
+    "open_note_ids",
+    "active_note_id",
+    "expanded_directory_ids",
+    "search_query",
+    "sync_presentation"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "description": "Version of this persisted session payload. Version 1 is the current version.",
+      "type": "integer",
+      "const": 1
+    },
+    "workspace_id": {
+      "description": "Identity of the Workspace that owns this snapshot.",
+      "type": "string"
+    },
+    "open_note_ids": {
+      "description": "Concept IDs of open Notes, in restore order.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "active_note_id": {
+      "description": "Concept ID of the active Note, or null when no Note is active.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "expanded_directory_ids": {
+      "description": "Directory concept IDs or bundle-relative paths used by the Workspace tree.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "search_query": {
+      "description": "The most recent search-box text. An empty string is valid.",
+      "type": "string"
+    },
+    "sync_presentation": {
+      "description": "A presentation-only synchronization label. Version 1 permits only `local`, `connected`, and `paused`. Add values only with a schema-version bump. These values do not define a Git reconciliation state machine.",
+      "type": "string",
+      "enum": [
+        "local",
+        "connected",
+        "paused"
+      ]
+    }
+  }
+}
