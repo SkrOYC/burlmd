@@ -18,6 +18,8 @@ Reviewed for PRD v1.3.7. This Evolution pass replaces workstation-dependent vali
 
 - Assigned the common functional matrix to Linux x86-64 and macOS 26 as well as macOS 15. macOS 15 remains compatibility-only.
 - Made Release Pipeline the authority for expected release, build, corpus, run, and required-role identities. Aggregation receives that expectation directly, authenticates the validation origin, verifies artifact integrity, and compares captured identity instead of trusting self-description.
+- Distinguished the tested source, workflow execution, base, and later evidence-only report state. Each role hands off one complete evidence bundle, and aggregation rejects an unmanaged origin or a bundle that omits bytes named by its manifest.
+- Clarified that a degraded close continues only a single Note-to-Note replacement with no enclosing operation. A batch or wider lifecycle operation stops after removing the retired warned tab and preserves every unprocessed tab.
 
 ## v1.4.14 - 2026-08-26
 

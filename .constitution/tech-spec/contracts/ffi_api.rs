@@ -1251,9 +1251,11 @@ pub struct CloseNoteResult {
 ///
 /// `Err` is a true refusal. Core keeps the session registered, and Dart keeps
 /// the outgoing Note writable after it reports the failure. An `Ok` result
-/// always means Core retired the session. If `warning` is present, Dart
-/// continues the switch and reports the warning through its dismissible status
-/// surface rather than restoring a dead session.
+/// always means Core retired the session. If `warning` is present, Dart removes
+/// the retired tab and reports the warning rather than restoring a dead
+/// session. Dart can continue only one Note-to-Note replacement when no batch,
+/// Workspace switch, or orderly shutdown encloses the close. A batch stops with
+/// unprocessed tabs preserved, and an enclosing switch or shutdown is canceled.
 #[frb]
 pub async fn close_note(note_id: String) -> Result<CloseNoteResult, AppError> {
     unimplemented!()

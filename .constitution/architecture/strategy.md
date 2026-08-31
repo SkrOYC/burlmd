@@ -12,7 +12,7 @@ A separate release pipeline produces installable artifacts for the supported Pla
 
 All three validation roles run the common functional matrix. Linux x86-64 and Apple Silicon macOS 26 are also performance-reference roles. The macOS 26 role also owns visual reference evidence. macOS 15 provides functional compatibility evidence only.
 
-The Release Pipeline establishes the authoritative expected identity for each run. It contains the release, build, corpus, run, and required-role identities. The pipeline hands this identity independently to validation and aggregation. Validation evidence records captured environment and observed release, build, corpus, run, and role identities. Its artifact handoff authenticates the pipeline-owned origin and protects integrity.
+The Release Pipeline establishes the authoritative expected identity for each run. It distinguishes tested source, workflow execution, base, release, build, corpus, run, and required-role identities. The pipeline hands this identity independently to validation and aggregation. Each validation role returns one complete evidence bundle that includes its manifest and every named result. The handoff authenticates managed origin and protects bundle integrity. A later evidence-only report state remains distinct from the tested source.
 
 The runtime can inspect release metadata and notify the Writer, but installation remains under the Platform or package manager's authority.
 

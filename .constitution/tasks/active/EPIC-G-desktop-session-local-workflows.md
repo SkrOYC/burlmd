@@ -160,13 +160,13 @@ And focus moves to the following tab or the preceding tab at the end
 - **Expected Success Output:** exit 0 with all close-entry and partial-batch scenarios passing
 - **STOP Conditions:**
   - STOP if any tab button, middle click, shortcut, Close Others, Close All, Workspace switch, or orderly shutdown removes a tab before Core returns its terminal close outcome.
-- **Description:** Route all close entry points through one serialized coordinator. Continue after clean success; remove and stop on a retired-session warning; retain failed and unprocessed tabs on error; cancel the enclosing switch or shutdown after any non-clean outcome.
+- **Description:** Route all close entry points through one serialized coordinator. Continue after clean success. For a retired-session warning, remove the warned tab and continue only a single Note-to-Note replacement with no batch or wider operation. During batch close, stop with every unprocessed tab preserved. Cancel an enclosing Workspace switch or orderly shutdown after a warning or error.
 - **Acceptance:**
   - **Mode:** invariant
   - **Evidence:**
 
 ```text
-For every close entry point and injected result sequence, processed Notes preserve input order, no two closes overlap, clean sessions disappear, warned retired sessions disappear and stop the batch, failed/unprocessed sessions remain writable, and a wider switch or shutdown proceeds only after an entirely clean batch.
+For every close entry point and injected result sequence, processed Notes preserve input order and no two closes overlap. Clean sessions disappear. A warned retired session disappears and a standalone Note-to-Note replacement continues to its target. The same warning stops a batch, preserves every unprocessed tab, and cancels a Workspace switch or orderly shutdown. Failed and unprocessed sessions remain writable. A wider switch or shutdown proceeds only after an entirely clean batch.
 ```
 
 #### OPEN-G006 Restore and explicitly switch the active Workspace
@@ -342,5 +342,5 @@ And requests any referenced Object that is not locally hydrated
   - **Evidence:**
 
 ```text
-The pipeline-owned Linux environment compares its exact capture with the named Linux baseline at a zero-different-pixel threshold without reading the Writer's desktop. The actual hosted macOS 26 GUI verifies its logical viewport and compares with the one authoritative macOS baseline. macOS 15 runs the same functional matrix without performance or visual evidence. Authenticated manifests and the accepted aggregate bind every result to the same build, corpus, run, image, signer, and artifact identity. Together with integration logs, the gates cover preferences, restored tabs, every close path, Workspace switch, title jump, backlinks, undo/redo, find/replace, and history restore. The shell preserves PR #11 design parity without fake Platform chrome, unreachable actions, hardcoded Writer-facing copy, or nonauthoritative placeholder state.
+The pipeline-owned Linux environment compares its exact capture with the named Linux baseline at a zero-different-pixel threshold without reading the Writer's desktop. The actual hosted macOS 26 GUI verifies its logical viewport and compares with the one authoritative macOS baseline. macOS 15 runs the same functional matrix without performance or visual evidence. Authenticated role bundles and the accepted aggregate bind every result to the same source, workflow execution, base, build, corpus, run, image, signer, and artifact identity. Together with integration logs, the gates cover preferences, restored tabs, every close path, Workspace switch, title jump, backlinks, undo/redo, find/replace, and history restore. The shell preserves PR #11 design parity without fake Platform chrome, unreachable actions, hardcoded Writer-facing copy, or nonauthoritative placeholder state.
 ```

@@ -62,7 +62,7 @@ PR #11 also delivered the design system, responsive shell, preferences surface, 
 
 - **Priority:** P0
 - **Capability ID:** CAP-SHELL-06
-- **Capability:** If burlmd retires a Note session with a degraded-durability warning, it removes that closed tab, reports the warning, preserves every unprocessed tab, and cancels any Workspace switch or orderly shutdown.
+- **Capability:** If burlmd retires a Note session with a degraded-durability warning, it removes that closed tab and reports the warning. A single Note-to-Note replacement continues only when no batch, Workspace switch, or orderly shutdown is in progress. A batch stops with every unprocessed tab preserved, and an enclosing Workspace switch or orderly shutdown is canceled.
 - **Rationale:** A retired session can't remain as an open but unusable tab.
 
 - **Priority:** P0
