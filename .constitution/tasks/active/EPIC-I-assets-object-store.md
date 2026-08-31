@@ -6,7 +6,7 @@ epic: I
 
 # Epic I: Assets and Object Store
 
-Deliver inline images through a portable Local Asset Store and a first-class, user-controlled S3-compatible Object Store. ASSET-I001 runs after merged `CI-M003`; dependent tickets adapt to the measured manifest, client, limits, and repository-health contract accepted by the upstream evolution pass. Production tickets remain blocked until their evidence, required upstream finalization, and Stage 4 adaptation are merged.
+Deliver inline images through a portable Local Asset Store and a first-class, user-controlled S3-compatible Object Store. ASSET-I001 runs after `CI-M003` merges; dependent tickets adapt to the measured manifest, client, limits, and repository-health contract accepted by the upstream evolution pass. Production tickets remain blocked until their evidence, required upstream finalization, and Stage 4 adaptation are merged.
 
 **Capability coverage:** CAP-EDIT-06, CAP-ASSET-01, CAP-ASSET-02, CAP-ASSET-03, CAP-ASSET-04, CAP-ASSET-05, CAP-ASSET-06, CAP-ASSET-08, CAP-ASSET-09, CAP-ASSET-10, CAP-ASSET-11, CAP-ASSET-12.
 
@@ -22,7 +22,7 @@ Deliver inline images through a portable Local Asset Store and a first-class, us
   - `.constitution/spikes/SPK-ASSET-I001.md`
 - **Scope (Out-of-Scope Files):**
   - Every repository path not listed above (don't touch production or active specifications)
-- **Verification Command:** In a candidate-branch draft pull request based on merged `CI-M003`, run `cargo test --locked --manifest-path .constitution/prototypes/assets/Cargo.toml --all-targets` on all three managed functional roles. Run the exact `SPK-ASSET-I001` Linux x86-64 and macOS 26 performance probe and coordinator aggregation commands from `.constitution/tech-spec/contracts/provisional-spikes.toml`. Validate the pre-upload manifests and final aggregate through the authenticated two-phase evidence protocol.
+- **Verification Command:** After `CI-M003` merges, run `./scripts/managed-evidence.sh run --ticket ASSET-I001 --ref GIT_REF --head-sha HEAD_SHA --output .constitution/prototypes/assets/managed-evidence.json && git diff --check`. The managed workflow runs `cargo test --locked --manifest-path .constitution/prototypes/assets/Cargo.toml --all-targets` on all three functional roles and the exact `SPK-ASSET-I001` Linux x86-64 and macOS 26 performance probes from `.constitution/tech-spec/contracts/provisional-spikes.toml`.
 - **Expected Success Output:** exit 0 with a finalized schema-valid report and explicit OD-06/OD-07 disposition
 - **STOP Conditions:**
   - STOP if credentials would enter committed files or evidence.

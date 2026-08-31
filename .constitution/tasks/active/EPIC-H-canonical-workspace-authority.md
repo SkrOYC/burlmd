@@ -8,9 +8,9 @@ epic: H
 
 Replace the reduced Markdown projection and host-dependent path model with the canonical Core-owned Note and Workspace models. Establish burlmd's authority over guest input, conformance repair, cross-platform identity, and live Workspace observation.
 
-AST-H001 and PATH-H002 execute after merged `CI-M003`. Their reports feed the constitution evidence-finalization pull request. Every dependent ticket must be reconciled against that accepted final TechSpec before implementation; the ticket stays in this epic and adapts rather than being discarded.
+AST-H001 and PATH-H002 execute after `CI-M003` merges. Their reports feed the constitution evidence-finalization pull request. Every dependent ticket must be reconciled against that accepted final TechSpec before implementation; the ticket stays in this epic and adapts rather than being discarded.
 
-**Tranche integration:** Create `spike/epic-h-canonical-foundations` from merged `master` after the M bootstrap pull request. Execute `AST-H001` and then `PATH-H002`, with one full milestone review after each ticket, and merge the H Spike pull request before constitution finalization. After the evidence-finalization pull request merges, create `feat/epic-h-authority-foundation` from merged `master` and execute `MODEL-H003`, `PATH-H005`, `ADAPT-H004`, `AUTH-H006`, and `PREFLIGHT-H007` in that order. No unmerged branch satisfies a dependency. Neither partial H tranche archives Epic H; `REPAIR-H008` through `RESCAN-H012` remain active.
+**Tranche integration:** Create `spike/epic-h-canonical-foundations` from merged `master` after the M bootstrap pull request. Execute `AST-H001` and then `PATH-H002`, with one full milestone review after each ticket, and merge the H Spike pull request before constitution finalization. After the evidence-finalization pull request merges, create `feat/epic-h-authority-foundation` from merged `master` and execute `MODEL-H003`, `PATH-H005`, `ADAPT-H004`, `AUTH-H006`, and `PREFLIGHT-H007` in that order. Within either declared H tranche, each earlier milestone must be committed, validated, and independently reviewed before it satisfies the next ticket. Cross-tranche and cross-branch prerequisites must be merged into the base. Neither partial H tranche archives Epic H; `REPAIR-H008` through `RESCAN-H012` remain active.
 
 **Capability coverage:** CAP-WS-05, CAP-WS-07, CAP-WS-08, CAP-WS-09, CAP-WS-10, CAP-WS-11, CAP-WS-12, CAP-PORT-03, CAP-PORT-05, and preservation of all delivered Note, lifecycle, Link, search, and conformance capabilities, including CAP-GRAPH-04.
 
@@ -26,7 +26,7 @@ AST-H001 and PATH-H002 execute after merged `CI-M003`. Their reports feed the co
   - `.constitution/spikes/SPK-AST-H001.md`
 - **Scope (Out-of-Scope Files):**
   - Every repository path not listed above (don't touch production or active specifications)
-- **Verification Command:** In a candidate-branch draft pull request based on merged `CI-M003`, run `cargo test --locked --manifest-path .constitution/prototypes/ast/Cargo.toml --all-targets` on `ubuntu-24.04`, Apple Silicon `macos-26`, and Apple Silicon `macos-15`. Run the exact `SPK-AST-H001` Linux and macOS 26 probe and coordinator aggregation commands from `.constitution/tech-spec/contracts/provisional-spikes.toml`. Transfer the unchanged pre-upload manifests through the authenticated `.constitution/tech-spec/contracts/ci-role-evidence.schema.json` handoff and validate the final accepted `.constitution/tech-spec/contracts/ci-evidence.schema.json` aggregate.
+- **Verification Command:** After `CI-M003` merges, run `./scripts/managed-evidence.sh run --ticket AST-H001 --ref GIT_REF --head-sha HEAD_SHA --output .constitution/prototypes/ast/managed-evidence.json && git diff --check`. The managed workflow runs `cargo test --locked --manifest-path .constitution/prototypes/ast/Cargo.toml --all-targets` on all three functional roles and the exact `SPK-AST-H001` Linux and macOS 26 probes from `.constitution/tech-spec/contracts/provisional-spikes.toml`.
 - **Expected Success Output:** exit 0 with authenticated managed-role runs, a finalized schema-valid result, and a Spike report
 - **STOP Conditions:**
   - STOP if a candidate can't preserve untouched bytes or represent any required syntax/domain case.
@@ -51,11 +51,11 @@ Every declared candidate and gate has attributed evidence for syntax, positions,
   - `.constitution/spikes/SPK-PATH-H002.md`
 - **Scope (Out-of-Scope Files):**
   - Every repository path not listed above (don't touch production or active specifications)
-- **Verification Command:** In the same managed draft pull request, run `cargo test --locked --manifest-path .constitution/prototypes/path/Cargo.toml --all-targets` on all three functional roles. Run the exact `SPK-PATH-H002` Linux with ext4 and macOS 26 with APFS probe and coordinator aggregation commands from `.constitution/tech-spec/contracts/provisional-spikes.toml`, using the authenticated two-phase evidence handoff from merged `CI-M003`.
+- **Verification Command:** After the committed, validated, and independently reviewed `AST-H001` milestone, run `./scripts/managed-evidence.sh run --ticket PATH-H002 --ref GIT_REF --head-sha HEAD_SHA --output .constitution/prototypes/path/managed-evidence.json && git diff --check`. The managed workflow runs `cargo test --locked --manifest-path .constitution/prototypes/path/Cargo.toml --all-targets` on all three functional roles and the exact `SPK-PATH-H002` Linux with ext4 and macOS 26 with APFS probes from `.constitution/tech-spec/contracts/provisional-spikes.toml`.
 - **Expected Success Output:** exit 0 with distinct filesystem runs and a finalized schema-valid report
 - **STOP Conditions:**
   - STOP if identity remains host-dependent or an accepted path can escape/alias the Workspace.
-  - STOP if `AST-H001` or `CI-M003` isn't merged, either filesystem role lacks authenticated evidence, or the aggregate is `rejected`.
+  - STOP if `CI-M003` isn't merged into the tranche base, `AST-H001` isn't committed, validated, and independently reviewed in this tranche, either filesystem role lacks authenticated evidence, or the aggregate is `rejected`.
   - STOP when the 3-day time box expires; don't select a permanent format from incomplete platform evidence.
 - **Description:** Compare the encoded-title and opaque-component candidates across Linux, default macOS, and Windows-compatible rules.
 - **Acceptance:**
@@ -112,7 +112,7 @@ For the canonical corpus, parsing yields the accepted exhaustive tree and exact 
 - **Verification Command:** `cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh adapt-h004 && git diff --check`
 - **Expected Success Output:** exit 0 with old `AstNode` authority removed and rendering parity preserved
 - **STOP Conditions:**
-  - STOP if `PATH-H005` isn't committed and reviewed in this tranche.
+  - STOP if `PATH-H005` isn't committed, validated, and independently reviewed in this tranche.
   - STOP if the final FFI projection contract isn't accepted or if Flutter gains a second document model.
 - **Description:** Replace the brownfield `AstNode` authority with adapters from the canonical document for Flutter rendering, interaction coordinates, Links, search/indexing, and conflict materialization.
 - **Acceptance:**
@@ -139,7 +139,7 @@ Generated bindings expose only the accepted projection; rendering/index fixtures
 - **Verification Command:** `cargo test --manifest-path rust/Cargo.toml && cargo clippy --workspace --all-targets --manifest-path rust/Cargo.toml -- -D warnings && git diff --check`
 - **Expected Success Output:** exit 0 with format, collision, migration, and rollback tests passing
 - **STOP Conditions:**
-  - STOP if `MODEL-H003` isn't committed and reviewed in this tranche or the accepted constitution finalization isn't merged into its base.
+  - STOP if `MODEL-H003` isn't committed, validated, and independently reviewed in this tranche or the accepted constitution finalization isn't merged into its base.
   - STOP if the final TechSpec hasn't accepted PATH-H002 or migration would silently choose among collisions.
 - **Description:** Implement canonical Note/Directory/Asset path validation and derivation, case-only rename, ghost-Link identity, and a previewable atomic migration from delivered title-verbatim paths.
 - **Acceptance:**
@@ -165,7 +165,7 @@ Every burlmd-created path satisfies the accepted cross-platform grammar; migrati
 - **Verification Command:** `cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && dart analyze && git diff --check`
 - **Expected Success Output:** exit 0 with authority, containment, session, and Protected State invariants passing
 - **STOP Conditions:**
-  - STOP if `ADAPT-H004` and `PATH-H005` aren't committed and reviewed in this tranche.
+  - STOP if `ADAPT-H004` and `PATH-H005` aren't committed, validated, and independently reviewed in this tranche.
   - STOP if Persistence, the index, a guest write, or Flutter can override Workspace Model authority.
 - **Description:** Make one Workspace tree own Directories, canonical identities, authoritative Note sessions, lifecycle provenance, decision records, and Protected State roots while rejecting symlink/submodule/path escape input.
 - **Acceptance:**
@@ -193,7 +193,7 @@ Exactly one Core Workspace tree decides every identity and open session; every m
 - **Verification Command:** `cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh preflight-h007 && git diff --check`
 - **Expected Success Output:** exit 0 with conforming inclusion, invalid inventory, and exclusion tests passing
 - **STOP Conditions:**
-  - STOP if `AUTH-H006` isn't committed and reviewed in this tranche.
+  - STOP if `AUTH-H006` isn't committed, validated, and independently reviewed in this tranche.
   - STOP if preflight rewrites source, follows unsupported aliases, or admits an invalid Note into the editor/index.
 - **Description:** Scan a selected directory without mutation, include conforming Notes, inventory invalid/noncanonical paths and Notes, preserve original bytes, and let the Writer exclude items explicitly before adoption.
 - **Acceptance:**
