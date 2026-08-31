@@ -137,6 +137,11 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String workspaceRestoreSavedNotes(String noteIds) {
+    return 'Could not restore saved notes: $noteIds';
+  }
+
+  @override
   String get workspaceCopiedPath => 'Copied path';
 
   @override

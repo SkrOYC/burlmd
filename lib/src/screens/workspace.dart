@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:burlmd/src/components/status_message.dart';
 import 'package:burlmd/src/components/visual_parity_fixture.dart';
 import 'package:burlmd/src/design/workspace_shell.dart';
@@ -5,13 +7,14 @@ import 'package:burlmd/src/providers/note_providers.dart';
 import 'package:burlmd/src/providers/rust_api_provider.dart';
 import 'package:burlmd/src/providers/search_provider.dart';
 import 'package:burlmd/src/providers/workspace_provider.dart';
+import 'package:burlmd/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// The application's home surface: a Workspace shell with the Directory
 /// tree as its navigation sidebar (`SHEL-E003`) and the editor for the
 /// selected Note as its main pane (`SHEL-E004`).
-class WorkspaceScreen extends ConsumerWidget {
+class WorkspaceScreen extends ConsumerStatefulWidget {
   const WorkspaceScreen({super.key, this.fixtureCaptureController});
 
   /// Test-only bridge for the visual-fixture branch. Production callers leave
@@ -19,28 +22,49 @@ class WorkspaceScreen extends ConsumerWidget {
   final FixtureCaptureController? fixtureCaptureController;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<WorkspaceScreen> createState() => _WorkspaceScreenState();
+}
+
+class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
+  var _sessionRestoreStarted = false;
+
+  Future<void> _restoreSessionTabs(WorkspaceSessionState snapshot) async {
+    final unavailable = await ref
+        .read(activeNoteProvider.notifier)
+        .restoreOpenNotes(
+          openNoteIds: snapshot.openNoteIds,
+          activeNoteId: snapshot.activeNoteId,
+        );
+    if (!mounted) return;
+
+    final activeNoteId = ref.read(activeNoteProvider)?.metadata.id;
+    if (activeNoteId != null) {
+      // The shell listener only activates the session Core already returned;
+      // it does not reopen or construct one from this selection identity.
+      ref.read(selectedNoteIdProvider.notifier).select(activeNoteId);
+    }
+    if (unavailable.isNotEmpty) {
+      _showRescanMessage(
+        context,
+        AppLocalizations.of(
+          context,
+        )!.workspaceRestoreSavedNotes(unavailable.join(', ')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final workspace = ref.watch(workspaceProvider);
     final sessionSnapshot = ref.watch(workspaceSessionSnapshotProvider);
     ref.listen<AsyncValue<WorkspaceSessionState>>(
       workspaceSessionSnapshotProvider,
       (_, next) {
-        final activeNoteId = switch (next) {
-          AsyncData(:final value) => value.activeNoteId,
-          _ => null,
-        };
-        if (activeNoteId == null) return;
-        // The shell's selected-note listener mounts the authoritative Core
-        // session. Delay this identity publication one frame so that listener
-        // exists before restore; the snapshot itself never creates a session.
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!context.mounted ||
-              ref.read(selectedNoteIdProvider) != null ||
-              ref.read(workspaceSessionProvider).activeNoteId != activeNoteId) {
-            return;
-          }
-          ref.read(selectedNoteIdProvider.notifier).select(activeNoteId);
-        });
+        if (_sessionRestoreStarted) return;
+        if (next case AsyncData(:final value)) {
+          _sessionRestoreStarted = true;
+          unawaited(_restoreSessionTabs(value));
+        }
       },
     );
     // Rescan outcomes surface here rather than inside the button widget, so
@@ -85,7 +109,7 @@ class WorkspaceScreen extends ConsumerWidget {
                 workspacePath: info.localPath.isEmpty ? null : info.localPath,
                 rescanButton: const WorkspaceRescanButton(),
                 onRescan: () => ref.read(rescanStateProvider.notifier).run(),
-                fixtureCaptureController: fixtureCaptureController,
+                fixtureCaptureController: widget.fixtureCaptureController,
               ),
       ),
     );

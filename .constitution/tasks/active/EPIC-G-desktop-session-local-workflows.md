@@ -151,6 +151,10 @@ And the missing Note is reported without blocking startup
 And focus moves to the following tab or the preceding tab at the end
 ```
 
+##### TABS-G004 Deviations & Justifications
+- **Touched Files:** `lib/main.dart`, `lib/l10n/**`, `test/components/editor_test.dart`, `test/screens/workspace_rescan_test.dart`, `.constitution/tasks/active/EPIC-G-desktop-session-local-workflows.md`
+- **Justification:** The smoke scenario must save its Core-backed snapshot before `WorkspaceScreen` restores it. The localized startup report names unavailable saved Note identities once. Existing shell, editor, and rescan tests now verify Core-backed tab selection instead of visual-only tab behavior.
+
 #### CLOSE-G005 Serialize every Note-close and batch-close lifecycle
 - **Type:** Feature
 - **Effort:** 8

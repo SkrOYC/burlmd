@@ -114,9 +114,45 @@ class WorkspaceSession extends Notifier<WorkspaceSessionState> {
     _scheduleSave();
   }
 
-  /// Records only an identity after Core has opened that Note successfully.
-  /// It does not add an entry to [WorkspaceSessionState.openNoteIds]: multiple
-  /// authoritative sessions are TABS-G004's responsibility.
+  /// Records an identity only after Core has opened that Note successfully.
+  /// The snapshot remains an identity-only restore hint; Core owns the actual
+  /// session that made this id eligible to persist.
+  void addOpenNoteId(String noteId) {
+    if (state.openNoteIds.contains(noteId)) return;
+    state = state.copyWith(openNoteIds: [...state.openNoteIds, noteId]);
+    _scheduleSave();
+  }
+
+  /// Removes an identity only after Core has retired its session. A closed
+  /// active id cannot remain as the snapshot's active identity.
+  void removeOpenNoteId(String noteId) {
+    if (!state.openNoteIds.contains(noteId)) return;
+    final openNoteIds = state.openNoteIds
+        .where((candidate) => candidate != noteId)
+        .toList(growable: false);
+    state = state.copyWith(
+      openNoteIds: openNoteIds,
+      clearActiveNoteId: state.activeNoteId == noteId,
+    );
+    _scheduleSave();
+  }
+
+  /// Replaces restored identities with exactly the Core sessions that
+  /// reopened. Failed ids are intentionally absent so the next startup does
+  /// not keep retrying a Note Core said is unavailable.
+  void replaceOpenNotes({
+    required List<String> openNoteIds,
+    required String? activeNoteId,
+  }) {
+    state = state.copyWith(
+      openNoteIds: List.unmodifiable(openNoteIds),
+      activeNoteId: activeNoteId,
+      clearActiveNoteId: activeNoteId == null,
+    );
+    _scheduleSave();
+  }
+
+  /// Records the active identity after Core has opened that Note successfully.
   void setActiveNoteId(String? noteId) {
     if (state.activeNoteId == noteId) return;
     state = noteId == null

@@ -213,9 +213,43 @@ final editorInputBlockedProvider = Provider<bool>(
       ref.watch(rescanEditingProvider) > 0,
 );
 
-/// Holds the currently open note's state. UI widgets must stay stateless
-/// regarding note content and read it from this provider rather than
-/// caching it themselves.
+/// The Core-owned Note sessions represented by tabs. A [NoteState] enters
+/// this list only after Core returns it; a snapshot identity never becomes a
+/// writable Dart session by itself.
+class OpenNoteSessions extends Notifier<List<NoteState>> {
+  @override
+  List<NoteState> build() => const [];
+
+  NoteState? byId(String noteId) {
+    for (final note in state) {
+      if (note.metadata.id == noteId) return note;
+    }
+    return null;
+  }
+
+  void replaceAll(List<NoteState> notes) => state = List.unmodifiable(notes);
+
+  void upsert(NoteState note, {String? replacedId}) {
+    final id = replacedId ?? note.metadata.id;
+    final index = state.indexWhere((candidate) => candidate.metadata.id == id);
+    if (index == -1) {
+      state = List.unmodifiable([...state, note]);
+      return;
+    }
+    final next = List<NoteState>.of(state)..[index] = note;
+    state = List.unmodifiable(next);
+  }
+
+  void remove(String noteId) => state = List.unmodifiable(
+    state.where((candidate) => candidate.metadata.id != noteId),
+  );
+}
+
+final openNoteSessionsProvider =
+    NotifierProvider<OpenNoteSessions, List<NoteState>>(OpenNoteSessions.new);
+
+/// Holds the active Note state. Tab sessions remain separately in
+/// [openNoteSessionsProvider] until their own Core close completes.
 class NoteController extends Notifier<NoteState?> {
   @override
   NoteState? build() => null;
@@ -248,6 +282,119 @@ class NoteController extends Notifier<NoteState?> {
   /// newer selection ([_openRequests]) returns without acting at all, so
   /// intermediate notes are neither closed nor opened redundantly.
   Future<void> open(String noteId) => _open(noteId);
+
+  /// Opens or selects a tab session without closing the current tab. The shell
+  /// uses this instead of [open]'s legacy close-before-open lifecycle path;
+  /// only a Core-returned state is admitted to [openNoteSessionsProvider].
+  Future<void> openAsTab(String noteId) async {
+    if (ref.read(noteSelectionBlockedProvider)) return;
+    final sessions = ref.read(openNoteSessionsProvider.notifier);
+    final current = state;
+    if (current?.metadata.id == noteId) {
+      sessions.upsert(current!);
+      final snapshot = ref.read(workspaceSessionProvider.notifier);
+      snapshot.addOpenNoteId(noteId);
+      snapshot.setActiveNoteId(noteId);
+      return;
+    }
+    final existing = sessions.byId(noteId);
+    if (existing != null) {
+      state = existing;
+      ref.read(workspaceSessionProvider.notifier).setActiveNoteId(noteId);
+      ref.read(editorErrorProvider.notifier).report(null);
+      ref.read(noteCloseFailureProvider.notifier).acknowledge();
+      ref.read(keystrokeWriteFailureProvider.notifier).report(null);
+      return;
+    }
+
+    final admission = ref.read(lifecycleAdmissionProvider);
+    try {
+      final opened = await ref.read(rustApiProvider).openNote(noteId);
+      if (!_isOpenAdmissionCurrent(admission, admittedByLifecycle: false)) {
+        return;
+      }
+      sessions.upsert(opened);
+      state = opened;
+      final snapshot = ref.read(workspaceSessionProvider.notifier);
+      snapshot.addOpenNoteId(opened.metadata.id);
+      snapshot.setActiveNoteId(opened.metadata.id);
+      ref.read(editorErrorProvider.notifier).report(null);
+      ref.read(noteCloseFailureProvider.notifier).acknowledge();
+      ref.read(keystrokeWriteFailureProvider.notifier).report(null);
+    } catch (error) {
+      // Leave the current session untouched. A selected unavailable id is
+      // retryable, but it never gets a presentation-created tab or buffer.
+      ref.read(editorErrorProvider.notifier).report(error);
+    }
+  }
+
+  /// Reopens all snapshot identities one by one through Core. Failed ids are
+  /// collected for the screen's single report while later ids still restore.
+  Future<List<String>> restoreOpenNotes({
+    required Iterable<String> openNoteIds,
+    required String? activeNoteId,
+  }) async {
+    final ids = <String>[];
+    final seen = <String>{};
+    for (final noteId in [...openNoteIds, ?activeNoteId]) {
+      if (seen.add(noteId)) ids.add(noteId);
+    }
+    final restored = <NoteState>[];
+    final unavailable = <String>[];
+    final api = ref.read(rustApiProvider);
+    for (final noteId in ids) {
+      try {
+        restored.add(await api.openNote(noteId));
+      } catch (_) {
+        unavailable.add(noteId);
+      }
+    }
+    if (!ref.mounted) return unavailable;
+
+    ref.read(openNoteSessionsProvider.notifier).replaceAll(restored);
+    NoteState? active;
+    for (final note in restored) {
+      if (note.metadata.id == activeNoteId) {
+        active = note;
+        break;
+      }
+    }
+    active ??= restored.isEmpty ? null : restored.first;
+    state = active;
+    ref
+        .read(workspaceSessionProvider.notifier)
+        .replaceOpenNotes(
+          openNoteIds: restored.map((note) => note.metadata.id).toList(),
+          activeNoteId: active?.metadata.id,
+        );
+    ref.read(editorErrorProvider.notifier).report(null);
+    ref.read(noteCloseFailureProvider.notifier).acknowledge();
+    ref.read(keystrokeWriteFailureProvider.notifier).report(null);
+    return unavailable;
+  }
+
+  /// Retires one known Core session. Batch close orchestration belongs to the
+  /// following CLOSE-G005 ticket; this only handles the individual tab.
+  Future<bool> closeTab(String noteId) async {
+    if (ref.read(openNoteSessionsProvider.notifier).byId(noteId) == null) {
+      return false;
+    }
+    try {
+      await ref.read(rustApiProvider).closeNote(noteId);
+    } on CloseNoteWarning catch (warning) {
+      ref.read(noteCloseFailureProvider.notifier).report(warning);
+    } catch (error) {
+      ref.read(noteCloseFailureProvider.notifier).report(error);
+      return false;
+    }
+    ref.read(openNoteSessionsProvider.notifier).remove(noteId);
+    ref.read(workspaceSessionProvider.notifier).removeOpenNoteId(noteId);
+    if (state?.metadata.id == noteId) {
+      state = null;
+      ref.read(keystrokeWriteFailureProvider.notifier).report(null);
+    }
+    return true;
+  }
 
   Future<void> _open(String noteId, {bool admittedByLifecycle = false}) {
     final ticket = ++_openRequests;
@@ -487,6 +634,10 @@ class NoteController extends Notifier<NoteState?> {
   void adopt(NoteState newState, {String? oldId}) {
     final previousId = oldId ?? state?.metadata.id;
     state = newState;
+    final tabSessions = ref.read(openNoteSessionsProvider.notifier);
+    if (previousId != null && tabSessions.byId(previousId) != null) {
+      tabSessions.upsert(newState, replacedId: previousId);
+    }
     if (previousId != null && previousId != newState.metadata.id) {
       ref
           .read(workspaceSessionProvider.notifier)
@@ -506,8 +657,15 @@ class NoteController extends Notifier<NoteState?> {
   /// retried or inspected, so a failure panel left over from it would name
   /// an impossibility. This mirrors what a successful open does.
   void clear() {
+    final noteId = state?.metadata.id;
     state = null;
-    ref.read(workspaceSessionProvider.notifier).setActiveNoteId(null);
+    if (noteId != null &&
+        ref.read(openNoteSessionsProvider.notifier).byId(noteId) != null) {
+      ref.read(openNoteSessionsProvider.notifier).remove(noteId);
+      ref.read(workspaceSessionProvider.notifier).removeOpenNoteId(noteId);
+    } else {
+      ref.read(workspaceSessionProvider.notifier).setActiveNoteId(null);
+    }
     ref.read(noteSwitchingProvider.notifier).set(false);
     ref.read(editorErrorProvider.notifier).report(null);
     ref.read(noteCloseFailureProvider.notifier).acknowledge();
@@ -545,6 +703,8 @@ class NoteController extends Notifier<NoteState?> {
       // authoritative for the visible Note, even if the id happens to match.
       if (!_isReloadCurrent(current, noteId, lifecycleGeneration)) return;
       state = reloaded;
+      final tabs = ref.read(openNoteSessionsProvider.notifier);
+      if (tabs.byId(noteId) != null) tabs.upsert(reloaded);
       ref.read(editorErrorProvider.notifier).report(null);
       // The reload replaced the buffer whose write was failing.
       ref.read(keystrokeWriteFailureProvider.notifier).report(null);

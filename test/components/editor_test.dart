@@ -260,7 +260,6 @@ class _ShellRustApi extends RustApi {
     this.failOpenFor = const {},
     this.failCloseFor = const {},
     this.openGates = const {},
-    this.closeGates = const {},
   });
 
   final List<TreeNode> tree;
@@ -277,7 +276,6 @@ class _ShellRustApi extends RustApi {
   /// round trip can be held genuinely in flight while the next selection
   /// races in (the interleaving that used to skip close).
   final Map<String, Completer<void>> openGates;
-  final Map<String, Completer<void>> closeGates;
 
   /// Every open/close call in issue order, as `'open:<id>'` / `'close:<id>'`.
   final List<String> calls = [];
@@ -335,8 +333,6 @@ class _ShellRustApi extends RustApi {
   @override
   Future<void> closeNote(String noteId) async {
     calls.add('close:$noteId');
-    final gate = closeGates[noteId];
-    if (gate != null && !gate.isCompleted) await gate.future;
     if (failCloseFor.contains(noteId)) throw Exception('close refused');
   }
 
@@ -3057,42 +3053,30 @@ void main() {
     expect((container.read(activeNoteProvider)!).metadata.id, 'note-b');
   });
 
-  testWidgets('typing while a gated switch closes and opens cannot mutate the '
-      'outgoing Note or survive only in its controller', (tester) async {
+  testWidgets('selecting another shell tab preserves the former Core session', (
+    tester,
+  ) async {
     _setWideShellViewport(tester);
-    final closeGate = Completer<void>();
-    final api = _ShellRustApi(
-      [
-        TreeNode.note(id: 'note-a', title: 'Note A', path: 'A.md'),
-        TreeNode.note(id: 'note-b', title: 'Note B', path: 'B.md'),
-      ],
-      closeGates: {'note-a': closeGate},
-    );
+    final api = _ShellRustApi([
+      TreeNode.note(id: 'note-a', title: 'Note A', path: 'A.md'),
+      TreeNode.note(id: 'note-b', title: 'Note B', path: 'B.md'),
+    ]);
     await _pumpShell(tester, api);
 
     await tester.tap(find.text('Note A'));
     await tester.pumpAndSettle();
-    await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
-    expect(_field(tester).controller.text, 'Rendered note-a');
-
     await tester.tap(find.text('Note B'));
-    await tester.pump();
-    expect(api.calls, ['open:note-a', 'close:note-a']);
-
-    tester.testTextInput.updateEditingValue(
-      const TextEditingValue(
-        text: 'doomed input',
-        selection: TextSelection.collapsed(offset: 12),
-      ),
-    );
-    await tester.pump();
-    expect(api.updatedSources, isEmpty);
-    expect(_field(tester).controller.text, 'Rendered note-a');
-
-    closeGate.complete();
     await tester.pumpAndSettle();
-    expect(api.calls, ['open:note-a', 'close:note-a', 'open:note-b']);
+
+    expect(api.calls, ['open:note-a', 'open:note-b']);
+    expect(find.byKey(const Key('shell-tab-note-a')), findsOneWidget);
+    expect(find.byKey(const Key('shell-tab-note-b')), findsOneWidget);
     expect(find.text('Rendered note-b'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('shell-tab-note-a')));
+    await tester.pumpAndSettle();
+    expect(api.calls, ['open:note-a', 'open:note-b']);
+    expect(find.text('Rendered note-a'), findsOneWidget);
   });
 
   testWidgets(
@@ -3155,51 +3139,6 @@ void main() {
       expect(container.read(noteCloseFailureProvider), isA<Exception>());
     },
   );
-
-  testWidgets('a failed gated close restores the coherent old raw editor', (
-    tester,
-  ) async {
-    _setWideShellViewport(tester);
-    final closeGate = Completer<void>();
-    final api = _ShellRustApi(
-      [
-        TreeNode.note(id: 'note-a', title: 'Note A', path: 'A.md'),
-        TreeNode.note(id: 'note-b', title: 'Note B', path: 'B.md'),
-      ],
-      failCloseFor: {'note-a'},
-      closeGates: {'note-a': closeGate},
-    );
-    await _pumpShell(tester, api);
-    final container = ProviderScope.containerOf(
-      tester.element(find.byType(WorkspaceScreen)),
-    );
-
-    await tester.tap(find.text('Note A'));
-    await tester.pumpAndSettle();
-    await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
-    await tester.enterText(_writableFields(), 'saved before switch');
-    await tester.pump();
-
-    await tester.tap(find.text('Note B'));
-    await tester.pump();
-    tester.testTextInput.updateEditingValue(
-      const TextEditingValue(
-        text: 'doomed input',
-        selection: TextSelection.collapsed(offset: 12),
-      ),
-    );
-    await tester.pump();
-    expect(api.updatedSources, ['note-a:saved before switch']);
-
-    closeGate.complete();
-    await tester.pumpAndSettle();
-    expect(api.calls, ['open:note-a', 'close:note-a']);
-    expect(_field(tester).controller.text, 'saved before switch');
-    expect(_field(tester).readOnly, isFalse);
-    expect(find.textContaining('Could not switch notes'), findsOneWidget);
-    expect(find.textContaining('close refused'), findsOneWidget);
-    expect(container.read(noteCloseFailureProvider), isNull);
-  });
 
   testWidgets('a failed incoming open leaves no writable snapshot of the '
       'already-closed Note', (tester) async {

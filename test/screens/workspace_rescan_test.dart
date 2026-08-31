@@ -227,7 +227,7 @@ void main() {
       // fresh against the dirty write tier and becomes unavailable.
       await tester.tap(find.text('Beta'));
       await tester.pumpAndSettle();
-      expect(api.calls, ['open:a', 'close:a', 'open:b']);
+      expect(api.calls, ['open:a', 'open:b']);
       expect(_rescanButton(tester).onPressed, isNull);
 
       // Invoking the controller directly anyway (the "stale frame slipped
@@ -326,11 +326,9 @@ void main() {
   );
 
   testWidgets(
-    'a delayed clean A-to-B switch refuses rescan until B is reconciled, then allows retry',
+    'opening another Core tab keeps rescan available once its session mounts',
     (tester) async {
       final api = _RescanRustApi([_note('a', 'Alpha'), _note('b', 'Beta')]);
-      final closeGate = Completer<void>();
-      api.closeGate = closeGate;
       var reindexCalls = 0;
       final container = await _pumpShell(
         tester,
@@ -344,20 +342,13 @@ void main() {
       await tester.tap(find.text('Alpha'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Beta'));
-      await tester.pump();
-      expect(container.read(noteSwitchingProvider), isTrue);
-      expect(_rescanButton(tester).onPressed, isNull);
-
-      await container.read(rescanStateProvider.notifier).run();
-      expect(reindexCalls, 0);
-      expect(container.read(rescanEditingProvider), 0);
-      expect(container.read(rescanStateProvider).refusedReason, isNotNull);
-
-      closeGate.complete();
       await tester.pumpAndSettle();
+
       expect(container.read(noteSwitchingProvider), isFalse);
       expect(container.read(selectedNoteIdProvider), 'b');
       expect(container.read(activeNoteProvider)!.metadata.id, 'b');
+      expect(api.calls, ['open:a', 'open:b']);
+      expect(_rescanButton(tester).onPressed, isNotNull);
 
       await container.read(rescanStateProvider.notifier).run();
       await tester.pumpAndSettle();

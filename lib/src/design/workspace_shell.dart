@@ -533,101 +533,63 @@ class _EditorPane extends ConsumerStatefulWidget {
 }
 
 class _EditorPaneState extends ConsumerState<_EditorPane> {
-  late final List<_VisualTab> _tabs;
-  var _tabsInitialized = false;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (_tabsInitialized) return;
-    _tabsInitialized = true;
-    _tabs = [
-      _VisualTab.visual(
-        AppLocalizations.of(context)!.workspaceWelcomeTab,
-        id: 'visual-welcome',
-      ),
-    ];
-  }
-
-  void _syncActiveTab(NoteState? active) {
-    if (active == null) return;
-    _tabs.removeWhere((tab) => tab.id == 'visual-welcome');
-    final id = active.metadata.id;
-    final index = _tabs.indexWhere((tab) => tab.id == id);
-    final tab = _VisualTab.note(
-      id,
-      _filename(active.metadata.path),
-      recovered: active.restoredFromDraft,
+  Future<void> _closeTab(_CoreNoteTab tab) async {
+    final sessions = ref.read(openNoteSessionsProvider);
+    final index = sessions.indexWhere(
+      (session) => session.metadata.id == tab.id,
     );
-    if (index == -1) {
-      _tabs.add(tab);
-    } else {
-      _tabs[index] = tab;
+    if (index == -1) return;
+    final wasActive = ref.read(activeNoteProvider)?.metadata.id == tab.id;
+    final closed = await ref.read(activeNoteProvider.notifier).closeTab(tab.id);
+    if (!mounted || !closed || !wasActive) return;
+
+    final remaining = ref.read(openNoteSessionsProvider);
+    if (remaining.isEmpty) {
+      ref.read(selectedNoteIdProvider.notifier).clear();
+      return;
     }
+    // CAP-SHELL-08: the old index names the following session after removal;
+    // only an end tab has no following session and falls back to its predecessor.
+    final next = index < remaining.length ? remaining[index] : remaining.last;
+    ref.read(selectedNoteIdProvider.notifier).select(next.metadata.id);
   }
-
-  void _addVisualTab() => setState(() {
-    _tabs.add(
-      _VisualTab.visual(
-        AppLocalizations.of(context)!.workspaceUntitledTab(_tabs.length),
-      ),
-    );
-  });
-
-  // A visual close may remove an inactive/local tab. Closing the active Note
-  // is intentionally deferred: it must eventually use the lifecycle-aware
-  // provider path (including Core close/flush), rather than silently clearing
-  // UI state here. Until that surface exists, the active provider state
-  // repopulates its tab on rebuild.
-  void _closeVisualTab(_VisualTab tab) => setState(() => _tabs.remove(tab));
-
-  void _closeOtherVisualTabs(_VisualTab tab) => setState(
-    () => _tabs.removeWhere(
-      (candidate) => candidate != tab && candidate.noteId == null,
-    ),
-  );
-
-  void _closeAllVisualTabs() =>
-      setState(() => _tabs.removeWhere((tab) => tab.noteId == null));
 
   @override
   void didUpdateWidget(covariant _EditorPane oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.closeRequest == oldWidget.closeRequest) return;
-    final active = ref.read(activeNoteProvider);
-    final tab = _tabs
-        .where((tab) => tab.noteId == active?.metadata.id)
-        .firstOrNull;
-    if (tab != null) _closeVisualTab(tab);
+    final activeId = ref.read(activeNoteProvider)?.metadata.id;
+    if (activeId == null) return;
+    final session = ref.read(openNoteSessionsProvider.notifier).byId(activeId);
+    if (session != null) unawaited(_closeTab(_CoreNoteTab(session)));
   }
 
   @override
   Widget build(BuildContext context) {
     final c = context.burlColors;
     ref.listen<String?>(selectedNoteIdProvider, (_, next) {
-      if (next != null) ref.read(activeNoteProvider.notifier).open(next);
+      if (next != null) {
+        ref.read(activeNoteProvider.notifier).openAsTab(next);
+      }
     });
     final selected = ref.watch(selectedNoteIdProvider);
     final active = ref.watch(activeNoteProvider);
-    _syncActiveTab(active);
+    final tabs = ref
+        .watch(openNoteSessionsProvider)
+        .map(_CoreNoteTab.new)
+        .toList(growable: false);
     return DecoratedBox(
       decoration: BoxDecoration(color: c.editor),
       child: Column(
         children: [
-          _VisualTabStrip(
+          _CoreNoteTabStrip(
             compact: widget.compact,
-            tabs: _tabs,
+            tabs: tabs,
             activeId: active?.metadata.id,
             onOpenNavigator: widget.onOpenNavigator,
-            onSelect: (tab) {
-              if (tab.noteId case final noteId?) {
-                ref.read(selectedNoteIdProvider.notifier).select(noteId);
-              }
-            },
-            onClose: _closeVisualTab,
-            onCloseOthers: _closeOtherVisualTabs,
-            onCloseAll: _closeAllVisualTabs,
-            onAdd: _addVisualTab,
+            onSelect: (tab) =>
+                ref.read(selectedNoteIdProvider.notifier).select(tab.id),
+            onClose: (tab) => unawaited(_closeTab(tab)),
           ),
           _MetadataHeader(
             compact: widget.compact,
@@ -652,56 +614,34 @@ class _EditorPaneState extends ConsumerState<_EditorPane> {
   }
 }
 
-class _VisualTab {
-  const _VisualTab._({
-    required this.id,
-    required this.label,
-    this.noteId,
-    this.recovered = false,
-  });
+/// A rendered tab has one source: a [NoteState] Core returned for an open
+/// session. It intentionally carries no synthetic id, draft, or buffer.
+class _CoreNoteTab {
+  const _CoreNoteTab(this.note);
 
-  factory _VisualTab.note(
-    String noteId,
-    String label, {
-    bool recovered = false,
-  }) => _VisualTab._(
-    id: noteId,
-    label: label,
-    noteId: noteId,
-    recovered: recovered,
-  );
+  final NoteState note;
 
-  factory _VisualTab.visual(String label, {String? id}) =>
-      _VisualTab._(id: id ?? 'visual-$label', label: label);
-
-  final String id;
-  final String label;
-  final String? noteId;
-  final bool recovered;
+  String get id => note.metadata.id;
+  String get label => _filename(note.metadata.path);
+  bool get recovered => note.restoredFromDraft;
 }
 
-class _VisualTabStrip extends StatelessWidget {
-  const _VisualTabStrip({
+class _CoreNoteTabStrip extends StatelessWidget {
+  const _CoreNoteTabStrip({
     required this.compact,
     required this.tabs,
     required this.activeId,
     required this.onOpenNavigator,
     required this.onSelect,
     required this.onClose,
-    required this.onCloseOthers,
-    required this.onCloseAll,
-    required this.onAdd,
   });
 
   final bool compact;
-  final List<_VisualTab> tabs;
+  final List<_CoreNoteTab> tabs;
   final String? activeId;
   final VoidCallback onOpenNavigator;
-  final ValueChanged<_VisualTab> onSelect;
-  final ValueChanged<_VisualTab> onClose;
-  final ValueChanged<_VisualTab> onCloseOthers;
-  final VoidCallback onCloseAll;
-  final VoidCallback onAdd;
+  final ValueChanged<_CoreNoteTab> onSelect;
+  final ValueChanged<_CoreNoteTab> onClose;
 
   @override
   Widget build(BuildContext context) {
@@ -738,26 +678,15 @@ class _VisualTabStrip extends StatelessWidget {
                 separatorBuilder: (_, _) => const SizedBox(width: 3),
                 itemBuilder: (context, index) {
                   final tab = tabs[index];
-                  final active = tab.noteId == activeId;
+                  final active = tab.id == activeId;
                   return _WorkspaceTab(
                     tab: tab,
                     active: active,
                     onSelect: () => onSelect(tab),
                     onClose: () => onClose(tab),
-                    onCloseOthers: () => onCloseOthers(tab),
-                    onCloseAll: onCloseAll,
                   );
                 },
               ),
-            ),
-            IconButton(
-              key: const Key('shell-add-tab'),
-              tooltip: l10n.workspaceAddVisualTab,
-              constraints: const BoxConstraints.tightFor(width: 36, height: 36),
-              padding: EdgeInsets.zero,
-              iconSize: 16,
-              onPressed: onAdd,
-              icon: const Icon(LucideIcons.plus),
             ),
           ],
         ),
@@ -772,13 +701,11 @@ class _WorkspaceTab extends StatefulWidget {
     required this.active,
     required this.onSelect,
     required this.onClose,
-    required this.onCloseOthers,
-    required this.onCloseAll,
   });
 
-  final _VisualTab tab;
+  final _CoreNoteTab tab;
   final bool active;
-  final VoidCallback onSelect, onClose, onCloseOthers, onCloseAll;
+  final VoidCallback onSelect, onClose;
 
   @override
   State<_WorkspaceTab> createState() => _WorkspaceTabState();
@@ -815,28 +742,9 @@ class _WorkspaceTabState extends State<_WorkspaceTab> {
           value: _TabMenuAction.close,
           child: Text(l10n.workspaceCloseTab),
         ),
-        PopupMenuItem(
-          key: ValueKey('tab-menu-close-others'),
-          value: _TabMenuAction.closeOthers,
-          child: Text(l10n.workspaceCloseOtherTabs),
-        ),
-        PopupMenuItem(
-          key: ValueKey('tab-menu-close-all'),
-          value: _TabMenuAction.closeAll,
-          child: Text(l10n.workspaceCloseAllVisualTabs),
-        ),
       ],
     );
-    switch (result) {
-      case _TabMenuAction.close:
-        widget.onClose();
-      case _TabMenuAction.closeOthers:
-        widget.onCloseOthers();
-      case _TabMenuAction.closeAll:
-        widget.onCloseAll();
-      case null:
-        break;
-    }
+    if (result == _TabMenuAction.close) widget.onClose();
   }
 
   @override
@@ -998,7 +906,7 @@ class _WorkspaceTabState extends State<_WorkspaceTab> {
   }
 }
 
-enum _TabMenuAction { close, closeOthers, closeAll }
+enum _TabMenuAction { close }
 
 class _MetadataHeader extends StatefulWidget {
   const _MetadataHeader({

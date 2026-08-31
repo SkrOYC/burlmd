@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:burlmd/src/smoke_isolation.dart';
@@ -43,6 +44,7 @@ Future<void> _rejectUnisolatedSmokeScenario() async {
     'BURLMD_SMOKE_F005',
     'BURLMD_SMOKE_F006',
     'BURLMD_SMOKE_F007',
+    'BURLMD_SMOKE_TABS_G004',
   };
   final environment = Platform.environment;
   final scenarioRequested = scenarioVariables.any(environment.containsKey);
@@ -111,6 +113,10 @@ class _Home extends ConsumerStatefulWidget {
 }
 
 class _HomeState extends ConsumerState<_Home> {
+  var _tabsG004Ready = !Platform.environment.containsKey(
+    'BURLMD_SMOKE_TABS_G004',
+  );
+
   @override
   void initState() {
     super.initState();
@@ -135,10 +141,20 @@ class _HomeState extends ConsumerState<_Home> {
     if (Platform.environment.containsKey('BURLMD_SMOKE_F007')) {
       _stageSmokeF007();
     }
+    if (Platform.environment.containsKey('BURLMD_SMOKE_TABS_G004')) {
+      unawaited(_prepareSmokeTabsG004());
+    }
+  }
+
+  Future<void> _prepareSmokeTabsG004() async {
+    await _stageSmokeTabsG004();
+    if (mounted) setState(() => _tabsG004Ready = true);
   }
 
   @override
-  Widget build(BuildContext context) => const WorkspaceScreen();
+  Widget build(BuildContext context) => _tabsG004Ready
+      ? const WorkspaceScreen()
+      : const Scaffold(body: Center(child: CircularProgressIndicator()));
 
   // -- BURLMD_SMOKE_F002 / BURLMD_SMOKE_F003 (staging half) ----------------
   //
@@ -356,6 +372,44 @@ class _HomeState extends ConsumerState<_Home> {
     } catch (_) {
       // No marker is emitted on a failed stage, so the smoke harness rejects
       // the generic shell window rather than producing misleading evidence.
+    }
+  }
+
+  /// Stages the Core sessions and identity-only snapshot for TABS-G004 before
+  /// the Workspace screen asks Core to restore it. The missing id has no Dart
+  /// stand-in; the restore path must report Core's refusal and continue.
+  Future<void> _stageSmokeTabsG004() async {
+    const titles = ['G004 Alpha', 'G004 Beta', 'G004 Gamma'];
+    const missingId = 'G004 Missing';
+    final api = ref.read(rustApiProvider);
+    try {
+      await ref.read(workspaceProvider.future);
+      final noteIds = <String>[];
+      for (final title in titles) {
+        try {
+          await api.deleteNote(title);
+        } catch (_) {
+          // This isolated workspace normally has no prior fixture.
+        }
+        final state = (await api.createNote('', title)).state;
+        if (state == null) return;
+        noteIds.add(state.metadata.id);
+      }
+      await api.saveActiveWorkspaceSessionSnapshot(
+        ActiveWorkspaceSessionSnapshot(
+          openNoteIds: [...noteIds, missingId],
+          activeNoteId: noteIds[1],
+          expandedDirectoryIds: const [],
+          searchQuery: '',
+          syncPresentation: SessionSyncPresentation.local,
+        ),
+      );
+      final readyPath = Platform.environment['BURLMD_SMOKE_READY_FILE'];
+      if (readyPath != null) {
+        await File(readyPath).writeAsString('tabs-g004-core-sessions');
+      }
+    } catch (_) {
+      // No readiness marker means smoke-shot rejects an incomplete fixture.
     }
   }
 

@@ -182,7 +182,8 @@ SCENARIO_ENV=()
 for scenario_var in \
   BURLMD_SMOKE_F001 BURLMD_SMOKE_F001_FOCUSED_INDEX \
   BURLMD_SMOKE_F002 BURLMD_SMOKE_F003 BURLMD_SMOKE_F004 \
-  BURLMD_SMOKE_F005 BURLMD_SMOKE_F006 BURLMD_SMOKE_F007; do
+  BURLMD_SMOKE_F005 BURLMD_SMOKE_F006 BURLMD_SMOKE_F007 \
+  BURLMD_SMOKE_TABS_G004; do
   if [[ -v "$scenario_var" ]]; then
     SCENARIO_ENV+=("$scenario_var=${!scenario_var}")
   fi
@@ -267,6 +268,12 @@ if [[ "${BURLMD_SMOKE_F007:-}" == "1" ]]; then
   [[ -s "$READY_FILE" ]] || fail "F007 scenario never completed type input, Action paste, and Action delete to the phantom caret"
   [[ "$(<"$READY_FILE")" == "f007-type-input-paste-action-delete-action-core-caret-phantom" ]] \
     || fail "F007 scenario readiness marker was invalid"
+fi
+
+if [[ "${BURLMD_SMOKE_TABS_G004:-}" == "1" ]]; then
+  [[ -s "$READY_FILE" ]] || fail "TABS-G004 scenario never staged Core-backed sessions"
+  [[ "$(<"$READY_FILE")" == "tabs-g004-core-sessions" ]] \
+    || fail "TABS-G004 scenario readiness marker was invalid"
 fi
 
 grim "$SHOT" >/dev/null 2>&1 || fail "final grim capture failed"
