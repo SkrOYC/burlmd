@@ -1,9 +1,10 @@
--- FORWARD STATUS (TechSpec v1.7.18-provisional): this is the delivered v2
--- derived-index schema. It does not yet model application session state,
--- excluded/repairable paths, Workspace observation, external-change
--- decisions, asset/object state, or typed Git reconciliation. Research Tasks
--- must not extend it. See provisional-forward-models.md; final Stage 3 owns
--- the migration after the AST, path, Git, asset, and packaging evidence lands.
+-- FORWARD STATUS (TechSpec v1.7.19-provisional): this is the delivered v2
+-- derived-index schema. Application session state is stored as JSON outside
+-- schema.sql; this file contains no session tables. It does not yet model
+-- excluded/repairable paths, Workspace observation, external-change decisions,
+-- asset/object state, or typed Git reconciliation. Research Tasks must not
+-- extend it. See provisional-forward-models.md; final Stage 3 owns the
+-- migration after the AST, path, Git, asset, and packaging evidence lands.
 --
 -- Physical schema for the SQLite Local Index (ENCRYPTED via SQLCipher).
 --

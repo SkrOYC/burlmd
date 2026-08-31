@@ -2,7 +2,7 @@
 
 ## v1.7.19-provisional - 2026-08-30
 
-M0 adds a narrow Epic G production exception while `production_implementation_authorized` remains `false`. Only `SHELL-G001`, `PREF-G002`, `STATE-G003`, `TABS-G004`, `CLOSE-G005`, and `NAV-G007` may write production code.
+M0 adds a narrow Epic G production exception while `production_implementation_authorized` remains `false`. Only `SHELL-G001`, `PREF-G002`, `STATE-G003`, `TABS-G004`, `CLOSE-G005`, and `NAV-G007` may write production code. The `stack.md`, `README.md`, and `data-models/schema.sql` status banners now match that exception.
 
 The milestone defines the versioned device-preferences and per-Workspace session-snapshot schemas, active-Workspace snapshot FFI, corrupt-state isolation, and atomic-replace contracts. It defers the remaining Epic G production tickets and preserves the exhaustive Spike write allowlists.
 
