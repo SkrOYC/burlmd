@@ -481,9 +481,11 @@ class NoteController extends Notifier<NoteState?> {
   /// source, span map, recorded revision), so closing and reopening would
   /// address a dead identifier and fail. The returned post-operation state is
   /// authoritative; adopting it directly keeps the editor anchored to the
-  /// same live session under its new id.
-  void adopt(NoteState newState) {
-    final previousId = state?.metadata.id;
+  /// same live session under its new id. Lifecycle re-anchors can supply
+  /// [oldId] when the presentation state was cleared before Core returned
+  /// the replacement identity.
+  void adopt(NoteState newState, {String? oldId}) {
+    final previousId = oldId ?? state?.metadata.id;
     state = newState;
     if (previousId != null && previousId != newState.metadata.id) {
       ref

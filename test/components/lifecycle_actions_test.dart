@@ -32,6 +32,7 @@ class _LifecycleApi extends RustApi {
 
   /// Every `open_note` id in order.
   final List<String> openNoteCalls = [];
+  final List<ActiveWorkspaceSessionSnapshot> savedSessionSnapshots = [];
 
   NoteState? createNoteResult;
   Object? createNoteError;
@@ -117,6 +118,13 @@ class _LifecycleApi extends RustApi {
   Future<List<TreeNode>> workspaceTree() async {
     workspaceTreeCalls++;
     return tree;
+  }
+
+  @override
+  Future<void> saveActiveWorkspaceSessionSnapshot(
+    ActiveWorkspaceSessionSnapshot snapshot,
+  ) async {
+    savedSessionSnapshots.add(snapshot);
   }
 
   @override
@@ -629,6 +637,43 @@ void main() {
       expect(container.read(editorErrorProvider), isNull);
     });
 
+    testWidgets('rename rekeys the stale selected-session snapshot after '
+        'opening its returned identity', (tester) async {
+      final returned = stateFor('Renamed/B');
+      final reopened = stateFor('Renamed/B', title: 'opened session');
+      final api = _LifecycleApi()
+        ..renameNoteResult = (returned, effects())
+        ..openStates['Renamed/B'] = reopened;
+      late ProviderContainer container;
+      await tester.pumpWidget(_probeHarness(api, (c) => container = c));
+      addTearDown(container.dispose);
+      container
+          .read(workspaceSessionProvider.notifier)
+          .restore(
+            const ActiveWorkspaceSessionSnapshot(
+              openNoteIds: ['B'],
+              activeNoteId: 'B',
+              expandedDirectoryIds: [],
+              searchQuery: '',
+              syncPresentation: SessionSyncPresentation.local,
+            ),
+          );
+      container.read(selectedNoteIdProvider.notifier).select('B');
+      expect(container.read(activeNoteProvider), isNull);
+
+      final outcome = await container
+          .read(lifecycleActionsProvider)
+          .renameNote('B', 'Renamed');
+
+      expect(outcome, isA<LifecycleCompleted>());
+      await tester.pump();
+      await tester.pump();
+      final snapshot = api.savedSessionSnapshots.last;
+      expect(snapshot.openNoteIds, ['Renamed/B']);
+      expect(snapshot.openNoteIds, isNot(contains('B')));
+      expect(snapshot.activeNoteId, 'Renamed/B');
+    });
+
     testWidgets('move opens the returned identity before publishing its '
         'selection when the selected source Note is not open', (tester) async {
       final returned = stateFor('Archive/B', title: 'returned metadata');
@@ -910,6 +955,44 @@ void main() {
       // ...fetched via the new id only. The dead one is never sent anywhere.
       expect(api.openNoteCalls, ['Renamed/Old']);
       expect(api.calls.where((c) => c.startsWith('closeNote')), isEmpty);
+    });
+
+    testWidgets('a selected remapped Note rekeys its snapshot without an '
+        'active state', (tester) async {
+      final remapped = stateFor('Renamed/Old');
+      final api = _LifecycleApi()
+        ..renameDirectoryResult = effects(
+          remapped: [IdRemap(oldId: 'Projects/Old', newId: 'Renamed/Old')],
+        )
+        ..openStates = {'Renamed/Old': remapped};
+      late ProviderContainer container;
+      await tester.pumpWidget(_probeHarness(api, (c) => container = c));
+      addTearDown(container.dispose);
+      container
+          .read(workspaceSessionProvider.notifier)
+          .restore(
+            const ActiveWorkspaceSessionSnapshot(
+              openNoteIds: ['Projects/Old'],
+              activeNoteId: 'Projects/Old',
+              expandedDirectoryIds: [],
+              searchQuery: '',
+              syncPresentation: SessionSyncPresentation.local,
+            ),
+          );
+      container.read(selectedNoteIdProvider.notifier).select('Projects/Old');
+      expect(container.read(activeNoteProvider), isNull);
+
+      final outcome = await container
+          .read(lifecycleActionsProvider)
+          .renameDirectory('Projects', 'Renamed');
+
+      expect(outcome, isA<LifecycleCompleted>());
+      await tester.pump();
+      await tester.pump();
+      final snapshot = api.savedSessionSnapshots.last;
+      expect(snapshot.openNoteIds, ['Renamed/Old']);
+      expect(snapshot.openNoteIds, isNot(contains('Projects/Old')));
+      expect(snapshot.activeNoteId, 'Renamed/Old');
     });
 
     testWidgets('an open rewritten note reloads although its id did not '

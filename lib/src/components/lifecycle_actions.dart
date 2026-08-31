@@ -512,6 +512,12 @@ class LifecycleActions {
         );
       }
       _ref
+          .read(workspaceSessionProvider.notifier)
+          .rekeyOpenNoteId(
+            oldNoteId: invokedNoteId,
+            newNoteId: returnedState.metadata.id,
+          );
+      _ref
           .read(selectedNoteIdProvider.notifier)
           .selectForLifecycle(returnedState.metadata.id);
     } else if (activeId != null || operation.selectedId != null) {
@@ -578,7 +584,7 @@ class LifecycleActions {
         newId: newId,
       ),
     );
-    _ref.read(activeNoteProvider.notifier).adopt(newState);
+    _ref.read(activeNoteProvider.notifier).adopt(newState, oldId: oldId);
     signal.clear();
   }
 
