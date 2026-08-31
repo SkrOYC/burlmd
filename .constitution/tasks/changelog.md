@@ -2,7 +2,7 @@
 
 ## v2.1.21 - 2026-08-30
 
-M0 authorizes the six Epic G production exceptions: SHELL-G001, PREF-G002, STATE-G003, TABS-G004, CLOSE-G005, and NAV-G007. The contracts define device preferences, per-Workspace session snapshots, active-Workspace FFI, and Linux/macOS visual-regression gates. OPEN-G006, EDIT-G008, FIND-G009, HIST-G010, and SHELL-G011 remain in Epic G with live owners.
+M0 authorizes the six Epic G production exceptions: SHELL-G001, PREF-G002, STATE-G003, TABS-G004, CLOSE-G005, and NAV-G007. The `stack.md`, `README.md`, and `data-models/schema.sql` status banners now match that exception. The contracts define device preferences, per-Workspace session snapshots, active-Workspace FFI, and Linux/macOS visual-regression gates. OPEN-G006, EDIT-G008, FIND-G009, HIST-G010, and SHELL-G011 remain in Epic G with live owners.
 
 ## v2.1.20 - 2026-08-26
 

@@ -1,12 +1,12 @@
 ---
-version: v1.7.18-provisional
+version: v1.7.19-provisional
 ---
 
 # Bill of Materials (BOM) & Stack
 
 ## Forward reconciliation status
 
-This is a provisional Stage 3 specification. It authorizes the five research Spikes in `contracts/provisional-spikes.toml`; it does not authorize production implementation of the forward capabilities introduced by PRD v1.3.6 and Architecture v1.4.14. The final Stage 3 evolution must replace every candidate below with measured selections and reconcile the brownfield FFI and data contracts before implementation Tasks are adapted for execution.
+This is a provisional Stage 3 specification. It authorizes the five research Spikes in `contracts/provisional-spikes.toml`. `SHELL-G001`, `PREF-G002`, `STATE-G003`, `TABS-G004`, `CLOSE-G005`, and `NAV-G007` are the only production-code exceptions. Every other production ticket remains blocked. The final Stage 3 evolution must replace every candidate below with measured selections and reconcile the brownfield FFI and data contracts before implementation Tasks are adapted for execution.
 
 The delivered application remains on Flutter 3.44.3, Dart 3.12.2, Rust 1.97.1, Git 2.54.0, and the dependency versions recorded below. Current documentation and registries were checked on 2026-08-25; a registry result is evidence for a Spike candidate, not permission to add that package to production.
 
