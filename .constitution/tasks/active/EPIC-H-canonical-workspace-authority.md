@@ -26,11 +26,12 @@ AST-H001 and PATH-H002 execute after `CI-M003` merges. Their reports feed the co
   - `.constitution/spikes/SPK-AST-H001.md`
 - **Scope (Out-of-Scope Files):**
   - Every repository path not listed above (don't touch production or active specifications)
-- **Verification Command:** After `CI-M003` merges and the source commit is pushed, run `./scripts/managed-evidence.sh run --ticket AST-H001 --source-ref SOURCE_REF --source-head-sha SOURCE_HEAD_SHA --base-sha BASE_SHA --output .constitution/prototypes/ast/managed-evidence.json && git diff --check`. The managed workflow runs `cargo test --locked --manifest-path .constitution/prototypes/ast/Cargo.toml --all-targets` on all three functional roles and the exact `SPK-AST-H001` Linux and macOS 26 probes from `.constitution/tech-spec/contracts/provisional-spikes.toml`.
-- **Expected Success Output:** exit 0 with authenticated managed-role runs, a finalized schema-valid result, and a Spike report
+- **Verification Command:** After `CI-M003` merges and the source commit is pushed, run `./scripts/managed-evidence.sh run --ticket AST-H001 --source-ref SOURCE_REF --source-head-sha SOURCE_HEAD_SHA --base-sha BASE_SHA --output .constitution/prototypes/ast/managed-evidence.json && git diff --check`. The managed workflow runs `cargo test --locked --manifest-path .constitution/prototypes/ast/Cargo.toml --all-targets` on all three functional roles and the exact `SPK-AST-H001` Linux and macOS 26 probes from `.constitution/tech-spec/contracts/provisional-spikes.toml`. The CLI stages authenticated role contents, runs `SPK-AST-H001.coordinator_steps`, and validates `.constitution/prototypes/ast/results.json` before accepting the evidence report.
+- **Expected Success Output:** exit 0 with authenticated managed-role runs, `.constitution/prototypes/ast/results.json`, accepted `.constitution/prototypes/ast/managed-evidence.json`, and executor-authored `.constitution/spikes/SPK-AST-H001.md`
 - **STOP Conditions:**
   - STOP if a candidate can't preserve untouched bytes or represent any required syntax/domain case.
   - STOP if `CI-M003` isn't merged, expected identity differs between roles, evidence is missing, mismatched, stale, corrupt, or unauthenticated, or aggregation is `rejected`.
+  - STOP if the machine result is missing or invalid, or if the evidence commit doesn't contain that result, the accepted managed report, and the executor-authored Spike report together.
   - STOP when the 3-day time box expires; record partial evidence without choosing by intuition.
 - **Description:** Compare mdast, Comrak, and complete models derived separately from `pulldown-cmark` 0.12.2 and 0.13.4 using the full canonical-AST contract and corpus.
 - **Acceptance:**
@@ -38,7 +39,7 @@ AST-H001 and PATH-H002 execute after `CI-M003` merges. Their reports feed the co
   - **Evidence:**
 
 ```text
-Every declared candidate and gate has attributed evidence for syntax, positions, source fidelity, Links, rendered selections, structural edits, and Suggestions. The common functional matrix passes on all three managed roles. Performance and FFI projection evidence comes from `ubuntu-24.04` with 4 CPUs and 16 GB and Apple Silicon `macos-26` with 3 M1 CPUs and 7 GB. Apple Silicon `macos-15` contributes functional compatibility evidence only. Every role captures image, OS, architecture, CPU, memory, storage, viewport, build, corpus, run, and role identity in one complete role bundle. Aggregation verifies source and workflow identity, GitHub-hosted signer provenance, every bundled internal artifact, and exact evidence classes before recommending one foundation or leaving the decision unresolved.
+Every declared candidate and gate has attributed evidence for syntax, positions, source fidelity, Links, rendered selections, structural edits, and Suggestions. The common functional matrix passes on all three managed roles. Performance and FFI projection evidence comes from `ubuntu-24.04` with 4 CPUs and 16 GB and Apple Silicon `macos-26` with 3 M1 CPUs and 7 GB. Apple Silicon `macos-15` contributes functional compatibility evidence only. Every role captures image, OS, architecture, CPU, memory, storage, viewport, build, corpus, run, and role identity in one complete role bundle. Aggregation verifies source and workflow identity, GitHub-hosted signer provenance, every bundled internal artifact, and exact evidence classes before recommending one foundation or leaving the decision unresolved. The CLI stages verified role members under the fixed role directories and produces the authoritative schema-valid `results.json`. The executor authors the human report from the accepted result and commits it with `results.json` and the accepted managed report.
 ```
 
 #### PATH-H002 Select the canonical cross-platform path algorithm
@@ -51,11 +52,12 @@ Every declared candidate and gate has attributed evidence for syntax, positions,
   - `.constitution/spikes/SPK-PATH-H002.md`
 - **Scope (Out-of-Scope Files):**
   - Every repository path not listed above (don't touch production or active specifications)
-- **Verification Command:** After the committed, validated, and independently reviewed `AST-H001` milestone and the PATH source commit are pushed, run `./scripts/managed-evidence.sh run --ticket PATH-H002 --source-ref SOURCE_REF --source-head-sha SOURCE_HEAD_SHA --base-sha BASE_SHA --output .constitution/prototypes/path/managed-evidence.json && git diff --check`. The managed workflow runs `cargo test --locked --manifest-path .constitution/prototypes/path/Cargo.toml --all-targets` on all three functional roles and the exact `SPK-PATH-H002` Linux with ext4 and macOS 26 with APFS probes from `.constitution/tech-spec/contracts/provisional-spikes.toml`.
-- **Expected Success Output:** exit 0 with distinct filesystem runs and a finalized schema-valid report
+- **Verification Command:** After the committed, validated, and independently reviewed `AST-H001` milestone and the PATH source commit are pushed, run `./scripts/managed-evidence.sh run --ticket PATH-H002 --source-ref SOURCE_REF --source-head-sha SOURCE_HEAD_SHA --base-sha BASE_SHA --output .constitution/prototypes/path/managed-evidence.json && git diff --check`. The managed workflow runs `cargo test --locked --manifest-path .constitution/prototypes/path/Cargo.toml --all-targets` on all three functional roles and the exact `SPK-PATH-H002` Linux with ext4 and macOS 26 with APFS probes from `.constitution/tech-spec/contracts/provisional-spikes.toml`. The CLI stages authenticated role contents, runs `SPK-PATH-H002.coordinator_steps`, and validates `.constitution/prototypes/path/results.json` before accepting the evidence report.
+- **Expected Success Output:** exit 0 with distinct filesystem runs, `.constitution/prototypes/path/results.json`, accepted `.constitution/prototypes/path/managed-evidence.json`, and executor-authored `.constitution/spikes/SPK-PATH-H002.md`
 - **STOP Conditions:**
   - STOP if identity remains host-dependent or an accepted path can escape/alias the Workspace.
   - STOP if `CI-M003` isn't merged into the tranche base, `AST-H001` isn't committed, validated, and independently reviewed in this tranche, either filesystem role lacks authenticated evidence, or the aggregate is `rejected`.
+  - STOP if the machine result is missing or invalid, or if the evidence commit doesn't contain that result, the accepted managed report, and the executor-authored Spike report together.
   - STOP when the 3-day time box expires; don't select a permanent format from incomplete platform evidence.
 - **Description:** Compare the encoded-title and opaque-component candidates across Linux, default macOS, and Windows-compatible rules.
 - **Acceptance:**
@@ -63,7 +65,7 @@ Every declared candidate and gate has attributed evidence for syntax, positions,
   - **Evidence:**
 
 ```text
-Generated and adversarial fixtures prove deterministic identity, collision freedom under all target equivalence rules, invertible ghost Links, safe case-only rename, and refusal of reserved, aliased, traversal, symlink, and submodule input. The common suite passes on all three managed roles. Authenticated GitHub-hosted Linux with ext4 and macOS 26 with APFS bundles bind to the same expected source, workflow execution, base, build, corpus, and run identity. Aggregation rejects missing, incomplete, mismatched, stale, corrupt, self-hosted, unauthenticated, duplicate-operating-system, or filesystem-role evidence.
+Generated and adversarial fixtures prove deterministic identity, collision freedom under all target equivalence rules, invertible ghost Links, safe case-only rename, and refusal of reserved, aliased, traversal, symlink, and submodule input. The common suite passes on all three managed roles. Authenticated GitHub-hosted Linux with ext4 and macOS 26 with APFS bundles bind to the same expected source, workflow execution, base, build, corpus, and run identity. Aggregation rejects missing, incomplete, mismatched, stale, corrupt, self-hosted, unauthenticated, duplicate-operating-system, or filesystem-role evidence. The CLI stages verified role members under the fixed role directories and produces the authoritative schema-valid `results.json`. The executor authors the human report from the accepted result and commits it with `results.json` and the accepted managed report.
 ```
 
 #### MODEL-H003 Implement the canonical source-backed Note document

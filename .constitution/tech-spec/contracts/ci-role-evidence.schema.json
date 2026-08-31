@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": ["schemaVersion", "expectedIdentity", "expectedIdentitySha256", "roleEvidence"],
   "properties": {
-    "schemaVersion": { "const": 3 },
+    "schemaVersion": { "const": 4 },
     "expectedIdentity": { "$ref": "#/$defs/expectedIdentity" },
     "expectedIdentitySha256": { "$ref": "#/$defs/sha256" },
     "roleEvidence": { "$ref": "#/$defs/roleEvidence" }
@@ -28,15 +28,16 @@
     "expectedIdentity": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["releaseIdentity", "testedSourceHeadSha", "workflowExecutionSha", "workflowExecutionRef", "baseSha", "workflowEvent", "evidenceReportCommitPolicy", "buildIdentity", "corpusIdentity", "runIdentity", "requiredRoleIdentities", "requiredRoleSigners"],
+      "required": ["ticketIdentity", "releaseIdentity", "testedSourceHeadSha", "workflowExecutionSha", "workflowExecutionRef", "baseSha", "workflowEvent", "evidenceReportCommitPolicy", "buildIdentity", "corpusIdentity", "runIdentity", "requiredRoleIdentities", "requiredRoleSigners"],
       "properties": {
+        "ticketIdentity": { "enum": ["CI-M003", "AST-H001", "PATH-H002", "ASSET-I001", "GIT-L001", "PKG-M001"] },
         "releaseIdentity": { "type": "string", "minLength": 1 },
         "testedSourceHeadSha": { "$ref": "#/$defs/gitSha" },
         "workflowExecutionSha": { "$ref": "#/$defs/gitSha" },
         "workflowExecutionRef": { "type": "string", "pattern": "^refs/heads/[A-Za-z0-9._/-]+$" },
         "baseSha": { "$ref": "#/$defs/gitSha" },
         "workflowEvent": { "const": "push" },
-        "evidenceReportCommitPolicy": { "const": "later-commit-parented-by-tested-source-with-report-only-diff" },
+        "evidenceReportCommitPolicy": { "const": "later-commit-parented-by-tested-source-with-declared-evidence-only-diff" },
         "buildIdentity": { "$ref": "#/$defs/sha256" },
         "corpusIdentity": { "$ref": "#/$defs/sha256" },
         "runIdentity": { "type": "string", "pattern": "^[0-9]+:[1-9][0-9]*$" },
@@ -80,8 +81,9 @@
     "capturedIdentity": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["releaseIdentity", "testedSourceHeadSha", "workflowExecutionSha", "workflowExecutionRef", "baseSha", "workflowEvent", "buildIdentity", "corpusIdentity", "runIdentity", "roleIdentity"],
+      "required": ["ticketIdentity", "releaseIdentity", "testedSourceHeadSha", "workflowExecutionSha", "workflowExecutionRef", "baseSha", "workflowEvent", "buildIdentity", "corpusIdentity", "runIdentity", "roleIdentity"],
       "properties": {
+        "ticketIdentity": { "enum": ["CI-M003", "AST-H001", "PATH-H002", "ASSET-I001", "GIT-L001", "PKG-M001"] },
         "releaseIdentity": { "type": "string", "minLength": 1 },
         "testedSourceHeadSha": { "$ref": "#/$defs/gitSha" },
         "workflowExecutionSha": { "$ref": "#/$defs/gitSha" },
