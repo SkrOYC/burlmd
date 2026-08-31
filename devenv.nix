@@ -205,11 +205,11 @@ in
 
       git
 
-      # Manual visual-verification tooling (Wayland). `grim` captures a real
-      # screenshot of the running app; `wtype` injects keystrokes into the
-      # focused window. Used to actually look at rendered pixels and exercise
-      # live typing, rather than only asserting widget properties in
-      # `flutter test`. Not part of the CI/build path.
+      # Visual-verification tooling (Wayland). `sway` supplies the owned
+      # headless compositor for the exact shell gate; `grim` captures that
+      # real Linux desktop surface. `wtype` remains for explicit manual
+      # interaction captures. This stays outside the normal Flutter build.
+      sway
       grim
       wtype
     ]

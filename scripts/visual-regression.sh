@@ -66,7 +66,13 @@ SHOT="$CAPTURE_DIR/$NAME.png"
 mkdir -p "$CAPTURE_DIR"
 CAPTURE_PPM="$(mktemp "$CAPTURE_DIR/.visual-regression-${NAME}.capture.XXXXXX.ppm")"
 BASELINE_PPM="$(mktemp "$CAPTURE_DIR/.visual-regression-${NAME}.baseline.XXXXXX.ppm")"
-WINDOW_SHOT="$(mktemp "$CAPTURE_DIR/.visual-regression-${NAME}.window.XXXXXX.png")"
+APP_PID_FILE="$(mktemp "$CAPTURE_DIR/.visual-regression-${NAME}.app-pid.XXXXXX")"
+VISUAL_RUNTIME_DIR=""
+VISUAL_SWAY_CONFIG=""
+VISUAL_SWAY_LOG=""
+VISUAL_SWAY_SOCKET=""
+VISUAL_WAYLAND_DISPLAY=""
+COMPOSITOR_PID=""
 SMOKE_PID=""
 
 cleanup() {
@@ -74,7 +80,14 @@ cleanup() {
     kill "$SMOKE_PID" 2>/dev/null || true
     wait "$SMOKE_PID" 2>/dev/null || true
   fi
-  rm -f "$CAPTURE_PPM" "$BASELINE_PPM" "$WINDOW_SHOT"
+  if [[ -n "$COMPOSITOR_PID" ]] && kill -0 "$COMPOSITOR_PID" 2>/dev/null; then
+    kill "$COMPOSITOR_PID" 2>/dev/null || true
+    wait "$COMPOSITOR_PID" 2>/dev/null || true
+  fi
+  rm -f "$CAPTURE_PPM" "$BASELINE_PPM" "$APP_PID_FILE"
+  if [[ -n "$VISUAL_RUNTIME_DIR" && -d "$VISUAL_RUNTIME_DIR" && "$VISUAL_RUNTIME_DIR" == /tmp/burlmd-visual-wayland.* ]]; then
+    rm -rf -- "$VISUAL_RUNTIME_DIR"
+  fi
 }
 trap cleanup EXIT
 
@@ -354,91 +367,195 @@ void main(List<String> arguments) {
 DART
 }
 
-# Hyprland exposes the client rectangle, including its host-owned titlebar.
-# Capturing that rectangle excludes unrelated desktop-panel pixels (such as a
-# clock) while retaining the complete host window chrome under test. When the
-# compositor cannot expose a client rectangle, retain smoke-shot's full-screen
-# capture as a compatible fallback.
-window_geometry() {
-  local clients
-  clients="$(hyprctl clients -j)" || return 1
-  CLIENTS="$clients" dart /dev/stdin <<'DART'
+# A private Sway compositor is the executable visual-gate display. Its fixed
+# headless output has no desktop panels, other clients, or ambient input. The
+# only accepted captured client is the exact app PID smoke-shot launched.
+sway_client_geometry() {
+  local app_pid="$1"
+  local tree
+  tree="$(XDG_RUNTIME_DIR="$VISUAL_RUNTIME_DIR" WAYLAND_DISPLAY="$VISUAL_WAYLAND_DISPLAY" swaymsg -s "$VISUAL_SWAY_SOCKET" -t get_tree -r)" || return 1
+  SWAY_TREE="$tree" APP_PID="$app_pid" dart /dev/stdin <<'DART'
 import 'dart:convert';
 import 'dart:io';
 
 void main() {
-  final clients = jsonDecode(Platform.environment['CLIENTS']!) as List<dynamic>;
-  for (final candidate in clients) {
-    final client = candidate as Map<String, dynamic>;
-    if (client['class'] != 'com.burlmd.burlmd' && client['title'] != 'burlmd') {
-      continue;
-    }
-    final at = client['at'] as List<dynamic>;
-    final size = client['size'] as List<dynamic>;
-    if (at.length == 2 && size.length == 2 &&
-        at.every((value) => value is num) && size.every((value) => value is num)) {
-      print('${at[0]},${at[1]} ${size[0]}x${size[1]}');
-      return;
-    }
-  }
-  exitCode = 1;
-}
-DART
-}
-
-hyprland_rounding() {
-  local option
-  option="$(hyprctl getoption decoration:rounding -j)" || return 1
-  ROUNDING_OPTION="$option" dart /dev/stdin <<'DART'
-import 'dart:convert';
-import 'dart:io';
-
-void main() {
-  final option = jsonDecode(Platform.environment['ROUNDING_OPTION']!) as Map<String, dynamic>;
-  final radius = option['int'];
-  if (radius is int && radius >= 0) {
-    print(radius);
+  final root = jsonDecode(Platform.environment['SWAY_TREE']!) as Map<String, dynamic>;
+  final appPid = int.tryParse(Platform.environment['APP_PID']!);
+  if (appPid == null || appPid <= 0) {
+    exitCode = 1;
     return;
   }
-  exitCode = 1;
+  final matches = <Map<String, dynamic>>[];
+  void visit(Map<String, dynamic> node) {
+    if (node['pid'] == appPid && node['type'] == 'con') matches.add(node);
+    for (final key in ['nodes', 'floating_nodes']) {
+      final children = node[key];
+      if (children is List) {
+        for (final child in children) {
+          if (child is Map<String, dynamic>) visit(child);
+        }
+      }
+    }
+  }
+  visit(root);
+  if (matches.length != 1) {
+    exitCode = 1;
+    return;
+  }
+  final client = matches.single;
+  final rect = client['rect'];
+  if (rect is! Map<String, dynamic> ||
+      rect['x'] is! num || rect['y'] is! num ||
+      rect['width'] is! num || rect['height'] is! num) {
+    exitCode = 1;
+    return;
+  }
+  print('${rect['x']},${rect['y']} ${rect['width']}x${rect['height']}');
 }
 DART
+}
+
+baseline_dimensions() {
+  dart /dev/stdin "$BASELINE" <<'DART'
+import 'dart:io';
+import 'dart:typed_data';
+
+void main(List<String> arguments) {
+  final bytes = File(arguments.single).readAsBytesSync();
+  const signature = <int>[137, 80, 78, 71, 13, 10, 26, 10];
+  if (bytes.length < 24 ||
+      !Iterable<int>.generate(signature.length).every((index) => bytes[index] == signature[index]) ||
+      String.fromCharCodes(bytes.sublist(12, 16)) != 'IHDR') {
+    exitCode = 1;
+    return;
+  }
+  final header = ByteData.sublistView(bytes, 16, 24);
+  final width = header.getUint32(0);
+  final height = header.getUint32(4);
+  if (width == 0 || height == 0) {
+    exitCode = 1;
+    return;
+  }
+  print('$width $height');
+}
+DART
+}
+
+smoke_app_pid() {
+  local app_pid
+  [[ -s "$APP_PID_FILE" ]] || return 1
+  IFS= read -r app_pid < "$APP_PID_FILE"
+  [[ "$app_pid" =~ ^[1-9][0-9]*$ ]] || return 1
+  kill -0 "$app_pid" 2>/dev/null || return 1
+  printf '%s\n' "$app_pid"
+}
+
+has_expected_client_size() {
+  local geometry="$1"
+  local expected_width="$2"
+  local expected_height="$3"
+  [[ "$geometry" =~ ^-?[0-9]+,-?[0-9]+[[:space:]]+([1-9][0-9]*)x([1-9][0-9]*)$ ]] || return 1
+  [[ "${BASH_REMATCH[1]}" == "$expected_width" && "${BASH_REMATCH[2]}" == "$expected_height" ]]
+}
+
+start_private_sway() {
+  local width="$1"
+  local height="$2"
+  local deadline
+  local -a display_sockets ipc_sockets
+
+  VISUAL_RUNTIME_DIR="$(mktemp -d /tmp/burlmd-visual-wayland.XXXXXX)" || return 1
+  [[ -d "$VISUAL_RUNTIME_DIR" && "$VISUAL_RUNTIME_DIR" == /tmp/burlmd-visual-wayland.* ]] || return 1
+  chmod 700 "$VISUAL_RUNTIME_DIR" || return 1
+  VISUAL_SWAY_CONFIG="$VISUAL_RUNTIME_DIR/config"
+  VISUAL_SWAY_LOG="$VISUAL_RUNTIME_DIR/sway.log"
+  printf '%s\n' \
+    'xwayland disable' \
+    'default_border none' \
+    'default_floating_border none' \
+    'gaps inner 0' \
+    'gaps outer 0' \
+    "output HEADLESS-1 mode ${width}x${height}" \
+    > "$VISUAL_SWAY_CONFIG" || return 1
+
+  env -u DISPLAY -u WAYLAND_DISPLAY -u SWAYSOCK \
+    "XDG_RUNTIME_DIR=$VISUAL_RUNTIME_DIR" \
+    'WLR_BACKENDS=headless' \
+    'WLR_HEADLESS_OUTPUTS=1' \
+    'WLR_RENDERER=pixman' \
+    'WLR_LIBINPUT_NO_DEVICES=1' \
+    sway -c "$VISUAL_SWAY_CONFIG" > "$VISUAL_SWAY_LOG" 2>&1 &
+  COMPOSITOR_PID=$!
+  deadline=$(( $(date +%s) + 30 ))
+  while kill -0 "$COMPOSITOR_PID" 2>/dev/null; do
+    mapfile -t display_sockets < <(find "$VISUAL_RUNTIME_DIR" -maxdepth 1 -type s -name 'wayland-[0-9]*' -printf '%f\n')
+    mapfile -t ipc_sockets < <(find "$VISUAL_RUNTIME_DIR" -maxdepth 1 -type s -name 'sway-ipc.*.sock' -printf '%p\n')
+    if [[ "${#display_sockets[@]}" -eq 1 && "${#ipc_sockets[@]}" -eq 1 ]]; then
+      VISUAL_WAYLAND_DISPLAY="${display_sockets[0]}"
+      VISUAL_SWAY_SOCKET="${ipc_sockets[0]}"
+      if XDG_RUNTIME_DIR="$VISUAL_RUNTIME_DIR" WAYLAND_DISPLAY="$VISUAL_WAYLAND_DISPLAY" \
+          swaymsg -s "$VISUAL_SWAY_SOCKET" -t get_outputs -r >/dev/null; then
+        return 0
+      fi
+    fi
+    (( $(date +%s) < deadline )) || break
+    sleep .1
+  done
+  return 1
 }
 
 cd "$REPO_ROOT"
-BURLMD_SMOKE_SHOT_DIR="$CAPTURE_DIR" "$REPO_ROOT/scripts/smoke-shot.sh" "$NAME" &
+read -r BASELINE_WIDTH BASELINE_HEIGHT <<< "$(baseline_dimensions)" || {
+  echo "visual-regression: could not read baseline dimensions from $BASELINE" >&2
+  exit 1
+}
+[[ "$BASELINE_WIDTH" =~ ^[1-9][0-9]*$ && "$BASELINE_HEIGHT" =~ ^[1-9][0-9]*$ ]] || {
+  echo "visual-regression: invalid baseline dimensions: ${BASELINE_WIDTH:-?}x${BASELINE_HEIGHT:-?}" >&2
+  exit 1
+}
+command -v sway >/dev/null 2>&1 || {
+  echo "visual-regression: sway is required for the isolated Linux visual gate" >&2
+  exit 1
+}
+if ! start_private_sway "$BASELINE_WIDTH" "$BASELINE_HEIGHT"; then
+  echo "visual-regression: could not start the private headless Sway compositor" >&2
+  [[ -n "$VISUAL_SWAY_LOG" ]] && sed -n '1,160p' "$VISUAL_SWAY_LOG" >&2 || true
+  exit 1
+fi
+
+XDG_RUNTIME_DIR="$VISUAL_RUNTIME_DIR" WAYLAND_DISPLAY="$VISUAL_WAYLAND_DISPLAY" \
+  SWAYSOCK="$VISUAL_SWAY_SOCKET" GDK_BACKEND=wayland \
+  BURLMD_SMOKE_SHOT_DIR="$CAPTURE_DIR" BURLMD_SMOKE_APP_PID_FILE="$APP_PID_FILE" \
+  "$REPO_ROOT/scripts/smoke-shot.sh" "$NAME" &
 SMOKE_PID=$!
-WINDOW_CAPTURED=0
-WINDOW_ROUNDING=""
-WINDOW_TITLEBAR_HEIGHT=0
 # GTK's HeaderBar occupies the first 47 rows in this reproducible Linux
 # capture. It is host-owned (font AA, close button, and compositor rendering),
 # so preserve it in the PNG but exclude it from the product-pixel comparison.
 HOST_TITLEBAR_HEIGHT=47
-if command -v hyprctl >/dev/null 2>&1; then
-  CAPTURE_DEADLINE=$(( $(date +%s) + 60 ))
-  while kill -0 "$SMOKE_PID" 2>/dev/null; do
-    if GEOMETRY="$(window_geometry 2>/dev/null)"; then
-      # Let the visible shell finish its initial provider-driven mount, but
-      # capture before smoke-shot terminates the isolated release process.
-      sleep 2
-      GEOMETRY="$(window_geometry 2>/dev/null)" || break
-      if grim -g "$GEOMETRY" "$WINDOW_SHOT"; then
-        WINDOW_ROUNDING="$(hyprland_rounding)" || {
-          echo "visual-regression: could not read Hyprland decoration rounding" >&2
-          exit 1
-        }
-        WINDOW_TITLEBAR_HEIGHT="$HOST_TITLEBAR_HEIGHT"
-        WINDOW_CAPTURED=1
-      else
-        echo "visual-regression: grim could not capture client geometry $GEOMETRY" >&2
-        exit 1
-      fi
+CAPTURE_DEADLINE=$(( $(date +%s) + 60 ))
+APP_PID=""
+CLIENT_VERIFIED=0
+while kill -0 "$SMOKE_PID" 2>/dev/null; do
+  if [[ -z "$APP_PID" ]]; then
+    APP_PID="$(smoke_app_pid 2>/dev/null || true)"
+  fi
+  if [[ -n "$APP_PID" ]] && GEOMETRY="$(sway_client_geometry "$APP_PID" 2>/dev/null)" &&
+      has_expected_client_size "$GEOMETRY" "$BASELINE_WIDTH" "$BASELINE_HEIGHT"; then
+    # Confirm after a compositor tick: a matching PID alone is insufficient if
+    # layout changes shrink it before smoke-shot's final screenshot.
+    sleep .2
+    GEOMETRY="$(sway_client_geometry "$APP_PID" 2>/dev/null)" || break
+    if has_expected_client_size "$GEOMETRY" "$BASELINE_WIDTH" "$BASELINE_HEIGHT"; then
+      CLIENT_VERIFIED=1
       break
     fi
-    (( $(date +%s) < CAPTURE_DEADLINE )) || break
-    sleep .2
-  done
+  fi
+  (( $(date +%s) < CAPTURE_DEADLINE )) || break
+  sleep .2
+done
+if (( ! CLIENT_VERIFIED )); then
+  echo "visual-regression: did not verify launched PID ${APP_PID:-unknown} at ${BASELINE_WIDTH}x${BASELINE_HEIGHT}" >&2
+  exit 1
 fi
 if ! wait "$SMOKE_PID"; then
   exit 1
@@ -448,9 +565,6 @@ SMOKE_PID=""
   echo "visual-regression: smoke-shot did not write $SHOT" >&2
   exit 1
 }
-if (( WINDOW_CAPTURED )); then
-  cp "$WINDOW_SHOT" "$SHOT"
-fi
 
 if [[ "$WRITE_BASELINE" -eq 1 ]]; then
   mkdir -p "$(dirname "$BASELINE")"
@@ -461,9 +575,9 @@ if [[ "$WRITE_BASELINE" -eq 1 ]]; then
   exit 0
 fi
 
-png_to_ppm "$SHOT" "$CAPTURE_PPM" "${WINDOW_ROUNDING:-0}" "$WINDOW_TITLEBAR_HEIGHT"
-png_to_ppm "$BASELINE" "$BASELINE_PPM" "${WINDOW_ROUNDING:-0}" "$WINDOW_TITLEBAR_HEIGHT"
-if ! COMPARED_PIXELS="$(compared_pixel_count "$CAPTURE_PPM" "${WINDOW_ROUNDING:-0}" "$WINDOW_TITLEBAR_HEIGHT")"; then
+png_to_ppm "$SHOT" "$CAPTURE_PPM" 0 "$HOST_TITLEBAR_HEIGHT"
+png_to_ppm "$BASELINE" "$BASELINE_PPM" 0 "$HOST_TITLEBAR_HEIGHT"
+if ! COMPARED_PIXELS="$(compared_pixel_count "$CAPTURE_PPM" 0 "$HOST_TITLEBAR_HEIGHT")"; then
   echo "visual-regression: could not count compared pixels" >&2
   exit 1
 fi

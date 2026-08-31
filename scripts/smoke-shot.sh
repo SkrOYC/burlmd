@@ -47,6 +47,16 @@ APP_BIN="$APP_BUNDLE/burlmd"
 cd "$REPO_ROOT"
 mkdir -p "$QA_DIR"
 
+# A parent visual gate may supply a private, pre-created regular file to bind
+# its compositor capture to this exact launched process. Never create or
+# remove a caller-selected path: smoke-shot merely publishes its child PID
+# after the exec succeeds.
+APP_PID_FILE="${BURLMD_SMOKE_APP_PID_FILE:-}"
+if [[ -n "$APP_PID_FILE" && ! -f "$APP_PID_FILE" ]]; then
+  echo "smoke-shot: BURLMD_SMOKE_APP_PID_FILE must name an existing regular file" >&2
+  exit 64
+fi
+
 # Drop any screenshot left by an earlier run up front, so a failed run can
 # never leave a stale .qa/<name>.png behind.
 rm -f "$SHOT"
@@ -206,6 +216,10 @@ env "${SCENARIO_ENV[@]}" \
   "BURLMD_DB_PATH=$SMOKE_DB_PATH" \
   "$APP_BIN" &
 APP_PID=$!
+if [[ -n "$APP_PID_FILE" ]]; then
+  printf '%s\n' "$APP_PID" > "$APP_PID_FILE" \
+    || fail "could not publish the launched application PID"
+fi
 
 echo "[smoke-shot] waiting for the window to render..."
 RENDER_DEADLINE="$(deadline "$RENDER_TIMEOUT")"

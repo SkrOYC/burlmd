@@ -155,6 +155,41 @@ void main() {
         expect(script, isNot(contains('mktemp /tmp/burlmd-selection-ready.')));
       },
     );
+
+    test(
+      'harness publishes its launched PID only to a pre-created file',
+      () async {
+        final script = await File('scripts/smoke-shot.sh').readAsString();
+
+        expect(
+          script,
+          contains(r'APP_PID_FILE="${BURLMD_SMOKE_APP_PID_FILE:-}"'),
+        );
+        expect(
+          script,
+          contains(r'[[ -n "$APP_PID_FILE" && ! -f "$APP_PID_FILE" ]]'),
+        );
+        expect(
+          script,
+          contains(r'''printf '%s\n' "$APP_PID" > "$APP_PID_FILE"'''),
+        );
+      },
+    );
+
+    test(
+      'visual gate owns a headless compositor and checks the launched PID',
+      () async {
+        final script = await File(
+          'scripts/visual-regression.sh',
+        ).readAsString();
+
+        expect(script, contains("'WLR_BACKENDS=headless'"));
+        expect(script, contains("'WLR_HEADLESS_OUTPUTS=1'"));
+        expect(script, contains(r'sway_client_geometry "$APP_PID"'));
+        expect(script, contains(r'BURLMD_SMOKE_APP_PID_FILE="$APP_PID_FILE"'));
+        expect(script, isNot(contains('hyprctl clients -j')));
+      },
+    );
   });
 }
 

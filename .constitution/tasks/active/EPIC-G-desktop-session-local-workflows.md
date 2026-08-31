@@ -49,8 +49,8 @@ The rebuilt `test/goldens/` Linux and macOS shell baselines contain no simulated
 ```
 
 ##### SHELL-G001 Deviations & Justifications
-- **Touched Files:** `.constitution/tasks/active/EPIC-G-desktop-session-local-workflows.md`
-- **Justification:** Record the M0 P2 path (`okf-bundle.md`) in the existing M0 deviation list so the recorded scope matches commit dad33d8 / this follow-up.
+- **Touched Files:** `.constitution/tasks/active/EPIC-G-desktop-session-local-workflows.md`, `devenv.nix`, `scripts/smoke-shot.sh`
+- **Justification:** Record the M0 P2 path (`okf-bundle.md`) in the existing M0 deviation list so the recorded scope matches commit dad33d8 / this follow-up. The executable Linux visual gate now owns a pinned headless Sway compositor and receives smoke-shot's launched PID through a private handoff file; this eliminates active-desktop windows, focus, geometry, input, and desktop noise from exact capture provenance.
 
 #### PREF-G002 Persist device-global preferences
 - **Type:** Feature

@@ -457,7 +457,10 @@ void main() {
 
     await focusStarterRaw();
     await sendPrimary(LogicalKeyboardKey.keyW);
-    expectRawSource();
+    expectCommittedSourceWhileModalOwnsFocus();
+    expect(container.read(activeNoteProvider), isNull);
+    expect(container.read(selectedNoteIdProvider), isNull);
+    expect(api.calls, contains('close:starter'));
 
     await tester.tap(find.byKey(const ValueKey('workspace-tree-note-inbox')));
     await tester.pump();
