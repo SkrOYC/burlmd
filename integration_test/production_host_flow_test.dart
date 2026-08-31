@@ -76,29 +76,34 @@ class _ProductionHostApi extends RustApi {
   }
 
   NoteState _noteState(String noteId) => NoteState(
-    ast: noteId == 'starter'
-        ? [
-            AstNode.heading(level: 1, content: [_text('Sourdough starter')]),
-            AstNode.paragraph(content: [_text(starterBody)]),
-            AstNode.list(
-              ordered: false,
-              items: [
-                AstNode.listItem(
-                  content: [
-                    AstNode.paragraph(content: [_text('Flour')]),
-                  ],
-                ),
+    ast: switch (noteId) {
+      'starter' => [
+        AstNode.heading(level: 1, content: [_text('Sourdough starter')]),
+        AstNode.paragraph(content: [_text(starterBody)]),
+        AstNode.list(
+          ordered: false,
+          items: [
+            AstNode.listItem(
+              content: [
+                AstNode.paragraph(content: [_text('Flour')]),
               ],
             ),
-            AstNode.blockquote(
-              nodes: [
-                AstNode.paragraph(content: [_text('Keep it warm.')]),
-              ],
-            ),
-            const AstNode.codeBlock(language: 'bash', code: 'bake --slow'),
-            const AstNode.thematicBreak(),
-          ]
-        : const <AstNode>[],
+          ],
+        ),
+        AstNode.blockquote(
+          nodes: [
+            AstNode.paragraph(content: [_text('Keep it warm.')]),
+          ],
+        ),
+        const AstNode.codeBlock(language: 'bash', code: 'bake --slow'),
+        const AstNode.thematicBreak(),
+      ],
+      'recovered' => [
+        AstNode.heading(level: 1, content: [_text('Recovered draft')]),
+        AstNode.paragraph(content: [_text('Restore this active draft.')]),
+      ],
+      _ => const <AstNode>[],
+    },
     metadata: NoteMetadata(
       id: noteId,
       path: noteId == 'starter'
@@ -458,9 +463,20 @@ void main() {
     await focusStarterRaw();
     await sendPrimary(LogicalKeyboardKey.keyW);
     expect(find.byKey(const ValueKey('raw-editor-1')), findsNothing);
-    expect(find.text('Select a note to open it'), findsOneWidget);
-    expect(container.read(activeNoteProvider), isNull);
-    expect(container.read(selectedNoteIdProvider), isNull);
+    expect(find.byKey(const Key('shell-tab-starter')), findsNothing);
+    expect(find.byKey(const Key('shell-tab-recovered')), findsOneWidget);
+    expect(container.read(activeNoteProvider)?.metadata.id, 'recovered');
+    expect(container.read(selectedNoteIdProvider), 'recovered');
+    expect(find.text('Restore this active draft.'), findsOneWidget);
+    expect(find.text('Select a note to open it'), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('promote-block-1')));
+    await tester.pump();
+    final recoveredRaw = find.byKey(const ValueKey('raw-editor-1'));
+    await tester.tap(recoveredRaw);
+    await tester.pump();
+    final recoveredEditable = tester.widget<EditableText>(recoveredRaw);
+    expect(recoveredEditable.focusNode.hasFocus, isTrue);
+    expect(recoveredEditable.controller.text, 'Restore this active draft.');
     expect(api.calls, contains('close:starter'));
 
     await tester.tap(find.byKey(const ValueKey('workspace-tree-note-inbox')));

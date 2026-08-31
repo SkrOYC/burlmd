@@ -156,45 +156,90 @@ void main() {
       },
     );
 
-    test(
-      'harness publishes its launched PID through an inherited FD',
-      () async {
-        final script = await File('scripts/smoke-shot.sh').readAsString();
+    test('visual gate owns a headless compositor', () async {
+      final script = await File('scripts/visual-regression.sh').readAsString();
 
-        expect(script, contains(r'APP_PID_FD="${BURLMD_SMOKE_APP_PID_FD:-}"'));
-        expect(script, contains(r'"/proc/self/fd/$APP_PID_FD"'));
+      expect(script, contains("'WLR_BACKENDS=headless'"));
+      expect(script, contains("'WLR_HEADLESS_OUTPUTS=1'"));
+      expect(script, isNot(contains('hyprctl clients -j')));
+    });
+  });
+
+  group('smoke PID handoff', () {
+    late _SmokeHandoffFixture fixture;
+
+    setUp(() async {
+      fixture = await _SmokeHandoffFixture.create();
+    });
+
+    tearDown(() => fixture.dispose());
+
+    test(
+      'publishes the PID of an actually launched app through an inherited FD',
+      () async {
+        final handoff = File('${fixture.root.path}/handoff');
+        final launched = File('${fixture.root.path}/launched');
+
+        final result = await fixture.runWithInheritedHandoff(
+          handoff: handoff,
+          launched: launched,
+        );
+
+        expect(result.exitCode, 0, reason: result.stderr.toString());
         expect(
-          script,
-          contains(r'''printf '%s\n' "$APP_PID" >&"$APP_PID_FD"'''),
+          _lastLine(result.stdout.toString()),
+          launched.readAsStringSync().trim(),
+        );
+        expect(
+          _lastLine(result.stdout.toString()),
+          matches(RegExp(r'^[1-9][0-9]*$')),
         );
       },
     );
 
-    test('PID handoff rejects a caller-supplied pathname attack', () async {
-      final script = await File('scripts/smoke-shot.sh').readAsString();
-
-      // A malicious caller can replace a path with a symlink between checks
-      // and redirection. The harness accepts only an inherited descriptor, so
-      // it cannot resolve or truncate that pathname after startup.
-      expect(script, isNot(contains('BURLMD_SMOKE_APP_PID_FILE')));
-      expect(script, isNot(contains(r'> "$APP_PID_FILE"')));
-    });
-
     test(
-      'visual gate owns a headless compositor and checks the launched PID',
+      'rejects invalid, closed, and non-regular descriptors before launch',
       () async {
-        final script = await File(
-          'scripts/visual-regression.sh',
-        ).readAsString();
+        final launched = File('${fixture.root.path}/should-not-launch');
+        final invalid = await fixture.run(
+          environment: {'BURLMD_SMOKE_APP_PID_FD': 'not-a-descriptor'},
+        );
+        final closed = await fixture.runBash(
+          r'exec 9>&-; BURLMD_SMOKE_APP_PID_FD=9 "$1" rejected',
+        );
+        final nonRegular = await fixture.runBash(
+          r'exec 9<> /dev/null; BURLMD_SMOKE_APP_PID_FD=9 "$1" rejected',
+        );
 
-        expect(script, contains("'WLR_BACKENDS=headless'"));
-        expect(script, contains("'WLR_HEADLESS_OUTPUTS=1'"));
-        expect(script, contains(r'sway_client_geometry "$APP_PID"'));
-        expect(script, contains(r'BURLMD_SMOKE_APP_PID_FD="$APP_PID_FD"'));
-        expect(script, contains(r'exec {APP_PID_FD}<> "$APP_PID_FILE"'));
-        expect(script, isNot(contains('hyprctl clients -j')));
+        for (final result in [invalid, closed, nonRegular]) {
+          expect(result.exitCode, 64, reason: result.stderr.toString());
+          expect(
+            result.stderr,
+            contains('must name an inherited owned regular-file FD'),
+          );
+        }
+        expect(await launched.exists(), isFalse);
       },
     );
+
+    test('a caller pathname substitution stays harmless', () async {
+      final handoff = File('${fixture.root.path}/handoff');
+      final launched = File('${fixture.root.path}/launched');
+      final substitutedPath = File(
+        '${fixture.root.path}/attacker-selected-path',
+      );
+      await substitutedPath.writeAsString('leave this unchanged\n');
+
+      final result = await fixture.runWithInheritedHandoff(
+        handoff: handoff,
+        launched: launched,
+        callerPathname: substitutedPath,
+      );
+
+      expect(result.exitCode, 0, reason: result.stderr.toString());
+      expect(await substitutedPath.readAsString(), 'leave this unchanged\n');
+      expect(await handoff.readAsString(), await launched.readAsString());
+    });
   });
 }
 
@@ -238,3 +283,124 @@ class _SmokeState {
 
   Future<void> dispose() => root.delete(recursive: true);
 }
+
+class _SmokeHandoffFixture {
+  _SmokeHandoffFixture._(this.root, this.script, this.fakeBin);
+
+  final Directory root;
+  final File script;
+  final Directory fakeBin;
+
+  static Future<_SmokeHandoffFixture> create() async {
+    final root = await Directory.systemTemp.createTemp('burlmd-smoke-handoff.');
+    final scripts = Directory('${root.path}/scripts');
+    final fakeBin = Directory('${root.path}/fake-bin');
+    await scripts.create();
+    await fakeBin.create();
+    await Directory('${root.path}/rust').create();
+    final script = File('${scripts.path}/smoke-shot.sh');
+    await File('scripts/smoke-shot.sh').copy(script.path);
+
+    for (final command in ['cargo', 'flutter']) {
+      final executable = File('${fakeBin.path}/$command');
+      await executable.writeAsString('#!/usr/bin/env bash\nexit 0\n');
+      await _makeExecutable(executable);
+    }
+    final grim = File('${fakeBin.path}/grim');
+    await grim.writeAsString(r'''#!/usr/bin/env bash
+set -euo pipefail
+output="${!#}"
+printf 'P6\n1 1\n255\n\0\0\0' > "$output"
+''');
+    await _makeExecutable(grim);
+
+    final app = File('${root.path}/build/linux/x64/release/bundle/burlmd');
+    await app.parent.create(recursive: true);
+    await app.writeAsString('''#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\\n' "\$\$" > "\$BURLMD_TEST_APP_LAUNCH_MARKER"
+trap 'exit 0' TERM INT
+while :; do sleep .1; done
+''');
+    await _makeExecutable(app);
+
+    return _SmokeHandoffFixture._(root, script, fakeBin);
+  }
+
+  Future<ProcessResult> run({Map<String, String> environment = const {}}) =>
+      Process.run('bash', [
+        script.path,
+        'rejected',
+      ], environment: _environment(environment));
+
+  Future<ProcessResult> runBash(String command) => Process.run('bash', [
+    '-c',
+    command,
+    'smoke-handoff-test',
+    script.path,
+  ], environment: _environment(const {}));
+
+  Future<ProcessResult> runWithInheritedHandoff({
+    required File handoff,
+    required File launched,
+    File? callerPathname,
+  }) => Process.run('bash', [
+    '-c',
+    '''
+set -euo pipefail
+handoff="\$1"
+launched="\$2"
+script="\$3"
+caller_pathname="\$4"
+exec 9<> "\$handoff"
+BURLMD_SMOKE_APP_PID_FD=9 \\
+  BURLMD_TEST_APP_LAUNCH_MARKER="\$launched" \\
+  BURLMD_SMOKE_APP_PID_FILE="\$caller_pathname" \\
+  "\$script" handoff &
+smoke_pid=\$!
+for _ in \$(seq 1 200); do
+  if [[ -s "\$handoff" && -s "\$launched" ]]; then
+    published_pid="\$(<"\$handoff")"
+    launched_pid="\$(<"\$launched")"
+    kill -0 "\$published_pid"
+    [[ "\$published_pid" == "\$launched_pid" ]]
+    kill "\$smoke_pid" 2>/dev/null || true
+    wait "\$smoke_pid" 2>/dev/null || true
+    printf '%s\\n' "\$published_pid"
+    exit 0
+  fi
+  sleep .02
+done
+kill "\$smoke_pid" 2>/dev/null || true
+wait "\$smoke_pid" 2>/dev/null || true
+exit 1
+''',
+    'smoke-handoff-test',
+    handoff.path,
+    launched.path,
+    script.path,
+    callerPathname?.path ?? '${root.path}/not-used',
+  ], environment: _environment({'BURLMD_SMOKE_SHOT_DIR': '${root.path}/qa'}));
+
+  Map<String, String> _environment(Map<String, String> additions) => {
+    ...Platform.environment,
+    'PATH': '${fakeBin.path}:${Platform.environment['PATH']}',
+    ...additions,
+  };
+
+  Future<void> dispose() => root.delete(recursive: true);
+
+  static Future<void> _makeExecutable(File file) async {
+    final result = await Process.run('chmod', ['u+x', file.path]);
+    if (result.exitCode != 0) {
+      throw ProcessException(
+        'chmod',
+        ['u+x', file.path],
+        result.stderr.toString(),
+        result.exitCode,
+      );
+    }
+  }
+}
+
+String _lastLine(String value) => value.trim().split('\n').last;
