@@ -42,6 +42,9 @@ class _MountingRustApi extends RustApi {
         syncPresentation: SessionSyncPresentation.local,
       );
 
+  /// A sidecar read failure must not block the Workspace shell.
+  Object? snapshotLoadError;
+
   /// Concept ids that no longer exist when a saved session is restored.
   final Set<String> unavailableNoteIds = {};
 
@@ -67,7 +70,11 @@ class _MountingRustApi extends RustApi {
 
   @override
   Future<ActiveWorkspaceSessionSnapshot>
-  loadActiveWorkspaceSessionSnapshot() async => snapshot;
+  loadActiveWorkspaceSessionSnapshot() async {
+    final error = snapshotLoadError;
+    if (error != null) throw error;
+    return snapshot;
+  }
 
   @override
   Future<List<TreeNode>> workspaceTree() async => tree;
@@ -220,6 +227,26 @@ ValueNotifier<String?> _captureClipboard(WidgetTester tester) {
 }
 
 void main() {
+  testWidgets(
+    'a session-sidecar load error mounts a writable shell and reports once',
+    (tester) async {
+      final api = _MountingRustApi([_treeNode('a', 'Alpha')])
+        ..snapshotLoadError = StateError('sidecar unavailable');
+      final container = await _pumpShell(tester, api);
+
+      expect(find.byKey(const ValueKey('shell-root')), findsOneWidget);
+      expect(
+        find.textContaining('Could not restore saved session: Bad state:'),
+        findsOneWidget,
+      );
+      final fallback = container.read(workspaceSessionProvider);
+      expect(fallback.openNoteIds, isEmpty);
+      expect(fallback.activeNoteId, isNull);
+      expect(fallback.searchQuery, isEmpty);
+      expect(container.read(workspaceSessionRestoreErrorProvider), isNull);
+    },
+  );
+
   testWidgets('the sidebar search affordance opens the search panel, passes '
       'its result limit to the Core, and a selected hit opens its note', (
     tester,

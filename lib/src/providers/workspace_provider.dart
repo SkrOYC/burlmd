@@ -96,7 +96,11 @@ class WorkspaceSession extends Notifier<WorkspaceSessionState> {
   @override
   WorkspaceSessionState build() => const WorkspaceSessionState.empty();
 
+  /// Restores exactly once during Workspace bootstrap. A failed read commits
+  /// the same writable default as Core's corrupt-snapshot fallback, so a
+  /// later stale retry must not replace user changes made after that failure.
   void restore(ActiveWorkspaceSessionSnapshot snapshot) {
+    if (_restored) return;
     state = WorkspaceSessionState.fromSnapshot(snapshot);
     _restored = true;
   }
@@ -240,6 +244,23 @@ final workspaceSessionProvider =
       WorkspaceSession.new,
     );
 
+/// A one-shot report for a sidecar read that fell back to the writable default
+/// session. The screen consumes it without treating the Workspace itself as
+/// unavailable.
+final workspaceSessionRestoreErrorProvider =
+    NotifierProvider<WorkspaceSessionRestoreError, Object?>(
+      WorkspaceSessionRestoreError.new,
+    );
+
+class WorkspaceSessionRestoreError extends Notifier<Object?> {
+  @override
+  Object? build() => null;
+
+  void report(Object error) => state = error;
+
+  void acknowledge() => state = null;
+}
+
 /// Loads the active Workspace snapshot after Core has established which
 /// Workspace is active. This is deliberately separate from [workspaceProvider]
 /// so a snapshot sidecar failure cannot make workspace bootstrap pretend the
@@ -247,11 +268,25 @@ final workspaceSessionProvider =
 final workspaceSessionSnapshotProvider =
     FutureProvider.autoDispose<WorkspaceSessionState>((ref) async {
       await ref.watch(workspaceProvider.future);
-      final snapshot = await ref
-          .watch(rustApiProvider)
-          .loadActiveWorkspaceSessionSnapshot();
       final controller = ref.read(workspaceSessionProvider.notifier);
-      controller.restore(snapshot);
+      try {
+        final snapshot = await ref
+            .watch(rustApiProvider)
+            .loadActiveWorkspaceSessionSnapshot();
+        controller.restore(snapshot);
+      } catch (error) {
+        // Match Core's corrupt/unknown-version behavior: presentation restore
+        // is unavailable, but the default session is immediately writable.
+        controller.restore(
+          const ActiveWorkspaceSessionSnapshot(
+            openNoteIds: [],
+            expandedDirectoryIds: [],
+            searchQuery: '',
+            syncPresentation: SessionSyncPresentation.local,
+          ),
+        );
+        ref.read(workspaceSessionRestoreErrorProvider.notifier).report(error);
+      }
       return ref.read(workspaceSessionProvider);
     });
 

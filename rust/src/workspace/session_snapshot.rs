@@ -387,28 +387,44 @@ mod tests {
     }
 
     #[test]
-    fn snapshot_bytes_exclude_note_bodies_credentials_and_device_preferences() {
+    fn serialized_snapshot_has_only_the_schema_approved_fields_and_values() {
         let (_directory, store) = store();
         store
             .save("workspace-a", &snapshot())
             .expect("save snapshot");
         let bytes =
             std::fs::read(store.snapshot_path("workspace-a")).expect("read durable snapshot");
-        let text = String::from_utf8(bytes).expect("snapshot JSON is UTF-8");
-
-        assert!(text.contains("open_note_ids"));
-        assert!(text.contains("workspace_id"));
-        for forbidden in [
-            "Note body that must not persist",
-            "credential-token-value",
-            "font_scale",
-            "theme_mode",
-            "update_notification",
-        ] {
-            assert!(
-                !text.contains(forbidden),
-                "snapshot bytes must not contain {forbidden:?}"
-            );
-        }
+        let serialized: serde_json::Value =
+            serde_json::from_slice(&bytes).expect("snapshot JSON must parse");
+        let object = serialized
+            .as_object()
+            .expect("snapshot JSON must be a schema object");
+        let actual_keys = object.keys().map(String::as_str).collect::<Vec<_>>();
+        assert_eq!(
+            actual_keys,
+            vec![
+                "active_note_id",
+                "expanded_directory_ids",
+                "open_note_ids",
+                "schema_version",
+                "search_query",
+                "sync_presentation",
+                "workspace_id",
+            ],
+            "a snapshot must not serialize content, credentials, preferences, or unknown fields"
+        );
+        assert_eq!(
+            serialized,
+            serde_json::json!({
+                "schema_version": 1,
+                "workspace_id": "workspace-a",
+                "open_note_ids": ["inbox/today", "projects/state"],
+                "active_note_id": "projects/state",
+                "expanded_directory_ids": ["inbox", "projects"],
+                "search_query": "durable session",
+                "sync_presentation": "connected",
+            }),
+            "every nested array value and scalar must remain within the v1 schema"
+        );
     }
 }

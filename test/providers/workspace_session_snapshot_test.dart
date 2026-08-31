@@ -11,6 +11,7 @@ class _SessionSnapshotRustApi extends RustApi {
 
   final ActiveWorkspaceSessionSnapshot snapshot;
   final List<ActiveWorkspaceSessionSnapshot> savedSnapshots = [];
+  Object? snapshotLoadError;
   NoteState? openedNote;
   var openNoteCalls = 0;
 
@@ -25,7 +26,11 @@ class _SessionSnapshotRustApi extends RustApi {
 
   @override
   Future<ActiveWorkspaceSessionSnapshot>
-  loadActiveWorkspaceSessionSnapshot() async => snapshot;
+  loadActiveWorkspaceSessionSnapshot() async {
+    final error = snapshotLoadError;
+    if (error != null) throw error;
+    return snapshot;
+  }
 
   @override
   Future<void> saveActiveWorkspaceSessionSnapshot(
@@ -86,6 +91,55 @@ void main() {
       expect(container.read(searchQueryProvider), 'durable session');
       expect(api.openNoteCalls, 0);
       expect(api.savedSnapshots, isEmpty);
+    },
+  );
+
+  test(
+    'a failed load enters the writable default and a stale retry cannot replace user state',
+    () async {
+      final api = _SessionSnapshotRustApi(
+        const ActiveWorkspaceSessionSnapshot(
+          openNoteIds: ['stale'],
+          activeNoteId: 'stale',
+          expandedDirectoryIds: ['stale-directory'],
+          searchQuery: 'stale search',
+          syncPresentation: SessionSyncPresentation.connected,
+        ),
+      )..snapshotLoadError = StateError('session sidecar unavailable');
+      final container = ProviderContainer(
+        overrides: [rustApiProvider.overrideWithValue(api)],
+      );
+      addTearDown(container.dispose);
+
+      final fallback = await container.read(
+        workspaceSessionSnapshotProvider.future,
+      );
+      expect(fallback.openNoteIds, isEmpty);
+      expect(fallback.activeNoteId, isNull);
+      expect(fallback.expandedDirectoryIds, isEmpty);
+      expect(fallback.searchQuery, isEmpty);
+      expect(fallback.syncPresentation, SessionSyncPresentation.local);
+      expect(
+        container.read(workspaceSessionRestoreErrorProvider),
+        isA<StateError>(),
+      );
+
+      container
+          .read(workspaceSessionProvider.notifier)
+          .setSearchQuery('user session change');
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+      expect(api.savedSnapshots.single.searchQuery, 'user session change');
+
+      api.snapshotLoadError = null;
+      container.invalidate(workspaceSessionSnapshotProvider);
+      await container.read(workspaceSessionSnapshotProvider.future);
+
+      final retained = container.read(workspaceSessionProvider);
+      expect(retained.searchQuery, 'user session change');
+      expect(retained.openNoteIds, isEmpty);
+      expect(retained.activeNoteId, isNull);
+      expect(api.savedSnapshots, hasLength(1));
     },
   );
 

@@ -67,6 +67,11 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
         }
       },
     );
+    ref.listen<Object?>(workspaceSessionRestoreErrorProvider, (_, error) {
+      if (error == null) return;
+      _showRescanMessage(context, 'Could not restore saved session: $error');
+      ref.read(workspaceSessionRestoreErrorProvider.notifier).acknowledge();
+    });
     // Rescan outcomes surface here rather than inside the button widget, so
     // both the failure branch ("names the failure") and the refusal branch
     // of SHEL-E008 report through one SnackBar path on the shell's Scaffold.
