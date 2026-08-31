@@ -1,5 +1,5 @@
 ---
-version: v2.1.20
+version: v2.2.0
 status: active
 epic: H
 ---
@@ -8,7 +8,9 @@ epic: H
 
 Replace the reduced Markdown projection and host-dependent path model with the canonical Core-owned Note and Workspace models. Establish burlmd's authority over guest input, conformance repair, cross-platform identity, and live Workspace observation.
 
-AST-H001 and PATH-H002 execute first. Their reports feed measured upstream evolution. Every dependent ticket must be reconciled against the accepted final TechSpec before implementation; the ticket stays in this epic and adapts rather than being discarded.
+AST-H001 and PATH-H002 execute after merged `CI-M003`. Their reports feed the constitution evidence-finalization pull request. Every dependent ticket must be reconciled against that accepted final TechSpec before implementation; the ticket stays in this epic and adapts rather than being discarded.
+
+**Tranche integration:** Create `spike/epic-h-canonical-foundations` from merged `master` after the M bootstrap pull request. Execute `AST-H001` and then `PATH-H002`, with one full milestone review after each ticket, and merge the H Spike pull request before constitution finalization. After the evidence-finalization pull request merges, create `feat/epic-h-authority-foundation` from merged `master` and execute `MODEL-H003`, `PATH-H005`, `ADAPT-H004`, `AUTH-H006`, and `PREFLIGHT-H007` in that order. No unmerged branch satisfies a dependency. Neither partial H tranche archives Epic H; `REPAIR-H008` through `RESCAN-H012` remain active.
 
 **Capability coverage:** CAP-WS-05, CAP-WS-07, CAP-WS-08, CAP-WS-09, CAP-WS-10, CAP-WS-11, CAP-WS-12, CAP-PORT-03, CAP-PORT-05, and preservation of all delivered Note, lifecycle, Link, search, and conformance capabilities, including CAP-GRAPH-04.
 
@@ -17,17 +19,18 @@ AST-H001 and PATH-H002 execute first. Their reports feed measured upstream evolu
 #### AST-H001 Select the canonical source-backed Markdown AST foundation
 - **Type:** Spike
 - **Effort:** 8
-- **Dependencies:** None
+- **Dependencies:** CI-M003
 - **Category:** Feature-Evolution
 - **Scope (In-Scope Files):**
   - `.constitution/prototypes/ast/**`
   - `.constitution/spikes/SPK-AST-H001.md`
 - **Scope (Out-of-Scope Files):**
   - Every repository path not listed above (don't touch production or active specifications)
-- **Verification Command:** Run these exact commands on their named hosts: common: `cargo test --locked --manifest-path .constitution/prototypes/ast/Cargo.toml --all-targets`; Linux reference profile: `cargo run --locked --release --manifest-path .constitution/prototypes/ast/Cargo.toml -- probe --run-id linux-reference --role linux-reference-profile --expected-os linux --expected-arch x86_64 --profile linux-i5-8250u-16gib --output .constitution/prototypes/ast/runs/linux-reference.json --handoff-bundle .constitution/prototypes/ast/handoff/outbox/linux-reference.tar.zst --handoff-sha256 .constitution/prototypes/ast/handoff/outbox/linux-reference.sha256`; Apple Silicon macOS reference profile: `cargo run --locked --release --manifest-path .constitution/prototypes/ast/Cargo.toml -- probe --run-id macos-reference --role macos-reference-profile --expected-os macos --expected-arch aarch64 --profile macos-m1-8gib --output .constitution/prototypes/ast/runs/macos-reference.json --handoff-bundle .constitution/prototypes/ast/handoff/outbox/macos-reference.tar.zst --handoff-sha256 .constitution/prototypes/ast/handoff/outbox/macos-reference.sha256`; coordinator transfer: `mkdir -p .constitution/prototypes/ast/handoff/inbox && scp "$BURLMD_LINUX_HANDOFF_SOURCE/linux-reference.tar.zst" "$BURLMD_LINUX_HANDOFF_SOURCE/linux-reference.sha256" "$BURLMD_MACOS_HANDOFF_SOURCE/macos-reference.tar.zst" "$BURLMD_MACOS_HANDOFF_SOURCE/macos-reference.sha256" .constitution/prototypes/ast/handoff/inbox/`; coordinator aggregation: `cargo run --locked --release --manifest-path .constitution/prototypes/ast/Cargo.toml -- aggregate --contract .constitution/tech-spec/contracts/provisional-spikes.toml --schema .constitution/tech-spec/contracts/spike-result.schema.json --import-bundle .constitution/prototypes/ast/handoff/inbox/linux-reference.tar.zst --import-sha256 .constitution/prototypes/ast/handoff/inbox/linux-reference.sha256 --import-bundle .constitution/prototypes/ast/handoff/inbox/macos-reference.tar.zst --import-sha256 .constitution/prototypes/ast/handoff/inbox/macos-reference.sha256 --require-role linux-reference-profile --require-role macos-reference-profile --require-distinct-hosts 2 --require-distinct-operating-systems 2 --require-role-os linux-reference-profile=linux --require-role-arch linux-reference-profile=x86_64 --require-role-profile linux-reference-profile=linux-i5-8250u-16gib --require-role-os macos-reference-profile=macos --require-role-arch macos-reference-profile=aarch64 --require-role-profile macos-reference-profile=macos-m1-8gib --output .constitution/prototypes/ast/results.json`.
-- **Expected Success Output:** exit 0 with distinct reference-host runs and a finalized schema-valid result and Spike report
+- **Verification Command:** In a candidate-branch draft pull request based on merged `CI-M003`, run `cargo test --locked --manifest-path .constitution/prototypes/ast/Cargo.toml --all-targets` on `ubuntu-24.04`, Apple Silicon `macos-26`, and Apple Silicon `macos-15`. Run the exact `SPK-AST-H001` Linux and macOS 26 probe and coordinator aggregation commands from `.constitution/tech-spec/contracts/provisional-spikes.toml`. Transfer the unchanged pre-upload manifests through the authenticated `.constitution/tech-spec/contracts/ci-role-evidence.schema.json` handoff and validate the final accepted `.constitution/tech-spec/contracts/ci-evidence.schema.json` aggregate.
+- **Expected Success Output:** exit 0 with authenticated managed-role runs, a finalized schema-valid result, and a Spike report
 - **STOP Conditions:**
   - STOP if a candidate can't preserve untouched bytes or represent any required syntax/domain case.
+  - STOP if `CI-M003` isn't merged, expected identity differs between roles, evidence is missing, mismatched, stale, corrupt, or unauthenticated, or aggregation is `rejected`.
   - STOP when the 3-day time box expires; record partial evidence without choosing by intuition.
 - **Description:** Compare mdast, Comrak, and complete models derived separately from `pulldown-cmark` 0.12.2 and 0.13.4 using the full canonical-AST contract and corpus.
 - **Acceptance:**
@@ -35,23 +38,24 @@ AST-H001 and PATH-H002 execute first. Their reports feed measured upstream evolu
   - **Evidence:**
 
 ```text
-Every declared candidate and gate has attributed evidence for syntax, positions, source fidelity, Links, rendered selections, structural edits, and Suggestions. The result tool obtains host fingerprints and complete PRD profile facts from system APIs; command flags only assert expected values. Aggregation matches the Linux role to the four-core Intel Core i5-8250U, 16 GiB, NVMe profile and the macOS role to the base Apple M1, 8 GiB, internal-SSD profile. Both require integrated graphics, a 1920x1080 60 Hz display, AC power, and no thermal throttling. Distinct verified hosts cover performance and FFI projection cost. Aggregation rejects missing, duplicated, same-host, same-operating-system, or role-mismatched evidence and recommends one foundation or explicitly leaves the decision unresolved.
+Every declared candidate and gate has attributed evidence for syntax, positions, source fidelity, Links, rendered selections, structural edits, and Suggestions. The common functional matrix passes on all three managed roles. Performance and FFI projection evidence comes from `ubuntu-24.04` with 4 CPUs and 16 GB and Apple Silicon `macos-26` with 3 M1 CPUs and 7 GB. Apple Silicon `macos-15` contributes functional compatibility evidence only. Every role captures image, OS, architecture, CPU, memory, storage, viewport, build, corpus, run, and role identity. Aggregation verifies the authoritative expected identity, role-specific signer provenance, artifact integrity, and exact evidence classes before recommending one foundation or leaving the decision unresolved.
 ```
 
 #### PATH-H002 Select the canonical cross-platform path algorithm
 - **Type:** Spike
 - **Effort:** 8
-- **Dependencies:** None
+- **Dependencies:** AST-H001, CI-M003
 - **Category:** Correctness
 - **Scope (In-Scope Files):**
   - `.constitution/prototypes/path/**`
   - `.constitution/spikes/SPK-PATH-H002.md`
 - **Scope (Out-of-Scope Files):**
   - Every repository path not listed above (don't touch production or active specifications)
-- **Verification Command:** Run these exact commands in order on their named hosts: common: `cargo test --locked --manifest-path .constitution/prototypes/path/Cargo.toml --all-targets`; Linux default filesystem: `cargo run --locked --release --manifest-path .constitution/prototypes/path/Cargo.toml -- probe --run-id linux-default-filesystem --role linux-default-filesystem --expected-os linux --expected-filesystem ext4 --output .constitution/prototypes/path/runs/linux-default-filesystem.json --handoff-bundle .constitution/prototypes/path/handoff/outbox/linux-default-filesystem.tar.zst --handoff-sha256 .constitution/prototypes/path/handoff/outbox/linux-default-filesystem.sha256`; macOS default filesystem: `cargo run --locked --release --manifest-path .constitution/prototypes/path/Cargo.toml -- probe --run-id macos-default-filesystem --role macos-default-filesystem --expected-os macos --expected-filesystem apfs --output .constitution/prototypes/path/runs/macos-default-filesystem.json --handoff-bundle .constitution/prototypes/path/handoff/outbox/macos-default-filesystem.tar.zst --handoff-sha256 .constitution/prototypes/path/handoff/outbox/macos-default-filesystem.sha256`; coordinator transfer: `mkdir -p .constitution/prototypes/path/handoff/inbox && scp "$BURLMD_LINUX_HANDOFF_SOURCE/linux-default-filesystem.tar.zst" "$BURLMD_LINUX_HANDOFF_SOURCE/linux-default-filesystem.sha256" "$BURLMD_MACOS_HANDOFF_SOURCE/macos-default-filesystem.tar.zst" "$BURLMD_MACOS_HANDOFF_SOURCE/macos-default-filesystem.sha256" .constitution/prototypes/path/handoff/inbox/`; coordinator aggregation: `cargo run --locked --release --manifest-path .constitution/prototypes/path/Cargo.toml -- aggregate --contract .constitution/tech-spec/contracts/provisional-spikes.toml --schema .constitution/tech-spec/contracts/spike-result.schema.json --import-bundle .constitution/prototypes/path/handoff/inbox/linux-default-filesystem.tar.zst --import-sha256 .constitution/prototypes/path/handoff/inbox/linux-default-filesystem.sha256 --import-bundle .constitution/prototypes/path/handoff/inbox/macos-default-filesystem.tar.zst --import-sha256 .constitution/prototypes/path/handoff/inbox/macos-default-filesystem.sha256 --require-role linux-default-filesystem --require-role macos-default-filesystem --require-distinct-operating-systems 2 --require-role-os linux-default-filesystem=linux --require-role-os macos-default-filesystem=macos --require-role-filesystem linux-default-filesystem=ext4 --require-role-filesystem macos-default-filesystem=apfs --output .constitution/prototypes/path/results.json`.
+- **Verification Command:** In the same managed draft pull request, run `cargo test --locked --manifest-path .constitution/prototypes/path/Cargo.toml --all-targets` on all three functional roles. Run the exact `SPK-PATH-H002` Linux with ext4 and macOS 26 with APFS probe and coordinator aggregation commands from `.constitution/tech-spec/contracts/provisional-spikes.toml`, using the authenticated two-phase evidence handoff from merged `CI-M003`.
 - **Expected Success Output:** exit 0 with distinct filesystem runs and a finalized schema-valid report
 - **STOP Conditions:**
   - STOP if identity remains host-dependent or an accepted path can escape/alias the Workspace.
+  - STOP if `AST-H001` or `CI-M003` isn't merged, either filesystem role lacks authenticated evidence, or the aggregate is `rejected`.
   - STOP when the 3-day time box expires; don't select a permanent format from incomplete platform evidence.
 - **Description:** Compare the encoded-title and opaque-component candidates across Linux, default macOS, and Windows-compatible rules.
 - **Acceptance:**
@@ -59,13 +63,13 @@ Every declared candidate and gate has attributed evidence for syntax, positions,
   - **Evidence:**
 
 ```text
-Generated and adversarial fixtures prove deterministic identity, collision freedom under all target equivalence rules, invertible ghost Links, safe case-only rename, and refusal of reserved, aliased, traversal, symlink, and submodule input. Aggregation verifies recorded host facts and rejects missing roles, duplicate operating systems, an operating system that doesn't match its declared role, or a Linux/ext4 or macOS/APFS filesystem mismatch.
+Generated and adversarial fixtures prove deterministic identity, collision freedom under all target equivalence rules, invertible ghost Links, safe case-only rename, and refusal of reserved, aliased, traversal, symlink, and submodule input. The common suite passes on all three managed roles. Authenticated Linux with ext4 and macOS 26 with APFS manifests bind to the same expected build, corpus, and run identity. Aggregation rejects missing, mismatched, stale, corrupt, unauthenticated, duplicate-operating-system, or filesystem-role evidence.
 ```
 
 #### MODEL-H003 Implement the canonical source-backed Note document
 - **Type:** Feature
 - **Effort:** 8
-- **Dependencies:** AST-H001
+- **Dependencies:** AST-H001, PATH-H002
 - **Category:** Feature-Evolution
 - **Scope (In-Scope Files):**
   - `rust/src/markdown/**`
@@ -77,6 +81,7 @@ Generated and adversarial fixtures prove deterministic identity, collision freed
 - **Verification Command:** `cargo test --manifest-path rust/Cargo.toml && cargo clippy --workspace --all-targets --manifest-path rust/Cargo.toml -- -D warnings && git diff --check`
 - **Expected Success Output:** exit 0 with canonical corpus, fidelity, and migration tests passing
 - **STOP Conditions:**
+  - STOP if the H Spike and constitution evidence-finalization pull requests aren't merged into `master` or this tranche wasn't created from that merged revision.
   - STOP if the final TechSpec hasn't accepted AST-H001 or changes this ticket's physical model; reconcile scope and estimates first.
   - STOP if implementation keeps the old projection as a second authoritative AST.
 - **Description:** Implement the accepted exhaustive Core document with original source, extended Markdown/domain nodes, exact ranges, editable identities, conformance state, and targeted splice/reparse coherence.
@@ -91,7 +96,7 @@ For the canonical corpus, parsing yields the accepted exhaustive tree and exact 
 #### ADAPT-H004 Replace parser, FFI, rendering, and index projections
 - **Type:** Feature
 - **Effort:** 8
-- **Dependencies:** MODEL-H003, CI-M003
+- **Dependencies:** MODEL-H003, PATH-H005, CI-M003
 - **Category:** Tech-Debt
 - **Scope (In-Scope Files):**
   - `rust/src/api/**`
@@ -107,6 +112,7 @@ For the canonical corpus, parsing yields the accepted exhaustive tree and exact 
 - **Verification Command:** `cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh adapt-h004 && git diff --check`
 - **Expected Success Output:** exit 0 with old `AstNode` authority removed and rendering parity preserved
 - **STOP Conditions:**
+  - STOP if `PATH-H005` isn't committed and reviewed in this tranche.
   - STOP if the final FFI projection contract isn't accepted or if Flutter gains a second document model.
 - **Description:** Replace the brownfield `AstNode` authority with adapters from the canonical document for Flutter rendering, interaction coordinates, Links, search/indexing, and conflict materialization.
 - **Acceptance:**
@@ -120,7 +126,7 @@ Generated bindings expose only the accepted projection; rendering/index fixtures
 #### PATH-H005 Implement canonical paths and recoverable migration
 - **Type:** Feature
 - **Effort:** 8
-- **Dependencies:** PATH-H002
+- **Dependencies:** PATH-H002, MODEL-H003
 - **Category:** Correctness
 - **Scope (In-Scope Files):**
   - `rust/src/okf/concept_id.rs`
@@ -133,6 +139,7 @@ Generated bindings expose only the accepted projection; rendering/index fixtures
 - **Verification Command:** `cargo test --manifest-path rust/Cargo.toml && cargo clippy --workspace --all-targets --manifest-path rust/Cargo.toml -- -D warnings && git diff --check`
 - **Expected Success Output:** exit 0 with format, collision, migration, and rollback tests passing
 - **STOP Conditions:**
+  - STOP if `MODEL-H003` isn't committed and reviewed in this tranche or the accepted constitution finalization isn't merged into its base.
   - STOP if the final TechSpec hasn't accepted PATH-H002 or migration would silently choose among collisions.
 - **Description:** Implement canonical Note/Directory/Asset path validation and derivation, case-only rename, ghost-Link identity, and a previewable atomic migration from delivered title-verbatim paths.
 - **Acceptance:**
@@ -158,6 +165,7 @@ Every burlmd-created path satisfies the accepted cross-platform grammar; migrati
 - **Verification Command:** `cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && dart analyze && git diff --check`
 - **Expected Success Output:** exit 0 with authority, containment, session, and Protected State invariants passing
 - **STOP Conditions:**
+  - STOP if `ADAPT-H004` and `PATH-H005` aren't committed and reviewed in this tranche.
   - STOP if Persistence, the index, a guest write, or Flutter can override Workspace Model authority.
 - **Description:** Make one Workspace tree own Directories, canonical identities, authoritative Note sessions, lifecycle provenance, decision records, and Protected State roots while rejecting symlink/submodule/path escape input.
 - **Acceptance:**
@@ -185,6 +193,7 @@ Exactly one Core Workspace tree decides every identity and open session; every m
 - **Verification Command:** `cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh preflight-h007 && git diff --check`
 - **Expected Success Output:** exit 0 with conforming inclusion, invalid inventory, and exclusion tests passing
 - **STOP Conditions:**
+  - STOP if `AUTH-H006` isn't committed and reviewed in this tranche.
   - STOP if preflight rewrites source, follows unsupported aliases, or admits an invalid Note into the editor/index.
 - **Description:** Scan a selected directory without mutation, include conforming Notes, inventory invalid/noncanonical paths and Notes, preserve original bytes, and let the Writer exclude items explicitly before adoption.
 - **Acceptance:**
@@ -238,10 +247,11 @@ Every repair preview identifies exact byte/path changes; confirmation applies on
   - `test/**`
 - **Scope (Out-of-Scope Files):**
   - Authority decisions owned by EXT-H010 and DECIDE-H011
-- **Verification Command:** Linux reference host: `cargo test --manifest-path rust/Cargo.toml && cargo clippy --workspace --all-targets --manifest-path rust/Cargo.toml -- -D warnings && ./scripts/check-generated-bindings.sh && cargo run --release --manifest-path rust/Cargo.toml --bin workspace-observer-meter -- --run-id linux-reference --profile linux-i5-8250u-16gib --operations 100 --output target/observer-meters/linux-reference.json && git diff --check`; Apple Silicon macOS reference host: `cargo test --manifest-path rust/Cargo.toml && cargo clippy --workspace --all-targets --manifest-path rust/Cargo.toml -- -D warnings && ./scripts/check-generated-bindings.sh && cargo run --release --manifest-path rust/Cargo.toml --bin workspace-observer-meter -- --run-id macos-reference --profile macos-m1-8gib --operations 100 --output target/observer-meters/macos-reference.json && git diff --check`.
+- **Verification Command:** `ubuntu-24.04`: `cargo test --manifest-path rust/Cargo.toml && cargo clippy --workspace --all-targets --manifest-path rust/Cargo.toml -- -D warnings && ./scripts/check-generated-bindings.sh && cargo run --release --manifest-path rust/Cargo.toml --bin workspace-observer-meter -- --run-id linux-reference --profile github-ubuntu-24_04-x86_64 --operations 100 --output target/observer-meters/linux-reference.json && git diff --check`; Apple Silicon `macos-26`: `cargo test --manifest-path rust/Cargo.toml && cargo clippy --workspace --all-targets --manifest-path rust/Cargo.toml -- -D warnings && ./scripts/check-generated-bindings.sh && cargo run --release --manifest-path rust/Cargo.toml --bin workspace-observer-meter -- --run-id macos-reference --profile github-macos-26-arm64 --operations 100 --output target/observer-meters/macos-reference.json && git diff --check`; Apple Silicon `macos-15` functional compatibility: `cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && git diff --check`. Validate role manifests and the accepted aggregate through the `CI-M003` two-phase protocol.
 - **Expected Success Output:** exit 0 with burst/debounce/fallback and missed-event recovery tests passing
 - **STOP Conditions:**
   - STOP if the final TechSpec hasn't pinned the observer adapter and polling fallback.
+  - STOP if managed evidence is rejected or if macOS 15 contributes performance evidence.
   - STOP if an event directly mutates authority without Core validation.
 - **Description:** Convert Platform filesystem events into debounced candidate create/edit/rename/move/delete proposals with fallback polling and explicit Rescan recovery.
 - **Acceptance:**
@@ -249,7 +259,7 @@ Every repair preview identifies exact byte/path changes; confirmation applies on
   - **Evidence:**
 
 ```text
-The two exact host commands record 100 deterministic single and burst operations apiece on the PRD reference hardware and its supported filesystems. Each run produces one candidate set within the 2-second Goal, with no missed or duplicate history outcome and no direct authoritative mutation.
+The Linux x86-64 and macOS 26 managed roles record 100 deterministic single and burst operations apiece with captured image and environment identity. Each performance run produces one candidate set within the 2-second Goal, with no missed or duplicate history outcome and no direct authoritative mutation. macOS 15 proves functional compatibility only. Aggregation rejects identity, signer, artifact, image-version, corpus, or role mismatches.
 ```
 
 #### EXT-H010 Reconcile valid external Note and lifecycle changes
