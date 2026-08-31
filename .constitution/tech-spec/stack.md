@@ -27,6 +27,10 @@ GitHub documents 4 CPUs, 16 GB of memory, and 14 GB of storage for standard x86-
 
 The `ubuntu-24.04`, `macos-26`, and `macos-15` labels pin the operating-system major, not an immutable image. GitHub updates hosted images weekly. Every run must therefore capture `ImageOS`, `ImageVersion`, the full OS release, architecture, CPU model and count, memory, storage, and the verified 1920x1080 at 60 Hz logical viewport. Aggregation must not combine performance or visual evidence across different image versions. Repository toolchains remain pinned through Nix inputs, `rust-toolchain.toml`, `Cargo.lock`, and `pubspec.lock`.
 
+Role output has two schemas. The `contracts/ci-role-evidence.schema.json` file validates immutable pre-upload manifest bytes and contains no service-assigned upload fields. The `contracts/ci-evidence.schema.json` file validates the coordinator's accepted or rejected aggregate after artifact and provenance enrichment. These contracts keep the attested manifest digest independent of the later artifact ID and upload digest.
+
+Each role has a distinct, single-job reusable workflow: `.github/workflows/ci-role-linux-x86-64.yml`, `.github/workflows/ci-role-macos-26-arm64.yml`, or `.github/workflows/ci-role-macos-15-arm64.yml`. The caller pins each workflow to the candidate's full commit SHA. The attestation's signed builder identity must contain the expected role-specific path and SHA. The coordinator verifies the matching hosted label from the job API within that run; it doesn't infer origin from an artifact-supplied job name or ID.
+
 CI uses the following reviewed action commits. A workflow must use the full commit SHA, never a mutable tag:
 
 | Action | Full commit SHA | Purpose |
