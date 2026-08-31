@@ -14,6 +14,11 @@ Reviewed for PRD v1.3.7. This Evolution pass replaces workstation-dependent vali
 - Required every evidence handoff to carry captured environment, build, corpus, role, and run identity. Aggregation rejects missing, corrupt, mismatched, or stale evidence.
 - Updated release resilience, observability, threat notes, risks, and failure behavior so incomplete proof can't publish as a complete release result.
 
+### Fixed
+
+- Assigned the common functional matrix to Linux x86-64 and macOS 26 as well as macOS 15. macOS 15 remains compatibility-only.
+- Made Release Pipeline the authority for expected release, build, corpus, run, and required-role identities. Aggregation receives that expectation directly, authenticates the validation origin, verifies artifact integrity, and compares captured identity instead of trusting self-description.
+
 ## v1.4.14 - 2026-08-26
 
 Reviewed for PRD v1.3.6. PR #12 full review round 14 aligns privacy-paused recovery and the Object Store risk boundary with the complete negative anonymous List, Get, Put, and Delete probe.

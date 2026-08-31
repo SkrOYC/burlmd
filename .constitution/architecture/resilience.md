@@ -52,10 +52,12 @@
 
 - Each validation run owns an isolated display, compositor, input channel, and process lifecycle. If it can't prove ownership, the run emits no acceptable evidence.
 - The Writer's active desktop never supplies visual proof or validation input. A captured Writer window or desktop state invalidates the run.
-- Every evidence artifact carries captured environment, build, corpus, validation-role, and run identity through an integrity-checked handoff.
-- Evidence Aggregation rejects missing or corrupt artifacts before reading results. It rejects mismatched identities and stale evidence before combining results.
-- macOS 15 supplies functional compatibility evidence only. It can't replace Linux x86-64 or Apple Silicon macOS 26 performance evidence, or macOS 26 visual evidence.
-- A partial run remains incomplete. Retry creates evidence for the current identities rather than reusing an earlier run's accepted result.
+- Release Pipeline establishes authoritative expected release, build, corpus, run, and required-role identities. It hands the same expectation directly to validation and aggregation.
+- Every evidence artifact carries captured environment and observed release, build, corpus, role, and run identities. The handoff authenticates its pipeline-owned validation origin and protects integrity.
+- Evidence Aggregation compares captured identity with the authoritative expected identity. It rejects self-description alone, an untrusted origin, missing or corrupt artifacts, mismatches, and stale evidence.
+- All three roles supply common functional-matrix evidence. Linux x86-64 and Apple Silicon macOS 26 also supply performance evidence. macOS 26 alone supplies visual evidence.
+- macOS 15 supplies functional compatibility evidence only. It can't replace either performance role or macOS 26 visual evidence.
+- A partial run remains incomplete. Each retry receives a distinct run identity instead of reusing an earlier result.
 
 ## Observability
 
