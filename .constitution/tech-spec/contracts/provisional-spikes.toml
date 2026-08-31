@@ -1,4 +1,4 @@
-schema_version = 15
+schema_version = 16
 stage = "tech-spec-v1.8.0-provisional"
 production_implementation_authorized = false
 # The Epic G entries preserve the M0 exception. FLAKE-M002 and CI-M003 may
@@ -38,6 +38,7 @@ never_accept_caller_supplied_host_facts_as_evidence = true
 capture_repository_revision_tree_lockfile_contract_schema_probe_source_probe_binary_and_corpus_hashes = true
 resolve_recorded_repository_revision_to_the_captured_checkout = true
 reject_cross_host_repository_tree_lockfile_contract_schema_probe_source_or_corpus_mismatch = true
+compare_every_captured_identity_field_and_role_signer_with_trusted_expected_identity = true
 
 [ci_bootstrap]
 status = "bootstrap-authorized-provisional"
@@ -45,70 +46,91 @@ generated_binding_checker = "scripts/check-generated-bindings.sh"
 generated_binding_checker_owner = "CI-M003"
 generated_binding_checker_base_state = "absent"
 generated_binding_checker_behavior = "Before any gate invokes the checker, implement it without importing or cherry-picking the coordinating Epic G branch. Snapshot a path-sorted SHA-256 manifest and byte-for-byte backup of rust/src/frb_generated.rs and every regular file under lib/src/rust. Run flutter_rust_bridge_codegen generate using provisional version 2.12.0. Compare file sets and bytes, fail on generator error or stale output, and restore and verify the exact precheck state on success, failure, or interruption."
-candidate_phase = "pushed-source-branch"
-draft_pull_request = "optional-visibility-only"
-aggregation = "coordinator-job-or-authenticated-local"
-report_phase = "evidence-commit-parented-directly-by-tested-source-before-milestone-review"
+candidate_phase = "trusted-workflow-dispatch-with-tested-source-checked-out-as-data"
+draft_pull_request = "candidate-visibility-and-review-only"
+aggregation = "clean-trust-anchor-checkout-only"
+report_phase = "reviewed-evidence-only-pull-request"
 caller_workflow = ".github/workflows/ci.yml"
 api_version = "2026-03-10"
-expected_identity_fields = ["ticket", "release", "tested-source-head-sha", "workflow-execution-sha", "workflow-execution-ref", "base-sha", "workflow-event", "evidence-report-commit-policy", "build", "corpus", "run", "required-roles", "required-role-signers"]
-capture_fields = ["ImageOS", "ImageVersion", "os-release", "architecture", "cpu-model", "logical-cpu-count", "memory-bytes", "storage-bytes", "logical-viewport", "ticket", "tested-source-head-sha", "workflow-execution-sha", "workflow-execution-ref", "base-sha", "build", "corpus", "run", "role"]
-ci_role_evidence_schema_version = 4
-ci_evidence_schema_version = 6
-role_phase = "Run every candidate command through the credential-sanitized role launcher. Write every result, log, raw measurement, and handoff first. Record each relative path, size, and SHA-256 digest in internalArtifacts. Validate ci-role-evidence.json, then create deterministic ci-role-evidence.tar.zst containing the manifest and every named file. Attest the exact bundle bytes and upload an artifact containing only that unchanged bundle. The manifest never contains bundle, artifact, upload, or attestation fields."
+default_branch = "master"
+expected_identity_fields = ["ticket", "release", "trust-anchor-sha", "tested-source-sha", "workflow-signer-sha", "workflow-signer-ref", "base-sha", "workflow-event", "evidence-report-commit-policy", "source-write-allowlist", "build", "corpus", "run", "required-roles", "required-role-signers"]
+capture_fields = ["ImageOS", "ImageVersion", "os-release", "architecture", "cpu-model", "logical-cpu-count", "memory-bytes", "storage-bytes", "logical-viewport", "ticket", "trust-anchor-sha", "tested-source-sha", "workflow-signer-sha", "workflow-signer-ref", "base-sha", "source-write-allowlist", "build", "corpus", "run", "role"]
+ci_role_evidence_schema_version = 5
+ci_evidence_schema_version = 7
+role_phase = "Run every candidate command through the credential-sanitized role launcher and allow it to write only declared results, logs, raw measurements, and handoffs. The trusted role wrapper records each relative path, size, and SHA-256 digest in internalArtifacts, writes and validates ci-role-evidence.json from the trusted expected identity, then creates deterministic ci-role-evidence.tar.zst containing the manifest and every named file. Candidate code can't provide or replace expected identity, the manifest, or the bundle. Attest the exact bundle bytes and upload an artifact containing only that unchanged bundle. The manifest never contains bundle, artifact, upload, or attestation fields."
 aggregate_phase = "Verify the upload digest, attested role-bundle digest, safe bundle extraction, manifest schema, and every internalArtifacts path, size, and hash. For a managed Spike, atomically stage manifest-named bytes under the fixed coordinator root, run that ticket's exact coordinator_steps, and validate its declared results.json before validating accepted or rejected coordinator output against ci-evidence.schema.json. Accepted Spike output requires all roles, a valid authoritative machine result, and successful checks. Rejected output permits partial or missing roles and records typed reasons."
-origin_authentication = "Trigger the caller from a pushed source branch and call each same-repository role workflow through a static ./.github/workflows path, which resolves from the caller's workflow execution commit. Verify the attestation's signed builder identity against the expected role-specific path, execution ref, and execution SHA and verify its invocation run and attempt. Require signed OIDC runner_environment to equal github-hosted and retain that fact in aggregate origin; reject self-hosted regardless of labels. Query the versioned job API only to corroborate the fixed hosted label. Artifact and job REST objects are not directly correlated, and an artifact-supplied job name or ID is never trusted. Private/internal repository attestation requires GitHub Enterprise Cloud; without it evidence remains rejected and there is no hash-only fallback."
+origin_authentication = "Dispatch the caller workflow from the trusted default branch. Before dispatch, require every validation control file at workflow-signer-sha to match trust-anchor-sha byte for byte. The trusted workflow checks out tested-source-sha separately with persisted credentials disabled and never loads workflow, action, or launcher code from that checkout. Verify each attestation's signed builder identity against the expected role-specific path, refs/heads/master, workflow-signer-sha, invocation run, and attempt. Require signed OIDC runner_environment to equal github-hosted and retain that fact in aggregate origin; reject self-hosted regardless of labels. Query the versioned job API only to corroborate the fixed hosted label. Artifact and job REST objects are not directly correlated, and an artifact-supplied job name or ID is never trusted. Private/internal repository attestation requires GitHub Enterprise Cloud; without it evidence remains rejected and there is no hash-only fallback."
+dispatch_client_permissions = ["actions:write", "contents:read"]
 caller_permissions = ["contents:read", "id-token:write", "attestations:write"]
 signer_permissions = ["contents:read", "id-token:write", "attestations:write"]
 aggregate_permissions = ["contents:read", "actions:read", "attestations:read"]
-reject = ["expected-identity-invalid", "role-manifest-invalid", "role-bundle-invalid", "missing-role", "duplicate-role", "unexpected-role", "role-gate-failed", "identity-mismatch", "stale-evidence", "workflow-signer-mismatch", "runner-label-mismatch", "runner-environment-mismatch", "untrusted-origin", "attestation-unavailable", "artifact-api-mismatch", "artifact-corrupt", "mixed-image-version", "coordinator-identity-mismatch", "coordinator-isolation-failed", "coordinator-credential-exposure", "aggregation-error"]
+reject = ["expected-identity-invalid", "trust-anchor-mismatch", "candidate-control-surface-changed", "source-allowlist-violation", "role-manifest-invalid", "role-bundle-invalid", "missing-role", "duplicate-role", "unexpected-role", "role-gate-failed", "identity-mismatch", "stale-evidence", "workflow-signer-mismatch", "runner-label-mismatch", "runner-environment-mismatch", "untrusted-origin", "attestation-unavailable", "artifact-api-mismatch", "artifact-corrupt", "mixed-image-version", "coordinator-identity-mismatch", "coordinator-isolation-failed", "coordinator-credential-exposure", "aggregation-error"]
 
-[ci_bootstrap.source_push]
-required_event = "push"
+[ci_bootstrap.trust_anchor]
+required_event = "workflow_dispatch"
+launcher_checkout = "clean-detached-checkout-at-trust-anchor-sha"
+launcher_path = "scripts/managed-evidence.sh"
+trusted_control_paths = ["scripts/managed-evidence.sh", "scripts/assert-managed-evidence-isolation.sh", ".github/workflows/ci.yml", ".github/workflows/ci-role-linux-x86-64.yml", ".github/workflows/ci-role-macos-26-arm64.yml", ".github/workflows/ci-role-macos-15-arm64.yml", ".constitution/tech-spec/contracts/ci-role-evidence.schema.json", ".constitution/tech-spec/contracts/ci-evidence.schema.json", ".constitution/tech-spec/contracts/provisional-spikes.toml"]
+workflow_dispatch_ref = "master"
+workflow_dispatch_ref_kind = "branch"
+workflow_dispatch_response = "HTTP 200 with workflow_run_id, run_url, and html_url"
+workflow_dispatch_input_limit = 25
+workflow_dispatch_payload_limit_bytes = 65535
+expected_identity_transport = "The trusted launcher creates canonical expected-identity.json before dispatch, retains those bytes locally, and passes their base64 encoding plus SHA-256 digest as workflow_dispatch inputs. The trusted workflow decodes the exact bytes for role fan-out and the expected-identity artifact."
+source_checkout = "actions/checkout tested-source-sha into an isolated data directory with persist-credentials false; remove checkout authentication before candidate execution; never load workflows, actions, launchers, or configuration from this checkout"
+normal_source_guard = "Before dispatch and again during collection, resolve base-sha and tested-source-sha from origin. Require base-sha to be an ancestor of tested-source-sha. Compute the exact path and object-mode diff for base-sha..tested-source-sha and reject every changed, renamed, copied, deleted, type-changed, submodule, or symlink path outside the selected Spike write_allowlist. A write_allowlist root matches only that exact path or a slash-delimited descendant, never a string-prefix sibling. Both source and destination of a rename or copy must match. Reject symlinks and submodules even inside a root. Reject any trusted_control_paths change regardless of another allowlist."
+bootstrap_write_allowlist = [".github/workflows/ci.yml", ".github/workflows/ci-role-linux-x86-64.yml", ".github/workflows/ci-role-macos-26-arm64.yml", ".github/workflows/ci-role-macos-15-arm64.yml", "devenv.nix", "devenv.lock", "scripts/**", "lib/visual_capture_main.dart", "test_driver/visual_capture_driver.dart", "test/visual_capture_driver_protocol_test.dart", "test/goldens/**", "integration_test/**"]
+bootstrap_source_guard = "For CI-M003 self-validation only, require trust-anchor-sha, tested-source-sha, workflow-signer-sha, and refs/heads/master to resolve to one commit. Require base-sha to be the rebased and reviewed FLAKE-M002 milestone that is the anchor's first parent. Verify base-sha..trust-anchor-sha against bootstrap_write_allowlist. Trusted-control changes are allowed only because the reviewed merge has already established those exact bytes as the new anchor."
+workflow_guard = "Resolve refs/heads/master as workflow-signer-sha. Require trust-anchor-sha to be an ancestor and require every trusted_control_paths byte and object mode at workflow-signer-sha to equal trust-anchor-sha. Reject before dispatch and again during collection if either condition fails."
 local_reusable_workflow_syntax = "./.github/workflows/{WORKFLOW_FILE}"
 expressions_or_ref_suffixes_in_job_uses_forbidden = true
-tested_source_head_equals_workflow_execution_sha = true
 ignored_evidence_only_paths = [".constitution/reports/**", ".constitution/prototypes/**/managed-evidence.json", ".constitution/prototypes/**/results.json", ".constitution/spikes/SPK-*.md"]
-report_commit_parent = "tested-source-head-sha"
-report_commit_diff = "For a managed Spike, exactly managed_report, managed_results, and the executor-authored human_report. For CI-M003 bootstrap, exactly REPORT_JSON."
+report_commit_parent = "tested-source-sha"
+report_commit_diff = "For a managed Spike, exactly managed_report, managed_results, and the executor-authored human_report. For CI-M003 bootstrap, the dedicated evidence pull request contains exactly .constitution/reports/ci-m003-managed-evidence.json and .constitution/reports/ci-m003-completion.md."
+bootstrap_implementation_branch = "chore/epic-m-ci-foundation"
+bootstrap_evidence_branch = "docs/epic-m-ci-evidence"
+bootstrap_completion = "Locally validate and independently review the CI-M003 milestone and its implementation pull request, then rebase-merge it into master. The resulting master tip is trust-anchor-sha. From a clean detached checkout at that SHA, dispatch the trusted workflow against tested-source-sha equal to trust-anchor-sha. Open, review, and merge the dedicated evidence pull request. CI-M003 remains incomplete until that second merge."
+trust_anchor_rotation = "Any later trusted_control_paths change repeats the implementation review and merge, records the resulting master tip as a replacement trust anchor, validates that anchor against itself, and completes through a reviewed evidence-only pull request before normal tickets use it."
 
 [ci_bootstrap.cli]
 entrypoint = "./scripts/managed-evidence.sh"
 authentication_environment = "GH_TOKEN"
 token_must_not_appear_in_arguments_logs_reports_or_artifacts = true
-expected_identity_artifact = "managed-evidence-expected-{run_id}-{run_attempt}"
+expected_identity_artifact = "managed-evidence-expected-{run_identity}"
 expected_identity_member = "expected-identity.json"
-role_artifact = "managed-evidence-{role}-{run_id}-{run_attempt}"
+role_artifact = "managed-evidence-{role}-{run_identity}"
 role_artifact_member = "ci-role-evidence.tar.zst"
 role_bundle_manifest = "ci-role-evidence.json"
 role_bundle_internal_artifacts = "exactly-every-manifest-internalArtifacts-entry-and-no-other-files"
 output_schema = ".constitution/tech-spec/contracts/ci-evidence.schema.json"
 stderr = "diagnostics-only"
-output_directory = "dirname(REPORT_JSON)"
+anchor_worktree = "clean detached checkout whose HEAD is trust-anchor-sha; launcher and trusted contracts resolve only from this checkout"
+evidence_worktree = "separate declared checkout that receives evidence outputs; never an execution or trust source"
+output_directory = "absolute dirname(REPORT_JSON) beneath the declared evidence worktree and outside the anchor checkout"
 coordinator_root = "OUTPUT_DIR/managed-evidence-coordinator"
 role_stage_directories = ["roles/linux-x86_64", "roles/macos-26-arm64", "roles/macos-15-arm64"]
 stage_policy = "Atomically replace the coordinator root. Stage only verified manifest-named regular files beneath the exact role directory, preserving ticket-root-relative names. Reject absolute paths, traversal, links, collisions, allowlist escape, extra files, and byte mismatch."
 coordinator_cleanup_policy = "After atomically publishing validated managed_results, or after failure, remove the owned coordinator and preparation roots. No coordinator step may write outside the mounted coordinator output root."
 output_write = "atomic-replace-results-then-report"
-stdout_fields = ["status", "runId", "runAttempt", "result", "report"]
+stdout_fields = ["status", "runIdentity", "workflowRunId", "runAttempt", "trustAnchorSha", "workflowSignerSha", "testedSourceSha", "result", "report"]
 exit_0 = "The output report is schema-valid and accepted. For a managed Spike, the declared results.json is also present, schema-valid, and contract-valid."
 exit_1 = "The output report is schema-valid and rejected."
-exit_2 = "Invalid arguments, insufficient API permission, interruption, no unique push run, timeout before authoritative identity is available, or output failure prevented a schema-valid report."
+exit_2 = "Invalid arguments, dirty or wrong trust-anchor checkout, insufficient API permission, dispatch failure before a run ID exists, interruption, or output failure prevented a schema-valid report."
 
 [ci_bootstrap.cli.collect]
-usage = "./scripts/managed-evidence.sh collect --ticket TICKET_ID --source-ref SOURCE_REF --run-id RUN_ID --attempt RUN_ATTEMPT --source-head-sha SOURCE_HEAD_SHA --base-sha BASE_SHA --output REPORT_JSON"
+usage = "./scripts/managed-evidence.sh collect --ticket TICKET_ID --trust-anchor-sha TRUST_ANCHOR_SHA --source-ref SOURCE_REF --tested-source-sha TESTED_SOURCE_SHA --base-sha BASE_SHA --run-identity RUN_IDENTITY --run-id RUN_ID --attempt RUN_ATTEMPT --output REPORT_JSON"
 permissions = ["actions:read", "attestations:read", "contents:read"]
 allowed_tickets = ["CI-M003", "AST-H001", "PATH-H002", "ASSET-I001", "GIT-L001", "PKG-M001"]
-required_event = "push"
-behavior = "For a managed Spike, prepare and identify the locked coordinator before reading or using GH_TOKEN. Then require the remote source ref to resolve to the supplied source head. Verify caller workflow path, event, ticket, run, attempt, source ref, source head, workflow execution SHA and ref, and base SHA. Download the separately produced expected-identity artifact and every exact role-bundle artifact for that run. Verify identity, hashes, bundle contents, artifact metadata, attestations, static signer workflows, signed github-hosted origin, and hosted labels without executing candidate bytes. Tear down authentication, revalidate coordinator identity, atomically stage verified role contents as read-only inputs, and execute coordinator_steps with the prepared binary in the declared sandbox. Validate and publish managed_results, then publish accepted or rejected aggregate evidence. CI-M003 has no Spike coordinator steps or machine result and writes only its aggregate report. Never select a run by recency or trust a self-reported job name or ID."
+required_event = "workflow_dispatch"
+behavior = "Run only from the clean detached trust-anchor checkout and reconstruct the canonical expected identity from the supplied identities and run nonce. For a managed Spike, prepare and identify the locked coordinator before reading or using GH_TOKEN. Recheck the workflow guard and exact source allowlist before using authentication. Verify the returned workflow run ID, attempt, workflow_dispatch event, master signer ref and SHA, tested-source input, base, run nonce, caller path, and expected-identity bytes. Download and verify the expected-identity artifact and every exact role-bundle artifact without executing candidate bytes. Recheck the workflow guard and source allowlist after download. Tear down authentication, revalidate coordinator identity, stage role contents as read-only inputs, and execute coordinator_steps with the prepared binary in the declared sandbox. Validate and publish managed_results, then publish accepted or rejected aggregate evidence. CI-M003 has no Spike coordinator steps or machine result and writes only its aggregate report. Never trust candidate workflow files, a candidate launcher, self-reported job identity, or an unverified diff."
 
 [ci_bootstrap.cli.run]
-usage = "./scripts/managed-evidence.sh run --ticket TICKET_ID --source-ref SOURCE_REF --source-head-sha SOURCE_HEAD_SHA --base-sha BASE_SHA --output REPORT_JSON"
-permissions = ["actions:read", "attestations:read", "contents:read"]
-allowed_tickets = ["AST-H001", "PATH-H002", "ASSET-I001", "GIT-L001", "PKG-M001"]
+usage = "./scripts/managed-evidence.sh run --ticket TICKET_ID --trust-anchor-sha TRUST_ANCHOR_SHA --source-ref SOURCE_REF --tested-source-sha TESTED_SOURCE_SHA --base-sha BASE_SHA --output REPORT_JSON"
+permissions = ["actions:write", "attestations:read", "contents:read"]
+allowed_tickets = ["CI-M003", "AST-H001", "PATH-H002", "ASSET-I001", "GIT-L001", "PKG-M001"]
 timeout_seconds = 7200
 initial_attempt = 1
-behavior = "Require the source commit to be pushed and the remote source ref to resolve to the supplied full SHA. Find exactly one push-triggered fixed-caller run matching the ticket's declared prototype allowlist, source ref, and source head, wait for attempt 1 to finish, then perform the collect protocol. After verifying every required bundle, stage its manifest-named contents under the fixed coordinator root, execute the ticket's exact coordinator_steps, validate and atomically publish managed_results, and atomically publish managed_report. Reject zero or multiple runs and any missing or invalid result. Never identify the run by list order, time, branch alone, pull-request state, or a self-reported job name or ID."
+behavior = "Run only from the clean detached trust-anchor checkout. Resolve source-ref to tested-source-sha and refs/heads/master to workflow-signer-sha. Verify the workflow guard and exact base-sha..tested-source-sha allowlist before authentication. For a managed Spike, prepare and identify the locked coordinator before reading or using GH_TOKEN. Create canonical expected identity with a fresh managed run nonce. Dispatch the fixed caller on master with the base64 identity bytes and digest, require the HTTP 200 response's workflow_run_id, wait up to 7200 seconds for attempt 1, and perform collect with that exact run ID and nonce. CI-M003 is allowed only when trust-anchor-sha, tested-source-sha, workflow-signer-sha, and the current master tip are equal after its reviewed implementation merge. Normal managed Spikes require a previously merged CI-M003 completion record naming the trust anchor. Do not discover a run by list order, recency, branch alone, or candidate state."
 
 [ci_bootstrap.coordinator]
 trusted_client_source = "merged-reviewed-CI-M003"
@@ -117,8 +139,8 @@ sandbox_package = "bubblewrap-0.11.2"
 sandbox_nixpkgs_revision = "6004ea8c229fe9d41b21c6f4c76bf6c2e10771dd"
 sandbox_platform = "github-ubuntu-24_04-x86_64"
 sandbox_required_flags = ["--unshare-all", "--unshare-net", "--new-session", "--die-with-parent"]
-sandbox_descriptor_policy = "Bubblewrap 0.11.2 has no --close-fds option. Its pinned source closes all descriptors except stdin, stdout, stderr, and explicitly requested setup descriptors before child exec. Pass no optional descriptor and reject if the child observes an injected inherited descriptor."
-prepare_environment = "env -i with owned empty HOME, XDG_CONFIG_HOME, XDG_CACHE_HOME, XDG_DATA_HOME, GH_CONFIG_DIR, CARGO_HOME, and Git configuration; close inherited descriptors above stderr; omit GitHub, Git, SSH-agent, package-registry, and cloud credentials"
+sandbox_descriptor_policy = "The trusted launcher enumerates its open descriptors, closes every descriptor above stderr that isn't in its empty execution allowlist, verifies closure, and only then execs Bubblewrap. Bubblewrap supplies namespace, network, and filesystem isolation; descriptor closure never depends on undocumented Bubblewrap behavior."
+prepare_environment = "env -i with owned empty HOME, XDG_CONFIG_HOME, XDG_CACHE_HOME, XDG_DATA_HOME, GH_CONFIG_DIR, CARGO_HOME, and Git configuration; explicitly enumerate, close, and verify all descriptors above stderr; omit GitHub, Git, SSH-agent, package-registry, and cloud credentials"
 dependency_fetch = "Before GitHub authentication, fetch only Cargo.lock dependencies without running build scripts and without GitHub, Git, SSH-agent, package-registry, or cloud credentials."
 build_environment = "Run coordinator_build with network unshared, source and dependency inputs read-only, only coordinator_target_dir writable, and the same empty credential-free environment."
 identity_fields = ["ticket", "executable-sha256", "source-tree-sha256", "lockfile-sha256", "toolchain-closure-sha256", "execution-closure-sha256", "contract-sha256", "build-command-sha256"]
@@ -129,7 +151,7 @@ execution_environment = ["HOME=/home/coordinator", "XDG_CONFIG_HOME=/tmp/xdg-con
 execution_path = "pinned-bash-and-coreutils-only"
 forbidden_execution_closure_tools = ["cargo", "git", "gh", "ssh", "curl", "wget", "cloud-clients"]
 isolation_failure = "Reject with coordinator-isolation-failed; no credential-clearing-only fallback."
-fixture_policy = "Inject unique environment and configuration canaries for GitHub, Git, SSH-agent, package registries, and cloud credentials. The probe child dumps its environment, probes standard credential paths, attempts gh and git discovery, inspects inherited descriptors, and attempts a network connection. Reject any visible canary, credential path, client, descriptor above stderr, or network route. A representative coordinator must still read staged inputs and write a schema-valid result."
+fixture_policy = "Inject unique environment and configuration canaries for GitHub, Git, SSH-agent, package registries, and cloud credentials. Open a non-CLOEXEC descriptor on canary bytes in the launcher parent. The probe child dumps its environment, probes standard credential paths, attempts gh and git discovery, enumerates descriptors, and attempts a network connection. Reject any visible canary, credential path, client, descriptor above stderr, or network route. A representative coordinator must still read staged inputs and write a schema-valid result."
 
 [ci_bootstrap.role_execution]
 candidate_process_environment = "Run every candidate-controlled build, test, probe, and packaging command through a trusted launcher with owned empty HOME and XDG/GH/Git configuration, closed inherited descriptors, and no GH_TOKEN, GITHUB_TOKEN, Actions OIDC request variables, SSH agent, Git askpass, package-registry token, or cloud credential variable. Pass only the declared toolchain, locale, input, and output variables."
@@ -140,19 +162,19 @@ fixture_policy = "Inject token, configuration, and descriptor canaries into the 
 workflow_path = ".github/workflows/ci-role-linux-x86-64.yml"
 runner_label = "ubuntu-24.04"
 job_count = 1
-call_ref = "static-local-path-at-workflow-execution-sha"
+call_ref = "static-local-path-at-trusted-master-workflow-signer-sha"
 
 [ci_bootstrap.role_workflows."macos-26-arm64"]
 workflow_path = ".github/workflows/ci-role-macos-26-arm64.yml"
 runner_label = "macos-26"
 job_count = 1
-call_ref = "static-local-path-at-workflow-execution-sha"
+call_ref = "static-local-path-at-trusted-master-workflow-signer-sha"
 
 [ci_bootstrap.role_workflows."macos-15-arm64"]
 workflow_path = ".github/workflows/ci-role-macos-15-arm64.yml"
 runner_label = "macos-15"
 job_count = 1
-call_ref = "static-local-path-at-workflow-execution-sha"
+call_ref = "static-local-path-at-trusted-master-workflow-signer-sha"
 
 [ci_bootstrap.role_prerequisites."PKG-M001-macos-archive"]
 producer_role = "macos-26-arm64"

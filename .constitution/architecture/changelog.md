@@ -18,10 +18,11 @@ Reviewed for PRD v1.3.7. This Evolution pass replaces workstation-dependent vali
 
 - Assigned the common functional matrix to Linux x86-64 and macOS 26 as well as macOS 15. macOS 15 remains compatibility-only.
 - Made Release Pipeline the authority for expected release, build, corpus, run, and required-role identities. Aggregation receives that expectation directly, authenticates the validation origin, verifies artifact integrity, and compares captured identity instead of trusting self-description.
-- Distinguished the tested source, workflow execution, base, and later evidence-only report state. Each role hands off one complete evidence bundle, and aggregation rejects an unmanaged origin or a bundle that omits bytes named by its manifest.
+- Distinguished the trust anchor, workflow signer, tested source, base, and later evidence-only report state. Each role hands off one complete evidence bundle, and aggregation rejects candidate-defined controls, an out-of-boundary source diff, an unmanaged origin, or a bundle that omits bytes named by its manifest.
 - Clarified that a degraded close continues only a single Note-to-Note replacement with no enclosing operation. A batch or wider lifecycle operation stops after removing the retired warned tab and preserves every unprocessed tab.
 - Distinguished Linux exact platform-regression evidence from authoritative product visual evidence. The Linux gate remains required but can't replace the sole authoritative macOS 26 visual role.
 - Split Evidence Aggregation into credentialed acquisition and credential-free coordinator execution. Candidate-controlled aggregation receives only verified read-only inputs, one writable output boundary, and no network or inherited user state; any isolation failure rejects the evidence.
+- Moved validation authority out of the tested source. A reviewed merged implementation establishes an immutable trust anchor; trusted validation checks the separate source against its ticket boundary. A second reviewed evidence-only integration completes the bootstrap, and later trust-surface changes repeat it.
 
 ## v1.4.14 - 2026-08-26
 
