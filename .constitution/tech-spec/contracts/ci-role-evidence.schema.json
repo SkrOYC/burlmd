@@ -1,0 +1,191 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://burlmd.local/schemas/ci-role-evidence.schema.json",
+  "title": "burlmd managed CI role evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "expectedIdentity", "expectedIdentitySha256", "roleEvidence"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "expectedIdentity": { "$ref": "#/$defs/expectedIdentity" },
+    "expectedIdentitySha256": { "$ref": "#/$defs/sha256" },
+    "roleEvidence": { "$ref": "#/$defs/roleEvidence" }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "gitSha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "role": { "enum": ["linux-x86_64", "macos-26-arm64", "macos-15-arm64"] },
+    "signer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["workflowPath", "jobWorkflowRef", "jobWorkflowSha"],
+      "properties": {
+        "workflowPath": { "type": "string", "minLength": 1 },
+        "jobWorkflowRef": { "type": "string", "minLength": 1 },
+        "jobWorkflowSha": { "$ref": "#/$defs/gitSha" }
+      }
+    },
+    "expectedIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["releaseIdentity", "buildIdentity", "corpusIdentity", "runIdentity", "requiredRoleIdentities", "requiredRoleSigners"],
+      "properties": {
+        "releaseIdentity": { "type": "string", "minLength": 1 },
+        "buildIdentity": { "$ref": "#/$defs/sha256" },
+        "corpusIdentity": { "$ref": "#/$defs/sha256" },
+        "runIdentity": { "type": "string", "pattern": "^[0-9]+:[1-9][0-9]*$" },
+        "requiredRoleIdentities": { "const": ["linux-x86_64", "macos-26-arm64", "macos-15-arm64"] },
+        "requiredRoleSigners": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["linux-x86_64", "macos-26-arm64", "macos-15-arm64"],
+          "properties": {
+            "linux-x86_64": {
+              "allOf": [
+                { "$ref": "#/$defs/signer" },
+                { "type": "object", "properties": {
+                  "workflowPath": { "const": ".github/workflows/ci-role-linux-x86-64.yml" },
+                  "jobWorkflowRef": { "type": "string", "pattern": "^SkrOYC/burlmd/\\.github/workflows/ci-role-linux-x86-64\\.yml@[0-9a-f]{40}$" }
+                } }
+              ]
+            },
+            "macos-26-arm64": {
+              "allOf": [
+                { "$ref": "#/$defs/signer" },
+                { "type": "object", "properties": {
+                  "workflowPath": { "const": ".github/workflows/ci-role-macos-26-arm64.yml" },
+                  "jobWorkflowRef": { "type": "string", "pattern": "^SkrOYC/burlmd/\\.github/workflows/ci-role-macos-26-arm64\\.yml@[0-9a-f]{40}$" }
+                } }
+              ]
+            },
+            "macos-15-arm64": {
+              "allOf": [
+                { "$ref": "#/$defs/signer" },
+                { "type": "object", "properties": {
+                  "workflowPath": { "const": ".github/workflows/ci-role-macos-15-arm64.yml" },
+                  "jobWorkflowRef": { "type": "string", "pattern": "^SkrOYC/burlmd/\\.github/workflows/ci-role-macos-15-arm64\\.yml@[0-9a-f]{40}$" }
+                } }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "capturedIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["releaseIdentity", "buildIdentity", "corpusIdentity", "runIdentity", "roleIdentity"],
+      "properties": {
+        "releaseIdentity": { "type": "string", "minLength": 1 },
+        "buildIdentity": { "$ref": "#/$defs/sha256" },
+        "corpusIdentity": { "$ref": "#/$defs/sha256" },
+        "runIdentity": { "type": "string", "pattern": "^[0-9]+:[1-9][0-9]*$" },
+        "roleIdentity": { "$ref": "#/$defs/role" }
+      }
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["runnerLabel", "imageOS", "imageVersion", "osRelease", "architecture", "cpuModel", "logicalCpuCount", "documentedMemoryBytes", "documentedStorageBytes", "observedMemoryBytes", "observedStorageAvailableBytes"],
+      "properties": {
+        "runnerLabel": { "enum": ["ubuntu-24.04", "macos-26", "macos-15"] },
+        "imageOS": { "type": "string", "minLength": 1 },
+        "imageVersion": { "type": "string", "minLength": 1 },
+        "osRelease": { "type": "string", "minLength": 1 },
+        "architecture": { "enum": ["x86_64", "aarch64"] },
+        "cpuModel": { "type": "string", "minLength": 1 },
+        "logicalCpuCount": { "type": "integer", "minimum": 1 },
+        "documentedMemoryBytes": { "type": "integer", "minimum": 1 },
+        "documentedStorageBytes": { "type": "integer", "minimum": 1 },
+        "observedMemoryBytes": { "type": "integer", "minimum": 1 },
+        "observedStorageAvailableBytes": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "viewport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["width", "height", "refreshHz", "verified"],
+      "properties": {
+        "width": { "const": 1920 },
+        "height": { "const": 1080 },
+        "refreshHz": { "const": 60 },
+        "verified": { "type": "boolean" }
+      }
+    },
+    "gates": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["commonFunctional", "performance", "linuxExactVisual", "macosAuthoritativeVisual"],
+      "properties": {
+        "commonFunctional": { "type": "boolean" },
+        "performance": { "type": "boolean" },
+        "linuxExactVisual": { "type": "boolean" },
+        "macosAuthoritativeVisual": { "type": "boolean" }
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "bytes", "sha256"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "bytes": { "type": "integer", "minimum": 0 },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "roleEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "capturedIdentity", "environment", "viewport", "evidenceClasses", "gates", "toolchain", "artifacts"],
+      "properties": {
+        "role": { "$ref": "#/$defs/role" },
+        "capturedIdentity": { "$ref": "#/$defs/capturedIdentity" },
+        "environment": { "$ref": "#/$defs/environment" },
+        "viewport": { "$ref": "#/$defs/viewport" },
+        "evidenceClasses": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "enum": ["common-functional", "performance", "linux-exact-visual", "macos-authoritative-visual"] }
+        },
+        "gates": { "$ref": "#/$defs/gates" },
+        "toolchain": { "type": "object", "minProperties": 1, "additionalProperties": { "type": "string", "minLength": 1 } },
+        "artifacts": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/artifact" } }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "role": { "const": "linux-x86_64" } }, "required": ["role"] },
+          "then": { "properties": {
+            "capturedIdentity": { "type": "object", "properties": { "roleIdentity": { "const": "linux-x86_64" } } },
+            "environment": { "type": "object", "properties": {
+              "runnerLabel": { "const": "ubuntu-24.04" }, "architecture": { "const": "x86_64" }, "logicalCpuCount": { "const": 4 }, "documentedMemoryBytes": { "const": 16000000000 }, "documentedStorageBytes": { "const": 14000000000 }
+            } },
+            "evidenceClasses": { "const": ["common-functional", "performance", "linux-exact-visual"] },
+            "gates": { "type": "object", "properties": { "macosAuthoritativeVisual": { "const": false } } }
+          } }
+        },
+        {
+          "if": { "properties": { "role": { "const": "macos-26-arm64" } }, "required": ["role"] },
+          "then": { "properties": {
+            "capturedIdentity": { "type": "object", "properties": { "roleIdentity": { "const": "macos-26-arm64" } } },
+            "environment": { "type": "object", "properties": {
+              "runnerLabel": { "const": "macos-26" }, "architecture": { "const": "aarch64" }, "logicalCpuCount": { "const": 3 }, "documentedMemoryBytes": { "const": 7000000000 }, "documentedStorageBytes": { "const": 14000000000 }
+            } },
+            "evidenceClasses": { "const": ["common-functional", "performance", "macos-authoritative-visual"] },
+            "gates": { "type": "object", "properties": { "linuxExactVisual": { "const": false } } }
+          } }
+        },
+        {
+          "if": { "properties": { "role": { "const": "macos-15-arm64" } }, "required": ["role"] },
+          "then": { "properties": {
+            "capturedIdentity": { "type": "object", "properties": { "roleIdentity": { "const": "macos-15-arm64" } } },
+            "environment": { "type": "object", "properties": {
+              "runnerLabel": { "const": "macos-15" }, "architecture": { "const": "aarch64" }, "logicalCpuCount": { "const": 3 }, "documentedMemoryBytes": { "const": 7000000000 }, "documentedStorageBytes": { "const": 14000000000 }
+            } },
+            "evidenceClasses": { "const": ["common-functional"] },
+            "gates": { "type": "object", "properties": { "performance": { "const": false }, "linuxExactVisual": { "const": false }, "macosAuthoritativeVisual": { "const": false } } }
+          } }
+        }
+      ]
+    }
+  }
+}

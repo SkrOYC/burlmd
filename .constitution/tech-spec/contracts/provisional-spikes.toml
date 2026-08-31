@@ -16,6 +16,7 @@ production_exceptions = [
   "CI-M003",
 ]
 result_schema = ".constitution/tech-spec/contracts/spike-result.schema.json"
+ci_role_evidence_schema = ".constitution/tech-spec/contracts/ci-role-evidence.schema.json"
 ci_evidence_schema = ".constitution/tech-spec/contracts/ci-evidence.schema.json"
 
 [rules]
@@ -43,10 +44,33 @@ status = "bootstrap-authorized-provisional"
 candidate_phase = "candidate-branch-draft-pull-request"
 aggregation = "coordinator-job-or-authenticated-local"
 report_phase = "reviewed-evidence-commit-before-milestone-review"
-expected_identity_fields = ["release", "build", "corpus", "run", "required-roles"]
+expected_identity_fields = ["release", "build", "corpus", "run", "required-roles", "required-role-signers"]
 capture_fields = ["ImageOS", "ImageVersion", "os-release", "architecture", "cpu-model", "logical-cpu-count", "memory-bytes", "storage-bytes", "logical-viewport", "build", "corpus", "run", "role"]
-origin_authentication = "Use the pinned actions/attest commit to authenticate each evidence-manifest digest with GitHub Sigstore. Verify the attestation against expected repository, workflow identity, head SHA, and artifact subject. Query the versioned workflow-job and artifact APIs with authenticated read access and compare job ID, required hosted label, repository IDs, workflow-run ID, run attempt, head SHA, artifact ID, and service-reported SHA-256 digest. Private/internal repository attestation requires GitHub Enterprise Cloud; without it evidence remains unaccepted and there is no hash-only fallback."
-reject = ["missing", "duplicate", "unexpected-role", "untrusted-origin", "corrupt", "mismatched", "stale", "mixed-image-version"]
+role_phase = "Validate immutable pre-upload bytes against ci-role-evidence.schema.json, compute their SHA-256 digest, attest that digest, then upload the unchanged manifest. The manifest never contains a service-assigned artifact ID or upload digest."
+aggregate_phase = "Validate accepted or rejected coordinator output against ci-evidence.schema.json. Accepted output requires all roles and successful checks. Rejected output permits partial or missing roles and records typed reasons."
+origin_authentication = "Call each single-job reusable role workflow at the candidate's full commit SHA. Verify the attestation's signed builder identity against the expected role-specific job_workflow_ref path and SHA and verify its invocation run and attempt. Download the artifact, compare the service digest, and compare the extracted manifest bytes with the attested subject digest. Query the versioned job API for that run and require the signer workflow's fixed hosted label. Artifact and job REST objects are not directly correlated, and an artifact-supplied job name or ID is never trusted. Private/internal repository attestation requires GitHub Enterprise Cloud; without it evidence remains rejected and there is no hash-only fallback."
+caller_permissions = ["contents:read", "id-token:write", "attestations:write"]
+signer_permissions = ["contents:read", "id-token:write", "attestations:write"]
+aggregate_permissions = ["contents:read", "actions:read", "attestations:read"]
+reject = ["expected-identity-invalid", "role-manifest-invalid", "missing-role", "duplicate-role", "unexpected-role", "role-gate-failed", "identity-mismatch", "stale-evidence", "workflow-signer-mismatch", "runner-label-mismatch", "untrusted-origin", "attestation-unavailable", "artifact-api-mismatch", "artifact-corrupt", "mixed-image-version", "aggregation-error"]
+
+[ci_bootstrap.role_workflows."linux-x86_64"]
+workflow_path = ".github/workflows/ci-role-linux-x86-64.yml"
+runner_label = "ubuntu-24.04"
+job_count = 1
+call_ref = "candidate-head-full-commit-sha"
+
+[ci_bootstrap.role_workflows."macos-26-arm64"]
+workflow_path = ".github/workflows/ci-role-macos-26-arm64.yml"
+runner_label = "macos-26"
+job_count = 1
+call_ref = "candidate-head-full-commit-sha"
+
+[ci_bootstrap.role_workflows."macos-15-arm64"]
+workflow_path = ".github/workflows/ci-role-macos-15-arm64.yml"
+runner_label = "macos-15"
+job_count = 1
+call_ref = "candidate-head-full-commit-sha"
 
 [ci_bootstrap.actions]
 checkout = "actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09"
@@ -101,7 +125,8 @@ storage_bytes = 14000000000
 logical_viewport_width = 1920
 logical_viewport_height = 1080
 logical_viewport_refresh_hz = 60
-roles = ["common-functional-compatibility"]
+roles = ["common-functional"]
+functional_scope = "compatibility-only"
 image_mutable = true
 visual_environment = "none"
 
