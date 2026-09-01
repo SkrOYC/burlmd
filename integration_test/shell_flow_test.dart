@@ -1,11 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:burlmd/src/providers/rust_api_provider.dart';
-import 'package:burlmd/src/providers/workspace_provider.dart';
-import 'package:burlmd/src/rust/draft.dart';
-import 'package:burlmd/src/rust/markdown/ast.dart';
-import 'package:burlmd/src/screens/workspace.dart';
 import 'package:burlmd/src/components/visual_parity_fixture.dart';
 import 'package:flutter/foundation.dart'
     show TargetPlatform, defaultTargetPlatform;
@@ -14,60 +9,8 @@ import 'package:flutter/gestures.dart'
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'
     show LogicalKeyboardKey, MissingPluginException;
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
-
-/// Run with `--dart-define=BURLMD_VISUAL_FIXTURE=true`. This deterministic
-/// UI-only fixture uses the application's public RustApi seam rather than
-/// starting the native Core, so the production shell can run without a local
-/// workspace.
-class _ShellFixtureApi extends RustApi {
-  const _ShellFixtureApi();
-
-  @override
-  Future<WorkspaceInfo> openOrCreateLocalWorkspace({String? path}) async =>
-      const WorkspaceInfo(
-        id: 'driver-workspace',
-        name: 'Driver workspace',
-        provider: 'local',
-        localPath: '/tmp/burlmd-driver-workspace',
-      );
-
-  @override
-  Future<List<TreeNode>> workspaceTree() async => [
-    TreeNode.note(
-      id: 'driver-note',
-      title: 'Driver Note',
-      path: 'Driver Note.md',
-    ),
-  ];
-
-  @override
-  Future<List<NoteMetadata>> pendingDrafts() async => const [];
-
-  @override
-  NoteWriteStatus noteWriteStatus(String noteId) =>
-      const NoteWriteStatus(hasUnwrittenEdits: false);
-
-  @override
-  Future<NoteState> openNote(String noteId) async => NoteState(
-    ast: const <AstNode>[],
-    metadata: const NoteMetadata(
-      id: 'driver-note',
-      path: 'Driver Note.md',
-      title: 'Driver Note',
-      lastModified: 0,
-      okfConformant: true,
-    ),
-    baseRevision: 'driver',
-    restoredFromDraft: false,
-  );
-
-  @override
-  Future<List<NoteMetadata>> searchNotes(String query, int limit) async =>
-      const [];
-}
 
 const _externalCaptureEnabled = bool.fromEnvironment('BURLMD_EXTERNAL_CAPTURE');
 const _externalCaptureDirectory = '/tmp/burlmd-proof';
@@ -585,20 +528,12 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
-    final container = ProviderContainer(
-      overrides: [
-        rustApiProvider.overrideWithValue(const _ShellFixtureApi()),
-        writeStatusPollIntervalProvider.overrideWithValue(null),
-      ],
-    );
     final fixtureController = FixtureCaptureController();
-    addTearDown(container.dispose);
     await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: MaterialApp(
-          debugShowCheckedModeBanner: false,
-          home: WorkspaceScreen(fixtureCaptureController: fixtureController),
+      MaterialApp(
+        debugShowCheckedModeBanner: false,
+        home: Scaffold(
+          body: FixtureReferenceShell(captureController: fixtureController),
         ),
       ),
     );
@@ -671,8 +606,7 @@ void main() {
       );
     }
 
-    // The fixture remains mounted through the production WorkspaceScreen and
-    // desktop shell rather than a retired standalone fixture route.
+    // Keep one fixture instance mounted through every state transition.
     final shell = find.byKey(const ValueKey('fixture-reference-shell'));
     expect(shell, findsOneWidget);
     expect(Theme.of(tester.element(shell)).brightness, Brightness.dark);

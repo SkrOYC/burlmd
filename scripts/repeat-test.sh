@@ -38,6 +38,30 @@ double_plus_one() {
     printf '%s\n' "$result"
 }
 
+# Compare equal-length non-negative decimal strings from their most-significant
+# digits. Do not use the shell's string-ordering operators here: their
+# collation behavior is not a portable numeric comparison under an arbitrary
+# POSIX `sh` locale.
+decimal_greater_than() {
+    left=$1
+    right=$2
+    while [ -n "$left" ]; do
+        left_rest=${left#?}
+        right_rest=${right#?}
+        left_digit=${left%"$left_rest"}
+        right_digit=${right%"$right_rest"}
+        if [ "$left_digit" -gt "$right_digit" ]; then
+            return 0
+        fi
+        if [ "$left_digit" -lt "$right_digit" ]; then
+            return 1
+        fi
+        left=$left_rest
+        right=$right_rest
+    done
+    return 1
+}
+
 # POSIX shell arithmetic uses signed long integers. Build its maximum as a
 # decimal string so an overlarge but digit-only count is rejected before any
 # numeric comparison can emit an implementation diagnostic.
@@ -61,16 +85,16 @@ case "$count" in
         ;;
 esac
 
-# Strip leading zeroes before comparing or using shell arithmetic; an
-# otherwise valid value such as 0001 must not overflow only because of its
-# presentation.
-count=$(printf '%s\n' "$count" | sed 's/^0*//')
-if [ -z "$count" ]; then
+# Keep the decimal representation canonical. Accepting leading zeroes would
+# make otherwise distinct command lines compare differently at the boundary.
+case "$count" in
+    0 | 0*)
     invalid_count
-fi
+    ;;
+esac
 
 if [ "${#count}" -gt "${#shell_long_max}" ] || {
-    [ "${#count}" -eq "${#shell_long_max}" ] && [ "$count" \> "$shell_long_max" ]
+    [ "${#count}" -eq "${#shell_long_max}" ] && decimal_greater_than "$count" "$shell_long_max"
 }; then
     invalid_count
 fi
@@ -92,5 +116,9 @@ while [ "$iteration" -le "$count" ]; do
             "$iteration" "$count" "$status" >&2
         exit "$status"
     fi
+    # Do not increment after the final accepted iteration: a count equal to
+    # the shell's largest representable positive integer would otherwise
+    # overflow despite passing the input-range check above.
+    [ "$iteration" = "$count" ] && break
     iteration=$((iteration + 1))
 done

@@ -1,0 +1,189 @@
+name: managed-ci
+on:
+  workflow_dispatch:
+    inputs:
+      expected_identity_base64: {required: true, type: string}
+      expected_identity_sha256: {required: true, type: string}
+      tested_source_sha: {required: true, type: string}
+      base_sha: {required: true, type: string}
+      run_identity: {required: true, type: string}
+      artifact_nonce: {required: true, type: string}
+permissions: {}
+jobs:
+  expected:
+    runs-on: ubuntu-24.04
+    permissions: {contents: read}
+    outputs:
+      artifact_id: ${{ steps.upload.outputs.artifact-id }}
+      artifact_digest: ${{ steps.upload.outputs.artifact-digest }}
+      tested_source_sha: ${{ steps.validated.outputs.tested_source_sha }}
+      base_sha: ${{ steps.validated.outputs.base_sha }}
+      run_identity: ${{ inputs.run_identity }}
+      artifact_nonce: ${{ steps.validated.outputs.nonce }}
+      expected_identity_base64: ${{ inputs.expected_identity_base64 }}
+      expected_identity_sha256: ${{ steps.validated.outputs.expected_identity_sha256 }}
+      ticket_identity: ${{ steps.validated.outputs.ticket_identity }}
+      requires_macos_15_stage: ${{ steps.validated.outputs.requires_macos_15_stage }}
+      workflow_signer_sha: ${{ steps.validated.outputs.workflow_signer_sha }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with: {persist-credentials: false}
+      - name: Reject preinstalled Nix
+        shell: bash
+        run: |
+          if command -v nix >/dev/null 2>&1; then
+            echo 'Nix must not be present before installation' >&2
+            exit 1
+          fi
+      - uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24
+        with: {enable_kvm: false}
+      - name: Verify action-installed Nix interface
+        shell: bash
+        run: |
+          nix_profile=/nix/var/nix/profiles/default
+          nix_path=$(command -v nix)
+          nix_store_path=$(command -v nix-store)
+          [[ $nix_path == "$nix_profile/bin/nix" ]] || { echo 'nix must resolve through the action-installed Nix profile' >&2; exit 1; }
+          [[ $nix_store_path == "$nix_profile/bin/nix-store" ]] || { echo 'nix-store must resolve through the action-installed Nix profile' >&2; exit 1; }
+          nix_version=$(nix --version 2>&1)
+          nix_store_version=$(nix-store --version 2>&1)
+          [[ $nix_version == 'nix (Nix) 2.35.2' ]] || { echo 'nix version must equal 2.35.2' >&2; exit 1; }
+          [[ $nix_store_version == 'nix-store (Nix) 2.35.2' ]] || { echo 'nix-store version must equal 2.35.2' >&2; exit 1; }
+          nix_real_path=$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$nix_path")
+          nix_store_real_path=$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$nix_store_path")
+          [[ ${nix_real_path%/*} == "${nix_store_real_path%/*}" ]] || { echo 'nix and nix-store must resolve through one installed Nix profile' >&2; exit 1; }
+      - id: validated
+        name: Validate canonical expected identity and dispatcher inputs
+        env:
+          EXPECTED_IDENTITY_BASE64: ${{ inputs.expected_identity_base64 }}
+          EXPECTED_IDENTITY_SHA256: ${{ inputs.expected_identity_sha256 }}
+          TESTED_SOURCE_SHA: ${{ inputs.tested_source_sha }}
+          BASE_SHA: ${{ inputs.base_sha }}
+          RUN_IDENTITY: ${{ inputs.run_identity }}
+          ARTIFACT_NONCE: ${{ inputs.artifact_nonce }}
+          GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: ./scripts/ci-devenv.sh ./scripts/validate-managed-workflow-inputs.sh --role linux-x86_64 --output "$RUNNER_TEMP/expected-identity.json" >> "$GITHUB_OUTPUT"
+      - id: upload
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: managed-evidence-expected-${{ steps.validated.outputs.nonce }}
+          path: ${{ steps.validated.outputs.expected_identity_file }}
+          overwrite: false
+          if-no-files-found: error
+  linux:
+    needs: expected
+    uses: ./.github/workflows/ci-role-linux-x86-64.yml
+    permissions: {actions: read, contents: read, id-token: write, attestations: write}
+    with:
+      tested_source_sha: ${{ needs.expected.outputs.tested_source_sha }}
+      expected_identity_base64: ${{ needs.expected.outputs.expected_identity_base64 }}
+      expected_identity_sha256: ${{ needs.expected.outputs.expected_identity_sha256 }}
+      expected_artifact_id: ${{ needs.expected.outputs.artifact_id }}
+      expected_artifact_digest: ${{ needs.expected.outputs.artifact_digest }}
+      run_identity: ${{ needs.expected.outputs.run_identity }}
+      artifact_nonce: ${{ needs.expected.outputs.artifact_nonce }}
+      base_sha: ${{ needs.expected.outputs.base_sha }}
+  macos_26:
+    needs: expected
+    uses: ./.github/workflows/ci-role-macos-26-arm64.yml
+    permissions: {actions: read, contents: read, id-token: write, attestations: write}
+    with:
+      tested_source_sha: ${{ needs.expected.outputs.tested_source_sha }}
+      expected_identity_base64: ${{ needs.expected.outputs.expected_identity_base64 }}
+      expected_identity_sha256: ${{ needs.expected.outputs.expected_identity_sha256 }}
+      expected_artifact_id: ${{ needs.expected.outputs.artifact_id }}
+      expected_artifact_digest: ${{ needs.expected.outputs.artifact_digest }}
+      run_identity: ${{ needs.expected.outputs.run_identity }}
+      artifact_nonce: ${{ needs.expected.outputs.artifact_nonce }}
+      base_sha: ${{ needs.expected.outputs.base_sha }}
+  macos_15:
+    needs: [expected, macos_26]
+    uses: ./.github/workflows/ci-role-macos-15-arm64.yml
+    permissions: {actions: read, contents: read, id-token: write, attestations: write}
+    with:
+      tested_source_sha: ${{ needs.expected.outputs.tested_source_sha }}
+      expected_identity_base64: ${{ needs.expected.outputs.expected_identity_base64 }}
+      expected_identity_sha256: ${{ needs.expected.outputs.expected_identity_sha256 }}
+      expected_artifact_id: ${{ needs.expected.outputs.artifact_id }}
+      expected_artifact_digest: ${{ needs.expected.outputs.artifact_digest }}
+      run_identity: ${{ needs.expected.outputs.run_identity }}
+      artifact_nonce: ${{ needs.expected.outputs.artifact_nonce }}
+      base_sha: ${{ needs.expected.outputs.base_sha }}
+      stage-artifact-name: ${{ needs.macos_26.outputs.stage-artifact-name }}
+      stage-artifact-id: ${{ needs.macos_26.outputs.stage-artifact-id }}
+      stage-upload-action-digest: ${{ needs.macos_26.outputs.stage-upload-action-digest }}
+      stage-rest-digest: ${{ needs.macos_26.outputs.stage-rest-digest }}
+      stage-created-at: ${{ needs.macos_26.outputs.stage-created-at }}
+      stage-expires-at: ${{ needs.macos_26.outputs.stage-expires-at }}
+      stage-manifest-sha256: ${{ needs.macos_26.outputs.stage-manifest-sha256 }}
+      stage-attestation-subject-digest: ${{ needs.macos_26.outputs.stage-attestation-subject-digest }}
+      stage-attestation-bundle-sha256: ${{ needs.macos_26.outputs.stage-attestation-bundle-sha256 }}
+      producer-workflow-signer-sha: ${{ needs.macos_26.outputs.producer-workflow-signer-sha }}
+      workflow-run-id: ${{ needs.macos_26.outputs.workflow-run-id }}
+      run-attempt: ${{ needs.macos_26.outputs.run-attempt }}
+      producer-sealing-check-run-id: ${{ needs.macos_26.outputs.producer-sealing-check-run-id }}
+      producer-sealing-receipt-artifact-id: ${{ needs.macos_26.outputs.producer-sealing-receipt-artifact-id }}
+      producer-sealing-receipt-upload-action-digest: ${{ needs.macos_26.outputs.producer-sealing-receipt-upload-action-digest }}
+      producer-sealing-receipt-rest-digest: ${{ needs.macos_26.outputs.producer-sealing-receipt-rest-digest }}
+      producer-sealing-receipt-created-at: ${{ needs.macos_26.outputs.producer-sealing-receipt-created-at }}
+      producer-sealing-receipt-expires-at: ${{ needs.macos_26.outputs.producer-sealing-receipt-expires-at }}
+      producer-lineage-artifact-id: ${{ needs.macos_26.outputs.producer-lineage-artifact-id }}
+      producer-lineage-upload-action-digest: ${{ needs.macos_26.outputs.producer-lineage-upload-action-digest }}
+      producer-lineage-rest-digest: ${{ needs.macos_26.outputs.producer-lineage-rest-digest }}
+      producer-lineage-sha256: ${{ needs.macos_26.outputs.producer-lineage-sha256 }}
+      producer-lineage-attestation-subject-digest: ${{ needs.macos_26.outputs.producer-lineage-attestation-subject-digest }}
+      producer-lineage-attestation-bundle-sha256: ${{ needs.macos_26.outputs.producer-lineage-attestation-bundle-sha256 }}
+      producer-role: ${{ needs.macos_26.outputs.producer-role }}
+      consumer-role: ${{ needs.macos_26.outputs.consumer-role }}
+  receipt_digests:
+    needs: [expected, linux, macos_26, macos_15]
+    runs-on: ubuntu-24.04
+    permissions: {contents: read}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with: {persist-credentials: false}
+      - name: Reject preinstalled Nix
+        shell: bash
+        run: |
+          if command -v nix >/dev/null 2>&1; then
+            echo 'Nix must not be present before installation' >&2
+            exit 1
+          fi
+      - uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24
+        with: {enable_kvm: false}
+      - name: Verify action-installed Nix interface
+        shell: bash
+        run: |
+          nix_profile=/nix/var/nix/profiles/default
+          nix_path=$(command -v nix)
+          nix_store_path=$(command -v nix-store)
+          [[ $nix_path == "$nix_profile/bin/nix" ]] || { echo 'nix must resolve through the action-installed Nix profile' >&2; exit 1; }
+          [[ $nix_store_path == "$nix_profile/bin/nix-store" ]] || { echo 'nix-store must resolve through the action-installed Nix profile' >&2; exit 1; }
+          nix_version=$(nix --version 2>&1)
+          nix_store_version=$(nix-store --version 2>&1)
+          [[ $nix_version == 'nix (Nix) 2.35.2' ]] || { echo 'nix version must equal 2.35.2' >&2; exit 1; }
+          [[ $nix_store_version == 'nix-store (Nix) 2.35.2' ]] || { echo 'nix-store version must equal 2.35.2' >&2; exit 1; }
+          nix_real_path=$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$nix_path")
+          nix_store_real_path=$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$nix_store_path")
+          [[ ${nix_real_path%/*} == "${nix_store_real_path%/*}" ]] || { echo 'nix and nix-store must resolve through one installed Nix profile' >&2; exit 1; }
+      - name: Write identity-bound receipt upload digest transport
+        env:
+          EXPECTED_IDENTITY_SHA256: ${{ needs.expected.outputs.expected_identity_sha256 }}
+          REPOSITORY_ID: ${{ github.repository_id }}
+          WORKFLOW_RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          WORKFLOW_SIGNER_SHA: ${{ needs.expected.outputs.workflow_signer_sha }}
+          ARTIFACT_NONCE: ${{ needs.expected.outputs.artifact_nonce }}
+          LINUX_RECEIPT_ARTIFACT_ID: ${{ needs.linux.outputs.sealing-receipt-artifact-id }}
+          LINUX_RECEIPT_UPLOAD_ACTION_DIGEST: ${{ needs.linux.outputs.sealing-receipt-upload-action-digest }}
+          MACOS_26_RECEIPT_ARTIFACT_ID: ${{ needs.macos_26.outputs.sealing-receipt-artifact-id }}
+          MACOS_26_RECEIPT_UPLOAD_ACTION_DIGEST: ${{ needs.macos_26.outputs.sealing-receipt-upload-action-digest }}
+          MACOS_15_RECEIPT_ARTIFACT_ID: ${{ needs.macos_15.outputs.sealing-receipt-artifact-id }}
+          MACOS_15_RECEIPT_UPLOAD_ACTION_DIGEST: ${{ needs.macos_15.outputs.sealing-receipt-upload-action-digest }}
+        run: ./scripts/ci-devenv.sh ./scripts/write-receipt-digest-observation.sh --output receipt-upload-digests.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: managed-evidence-receipt-digests-${{ needs.expected.outputs.artifact_nonce }}
+          path: receipt-upload-digests.json
+          overwrite: false
+          if-no-files-found: error
