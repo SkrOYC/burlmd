@@ -56,10 +56,12 @@
       "name": "macos-26-packaging-claim-mismatches-runner-label",
       "authenticatedRole": "macos-26-arm64",
       "expectedRunnerLabel": "macos-26",
-      "observedRunnerLabel": "macos-15",
+      "observedRunnerLabel": "ubuntu-24.04",
       "expectedIdentityClasses": ["packaging-runtime", "repeatable-construction"],
       "claimedEvidenceClasses": ["packaging-runtime", "repeatable-construction"],
       "logicalViewportVerified": false,
+      "schemaFixture": "valid/macos-26-packaging-wrong-runner-label.json",
+      "structuralSchemaOutcome": "valid",
       "expectedOutcome": "rejected:runner-label-mismatch"
     }
   ]

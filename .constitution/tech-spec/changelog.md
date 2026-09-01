@@ -1,5 +1,9 @@
 # Stage 3: Technical Implementation Changelog
 
+## v1.8.6-provisional - 2026-08-31
+
+Make the runner-label adversarial case structurally valid before collector rejection. Restore the requirement that every gate and measurement identifies its candidate or `cross-cutting`.
+
 ## v1.8.5-provisional - 2026-08-31
 
 Make runner-label reconciliation executable. Collector fixtures record the expected and observed labels for every case, and matching evidence classes with a wrong runner label reject before profile comparison.
