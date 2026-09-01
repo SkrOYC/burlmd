@@ -1,5 +1,9 @@
 # Stage 3: Technical Implementation Changelog
 
+## v1.8.3-provisional - 2026-08-31
+
+Bind each Spike-result viewport claim to authenticated managed evidence. A run records its claimed evidence classes, but the trusted collector requires an exact match with the expected-identity profile for the supplying role. Host capabilities are descriptive only. The viewport requirement applies to the reconciled claim, and macOS 15 remains restricted to its functional and packaging-compatibility classes.
+
 ## v1.8.2-provisional - 2026-08-31
 
 Align Spike-result viewport evidence with managed role evidence. Functional and packaging-only results can record an unverified viewport. Results that claim performance, Linux platform-regression, or authoritative macOS visual evidence must record a successful role-owned exact-viewport probe. macOS 15 remains functional compatibility-only.

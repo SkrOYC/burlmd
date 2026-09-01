@@ -1,0 +1,30 @@
+{
+  "contract": "spike-result claimed evidence reconciliation",
+  "collectorRequirement": "Map each run to its authenticated role bundle and require claimedEvidenceClasses to equal expectedIdentity.requiredEvidenceClasses[role] in the declared order.",
+  "cases": [
+    {
+      "name": "macos-26-packaging-only-false-accepted",
+      "authenticatedRole": "macos-26-arm64",
+      "expectedIdentityClasses": ["packaging-runtime"],
+      "claimedEvidenceClasses": ["packaging-runtime"],
+      "logicalViewportVerified": false,
+      "expectedOutcome": "accepted"
+    },
+    {
+      "name": "performance-claim-omits-assigned-performance",
+      "authenticatedRole": "linux-x86_64",
+      "expectedIdentityClasses": ["common-functional", "performance", "asset-measurement"],
+      "claimedEvidenceClasses": ["common-functional", "asset-measurement"],
+      "logicalViewportVerified": false,
+      "expectedOutcome": "rejected:evidence-profile-mismatch"
+    },
+    {
+      "name": "packaging-claim-adds-unassigned-performance",
+      "authenticatedRole": "macos-26-arm64",
+      "expectedIdentityClasses": ["packaging-runtime"],
+      "claimedEvidenceClasses": ["packaging-runtime", "performance"],
+      "logicalViewportVerified": true,
+      "expectedOutcome": "rejected:evidence-profile-mismatch"
+    }
+  ]
+}

@@ -1,5 +1,9 @@
 # Stage 4: Tasks changelog
 
+## v2.2.3 - 2026-08-31
+
+Reviewed TechSpec v1.8.3-provisional. `ASSET-I001` now requires a viewport record for every run and verification only for an authenticated viewport-bound evidence assignment. No ticket, dependency, scope, acceptance mode, effort estimate, or execution order changes.
+
 ## v2.2.2 - 2026-08-31
 
 Reviewed TechSpec v1.8.2-provisional. The Spike-result viewport correction changes no ticket, dependency, scope, acceptance mode, effort estimate, or execution order.
