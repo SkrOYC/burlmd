@@ -1,5 +1,9 @@
 # Stage 3: Technical Implementation Changelog
 
+## v1.8.4-provisional - 2026-08-31
+
+Require a host profile for every Spike-result run. The trusted collector now reconciles the profile runner label with the authenticated role bundle before ordered expected-identity comparison. Packaging fixtures use the full macOS 26 profile, including repeatable construction.
+
 ## v1.8.3-provisional - 2026-08-31
 
 Bind each Spike-result viewport claim to authenticated managed evidence. A run records its claimed evidence classes, but the trusted collector requires an exact match with the expected-identity profile for the supplying role. Host capabilities are descriptive only. The viewport requirement applies to the reconciled claim, and macOS 15 remains restricted to its functional and packaging-compatibility classes.

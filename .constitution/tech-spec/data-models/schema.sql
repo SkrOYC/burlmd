@@ -1,4 +1,4 @@
--- FORWARD STATUS (TechSpec v1.8.3-provisional): this is the delivered v2
+-- FORWARD STATUS (TechSpec v1.8.4-provisional): this is the delivered v2
 -- derived-index schema. Application session state is stored as JSON outside
 -- schema.sql; this file contains no session tables. It does not yet model
 -- excluded/repairable paths, Workspace observation, external-change decisions,
