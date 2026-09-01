@@ -1,5 +1,9 @@
 # Stage 4: Tasks changelog
 
+## v2.2.6 - 2026-08-31
+
+Reviewed TechSpec v1.8.6-provisional. The schema-valid runner-label fixture and restored candidate-attribution guidance change no ticket, dependency, scope, acceptance mode, effort estimate, or execution order.
+
 ## v2.2.5 - 2026-08-31
 
 Reviewed TechSpec v1.8.5-provisional. The runner-label reconciliation fixture changes no ticket, dependency, scope, acceptance mode, effort estimate, or execution order.
