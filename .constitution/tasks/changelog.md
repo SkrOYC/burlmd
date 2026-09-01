@@ -1,5 +1,9 @@
 # Stage 4: Tasks changelog
 
+## v2.2.5 - 2026-08-31
+
+Reviewed TechSpec v1.8.5-provisional. The runner-label reconciliation fixture changes no ticket, dependency, scope, acceptance mode, effort estimate, or execution order.
+
 ## v2.2.4 - 2026-08-31
 
 Reviewed TechSpec v1.8.4-provisional. The required host-profile and ordered authenticated-profile reconciliation changes no ticket, dependency, scope, acceptance mode, effort estimate, or execution order.
