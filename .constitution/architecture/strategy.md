@@ -1,5 +1,5 @@
 ---
-version: v1.4.15
+version: v1.4.16
 ---
 
 # Architectural strategy
@@ -12,7 +12,7 @@ A separate release pipeline produces installable artifacts for the supported Pla
 
 The three validation roles define evidence capabilities. A validation request assigns the exact subset its gate requires. Linux x86-64 and Apple Silicon macOS 26 can serve as performance-reference roles. Linux can also supply exact platform-regression evidence, but that evidence isn't a product visual reference. The macOS 26 role alone can supply authoritative product visual evidence. macOS 15 provides functional compatibility evidence only.
 
-The Release Pipeline establishes authoritative expected identity from an immutable reviewed validation anchor. It distinguishes the trust anchor, workflow signer, tested source, base, release, build, corpus, run, required roles, and role-specific evidence classes. The pipeline verifies the ticket write boundary and hands the identity independently to validation and aggregation. Each role runs candidate work without evidence-signing authority, hands its complete output bundle to a fresh pipeline-owned sealing environment, and authenticates only the validated sealed bundle. The fresh environment boundary prevents candidate processes or filesystem state from reaching origin authentication. A later evidence-only report state remains distinct from the tested source.
+The Release Pipeline establishes authoritative expected identity from an immutable reviewed validation anchor. It distinguishes the trust anchor, workflow signer, tested source, base, release, build, corpus, run, required roles, and role-specific evidence classes. The pipeline verifies the ticket write boundary and hands the identity independently to validation and aggregation. Each role treats candidate output as untrusted and hands its complete bundle to a fresh pipeline-owned sealing environment. Only that environment authenticates a validated sealed bundle. Fresh-environment separation protects origin authority and Writer-device isolation. It doesn't universally prove that a hosted candidate process ended. A later evidence-only report state remains distinct from the tested source.
 
 The runtime can inspect release metadata and notify the Writer, but installation remains under the Platform or package manager's authority.
 

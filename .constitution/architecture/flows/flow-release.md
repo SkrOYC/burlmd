@@ -61,7 +61,7 @@ flowchart TD
 
 ## Failure path
 
-- Every validation environment owns its display, compositor, input, and process state. If ownership isn't proven, it produces no acceptable evidence.
+- Every validation environment owns its display, compositor, input, and declared process state. The strict-containment role proves candidate-process teardown. Other hosted roles record bounded cleanup and don't claim that arbitrary candidate processes ended. If display or input ownership isn't proven, the run produces no acceptable evidence.
 - The Writer's active desktop never supplies visual proof. The Writer's desktop state in a capture invalidates the complete run.
 - Missing authoritative trust-anchor, workflow-signer, tested-source, base, release, build, corpus, run, required-role, or role-specific evidence-class identity prevents evidence acceptance.
 - A candidate-defined launcher, signer workflow, expected identity, or change outside the ticket's declared write boundary prevents dispatch or evidence acceptance.

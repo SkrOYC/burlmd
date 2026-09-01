@@ -1,5 +1,23 @@
 # Stage 2: Architecture changelog
 
+## v1.4.16 - 2026-09-01
+
+Correct the hosted candidate-process claim without changing the Release
+Pipeline boundary or product scope.
+
+### Changed
+
+- Preserved fresh-environment separation and Writer-device isolation while
+  removing the universal claim that a hosted candidate process must end.
+- Classified candidate bundles as untrusted. The strict-containment role proves
+  teardown before upload. Other hosted roles record bounded cleanup only.
+
+### Security
+
+- Made fresh sealing the sole origin authority. A surviving hosted candidate
+  process can corrupt untrusted output or cause a failed upload, but can't
+  enter the fresh sealing environment or gain origin authority.
+
 ## v1.4.15 - 2026-08-31
 
 Reviewed for PRD v1.3.7. This Evolution pass replaces workstation-dependent validation with pipeline-owned isolated execution and integrity-checked evidence aggregation.

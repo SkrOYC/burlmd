@@ -31,9 +31,11 @@ survive. The release contract must not make that claim.
    record cleanup failure. It must not claim universal containment, zero
    survivors, or that arbitrary candidate code cannot falsify its own
    untrusted output.
-4. Give candidate jobs only `contents: read`. They receive no OIDC,
-   attestation, Actions, artifact-runtime, or repository-content write
-   authority.
+4. Give candidate commands only the declared toolchain, locale, input, and
+   output variables. Candidate commands receive no OIDC, attestation, Actions,
+   artifact-runtime, or repository-content write authority. The trusted
+   workflow wrapper receives short-lived artifact-upload authority after
+   candidate commands finish.
 5. Make the fresh `seal` job the sole provenance authority. It never executes
    candidate bytes. It validates the expected identity, candidate job and
    hosted label, reserved artifact inventory and IDs, normalized REST digests,
@@ -46,6 +48,9 @@ survive. The release contract must not make that claim.
 
 - A surviving hosted-macOS candidate process cannot obtain signing authority or
   execute in the fresh sealing environment.
+- On hosted macOS, a surviving candidate process can interfere with the later
+  untrusted upload. The outcome is untrusted-output corruption or a fail-closed
+  upload denial, not an authenticated candidate result.
 - Accepted evidence authenticates reviewed workflow execution and sealed
   provenance. It does not establish lifecycle containment for arbitrary
   malicious macOS candidate code or make candidate output trustworthy by
