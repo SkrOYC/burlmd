@@ -1,5 +1,33 @@
 # Stage 3: Technical Implementation Changelog
 
+## v1.8.7-provisional - 2026-09-01
+
+Correct the hosted candidate-process trust claim without changing the Release
+Pipeline boundary or product scope.
+
+### Changed
+
+- Added ADR-019. Linux candidate commands require `env -i`, Bubblewrap
+  `0.11.2`, a private PID namespace, a teardown lock, and a failed-double-fork
+  survivor check before upload. Hosted macOS records bounded cleanup only.
+- Made candidate bundles explicitly untrusted on every platform. The fresh
+  `seal` job is the sole provenance authority and never runs candidate bytes.
+  It validates identity, job and hosted label, artifact IDs and REST digests,
+  archive shape, schemas, and member hashes before attestation.
+- Added static fixture requirements that distinguish Linux containment from the
+  hosted-macOS fresh-job and no-privilege boundary. Fixtures must reject a
+  universal macOS containment or zero-survivor assertion.
+- Advanced the raw provisional contract from version `23` to `24`. The role
+  and aggregate schemas remain at versions `9` and `11`, because neither
+  schema models platform-independent candidate-process termination.
+
+### Security
+
+- Scoped the threat model precisely. Accepted evidence authenticates reviewed
+  workflow execution and sealed provenance. It does not prove that arbitrary
+  malicious hosted-macOS candidate code is lifecycle-contained or that its
+  untrusted output is truthful. Source and test review remain required.
+
 ## v1.8.6-provisional - 2026-08-31
 
 Make the runner-label adversarial case structurally valid before collector rejection. Restore the requirement that every gate and measurement identifies its candidate or `cross-cutting`.

@@ -1,5 +1,13 @@
 # Stage 4: Tasks changelog
 
+## v2.2.7 - 2026-09-01
+
+Reviewed TechSpec v1.8.7-provisional. `CI-M003` now distinguishes Linux
+candidate containment from hosted-macOS fresh-seal authority. The correction
+updates its acceptance, STOP conditions, and static fixture requirements. It
+does not change ticket count, effort, dependencies, scope, acceptance mode, or
+execution order.
+
 ## v2.2.6 - 2026-08-31
 
 Reviewed TechSpec v1.8.6-provisional. The schema-valid runner-label fixture and restored candidate-attribution guidance change no ticket, dependency, scope, acceptance mode, effort estimate, or execution order.
