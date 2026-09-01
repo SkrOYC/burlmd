@@ -61,6 +61,34 @@ let
   cargo = "${config.languages.rust.toolchainPackage}/bin/cargo";
   dart = "${flutter}/bin/dart";
 
+  # Cargokit insists on a rustup command even for a native target that is
+  # already supplied by Nix's pinned Rust toolchain. This narrow shim reports
+  # that exact stable target and delegates only `rustup run stable cargo` to
+  # the locked Cargo binary. It cannot install toolchains or targets, which
+  # keeps the Bubblewrap candidate network-free and avoids a mutable rustup
+  # home becoming a second toolchain authority.
+  rustupShim = pkgs.writeShellScriptBin "rustup" ''
+    set -euo pipefail
+    case "''${1-}:''${2-}:''${3-}:''${4-}" in
+      toolchain:list::)
+        printf '%s\n' 'stable-x86_64-unknown-linux-gnu (default)'
+        ;;
+      target:list:--toolchain:stable*)
+        shift 4
+        [[ "''${1-}" == --installed && $# == 1 ]] || exit 2
+        printf '%s\n' 'x86_64-unknown-linux-gnu'
+        ;;
+      run:stable:cargo:*)
+        shift 3
+        exec ${cargo} "$@"
+        ;;
+      *)
+        echo "unsupported locked rustup shim invocation: $*" >&2
+        exit 2
+        ;;
+    esac
+  '';
+
   # The guards distinguish "no manifest exists yet" (skip, we are pre-CORE-A001)
   # from "a manifest exists somewhere unexpected" (fail loudly). A bare
   # `[ -f rust/Cargo.toml ] || exit 0` would turn a layout change into a green
@@ -190,6 +218,11 @@ in
     [
       flutter
       flutter_rust_bridge_codegen # FRB v2 code generator (ADR-001)
+      # FRB 2.12.0 invokes `cargo expand` while generating bindings. Supplying
+      # the locked package prevents it from attempting an unauthenticated
+      # cargo-install inside the network-denied candidate namespace.
+      cargo-expand
+      rustupShim
 
       # Build tooling required by the Flutter desktop build and by rust bindgen.
       pkg-config
@@ -204,17 +237,36 @@ in
       clang
 
       git
+      gh
+      actionlint
+      jq
+      # Managed-evidence scripts parse the authoritative TOML contract and
+      # validate role manifests before packaging. These are deliberately in
+      # the locked closure: hosted images are not a source of protocol tools.
+      taplo
+      check-jsonschema
+      gnutar
+      zstd
+      findutils
+      perl
 
-      # Manual visual-verification tooling (Wayland). `grim` captures a real
-      # screenshot of the running app; `wtype` injects keystrokes into the
-      # focused window. Used to actually look at rendered pixels and exercise
-      # live typing, rather than only asserting widget properties in
-      # `flutter test`. Not part of the CI/build path.
-      grim
-      wtype
     ]
     ++ coreEngineDeps
-    ++ lib.optionals pkgs.stdenv.isLinux linuxDesktopDeps;
+    ++ lib.optionals pkgs.stdenv.isLinux (
+      linuxDesktopDeps
+      ++ [
+        bubblewrap
+        # Candidate tests retain an isolated network namespace but raise its
+        # loopback device for Flutter's local VM-service connection.
+        iproute2
+        # Manual visual-verification tooling (Wayland). These packages do not
+        # exist on aarch64-darwin, so keep the development-only compositor
+        # tooling out of every macOS evaluation as well as the CI closure.
+        grim
+        wtype
+        sway
+      ]
+    );
 
   # --- Environment ----------------------------------------------------------
 
