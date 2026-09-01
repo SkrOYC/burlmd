@@ -8,6 +8,13 @@ updates its acceptance, STOP conditions, and static fixture requirements. It
 does not change ticket count, effort, dependencies, scope, acceptance mode, or
 execution order.
 
+Reviewed Architecture v1.4.16. The corrected architecture changes no task
+graph or execution order.
+
+Clarified that static fixtures distinguish candidate-command isolation from the
+trusted upload wrapper's required artifact runtime authority. This changes no
+ticket metadata or ordering.
+
 ## v2.2.6 - 2026-08-31
 
 Reviewed TechSpec v1.8.6-provisional. The schema-valid runner-label fixture and restored candidate-attribution guidance change no ticket, dependency, scope, acceptance mode, effort estimate, or execution order.

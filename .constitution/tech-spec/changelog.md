@@ -5,6 +5,10 @@
 Correct the hosted candidate-process trust claim without changing the Release
 Pipeline boundary or product scope.
 
+Reviewed Architecture v1.4.16. The Stage 2 correction preserves the Release
+Pipeline boundary and aligns with this version's platform-specific candidate
+trust policy.
+
 ### Changed
 
 - Added ADR-019. Linux candidate commands require `env -i`, Bubblewrap
@@ -14,6 +18,11 @@ Pipeline boundary or product scope.
   `seal` job is the sole provenance authority and never runs candidate bytes.
   It validates identity, job and hosted label, artifact IDs and REST digests,
   archive shape, schemas, and member hashes before attestation.
+- Distinguished candidate-command authority from upload-wrapper authority.
+  Candidate commands receive no artifact-runtime credential. The trusted
+  wrapper receives job-scoped upload authority after those commands finish.
+  Hosted-macOS interference becomes untrusted-output corruption or fail-closed
+  upload denial, never seal authority.
 - Added static fixture requirements that distinguish Linux containment from the
   hosted-macOS fresh-job and no-privilege boundary. Fixtures must reject a
   universal macOS containment or zero-survivor assertion.
