@@ -34,7 +34,7 @@ AST-H001 and PATH-H002 execute after both `CI-M003` pull requests merge. Their r
   - STOP if post-completion API observation doesn't resolve the receipt locator to one completed successful sealing job on the fixed hosted label, or if an expected, candidate, or sealed artifact name or normalized digest is invalid, missing, duplicate, extra, or inconsistent with the run nonce.
   - STOP if the launcher isn't the clean trust-anchor copy, a trusted control file differs at the signer SHA, or the base-to-source diff leaves the AST write allowlist.
   - STOP if the machine result is missing or invalid, or if the evidence commit doesn't contain that result, the accepted managed report, and the executor-authored Spike report together.
-  - STOP if a candidate process or coordinator can observe a credential canary, coordinator identity changes after preparation, isolation or network denial fails, an input is writable, or any path except the coordinator output is writable.
+  - STOP if a candidate command can observe a credential canary or OIDC or attestation capability; if the trusted upload wrapper lacks its job-scoped artifact runtime authority; if candidate output is treated as trusted or can gain seal authority or enter the fresh sealing environment; or if coordinator identity changes after preparation, isolation or network denial fails, an input is writable, or any path except the coordinator output is writable.
   - STOP when the 3-day time box expires; record partial evidence without choosing by intuition.
 - **Description:** Compare mdast, Comrak, and complete models derived separately from `pulldown-cmark` 0.12.2 and 0.13.4 using the full canonical-AST contract and corpus.
 - **Acceptance:**
@@ -63,7 +63,7 @@ Every declared candidate and gate has attributed evidence for syntax, positions,
   - STOP if post-completion API observation doesn't resolve the receipt locator to one completed successful sealing job on the fixed hosted label, or if an expected, candidate, or sealed artifact name or normalized digest is invalid, missing, duplicate, extra, or inconsistent with the run nonce.
   - STOP if the launcher isn't the clean trust-anchor copy, a trusted control file differs at the signer SHA, or the reviewed AST milestone-to-PATH diff leaves the PATH write allowlist.
   - STOP if the machine result is missing or invalid, or if the evidence commit doesn't contain that result, the accepted managed report, and the executor-authored Spike report together.
-  - STOP if a candidate process or coordinator can observe a credential canary, coordinator identity changes after preparation, isolation or network denial fails, an input is writable, or any path except the coordinator output is writable.
+  - STOP if a candidate command can observe a credential canary or OIDC or attestation capability; if the trusted upload wrapper lacks its job-scoped artifact runtime authority; if candidate output is treated as trusted or can gain seal authority or enter the fresh sealing environment; or if coordinator identity changes after preparation, isolation or network denial fails, an input is writable, or any path except the coordinator output is writable.
   - STOP when the 3-day time box expires; don't select a permanent format from incomplete platform evidence.
 - **Description:** Compare the encoded-title and opaque-component candidates across Linux, default macOS, and Windows-compatible rules.
 - **Acceptance:**
