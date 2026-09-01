@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document prevents the research wave from becoming an accidental implementation wave. PRD v1.3.7 and Architecture v1.4.15 are binding. The delivered v1.6.x physical contracts remain valid only for already-delivered behavior. Where they conflict with the forward constitution, the forward requirement is authoritative.
+This document prevents the research wave from becoming an accidental implementation wave. PRD v1.3.7 and Architecture v1.4.16 are binding. The delivered v1.6.x physical contracts remain valid only for already-delivered behavior. Where they conflict with the forward constitution, the forward requirement is authoritative.
 
 ## Decision gates
 
