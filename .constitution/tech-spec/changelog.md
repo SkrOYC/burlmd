@@ -1,5 +1,9 @@
 # Stage 3: Technical Implementation Changelog
 
+## v1.8.5-provisional - 2026-08-31
+
+Make runner-label reconciliation executable. Collector fixtures record the expected and observed labels for every case, and matching evidence classes with a wrong runner label reject before profile comparison.
+
 ## v1.8.4-provisional - 2026-08-31
 
 Require a host profile for every Spike-result run. The trusted collector now reconciles the profile runner label with the authenticated role bundle before ordered expected-identity comparison. Packaging fixtures use the full macOS 26 profile, including repeatable construction.
