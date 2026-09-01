@@ -1,5 +1,5 @@
 ---
-version: v1.8.6-provisional
+version: v1.8.7-provisional
 ---
 
 # Bill of Materials (BOM) & Stack
@@ -29,7 +29,7 @@ The `ubuntu-24.04`, `macos-26`, and `macos-15` labels pin the operating-system m
 
 Role output has two schemas. The `contracts/ci-role-evidence.schema.json` file validates the candidate manifest and the separate pre-completion sealing receipt. The receipt records `job.check_run_id` and immutable identity and digest facts, but it has no final job state. The `contracts/ci-evidence.schema.json` file validates the coordinator's accepted or rejected aggregate after post-completion job, artifact, and provenance enrichment. These contracts keep receipt and bundle hashes outside the bytes they describe.
 
-Each role has a distinct reusable workflow with two static jobs: `candidate` and `seal`. The jobs run on separate fresh environments with the role's same fixed hosted label. `candidate` checks out the tested source as data and has no OIDC, attestation, or Actions authority. `seal` needs that successful job, validates the candidate bundle, and alone receives OIDC and attestation authority. During execution, `seal` records a check-run locator but doesn't predict its conclusion. After the attempt completes, aggregation requires the matching job API object to report success and match the signed hosted provenance. A trusted `workflow_dispatch` caller on `master` references each local workflow through a static `./.github/workflows/...` path, so GitHub resolves it from the caller's signer commit.
+Each role has a distinct reusable workflow with two static jobs: `candidate` and `seal`. The jobs run on separate fresh environments with the role's same fixed hosted label. `candidate` checks out the tested source as data and has no OIDC, attestation, or Actions authority. Candidate artifacts are untrusted. On Linux, candidate commands run with `env -i` in a Bubblewrap `0.11.2` private PID namespace and must prove that a double-fork probe does not survive teardown. On hosted macOS, cleanup is bounded and does not claim universal candidate-process containment. `seal` needs the successful candidate job, never executes candidate bytes, validates identity, job, hosted label, artifact IDs, REST digests, safe archive structure, schemas, and member hashes, and alone receives OIDC and attestation authority. During execution, `seal` records a check-run locator but doesn't predict its conclusion. After the attempt completes, aggregation requires the matching job API object to report success and match the signed hosted provenance. A trusted `workflow_dispatch` caller on `master` references each local workflow through a static `./.github/workflows/...` path, so GitHub resolves it from the caller's signer commit. ADR-019 records this platform-specific trust decision.
 
 CI uses the following reviewed action commits. A workflow must use the full commit SHA, never a mutable tag:
 
