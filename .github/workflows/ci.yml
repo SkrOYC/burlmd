@@ -1,0 +1,157 @@
+name: managed-ci
+on:
+  workflow_dispatch:
+    inputs:
+      expected_identity_base64: {required: true, type: string}
+      expected_identity_sha256: {required: true, type: string}
+      tested_source_sha: {required: true, type: string}
+      base_sha: {required: true, type: string}
+      run_identity: {required: true, type: string}
+      artifact_nonce: {required: true, type: string}
+permissions: {}
+jobs:
+  expected:
+    runs-on: ubuntu-24.04
+    permissions: {contents: read}
+    outputs:
+      artifact_id: ${{ steps.upload.outputs.artifact-id }}
+      artifact_digest: ${{ steps.upload.outputs.artifact-digest }}
+      tested_source_sha: ${{ steps.validated.outputs.tested_source_sha }}
+      base_sha: ${{ steps.validated.outputs.base_sha }}
+      run_identity: ${{ inputs.run_identity }}
+      artifact_nonce: ${{ steps.validated.outputs.nonce }}
+      expected_identity_base64: ${{ inputs.expected_identity_base64 }}
+      expected_identity_sha256: ${{ steps.validated.outputs.expected_identity_sha256 }}
+      ticket_identity: ${{ steps.validated.outputs.ticket_identity }}
+      requires_macos_15_stage: ${{ steps.validated.outputs.requires_macos_15_stage }}
+      workflow_signer_sha: ${{ steps.validated.outputs.workflow_signer_sha }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with: {persist-credentials: false}
+      - uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24
+      - id: validated
+        name: Validate canonical expected identity and dispatcher inputs
+        env:
+          EXPECTED_IDENTITY_BASE64: ${{ inputs.expected_identity_base64 }}
+          EXPECTED_IDENTITY_SHA256: ${{ inputs.expected_identity_sha256 }}
+          TESTED_SOURCE_SHA: ${{ inputs.tested_source_sha }}
+          BASE_SHA: ${{ inputs.base_sha }}
+          RUN_IDENTITY: ${{ inputs.run_identity }}
+          ARTIFACT_NONCE: ${{ inputs.artifact_nonce }}
+        run: ./scripts/ci-devenv.sh ./scripts/validate-managed-workflow-inputs.sh --role linux-x86_64 --output "$RUNNER_TEMP/expected-identity.json" >> "$GITHUB_OUTPUT"
+      - id: upload
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: managed-evidence-expected-${{ steps.validated.outputs.nonce }}
+          path: ${{ steps.validated.outputs.expected_identity_file }}
+          overwrite: false
+          if-no-files-found: error
+  linux:
+    needs: expected
+    uses: ./.github/workflows/ci-role-linux-x86-64.yml
+    permissions: {actions: read, contents: read, id-token: write, attestations: write}
+    with:
+      tested_source_sha: ${{ needs.expected.outputs.tested_source_sha }}
+      expected_identity_base64: ${{ needs.expected.outputs.expected_identity_base64 }}
+      expected_identity_sha256: ${{ needs.expected.outputs.expected_identity_sha256 }}
+      expected_artifact_id: ${{ needs.expected.outputs.artifact_id }}
+      expected_artifact_digest: ${{ needs.expected.outputs.artifact_digest }}
+      run_identity: ${{ needs.expected.outputs.run_identity }}
+      artifact_nonce: ${{ needs.expected.outputs.artifact_nonce }}
+      base_sha: ${{ needs.expected.outputs.base_sha }}
+  macos_26:
+    needs: expected
+    uses: ./.github/workflows/ci-role-macos-26-arm64.yml
+    permissions: {actions: read, contents: read, id-token: write, attestations: write}
+    with:
+      tested_source_sha: ${{ needs.expected.outputs.tested_source_sha }}
+      expected_identity_base64: ${{ needs.expected.outputs.expected_identity_base64 }}
+      expected_identity_sha256: ${{ needs.expected.outputs.expected_identity_sha256 }}
+      expected_artifact_id: ${{ needs.expected.outputs.artifact_id }}
+      expected_artifact_digest: ${{ needs.expected.outputs.artifact_digest }}
+      run_identity: ${{ needs.expected.outputs.run_identity }}
+      artifact_nonce: ${{ needs.expected.outputs.artifact_nonce }}
+      base_sha: ${{ needs.expected.outputs.base_sha }}
+  stage_macos_26_for_15:
+    needs: [expected, macos_26]
+    runs-on: macos-26
+    permissions: {actions: read, attestations: read, contents: read}
+    outputs:
+      artifact_name: ${{ steps.stage_name.outputs.artifact_name }}
+      artifact_id: ${{ steps.upload_stage.outputs.artifact-id }}
+      artifact_digest: ${{ steps.upload_stage.outputs.artifact-digest }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with: {persist-credentials: false}
+      - uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        if: ${{ needs.expected.outputs.requires_macos_15_stage == 'true' }}
+        with:
+          name: managed-evidence-expected-${{ needs.expected.outputs.artifact_nonce }}
+          path: expected
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        if: ${{ needs.expected.outputs.requires_macos_15_stage == 'true' }}
+        with:
+          name: managed-evidence-sealed-macos-26-arm64-${{ needs.expected.outputs.artifact_nonce }}
+          path: sealed
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        if: ${{ needs.expected.outputs.requires_macos_15_stage == 'true' }}
+        with:
+          name: managed-evidence-seal-receipt-macos-26-arm64-${{ needs.expected.outputs.artifact_nonce }}
+          path: receipt
+      - name: Verify attested macOS 26 sealed producer
+        if: ${{ needs.expected.outputs.requires_macos_15_stage == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SIGNER_SHA: ${{ needs.expected.outputs.workflow_signer_sha }}
+        run: ./scripts/ci-devenv.sh gh attestation verify sealed/ci-sealed-role-evidence.tar.zst --repo SkrOYC/burlmd --signer-workflow SkrOYC/burlmd/.github/workflows/ci-role-macos-26-arm64.yml@refs/heads/master --signer-digest "$SIGNER_SHA" --deny-self-hosted-runners
+      - name: Verify attested macOS 26 sealing receipt
+        if: ${{ needs.expected.outputs.requires_macos_15_stage == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SIGNER_SHA: ${{ needs.expected.outputs.workflow_signer_sha }}
+        run: ./scripts/ci-devenv.sh gh attestation verify receipt/ci-seal-receipt.json --repo SkrOYC/burlmd --signer-workflow SkrOYC/burlmd/.github/workflows/ci-role-macos-26-arm64.yml@refs/heads/master --signer-digest "$SIGNER_SHA" --deny-self-hosted-runners
+      - name: Authenticate completed macOS 26 producer API observations
+        if: ${{ needs.expected.outputs.requires_macos_15_stage == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_NONCE: ${{ needs.expected.outputs.artifact_nonce }}
+          CANDIDATE_CHECK_RUN_ID: ${{ needs.macos_26.outputs.candidate_check_run_id }}
+          SEAL_CHECK_RUN_ID: ${{ needs.macos_26.outputs.sealing_check_run_id }}
+          EXPECTED_ID: ${{ needs.expected.outputs.artifact_id }}
+          EXPECTED_DIGEST: ${{ needs.expected.outputs.artifact_digest }}
+        run: ./scripts/ci-devenv.sh ./scripts/validate-authenticated-stage-producer.sh --expected expected/expected-identity.json --receipt receipt/ci-seal-receipt.json --role macos-26-arm64 --nonce "$ARTIFACT_NONCE" --candidate-check-run-id "$CANDIDATE_CHECK_RUN_ID" --seal-check-run-id "$SEAL_CHECK_RUN_ID" --expected-id "$EXPECTED_ID" --expected-digest "$EXPECTED_DIGEST"
+      - name: Stage only verified contract-declared producer members
+        if: ${{ needs.expected.outputs.requires_macos_15_stage == 'true' }}
+        env: {ARTIFACT_NONCE: "${{ needs.expected.outputs.artifact_nonce }}"}
+        run: ./scripts/ci-devenv.sh ./scripts/stage-authenticated-role-bundle.sh --expected expected/expected-identity.json --receipt receipt/ci-seal-receipt.json --nonce "$ARTIFACT_NONCE" --bundle sealed/ci-sealed-role-evidence.tar.zst --output authenticated-stage
+      - id: stage_name
+        env:
+          ARTIFACT_NONCE: ${{ needs.expected.outputs.artifact_nonce }}
+          REQUIRED: ${{ needs.expected.outputs.requires_macos_15_stage }}
+        run: |
+          if [[ $REQUIRED == true ]]; then
+            printf 'artifact_name=managed-evidence-authenticated-stage-macos-26-arm64-%s\n' "$ARTIFACT_NONCE" >> "$GITHUB_OUTPUT"
+          fi
+      - id: upload_stage
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: ${{ needs.expected.outputs.requires_macos_15_stage == 'true' }}
+        with:
+          name: ${{ steps.stage_name.outputs.artifact_name }}
+          path: authenticated-stage
+          overwrite: false
+          if-no-files-found: error
+  macos_15:
+    needs: [expected, macos_26, stage_macos_26_for_15]
+    uses: ./.github/workflows/ci-role-macos-15-arm64.yml
+    permissions: {actions: read, contents: read, id-token: write, attestations: write}
+    with:
+      tested_source_sha: ${{ needs.expected.outputs.tested_source_sha }}
+      expected_identity_base64: ${{ needs.expected.outputs.expected_identity_base64 }}
+      expected_identity_sha256: ${{ needs.expected.outputs.expected_identity_sha256 }}
+      expected_artifact_id: ${{ needs.expected.outputs.artifact_id }}
+      expected_artifact_digest: ${{ needs.expected.outputs.artifact_digest }}
+      run_identity: ${{ needs.expected.outputs.run_identity }}
+      artifact_nonce: ${{ needs.expected.outputs.artifact_nonce }}
+      base_sha: ${{ needs.expected.outputs.base_sha }}
+      authenticated_stage_artifact: ${{ needs.stage_macos_26_for_15.outputs.artifact_name }}

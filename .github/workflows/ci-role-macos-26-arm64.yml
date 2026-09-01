@@ -1,0 +1,153 @@
+name: managed role macos-26-arm64
+on:
+  workflow_call:
+    inputs:
+      tested_source_sha: {required: true, type: string}
+      expected_identity_base64: {required: true, type: string}
+      expected_identity_sha256: {required: true, type: string}
+      expected_artifact_id: {required: true, type: string}
+      expected_artifact_digest: {required: true, type: string}
+      run_identity: {required: true, type: string}
+      artifact_nonce: {required: true, type: string}
+      base_sha: {required: true, type: string}
+    outputs:
+      sealed_artifact_id:
+        value: ${{ jobs.seal.outputs.artifact_id }}
+      sealed_artifact_digest:
+        value: ${{ jobs.seal.outputs.artifact_digest }}
+      sealing_receipt_id:
+        value: ${{ jobs.seal.outputs.receipt_id }}
+      sealing_receipt_digest:
+        value: ${{ jobs.seal.outputs.receipt_digest }}
+      candidate_check_run_id:
+        value: ${{ jobs.candidate.outputs.check_run_id }}
+      sealing_check_run_id:
+        value: ${{ jobs.seal.outputs.check_run_id }}
+jobs:
+  candidate:
+    runs-on: macos-26
+    permissions: {contents: read}
+    outputs:
+      artifact_id: ${{ steps.upload.outputs.artifact-id }}
+      artifact_digest: ${{ steps.upload.outputs.artifact-digest }}
+      check_run_id: ${{ steps.candidate_locator.outputs.check_run_id }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with: {persist-credentials: false}
+      - uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24
+      - id: validated
+        env:
+          EXPECTED_IDENTITY_BASE64: ${{ inputs.expected_identity_base64 }}
+          EXPECTED_IDENTITY_SHA256: ${{ inputs.expected_identity_sha256 }}
+          TESTED_SOURCE_SHA: ${{ inputs.tested_source_sha }}
+          BASE_SHA: ${{ inputs.base_sha }}
+          RUN_IDENTITY: ${{ inputs.run_identity }}
+          ARTIFACT_NONCE: ${{ inputs.artifact_nonce }}
+          EXPECTED_ARTIFACT_ID: ${{ inputs.expected_artifact_id }}
+          EXPECTED_ARTIFACT_DIGEST: ${{ inputs.expected_artifact_digest }}
+        run: ./scripts/ci-devenv.sh ./scripts/validate-managed-workflow-inputs.sh --role macos-26-arm64 --output "$RUNNER_TEMP/expected-identity.json" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with: {ref: "${{ steps.validated.outputs.tested_source_sha }}", path: tested-source, persist-credentials: false}
+      - name: Run candidate as credential-free data
+        env: {EXPECTED_IDENTITY: "${{ steps.validated.outputs.expected_identity_file }}"}
+        run: ./scripts/ci-devenv.sh ./scripts/run-managed-role.sh macos-26-arm64 "$PWD/tested-source" "$PWD/candidate"
+      - id: upload
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with: {name: "managed-evidence-candidate-macos-26-arm64-${{ steps.validated.outputs.nonce }}", path: candidate/ci-role-evidence.tar.zst, overwrite: false, if-no-files-found: error}
+      - id: candidate_locator
+        env: {CHECK_RUN_ID: "${{ job.check_run_id }}"}
+        run: printf 'check_run_id=%s\n' "$CHECK_RUN_ID" >> "$GITHUB_OUTPUT"
+  seal:
+    needs: candidate
+    runs-on: macos-26
+    permissions: {actions: read, contents: read, id-token: write, attestations: write}
+    outputs:
+      artifact_id: ${{ steps.upload_sealed.outputs.artifact-id }}
+      artifact_digest: ${{ steps.upload_sealed.outputs.artifact-digest }}
+      receipt_id: ${{ steps.upload_receipt.outputs.artifact-id }}
+      receipt_digest: ${{ steps.upload_receipt.outputs.artifact-digest }}
+      check_run_id: ${{ steps.seal_locator.outputs.check_run_id }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with: {persist-credentials: false}
+      - uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24
+      - id: seal_locator
+        env: {CHECK_RUN_ID: "${{ job.check_run_id }}"}
+        run: printf 'check_run_id=%s\n' "$CHECK_RUN_ID" >> "$GITHUB_OUTPUT"
+      - id: validated
+        env:
+          EXPECTED_IDENTITY_BASE64: ${{ inputs.expected_identity_base64 }}
+          EXPECTED_IDENTITY_SHA256: ${{ inputs.expected_identity_sha256 }}
+          TESTED_SOURCE_SHA: ${{ inputs.tested_source_sha }}
+          BASE_SHA: ${{ inputs.base_sha }}
+          RUN_IDENTITY: ${{ inputs.run_identity }}
+          ARTIFACT_NONCE: ${{ inputs.artifact_nonce }}
+          EXPECTED_ARTIFACT_ID: ${{ inputs.expected_artifact_id }}
+          EXPECTED_ARTIFACT_DIGEST: ${{ inputs.expected_artifact_digest }}
+        run: ./scripts/ci-devenv.sh ./scripts/validate-managed-workflow-inputs.sh --role macos-26-arm64 --output "$RUNNER_TEMP/expected-input.json" >> "$GITHUB_OUTPUT"
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with: {name: "managed-evidence-expected-${{ steps.validated.outputs.nonce }}", path: expected}
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with: {name: "managed-evidence-candidate-macos-26-arm64-${{ steps.validated.outputs.nonce }}", path: candidate}
+      - name: Authenticate candidate job and artifact before authority
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_IDENTITY_FILE: ${{ steps.validated.outputs.expected_identity_file }}
+          EXPECTED_ID: ${{ inputs.expected_artifact_id }}
+          EXPECTED_DIGEST: ${{ inputs.expected_artifact_digest }}
+          ARTIFACT_NONCE: ${{ steps.validated.outputs.nonce }}
+          CANDIDATE_CHECK_RUN_ID: ${{ needs.candidate.outputs.check_run_id }}
+          CANDIDATE_ID: ${{ needs.candidate.outputs.artifact_id }}
+          CANDIDATE_DIGEST: ${{ needs.candidate.outputs.artifact_digest }}
+        run: ./scripts/ci-devenv.sh ./scripts/validate-seal-rest.sh --phase candidate --role macos-26-arm64 --nonce "$ARTIFACT_NONCE" --expected "$EXPECTED_IDENTITY_FILE" --expected-id "$EXPECTED_ID" --expected-digest "$EXPECTED_DIGEST" --candidate-check-run-id "$CANDIDATE_CHECK_RUN_ID" --candidate-id "$CANDIDATE_ID" --candidate-digest "$CANDIDATE_DIGEST"
+      - name: Validate immutable candidate then seal
+        env: {EXPECTED_INPUT: "${{ steps.validated.outputs.expected_identity_file }}", ARTIFACT_NONCE: "${{ steps.validated.outputs.nonce }}"}
+        run: |
+          ./scripts/ci-devenv.sh cmp -- "$EXPECTED_INPUT" expected/expected-identity.json
+          ./scripts/ci-devenv.sh ./scripts/validate-managed-role-bundle.sh --expected expected/expected-identity.json --role macos-26-arm64 --nonce "$ARTIFACT_NONCE" --bundle candidate/ci-role-evidence.tar.zst
+          ./scripts/ci-devenv.sh mkdir sealed
+          ./scripts/ci-devenv.sh cp candidate/ci-role-evidence.tar.zst sealed/
+          ./scripts/ci-devenv.sh tar --sort=name --mtime='@0' --owner=0 --group=0 --numeric-owner -I 'zstd -19 --no-progress' -cf sealed/ci-sealed-role-evidence.tar.zst -C sealed ci-role-evidence.tar.zst
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
+        with: {subject-path: sealed/ci-sealed-role-evidence.tar.zst}
+      - id: upload_sealed
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with: {name: "managed-evidence-sealed-macos-26-arm64-${{ steps.validated.outputs.nonce }}", path: sealed/ci-sealed-role-evidence.tar.zst, overwrite: false, if-no-files-found: error}
+      - name: Write pre-completion receipt
+        env:
+          ROLE: macos-26-arm64
+          WORKFLOW_PATH: .github/workflows/ci-role-macos-26-arm64.yml
+          ARTIFACT_NONCE: ${{ steps.validated.outputs.nonce }}
+          EXPECTED_IDENTITY_SHA256: ${{ steps.validated.outputs.expected_identity_sha256 }}
+          EXPECTED_ID: ${{ steps.validated.outputs.expected_artifact_id }}
+          EXPECTED_DIGEST: ${{ steps.validated.outputs.expected_artifact_digest }}
+          CANDIDATE_ID: ${{ needs.candidate.outputs.artifact_id }}
+          CANDIDATE_DIGEST: ${{ needs.candidate.outputs.artifact_digest }}
+          SEALED_ID: ${{ steps.upload_sealed.outputs.artifact-id }}
+          SEALED_DIGEST: ${{ steps.upload_sealed.outputs.artifact-digest }}
+          TESTED_SOURCE_SHA: ${{ steps.validated.outputs.tested_source_sha }}
+          BASE_SHA: ${{ steps.validated.outputs.base_sha }}
+          CHECK_RUN_ID: ${{ job.check_run_id }}
+          EXPECTED_IDENTITY_FILE: ${{ steps.validated.outputs.expected_identity_file }}
+        run: ./scripts/ci-devenv.sh ./scripts/write-sealing-receipt.sh candidate/ci-role-evidence.tar.zst sealed/ci-sealed-role-evidence.tar.zst ci-seal-receipt.json
+      - run: ./scripts/ci-devenv.sh ./scripts/validate-sealing-receipt.sh ci-seal-receipt.json
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
+        with: {subject-path: ci-seal-receipt.json}
+      - id: upload_receipt
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with: {name: "managed-evidence-seal-receipt-macos-26-arm64-${{ steps.validated.outputs.nonce }}", path: ci-seal-receipt.json, overwrite: false, if-no-files-found: error}
+      - name: Re-authenticate sealed artifacts and receipt after upload
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_IDENTITY_FILE: expected/expected-identity.json
+          EXPECTED_ID: ${{ inputs.expected_artifact_id }}
+          EXPECTED_DIGEST: ${{ inputs.expected_artifact_digest }}
+          ARTIFACT_NONCE: ${{ steps.validated.outputs.nonce }}
+          CANDIDATE_CHECK_RUN_ID: ${{ needs.candidate.outputs.check_run_id }}
+          CANDIDATE_ID: ${{ needs.candidate.outputs.artifact_id }}
+          CANDIDATE_DIGEST: ${{ needs.candidate.outputs.artifact_digest }}
+          SEALED_ID: ${{ steps.upload_sealed.outputs.artifact-id }}
+          SEALED_DIGEST: ${{ steps.upload_sealed.outputs.artifact-digest }}
+          RECEIPT_ID: ${{ steps.upload_receipt.outputs.artifact-id }}
+          RECEIPT_DIGEST: ${{ steps.upload_receipt.outputs.artifact-digest }}
+        run: ./scripts/ci-devenv.sh ./scripts/validate-seal-rest.sh --phase sealed --role macos-26-arm64 --nonce "$ARTIFACT_NONCE" --expected "$EXPECTED_IDENTITY_FILE" --expected-id "$EXPECTED_ID" --expected-digest "$EXPECTED_DIGEST" --candidate-check-run-id "$CANDIDATE_CHECK_RUN_ID" --candidate-id "$CANDIDATE_ID" --candidate-digest "$CANDIDATE_DIGEST" --sealed-id "$SEALED_ID" --sealed-digest "$SEALED_DIGEST" --receipt-id "$RECEIPT_ID" --receipt-digest "$RECEIPT_DIGEST"
