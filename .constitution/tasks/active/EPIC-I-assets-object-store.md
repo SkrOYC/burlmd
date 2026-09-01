@@ -1,5 +1,5 @@
 ---
-version: v2.2.0
+version: v2.2.3
 status: active
 epic: I
 ---
@@ -39,7 +39,7 @@ Deliver inline images through a portable Local Asset Store and a first-class, us
   - **Evidence:**
 
 ```text
-Candidate-attributed results cover all three common functional roles, both measured performance roles, every declared gate, exact tool and service configurations without secrets, UI Responsiveness and Idle Memory disposition, and a recommendation or explicit unresolved outcome. All roles provide `common-functional`. Linux and macOS 26 additionally provide `performance` and `asset-measurement`; macOS 15 provides no performance class. The Asset profile doesn't claim platform-regression or authoritative visual evidence. Each candidate job captures the verified logical viewport and complete image, environment, build, corpus, run, nonce, and role identity in one untrusted bundle. Aggregation verifies that exact profile and rejects a self-hosted origin or missing, extra, stale, mismatched, corrupt, unauthenticated, or role-invalid evidence. The accepted aggregate records the trust anchor, workflow signer, separate tested source, Asset allowlist conformance, candidate and sealing origins, prepared coordinator identity, and successful coordinator isolation. The CLI produces the authoritative schema-valid `results.json`; the executor commits its human interpretation with that result and the accepted managed report.
+Candidate-attributed results cover all three common functional roles, both measured performance roles, every declared gate, exact tool and service configurations without secrets, UI Responsiveness and Idle Memory disposition, and a recommendation or explicit unresolved outcome. All roles provide `common-functional`. Linux and macOS 26 additionally provide `performance` and `asset-measurement`; macOS 15 provides no performance class. The Asset profile doesn't claim platform-regression or authoritative visual evidence. Each candidate job captures the logical viewport record and complete image, environment, build, corpus, run, nonce, and role identity in one untrusted bundle. It verifies that viewport only when its authenticated assigned evidence includes a viewport-bound class. Aggregation exact-matches each run's claimed classes to that assigned profile and rejects a self-hosted origin or missing, extra, stale, mismatched, corrupt, unauthenticated, or role-invalid evidence. The accepted aggregate records the trust anchor, workflow signer, separate tested source, Asset allowlist conformance, candidate and sealing origins, prepared coordinator identity, and successful coordinator isolation. The CLI produces the authoritative schema-valid `results.json`; the executor commits its human interpretation with that result and the accepted managed report.
 ```
 
 #### STORE-I002 Implement the Local Asset Store and immutable manifest
