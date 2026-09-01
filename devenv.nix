@@ -26,10 +26,9 @@ let
     # the bin output is propagated regardless).
     util-linux
     xorg.libX11
-    # libglvnd, which owns the libGL.so.1 loader ABI. The driver implementations
-    # come from the host (/run/opengl-driver on NixOS), so `mesa` is deliberately
-    # not listed: it would add a closure without making GL work anywhere it
-    # doesn't already.
+    # The managed Linux candidate must never borrow host GPU paths.  Lock Mesa
+    # into this closure and pass only its DRI/EGL vendor files into Bubblewrap.
+    mesa
     libGL
   ];
 
@@ -62,6 +61,56 @@ let
   # to nixpkgs' cargo — a different version from the one the shell provides.
   cargo = "${config.languages.rust.toolchainPackage}/bin/cargo";
   dart = "${flutter}/bin/dart";
+  rustTarget = pkgs.stdenv.hostPlatform.config;
+
+  # Mesa's Linux driver outputs do not exist on Darwin. Keep the two variables
+  # present for the managed-role interface on every host, but make their Linux
+  # store references lazy behind the platform test so Darwin can evaluate the
+  # environment without touching a Mesa-only attribute.
+  mesaEnvironment =
+    if pkgs.stdenv.isLinux then
+      {
+        BURLMD_MESA_DRI_PATH = "${pkgs.mesa.drivers}/lib/dri";
+        BURLMD_MESA_EGL_VENDOR_PATH = "${pkgs.mesa.drivers}/share/glvnd/egl_vendor.d/50_mesa.json";
+      }
+    else
+      {
+        BURLMD_MESA_DRI_PATH = "";
+        BURLMD_MESA_EGL_VENDOR_PATH = "";
+      };
+
+  # The shell's Cargo module prepends CARGO_INSTALL_ROOT/bin, which can shadow
+  # this package with a mutable cargo-install copy. Trusted candidate setup
+  # resolves this explicit store executable instead.
+  cargoExpand = "${pkgs.cargo-expand}/bin/cargo-expand";
+
+  # Cargokit insists on a rustup command even for a native target that is
+  # already supplied by Nix's pinned Rust toolchain. This narrow shim reports
+  # the Nix host target (including aarch64-apple-darwin) and delegates only
+  # `rustup run stable cargo` to the locked Cargo binary. It cannot install
+  # toolchains or targets, which keeps the Bubblewrap candidate network-free
+  # and avoids a mutable rustup home becoming a second toolchain authority.
+  rustupShim = pkgs.writeShellScriptBin "rustup" ''
+    set -euo pipefail
+    case "''${1-}:''${2-}:''${3-}:''${4-}" in
+      toolchain:list::)
+        printf '%s\n' 'stable-${rustTarget} (default)'
+        ;;
+      target:list:--toolchain:stable*)
+        shift 4
+        [[ "''${1-}" == --installed && $# == 1 ]] || exit 2
+        printf '%s\n' '${rustTarget}'
+        ;;
+      run:stable:cargo:*)
+        shift 3
+        exec ${cargo} "$@"
+        ;;
+      *)
+        echo "unsupported locked rustup shim invocation: $*" >&2
+        exit 2
+        ;;
+    esac
+  '';
 
   # The guards distinguish "no supported manifest exists" (skip) from "a
   # manifest exists somewhere unexpected" (fail loudly). A bare
@@ -192,6 +241,11 @@ in
     [
       flutter
       flutter_rust_bridge_codegen # FRB v2 code generator (ADR-001)
+      # FRB 2.12.0 invokes `cargo expand` while generating bindings. Supplying
+      # the locked package prevents it from attempting an unauthenticated
+      # cargo-install inside the network-denied candidate namespace.
+      cargo-expand
+      rustupShim
 
       # Build tooling required by the Flutter desktop build and by rust bindgen.
       pkg-config
@@ -206,21 +260,56 @@ in
       clang
 
       git
+      gh
+      actionlint
+      jq
+      # These protocol and archive utilities are used by the managed-role
+      # fixtures and workflow wrappers.  Keep them in the pinned devenv
+      # closure; candidate execution receives them only when its explicit
+      # ticket/role inventory grants them.
+      ripgrep
+      curl
+      zip
+      unzip
+      # Managed-evidence scripts parse the authoritative TOML contract and
+      # validate role manifests before packaging. These are deliberately in
+      # the locked closure: hosted images are not a source of protocol tools.
+      taplo
+      check-jsonschema
+      gnutar
+      zstd
+      findutils
+      perl
+      # The generated-binding checker uses the locked cmp member on every
+      # supported role, including macOS.
+      diffutils
 
-      # Manual visual-verification tooling (Wayland). `grim` captures a real
-      # screenshot of the running app; `wtype` injects keystrokes into the
-      # focused window. Used to actually look at rendered pixels and exercise
-      # live typing, rather than only asserting widget properties in
-      # `flutter test`. Not part of the CI/build path.
-      grim
-      wtype
     ]
     ++ coreEngineDeps
-    ++ lib.optionals pkgs.stdenv.isLinux linuxDesktopDeps;
+    ++ lib.optionals pkgs.stdenv.isLinux (
+      linuxDesktopDeps
+      ++ [
+        bubblewrap
+        # Keep process inspection in the declared Linux environment rather
+        # than accepting an ambient runner-profile `ps`.
+        procps
+        # Candidate tests retain an isolated network namespace but raise its
+        # loopback device for Flutter's local VM-service connection.
+        iproute2
+        # Sway supports managed Linux integration. grim and wtype are manual
+        # visual-verification tools. These Linux-only packages are excluded
+        # from macOS evaluation.
+        grim
+        wtype
+        sway
+      ]
+    );
 
   # --- Environment ----------------------------------------------------------
 
   env = {
+    BURLMD_CARGO_EXPAND = cargoExpand;
+
     # bindgen (pulled in by rusqlite/sqlcipher) locates libclang through this.
     LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
 
@@ -254,7 +343,8 @@ in
     # green `[✓] Chrome` that devenv.lock does not govern — a per-machine result
     # from ambient state, which is exactly what the Android pair above closes.
     CHROME_EXECUTABLE = "${config.env.DEVENV_ROOT}/.sentinels/no-chrome";
-  };
+  }
+  // mesaEnvironment;
 
   # The banner goes to stderr. On stdout it corrupts every non-interactive
   # `devenv shell -- <cmd>` invocation — CI steps, `direnv exec`, and any

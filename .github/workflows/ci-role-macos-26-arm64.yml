@@ -1,0 +1,353 @@
+name: managed role macos-26-arm64
+on:
+  workflow_call:
+    inputs:
+      tested_source_sha: {required: true, type: string}
+      expected_identity_base64: {required: true, type: string}
+      expected_identity_sha256: {required: true, type: string}
+      expected_artifact_id: {required: true, type: string}
+      expected_artifact_digest: {required: true, type: string}
+      run_identity: {required: true, type: string}
+      artifact_nonce: {required: true, type: string}
+      base_sha: {required: true, type: string}
+    outputs:
+      sealing-receipt-artifact-id:
+        value: ${{ jobs.seal.outputs.receipt_id }}
+      sealing-receipt-upload-action-digest:
+        value: ${{ jobs.seal.outputs.receipt_digest }}
+      stage-artifact-name: {value: "${{ jobs.seal.outputs.stage-artifact-name }}"}
+      stage-artifact-id: {value: "${{ jobs.seal.outputs.stage-artifact-id }}"}
+      stage-upload-action-digest: {value: "${{ jobs.seal.outputs.stage-upload-action-digest }}"}
+      stage-rest-digest: {value: "${{ jobs.seal.outputs.stage-rest-digest }}"}
+      stage-created-at: {value: "${{ jobs.seal.outputs.stage-created-at }}"}
+      stage-expires-at: {value: "${{ jobs.seal.outputs.stage-expires-at }}"}
+      stage-manifest-sha256: {value: "${{ jobs.seal.outputs.stage-manifest-sha256 }}"}
+      stage-attestation-subject-digest: {value: "${{ jobs.seal.outputs.stage-attestation-subject-digest }}"}
+      stage-attestation-bundle-sha256: {value: "${{ jobs.seal.outputs.stage-attestation-bundle-sha256 }}"}
+      producer-workflow-signer-sha: {value: "${{ jobs.seal.outputs.producer-workflow-signer-sha }}"}
+      workflow-run-id: {value: "${{ jobs.seal.outputs.workflow-run-id }}"}
+      run-attempt: {value: "${{ jobs.seal.outputs.run-attempt }}"}
+      producer-sealing-check-run-id: {value: "${{ jobs.seal.outputs.ticket-identity == 'BURL-O001' && jobs.seal.outputs.producer-sealing-check-run-id || '' }}"}
+      producer-sealing-receipt-artifact-id: {value: "${{ jobs.seal.outputs.ticket-identity == 'BURL-O001' && jobs.seal.outputs.producer-sealing-receipt-artifact-id || '' }}"}
+      producer-sealing-receipt-upload-action-digest: {value: "${{ jobs.seal.outputs.ticket-identity == 'BURL-O001' && jobs.seal.outputs.producer-sealing-receipt-upload-action-digest || '' }}"}
+      producer-sealing-receipt-rest-digest: {value: "${{ jobs.seal.outputs.producer-sealing-receipt-rest-digest }}"}
+      producer-sealing-receipt-created-at: {value: "${{ jobs.seal.outputs.producer-sealing-receipt-created-at }}"}
+      producer-sealing-receipt-expires-at: {value: "${{ jobs.seal.outputs.producer-sealing-receipt-expires-at }}"}
+      producer-lineage-artifact-id: {value: "${{ jobs.seal.outputs.producer-lineage-artifact-id }}"}
+      producer-lineage-upload-action-digest: {value: "${{ jobs.seal.outputs.producer-lineage-upload-action-digest }}"}
+      producer-lineage-rest-digest: {value: "${{ jobs.seal.outputs.producer-lineage-rest-digest }}"}
+      producer-lineage-sha256: {value: "${{ jobs.seal.outputs.producer-lineage-sha256 }}"}
+      producer-lineage-attestation-subject-digest: {value: "${{ jobs.seal.outputs.producer-lineage-attestation-subject-digest }}"}
+      producer-lineage-attestation-bundle-sha256: {value: "${{ jobs.seal.outputs.producer-lineage-attestation-bundle-sha256 }}"}
+      producer-role: {value: "${{ jobs.seal.outputs.producer-role }}"}
+      consumer-role: {value: "${{ jobs.seal.outputs.consumer-role }}"}
+jobs:
+  candidate:
+    runs-on: macos-26
+    timeout-minutes: 120
+    permissions: {contents: read}
+    outputs:
+      artifact_id: ${{ steps.upload.outputs.artifact-id }}
+      artifact_digest: ${{ steps.upload.outputs.artifact-digest }}
+      check_run_id: ${{ steps.candidate_locator.outputs.check_run_id }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with: {persist-credentials: false}
+      - name: Reject preinstalled Nix
+        shell: bash
+        run: |
+          if command -v nix >/dev/null 2>&1; then
+            echo 'Nix must not be present before installation' >&2
+            exit 1
+          fi
+      - uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24
+        with: {enable_kvm: false}
+      - name: Verify action-installed Nix interface
+        shell: bash
+        run: |
+          nix_profile=/nix/var/nix/profiles/default
+          nix_path=$(command -v nix)
+          nix_store_path=$(command -v nix-store)
+          [[ $nix_path == "$nix_profile/bin/nix" ]] || { echo 'nix must resolve through the action-installed Nix profile' >&2; exit 1; }
+          [[ $nix_store_path == "$nix_profile/bin/nix-store" ]] || { echo 'nix-store must resolve through the action-installed Nix profile' >&2; exit 1; }
+          nix_version=$(nix --version 2>&1)
+          nix_store_version=$(nix-store --version 2>&1)
+          [[ $nix_version == 'nix (Nix) 2.35.2' ]] || { echo 'nix version must equal 2.35.2' >&2; exit 1; }
+          [[ $nix_store_version == 'nix-store (Nix) 2.35.2' ]] || { echo 'nix-store version must equal 2.35.2' >&2; exit 1; }
+          nix_real_path=$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$nix_path")
+          nix_store_real_path=$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$nix_store_path")
+          [[ ${nix_real_path%/*} == "${nix_store_real_path%/*}" ]] || { echo 'nix and nix-store must resolve through one installed Nix profile' >&2; exit 1; }
+      - id: validated
+        env:
+          EXPECTED_IDENTITY_BASE64: ${{ inputs.expected_identity_base64 }}
+          EXPECTED_IDENTITY_SHA256: ${{ inputs.expected_identity_sha256 }}
+          TESTED_SOURCE_SHA: ${{ inputs.tested_source_sha }}
+          BASE_SHA: ${{ inputs.base_sha }}
+          RUN_IDENTITY: ${{ inputs.run_identity }}
+          ARTIFACT_NONCE: ${{ inputs.artifact_nonce }}
+          GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
+          EXPECTED_ARTIFACT_ID: ${{ inputs.expected_artifact_id }}
+          EXPECTED_ARTIFACT_DIGEST: ${{ inputs.expected_artifact_digest }}
+        run: ./scripts/ci-devenv.sh ./scripts/validate-managed-workflow-inputs.sh --role macos-26-arm64 --output "$RUNNER_TEMP/expected-identity.json" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with: {ref: "${{ steps.validated.outputs.tested_source_sha }}", path: tested-source, persist-credentials: false}
+      - name: Remove persisted Nix credentials before candidate execution
+        run: |
+          # The pinned installer falls back to github.token when its optional
+          # input is empty. Remove its world-readable Nix access token and
+          # restart the daemon so candidate code cannot inherit cached config.
+          sudo /usr/bin/sed -i '' -E '/^[[:space:]]*access-tokens[[:space:]]*=/d' /etc/nix/nix.conf
+          sudo /bin/launchctl kickstart -k system/org.nixos.nix-daemon
+          if sudo /usr/bin/grep -Eq '^[[:space:]]*access-tokens[[:space:]]*=' /etc/nix/nix.conf; then
+            echo 'Nix access-token configuration remains after scrub' >&2
+            exit 1
+          fi
+          effective_nix_config=$(nix show-config)
+          if /usr/bin/grep -Eq '^[[:space:]]*access-tokens[[:space:]]*=[[:space:]]*[^[:space:]]' <<<"$effective_nix_config"; then
+            echo 'Nix daemon retains an access token after scrub' >&2
+            exit 1
+          fi
+      - name: Run candidate as credential-free data
+        env:
+          EXPECTED_IDENTITY: "${{ steps.validated.outputs.expected_identity_file }}"
+          BURLMD_ROLE_RUNTIME_ROOT: ${{ runner.temp }}/role-runtime
+        run: |
+          # The runner exposes artifact-runtime authority to this step. Clear
+          # it in this shell before the long-lived candidate can inspect its
+          # parent environment on the shared macOS host.
+          unset ACTIONS_RUNTIME_TOKEN ACTIONS_RUNTIME_URL ACTIONS_RESULTS_URL
+          env -u GH_TOKEN -u GITHUB_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_URL -u ACTIONS_RUNTIME_TOKEN -u ACTIONS_RUNTIME_URL -u ACTIONS_RESULTS_URL -u SSH_AUTH_SOCK -u GIT_ASKPASS -u NIX_CONFIG -u NIX_CONF_DIR -u NIX_USER_CONF_FILES \
+            ./scripts/ci-devenv.sh ./scripts/run-managed-role.sh macos-26-arm64 "$GITHUB_WORKSPACE/tested-source" "$RUNNER_TEMP/candidate-output"
+      - id: upload
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with: {name: "managed-evidence-candidate-macos-26-arm64-${{ steps.validated.outputs.nonce }}", path: "${{ runner.temp }}/candidate-output/ci-role-evidence.tar.zst", overwrite: false, if-no-files-found: error}
+      - id: candidate_locator
+        env: {CHECK_RUN_ID: "${{ job.check_run_id }}"}
+        run: printf 'check_run_id=%s\n' "$CHECK_RUN_ID" >> "$GITHUB_OUTPUT"
+  seal:
+    needs: candidate
+    runs-on: macos-26
+    permissions: {actions: read, contents: read, id-token: write, attestations: write}
+    outputs:
+      artifact_id: ${{ steps.upload_sealed.outputs.artifact-id }}
+      artifact_digest: ${{ steps.upload_sealed.outputs.artifact-digest }}
+      receipt_id: ${{ steps.upload_receipt.outputs.artifact-id }}
+      receipt_digest: ${{ steps.upload_receipt.outputs.artifact-digest }}
+      check_run_id: ${{ steps.seal_locator.outputs.check_run_id }}
+      ticket-identity: ${{ steps.validated.outputs.ticket_identity }}
+      stage-artifact-name: ${{ steps.stage.outputs.artifact_name }}
+      stage-artifact-id: ${{ steps.upload_stage.outputs.artifact-id }}
+      stage-upload-action-digest: ${{ steps.upload_stage.outputs.artifact-digest }}
+      stage-rest-digest: ${{ steps.stage_rest.outputs.rest_digest }}
+      stage-created-at: ${{ steps.stage_rest.outputs.created_at }}
+      stage-expires-at: ${{ steps.stage_rest.outputs.expires_at }}
+      stage-manifest-sha256: ${{ steps.stage.outputs.manifest_sha256 }}
+      stage-attestation-subject-digest: ${{ steps.stage.outputs.attestation_subject_digest }}
+      stage-attestation-bundle-sha256: ${{ steps.stage_rest.outputs.attestation_bundle_sha256 }}
+      producer-workflow-signer-sha: ${{ steps.stage.outputs.producer_workflow_signer_sha }}
+      workflow-run-id: ${{ steps.stage.outputs.workflow_run_id }}
+      run-attempt: ${{ steps.stage.outputs.run_attempt }}
+      producer-sealing-check-run-id: ${{ steps.validated.outputs.ticket_identity == 'BURL-O001' && steps.seal_locator.outputs.check_run_id || '' }}
+      producer-sealing-receipt-artifact-id: ${{ steps.validated.outputs.ticket_identity == 'BURL-O001' && steps.upload_receipt.outputs.artifact-id || '' }}
+      producer-sealing-receipt-upload-action-digest: ${{ steps.validated.outputs.ticket_identity == 'BURL-O001' && steps.upload_receipt.outputs.artifact-digest || '' }}
+      producer-sealing-receipt-rest-digest: ${{ steps.lineage.outputs.receipt_rest_digest }}
+      producer-sealing-receipt-created-at: ${{ steps.lineage.outputs.receipt_created_at }}
+      producer-sealing-receipt-expires-at: ${{ steps.lineage.outputs.receipt_expires_at }}
+      producer-lineage-artifact-id: ${{ steps.upload_lineage.outputs.artifact-id }}
+      producer-lineage-upload-action-digest: ${{ steps.upload_lineage.outputs.artifact-digest }}
+      producer-lineage-rest-digest: ${{ steps.lineage_rest.outputs.rest_digest }}
+      producer-lineage-sha256: ${{ steps.lineage.outputs.sha256 }}
+      producer-lineage-attestation-subject-digest: ${{ steps.lineage.outputs.attestation_subject_digest }}
+      producer-lineage-attestation-bundle-sha256: ${{ steps.lineage_rest.outputs.attestation_bundle_sha256 }}
+      producer-role: ${{ steps.stage.outputs.producer_role }}
+      consumer-role: ${{ steps.stage.outputs.consumer_role }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with: {persist-credentials: false}
+      - name: Reject preinstalled Nix
+        shell: bash
+        run: |
+          if command -v nix >/dev/null 2>&1; then
+            echo 'Nix must not be present before installation' >&2
+            exit 1
+          fi
+      - uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24
+        with: {enable_kvm: false}
+      - name: Verify action-installed Nix interface
+        shell: bash
+        run: |
+          nix_profile=/nix/var/nix/profiles/default
+          nix_path=$(command -v nix)
+          nix_store_path=$(command -v nix-store)
+          [[ $nix_path == "$nix_profile/bin/nix" ]] || { echo 'nix must resolve through the action-installed Nix profile' >&2; exit 1; }
+          [[ $nix_store_path == "$nix_profile/bin/nix-store" ]] || { echo 'nix-store must resolve through the action-installed Nix profile' >&2; exit 1; }
+          nix_version=$(nix --version 2>&1)
+          nix_store_version=$(nix-store --version 2>&1)
+          [[ $nix_version == 'nix (Nix) 2.35.2' ]] || { echo 'nix version must equal 2.35.2' >&2; exit 1; }
+          [[ $nix_store_version == 'nix-store (Nix) 2.35.2' ]] || { echo 'nix-store version must equal 2.35.2' >&2; exit 1; }
+          nix_real_path=$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$nix_path")
+          nix_store_real_path=$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$nix_store_path")
+          [[ ${nix_real_path%/*} == "${nix_store_real_path%/*}" ]] || { echo 'nix and nix-store must resolve through one installed Nix profile' >&2; exit 1; }
+      - id: seal_locator
+        env: {CHECK_RUN_ID: "${{ job.check_run_id }}"}
+        run: printf 'check_run_id=%s\n' "$CHECK_RUN_ID" >> "$GITHUB_OUTPUT"
+      - id: validated
+        env:
+          EXPECTED_IDENTITY_BASE64: ${{ inputs.expected_identity_base64 }}
+          EXPECTED_IDENTITY_SHA256: ${{ inputs.expected_identity_sha256 }}
+          TESTED_SOURCE_SHA: ${{ inputs.tested_source_sha }}
+          BASE_SHA: ${{ inputs.base_sha }}
+          RUN_IDENTITY: ${{ inputs.run_identity }}
+          ARTIFACT_NONCE: ${{ inputs.artifact_nonce }}
+          GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
+          EXPECTED_ARTIFACT_ID: ${{ inputs.expected_artifact_id }}
+          EXPECTED_ARTIFACT_DIGEST: ${{ inputs.expected_artifact_digest }}
+        run: ./scripts/ci-devenv.sh ./scripts/validate-managed-workflow-inputs.sh --role macos-26-arm64 --output "$RUNNER_TEMP/expected-input.json" >> "$GITHUB_OUTPUT"
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with: {name: "managed-evidence-expected-${{ steps.validated.outputs.nonce }}", path: expected}
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with: {name: "managed-evidence-candidate-macos-26-arm64-${{ steps.validated.outputs.nonce }}", path: candidate}
+      - name: Authenticate candidate job and artifact before authority
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_IDENTITY_FILE: ${{ steps.validated.outputs.expected_identity_file }}
+          EXPECTED_ID: ${{ inputs.expected_artifact_id }}
+          EXPECTED_DIGEST: ${{ inputs.expected_artifact_digest }}
+          ARTIFACT_NONCE: ${{ steps.validated.outputs.nonce }}
+          CANDIDATE_CHECK_RUN_ID: ${{ needs.candidate.outputs.check_run_id }}
+          CANDIDATE_ID: ${{ needs.candidate.outputs.artifact_id }}
+          CANDIDATE_DIGEST: ${{ needs.candidate.outputs.artifact_digest }}
+        run: ./scripts/ci-devenv.sh ./scripts/validate-seal-rest.sh --phase candidate --role macos-26-arm64 --nonce "$ARTIFACT_NONCE" --expected "$EXPECTED_IDENTITY_FILE" --expected-id "$EXPECTED_ID" --expected-digest "$EXPECTED_DIGEST" --candidate-check-run-id "$CANDIDATE_CHECK_RUN_ID" --candidate-id "$CANDIDATE_ID" --candidate-digest "$CANDIDATE_DIGEST"
+      - name: Validate immutable candidate then seal
+        env: {EXPECTED_INPUT: "${{ steps.validated.outputs.expected_identity_file }}", ARTIFACT_NONCE: "${{ steps.validated.outputs.nonce }}"}
+        run: |
+          ./scripts/ci-devenv.sh cmp -- "$EXPECTED_INPUT" expected/expected-identity.json
+          ./scripts/ci-devenv.sh ./scripts/validate-managed-role-bundle.sh --expected expected/expected-identity.json --role macos-26-arm64 --nonce "$ARTIFACT_NONCE" --bundle candidate/ci-role-evidence.tar.zst
+          ./scripts/ci-devenv.sh mkdir sealed
+          ./scripts/ci-devenv.sh cp candidate/ci-role-evidence.tar.zst sealed/
+          ./scripts/ci-devenv.sh tar --sort=name --mtime='@0' --owner=0 --group=0 --numeric-owner -I 'zstd -19 --no-progress' -cf sealed/ci-sealed-role-evidence.tar.zst -C sealed ci-role-evidence.tar.zst
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
+        with: {subject-path: sealed/ci-sealed-role-evidence.tar.zst, push-to-registry: false, create-storage-record: false}
+      - id: upload_sealed
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with: {name: "managed-evidence-sealed-macos-26-arm64-${{ steps.validated.outputs.nonce }}", path: sealed/ci-sealed-role-evidence.tar.zst, overwrite: false, if-no-files-found: error}
+      - id: stage
+        name: Create authenticated compatibility stage in the producer seal
+        if: ${{ steps.validated.outputs.ticket_identity == 'BURL-O001' }}
+        env:
+          EXPECTED: expected/expected-identity.json
+          SEALED: sealed/ci-sealed-role-evidence.tar.zst
+          ARTIFACT_NONCE: ${{ steps.validated.outputs.nonce }}
+          CHECK_RUN_ID: ${{ job.check_run_id }}
+        run: ./scripts/ci-devenv.sh ./scripts/prepare-compatibility-stage.sh --expected "$EXPECTED" --sealed "$SEALED" --nonce "$ARTIFACT_NONCE" --sealing-check-run-id "$CHECK_RUN_ID" --output stage --github-output "$GITHUB_OUTPUT"
+      - id: attest_stage
+        if: ${{ steps.validated.outputs.ticket_identity == 'BURL-O001' }}
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
+        with: {subject-path: stage/compatibility-stage-manifest.json, push-to-registry: false, create-storage-record: false}
+      - name: Preserve stage attestation bundle
+        if: ${{ steps.validated.outputs.ticket_identity == 'BURL-O001' }}
+        run: ./scripts/ci-devenv.sh cp -- "${{ steps.attest_stage.outputs.bundle-path }}" stage/compatibility-stage-attestation.sigstore.json
+      - id: upload_stage
+        if: ${{ steps.validated.outputs.ticket_identity == 'BURL-O001' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: managed-evidence-authenticated-stage-macos-26-arm64-for-macos-15-arm64-${{ steps.validated.outputs.nonce }}
+          path: |
+            stage/compatibility-stage-manifest.json
+            stage/compatibility-stage-attestation.sigstore.json
+            stage/handoff/outbox/macos-current-construction.tar.zst
+            stage/handoff/outbox/macos-current-construction.sha256
+          overwrite: false
+          if-no-files-found: error
+      - id: stage_rest
+        name: REST validate exact compatibility stage
+        if: ${{ steps.validated.outputs.ticket_identity == 'BURL-O001' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: ${{ steps.upload_stage.outputs.artifact-id }}
+          ACTION_DIGEST: ${{ steps.upload_stage.outputs.artifact-digest }}
+        run: ./scripts/ci-devenv.sh ./scripts/record-compatibility-stage-rest.sh --artifact-id "$ARTIFACT_ID" --upload-action-digest "$ACTION_DIGEST" --binding stage/producer-stage-binding.json --attestation-bundle stage/compatibility-stage-attestation.sigstore.json --github-output "$GITHUB_OUTPUT"
+      - name: Write pre-completion receipt
+        env:
+          ROLE: macos-26-arm64
+          WORKFLOW_PATH: .github/workflows/ci-role-macos-26-arm64.yml
+          ARTIFACT_NONCE: ${{ steps.validated.outputs.nonce }}
+          EXPECTED_IDENTITY_SHA256: ${{ steps.validated.outputs.expected_identity_sha256 }}
+          EXPECTED_ID: ${{ steps.validated.outputs.expected_artifact_id }}
+          EXPECTED_DIGEST: ${{ steps.validated.outputs.expected_artifact_digest }}
+          CANDIDATE_ID: ${{ needs.candidate.outputs.artifact_id }}
+          CANDIDATE_DIGEST: ${{ needs.candidate.outputs.artifact_digest }}
+          SEALED_ID: ${{ steps.upload_sealed.outputs.artifact-id }}
+          SEALED_DIGEST: ${{ steps.upload_sealed.outputs.artifact-digest }}
+          TESTED_SOURCE_SHA: ${{ steps.validated.outputs.tested_source_sha }}
+          BASE_SHA: ${{ steps.validated.outputs.base_sha }}
+          CHECK_RUN_ID: ${{ job.check_run_id }}
+          EXPECTED_IDENTITY_FILE: ${{ steps.validated.outputs.expected_identity_file }}
+          COMPATIBILITY_STAGE_FILE: ${{ steps.validated.outputs.ticket_identity == 'BURL-O001' && 'stage/producer-stage-binding.json' || '' }}
+        run: ./scripts/ci-devenv.sh ./scripts/write-sealing-receipt.sh candidate/ci-role-evidence.tar.zst sealed/ci-sealed-role-evidence.tar.zst ci-seal-receipt.json
+      - run: ./scripts/ci-devenv.sh ./scripts/validate-sealing-receipt.sh ci-seal-receipt.json
+      - id: attest_receipt
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
+        with: {subject-path: ci-seal-receipt.json, push-to-registry: false, create-storage-record: false}
+      - name: Preserve receipt attestation bundle
+        run: ./scripts/ci-devenv.sh cp -- "${{ steps.attest_receipt.outputs.bundle-path }}" ci-seal-receipt-attestation.sigstore.json
+      - id: upload_receipt
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: "managed-evidence-seal-receipt-macos-26-arm64-${{ steps.validated.outputs.nonce }}"
+          path: |
+            ci-seal-receipt.json
+            ci-seal-receipt-attestation.sigstore.json
+          overwrite: false
+          if-no-files-found: error
+      - id: lineage
+        name: Bind stage to signed producer receipt as RFC 8785 bytes
+        if: ${{ steps.validated.outputs.ticket_identity == 'BURL-O001' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STAGE_ID: ${{ steps.upload_stage.outputs.artifact-id }}
+          STAGE_DIGEST: ${{ steps.upload_stage.outputs.artifact-digest }}
+          RECEIPT_ID: ${{ steps.upload_receipt.outputs.artifact-id }}
+          RECEIPT_DIGEST: ${{ steps.upload_receipt.outputs.artifact-digest }}
+        run: ./scripts/ci-devenv.sh ./scripts/write-compatibility-stage-lineage.sh --stage-id "$STAGE_ID" --stage-upload-action-digest "$STAGE_DIGEST" --receipt-id "$RECEIPT_ID" --receipt-upload-action-digest "$RECEIPT_DIGEST" --stage-binding stage/producer-stage-binding.json --output compatibility-stage-producer-lineage.json --github-output "$GITHUB_OUTPUT"
+      - id: attest_lineage
+        if: ${{ steps.validated.outputs.ticket_identity == 'BURL-O001' }}
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
+        with: {subject-path: compatibility-stage-producer-lineage.json, push-to-registry: false, create-storage-record: false}
+      - name: Preserve producer-lineage attestation bundle
+        if: ${{ steps.validated.outputs.ticket_identity == 'BURL-O001' }}
+        run: ./scripts/ci-devenv.sh cp -- "${{ steps.attest_lineage.outputs.bundle-path }}" compatibility-stage-producer-lineage-attestation.sigstore.json
+      - id: upload_lineage
+        if: ${{ steps.validated.outputs.ticket_identity == 'BURL-O001' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: managed-evidence-producer-lineage-macos-26-arm64-for-macos-15-arm64-${{ steps.validated.outputs.nonce }}
+          path: |
+            compatibility-stage-producer-lineage.json
+            compatibility-stage-producer-lineage-attestation.sigstore.json
+          overwrite: false
+          if-no-files-found: error
+      - id: lineage_rest
+        name: REST validate exact producer lineage after upload
+        if: ${{ steps.validated.outputs.ticket_identity == 'BURL-O001' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: ${{ steps.upload_lineage.outputs.artifact-id }}
+          ACTION_DIGEST: ${{ steps.upload_lineage.outputs.artifact-digest }}
+          ARTIFACT_NONCE: ${{ steps.validated.outputs.nonce }}
+        run: ./scripts/ci-devenv.sh ./scripts/record-compatibility-stage-rest.sh --artifact-id "$ARTIFACT_ID" --upload-action-digest "$ACTION_DIGEST" --attestation-bundle compatibility-stage-producer-lineage-attestation.sigstore.json --github-output "$GITHUB_OUTPUT"
+      - name: Re-authenticate sealed artifacts and receipt after upload
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_IDENTITY_FILE: expected/expected-identity.json
+          EXPECTED_ID: ${{ inputs.expected_artifact_id }}
+          EXPECTED_DIGEST: ${{ inputs.expected_artifact_digest }}
+          ARTIFACT_NONCE: ${{ steps.validated.outputs.nonce }}
+          CANDIDATE_CHECK_RUN_ID: ${{ needs.candidate.outputs.check_run_id }}
+          CANDIDATE_ID: ${{ needs.candidate.outputs.artifact_id }}
+          CANDIDATE_DIGEST: ${{ needs.candidate.outputs.artifact_digest }}
+          SEALED_ID: ${{ steps.upload_sealed.outputs.artifact-id }}
+          SEALED_DIGEST: ${{ steps.upload_sealed.outputs.artifact-digest }}
+          RECEIPT_ID: ${{ steps.upload_receipt.outputs.artifact-id }}
+          RECEIPT_DIGEST: ${{ steps.upload_receipt.outputs.artifact-digest }}
+        run: ./scripts/ci-devenv.sh ./scripts/validate-seal-rest.sh --phase sealed --role macos-26-arm64 --nonce "$ARTIFACT_NONCE" --expected "$EXPECTED_IDENTITY_FILE" --expected-id "$EXPECTED_ID" --expected-digest "$EXPECTED_DIGEST" --candidate-check-run-id "$CANDIDATE_CHECK_RUN_ID" --candidate-id "$CANDIDATE_ID" --candidate-digest "$CANDIDATE_DIGEST" --sealed-id "$SEALED_ID" --sealed-digest "$SEALED_DIGEST" --receipt-id "$RECEIPT_ID" --receipt-digest "$RECEIPT_DIGEST"
