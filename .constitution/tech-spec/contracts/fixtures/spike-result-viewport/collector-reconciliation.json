@@ -1,12 +1,12 @@
 {
   "contract": "spike-result claimed evidence reconciliation",
-  "collectorRequirement": "Map each run to its authenticated role bundle and require claimedEvidenceClasses to equal expectedIdentity.requiredEvidenceClasses[role] in the declared order.",
+  "collectorRequirement": "Map each run to its authenticated role bundle, reconcile host.profile.runnerLabel to that role, and require claimedEvidenceClasses to equal expectedIdentity.requiredEvidenceClasses[role] in the declared order.",
   "cases": [
     {
       "name": "macos-26-packaging-only-false-accepted",
       "authenticatedRole": "macos-26-arm64",
-      "expectedIdentityClasses": ["packaging-runtime"],
-      "claimedEvidenceClasses": ["packaging-runtime"],
+      "expectedIdentityClasses": ["packaging-runtime", "repeatable-construction"],
+      "claimedEvidenceClasses": ["packaging-runtime", "repeatable-construction"],
       "logicalViewportVerified": false,
       "expectedOutcome": "accepted"
     },
@@ -21,9 +21,25 @@
     {
       "name": "packaging-claim-adds-unassigned-performance",
       "authenticatedRole": "macos-26-arm64",
-      "expectedIdentityClasses": ["packaging-runtime"],
-      "claimedEvidenceClasses": ["packaging-runtime", "performance"],
+      "expectedIdentityClasses": ["packaging-runtime", "repeatable-construction"],
+      "claimedEvidenceClasses": ["packaging-runtime", "repeatable-construction", "performance"],
       "logicalViewportVerified": true,
+      "expectedOutcome": "rejected:evidence-profile-mismatch"
+    },
+    {
+      "name": "packaging-claim-reorders-assigned-profile",
+      "authenticatedRole": "macos-26-arm64",
+      "expectedIdentityClasses": ["packaging-runtime", "repeatable-construction"],
+      "claimedEvidenceClasses": ["repeatable-construction", "packaging-runtime"],
+      "logicalViewportVerified": false,
+      "expectedOutcome": "rejected:evidence-profile-mismatch"
+    },
+    {
+      "name": "macos-26-claim-uses-macos-15-profile",
+      "authenticatedRole": "macos-26-arm64",
+      "expectedIdentityClasses": ["packaging-runtime", "repeatable-construction"],
+      "claimedEvidenceClasses": ["packaging-runtime-compatibility"],
+      "logicalViewportVerified": false,
       "expectedOutcome": "rejected:evidence-profile-mismatch"
     }
   ]

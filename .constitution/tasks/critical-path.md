@@ -1,5 +1,5 @@
 ---
-version: v2.2.3
+version: v2.2.4
 ---
 
 # Active backlog summary
