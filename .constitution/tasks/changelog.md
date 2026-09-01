@@ -1,5 +1,9 @@
 # Stage 4: Tasks changelog
 
+## v2.2.2 - 2026-08-31
+
+Reviewed TechSpec v1.8.2-provisional. The Spike-result viewport correction changes no ticket, dependency, scope, acceptance mode, effort estimate, or execution order.
+
 ## v2.2.1 - 2026-08-31
 
 Reviewed TechSpec v1.8.1-provisional. The conditional viewport evidence correction changes no ticket, dependency, scope, acceptance mode, effort estimate, or execution order.

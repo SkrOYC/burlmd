@@ -2,7 +2,7 @@
 
 ## Provisional research boundary
 
-TechSpec v1.8.1-provisional permits research code only under `.constitution/prototypes/`. The existing Epic G M0 production exceptions remain unchanged. `FLAKE-M002` and `CI-M003` may write production code only for their reproducibility and validation bootstrap. Every other production ticket remains blocked by its own decision evidence and a matching Stage 3 and Stage 4 adaptation. Except for these contract-scoped exceptions, production directories (`lib/`, `rust/`, `linux/`, and `macos/`) are read-only inputs to this research wave.
+TechSpec v1.8.2-provisional permits research code only under `.constitution/prototypes/`. The existing Epic G M0 production exceptions remain unchanged. `FLAKE-M002` and `CI-M003` may write production code only for their reproducibility and validation bootstrap. Every other production ticket remains blocked by its own decision evidence and a matching Stage 3 and Stage 4 adaptation. Except for these contract-scoped exceptions, production directories (`lib/`, `rust/`, `linux/`, and `macos/`) are read-only inputs to this research wave.
 
 The five exact prototype roots and verification commands are machine-readable in `contracts/provisional-spikes.toml`. Its allowlist is exhaustive: each Spike may write only its named prototype root and report path. Every unlisted repository path is read-only. Framework bookkeeping may update the owning active Task after the Spike process exits, but that isn't part of the Spike's write authority.
 

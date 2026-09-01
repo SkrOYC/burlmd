@@ -1,5 +1,5 @@
-schema_version = 18
-stage = "tech-spec-v1.8.1-provisional"
+schema_version = 19
+stage = "tech-spec-v1.8.2-provisional"
 production_implementation_authorized = false
 # The Epic G entries preserve the M0 exception. FLAKE-M002 and CI-M003 may
 # implement only the reproducibility and managed-validation bootstrap. Every
@@ -16,6 +16,7 @@ production_exceptions = [
   "CI-M003",
 ]
 result_schema = ".constitution/tech-spec/contracts/spike-result.schema.json"
+result_schema_version = 18
 ci_role_evidence_schema = ".constitution/tech-spec/contracts/ci-role-evidence.schema.json"
 ci_evidence_schema = ".constitution/tech-spec/contracts/ci-evidence.schema.json"
 
@@ -34,6 +35,7 @@ copy_external_or_symlinked_build_outputs_into_the_write_allowlist_before_hashing
 capture_command_exit_status_stdout_and_stderr = true
 semantically_parse_rfc3339_timestamps_and_reject_invalid_calendar_dates_without_optional_format_plugins = true
 capture_host_fingerprint_os_version_architecture_filesystem_and_profile_from_system_apis = true
+viewport_evidence_policy = "A Spike profile records logicalViewportVerified true only when its role-owned probe observes the exact 1920x1080 at 60 Hz viewport. Functional and packaging-only profiles can record false. A profile that claims performance, linux-platform-regression, or macos-authoritative-visual must record true. macOS 15 profiles remain functional compatibility-only and cannot claim any viewport-bound class."
 never_accept_caller_supplied_host_facts_as_evidence = true
 capture_repository_revision_tree_lockfile_contract_schema_probe_source_probe_binary_and_corpus_hashes = true
 resolve_recorded_repository_revision_to_the_captured_checkout = true
