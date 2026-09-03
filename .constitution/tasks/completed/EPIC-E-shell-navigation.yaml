@@ -41,7 +41,7 @@ tickets:
     title: Open Directly Into the Workspace
     type: Feature
     effort: 3
-    depends_on: []
+    depends_on: [BURL-E001]
     category: Correctness
     scope:
       in: [lib/main.dart, lib/src/screens/workspace.dart, lib/src/providers/workspace_provider.dart, lib/src/providers/rust_api_provider.dart, test/widget_test.dart]
@@ -74,7 +74,7 @@ tickets:
     title: Directory Tree Sidebar
     type: Feature
     effort: 5
-    depends_on: []
+    depends_on: [BURL-E002]
     category: Correctness
     scope:
       in: [lib/src/components/workspace_tree.dart, lib/src/providers/workspace_provider.dart, lib/src/screens/workspace.dart, test/components/workspace_tree_test.dart]
@@ -111,7 +111,7 @@ tickets:
     title: Mount the Editor and Navigate
     type: Feature
     effort: 5
-    depends_on: []
+    depends_on: [BURL-E003]
     category: Correctness
     scope:
       in: [lib/src/screens/workspace.dart, lib/src/components/editor.dart, lib/src/providers/note_providers.dart, test/components/editor_test.dart]
@@ -151,7 +151,7 @@ tickets:
     title: Note and Directory Lifecycle Actions
     type: Feature
     effort: 5
-    depends_on: []
+    depends_on: [BURL-E004]
     category: Correctness
     scope:
       in: [lib/src/components/workspace_tree.dart, lib/src/components/lifecycle_actions.dart, lib/src/providers/workspace_provider.dart, test/components/lifecycle_actions_test.dart]
@@ -215,7 +215,7 @@ tickets:
     title: Search Surface
     type: Feature
     effort: 3
-    depends_on: []
+    depends_on: [BURL-E004]
     category: Correctness
     scope:
       in: [lib/src/components/search_panel.dart, lib/src/providers/search_provider.dart, test/components/search_panel_test.dart]
@@ -252,7 +252,7 @@ tickets:
     title: Recovered Draft Surface
     type: Feature
     effort: 2
-    depends_on: []
+    depends_on: [BURL-E004]
     category: Correctness
     scope:
       in: [lib/src/components/draft_recovery.dart, lib/src/providers/workspace_provider.dart, test/components/draft_recovery_test.dart]
@@ -304,7 +304,7 @@ tickets:
     title: Rescan Workspace
     type: Feature
     effort: 2
-    depends_on: []
+    depends_on: [BURL-E002, BURL-E003]
     category: Correctness
     scope:
       in: [lib/src/screens/workspace.dart, lib/src/providers/workspace_provider.dart]
@@ -360,5 +360,5 @@ closeout:
   changelog_entries: []
   candidate_terms: []
   routed_upstream: []
-  follow_ups: []
+  follow_ups: ["**`lib/src/components/status_message.dart`** is a new shared SnackBar seam introduced by the PR review-fix commits (one `showStatusMessage(BuildContext, String)` helper so lifecycle-outcome and rescan reporting hide-then-show through a single path). It is a justified reconciliation artifact consumed by the `SHEL-E005` and `SHEL-E008` surfaces, neither of whose declared scopes owned a shared reporting seam.", "**A Zero-Directory Workspace has no entry point for creating a root-level Directory.** Row menus only exist on existing tree rows (also recorded as `SHEL-E005`'s known limitation). Until surfaced otherwise, first content must arrive through a path that already has a Directory.", "**`RecoveredDraftsPanel` can overflow vertically** with very many recovered drafts (P3): it has no scroll container.", "**The tree-row overflow \"move\" picker silently no-ops while the tree snapshot is loading** (P3).", "**Open question from the `SHEL-E008` review:** whether Core-side `reindex_workspace` transactionality covers typing into a previously-clean Note while a rescan is in flight. Worth settling before any future ticket widens the rescan path.", "**No test coverage of the periodic-timer arm path** (write-tier polling) — a deliberate fake-clock tradeoff, recorded so its absence reads as a decision rather than an oversight.", "**Two standing standards adopted before this epic painted widgets were not met by its own widgets:** zero `Semantics` wrappers ship, user-facing strings are hardcoded literals across the new components, and no `gen-l10n` scaffolding exists. Recorded in `tech-spec/changelog.md` v1.4.0 as well; owed before the Wave 3 design epic builds final UI."]
   settled: []

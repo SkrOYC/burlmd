@@ -28,6 +28,9 @@ tickets:
     flows: [flow-desktop-session]
     certainty: assumed
     status: planned
+    deviations:
+      - files: [README.md, ".constitution/tech-spec/stack.md", ".constitution/tech-spec/data-models/schema.sql"]
+        justification: Review found restated production-stop and version banners outside the original M0 file list. Those copies would instruct executors to stop the authorized Epic G tickets.
   - id: BURL-G002
     title: Persist device-global preferences
     type: Feature
@@ -78,7 +81,7 @@ tickets:
     title: Replace visual-only tabs with authoritative Note sessions
     type: Feature
     effort: 8
-    depends_on: []
+    depends_on: [BURL-G003]
     category: Correctness
     scope:
       in: [lib/src/design/workspace_shell.dart, lib/src/providers/note_providers.dart, lib/src/providers/workspace_provider.dart, lib/src/screens/workspace.dart, scripts/smoke-shot.sh, "test/**"]
@@ -104,7 +107,7 @@ tickets:
     title: Serialize every Note-close and batch-close lifecycle
     type: Feature
     effort: 8
-    depends_on: []
+    depends_on: [BURL-G004]
     category: Correctness
     scope:
       in: [lib/src/design/workspace_shell.dart, lib/src/providers/note_providers.dart, lib/src/providers/workspace_provider.dart, rust/src/workspace/persist.rs, "test/**", "integration_test/**"]
@@ -123,7 +126,7 @@ tickets:
     title: Restore and explicitly switch the active Workspace
     type: Feature
     effort: 8
-    depends_on: []
+    depends_on: [BURL-G005]
     category: Feature-Evolution
     scope:
       in: [lib/src/screens/workspace.dart, lib/src/providers/workspace_provider.dart, rust/src/workspace/bootstrap.rs, "test/screens/**", "integration_test/**"]
@@ -149,7 +152,7 @@ tickets:
     title: Surface keyboard title jump and backlinks
     type: Feature
     effort: 5
-    depends_on: []
+    depends_on: [BURL-G004]
     category: Feature-Evolution
     scope:
       in: ["lib/src/components/**", lib/src/providers/search_provider.dart, lib/src/providers/note_providers.dart, "test/components/**"]
@@ -174,7 +177,7 @@ tickets:
     title: Implement Core-owned undo and redo
     type: Feature
     effort: 8
-    depends_on: []
+    depends_on: [BURL-G004]
     category: Correctness
     scope:
       in: [rust/src/draft.rs, "rust/src/markdown/**", rust/src/api/ffi_api.rs, lib/src/providers/note_providers.dart, lib/src/components/editor.dart, "test/components/**"]
@@ -193,7 +196,7 @@ tickets:
     title: Implement in-Note find and atomic replace
     type: Feature
     effort: 8
-    depends_on: []
+    depends_on: [BURL-G008]
     category: Feature-Evolution
     scope:
       in: ["rust/src/markdown/**", rust/src/api/ffi_api.rs, lib/src/components/editor.dart, lib/src/providers/note_providers.dart, "test/components/**"]
@@ -212,7 +215,7 @@ tickets:
     title: Surface and restore local Note history
     type: Feature
     effort: 5
-    depends_on: []
+    depends_on: [BURL-G004]
     category: Feature-Evolution
     scope:
       in: [rust/src/git/operations.rs, rust/src/api/ffi_api.rs, "lib/src/components/**", lib/src/providers/note_providers.dart, "test/**"]
@@ -238,13 +241,13 @@ tickets:
     title: Integrate and harden the feature-complete local shell
     type: Feature
     effort: 8
-    depends_on: []
+    depends_on: [BURL-G001, BURL-G002, BURL-G006, BURL-G007, BURL-G009, BURL-G010]
     category: Correctness
     scope:
       in: ["lib/src/design/**", lib/src/screens/workspace.dart, "lib/src/components/**", "lib/l10n/**", "test/goldens/**", "test/**", "integration_test/**", scripts/visual-regression.sh]
     verification:
       command: "cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && ./scripts/visual-regression.sh shell-g011 --baseline test/goldens/shell-g011-linux.png --max-different-pixels 0 && git diff --check && ! rg -n '\\[DEBUG-' lib rust test scripts"
-      expected: exit 0 with the local feature matrix and reviewed visual evidence passing
+      expected: "exit 0 with the local feature matrix and reviewed visual evidence passing Original verification detail: `ubuntu-24.04`: `cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && ./scripts/visual-regression.sh shell-g011 --baseline test/goldens/shell-g011-linux.png --max-different-pixels 0 && git diff --check && ! rg -n '\\[DEBUG-' lib rust test scripts`; Apple Silicon `macos-26`: `cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && ./scripts/visual-regression.sh shell-g011 --baseline test/goldens/shell-g011-macos.png --max-different-pixels 0 && git diff --check && ! rg -n '\\[DEBUG-' lib rust test scripts`; Apple Silicon `macos-15`: `cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && git diff --check`. Validate all results through the authenticated `CI-M003` role and aggregate schemas."
     stop_conditions: ["STOP if any pointer action lacks keyboard reachability, Writer-facing string bypasses localization, or state shown by the shell isn't authoritative.", "STOP if the final aggregate is rejected, Linux capture can observe the Writer's desktop, macOS 26 geometry isn't verified, or macOS 15 creates or updates a visual baseline."]
     description: "Integrate the completed local workflows into the delivered design system, finish keyboard/focus/Semantics/localization coverage, and rebuild visual evidence after Platform-chrome removal"
     acceptance:

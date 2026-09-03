@@ -1,7 +1,7 @@
 ---
 id: ADR-0007
 status: accepted
-date: 2026-09-03
+date: 2026-07-24
 certainty: assumed
 assumption: "Migrated; the decision's ruling reference was not found in the status line."
 ---
@@ -33,7 +33,7 @@ Together these convert serialization from a generation problem into a splice pro
 7. **`base_revision` is a content hash of the on-disk file.** This replaces the `notes.last_modified` timestamp the current `save_note` compares. It reconciles the open-to-save path, which is presently broken by construction: `open_note` returns the literal placeholder `"head"` while `save_note` expects a stringified `last_modified`, so any real save returns `GitConflict`. A content hash is well-defined at both ends, immune to timestamp granularity and clock skew, and is exactly the token OCC needs. `sha2` is already a direct dependency.
 8. **The span map carries inline granularity, not only Block granularity.** `BlockRange` (ADR-006 decision 3) expresses a selection across *unfocused* Blocks, which the user sees rendered, so its offsets are offsets into rendered text; splicing needs source offsets. Resolving one to the other requires knowing where each rendered run began in the source, which is finer than `block_path`. This costs nothing extra: `Parser::into_offset_iter()` yields a `Range<usize>` for *every* event, inline events included — verified in the vendored source at `src/parse.rs:2048-2078`, where `OffsetIter`'s `Iterator` impl emits `item.start..item.end` after `handle_inline()`, and verified empirically against `pulldown-cmark` 0.12.2: for `hello **bold** world`, accumulating `Event::Text` payloads gives the rendered string `hello bold world`, and rendered offset 6 resolves to source offset 8, which is exactly where `bold` starts. The map is built during the same parse that produces the AST, stays Core-side under decision 3, and is discarded and rebuilt with it.
 
-   This is worth stating explicitly because ADR-006 and `tasks/active/EPIC-F-editor-depth.md` both claim that mapping formatted output to editable spans is "no longer a requirement at all". That claim is true for the *focused* Block, whose editable surface holds plain source, and it is what removes the shipped-regression risk. It is not true for a selection across unfocused Blocks. The distinction matters: what was dangerous before was mapping back from *laid-out geometry*, which depends on fonts, wrapping and the widget tree. This map is a pure function of source text and parser output, computed where the parser already runs.
+   This is worth stating explicitly because ADR-006 and `tasks/epics/EPIC-F-editor-depth.md` both claim that mapping formatted output to editable spans is "no longer a requirement at all". That claim is true for the *focused* Block, whose editable surface holds plain source, and it is what removes the shipped-regression risk. It is not true for a selection across unfocused Blocks. The distinction matters: what was dangerous before was mapping back from *laid-out geometry*, which depends on fonts, wrapping and the widget tree. This map is a pure function of source text and parser output, computed where the parser already runs.
 
 9. **Writes are atomic.** A Note is written to a temporary file in the same directory and renamed over the target, satisfying `architecture/resilience.md`'s Atomic Commits guarantee.
 

@@ -22,7 +22,10 @@ tickets:
     description: Implement Rust keyring integration to generate and securely store a 256-bit root AES key in the host OS secure enclave
     acceptance:
       mode: gherkin
-      evidence: TODO
+      evidence: |
+        Given a fresh installation
+        When the app boots
+        Then a new 256-bit key is generated and stored in the OS Keychain
     flows: []
     certainty: assumed
     status: done
@@ -33,7 +36,7 @@ tickets:
     title: Encrypt SQLite with SQLCipher
     type: Security
     effort: 5
-    depends_on: []
+    depends_on: [BURL-B001]
     category: Security
     scope:
       in: [rust/src/db/connection.rs]
@@ -43,7 +46,10 @@ tickets:
     description: Configure the rusqlite initialization to issue PRAGMA key using the root key from BURL-B001
     acceptance:
       mode: gherkin
-      evidence: TODO
+      evidence: |
+        Given the SQLite initialization
+        When the database file is written to disk
+        Then the file is AES-256-CBC encrypted with HMAC-SHA512 page authentication and cannot be opened by standard sqlite3 CLI
     flows: []
     certainty: assumed
     status: done
@@ -54,7 +60,7 @@ tickets:
     title: "SQLite Initialization & Schema"
     type: Feature
     effort: 3
-    depends_on: []
+    depends_on: [BURL-B002]
     category: Correctness
     scope:
       in: [rust/src/db/connection.rs, rust/src/db/schema.sql]
@@ -64,7 +70,10 @@ tickets:
     description: "Implement rusqlite setup logic to initialize the local encrypted database file, applying the notes, links, and notes_fts tables using the TechSpec schema"
     acceptance:
       mode: gherkin
-      evidence: TODO
+      evidence: |
+        Given an empty database path
+        When the db initialization routine runs
+        Then the tables `notes` and `notes_fts` are created successfully
     flows: []
     certainty: assumed
     status: done
@@ -72,7 +81,7 @@ tickets:
     title: Expose SQLite Queries to FFI
     type: Feature
     effort: 2
-    depends_on: []
+    depends_on: [BURL-B003]
     category: Correctness
     scope:
       in: [rust/src/api/ffi_api.rs]
@@ -82,7 +91,10 @@ tickets:
     description: "Expose search_notes and save_note functions across the FRB boundary, wiring them to the rusqlite database operations"
     acceptance:
       mode: gherkin
-      evidence: TODO
+      evidence: |
+        Given the FFI bridge
+        When Dart calls `search_notes`
+        Then the Rust core executes an FTS5 query and returns `NoteMetadata`
     flows: []
     certainty: assumed
     status: done
@@ -103,7 +115,10 @@ tickets:
     description: Wrap the Flutter app in a ProviderScope and set up the foundational Riverpod providers to access the Rust FFI functions globally
     acceptance:
       mode: gherkin
-      evidence: TODO
+      evidence: |
+        Given the Flutter app
+        When it boots
+        Then the Rust API is injected via a Riverpod Provider
     flows: []
     certainty: assumed
     status: done
@@ -114,7 +129,7 @@ tickets:
     title: Hybrid Editor Widget (Basic Rendering)
     type: Feature
     effort: 5
-    depends_on: []
+    depends_on: [BURL-B004, BURL-B005]
     category: Feature-Evolution
     scope:
       in: [lib/src/components/editor.dart]
@@ -124,7 +139,10 @@ tickets:
     description: "Build the Flutter widget that takes an AstNode tree and recursively renders it into Flutter TextSpan and structural widgets, effectively visualizing the parsed Markdown without raw asterisks"
     acceptance:
       mode: gherkin
-      evidence: TODO
+      evidence: |
+        Given an AST containing a bold TextRun
+        When the Editor renders the AST
+        Then a bold Flutter Text widget is painted to the screen
     flows: []
     certainty: assumed
     status: done
@@ -135,7 +153,7 @@ tickets:
     title: Editor FFI Streaming Connection
     type: Feature
     effort: 3
-    depends_on: []
+    depends_on: [BURL-B006]
     category: Correctness
     scope:
       in: [lib/src/components/editor.dart, rust/src/api/ffi_api.rs]
@@ -145,7 +163,10 @@ tickets:
     description: "Wire the Editor widget to send block updates (keystrokes) to the update_block FFI function, and re-render the AST returned by the Core Engine"
     acceptance:
       mode: gherkin
-      evidence: TODO
+      evidence: |
+        Given the active Editor
+        When the user types a character
+        Then the FFI function is called and the UI updates within 16ms
     flows: []
     certainty: assumed
     status: done

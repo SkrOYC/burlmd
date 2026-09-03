@@ -23,7 +23,11 @@ tickets:
     description: "Set up the standard flutter_rust_bridge monorepo. Clear out the default counter code and establish the rust/src/api directory structure. FRB scaffolds rust_builder/cargokit/ containing vendored third-party Dart that upstream says to ignore; add analyzer.exclude for it in analysis_options.yaml, or the dart analyze pre-commit hook will gate on code this project does not own. The dart format hook is already scoped to lib/ and test/ for the same reason"
     acceptance:
       mode: gherkin
-      evidence: TODO
+      evidence: |
+        Given a fresh clone of the repository
+        When I run `flutter_rust_bridge_codegen generate`
+        Then the Dart bindings are successfully generated without errors
+        And `cargo build` succeeds
     flows: []
     certainty: assumed
     status: done
@@ -34,7 +38,7 @@ tickets:
     title: Implement Markdown Parsing Logic
     type: Feature
     effort: 5
-    depends_on: []
+    depends_on: [BURL-A001]
     category: Correctness
     scope:
       in: [rust/src/markdown/parser.rs]
@@ -45,7 +49,10 @@ tickets:
     description: Build the Rust module that uses pulldown-cmark to parse raw Markdown text into the custom AST AstNode structures defined in the TechSpec
     acceptance:
       mode: gherkin
-      evidence: TODO
+      evidence: |
+        Given a raw markdown string with headings and bold text
+        When the parsing function is called
+        Then it returns an AstNode tree containing the correct TextRuns
     flows: []
     certainty: assumed
     status: done
@@ -56,7 +63,7 @@ tickets:
     title: Expose AST over FFI
     type: Feature
     effort: 2
-    depends_on: []
+    depends_on: [BURL-A002]
     category: Correctness
     scope:
       in: [rust/src/api/ffi_api.rs]
@@ -66,7 +73,10 @@ tickets:
     description: Expose the AST data structures and the open_note synchronous parsing function across the flutter_rust_bridge boundary
     acceptance:
       mode: gherkin
-      evidence: TODO
+      evidence: |
+        Given the parsed AST structures
+        When I run FRB codegen
+        Then the corresponding Dart classes (AstNode, TextRun) are available in `lib/src/rust/`
     flows: []
     certainty: assumed
     status: done

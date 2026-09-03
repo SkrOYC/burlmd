@@ -3,28 +3,16 @@ decisions:
     question: "Which epic carries the foundations retrofit — the theme-token pass, the gen-l10n scaffold, and the Semantics scaffolding that the Realign interview documented but left unscheduled?"
     blocks: [EPIC-G]
     options:
-      - name: Fold the retrofit into Epic G
-        pros:
-          - "Epic G already owns lib/src/design/**, lib/l10n/**, and the shell widgets the retrofit touches, so no new scope overlap appears."
-          - "The retrofit lands before the release gates in Epic M measure the shell."
-        cons:
-          - "Epic G is already the largest local-workflow epic; adding the retrofit widens its diff."
-          - "It couples a cross-cutting standards pass to one feature epic's review cadence."
-      - name: Create a dedicated foundations retrofit epic
-        pros:
-          - "Keeps the standards pass reviewable on its own and reusable by later epics."
-          - "Lets the retrofit run in its own wave without blocking feature work."
-        cons:
-          - "Its scope paths overlap Epic G's, so the two epics could not run concurrently."
-          - "Adds an epic that delivers no product capability."
-      - name: Defer the retrofit until after the 0.x release
-        pros:
-          - "Nothing in the release-blocking matrix depends on it today."
-          - "Keeps the current wave plan unchanged."
-        cons:
-          - "Every new widget written before the retrofit is written against the old conventions and has to be revisited."
-          - "The Realign interview already found the debt; deferring it a second time makes it structural."
-    recommendation: Fold the retrofit into Epic G
+      - name: insert the work into Epic E
+        pros: ["Migration-authored placeholder: the source register records the option name but no analysis."]
+        cons: ["Migration-authored placeholder: the source register records the option name but no analysis."]
+      - name: create a mini-epic
+        pros: ["Migration-authored placeholder: the source register records the option name but no analysis."]
+        cons: ["Migration-authored placeholder: the source register records the option name but no analysis."]
+      - name: document standards now and retrofit later
+        pros: ["Migration-authored placeholder: the source register records the option name but no analysis."]
+        cons: ["Migration-authored placeholder: the source register records the option name but no analysis."]
+    recommendation: document standards now and retrofit later
     closure: ruling
     ruler: "The user, or Stage 4 at the next wave-planning pass"
     waiting_on: "A decision on whether Epic G's diff budget can absorb the retrofit"
@@ -32,101 +20,79 @@ decisions:
     asked:
       date: 2026-08-21
       in: reports/2026-08-21-interview-realign.md
+    interim:
+      assumption: "Migration-authored pros and cons were removed; the source register records only these options."
+      applied_by: []
   - id: OD-02
     question: "What condition reopens screen-reader certification, which the Realign interview deferred to the keyboard-and-Semantics baseline without naming a trigger?"
     blocks: [".constitution/prd/out-of-scope/screen-reader-certification.md"]
     options:
-      - name: Keep certification out of scope with no reopening condition
-        pros:
-          - "Matches the current out-of-scope entry exactly and needs no work."
-          - "Keeps the 0.x release matrix focused on functional parity."
-        cons:
-          - "An out-of-scope entry with no reopening condition never gets revisited."
-          - "The baseline standard can silently decay because nothing measures it."
-      - name: Reopen when a named accessibility user or a distribution channel requires it
-        pros:
-          - "Ties the cost to a real demand instead of a schedule."
-          - "Gives the out-of-scope entry the trigger the framework asks for."
-        cons:
-          - "The trigger may arrive at the worst moment in the release cycle."
-          - "Requires someone to watch for the trigger."
-      - name: Certify against Orca and VoiceOver during 0.x
-        pros:
-          - "Removes the largest accessibility unknown before the product is called stable."
-          - "Screen-reader defects found late are expensive to fix."
-        cons:
-          - "Adds two manual certification matrices to an already large release gate."
-          - "The user explicitly chose the baseline over certification at the Realign interview."
-    recommendation: Reopen when a named accessibility user or a distribution channel requires it
+      - name: undocumented
+        pros: ["Migration-authored placeholder: the source register records the option name but no analysis."]
+        cons: ["Migration-authored placeholder: the source register records the option name but no analysis."]
+      - name: baseline standard
+        pros: ["Migration-authored placeholder: the source register records the option name but no analysis."]
+        cons: ["Migration-authored placeholder: the source register records the option name but no analysis."]
+      - name: certified
+        pros: ["Migration-authored placeholder: the source register records the option name but no analysis."]
+        cons: ["Migration-authored placeholder: the source register records the option name but no analysis."]
+    recommendation: baseline standard
     closure: ruling
     ruler: "The user, confirming a Stage 1 Evolution pass that rewrites the out-of-scope entry"
     status: open
     asked:
       date: 2026-08-25
       in: reports/2026-08-25-interview-tasks.md
+    interim:
+      assumption: "Migration-authored pros and cons were removed; the source register records only these options."
+      applied_by: []
   - id: OD-03
     question: "Where do the parallel Epic G and Epic H tracks hand off to each other, given one solo developer and a shared shell surface?"
     blocks: [EPIC-G, EPIC-H]
     options:
-      - name: Sequence Epic H fully before Epic G
-        pros:
-          - "The canonical AST and path authority land once, so Epic G never builds against a projection that Epic H replaces."
-          - "Removes every handoff question; there is only one track."
-        cons:
-          - "Delays every user-visible desktop improvement behind a long foundation epic."
-          - "Wastes the parallelism the user explicitly asked for."
-      - name: Interleave at named milestones
-        pros:
-          - "Epic G's tickets that need BURL-H004 wait for exactly that milestone and nothing more."
-          - "Keeps user-visible progress flowing while the foundation lands."
-        cons:
-          - "Requires the epic leads to agree on milestone boundaries before either starts."
-          - "A slipped Epic H milestone stalls Epic G mid-epic."
-      - name: Run both tracks fully in parallel from a shared design-token milestone
-        pros:
-          - "Maximum throughput if the two tracks really are scope-disjoint."
-          - "One early shared milestone removes the largest source of conflict."
-        cons:
-          - "Epic G and Epic H both own rust/src/api/ffi_api.rs and lib/src/rust/**, so they are not scope-disjoint today."
-          - "A solo developer cannot actually work two tracks at once, so the parallelism is nominal."
-    recommendation: Interleave at named milestones
+      - name: sync first
+        pros: ["Migration-authored placeholder: the source register records the option name but no analysis."]
+        cons: ["Migration-authored placeholder: the source register records the option name but no analysis."]
+      - name: design first
+        pros: ["Migration-authored placeholder: the source register records the option name but no analysis."]
+        cons: ["Migration-authored placeholder: the source register records the option name but no analysis."]
+      - name: interleaved
+        pros: ["Migration-authored placeholder: the source register records the option name but no analysis."]
+        cons: ["Migration-authored placeholder: the source register records the option name but no analysis."]
+    recommendation: interleaved
     closure: ruling
     ruler: "The user, at the next wave-planning pass"
-    status: open
+    status: closed
     asked:
       date: 2026-08-21
       in: reports/2026-08-21-interview-realign.md
+    interim:
+      assumption: "Recorded ruling: the user chose genuinely parallel tracks and delegated the concrete interleave to Stage 4 planning."
+      applied_by: []
+    ruling:
+      ref: reports/2026-08-21-open-decisions.md
+      date: 2026-08-21
+      summary: The user chose genuinely parallel tracks and delegated the concrete interleave to planning.
+      chosen: interleaved
   - id: OD-04
     question: "Which standards foundation should the Core-owned canonical extended Markdown AST be built on?"
     blocks: [BURL-H003, BURL-H004]
     options:
-      - name: "mdast from the markdown crate"
-        pros:
-          - "A published, widely implemented AST shape, so guest tooling can reason about it."
-          - "The provisional default already recorded in the Tasks interview."
-        cons:
-          - "Byte-position fidelity and untouched-source preservation are unproven for burlmd's splice model."
-          - "Adds a dependency whose release cadence burlmd does not control."
+      - name: mdast from the markdown crate
+        pros: ["A published, widely implemented AST shape, so guest tooling can reason about it.", The provisional default already recorded in the Tasks interview.]
+        cons: ["Byte-position fidelity and untouched-source preservation are unproven for burlmd's splice model.", Adds a dependency whose release cadence burlmd does not control.]
       - name: Comrak
-        pros:
-          - "CommonMark plus GFM coverage in one maintained crate."
-          - "Arena-based nodes make whole-document rebuilds cheap."
-        cons:
-          - "Its node model is tuned for rendering, not for source-preserving editing."
-          - "The FFI projection cost across the arena has not been measured."
-      - name: "A complete model derived from pulldown-cmark events"
-        pros:
-          - "Production already uses pulldown-cmark, so the migration is incremental."
-          - "Full control over span capture and the edit projection."
-        cons:
-          - "burlmd owns the whole AST definition and its conformance burden."
-          - "Exhaustive syntax coverage has to be written and proven from scratch."
-    recommendation: "mdast from the markdown crate"
+        pros: [CommonMark plus GFM coverage in one maintained crate., Arena-based nodes make whole-document rebuilds cheap.]
+        cons: ["Its node model is tuned for rendering, not for source-preserving editing.", The FFI projection cost across the arena has not been measured.]
+      - name: A complete model derived from pulldown-cmark events
+        pros: ["Production already uses pulldown-cmark, so the migration is incremental.", Full control over span capture and the edit projection.]
+        cons: [burlmd owns the whole AST definition and its conformance burden., Exhaustive syntax coverage has to be written and proven from scratch.]
+    recommendation: mdast from the markdown crate
     closure: spike
     spike: SPK-BURL-H001
     interim:
       assumption: "The provisional TechSpec assumes mdast so that BURL-H003 can be scoped; the spike may overturn it."
-      applied_by: ["tech-spec/data-models/provisional-forward-models.md", "tasks/epics/EPIC-H-canonical-workspace-authority.yaml#BURL-H003"]
+      applied_by: [tech-spec/data-models/provisional-forward-models.md, tasks/epics/EPIC-H-canonical-workspace-authority.yaml#BURL-H003]
     status: open
     asked:
       date: 2026-08-25
@@ -135,33 +101,21 @@ decisions:
     question: "Which deterministic on-disk component and collision algorithm keeps one Workspace path unambiguous across Linux, macOS, and Windows-compatible storage?"
     blocks: [BURL-H005]
     options:
-      - name: "Lowest-common-denominator component with NFC normalization and collision suffixes"
-        pros:
-          - "The user already chose a lowest-common-denominator on-disk format at the Tasks interview."
-          - "Keeps filenames readable, so the Workspace stays usable in a plain file manager."
-        cons:
-          - "Case-only renames and reserved device names still need explicit disambiguation rules."
-          - "Titles that differ only in stripped characters collide and need a suffix nobody chose."
-      - name: "Opaque content-addressed filenames with a title index"
-        pros:
-          - "No normalization, case, or reserved-name question can ever produce a collision."
-          - "Renames become metadata-only operations."
-        cons:
-          - "Breaks the Open Knowledge Format promise that the Workspace is readable without burlmd."
-          - "A lost index makes the Workspace unnavigable by hand."
+      - name: Lowest-common-denominator component with NFC normalization and collision suffixes
+        pros: [The user already chose a lowest-common-denominator on-disk format at the Tasks interview., "Keeps filenames readable, so the Workspace stays usable in a plain file manager."]
+        cons: [Case-only renames and reserved device names still need explicit disambiguation rules., Titles that differ only in stripped characters collide and need a suffix nobody chose.]
+      - name: Opaque content-addressed filenames with a title index
+        pros: ["No normalization, case, or reserved-name question can ever produce a collision.", Renames become metadata-only operations.]
+        cons: [Breaks the Open Knowledge Format promise that the Workspace is readable without burlmd., A lost index makes the Workspace unnavigable by hand.]
       - name: Host-native passthrough with per-host equivalence
-        pros:
-          - "Simplest possible implementation; the filesystem decides."
-          - "Zero surprise for a Writer who stays on one operating system."
-        cons:
-          - "Directly contradicts CAP-051, which requires one identity across supported hosts."
-          - "A Workspace copied between hosts can silently develop two Notes with one identity."
-    recommendation: "Lowest-common-denominator component with NFC normalization and collision suffixes"
+        pros: ["Simplest possible implementation; the filesystem decides.", Zero surprise for a Writer who stays on one operating system.]
+        cons: ["Directly contradicts CAP-051, which requires one identity across supported hosts.", A Workspace copied between hosts can silently develop two Notes with one identity.]
+    recommendation: Lowest-common-denominator component with NFC normalization and collision suffixes
     closure: spike
     spike: SPK-BURL-H002
     interim:
       assumption: "The provisional TechSpec assumes the lowest-common-denominator format so BURL-H005 can be scoped; the spike settles the exact algorithm."
-      applied_by: ["tech-spec/adrs/ADR-014-canonical-cross-platform-workspace-paths.md", "tasks/epics/EPIC-H-canonical-workspace-authority.yaml#BURL-H005"]
+      applied_by: [tech-spec/adrs/ADR-014-canonical-cross-platform-workspace-paths.md, tasks/epics/EPIC-H-canonical-workspace-authority.yaml#BURL-H005]
     status: open
     asked:
       date: 2026-08-25
@@ -170,33 +124,21 @@ decisions:
     question: "What is the maximum encoded size of one imported image?"
     blocks: [BURL-I003]
     options:
-      - name: "Keep the provisional 25 MiB limit"
-        pros:
-          - "Already accepted at the Tasks interview and already written into the Image Import Size meter."
-          - "A round, explainable number that a Writer can predict."
-        cons:
-          - "Chosen before binary payloads moved to S3-compatible storage, so its original reason no longer applies."
-          - "No measurement supports it on either reference class."
-      - name: "Set the limit from the asset spike measurement"
-        pros:
-          - "Ties the user-visible refusal to the decode, memory, and hydration costs that actually degrade the product."
-          - "The spike measures those costs anyway."
-        cons:
-          - "The limit stays unknown until the spike reports, so BURL-I003 cannot state its refusal message yet."
-          - "A measured limit may be an awkward number to explain."
-      - name: "Accept any size and stream large images"
-        pros:
-          - "No Writer ever hits a refusal."
-          - "Removes a product rule that has to be explained and maintained."
-        cons:
-          - "Violates the UI Responsiveness and Idle Memory Fail thresholds at large sizes."
-          - "Streaming decode is a substantial addition to Epic I's scope."
-    recommendation: "Set the limit from the asset spike measurement"
+      - name: Keep the provisional 25 MiB limit
+        pros: [Already accepted at the Tasks interview and already written into the Image Import Size meter., "A round, explainable number that a Writer can predict."]
+        cons: ["Chosen before binary payloads moved to S3-compatible storage, so its original reason no longer applies.", No measurement supports it on either reference class.]
+      - name: Set the limit from the asset spike measurement
+        pros: ["Ties the user-visible refusal to the decode, memory, and hydration costs that actually degrade the product.", The spike measures those costs anyway.]
+        cons: ["The limit stays unknown until the spike reports, so BURL-I003 cannot state its refusal message yet.", A measured limit may be an awkward number to explain.]
+      - name: Accept any size and stream large images
+        pros: [No Writer ever hits a refusal., Removes a product rule that has to be explained and maintained.]
+        cons: [Violates the UI Responsiveness and Idle Memory Fail thresholds at large sizes., "Streaming decode is a substantial addition to Epic I's scope."]
+    recommendation: Set the limit from the asset spike measurement
     closure: spike
     spike: SPK-BURL-I001
     interim:
-      assumption: "25 MiB stays the provisional cap in the Image Import Size meter until the spike reports."
-      applied_by: ["prd/constraints.yaml#NFC-08"]
+      assumption: 25 MiB stays the provisional cap in the Image Import Size meter until the spike reports.
+      applied_by: [prd/constraints.yaml#NFC-08]
     status: open
     asked:
       date: 2026-08-25
@@ -205,33 +147,21 @@ decisions:
     question: "At what stored-history size should burlmd warn that the local Version store is becoming unhealthy?"
     blocks: [BURL-M016]
     options:
-      - name: "Keep the provisional 1 GiB threshold"
-        pros:
-          - "Already accepted at the Tasks interview and already written into the History Storage Health Warning meter."
-          - "Lets BURL-M016 ship without waiting for a spike."
-        cons:
-          - "Chosen before binary payloads moved out of Git, so the number describes a history shape that no longer exists."
-          - "A threshold nobody measured either warns too early or too late."
-      - name: "Set the threshold from the asset or performance spike measurement"
-        pros:
-          - "Warns before user-visible degradation rather than at a round number."
-          - "The spike already measures clone, fetch, maintenance, and index cost."
-        cons:
-          - "BURL-M016 cannot state its threshold until the spike reports."
-          - "The measured value may need revisiting once Assets are in real use."
+      - name: Keep the provisional 1 GiB threshold
+        pros: [Already accepted at the Tasks interview and already written into the History Storage Health Warning meter., Lets BURL-M016 ship without waiting for a spike.]
+        cons: ["Chosen before binary payloads moved out of Git, so the number describes a history shape that no longer exists.", A threshold nobody measured either warns too early or too late.]
+      - name: Set the threshold from the asset or performance spike measurement
+        pros: [Warns before user-visible degradation rather than at a round number., "The spike already measures clone, fetch, maintenance, and index cost."]
+        cons: [BURL-M016 cannot state its threshold until the spike reports., The measured value may need revisiting once Assets are in real use.]
       - name: Drop the warning entirely
-        pros:
-          - "Removes a meter and a user-facing message that may never fire."
-          - "Git maintenance already handles most growth."
-        cons:
-          - "A Workspace that becomes unclonable on a second device is exactly the failure the warning exists to prevent."
-          - "The PRD names the warning as a capability of the release."
-    recommendation: "Set the threshold from the asset or performance spike measurement"
+        pros: [Removes a meter and a user-facing message that may never fire., Git maintenance already handles most growth.]
+        cons: [A Workspace that becomes unclonable on a second device is exactly the failure the warning exists to prevent., The PRD names the warning as a capability of the release.]
+    recommendation: Set the threshold from the asset or performance spike measurement
     closure: spike
     spike: SPK-BURL-I001
     interim:
-      assumption: "1 GiB stays the provisional warning threshold until the spike reports."
-      applied_by: ["prd/constraints.yaml#NFC-09"]
+      assumption: 1 GiB stays the provisional warning threshold until the spike reports.
+      applied_by: [prd/constraints.yaml#NFC-09]
     status: open
     asked:
       date: 2026-08-25
@@ -240,33 +170,21 @@ decisions:
     question: "Which oldest x86-64 Linux runtime baseline and named distributions does a supported 0.x release have to run on?"
     blocks: [BURL-M006, BURL-M011]
     options:
-      - name: "An Ubuntu 22.04-era glibc baseline"
-        pros:
-          - "Covers long-term-support distributions that many desktop users still run."
-          - "Widens the audience for the first published AppImage."
-        cons:
-          - "Older glibc and GTK versions constrain the Flutter and Rust toolchains burlmd can use."
-          - "Nothing has verified that the required keyring and file-selection behavior works there."
-      - name: "An Ubuntu 24.04-era baseline"
-        pros:
-          - "Matches the managed validation runner the CI matrix already uses, so evidence and support agree."
-          - "Leaves the toolchain unconstrained."
-        cons:
-          - "Excludes users on older long-term-support releases."
-          - "Narrows the first release audience for no measured reason."
-      - name: "The baseline the packaging spike measures"
-        pros:
-          - "The support matrix then rests on a tested harness rather than a guess."
-          - "The spike already exercises the version-locked Git CLI, keyring access, and file selection."
-        cons:
-          - "The AppImage and its gate cannot state a support matrix until the spike reports."
-          - "The measured baseline may be narrower than the project would like to promise."
-    recommendation: "The baseline the packaging spike measures"
+      - name: An Ubuntu 22.04-era glibc baseline
+        pros: [Covers long-term-support distributions that many desktop users still run., Widens the audience for the first published AppImage.]
+        cons: [Older glibc and GTK versions constrain the Flutter and Rust toolchains burlmd can use., Nothing has verified that the required keyring and file-selection behavior works there.]
+      - name: An Ubuntu 24.04-era baseline
+        pros: ["Matches the managed validation runner the CI matrix already uses, so evidence and support agree.", Leaves the toolchain unconstrained.]
+        cons: [Excludes users on older long-term-support releases., Narrows the first release audience for no measured reason.]
+      - name: The baseline the packaging spike measures
+        pros: [The support matrix then rests on a tested harness rather than a guess., "The spike already exercises the version-locked Git CLI, keyring access, and file selection."]
+        cons: [The AppImage and its gate cannot state a support matrix until the spike reports., The measured baseline may be narrower than the project would like to promise.]
+    recommendation: The baseline the packaging spike measures
     closure: spike
     spike: SPK-BURL-M001
     interim:
-      assumption: "The release notes say x86-64 Linux without naming distributions until the spike reports."
-      applied_by: ["tech-spec/adrs/ADR-018-prerelease-desktop-artifacts.md"]
+      assumption: The release notes say x86-64 Linux without naming distributions until the spike reports.
+      applied_by: [tech-spec/adrs/ADR-018-prerelease-desktop-artifacts.md]
     status: open
     asked:
       date: 2026-08-25
@@ -275,69 +193,45 @@ decisions:
     question: "Should Epic M be split so that the release gates can depend on the product epics without making the epic graph cyclic?"
     blocks: [EPIC-M]
     options:
-      - name: "Split Epic M into a CI bootstrap epic and a release-gate epic"
-        pros:
-          - "The bootstrap epic becomes the root every other epic depends on, and the gate epic depends on the finished product epics; both edges are then honest."
-          - "Removes the cycle without dropping any real dependency."
-        cons:
-          - "Requires a Stage 4 replan, new epic ids, and a rewritten wave plan."
-          - "Splits one coherent quality-and-release story into two files."
-      - name: "Keep one Epic M and rely on ticket order inside it"
-        pros:
-          - "No replan; the epic file already sequences the bootstrap tickets before the gate tickets."
-          - "Keeps the release story in one place."
-        cons:
-          - "The epic graph no longer records that BURL-M006 and BURL-M011 through BURL-M014 need the product epics complete."
-          - "A wave scheduler could start a release gate before the product exists."
-      - name: "Move the release gates into an out-of-band epic later"
-        pros:
-          - "Defers the decision until the product epics are close to done."
-          - "An out-of-band epic sits outside the critical path by design."
-        cons:
-          - "Leaves the graph wrong in the meantime."
-          - "Out-of-band epics are meant for issues, not for planned release work."
-    recommendation: "Split Epic M into a CI bootstrap epic and a release-gate epic"
+      - name: Split Epic M into a CI bootstrap epic and a release-gate epic
+        pros: ["The bootstrap epic becomes the root every other epic depends on, and the gate epic depends on the finished product epics; both edges are then honest.", Removes the cycle without dropping any real dependency.]
+        cons: ["Requires a Stage 4 replan, new epic ids, and a rewritten wave plan.", Splits one coherent quality-and-release story into two files.]
+      - name: Keep one Epic M and rely on ticket order inside it
+        pros: ["No replan; the epic file already sequences the bootstrap tickets before the gate tickets.", Keeps the release story in one place.]
+        cons: [The epic graph no longer records that BURL-M006 and BURL-M011 through BURL-M014 need the product epics complete., A wave scheduler could start a release gate before the product exists.]
+      - name: Move the release gates into an out-of-band epic later
+        pros: [Defers the decision until the product epics are close to done., An out-of-band epic sits outside the critical path by design.]
+        cons: [Leaves the graph wrong in the meantime., "Out-of-band epics are meant for issues, not for planned release work."]
+    recommendation: Split Epic M into a CI bootstrap epic and a release-gate epic
     closure: ruling
     ruler: "The user, at the next Stage 4 planning pass"
     interim:
       assumption: "The migration set Epic M's depends_on to an empty list, because every other epic needs its BURL-M003 managed-validation matrix; the reverse dependencies of the release-gate tickets are recorded here instead of in the graph."
-      applied_by: ["tasks/epics/EPIC-M-quality-releases.yaml"]
+      applied_by: [tasks/epics/EPIC-M-quality-releases.yaml]
     status: open
     asked:
       date: 2026-09-03
-      in: "The 2026-09-03 structured-constitution migration"
+      in: The 2026-09-03 structured-constitution migration
   - id: OD-10
     question: "Which direction should own the ordering between Epic I's Object retention and Epic L's Remote refs, given that BURL-I011, BURL-I012, and BURL-I013 need BURL-L010 while BURL-L010 needs BURL-I007?"
     blocks: [BURL-I011, BURL-I012, BURL-I013]
     options:
       - name: "Epic L depends on Epic I, and the three Object Store lifecycle tickets move to Epic L"
-        pros:
-          - "Epic I stays the upstream provider of Object identity and retention, which Epics K and L both already need."
-          - "Removes the only remaining cycle in the active graph."
-        cons:
-          - "Epic L grows by three tickets and takes on Object Store scope paths."
-          - "The Object Store lifecycle story is then split across two epic files."
+        pros: ["Epic I stays the upstream provider of Object identity and retention, which Epics K and L both already need.", Removes the only remaining cycle in the active graph.]
+        cons: [Epic L grows by three tickets and takes on Object Store scope paths., The Object Store lifecycle story is then split across two epic files.]
       - name: "Epic I depends on Epic L, and BURL-I007 moves to Epic L"
-        pros:
-          - "Keeps every Object Store lifecycle ticket in Epic I."
-          - "Retention and Remote refs are genuinely one reachability problem."
-        cons:
-          - "Epic K also depends on Epic I, so Epic I becoming downstream of Epic L creates a new cycle through K."
-          - "Moves the Protected State rule away from the epic that defines Objects."
-      - name: "Split Epic I into a core asset epic and an Object Store lifecycle epic"
-        pros:
-          - "Both directions become expressible with no ticket moving between unrelated epics."
-          - "Epic I is already the largest epic at 14,500 estimated diff lines."
-        cons:
-          - "Another Stage 4 replan with new epic ids and a new wave plan."
-          - "The two halves share rust/src/assets and rust/src/object_store paths, so they could not run concurrently anyway."
+        pros: [Keeps every Object Store lifecycle ticket in Epic I., Retention and Remote refs are genuinely one reachability problem.]
+        cons: ["Epic K also depends on Epic I, so Epic I becoming downstream of Epic L creates a new cycle through K.", Moves the Protected State rule away from the epic that defines Objects.]
+      - name: Split Epic I into a core asset epic and an Object Store lifecycle epic
+        pros: [Both directions become expressible with no ticket moving between unrelated epics., "Epic I is already the largest epic at 14,500 estimated diff lines."]
+        cons: [Another Stage 4 replan with new epic ids and a new wave plan., "The two halves share rust/src/assets and rust/src/object_store paths, so they could not run concurrently anyway."]
     recommendation: "Epic L depends on Epic I, and the three Object Store lifecycle tickets move to Epic L"
     closure: ruling
     ruler: "The user, at the next Stage 4 planning pass"
     interim:
       assumption: "The migration removed L from Epic I's depends_on so the graph is acyclic; BURL-I011, BURL-I012, and BURL-I013 still say in their own text that they need BURL-L010, and must not start before it."
-      applied_by: ["tasks/epics/EPIC-I-assets-object-store.yaml"]
+      applied_by: [tasks/epics/EPIC-I-assets-object-store.yaml]
     status: open
     asked:
       date: 2026-09-03
-      in: "The 2026-09-03 structured-constitution migration"
+      in: The 2026-09-03 structured-constitution migration

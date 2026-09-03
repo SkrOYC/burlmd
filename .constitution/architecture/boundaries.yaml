@@ -5,8 +5,8 @@ boundaries:
     kind: module
     type: Desktop interaction surface
     responsibility: "Captures Writer intent and renders authoritative state, warnings, Decisions, Suggestions, diagnostics, and release information"
-    inputs: []
-    outputs: []
+    inputs: ["Receives Note, Workspace, session, synchronization, and recovery state."]
+    outputs: [Sends interaction commands.]
     depends_on: [BND-02]
     certainty: assumed
     assumption: "Migrated from containers.md; not yet mapped to a code path."
@@ -16,8 +16,8 @@ boundaries:
     kind: module
     type: Application coordinator and authority boundary
     responsibility: "Serializes commands against authoritative model state, enforces authority and conformance, and coordinates local and external state machines"
-    inputs: []
-    outputs: []
+    inputs: ["Receives Writer actions, guest-change proposals, synchronization results, and Object results."]
+    outputs: [Emits authoritative state and durable obligations.]
     depends_on: [BND-03, BND-04, BND-05, BND-07, BND-08, BND-09, BND-10, BND-11, BND-12, BND-18]
     certainty: assumed
     assumption: "Migrated from containers.md; not yet mapped to a code path."
@@ -27,8 +27,8 @@ boundaries:
     kind: module
     type: Source-backed semantic model
     responsibility: "Defines Note-local values and operations for parsing, rendering, source-preserving edits, undo, find and replace, Links, Assets, Suggestion representation, and conformance"
-    inputs: []
-    outputs: []
+    inputs: [Accepts Note source and semantic operations.]
+    outputs: ["Returns structured Note state, source ranges, and source-preserving results."]
     depends_on: []
     certainty: assumed
     assumption: "Migrated from containers.md; not yet mapped to a code path."
@@ -38,8 +38,8 @@ boundaries:
     kind: module
     type: Workspace authority model
     responsibility: "Solely owns authoritative Workspace and session state: the Directory tree, canonical paths, Note identity, open-session registry, Protected State, lifecycle provenance, and the lifecycle of Suggestions, Lifecycle Decisions, Asset Decisions, and reconciliation records"
-    inputs: []
-    outputs: []
+    inputs: [Accepts Workspace operations and candidate external states.]
+    outputs: ["Returns authoritative tree state, Decisions, and retention roots."]
     depends_on: [BND-03]
     certainty: assumed
     assumption: "Migrated from containers.md; not yet mapped to a code path."
@@ -49,8 +49,8 @@ boundaries:
     kind: other
     type: Local authoritative storage
     responsibility: "Persists Note source, Directories, recoverable local history, and atomic lifecycle outcomes inside the Workspace boundary"
-    inputs: []
-    outputs: []
+    inputs: [Stores and retrieves authoritative Workspace bytes and Versions.]
+    outputs: [Stores and retrieves authoritative Workspace bytes and Versions.]
     depends_on: [BND-13]
     certainty: assumed
     assumption: "Migrated from containers.md; not yet mapped to a code path."
@@ -60,8 +60,8 @@ boundaries:
     kind: other
     type: Local authoritative Object storage
     responsibility: "Owns verified local Object bytes, active offline availability, hydration handoff, cache eviction, and retention of bytes reachable from Protected State"
-    inputs: []
-    outputs: []
+    inputs: [Accepts verified Object writes and retention roots.]
+    outputs: ["Returns verified bytes, availability, and eviction outcomes."]
     depends_on: [BND-04, BND-05, BND-13]
     certainty: assumed
     assumption: "Migrated from containers.md; not yet mapped to a code path."
@@ -71,9 +71,9 @@ boundaries:
     kind: other
     type: Rebuildable local projection
     responsibility: "Supports search, title lookup, backlinks, conformance inventory, and incremental Workspace views without becoming authoritative"
-    inputs: []
-    outputs: []
-    depends_on: [BND-05]
+    inputs: [Accepts validated Workspace changes.]
+    outputs: [Returns queries and rebuild progress.]
+    depends_on: [BND-05, BND-12]
     certainty: assumed
     assumption: "Migrated from containers.md; not yet mapped to a code path."
   - id: BND-08
@@ -82,8 +82,8 @@ boundaries:
     kind: other
     type: Non-Workspace durable state
     responsibility: "Persists and restores snapshots of device preferences, per-Workspace session state, drafts, operation intents, reconciliation records, synchronization presentation, and migration metadata. It doesn't own authoritative session state"
-    inputs: []
-    outputs: []
+    inputs: [Persists and restores device or Workspace-scoped application state.]
+    outputs: [Persists and restores device or Workspace-scoped application state.]
     depends_on: [BND-12]
     certainty: assumed
     assumption: "Migrated from containers.md; not yet mapped to a code path."
@@ -93,8 +93,8 @@ boundaries:
     kind: module
     type: Platform event adapter
     responsibility: Converts filesystem event bursts into debounced change proposals without deciding authority or conformance
-    inputs: []
-    outputs: []
+    inputs: ["Receives Platform events and emits candidate creates, edits, moves, renames, and deletes."]
+    outputs: ["Receives Platform events and emits candidate creates, edits, moves, renames, and deletes."]
     depends_on: [BND-13]
     certainty: assumed
     assumption: "Migrated from containers.md; not yet mapped to a code path."
@@ -104,8 +104,8 @@ boundaries:
     kind: module
     type: Optional asynchronous coordinator
     responsibility: "Connects a Workspace to a private Remote, detects local and incoming history, coordinates reconciliation, and reports distinct synchronization states"
-    inputs: []
-    outputs: []
+    inputs: [Accepts durable synchronization intents.]
+    outputs: ["Returns authentication, privacy, transfer, divergence, and completion outcomes."]
     depends_on: [BND-02, BND-05, BND-08, BND-12, BND-14]
     certainty: assumed
     assumption: "Migrated from containers.md; not yet mapped to a code path."
@@ -115,8 +115,8 @@ boundaries:
     kind: module
     type: Optional asynchronous Object coordinator
     responsibility: "Validates at connection, periodically, and before publication that anonymous callers can't list, read, write, or delete in the Object Store prefix; uploads and verifies required Objects before history publication; hydrates Objects; and coordinates migration, repair, rotation, and cleanup"
-    inputs: []
-    outputs: []
+    inputs: [Accepts Object obligations and retention roots.]
+    outputs: ["Returns verification, hydration, migration, and recovery outcomes."]
     depends_on: [BND-02, BND-06, BND-08, BND-12, BND-14]
     certainty: assumed
     assumption: "Migrated from containers.md; not yet mapped to a code path."
@@ -126,8 +126,8 @@ boundaries:
     kind: other
     type: Credential and key persistence
     responsibility: "Persists index keys, Provider credentials, and Object Store credentials outside Workspace content and diagnostics"
-    inputs: []
-    outputs: []
+    inputs: ["Stores, reads, rotates, and removes secret material for authorized callers."]
+    outputs: ["Stores, reads, rotates, and removes secret material for authorized callers."]
     depends_on: [BND-13]
     certainty: assumed
     assumption: "Migrated from containers.md; not yet mapped to a code path."
@@ -137,8 +137,8 @@ boundaries:
     kind: other
     type: Operating system and filesystem authority
     responsibility: "Owns window chrome, process lifecycle, filesystem events, secure storage, file selection, installation, and package-manager behavior"
-    inputs: []
-    outputs: []
+    inputs: [Provides Platform services and lifecycle signals.]
+    outputs: [Provides Platform services and lifecycle signals.]
     depends_on: []
     certainty: assumed
     assumption: "Migrated from containers.md; not yet mapped to a code path."
@@ -148,9 +148,9 @@ boundaries:
     kind: other
     type: Optional user-controlled synchronization services
     responsibility: "The Provider authorizes and locates a private Remote. The Remote stores Workspace history. The Object Store stores immutable Object bytes under the Writer's control"
-    inputs: []
-    outputs: []
-    depends_on: ["External network availability", "User-controlled Provider, Remote, and Object Store accounts"]
+    inputs: ["Accept authenticated repository or Object operations and return explicit authorization, privacy, integrity, and availability outcomes."]
+    outputs: ["Accept authenticated repository or Object operations and return explicit authorization, privacy, integrity, and availability outcomes."]
+    depends_on: [External network availability, "User-controlled Provider, Remote, and Object Store accounts"]
     certainty: assumed
     assumption: "Migrated from containers.md; not yet mapped to a code path."
   - id: BND-15
@@ -159,9 +159,9 @@ boundaries:
     kind: pipeline-stage
     type: "Build, verification, and publication boundary"
     responsibility: "Produces each supported artifact, assigns validation roles, establishes authoritative expected identity, requires complete accepted evidence, and publishes artifact integrity with authenticated build provenance"
-    inputs: []
-    outputs: []
-    depends_on: [BND-16, BND-17, BND-19, "Supported Platform build environments"]
+    inputs: [Accepts a release identity and Platform matrix.]
+    outputs: ["Emits verified artifacts, evidence, and metadata to Release Distribution."]
+    depends_on: [BND-16, BND-17, BND-19, Supported Platform build environments]
     certainty: assumed
     assumption: "Migrated from containers.md; not yet mapped to a code path."
   - id: BND-16
@@ -170,9 +170,9 @@ boundaries:
     kind: other
     type: Pipeline-owned System/Native validation environment
     responsibility: "Runs one assigned validation role while owning its display, compositor, input, and process state independently of the Writer's active desktop. Candidate execution and evidence sealing use separate fresh pipeline-owned environments"
-    inputs: []
-    outputs: []
-    depends_on: [BND-15]
+    inputs: ["Candidate execution accepts an artifact, run identity, required role, and authoritative expected source, execution, base, release, build, and corpus identities without origin-signing authority."]
+    outputs: [It emits one complete untrusted bundle containing the role manifest and every named evidence file., A fresh sealing environment validates that bundle and the candidate environment identity before it authenticates an immutable sealed handoff.]
+    depends_on: [BND-15, BND-17]
     certainty: assumed
     assumption: "Migrated from containers.md; not yet mapped to a code path."
   - id: BND-17
@@ -181,9 +181,9 @@ boundaries:
     kind: pipeline-stage
     type: Evidence integrity and acceptance boundary
     responsibility: "Authenticates the fresh sealing environment as managed origin, independently observes its final state after completion, verifies the trust-anchor relationship and ticket write boundary, verifies candidate and sealed handoff identities and complete bundle integrity, and compares captured identity with authoritative expected identity before isolated aggregation"
-    inputs: []
-    outputs: []
-    depends_on: [BND-16]
+    inputs: ["Accepts expected trust-anchor, workflow-signer, tested-source, base, release, build, corpus, run, and required-role identities from Release Pipeline.", Accepts one authenticated sealed bundle per role and the pipeline-owned candidate and sealing environment records., Credentialed acquisition produces verified read-only inputs.]
+    outputs: [Credentialed acquisition produces verified read-only inputs., "Returns an accepted complete set or explicit unmanaged, candidate-controlled, out-of-boundary, untrusted, missing, duplicated, mismatched, stale, corrupt, unsealed, credential-exposed, or isolation-failed outcomes."]
+    depends_on: [BND-16, BND-15]
     certainty: assumed
     assumption: "Migrated from containers.md; not yet mapped to a code path."
   - id: BND-18
@@ -192,8 +192,8 @@ boundaries:
     kind: module
     type: Optional asynchronous metadata coordinator
     responsibility: "Checks compatible release metadata, reports a higher 0.x release, and hands installation authority to the Host Platform or package manager"
-    inputs: []
-    outputs: []
+    inputs: [Receives update-check intent and returns compatible release information.]
+    outputs: [Receives update-check intent and returns compatible release information. It never replaces installed binaries.]
     depends_on: [BND-19]
     certainty: assumed
     assumption: "Migrated from containers.md; not yet mapped to a code path."
@@ -203,9 +203,9 @@ boundaries:
     kind: other
     type: Artifact and release-metadata distribution
     responsibility: "Publishes supported artifacts, integrity data, authenticated provenance, compatibility metadata, and release information without installing binaries"
-    inputs: []
-    outputs: []
-    depends_on: [BND-15, "External network availability"]
+    inputs: [Accepts verified release outputs and serves immutable artifacts and compatible release metadata.]
+    outputs: [Accepts verified release outputs and serves immutable artifacts and compatible release metadata.]
+    depends_on: [BND-15, External network availability]
     certainty: assumed
     assumption: "Migrated from containers.md; not yet mapped to a code path."
 edges:
@@ -256,23 +256,23 @@ edges:
   - from: BND-04
     to: BND-03
     protocol: in-process
-    note: "Note-local values and operations the Workspace authority composes into tree-level outcomes"
+    note: Note-local values and operations the Workspace authority composes into tree-level outcomes
   - from: BND-05
     to: BND-13
     protocol: shared-storage
-    note: "Plain Markdown files and Directories on the host filesystem inside the Workspace boundary"
+    note: Plain Markdown files and Directories on the host filesystem inside the Workspace boundary
   - from: BND-06
     to: BND-13
     protocol: shared-storage
-    note: "Object bytes kept at portable Workspace paths so guest tools can read them"
+    note: Object bytes kept at portable Workspace paths so guest tools can read them
   - from: BND-06
     to: BND-04
     protocol: in-process
-    note: "Asset reference resolution against canonical Workspace identity"
+    note: Asset reference resolution against canonical Workspace identity
   - from: BND-06
     to: BND-05
     protocol: in-process
-    note: "Asset references carried in Note source"
+    note: Asset references carried in Note source
   - from: BND-07
     to: BND-05
     protocol: shared-storage
@@ -280,7 +280,7 @@ edges:
   - from: BND-08
     to: BND-12
     protocol: in-process
-    note: "Application state encrypted or key-wrapped through Platform secure storage"
+    note: "key request when needed: Application state encrypted or key-wrapped through Platform secure storage"
   - from: BND-09
     to: BND-13
     protocol: event
@@ -288,19 +288,19 @@ edges:
   - from: BND-10
     to: BND-14
     protocol: request-response
-    note: "Authenticated Git and Provider API exchanges with the private Remote"
+    note: Authenticated Git and Provider API exchanges with the private Remote
   - from: BND-10
     to: BND-05
     protocol: in-process
-    note: "Local history reads and the reconciled state written back"
+    note: Local history reads and the reconciled state written back
   - from: BND-10
     to: BND-08
     protocol: in-process
-    note: "Durable reconciliation records and scheduler state"
+    note: Durable reconciliation records and scheduler state
   - from: BND-10
     to: BND-12
     protocol: in-process
-    note: "Provider token retrieval and refresh"
+    note: Provider token retrieval and refresh
   - from: BND-11
     to: BND-14
     protocol: request-response
@@ -308,15 +308,15 @@ edges:
   - from: BND-11
     to: BND-06
     protocol: in-process
-    note: "Local Object bytes to publish and hydrated bytes to store"
+    note: Local Object bytes to publish and hydrated bytes to store
   - from: BND-11
     to: BND-08
     protocol: in-process
-    note: "Transfer progress and retention bookkeeping"
+    note: Transfer progress and retention bookkeeping
   - from: BND-11
     to: BND-12
     protocol: in-process
-    note: "Object Store credential retrieval"
+    note: Object Store credential retrieval
   - from: BND-12
     to: BND-13
     protocol: ipc
@@ -324,20 +324,44 @@ edges:
   - from: BND-15
     to: BND-16
     protocol: file-handoff
-    note: "Role assignment and tested-source data handed to a fresh pipeline-owned environment"
+    note: "validation request and authoritative expected-identity handoff: Role assignment and tested-source data handed to a fresh pipeline-owned environment"
   - from: BND-16
     to: BND-17
     protocol: file-handoff
-    note: "Sealed role bundles with manifests, byte counts, and digests"
+    note: "authenticated-origin complete evidence bundle handoff: Sealed role bundles with manifests, byte counts, and digests"
   - from: BND-17
     to: BND-15
     protocol: file-handoff
-    note: "Accepted or rejected aggregate evidence that gates publication"
+    note: "expected-identity-matched evidence set: Accepted or rejected aggregate evidence that gates publication"
   - from: BND-15
     to: BND-19
     protocol: file-handoff
-    note: "Verified artifacts, integrity data, and authenticated provenance for publication"
+    note: "artifact, evidence, and provenance handoff: Verified artifacts, integrity data, and authenticated provenance for publication"
   - from: BND-18
     to: BND-19
     protocol: request-response
-    note: "Release metadata queries for a compatible higher 0.x release"
+    note: Release metadata queries for a compatible higher 0.x release
+  - from: BND-10
+    to: BND-02
+    protocol: in-process
+    note: "asynchronous synchronization intent and result: asynchronous synchronization intent and result"
+  - from: BND-11
+    to: BND-02
+    protocol: in-process
+    note: "asynchronous Object obligation and result: asynchronous Object obligation and result"
+  - from: BND-15
+    to: BND-17
+    protocol: in-process
+    note: "authoritative expected-identity handoff: authoritative expected-identity handoff"
+  - from: BND-16
+    to: BND-15
+    protocol: in-process
+    note: validation request and authoritative expected-identity handoff
+  - from: BND-17
+    to: BND-16
+    protocol: in-process
+    note: authenticated-origin complete evidence bundle handoff
+  - from: BND-19
+    to: BND-15
+    protocol: in-process
+    note: "artifact, evidence, and provenance handoff"
