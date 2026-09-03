@@ -33,7 +33,7 @@ tickets:
     title: Implement the Local Asset Store and immutable manifest
     type: Feature
     effort: 8
-    depends_on: []
+    depends_on: [BURL-I001]
     category: Correctness
     scope:
       in: ["rust/src/assets/**", "rust/src/workspace/**", rust/src/git/operations.rs, rust/src/api/ffi_api.rs, rust/Cargo.toml, rust/Cargo.lock, "test/**"]
@@ -52,7 +52,7 @@ tickets:
     title: Complete inline image import and rendering
     type: Feature
     effort: 8
-    depends_on: []
+    depends_on: [BURL-I002]
     category: Feature-Evolution
     scope:
       in: ["rust/src/assets/**", "rust/src/markdown/**", rust/src/api/ffi_api.rs, lib/src/components/editor.dart, lib/src/components/block_view.dart, lib/src/providers/note_providers.dart, pubspec.yaml, pubspec.lock, "linux/**", "macos/**", "test/**", "integration_test/**"]
@@ -78,7 +78,7 @@ tickets:
     title: Connect and validate a private S3-compatible Object Store
     type: Security
     effort: 8
-    depends_on: []
+    depends_on: [BURL-I001]
     category: Security
     scope:
       in: ["rust/src/object_store/**", "rust/src/security/**", rust/src/api/ffi_api.rs, rust/Cargo.toml, rust/Cargo.lock, "lib/src/components/**", "test/**"]
@@ -97,7 +97,7 @@ tickets:
     title: "Upload, verify, and progressively hydrate Objects"
     type: Feature
     effort: 8
-    depends_on: []
+    depends_on: [BURL-I002, BURL-I004]
     category: Correctness
     scope:
       in: ["rust/src/object_store/**", "rust/src/assets/**", "rust/src/sync/**", rust/src/api/ffi_api.rs, "lib/src/providers/**", "test/**"]
@@ -116,7 +116,7 @@ tickets:
     title: Resolve missing or corrupt Objects safely
     type: Feature
     effort: 8
-    depends_on: []
+    depends_on: [BURL-I005]
     category: Correctness
     scope:
       in: ["rust/src/assets/**", "rust/src/object_store/**", rust/src/api/ffi_api.rs, "lib/src/components/**", "test/**"]
@@ -142,7 +142,7 @@ tickets:
     title: Enforce Protected State reachability and retention
     type: Feature
     effort: 8
-    depends_on: []
+    depends_on: [BURL-I005]
     category: Correctness
     scope:
       in: ["rust/src/assets/**", rust/src/git/operations.rs, "rust/src/object_store/**", "test/**"]
@@ -161,7 +161,7 @@ tickets:
     title: Rotate Object Store credentials atomically
     type: Security
     effort: 5
-    depends_on: []
+    depends_on: [BURL-I005]
     category: Security
     scope:
       in: ["rust/src/object_store/**", "rust/src/security/**", rust/src/api/ffi_api.rs, "lib/src/components/**", "test/**"]
@@ -180,7 +180,7 @@ tickets:
     title: Migrate protected Objects to a replacement store
     type: Feature
     effort: 8
-    depends_on: []
+    depends_on: [BURL-I005, BURL-I007]
     category: Correctness
     scope:
       in: ["rust/src/object_store/**", "rust/src/sync/**", "rust/src/workspace/**", rust/src/api/ffi_api.rs, "lib/src/components/**", "test/**"]
@@ -199,7 +199,7 @@ tickets:
     title: Prepare every protected Object for full-local transition
     type: Feature
     effort: 8
-    depends_on: []
+    depends_on: [BURL-I007, BURL-I006]
     category: Correctness
     scope:
       in: ["rust/src/object_store/**", rust/src/api/ffi_api.rs, "lib/src/components/**", "test/**"]
@@ -227,7 +227,7 @@ tickets:
     title: Detach an unused Object Store without detaching the Remote
     type: Feature
     effort: 5
-    depends_on: []
+    depends_on: [BURL-I004, BURL-I007]
     category: Correctness
     scope:
       in: ["rust/src/object_store/**", "rust/src/security/**", rust/src/api/ffi_api.rs, "lib/src/components/**", "test/**"]
@@ -246,7 +246,7 @@ tickets:
     title: Inventory and migrate foreign Workspace Assets
     type: Feature
     effort: 8
-    depends_on: []
+    depends_on: [BURL-I002]
     category: Feature-Evolution
     scope:
       in: ["rust/src/assets/**", rust/src/workspace/bootstrap.rs, "rust/src/markdown/**", rust/src/api/ffi_api.rs, "lib/src/components/**", "test/**"]
@@ -272,7 +272,7 @@ tickets:
     title: "Integrate Asset state with restore, Consolidation, and shell status"
     type: Feature
     effort: 8
-    depends_on: []
+    depends_on: [BURL-I003, BURL-I006, BURL-I008, BURL-I011, BURL-I012, BURL-I013, BURL-I009]
     category: Correctness
     scope:
       in: ["rust/src/assets/**", rust/src/api/ffi_api.rs, "lib/src/components/**", "lib/src/providers/**", "test/**", "integration_test/**"]

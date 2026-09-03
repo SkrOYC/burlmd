@@ -4,7 +4,7 @@
 
 ## 1. Context & Objective
 - **Triggering upstream file/section:** `.constitution/architecture/risks.md` risk 7 (Span Invalidation Under Splicing); `.constitution/tech-spec/adrs/ADR-007-span-preserving-splice-edits.md` decision 1 and its first Negative consequence; `ADR-008-save-and-commit-granularity.md`'s final unsettled Negative on timer/FFI-thread synchronization.
-- **Target:** How the Core Engine maintains source spans across a splice, the Note size at which the chosen strategy stops meeting the 16ms frame budget in `prd/constraints.md`, and the shape by which the tier 2 idle-write timer synchronizes with the synchronous `update_block`/`commit_block` FFI calls it races.
+- **Target:** How the Core Engine maintains source spans across a splice, the Note size at which the chosen strategy stops meeting the 16ms frame budget in `prd/constraints.yaml`, and the shape by which the tier 2 idle-write timer synchronizes with the synchronous `update_block`/`commit_block` FFI calls it races.
 
 The risk is a silent data-corruption mode rather than a crash: splicing one Block shifts every subsequent byte offset, so a stale span map writes a later edit into the wrong region of the file. ADR-007 names whole-file reparse as the mitigation because it makes an incorrect span map unrepresentable, but the cost of that choice had never been measured. ADR-008 additionally left the timer's locking discipline open, having only observed that reusing `db::connection`'s process-wide mutex naively would put a keystroke behind a lock held across a disk write.
 

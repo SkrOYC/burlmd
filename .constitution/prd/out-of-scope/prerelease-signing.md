@@ -1,6 +1,6 @@
 ---
 decision: deferred
-date: "2026-09-03"
+date: 2026-08-26
 ---
 # Prerelease signing and notarization
 

@@ -31,7 +31,7 @@ tickets:
     title: Publish an atomic plain-copy Export
     type: Feature
     effort: 8
-    depends_on: []
+    depends_on: [BURL-J001]
     category: Feature-Evolution
     scope:
       in: ["rust/src/export/**", rust/src/api/ffi_api.rs, "test/**"]
@@ -50,7 +50,7 @@ tickets:
     title: Publish an atomic Bundle Archive
     type: Feature
     effort: 5
-    depends_on: []
+    depends_on: [BURL-J001]
     category: Feature-Evolution
     scope:
       in: ["rust/src/export/**", rust/src/api/ffi_api.rs, "test/**"]
@@ -88,7 +88,7 @@ tickets:
     title: Apply Consolidation and collision decisions atomically
     type: Feature
     effort: 8
-    depends_on: []
+    depends_on: [BURL-J004]
     category: Correctness
     scope:
       in: ["rust/src/workspace/**", "rust/src/assets/**", rust/src/api/ffi_api.rs, "test/**"]
@@ -107,7 +107,7 @@ tickets:
     title: Integrate plain-copy and archive Export surfaces
     type: Feature
     effort: 5
-    depends_on: []
+    depends_on: [BURL-J002, BURL-J003]
     category: Feature-Evolution
     scope:
       in: ["lib/src/components/**", lib/src/providers/workspace_provider.dart, lib/src/screens/workspace.dart, "lib/l10n/**", "test/**", "integration_test/**"]
@@ -132,7 +132,7 @@ tickets:
     title: Integrate the Consolidation decision surface
     type: Feature
     effort: 5
-    depends_on: []
+    depends_on: [BURL-J005]
     category: Feature-Evolution
     scope:
       in: ["lib/src/components/**", lib/src/providers/workspace_provider.dart, lib/src/screens/workspace.dart, "lib/l10n/**", "test/**", "integration_test/**"]

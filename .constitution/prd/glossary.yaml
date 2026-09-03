@@ -1,7 +1,7 @@
 terms:
   - term: Writer
     definition: "The primary person who creates, organizes, and synchronizes knowledge through burlmd"
-    do_not_use: [User (when the Writer role is intended), Customer]
+    do_not_use: [User (when the Writer role is intended), Customer, Author]
   - term: Agent
     definition: An automated guest that the Writer authorizes to read or write Workspace files. burlmd remains the authority for Workspace semantics
     do_not_use: [Owner, Automated Consumer]
@@ -16,7 +16,7 @@ terms:
     do_not_use: [Folder]
   - term: Link
     definition: "A lateral connection from one Note to another, forming the knowledge graph structure"
-    do_not_use: [Backlink (as a synonym for Link)]
+    do_not_use: [Backlink (as a synonym for Link), Wikilink]
   - term: Workspace
     definition: The root container holding all Notes and Directories. It is local by default and may optionally be connected to a Remote
     do_not_use: [Vault, Brain, Repo]
@@ -28,7 +28,7 @@ terms:
     do_not_use: []
   - term: Suggestion
     definition: A persistent inline decision for resolving a concurrent content change without exposing raw conflict markers
-    do_not_use: [Conflict (as a synonym for Suggestion), Fork]
+    do_not_use: [Conflict (as a synonym for Suggestion), Fork, Merge, Diff]
   - term: Lifecycle Decision
     definition: "A required user choice that resolves a conflicting add, delete, rename, move, Directory, type, or path-identity outcome. Delete-versus-edit remains a Suggestion instead"
     do_not_use: [Structural conflict (as a synonym), File conflict]
@@ -55,13 +55,13 @@ terms:
     do_not_use: [Import (as a synonym)]
   - term: Diagnostics Export
     definition: "A user-produced export describing recent application behavior — errors, retries, failures — with Note content excluded"
-    do_not_use: [Log dump, Crash report]
+    do_not_use: [Log dump, Crash report, Telemetry]
   - term: Version
     definition: A recoverable past state of one Note in local history
-    do_not_use: []
+    do_not_use: [Revision, Snapshot, Backup]
   - term: Asset
     definition: "User-visible non-Note content that a Note references, such as an image"
-    do_not_use: [Blob]
+    do_not_use: [Blob, Attachment]
   - term: Object
     definition: Immutable asset bytes identified by their content. An Asset refers to one Object at a time
     do_not_use: []

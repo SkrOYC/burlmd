@@ -17,12 +17,15 @@ tickets:
     scope:
       in: [rust/src/git/operations.rs]
     verification:
-      command: "git diff --check"
+      command: git diff --check
       expected: exit 0
     description: "Implement programmatic Git clone, commit, push, and pull operations against the local Workspace directory using gix (or shelling out to the git CLI if gix currently lacks robust working tree merge conflict generation)"
     acceptance:
       mode: gherkin
-      evidence: TODO
+      evidence: |
+        Given a local directory with changes
+        When the commit function is called
+        Then `gix` successfully creates a Git commit in the local `.git` index
     flows: []
     certainty: assumed
     status: done
@@ -35,12 +38,15 @@ tickets:
     scope:
       in: [lib/src/screens/login.dart, rust/src/api/auth.rs]
     verification:
-      command: "git diff --check"
+      command: git diff --check
       expected: exit 0
     description: "Build the OAuth web flow in Flutter to capture a GitHub authorization code, pass it to Rust, exchange it for tokens via PKCE, and store them via keyring"
     acceptance:
       mode: gherkin
-      evidence: TODO
+      evidence: |
+        Given the Login screen
+        When the user completes the OAuth flow
+        Then the Access Token is securely stored in the OS Keychain by Rust
     flows: []
     certainty: assumed
     status: done
@@ -48,17 +54,20 @@ tickets:
     title: Background Sync Manager Scheduler
     type: Feature
     effort: 3
-    depends_on: []
+    depends_on: [BURL-C001, BURL-C002]
     category: Correctness
     scope:
       in: [rust/src/sync/scheduler.rs]
     verification:
-      command: "git diff --check"
+      command: git diff --check
       expected: exit 0
     description: Implement a debounced background worker in Rust that calls the gix push/pull operations automatically every X minutes or after explicitly saving
     acceptance:
       mode: gherkin
-      evidence: TODO
+      evidence: |
+        Given active local commits
+        When 5 seconds of inactivity pass
+        Then the background worker automatically pushes to the Remote Repo
     flows: []
     certainty: assumed
     status: done
@@ -70,5 +79,5 @@ closeout:
   changelog_entries: []
   candidate_terms: []
   routed_upstream: []
-  follow_ups: []
+  follow_ups: ["**GitHub OAuth App registration.** `BURLMD_GITHUB_CLIENT_ID`/`BURLMD_GITHUB_CLIENT_SECRET` must be provided at deploy time; no GitHub OAuth App/GitHub App is registered for this project yet. Real-network token exchange and credentialed push/pull are untested beyond mock-server/local-fixture coverage — a manual smoke test against a real GitHub account is needed once an app is registered.", "**Keychain credential readback.** `api::auth` exposes no public accessor to read stored OAuth tokens back out of the OS Keychain (only the private `store_tokens_in_keyring`), so `SyncScheduler`'s `credentials` dependency defaults to `None`. A follow-up must bridge stored tokens into a `GitCredentials` value for the scheduler to use.", "**No notes re-index function exists.** Epic B never added a `notes`/`notes_fts` re-index function, so the scheduler's conflict-path re-index hook (`SyncDeps::default().reindex`) defaults to a no-op.", "**App-lifecycle integration is un-ticketed.** Nothing in the codebase constructs a `SyncScheduler`, calls `notify_activity()` from save, performs the login flow's tail steps (clone the repository with the access token, initialize the encrypted local index, per `flow-auth-handshake.md`), or checks for an existing session at startup — no such FFI contract function exists, so every process restart re-shows the login screen even if a valid token is already sitting in the OS Keychain.", "**`SyncScheduler::stop()` latency is unbounded.** It is bounded only by whatever in-flight git subprocess (if any) is currently running, with no timeout. Bound it when app-lifecycle wiring lands.", "**Post-conflict re-push timing.** After a push rejection followed by a clean auto-merge, the merge commit is only pushed on the *next* trigger (debounce/poll/activity), not immediately — faithful to `flow-sync-push.md` as written, but the follow-up ticket should decide explicitly whether an immediate re-push is wanted instead.", "**Accepted design decision (not a gap):** the PKCE `code_verifier` transits Dart between `begin_oauth_flow` and `authenticate_workspace`, per standard RFC 8252 native-app PKCE practice. The OAuth tokens themselves never cross the FFI boundary at any point."]
   settled: []
