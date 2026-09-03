@@ -1,0 +1,260 @@
+id: L
+name: sync reconciliation
+kind: product
+capabilities: [CAP-064, CAP-065, CAP-066, CAP-071, CAP-072, CAP-073, CAP-074]
+depends_on: [G, H, I, K, M]
+scope:
+  paths: [".constitution/prototypes/git-analysis/**", ".constitution/spikes/SPK-BURL-L001.md", "rust/src/git/**", "rust/src/sync/**", rust/src/api/ffi_api.rs, rust/Cargo.toml, rust/Cargo.lock, "test/**", rust/src/bin/sync_freshness_meter.rs, lib/src/providers/workspace_provider.dart, "rust/src/markdown/**", lib/src/components/editor.dart, lib/src/components/block_view.dart, lib/src/providers/note_providers.dart, "rust/src/workspace/**", "lib/src/components/**", "rust/src/assets/**", "rust/src/object_store/**", "rust/src/db/**", "lib/l10n/**", "lib/src/providers/**", "integration_test/**"]
+  tech_spec_patchable: []
+estimated_diff_lines: 13500
+tickets:
+  - id: BURL-L001
+    title: Select the structured Git analysis protocol
+    type: Spike
+    effort: 8
+    depends_on: []
+    category: Security
+    scope:
+      in: [".constitution/prototypes/git-analysis/**", ".constitution/spikes/SPK-BURL-L001.md"]
+    verification:
+      command: "TRUST_ANCHOR_WORKTREE/scripts/managed-evidence.sh run --ticket BURL-L001 --trust-anchor-sha TRUST_ANCHOR_SHA --source-ref SOURCE_REF --tested-source-sha TESTED_SOURCE_SHA --base-sha BASE_SHA --output EVIDENCE_WORKTREE/.constitution/prototypes/git-analysis/managed-evidence.json && git -C EVIDENCE_WORKTREE diff --check"
+      expected: "exit 0 with distinct filesystem runs, .constitution/prototypes/git-analysis/results.json, accepted .constitution/prototypes/git-analysis/managed-evidence.json, and executor-authored .constitution/spikes/SPK-BURL-L001.md"
+    stop_conditions: ["STOP if the `BURL-M003` evidence pull request isn't merged or if evidence is missing, stale, mismatched, corrupt, self-hosted, unauthenticated, assigned to the wrong filesystem role, or rejected.", "STOP if post-completion API observation doesn't resolve the receipt locator to one completed successful sealing job on the fixed hosted label, or if an expected, candidate, or sealed artifact name or normalized digest is invalid, missing, duplicate, extra, or inconsistent with the run nonce.", "STOP if the launcher isn't the clean trust-anchor copy, a trusted control file differs at the signer SHA, or the base-to-source diff leaves the Git-analysis write allowlist.", "STOP if the machine result is missing or invalid, or if the evidence commit doesn't contain that result, the accepted managed report, and the executor-authored Spike report together.", "STOP if a candidate process or coordinator can observe a credential canary, coordinator identity changes after preparation, isolation or network denial fails, an input is writable, or any path except the coordinator output is writable.", "STOP if analysis parses human error prose, relies on markers, mutates the authoritative worktree, or executes repository-controlled behavior.", STOP at the 3-day time box and report uncovered conflict classes.]
+    description: "Compare merge-tree, temporary-index plumbing, and isolated-worktree porcelain across the complete Git corpus and fault matrix"
+    acceptance:
+      mode: contract_test
+      evidence: "Every declared candidate and conflict/security gate has attributed structured evidence on both default Linux and macOS filesystems. All roles provide `common-functional`. Linux and macOS 26 additionally provide `filesystem-compatibility` and `git-protocol`; no role claims performance or visual evidence. The result tool captures host fingerprints, filesystem facts, and effective `core.ignoreCase`, `core.precomposeUnicode`, `core.protectHFS`, and filemode behavior from system and Git probes. Aggregation requires that exact profile and binds evidence to the trust anchor, workflow signer, tested source, ticket base, build, corpus, run, artifact nonce, sealing origin, and filesystem role. It rejects missing or unassigned classes, same-host, same-operating-system, role-mismatched, unauthenticated, or incomplete evidence. The accepted aggregate records unchanged trusted controls, Git-analysis allowlist conformance, candidate and sealing origins, the prepared coordinator identity, and successful coordinator isolation. The authoritative `results.json` contains exact object/tree identities, crash/CAS inputs, worktree nonmutation proof, and redistribution obligations. The executor commits its human interpretation with that result and the accepted managed report."
+    flows: [flow-conflict-resolution]
+    certainty: assumed
+    status: planned
+    spike: SPK-BURL-L001
+  - id: BURL-L002
+    title: Implement typed read-only Git reconciliation analysis
+    type: Security
+    effort: 8
+    depends_on: [BURL-L001]
+    category: Security
+    scope:
+      in: ["rust/src/git/**", "rust/src/sync/**", rust/src/api/ffi_api.rs, rust/Cargo.toml, rust/Cargo.lock, "test/**"]
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && cargo clippy --workspace --all-targets --manifest-path rust/Cargo.toml -- -D warnings && ./scripts/check-generated-bindings.sh && git diff --check"
+      expected: exit 0 with the complete accepted Git matrix and hostile-configuration isolation passing
+    stop_conditions: ["STOP if final TechSpec hasn't accepted BURL-L001 or any analysis path uses ambient/version-unchecked Git."]
+    description: "Wrap the accepted version-locked Git protocol in typed records for exact base/local/incoming commits, paths, stages, tentative trees, Suggestions, Lifecycle Decisions, Asset Decisions, and unsupported entries"
+    acceptance:
+      mode: contract_test
+      evidence: "The complete Spike corpus maps deterministically into typed outcomes without worktree mutation, localized text parsing, marker dependence, repository hooks/filters/drivers/helpers, or unsupported alias execution."
+    flows: [flow-conflict-resolution]
+    certainty: assumed
+    status: planned
+  - id: BURL-L003
+    title: Complete the durable synchronization scheduler
+    type: Feature
+    effort: 8
+    depends_on: [BURL-L002]
+    category: Correctness
+    scope:
+      in: ["rust/src/sync/**", "rust/src/git/**", rust/src/bin/sync_freshness_meter.rs, rust/src/api/ffi_api.rs, lib/src/providers/workspace_provider.dart, "test/**"]
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh sched-l003 && cargo run --release --manifest-path rust/Cargo.toml --bin sync-freshness-meter -- --private-remote \"$BURLMD_TEST_PRIVATE_REMOTE_URL\" --local-versions 100 --incoming-versions 100 --offline-cycles 10 --offline-duration-seconds 3600 --output target/sync-meters/sched-l003.json && git diff --check"
+      expected: "exit 0 with debounce, backoff, offline, refresh, workflow-history pause, bounded shutdown, restart, privacy-pause, and machine-readable freshness measurements passing"
+    stop_conditions: ["STOP if network work blocks editing, shutdown waits without a bound, or an abrupt kill loses durable sync intent.", "STOP before push if any commit reachable from a local publication ref contains `.github/workflows/**`; preserve durable intent and offer Consolidation into a clean Workspace."]
+    description: "Wire commit activity and application lifecycle into durable fetch/analyze/reconcile/push scheduling, retry/backoff, authorization/privacy pauses, workflow-history refusal, and one bounded final shutdown attempt"
+    acceptance:
+      mode: benchmark
+      constraints: [NFC-10, NFC-11]
+      evidence: "Against the isolated private Remote named by the exact verification command, all 100 healthy local Versions publish within the 60-second Sync Latency Goal and all 100 incoming Versions surface within the 60-second Remote Freshness Goal. A current or historical `.github/workflows/**` path pauses push without requesting Workflows permission or blocking local use. Ten offline/reconnect cycles include an explicit 3,600-second offline interval, honor the 15-minute maximum backoff, and surface incoming changes within 60 seconds of the one-hour reconnect. Editing remains nonblocking; shutdown obeys its bound; and restart resumes every incomplete durable intent without a daemon."
+    flows: [flow-sync-push]
+    certainty: assumed
+    status: planned
+  - id: BURL-L004
+    title: Materialize content conflicts as canonical AST Suggestions
+    type: Feature
+    effort: 8
+    depends_on: [BURL-L002]
+    category: Correctness
+    scope:
+      in: ["rust/src/markdown/**", "rust/src/sync/**", "rust/src/git/**", rust/src/api/ffi_api.rs, "test/**"]
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && dart analyze && git diff --check"
+      expected: "exit 0 with smallest-safe-subtree, base/local/incoming, multi-Suggestion, and valid-merge-tree tests passing"
+    stop_conditions: ["STOP if literal marker text is misclassified, either side is lost, or unresolved Suggestions can't live in a valid two-parent merge commit."]
+    description: "Convert source-backed Markdown content conflicts into independently resolvable canonical AST Suggestions, preserve all three variants, and materialize a valid merge tree that can continue syncing while Suggestions remain"
+    acceptance:
+      mode: invariant
+      evidence: "Every content fixture preserves base/local/incoming bytes, partitions only at the smallest safe AST subtree, never exposes raw markers, produces no duplicate Note, and records a valid two-parent merge commit even with unresolved Suggestions."
+    flows: [flow-conflict-resolution]
+    certainty: assumed
+    status: planned
+  - id: BURL-L005
+    title: Resolve Suggestions independently in the editor
+    type: Feature
+    effort: 8
+    depends_on: [BURL-L004]
+    category: Feature-Evolution
+    scope:
+      in: [lib/src/components/editor.dart, lib/src/components/block_view.dart, lib/src/providers/note_providers.dart, rust/src/api/ffi_api.rs, "test/**"]
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh sug-l005 && git diff --check"
+      expected: "exit 0 with local/incoming/both/custom, partial unresolved, keyboard, Semantics, and persistence tests passing"
+    stop_conditions: [STOP if resolving one Suggestion implicitly resolves another or if UI owns conflict source.]
+    description: "Render canonical Suggestions inline and support independent accept-local, accept-incoming, accept-both, and custom source replacement while retaining unresolved siblings through history and sync"
+    acceptance:
+      mode: gherkin
+      evidence: |
+        ```gherkin
+        Given a Note contains several unresolved Suggestions
+        When the Writer resolves one using any supported choice
+        Then only that Suggestion changes
+        And the Note remains valid and durable
+        And unresolved siblings remain visible and synchronizable
+        ```
+    flows: [flow-conflict-resolution]
+    certainty: assumed
+    status: planned
+  - id: BURL-L006
+    title: Implement durable Lifecycle Decisions
+    type: Feature
+    effort: 8
+    depends_on: [BURL-L002]
+    category: Correctness
+    scope:
+      in: ["rust/src/sync/**", "rust/src/workspace/**", "rust/src/git/**", rust/src/api/ffi_api.rs, "lib/src/components/**", "test/**"]
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh life-l006 && git diff --check"
+      expected: "exit 0 with all structural classes, durable pause, editing availability, explicit choices, and resume tests passing"
+    stop_conditions: [STOP if uncertain guest rename provenance is accepted automatically or local editing/history is blocked while sync pauses.]
+    description: "Persist and present explicit decisions for add/delete/rename/move/Directory/type/path-identity conflicts, preserve candidates, pause Workspace sync, and apply one validated lifecycle outcome"
+    acceptance:
+      mode: invariant
+      evidence: "Every structural conflict maps to a durable keyed decision with exact input commits/tree; sync pauses but local editing/history continues; uncertain rename is explicit; and only a complete revalidated decision set can publish one canonical tree."
+    flows: [flow-conflict-resolution]
+    certainty: assumed
+    status: planned
+  - id: BURL-L007
+    title: Implement durable Asset Decisions
+    type: Feature
+    effort: 8
+    depends_on: [BURL-L002]
+    category: Correctness
+    scope:
+      in: ["rust/src/sync/**", "rust/src/assets/**", "rust/src/object_store/**", rust/src/api/ffi_api.rs, "lib/src/components/**", "test/**"]
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh asset-l007 && git diff --check"
+      expected: "exit 0 with byte/reference/availability conflict, verified candidate, pause, choice, and Object publication tests passing"
+    stop_conditions: ["STOP if either byte candidate is discarded before decision or a chosen Object isn't verified locally and remotely before resume."]
+    description: "Persist and present Asset Decisions for conflicting bytes, references, or availability; preserve every candidate Object; coordinate recovery and Object publication; and pause only affected Workspace synchronization"
+    acceptance:
+      mode: invariant
+      evidence: "Every binary/reference conflict retains both identities and verified bytes, offers only valid actions, keeps local editing/history available, and resumes only after the selected reference and Object verify against the recorded reconciliation inputs."
+    flows: [flow-conflict-resolution, flow-object-store-lifecycle]
+    certainty: assumed
+    status: planned
+  - id: BURL-L008
+    title: Finalize reconciliation with compare-and-swap and crash recovery
+    type: Feature
+    effort: 8
+    depends_on: [BURL-L004, BURL-L006, BURL-L007]
+    category: Correctness
+    scope:
+      in: ["rust/src/sync/**", "rust/src/git/**", "rust/src/db/**", rust/src/api/ffi_api.rs, "test/**"]
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && dart analyze && git diff --check"
+      expected: "exit 0 with fault injection at every state transition, restart, stale branch, revalidation, and CAS tests passing"
+    stop_conditions: [STOP if a decision can apply to different commit/tree identities than the Writer reviewed.]
+    description: "Persist base/local/incoming/tentative identities and decisions before input, recover them after crash, CAS the branch from recorded local, recompute after advancement, and require renewed input for changed outcomes"
+    acceptance:
+      mode: invariant
+      evidence: "Fault injection at every durable transition resumes or safely abandons without losing candidates. Branch advancement prevents stale publication, recomputation retains only decisions whose exact outcome is unchanged, and final CAS creates one valid merge commit."
+    flows: [flow-conflict-resolution]
+    certainty: assumed
+    status: planned
+  - id: BURL-L009
+    title: Expose complete synchronization state and recovery actions
+    type: Feature
+    effort: 5
+    depends_on: [BURL-L003, BURL-L005, BURL-L008]
+    category: Feature-Evolution
+    scope:
+      in: [rust/src/api/ffi_api.rs, lib/src/providers/workspace_provider.dart, "lib/src/components/**", "lib/l10n/**", "test/**"]
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh state-l009 && git diff --check"
+      expected: exit 0 with clean/active/offline/behind/failed/auth/decision/Suggestion state tests passing
+    stop_conditions: [STOP if pending Suggestions are presented as clean or a paused Decision shares the same action model as offline/auth failure.]
+    description: "Expose and render typed synchronization states, timestamps, pending commits, pending Suggestions, decision pauses, privacy failures, and only the recovery actions valid for each"
+    acceptance:
+      mode: gherkin
+      evidence: |
+        ```gherkin
+        Given each synchronization state and transition
+        When the shell renders status
+        Then the Writer can distinguish the state and its valid action
+        And pending Suggestions are not clean
+        And Decision pauses do not block local editing or history
+        ```
+    flows: [flow-sync-push]
+    certainty: assumed
+    status: planned
+  - id: BURL-L010
+    title: Integrate complete Remote refs with Protected Object retention
+    type: Feature
+    effort: 8
+    depends_on: [BURL-L003]
+    category: Correctness
+    scope:
+      in: ["rust/src/git/**", "rust/src/sync/**", "rust/src/assets/**", "rust/src/object_store/**", "test/**"]
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && cargo clippy --workspace --all-targets --manifest-path rust/Cargo.toml -- -D warnings && git diff --check"
+      expected: "exit 0 with unfiltered advertised-ref enumeration, quarantined no-prune fetch, incomplete stop, and deletion integration tests passing"
+    stop_conditions: ["STOP if an advertised ref is excluded or can't be fetched into quarantine without an accepted upstream classification that proves it isn't published history.", "STOP and mark Remote authority incomplete if advertisement or quarantine work exceeds 100,000 refs, 16 MiB of advertised-ref bytes, 2 GiB of cumulative fetched data, or 30 minutes of wall-clock time."]
+    description: "Run unfiltered git ls-remote --refs against the attached Remote and stream-parse every advertised refs/* entry under explicit count and byte limits. Fetch each Object ID into an isolated, bounded, no-prune temporary quarantine namespace without mutating Workspace refs. Enforce 100,000 refs, 16 MiB of advertisement data, 2 GiB of cumulative fetched data, and a 30-minute wall-clock deadline, with cancellation and cleanup on success, failure, cancellation, and restart. Extend Protected State roots with every fetched history for recovery, migration, detach, cache-retention, and reconciliation decisions. Fail closed when enumeration, classification, fetch completeness, or resource bounds are unproven while preserving local use"
+    acceptance:
+      mode: invariant
+      evidence: "Generated Remote namespaces include branches, annotated and lightweight tags, pull-request refs, and arbitrary advertised ref hierarchies. Every fetchable advertised Object ID expands Protected State. Reflog-only and non-advertised Provider-internal refs don't expand authority. Boundary tests cover every limit, streaming behavior, cancellation, crash recovery, path confinement, and unconditional quarantine cleanup. An unclassified or unfetchable advertised ref, authorization failure, enumeration failure, fetch failure, or exceeded limit marks Remote authority incomplete and stops migration, detach, retention, or reconciliation decisions that require complete published history without blocking local editing. Independent verified local cache eviction remains possible; authoritative remote deletion doesn't exist during `0.x`."
+    flows: [flow-sync-push, flow-object-store-lifecycle]
+    certainty: assumed
+    status: planned
+  - id: BURL-L011
+    title: Resolve delete-versus-edit without content loss
+    type: Feature
+    effort: 5
+    depends_on: [BURL-L004, BURL-L006]
+    category: Correctness
+    scope:
+      in: ["rust/src/sync/**", "rust/src/markdown/**", "rust/src/workspace/**", rust/src/api/ffi_api.rs, "lib/src/components/**", "test/**"]
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh delete-l011 && git diff --check && ! rg -n '\\[DEBUG-' lib rust test scripts"
+      expected: "exit 0 with both direction orders, restore-plus-Suggestion, confirmation, and history tests passing"
+    stop_conditions: [STOP if edited content becomes only a structural decision or deletion wins without explicit confirmation.]
+    description: "Restore the edited Note, represent the content difference as a Suggestion, preserve both outcomes, and require explicit confirmation before deletion wins"
+    acceptance:
+      mode: gherkin
+      evidence: |
+        ```gherkin
+        Given one side deleted a Note and the other edited it
+        When reconciliation materializes
+        Then the edited Note is restored with a Suggestion and recoverable history
+        And deletion occurs only after the Writer explicitly confirms that outcome
+        ```
+    flows: [flow-conflict-resolution]
+    certainty: assumed
+    status: planned
+  - id: BURL-L012
+    title: Validate the complete synchronization lifecycle
+    type: Feature
+    effort: 8
+    depends_on: [BURL-L009, BURL-L010, BURL-L011]
+    category: Correctness
+    scope:
+      in: ["rust/src/sync/**", "rust/src/git/**", "rust/src/assets/**", "lib/src/components/**", "lib/src/providers/**", "test/**", "integration_test/**"]
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && ./scripts/smoke-shot.sh integ-l012 && git diff --check"
+      expected: exit 0 with hermetic and private canary lifecycle evidence passing
+    stop_conditions: ["STOP if any full-lifecycle path loses local/incoming state, publishes a Note before its Objects, or blocks local editing on network state."]
+    description: "Exercise connect, multi-device sync, offline/reconnect, content/lifecycle/asset conflicts, unresolved Suggestions, privacy/auth failure, crash recovery, shutdown attempt, detach, and reconnect as one feature matrix"
+    acceptance:
+      mode: hitl_sil
+      evidence: "Hermetic fixtures and the dedicated private GitHub canary complete the full matrix with exact state transitions, protected Objects, no content loss, local-first editing throughout, bounded shutdown, recoverable interruption, and no public repository or credential exposure."
+    flows: [flow-sync-push, flow-conflict-resolution]
+    certainty: assumed
+    status: planned

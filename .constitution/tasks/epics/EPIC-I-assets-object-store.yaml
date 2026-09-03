@@ -1,0 +1,289 @@
+id: I
+name: assets object store
+kind: product
+capabilities: [CAP-031, CAP-052, CAP-053, CAP-054, CAP-055, CAP-056, CAP-057, CAP-058, CAP-059, CAP-060, CAP-061, CAP-062]
+depends_on: [G, H, M]
+scope:
+  paths: [".constitution/prototypes/assets/**", ".constitution/spikes/SPK-BURL-I001.md", "rust/src/assets/**", "rust/src/workspace/**", rust/src/git/operations.rs, rust/src/api/ffi_api.rs, rust/Cargo.toml, rust/Cargo.lock, "test/**", "rust/src/markdown/**", lib/src/components/editor.dart, lib/src/components/block_view.dart, lib/src/providers/note_providers.dart, pubspec.yaml, pubspec.lock, "linux/**", "macos/**", "integration_test/**", "rust/src/object_store/**", "rust/src/security/**", "lib/src/components/**", "rust/src/sync/**", "lib/src/providers/**", rust/src/workspace/bootstrap.rs]
+  tech_spec_patchable: []
+estimated_diff_lines: 14500
+tickets:
+  - id: BURL-I001
+    title: Measure the hybrid Asset and Object Store contract
+    type: Spike
+    effort: 8
+    depends_on: []
+    category: Feature-Evolution
+    scope:
+      in: [".constitution/prototypes/assets/**", ".constitution/spikes/SPK-BURL-I001.md"]
+    verification:
+      command: "TRUST_ANCHOR_WORKTREE/scripts/managed-evidence.sh run --ticket BURL-I001 --trust-anchor-sha TRUST_ANCHOR_SHA --source-ref SOURCE_REF --tested-source-sha TESTED_SOURCE_SHA --base-sha BASE_SHA --output EVIDENCE_WORKTREE/.constitution/prototypes/assets/managed-evidence.json && git -C EVIDENCE_WORKTREE diff --check"
+      expected: "exit 0 with .constitution/prototypes/assets/results.json, accepted .constitution/prototypes/assets/managed-evidence.json, executor-authored .constitution/spikes/SPK-BURL-I001.md, and explicit OD-06/OD-07 disposition"
+    stop_conditions: [STOP if credentials would enter committed files or evidence., STOP if a result weakens Protected State or deletion safety., "STOP if the `BURL-M003` evidence pull request isn't merged or if evidence is missing, stale, mismatched, corrupt, unauthenticated, or assigned to the wrong role.", "STOP if post-completion API observation doesn't resolve the receipt locator to one completed successful sealing job on the fixed hosted label, or if an expected, candidate, or sealed artifact name or normalized digest is invalid, missing, duplicate, extra, or inconsistent with the run nonce.", "STOP if the launcher isn't the clean trust-anchor copy, a trusted control file differs at the signer SHA, or the base-to-source diff leaves the Asset write allowlist.", "STOP if the machine result is missing or invalid, or if the evidence commit doesn't contain that result, the accepted managed report, and the executor-authored Spike report together.", "STOP if a candidate process or coordinator can observe a credential canary, coordinator identity changes after preparation, isolation or network denial fails, an input is writable, or any path except the coordinator output is writable.", "STOP at the 3-day time box and leave thresholds unresolved when full meters aren't established."]
+    description: "Compare the accepted S3 client candidates and measure content identity, immutable manifests, image limits, hydration, reachability, retention, and repository health"
+    acceptance:
+      mode: benchmark
+      constraints: [NFC-08, NFC-09]
+      evidence: "Candidate-attributed results cover all three common functional roles, both measured performance roles, every declared gate, exact tool and service configurations without secrets, UI Responsiveness and Idle Memory disposition, and a recommendation or explicit unresolved outcome. All roles provide `common-functional`. Linux and macOS 26 additionally provide `performance` and `asset-measurement`; macOS 15 provides no performance class. The Asset profile doesn't claim platform-regression or authoritative visual evidence. Each candidate job captures the verified logical viewport and complete image, environment, build, corpus, run, nonce, and role identity in one untrusted bundle. Aggregation verifies that exact profile and rejects a self-hosted origin or missing, extra, stale, mismatched, corrupt, unauthenticated, or role-invalid evidence. The accepted aggregate records the trust anchor, workflow signer, separate tested source, Asset allowlist conformance, candidate and sealing origins, prepared coordinator identity, and successful coordinator isolation. The CLI produces the authoritative schema-valid `results.json`; the executor commits its human interpretation with that result and the accepted managed report."
+    flows: [flow-assets, flow-object-store-lifecycle]
+    certainty: assumed
+    status: planned
+    spike: SPK-BURL-I001
+  - id: BURL-I002
+    title: Implement the Local Asset Store and immutable manifest
+    type: Feature
+    effort: 8
+    depends_on: [BURL-I001]
+    category: Correctness
+    scope:
+      in: ["rust/src/assets/**", "rust/src/workspace/**", rust/src/git/operations.rs, rust/src/api/ffi_api.rs, rust/Cargo.toml, rust/Cargo.lock, "test/**"]
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && cargo clippy --workspace --all-targets --manifest-path rust/Cargo.toml -- -D warnings && ./scripts/check-generated-bindings.sh && git diff --check"
+      expected: "exit 0 with identity, dedupe, manifest, atomic-copy, containment, and Git-payload-exclusion tests passing"
+    stop_conditions: ["STOP if final TechSpec hasn't accepted BURL-I001 or mutable device state enters the Git manifest.", "STOP if commit safety depends on a writable, readable, present, or trustworthy `.gitignore` file."]
+    description: "Add the accepted content identity, canonical assets/objects/ payload path, immutable textual manifest, atomic imported-byte adoption, deduplication, and local verification state. Enforce a Core commit-path exclusion for assets/objects/ before staging, independent of ignore files and ambient Git configuration. Stage only authoritative Note and textual-manifest paths selected by the operation"
+    acceptance:
+      mode: invariant
+      evidence: "Byte-identical imports share one Object; distinct bytes never collide; active bytes are copied inside the contained Workspace before reference; the manifest contains only accepted immutable facts; and device-local hydration/verification state never enters Git. Missing, modified, unreadable, or symlinked `.gitignore` fixtures can't place payload bytes in the index or a commit. Existing tracked payload paths, broad commit requests, and adversarial path aliases fail closed before staging, while the textual manifest remains committable."
+    flows: [flow-assets]
+    certainty: assumed
+    status: planned
+  - id: BURL-I003
+    title: Complete inline image import and rendering
+    type: Feature
+    effort: 8
+    depends_on: [BURL-I002]
+    category: Feature-Evolution
+    scope:
+      in: ["rust/src/assets/**", "rust/src/markdown/**", rust/src/api/ffi_api.rs, lib/src/components/editor.dart, lib/src/components/block_view.dart, lib/src/providers/note_providers.dart, pubspec.yaml, pubspec.lock, "linux/**", "macos/**", "test/**", "integration_test/**"]
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh image-i003 && git diff --check"
+      expected: "exit 0 with picker, clipboard, drag/drop, refusal, and inline-render tests passing"
+    stop_conditions: ["STOP if import references the source file in place, bypasses the accepted size/pixel limits, or lets Flutter invent Object identity."]
+    description: "Import images from file selection, clipboard, and drag/drop into the Local Asset Store, splice a standard bundle-absolute Markdown reference, and render verified bytes inline with accessible fallbacks"
+    acceptance:
+      mode: gherkin
+      evidence: |
+        ```gherkin
+        Given a supported image from each import channel
+        When the Writer inserts it
+        Then Core adopts and verifies the bytes before writing a portable Markdown reference
+        And the image renders offline
+        And oversized, unsafe, or invalid input is refused without changing the Note
+        ```
+    flows: [flow-assets]
+    certainty: assumed
+    status: planned
+  - id: BURL-I004
+    title: Connect and validate a private S3-compatible Object Store
+    type: Security
+    effort: 8
+    depends_on: [BURL-I001]
+    category: Security
+    scope:
+      in: ["rust/src/object_store/**", "rust/src/security/**", rust/src/api/ffi_api.rs, rust/Cargo.toml, rust/Cargo.lock, "lib/src/components/**", "test/**"]
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh object-i004 && git diff --check && ! rg -n '\\[DEBUG-' lib rust test scripts"
+      expected: "exit 0 with protocol, credential-isolation, initial and recurring privacy, drift-pause, and probe cleanup tests passing"
+    stop_conditions: ["STOP if final TechSpec hasn't accepted the client/configuration contract.", "STOP if anonymous list, read, write, or delete access can't be disproved or credentials leave Platform secure storage.", "STOP synchronized publication after any failed or stale privacy revalidation; local work remains available."]
+    description: "Collect endpoint, region, bucket, prefix, and narrowly scoped credentials; store secrets securely; validate authenticated list/read/write/delete with disposable Objects; reject anonymously listable, readable, writable, or deletable storage without mutating policy. Revalidate privacy at startup, before each publication batch, and at least every 15 minutes while synchronized. Under an unpredictable disposable prefix, authenticate to create read/delete sentinels, then require unauthenticated ListObjectsV2, GetObject, PutObject, and DeleteObject attempts to fail. Verify after the delete attempt that its sentinel still exists, and use authenticated cleanup for every sentinel plus any anonymously created object on every outcome. A failed, stale, or anonymously permissive probe moves Object synchronization to a visible privacy-paused state until a fresh complete probe succeeds"
+    acceptance:
+      mode: contract_test
+      evidence: "AWS and safe non-AWS S3-compatible contract fixtures prove endpoint/addressing behavior, authenticated disposable list/read/write/delete, unconditional cleanup, anonymous List/Get/Put/Delete refusal, secret redaction, and no credential persistence in Workspace, Dart state, Git, or diagnostics. Independent policy-drift fixtures enable each anonymous permission after connection and prove the next scheduled or prepublication probe pauses Object synchronization before any history publication. The delete probe verifies its sentinel survives; the put probe cleans up even when the anonymous request unexpectedly succeeds. A fresh complete private probe resumes synchronization without blocking local Note work."
+    flows: [flow-object-store-lifecycle]
+    certainty: assumed
+    status: planned
+  - id: BURL-I005
+    title: "Upload, verify, and progressively hydrate Objects"
+    type: Feature
+    effort: 8
+    depends_on: [BURL-I002, BURL-I004]
+    category: Correctness
+    scope:
+      in: ["rust/src/object_store/**", "rust/src/assets/**", "rust/src/sync/**", rust/src/api/ffi_api.rs, "lib/src/providers/**", "test/**"]
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh transfer-i005 && git diff --check"
+      expected: exit 0 with verified-before-publish obligations and progressive/offline hydration tests passing
+    stop_conditions: [STOP if an Object is marked available before hash verification or transfers block local Note editing., "STOP publication if BURL-I004 privacy evidence is missing, failed, or older than 15 minutes."]
+    description: "Upload content-addressed Objects, verify remote bytes, prioritize active hydration on another device, retain offline Note work, and persist resumable transfer state outside the manifest"
+    acceptance:
+      mode: invariant
+      evidence: "No history-publication obligation completes before every referenced Object verifies remotely and fresh BURL-I004 privacy evidence permits the batch. Hydration exposes only verified bytes, prioritizes active Assets, resumes after interruption, and never blocks local Note editing while offline. Privacy drift pauses synchronized transfer and publication without converting local work into an error."
+    flows: [flow-object-store-lifecycle]
+    certainty: assumed
+    status: planned
+  - id: BURL-I006
+    title: Resolve missing or corrupt Objects safely
+    type: Feature
+    effort: 8
+    depends_on: [BURL-I005]
+    category: Correctness
+    scope:
+      in: ["rust/src/assets/**", "rust/src/object_store/**", rust/src/api/ffi_api.rs, "lib/src/components/**", "test/**"]
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh recover-i006 && git diff --check"
+      expected: exit 0 with Retry/Repair/Replace/Remove and pause/resume tests passing
+    stop_conditions: ["STOP if recovery discards a verified copy, silently removes a reference, or resumes affected sync before verification."]
+    description: "Detect missing/corrupt bytes, preserve verified copies, pause affected synchronization, and expose only valid Retry, Repair from local, Choose replacement, or Remove reference actions"
+    acceptance:
+      mode: gherkin
+      evidence: |
+        ```gherkin
+        Given an active Object is missing or fails content verification
+        When recovery state is shown
+        Then all verified copies remain preserved and affected synchronization pauses
+        And only valid recovery actions are offered
+        And resume occurs only after the resulting Object verifies
+        ```
+    flows: [flow-assets, flow-object-store-lifecycle]
+    certainty: assumed
+    status: planned
+  - id: BURL-I007
+    title: Enforce Protected State reachability and retention
+    type: Feature
+    effort: 8
+    depends_on: [BURL-I005]
+    category: Correctness
+    scope:
+      in: ["rust/src/assets/**", rust/src/git/operations.rs, "rust/src/object_store/**", "test/**"]
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && cargo clippy --workspace --all-targets --manifest-path rust/Cargo.toml -- -D warnings && git diff --check"
+      expected: "exit 0 with generated-history reachability, 30-day local cache eviction, and remote-deletion refusal simulations passing"
+    stop_conditions: ["STOP if age overrides reachability, cache eviction lacks a verified remote copy, or any path can delete an authoritative Object Store byte."]
+    description: "Derive Object reachability from canonical AST references across every Protected State, evict only verified inactive local cache copies after the CAP-058 30-day inactivity window, and prohibit authoritative Object Store deletion during 0.x"
+    acceptance:
+      mode: invariant
+      evidence: "Property tests generate arbitrary advertised refs, local or unpublished history, reconciliation, Consolidation, and unreachable Objects. Every reachable Object survives regardless of age. Local eviction requires a verified remote copy, 30 unused days, and no active offline need. No production path issues delete for an authoritative Object; delete remains limited to disposable connection probes."
+    flows: [flow-object-store-lifecycle]
+    certainty: assumed
+    status: planned
+  - id: BURL-I008
+    title: Rotate Object Store credentials atomically
+    type: Security
+    effort: 5
+    depends_on: [BURL-I005]
+    category: Security
+    scope:
+      in: ["rust/src/object_store/**", "rust/src/security/**", rust/src/api/ffi_api.rs, "lib/src/components/**", "test/**"]
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh rotate-i008 && git diff --check && ! rg -n '\\[DEBUG-' lib rust test scripts"
+      expected: "exit 0 with credential preflight, atomic replacement, revocation, and rollback tests passing"
+    stop_conditions: [STOP if old credentials are removed before the replacement authenticates and verifies existing Objects.]
+    description: "Preflight replacement Object Store credentials, atomically publish the verified credential reference, remove the superseded secret from local Secure Storage only after success, instruct the Writer to revoke it at the storage provider, and preserve the working connection after any failure"
+    acceptance:
+      mode: invariant
+      evidence: "Fault injection proves the active credential reference is always either the verified old secret or verified replacement; no credential reaches Workspace state, logs, or history; failure leaves the original connection usable."
+    flows: [flow-object-store-lifecycle]
+    certainty: assumed
+    status: planned
+  - id: BURL-I011
+    title: Migrate protected Objects to a replacement store
+    type: Feature
+    effort: 8
+    depends_on: [BURL-I005, BURL-I007]
+    category: Correctness
+    scope:
+      in: ["rust/src/object_store/**", "rust/src/sync/**", "rust/src/workspace/**", rust/src/api/ffi_api.rs, "lib/src/components/**", "test/**"]
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh migrate-i011 && git diff --check"
+      expected: "exit 0 with durable intent, dual-write, baseline/delta copy, revision-bound cutover, resume, stale-publisher, and fresh-device fallback tests passing"
+    stop_conditions: [STOP if the old store can retire before every Protected Object is verified in the replacement., "STOP if any device can publish during migration without first verifying each new Object in both stores, or if a device without replacement credentials can publish after cutover.", STOP if cutover discards the non-secret old-store fallback descriptor or a replacement-store miss can strand a protected Object that remains verifiable in the retained old store., "STOP before migration intent, copy, or dual-write if the replacement hasn't passed the complete BURL-I004 private-store validation; pause migration and publication if that privacy evidence fails or becomes older than 15 minutes.", "STOP if a Remote-detached Workspace with prior published history attempts replacement migration; reconnect the exact prior Remote for coordinated migration or remain in `LocalWithObjectStore`."]
+    description: "Route the replacement through the complete BURL-I004 private-store validation before publishing migration intent or copying any Object. Publish a durable migration intent with non-secret old/new store identities only after that succeeds. Revalidate replacement privacy before each publication batch and at least every 15 minutes throughout baseline copy, delta reconciliation, and dual-write operation. Privacy failure or stale evidence pauses migration and publication, leaves the old store authoritative, and keeps local use available. While the intent is active, every connected device dual-writes and verifies new Objects before publication; devices without replacement credentials pause publication but keep local use. Copy and verify the baseline Protected Object closure, repeatedly reconcile deltas against complete advertised refs and local publication state, then publish a compare-and-swap cutover bound to the migration epoch, Workspace revision, and Remote-ref inventory. Keep the old store's non-secret fallback descriptor in Workspace authority because authoritative deletion is disabled during 0.x. On a replacement miss, use securely stored old-store credentials or request them from the Writer; alternatively, a connected device that retains those credentials may perform the same on-demand backfill. Verify the old bytes by content hash, write and verify the replacement, then hydrate from the replacement"
+    acceptance:
+      mode: invariant
+      evidence: "Concurrency and interruption tests start publication before, during, and after baseline copy. Initial validation rejects a replacement that permits any anonymous List, Get, Put, or Delete operation before intent or copy. Independent policy-drift fixtures enable each operation during baseline and delta work; the next scheduled or prepublication probe pauses copying, dual writes, and publication with the old store still authoritative. Every publication under the migration intent verifies fresh replacement privacy and its Objects in both stores. Delta reconciliation reaches the exact bound Workspace and Remote inventories before compare-and-swap cutover. A stale epoch, revision, ref inventory, privacy result, missing replacement credential, or failed verification blocks publication or cutover without changing authority. Restart resumes durable progress only after fresh private-store validation; successful cutover makes the replacement authoritative and retains the old store descriptor as readable fallback without changing Object identities. Tests cover a stale publisher after cutover and a fresh-device join whose replacement lookup misses: securely supplied old-store credentials or a credentialed peer fetch the old object, verify its content identity, backfill and verify the replacement, and only then hydrate it. No contract claims the fallback can be retired during `0.x`."
+    flows: [flow-object-store-lifecycle]
+    certainty: assumed
+    status: planned
+  - id: BURL-I012
+    title: Prepare every protected Object for full-local transition
+    type: Feature
+    effort: 8
+    depends_on: [BURL-I007, BURL-I006]
+    category: Correctness
+    scope:
+      in: ["rust/src/object_store/**", rust/src/api/ffi_api.rs, "lib/src/components/**", "test/**"]
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh detach-i012 && git diff --check"
+      expected: "exit 0 with authenticated Remote revalidation, reconnect requirement, readiness-token, refusal, and restart tests passing"
+    stop_conditions: ["STOP if readiness can be issued while any Protected Object is missing, unverified, or based on stale reachability.", "STOP if preparation can't authenticate online and re-enumerate all published Remote refs immediately before closure computation.", "STOP if `LocalWithObjectStore` can issue readiness before reconnecting the exact prior Remote."]
+    description: "Require an attached, authenticated Remote for full-local preparation. A Workspace in LocalWithObjectStore first reconnects the exact prior Remote. Then re-enumerate every published Remote ref, compute the complete Protected Object closure across Remote and local state, hydrate and verify every byte, and bind readiness to the ref inventory and Workspace revision. Preparation doesn't detach either external connection"
+    acceptance:
+      mode: gherkin
+      evidence: |
+        ```gherkin
+        Given a Workspace has an attached Remote, or has reconnected the exact prior Remote after offline detach, and protected Objects may not be local
+        When burlmd prepares a full-local transition while online and authenticated
+        Then it freshly enumerates every published Remote ref
+        And hydrates and verifies every protected Object reachable from that authority
+        And returns readiness bound to the Remote-ref inventory and Workspace revision
+        And leaves both external connections unchanged
+        And restart preserves prepared bytes but requires renewed authenticated readiness after the ref inventory or Workspace revision advances
+        ```
+    flows: [flow-object-store-lifecycle]
+    certainty: assumed
+    status: planned
+  - id: BURL-I013
+    title: Detach an unused Object Store without detaching the Remote
+    type: Feature
+    effort: 5
+    depends_on: [BURL-I004, BURL-I007]
+    category: Correctness
+    scope:
+      in: ["rust/src/object_store/**", "rust/src/security/**", rust/src/api/ffi_api.rs, "lib/src/components/**", "test/**"]
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh unlink-i013 && git diff --check"
+      expected: "exit 0 with empty-protected-set, stale-enumeration refusal, credential removal, Remote-preservation, and reconnect tests passing"
+    stop_conditions: ["STOP if published history is incomplete, any Protected Object exists, the enumerated revision has advanced, or Object Store detach can alter Remote attachment/history."]
+    description: "Enumerate every Protected State through the complete published-ref inventory, prove the protected Object set is empty at compare-and-swap time, remove only the Object Store configuration and local credential, keep the private GitHub Remote attached, and permit later Object Store reconnection"
+    acceptance:
+      mode: invariant
+      evidence: "Property and interruption tests cover current state, retained or unpublished local history, every fetchable ref from unfiltered Remote advertisement, pending reconciliation, and Consolidation. Detach succeeds only for a revision-bound empty protected set; it removes the local Object Store credential and configuration, preserves the exact Remote and Git history, and refuses stale, incomplete, unclassified, unfetchable, or nonempty enumeration without changing either connection."
+    flows: [flow-object-store-lifecycle]
+    certainty: assumed
+    status: planned
+  - id: BURL-I009
+    title: Inventory and migrate foreign Workspace Assets
+    type: Feature
+    effort: 8
+    depends_on: [BURL-I002]
+    category: Feature-Evolution
+    scope:
+      in: ["rust/src/assets/**", rust/src/workspace/bootstrap.rs, "rust/src/markdown/**", rust/src/api/ffi_api.rs, "lib/src/components/**", "test/**"]
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh adopt-i009 && git diff --check && ! rg -n '\\[DEBUG-' lib rust test scripts"
+      expected: "exit 0 with inventory, preview, atomic migration, rollback, and unreferenced-file tests passing"
+    stop_conditions: [STOP if preflight changes bytes or migration guesses among missing/ambiguous references.]
+    description: "Inventory guest Asset references, report missing/ambiguous/oversized/nonconforming inputs, preview canonical migration, adopt referenced bytes atomically, and leave unreferenced files available for review"
+    acceptance:
+      mode: gherkin
+      evidence: |
+        ```gherkin
+        Given a foreign Workspace contains ordinary Asset paths and unrelated files
+        When preflight and confirmed migration run
+        Then every issue is reported before mutation
+        And referenced bytes and Markdown references migrate as one recoverable outcome
+        And unreferenced files remain unchanged for review
+        ```
+    flows: [flow-assets]
+    certainty: assumed
+    status: planned
+  - id: BURL-I010
+    title: "Integrate Asset state with restore, Consolidation, and shell status"
+    type: Feature
+    effort: 8
+    depends_on: [BURL-I003, BURL-I006, BURL-I008, BURL-I011, BURL-I012, BURL-I013, BURL-I009]
+    category: Correctness
+    scope:
+      in: ["rust/src/assets/**", rust/src/api/ffi_api.rs, "lib/src/components/**", "lib/src/providers/**", "test/**", "integration_test/**"]
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh asset-i010 && git diff --check"
+      expected: "exit 0 with restore hydration, local-only, transfer status, and failure-surface integration passing"
+    stop_conditions: [STOP if UI state becomes an authority for Object availability or hides an unresolved integrity failure.]
+    description: "Integrate progressive availability, recovery, version restore rehydration, adoption, and local-only state into authoritative shell surfaces and Core handoffs used by Export and Consolidation"
+    acceptance:
+      mode: hitl_sil
+      evidence: "Offline, degraded Object Store, second-device hydration, historical restore, and local-only runs show accurate authoritative status; Notes remain editable; only verified bytes render; and every unresolved integrity state exposes its valid recovery action."
+    flows: [flow-assets]
+    certainty: assumed
+    status: planned

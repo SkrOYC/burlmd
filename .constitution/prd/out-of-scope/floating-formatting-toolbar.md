@@ -1,3 +1,7 @@
+---
+decision: deferred
+date: 2026-08-26
+---
 # Floating formatting toolbar
 
 **Context:** CAP-EDIT-07 proposed a pointer-driven formatting toolbar after text selection.

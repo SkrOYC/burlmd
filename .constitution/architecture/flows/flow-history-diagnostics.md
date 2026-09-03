@@ -1,3 +1,11 @@
+---
+job: JOB-05
+capabilities: [CAP-044, CAP-045]
+boundaries: [BND-01, BND-02, BND-05, BND-08]
+view: sequence
+certainty: assumed
+assumption: "Migrated from markdown; not yet exercised by an integration test."
+---
 # History, recovery, and diagnostics flow
 
 **Maps to:** CAP-HIST-01, CAP-SUP-01.

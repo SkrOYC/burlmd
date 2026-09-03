@@ -1,3 +1,7 @@
+---
+decision: deferred
+date: 2026-08-26
+---
 # Full history diff viewer
 
 **Context:** A full viewer could compare arbitrary versions across a Note's complete history.

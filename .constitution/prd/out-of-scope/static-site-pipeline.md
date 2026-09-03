@@ -1,3 +1,7 @@
+---
+decision: rejected
+date: 2026-08-21
+---
 # Out of Scope: Static-Site Publication Pipeline
 
 **Status:** Rejected

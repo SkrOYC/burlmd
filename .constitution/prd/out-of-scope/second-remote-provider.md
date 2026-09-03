@@ -1,3 +1,7 @@
+---
+decision: deferred
+date: 2026-08-26
+---
 # Second Remote provider
 
 **Context:** CAP-SYNC-09 proposed matching Remote behavior through another hosting provider.

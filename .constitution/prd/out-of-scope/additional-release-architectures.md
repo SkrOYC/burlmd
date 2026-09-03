@@ -1,3 +1,7 @@
+---
+decision: deferred
+date: 2026-08-26
+---
 # Additional release architectures
 
 **Context:** Release artifacts could include Intel macOS and Linux ARM64 builds in addition to the selected desktop architectures.

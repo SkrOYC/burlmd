@@ -1,7 +1,7 @@
-// FORWARD STATUS (TechSpec v1.7.19-provisional): this is the delivered
+// FORWARD STATUS (TechSpec v1.8.0-provisional): this is the delivered
 // brownfield interface, with the Epic G session-restore exception specified.
-// It is not otherwise an implementation-ready contract for PRD v1.3.6 and
-// Architecture v1.4.14.
+// It is not otherwise an implementation-ready contract for PRD v1.3.7 and
+// Architecture v1.4.15.
 // In particular, AstNode is a rendering projection rather than the required
 // canonical extended AST; the OAuth redirect flow is superseded by the
 // GitHub App device-flow decision; title-verbatim path derivation is under
@@ -9,8 +9,10 @@
 // reconciliation-decision, and release surfaces remain absent.
 // Research-only Tasks must use contracts/provisional-spikes.toml and must not
 // implement or extend this FFI. The named Epic G exceptions may implement
-// their specified contracts. Final Stage 3 reconciles the remaining gaps after
-// the five Spikes produce evidence.
+// their specified contracts. BURL-M015 and BURL-M003 may bootstrap validation
+// but may not change this interface. Each remaining production contract waits
+// only for its own evidence, final Stage 3 reconciliation, and Stage 4
+// adaptation.
 //
 // Raw Rust interface contract exposed to Flutter via flutter_rust_bridge.
 // This defines the exact shapes passing over the FFI boundary.
@@ -246,7 +248,7 @@ pub struct NoteMetadata {
 /// before this returns, and `note_write_status` reports on it immediately.
 /// Stated because the alternative reading — create the file, return a state,
 /// register nothing — leaves the first `update_block` substituting into a
-/// buffer that was never established. `SHEL-E005` has a new Note "open for
+/// buffer that was never established. `BURL-E005` has a new Note "open for
 /// editing" the moment it is created.
 ///
 /// The filename is derived from `title` by the rule in
@@ -317,13 +319,13 @@ pub async fn delete_note(note_id: String) -> Result<LifecycleResult, AppError> {
 /// **Draft rows of affected Notes are rewritten too**, not merely re-keyed.
 /// A source Note with an unflushed draft holds the old Link text, and
 /// `open_note` parses the draft in preference to disk — so leaving it produces
-/// the same reversion one session later. `WSPC-D006` owns this.
+/// the same reversion one session later. `BURL-D006` owns this.
 ///
 /// A Note that links to *itself* is both cases at once and gets both
 /// substitutions.
 ///
 /// Refusing while any affected Note is open would also be a defensible answer.
-/// It is not the one taken, because `SHEL-E005` makes renaming an open Note a
+/// It is not the one taken, because `BURL-E005` makes renaming an open Note a
 /// criterion-backed workflow, `prd/capabilities.md` treats renaming as routine
 /// during writing, and the set of *source* Notes is not something the user can
 /// see in order to close them first.
@@ -524,7 +526,7 @@ pub enum InlineElement {
         /// this flag.** Without that rule, following a ghost Link to a concept
         /// created moments ago runs create-on-follow into `create_note` and
         /// gets `PathUnavailable` for a Link that resolves perfectly well --
-        /// and `SHEL-E005`'s STOP then forbids working around it client-side,
+        /// and `BURL-E005`'s STOP then forbids working around it client-side,
         /// so the user is simply told no. The mirror case returns `NotFound`
         /// instead of the create offer. What the flag is *for* is rendering:
         /// deciding whether to draw a Link distinctly is a per-frame question
@@ -532,9 +534,9 @@ pub enum InlineElement {
         /// trip per Link.
         ///
         /// Resolving this requires the index, not the parser: it is whether
-        /// `target_id` matches a `notes` row. `WSPC-D003` declares the field
+        /// `target_id` matches a `notes` row. `BURL-D003` declares the field
         /// and cannot fill it — it is upstream of the indexer — so
-        /// `WSPC-D005` populates it and carries the criterion.
+        /// `BURL-D005` populates it and carries the criterion.
         exists: bool,
         content: Vec<InlineElement>,
     },
@@ -980,7 +982,7 @@ pub fn merge_block_with_previous(
 /// list's `1. `, a code fence's gutter or line numbers. The rendered string is
 /// the Core's definition and the UI must map its own selection onto it rather
 /// than the reverse, because the alternative is the Core knowing the widget's
-/// presentation, which rule 3 exists to prevent. `EDIT-F003` owns proving the
+/// presentation, which rule 3 exists to prevent. `BURL-F003` owns proving the
 /// two agree, and its criteria must use a fixture containing a code block and
 /// a list, not three paragraphs.
 ///
@@ -1009,7 +1011,7 @@ pub fn merge_block_with_previous(
 /// yields it, and `delete_range`/`replace_range` therefore destroy it. This is
 /// the intended behaviour and the difference from the single-Block mutators,
 /// which step over those regions rather than into them: a range is an explicit
-/// span the user dragged, not a Block the Core picked. `EDIT-F004` builds the
+/// span the user dragged, not a Block the Core picked. `BURL-F004` builds the
 /// selection UI knowing it, and should decide there whether a selection
 /// crossing invisible content warrants a confirmation.
 ///
@@ -1018,7 +1020,7 @@ pub fn merge_block_with_previous(
 /// rejected with `ParseError` and leave the Note unchanged; Core never swaps
 /// endpoints because atomic-run boundary bias is endpoint-specific.
 ///
-/// `EDIT-F001` settled the former drag-outward question on Flutter 3.44.3:
+/// `BURL-F001` settled the former drag-outward question on Flutter 3.44.3:
 /// a focused `EditableText` does not participate in its enclosing
 /// `SelectionArea`. A gesture in the field is field-local; a region drag that
 /// crosses it selects around the field and omits its content. The mandatory
@@ -1203,7 +1205,7 @@ pub fn note_write_status(note_id: String) -> NoteWriteStatus {
 /// This is the other half of `RevisionMismatch`, and without it that error has
 /// no exit. Every document routes the recovery the same way -- risk 6's
 /// residual-risk paragraph, `NoteWriteStatus.last_error` above, and
-/// `SHEL-E007`'s criterion all say the user is offered a **reload** -- while
+/// `BURL-E007`'s criterion all say the user is offered a **reload** -- while
 /// earlier revisions of this contract gave the UI nothing to call. The one
 /// candidate, `open_note`, is specifically wrong for it: it restores an
 /// unflushed draft in preference to disk, and tier 2 deliberately leaves the
@@ -1249,9 +1251,11 @@ pub struct CloseNoteResult {
 ///
 /// `Err` is a true refusal. Core keeps the session registered, and Dart keeps
 /// the outgoing Note writable after it reports the failure. An `Ok` result
-/// always means Core retired the session. If `warning` is present, Dart
-/// continues the switch and reports the warning through its dismissible status
-/// surface rather than restoring a dead session.
+/// always means Core retired the session. If `warning` is present, Dart removes
+/// the retired tab and reports the warning rather than restoring a dead
+/// session. Dart can continue only one Note-to-Note replacement when no batch,
+/// Workspace switch, or orderly shutdown encloses the close. A batch stops with
+/// unprocessed tabs preserved, and an enclosing switch or shutdown is canceled.
 #[frb]
 pub async fn close_note(note_id: String) -> Result<CloseNoteResult, AppError> {
     unimplemented!()
@@ -1265,7 +1269,7 @@ pub async fn pending_drafts() -> Result<Vec<NoteMetadata>, AppError> {
 }
 
 // ---------------------------------------------------------------------------
-// Workspace session snapshots (STATE-G003)
+// Workspace session snapshots (BURL-G003)
 // ---------------------------------------------------------------------------
 
 /// Defines the saved presentation-only synchronization label.
@@ -1301,9 +1305,17 @@ pub struct ActiveWorkspaceSessionSnapshot {
 
 /// Loads the active Workspace session snapshot.
 ///
-/// For corrupt bytes or an unknown schema version, Core isolates the snapshot
-/// and returns the empty default session for the active Workspace. The result
-/// contains no Note body, credential, or device preference.
+/// Before restore, Core requires every identity to be valid and nonempty,
+/// rejects duplicates, requires the persisted Workspace ID to equal the active
+/// Workspace, and requires a non-null active Note ID to occur in the open-Note
+/// list. For corrupt bytes, an unsupported later schema version, or any semantic
+/// violation, Core quarantines and preserves the original bytes without
+/// migration or overwrite and returns the empty session for the active
+/// Workspace. It never restores malformed state. A malformed current-version
+/// snapshot leaves the normal default path writable after quarantine. After a
+/// later-version refusal, Core may write a supported snapshot only at an
+/// explicitly safe path isolated from the preserved bytes. The result contains
+/// no Note body, credential, or device preference.
 #[frb]
 pub async fn load_active_workspace_session_snapshot(
 ) -> Result<ActiveWorkspaceSessionSnapshot, AppError> {
@@ -1313,7 +1325,10 @@ pub async fn load_active_workspace_session_snapshot(
 /// Saves a session snapshot for the active Workspace.
 ///
 /// Core writes the versioned payload with atomic replace. It determines the
-/// Workspace ID and schema version instead of accepting either through FFI.
+/// Workspace ID and schema version instead of accepting either through FFI. If
+/// the normal snapshot path has quarantined unsupported later-version bytes,
+/// Core refuses to overwrite it and may save only through the explicitly safe
+/// current-format path isolated from those preserved bytes.
 #[frb]
 pub async fn save_active_workspace_session_snapshot(
     snapshot: ActiveWorkspaceSessionSnapshot,
@@ -1321,11 +1336,12 @@ pub async fn save_active_workspace_session_snapshot(
     unimplemented!()
 }
 
-/// Clears an isolated corrupt snapshot for the active Workspace.
+/// Clears an isolated invalid current-version snapshot for the active Workspace.
 ///
-/// Core preserves the corrupt bytes outside the active session path before it
-/// clears that Workspace's snapshot. The call does not affect another
-/// Workspace.
+/// Core preserves corrupt, schema-invalid, or semantically invalid bytes outside
+/// the active session path before it clears that Workspace's snapshot. This
+/// call doesn't delete quarantined unsupported later-version bytes and doesn't
+/// affect another Workspace.
 #[frb]
 pub async fn clear_corrupt_active_workspace_session_snapshot() -> Result<(), AppError> {
     unimplemented!()
@@ -1351,7 +1367,7 @@ pub async fn search_notes(query: String, limit: u32) -> Result<Vec<NoteMetadata>
 ///
 /// **Prefix, not substring, and this is a deliberate Stage 3 narrowing of the
 /// capability.** CAP-FIND-02 says a user jumps to a Note "by typing part of
-/// its title"; this contract and `WSPC-D009`'s implementation both match a
+/// its title"; this contract and `BURL-D009`'s implementation both match a
 /// leading prefix only, so typing `lait` does not reach `Café au lait`.
 /// Prefix is the behaviour of the palettes this affordance is modelled on, and
 /// it is the form that *can* be made index-backed later: `title LIKE 'q%'` is
@@ -1392,7 +1408,7 @@ pub struct LinkCompletion {
     /// cannot produce a non-conformant one -- which is only true if the Core
     /// applies the wrapping, since the ordinary multi-word title produces a
     /// path with a space in it and the unwrapped form of that is not a link.
-    /// `EDIT-F006`'s STOP forbids the UI from repairing it afterwards.
+    /// `BURL-F006`'s STOP forbids the UI from repairing it afterwards.
     /// The link *text* is `title` with every whitespace run folded to a
     /// single space, so it is not always byte-identical to `title`: a title
     /// carrying an interior line terminator -- legal YAML, so reachable from a

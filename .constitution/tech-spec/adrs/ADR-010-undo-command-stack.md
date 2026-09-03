@@ -1,3 +1,10 @@
+---
+id: ADR-0010
+status: accepted
+date: 2026-08-21
+certainty: assumed
+assumption: "Migrated; the decision's ruling reference was not found in the status line."
+---
 # ADR-010: Core-Side Undo Command Stack Over Content Operations
 
 **Status:** Accepted

@@ -1,7 +1,14 @@
+---
+id: ADR-0016
+status: proposed
+date: 2026-08-26
+certainty: assumed
+assumption: "Migrated; the decision's ruling reference was not found in the status line."
+---
 # ADR-016: Hybrid Local Assets and S3-Compatible Objects
 
 **Status:** Proposed; implementation-blocking Spike
-**Decision owner:** SPK-ASSET-I001, measured PRD and Architecture review, then final Technical Implementation evolution
+**Decision owner:** SPK-BURL-I001, measured PRD and Architecture review, then final Technical Implementation evolution
 
 ## Context
 
@@ -19,7 +26,7 @@ The product requires standard Markdown image paths that work offline and a first
 
 ## Evidence required
 
-SPK-ASSET-I001 compares the official AWS SDK for Rust with `object_store` using at least AWS S3 and one non-AWS S3-compatible fixture when credentials are safely available; otherwise it must use a protocol-faithful local service and flag cloud compatibility unverified. It measures content identity, deduplication, manifest round trips, decode memory and dimensions, the provisional 25 MiB limit, offline behavior, hydration, protected-history traversal, local cache eviction, and textual repository growth. OD-06 and OD-07 remain open until the measured PRD evolution.
+SPK-BURL-I001 compares the official AWS SDK for Rust with `object_store` using at least AWS S3 and one non-AWS S3-compatible fixture when credentials are safely available; otherwise it must use a protocol-faithful local service and flag cloud compatibility unverified. It measures content identity, deduplication, manifest round trips, decode memory and dimensions, the provisional 25 MiB limit, offline behavior, hydration, protected-history traversal, local cache eviction, and textual repository growth. OD-06 and OD-07 remain open until the measured PRD evolution.
 
 ## Consequences
 

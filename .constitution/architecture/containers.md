@@ -26,6 +26,8 @@ flowchart LR
     ObjectStore[Object Store\nexternal storage]
     Update[Release Update Coordinator\nmodule]
     Release[Release Pipeline\npipeline boundary]
+    Validation[Isolated Validation Environment\nexecution boundary]
+    Evidence[Evidence Aggregation\npipeline stage]
     Distribution[Release Distribution\nexternal boundary]
 
     Writer -->|interaction| UI
@@ -63,7 +65,11 @@ flowchart LR
     Persist -->|Asset references| LocalAssets
     Core -->|asynchronous update check| Update
     Update -->|release metadata request| Distribution
-    Release -->|artifact and provenance handoff| Distribution
+    Release -->|validation request and authoritative expected-identity handoff| Validation
+    Release -->|authoritative expected-identity handoff| Evidence
+    Validation -->|authenticated-origin complete evidence bundle handoff| Evidence
+    Evidence -->|expected-identity-matched evidence set| Release
+    Release -->|artifact, evidence, and provenance handoff| Distribution
 ```
 
 ## Presentation and Interaction
@@ -188,9 +194,33 @@ Device preferences never enter Workspace content. Session and navigation state r
 
 - **Boundary kind:** Pipeline boundary.
 - **Logical type:** Build, verification, and publication boundary.
-- **Responsibility:** Produces each supported artifact, runs the common release matrix, and publishes integrity plus cryptographically authenticated build provenance bound to the expected repository, workflow, source revision, and artifact identity.
-- **Inputs and outputs:** Accepts a release revision and Platform matrix. Emits verified artifacts and metadata to Release Distribution.
-- **Depends on:** Supported Platform environments and Release Distribution.
+- **Responsibility:** Produces each supported artifact, assigns validation roles, establishes authoritative expected identity, requires complete accepted evidence, and publishes artifact integrity with authenticated build provenance.
+- **Inputs and outputs:** Accepts a release identity and Platform matrix. From an immutable reviewed validation anchor, sends validation and aggregation the expected trust-anchor, workflow-signer, tested-source, base, release, build, corpus, run, required-role, and role-specific evidence-class identities. Emits verified artifacts, evidence, and metadata to Release Distribution.
+- **Depends on:** Isolated Validation Environment, Evidence Aggregation, supported Platform environments, and Release Distribution.
+
+The pipeline assigns the following validation roles:
+
+- Linux x86-64 can provide common functional-matrix, performance, and exact platform-regression evidence. Its platform regression isn't authoritative product visual evidence.
+- Apple Silicon macOS 26 can provide common functional-matrix, performance, and the sole authoritative product visual evidence.
+- macOS 15 can provide common functional-matrix evidence for compatibility only.
+
+## Isolated validation environment
+
+- **Boundary kind:** Execution boundary.
+- **Logical type:** Pipeline-owned System/Native validation environment.
+- **Responsibility:** Runs one assigned validation role while owning its display, compositor, input, and process state independently of the Writer's active desktop. Candidate execution and evidence sealing use separate fresh pipeline-owned environments.
+- **Inputs and outputs:** Candidate execution accepts an artifact, run identity, required role, and authoritative expected source, execution, base, release, build, and corpus identities without origin-signing authority. It emits one complete untrusted bundle containing the role manifest and every named evidence file. A fresh sealing environment validates that bundle and the candidate environment identity before it authenticates an immutable sealed handoff.
+- **Depends on:** Release Pipeline.
+
+## Evidence aggregation
+
+- **Boundary kind:** Pipeline stage.
+- **Logical type:** Evidence integrity and acceptance boundary.
+- **Responsibility:** Authenticates the fresh sealing environment as managed origin, independently observes its final state after completion, verifies the trust-anchor relationship and ticket write boundary, verifies candidate and sealed handoff identities and complete bundle integrity, and compares captured identity with authoritative expected identity before isolated aggregation.
+- **Inputs and outputs:** Accepts expected trust-anchor, workflow-signer, tested-source, base, release, build, corpus, run, and required-role identities from Release Pipeline. Accepts one authenticated sealed bundle per role and the pipeline-owned candidate and sealing environment records. Credentialed acquisition produces verified read-only inputs. A separate credential-free, non-networked coordinator produces machine results through one writable output boundary. Returns an accepted complete set or explicit unmanaged, candidate-controlled, out-of-boundary, untrusted, missing, duplicated, mismatched, stale, corrupt, unsealed, credential-exposed, or isolation-failed outcomes.
+- **Depends on:** Isolated Validation Environment and Release Pipeline.
+
+Each validation request names the evidence classes that each role must provide. Acceptance requires that exact profile: neither a missing assigned class nor an extra unassigned class is valid. macOS 15 evidence can't satisfy performance, Linux platform-regression, or authoritative visual evidence. Linux platform-regression evidence can't satisfy the macOS 26 authoritative product visual role. Evidence from the Writer's active desktop is invalid even when the captured output appears correct.
 
 ## Release Update Coordinator
 

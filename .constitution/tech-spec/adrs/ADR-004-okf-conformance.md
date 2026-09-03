@@ -1,9 +1,16 @@
+---
+id: ADR-0004
+status: accepted
+date: 2026-07-24
+certainty: assumed
+assumption: "Migrated; the decision's ruling reference was not found in the status line."
+---
 # ADR-004: Conformance to Open Knowledge Format v0.2
 
 **Status:** Accepted
 
 ## Context
-`prd/vision.md` has named "Open Knowledge Format (OKF)" as the on-disk Workspace structure since v1.0.0, but nothing downstream ever defined it. `prd/glossary.md` did not carry the term, no tech-spec file specified a layout, and `data-models/schema.sql` asserted a fact about it (`notes.id` is "a stable UUID persisted in Markdown YAML frontmatter") that no code implements and no document justifies — `markdown/parser.rs` has no frontmatter handling at all, and `api::ffi_api::open_note` in fact sets `id` to the filesystem path. The project's own storage format was undefined canonical vocabulary carrying a contradictory schema claim.
+`prd/vision.md` has named "Open Knowledge Format (OKF)" as the on-disk Workspace structure since v1.0.0, but nothing downstream ever defined it. `prd/glossary.yaml` did not carry the term, no tech-spec file specified a layout, and `data-models/schema.sql` asserted a fact about it (`notes.id` is "a stable UUID persisted in Markdown YAML frontmatter") that no code implements and no document justifies — `markdown/parser.rs` has no frontmatter handling at all, and `api::ffi_api::open_note` in fact sets `id` to the filesystem path. The project's own storage format was undefined canonical vocabulary carrying a contradictory schema claim.
 
 Investigation established that OKF is a real published specification, originated by Google Cloud and announced 2026-06-12, currently at **v0.2** (`GoogleCloudPlatform/knowledge-catalog`, `okf/SPEC.md`). It is deliberately minimal: a directory of Markdown files with YAML frontmatter, plus a small set of conventions.
 
@@ -13,7 +20,7 @@ The specification's own framing is aimed at organizational data catalogs and AI-
 2. §11's conformance requirements are only three, and all are cheap: parseable YAML frontmatter on every non-reserved `.md`, a non-empty `type` field in each, and reserved filenames following §8/§9 *when present*.
 3. §6.1's link form is a standard Markdown link, which any Markdown renderer already resolves.
 
-`prd/actors.md` v1.1.0 additionally introduced the **Agent** actor — an external tool or AI agent reading the Workspace directly from disk — which gives conformance a stated beneficiary rather than leaving it an unmotivated technical preference. `prd/capabilities.md` CAP-PORT-01 makes it a P0 requirement that conformance holds *continuously*, not at Export time.
+`prd/actors.md` v1.1.0 additionally introduced the **Agent** actor — an external tool or AI agent reading the Workspace directly from disk — which gives conformance a stated beneficiary rather than leaving it an unmotivated technical preference. `prd/capabilities.yaml` CAP-PORT-01 makes it a P0 requirement that conformance holds *continuously*, not at Export time.
 
 ## Decision
 1. **Pin to OKF v0.2.** The on-disk Workspace is an OKF bundle conforming to specification version 0.2 exactly. The full on-disk contract is specified in `data-models/okf-bundle.md`, with a machine-checkable frontmatter schema in `data-models/okf-frontmatter.schema.json`.

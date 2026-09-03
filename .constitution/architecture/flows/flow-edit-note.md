@@ -1,3 +1,11 @@
+---
+job: JOB-01
+capabilities: [CAP-001, CAP-002, CAP-003, CAP-004, CAP-005, CAP-017, CAP-018, CAP-032, CAP-034]
+boundaries: [BND-01, BND-02, BND-03, BND-08, BND-05]
+view: sequence
+certainty: assumed
+assumption: "Migrated from markdown; not yet exercised by an integration test."
+---
 # Edit Note flow
 
 **Maps to delivered:** CAP-EDIT-01, CAP-EDIT-02, CAP-EDIT-03, CAP-EDIT-04, CAP-EDIT-05, CAP-WS-02, CAP-WS-03.

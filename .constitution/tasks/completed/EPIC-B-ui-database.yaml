@@ -1,0 +1,185 @@
+id: B
+name: ui database
+kind: foundation
+capabilities: []
+depends_on: [A]
+scope:
+  paths: [rust/src/security/keyring.rs, rust/src/db/connection.rs, rust/src/db/schema.sql, rust/src/api/ffi_api.rs, lib/main.dart, lib/src/providers, lib/src/components/editor.dart]
+  tech_spec_patchable: []
+estimated_diff_lines: 3500
+tickets:
+  - id: BURL-B001
+    title: Integrate Keychain Root Key
+    type: Security
+    effort: 3
+    depends_on: []
+    category: Security
+    scope:
+      in: [rust/src/security/keyring.rs]
+    verification:
+      command: "cargo test security::"
+      expected: exit 0
+    description: Implement Rust keyring integration to generate and securely store a 256-bit root AES key in the host OS secure enclave
+    acceptance:
+      mode: gherkin
+      evidence: |
+        Given a fresh installation
+        When the app boots
+        Then a new 256-bit key is generated and stored in the OS Keychain
+    flows: []
+    certainty: assumed
+    status: done
+    deviations:
+      - files: [rust/src/security/mod.rs (new), rust/src/lib.rs, rust/Cargo.toml, rust/Cargo.lock]
+        justification: "Introducing the security module requires a mod.rs to declare its child (keyring) and a pub mod security; wire-in at the crate root (lib.rs), the same shape as BURL-A001's recorded deviations for rust/src/api. Cargo.toml/Cargo.lock changed because the keyring, getrandom, and zeroize crates were added via cargo add per project tooling policy — zeroize wraps the generated root key (and, from BURL-B002 onward, its hex encoding and the assembled PRAGMA string) so key material is wiped from memory on drop rather than lingering in a dropped-but-unzeroed allocation. (This crate was missed from this justification when first added and only recorded here during PR #4's round-3 review.)"
+  - id: BURL-B002
+    title: Encrypt SQLite with SQLCipher
+    type: Security
+    effort: 5
+    depends_on: [BURL-B001]
+    category: Security
+    scope:
+      in: [rust/src/db/connection.rs]
+    verification:
+      command: "cargo test db::"
+      expected: exit 0
+    description: Configure the rusqlite initialization to issue PRAGMA key using the root key from BURL-B001
+    acceptance:
+      mode: gherkin
+      evidence: |
+        Given the SQLite initialization
+        When the database file is written to disk
+        Then the file is AES-256-CBC encrypted with HMAC-SHA512 page authentication and cannot be opened by standard sqlite3 CLI
+    flows: []
+    certainty: assumed
+    status: done
+    deviations:
+      - files: [rust/src/db/mod.rs (new), rust/src/lib.rs, rust/Cargo.toml, rust/Cargo.lock, ".constitution/tech-spec/stack.md", ".constitution/tech-spec/changelog.md"]
+        justification: "db/mod.rs and the lib.rs wire-in are the same unavoidable module-introduction pattern as BURL-B001. Cargo.toml/Cargo.lock changed via cargo add rusqlite --features bundled-sqlcipher and cargo add tempfile --dev. stack.md/changelog.md were corrected because the shipped implementation applies the root key via SQLCipher's raw-key PRAGMA form (PRAGMA key = \"x'<hex>'\", no KDF) rather than the passphrase/PBKDF2 mechanism the spec previously described — leaving the spec factually wrong about the actual security mechanism was judged worse than this one-bullet out-of-scope correction; confirmed with the user before implementation as the correct approach given the root key is already full-entropy CSPRNG output"
+  - id: BURL-B003
+    title: "SQLite Initialization & Schema"
+    type: Feature
+    effort: 3
+    depends_on: [BURL-B002]
+    category: Correctness
+    scope:
+      in: [rust/src/db/connection.rs, rust/src/db/schema.sql]
+    verification:
+      command: "cargo test db::"
+      expected: exit 0
+    description: "Implement rusqlite setup logic to initialize the local encrypted database file, applying the notes, links, and notes_fts tables using the TechSpec schema"
+    acceptance:
+      mode: gherkin
+      evidence: |
+        Given an empty database path
+        When the db initialization routine runs
+        Then the tables `notes` and `notes_fts` are created successfully
+    flows: []
+    certainty: assumed
+    status: done
+  - id: BURL-B004
+    title: Expose SQLite Queries to FFI
+    type: Feature
+    effort: 2
+    depends_on: [BURL-B003]
+    category: Correctness
+    scope:
+      in: [rust/src/api/ffi_api.rs]
+    verification:
+      command: cargo build
+      expected: exit 0
+    description: "Expose search_notes and save_note functions across the FRB boundary, wiring them to the rusqlite database operations"
+    acceptance:
+      mode: gherkin
+      evidence: |
+        Given the FFI bridge
+        When Dart calls `search_notes`
+        Then the Rust core executes an FTS5 query and returns `NoteMetadata`
+    flows: []
+    certainty: assumed
+    status: done
+    deviations:
+      - files: [rust/src/db/connection.rs, rust/src/frb_generated.rs, lib/src/rust/api/ffi_api.dart, lib/src/rust/frb_generated.dart, lib/src/rust/frb_generated.io.dart, lib/src/rust/frb_generated.web.dart]
+        justification: "search_notes/save_note need a process-wide DB connection to operate on, so the OnceLock<Mutex<Connection>> singleton and its connection() accessor were added to db/connection.rs (already-owned by BURL-B002/B003) rather than duplicated inside ffi_api.rs. rust/src/frb_generated.rs and the lib/src/rust/ files are all flutter_rust_bridge_codegen generate output (Rust-side dispatch glue and Dart-side bindings respectively), required whenever ffi_api.rs's public FFI surface changes (same pattern recorded for BURL-A003, whose own Verification Command was flutter_rust_bridge_codegen generate && cargo build); regenerated automatically, not hand-edited"
+  - id: BURL-B005
+    title: Flutter Riverpod Setup
+    type: Feature
+    effort: 2
+    depends_on: []
+    category: DX
+    scope:
+      in: [lib/main.dart, lib/src/providers]
+    verification:
+      command: flutter analyze
+      expected: exit 0
+    description: Wrap the Flutter app in a ProviderScope and set up the foundational Riverpod providers to access the Rust FFI functions globally
+    acceptance:
+      mode: gherkin
+      evidence: |
+        Given the Flutter app
+        When it boots
+        Then the Rust API is injected via a Riverpod Provider
+    flows: []
+    certainty: assumed
+    status: done
+    deviations:
+      - files: [pubspec.yaml, pubspec.lock]
+        justification: "flutter_riverpod was added via flutter pub add flutter_riverpod per project tooling policy, which necessarily updates both the dependency declaration and the lockfile"
+  - id: BURL-B006
+    title: Hybrid Editor Widget (Basic Rendering)
+    type: Feature
+    effort: 5
+    depends_on: [BURL-B004, BURL-B005]
+    category: Feature-Evolution
+    scope:
+      in: [lib/src/components/editor.dart]
+    verification:
+      command: flutter test
+      expected: exit 0
+    description: "Build the Flutter widget that takes an AstNode tree and recursively renders it into Flutter TextSpan and structural widgets, effectively visualizing the parsed Markdown without raw asterisks"
+    acceptance:
+      mode: gherkin
+      evidence: |
+        Given an AST containing a bold TextRun
+        When the Editor renders the AST
+        Then a bold Flutter Text widget is painted to the screen
+    flows: []
+    certainty: assumed
+    status: done
+    deviations:
+      - files: [test/components/editor_test.dart (new)]
+        justification: "The ticket's own Verification Command is flutter test, which requires a test to exist; test/ mirrors lib/src/components/ for its one widget test, matching the project's existing test/widget_test.dart convention"
+  - id: BURL-B007
+    title: Editor FFI Streaming Connection
+    type: Feature
+    effort: 3
+    depends_on: [BURL-B006]
+    category: Correctness
+    scope:
+      in: [lib/src/components/editor.dart, rust/src/api/ffi_api.rs]
+    verification:
+      command: "cargo build && flutter test"
+      expected: exit 0
+    description: "Wire the Editor widget to send block updates (keystrokes) to the update_block FFI function, and re-render the AST returned by the Core Engine"
+    acceptance:
+      mode: gherkin
+      evidence: |
+        Given the active Editor
+        When the user types a character
+        Then the FFI function is called and the UI updates within 16ms
+    flows: []
+    certainty: assumed
+    status: done
+    deviations:
+      - files: [rust/src/frb_generated.rs, lib/src/rust/api/ffi_api.dart, lib/src/rust/frb_generated.dart, lib/src/rust/frb_generated.io.dart, lib/src/rust/frb_generated.web.dart, lib/src/providers/note_providers.dart, lib/src/providers/rust_api_provider.dart, test/components/editor_test.dart]
+        justification: "rust/src/frb_generated.rs and lib/src/rust/ are flutter_rust_bridge_codegen generate output for update_block's new FFI surface, following the same pattern recorded for BURL-B004. note_providers.dart/rust_api_provider.dart (both already-owned by BURL-B005) are the natural home for the updateBlock call the Editor needs — adding it there rather than duplicating FFI-calling logic inside editor.dart keeps the \"UI stays stateless regarding content\" boundary intact. test/components/editor_test.dart required updating because Editor's public constructor changed (it now reads activeNoteProvider instead of taking ast directly, per this ticket's declared scope covering editor.dart), which is the same \"test needs updating because production API changed\" situation the BURL-B005 review flagged in advance for this exact milestone"
+closeout:
+  tickets_completed: [BURL-B001, BURL-B002, BURL-B003, BURL-B004, BURL-B005, BURL-B006, BURL-B007]
+  tickets_deferred: []
+  points_completed: 23
+  spec_patches: []
+  changelog_entries: []
+  candidate_terms: []
+  routed_upstream: []
+  follow_ups: []
+  settled: []

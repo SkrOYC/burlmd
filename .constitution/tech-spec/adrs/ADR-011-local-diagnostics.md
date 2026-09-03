@@ -1,3 +1,10 @@
+---
+id: ADR-0011
+status: accepted
+date: 2026-08-21
+certainty: assumed
+assumption: "Migrated; the decision's ruling reference was not found in the status line."
+---
 # ADR-011: Local structured log with content-excluding Diagnostics Export
 
 **Status:** Accepted

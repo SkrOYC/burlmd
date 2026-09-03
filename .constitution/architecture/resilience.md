@@ -48,9 +48,24 @@
 - Structured local diagnostics exclude Note content, Asset content, credentials, signed locations, and content-derived telemetry.
 - No diagnostic or usage information leaves the device automatically. The Writer creates and shares a Diagnostics Export explicitly.
 
+## Validation evidence
+
+- Each validation run owns an isolated display, compositor, input channel, and process lifecycle. If it can't prove ownership, the run emits no acceptable evidence.
+- The Writer's active desktop never supplies visual proof or validation input. A captured Writer window or desktop state invalidates the run.
+- Release Pipeline establishes an immutable trust-anchor identity from a reviewed and merged validation implementation. It creates authoritative trust-anchor, workflow-signer, tested-source, base, release, build, corpus, run, required-role, and role-specific evidence-class identities outside the tested source. It hands the same expectation directly to validation and aggregation.
+- Every validation role separates candidate execution from origin authentication. Candidate work has no signing authority and uploads one complete untrusted bundle. A fresh pipeline-owned sealing environment validates that bundle, authenticates immutable evidence, and records only the identity and locator facts available before it finishes. Candidate processes and filesystem state end with the candidate environment and never enter the sealing environment.
+- Evidence Aggregation observes sealing completion independently after the environment finishes. It compares captured identity with the authoritative expected identity, resolves the sealing locator to one completed successful role environment, and verifies the trust anchor and ticket write boundary. It rejects a premature completion claim, an in-progress, failed, missing, or mismatched sealing phase, candidate-defined validation control, duplicate or substituted handoffs, corrupt bundles, mismatches, and stale evidence. A later report state can't replace the tested source identity.
+- Evidence Aggregation separates credentialed acquisition from candidate-controlled aggregation. It resolves and identifies the coordinator before acquiring remote credentials. The authenticated phase only downloads and verifies evidence. It then destroys the credential context before running the prepared coordinator with read-only inputs, one writable output boundary, no inherited user configuration, and no network. Any credential, configuration, descriptor, filesystem, or network isolation failure rejects the evidence.
+- The validation implementation establishes trust through two reviewed integrations. The first integration lands the locally validated implementation and defines its immutable trust anchor. The merged implementation validates that exact source. A second evidence-only integration records the accepted result and completion state. Validation remains incomplete until both integrations merge. Any later change to the trusted launcher or workflow definition repeats this bootstrap.
+- Each validation request assigns an exact evidence profile to the three roles. A role's available capabilities don't become universal requirements for every request. Acceptance rejects both missing assigned classes and unassigned extra classes.
+- Linux x86-64 and Apple Silicon macOS 26 can supply performance evidence. Linux can supply exact platform-regression evidence, which can't replace product visual proof. macOS 26 alone can supply authoritative product visual evidence. macOS 15 supplies functional compatibility evidence only and can't replace those classes.
+- A partial run remains incomplete. Each retry receives a distinct run identity instead of reusing an earlier result.
+
 ## Observability
 
 Every durable state machine emits structured local events for transitions, retry class, partial outcome, recovery action, and correlation identity. Events contain identifiers needed for support without Note or Asset bytes. Diagnostics include application and schema versions so a report can be interpreted after upgrades.
+
+Release validation records isolation ownership, evidence handoff, identity rejection, freshness rejection, credential-boundary checks, coordinator identity, and aggregation outcomes. These records correlate a release identity without including the Writer's desktop content.
 
 ## Configuration
 

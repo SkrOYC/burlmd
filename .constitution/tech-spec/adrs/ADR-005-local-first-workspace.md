@@ -1,10 +1,17 @@
+---
+id: ADR-0005
+status: accepted
+date: 2026-07-24
+certainty: assumed
+assumption: "Migrated; the decision's ruling reference was not found in the status line."
+---
 # ADR-005: Local-First Workspace with Opt-In Remote
 
 **Status:** Accepted
 **Supersedes in part:** the clone-on-login step of `architecture/flows/flow-auth-handshake.md`
 
 ## Context
-`prd/constraints.md` has carried a Local-First Mandate since v1.0.0: the application "must be 100% functional when completely disconnected from the internet." The capability set contradicted it. OAuth was the only documented path to a Workspace, and `flow-auth-handshake.md` sequenced it as authorize → exchange tokens → store key → **clone repository** → initialize index → ready. There was no branch through that flow that did not involve a Remote.
+`prd/constraints.yaml` has carried a Local-First Mandate since v1.0.0: the application "must be 100% functional when completely disconnected from the internet." The capability set contradicted it. OAuth was the only documented path to a Workspace, and `flow-auth-handshake.md` sequenced it as authorize → exchange tokens → store key → **clone repository** → initialize index → ready. There was no branch through that flow that did not involve a Remote.
 
 The shipped implementation followed the flow faithfully, and the result is that `lib/main.dart` gates the entire application behind `LoginScreen` unless `authControllerProvider` reports `AuthStatus.success`. Combined with Epic C's deferred item 1 — no GitHub OAuth App is registered, so `BURLMD_GITHUB_CLIENT_ID`/`BURLMD_GITHUB_CLIENT_SECRET` are unset — the gate cannot currently be passed at all. The application is presently unusable for its stated purpose, and the cause is a specification error rather than a coding error.
 
@@ -27,7 +34,7 @@ PRD v1.1.0 resolved this at the product layer with CAP-WS-01 (write on first lau
 
 8. **`open_workspace` initializes a repository when the directory has none.** It is the third way to reach a Workspace, and the other two — initialize-local and clone — were deliberately required to converge "so that no later code needs to ask which path produced the Workspace it is looking at". This one has to converge too, or tier 3 has nothing to commit into: `close_note` makes a Git commit on the routine path, and CAP-WS-02 promises every editing session lands in local version history. A Workspace adopted from a directory with no history would fail both.
 
-   Creating `.git/` in a directory the user pointed at is a real side effect, and it is the reason `WSPC-D004`'s criterion says "no **Note** in it is modified" rather than "nothing is created" — no user content is touched, and the alternative is worse: adopting a Workspace that silently cannot keep history, discovered later, on the first close. A directory that already has history is left exactly as it is.
+   Creating `.git/` in a directory the user pointed at is a real side effect, and it is the reason `BURL-D004`'s criterion says "no **Note** in it is modified" rather than "nothing is created" — no user content is touched, and the alternative is worse: adopting a Workspace that silently cannot keep history, discovered later, on the first close. A directory that already has history is left exactly as it is.
 
 ## Consequences
 - **Positive:** The Local-First Mandate becomes literally true rather than aspirational, and the application becomes usable at all — which it currently is not.

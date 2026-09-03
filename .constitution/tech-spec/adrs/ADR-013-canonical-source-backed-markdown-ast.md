@@ -1,7 +1,14 @@
+---
+id: ADR-0013
+status: proposed
+date: 2026-08-26
+certainty: assumed
+assumption: "Migrated; the decision's ruling reference was not found in the status line."
+---
 # ADR-013: Canonical Source-Backed Markdown AST Foundation
 
 **Status:** Proposed; implementation-blocking Spike
-**Decision owner:** SPK-AST-H001, then final Technical Implementation evolution
+**Decision owner:** SPK-BURL-H001, then final Technical Implementation evolution
 
 ## Context
 
@@ -19,7 +26,7 @@ The current candidates are `markdown` 1.0.0 mdast, Comrak 0.54.0, and a complete
 
 ## Evidence required
 
-SPK-AST-H001 must compare all four candidates on the same checked-in corpus: mdast, Comrak, and distinct complete models over `pulldown-cmark` 0.12.2 and 0.13.4. It must prove exhaustive representation of the selected syntax, exact byte positions, preservation of malformed and unsupported source, link classification, conflict representation, structural and range edits, existing Note-size performance meters, and Flutter Rust Bridge projection cost. A candidate fails if it needs a second canonical document model or cannot preserve untouched bytes.
+SPK-BURL-H001 must compare all four candidates on the same checked-in corpus: mdast, Comrak, and distinct complete models over `pulldown-cmark` 0.12.2 and 0.13.4. It must prove exhaustive representation of the selected syntax, exact byte positions, preservation of malformed and unsupported source, link classification, conflict representation, structural and range edits, existing Note-size performance meters, and Flutter Rust Bridge projection cost. A candidate fails if it needs a second canonical document model or cannot preserve untouched bytes.
 
 ## Consequences
 

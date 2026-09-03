@@ -1,0 +1,84 @@
+entries:
+  - version: v2.0.0
+    date: 2026-09-03
+    added: ["Added 33 protocol-labeled edges to boundaries.yaml, one per communication the container diagram and the flows describe, covering the in-process Core seams, the filesystem and secure-storage Platform seams, the two network seams to the Remote and the Object Store, and the release pipeline handoffs."]
+    changed: ["Converted architecture/ to the structured layout. containers.md became boundaries.yaml with 19 boundary records; strategy.md, resilience.md, risks.md, and containers.md stay prose.", "Gave every flow front matter its job and its capability list. The sixteen flows now map onto the nine jobs; four jobs are told by more than one flow, which is why the flows were not merged.", "Cleaned the boundary depends_on lists the conversion left as prose fragments, so every entry is either a BND id or a named external entity.", "Migration date retained for v2.0.0: no master commit introducing this version string was found.", "Migration date retained for v2.0.0: no master commit introducing this version string was found."]
+    by: migrate
+    upstream:
+      prd: v2.0.0
+  - version: v1.4.15
+    date: 2026-08-31
+    changed: [Reviewed for PRD v1.3.7. This Evolution pass replaces workstation-dependent validation with pipeline-owned isolated execution and integrity-checked evidence aggregation, Assigned performance evidence to Linux x86-64 and Apple Silicon macOS 26. Linux also supplies required non-authoritative exact platform-regression evidence. The macOS 26 role supplies the sole authoritative product visual evidence. macOS 15 supplies functional compatibility evidence only, "Required every evidence handoff to carry captured environment, build, corpus, role, and run identity. Aggregation rejects missing, corrupt, mismatched, or stale evidence", "Updated release resilience, observability, threat notes, risks, and failure behavior so incomplete proof can't publish as a complete release result"]
+    added: ["Added Isolated Validation Environment and Evidence Aggregation as logical release-pipeline stages. Validation owns display, compositor, input, and process state without using the Writer's active desktop"]
+    fixed: [Assigned the common functional matrix to Linux x86-64 and macOS 26 as well as macOS 15. macOS 15 remains compatibility-only, "Made Release Pipeline the authority for expected release, build, corpus, run, and required-role identities. Aggregation receives that expectation directly, authenticates the validation origin, verifies artifact integrity, and compares captured identity instead of trusting self-description", "Distinguished the trust anchor, workflow signer, tested source, base, and later evidence-only report state. Each role hands off one complete evidence bundle, and aggregation rejects candidate-defined controls, an out-of-boundary source diff, an unmanaged origin, or a bundle that omits bytes named by its manifest", Clarified that a degraded close continues only a single Note-to-Note replacement with no enclosing operation. A batch or wider lifecycle operation stops after removing the retired warned tab and preserves every unprocessed tab, "Distinguished Linux exact platform-regression evidence from authoritative product visual evidence. The Linux gate remains required but can't replace the sole authoritative macOS 26 visual role", "Split Evidence Aggregation into credentialed acquisition and credential-free coordinator execution. Candidate-controlled aggregation receives only verified read-only inputs, one writable output boundary, and no network or inherited user state; any isolation failure rejects the evidence", "Split every validation role into candidate execution without origin-signing authority and a fresh pipeline-owned sealing environment. Only the sealing environment authenticates a validated immutable bundle; missing, failed, duplicate, substituted, or role-mismatched handoffs fail closed", "Required Evidence Aggregation to observe a sealing environment's final success after that environment finishes. A sealing handoff records pre-completion identity and locator facts but can't authenticate its own final outcome", "Distinguished a validation role's available capabilities from a request's required evidence. Authoritative expected identity assigns the exact role-specific classes for each gate, and aggregation rejects both missing and unassigned evidence", "Moved validation authority out of the tested source. A reviewed merged implementation establishes an immutable trust anchor; trusted validation checks the separate source against its ticket boundary. A second reviewed evidence-only integration completes the bootstrap, and later trust-surface changes repeat it"]
+    by: migrate
+    upstream:
+      prd: v1.3.7
+  - version: v1.4.14
+    date: 2026-08-26
+    changed: ["Reviewed for PRD v1.3.6. PR #12 full review round 14 aligns privacy-paused recovery and the Object Store risk boundary with the complete negative anonymous List, Get, Put, and Delete probe"]
+  - version: v1.4.13
+    date: 2026-08-26
+    changed: ["PR #12 full review round 12 defines private Object Storage across the complete anonymous permission surface: list, read, write, and delete must all be denied at connection and during recurring or prepublication revalidation"]
+  - version: v1.4.12
+    date: 2026-08-26
+    changed: ["PR #12 full review round 11 constrains direct Remote detach to asset-free Workspaces. Every asset-bearing detach, including from privacy-loss or unauthenticated states, enters LocalWithObjectStore and must reconnect the exact prior Remote before the authenticated full-local transition"]
+  - version: v1.4.11
+    date: 2026-08-26
+    changed: ["PR #12 full review round 10 routes every replacement Object Store through initial and recurring privacy validation before migration can copy or publish. It also removes the contradictory direct retained-store removal path after offline Remote detach: returning fully local requires reconnecting the exact prior Remote and obtaining fresh authenticated published-ref authority, as CAP-ASSET-11 requires"]
+  - version: v1.4.10
+    date: 2026-08-26
+    changed: ["PR #12 full review round 9 routes completed Consolidation back through prerequisite verification and initial publication instead of treating identity decisions as connection success. Object Store privacy now has a recurring and prepublication revalidation path whose failure pauses synchronization without blocking local work"]
+  - version: v1.4.9
+    date: 2026-08-26
+    changed: ["PR #12 full review round 8 closes three cross-boundary gaps. Replacement-store cutover now retains a discoverable old-store fallback path for stale publishers and fresh devices. Complete Remote-ref analysis is explicitly bounded and fails closed without blocking local work. The Release Pipeline now authenticates artifact provenance against its repository, workflow, revision, and subject identity while leaving Platform signing deferred"]
+  - version: v1.4.8
+    date: 2026-08-26
+    changed: ["Reviewed for PRD v1.3.5. The architecture prohibits authoritative Object Store deletion during 0.x, requires dual-write and revision-bound replacement-store migration, and makes Git payload exclusion independent of guest ignore files. It also assigns direct retained-store removal to the local-with-Object-Store path"]
+  - version: v1.4.7
+    date: 2026-08-26
+    changed: ["PR #12 full review round 6 adds an explicit local-with-Object-Store state after offline Remote detach, including Remote reconnection and verified Object Store removal. It also separates read-only find navigation from edit, replace, undo, and redo mutations"]
+  - version: v1.4.6
+    date: 2026-08-26
+    changed: [Reviewed for PRD v1.3.4. Remote connection and synchronization preflight reject workflow-bearing publication history while local use remains available. Consolidation provides the clean-Workspace remediation without granting workflow-modification authority to the GitHub App]
+  - version: v1.4.5
+    date: 2026-08-26
+    changed: ["Reviewed for PRD v1.3.3. PR #12 full review round 4 distinguishes offline Remote detachment from the full-local transition. Offline detachment retains the Object Store. Full-local transition requires authenticated online enumeration of all published Remote refs, verified hydration of the resulting Protected Object closure, and an atomic revision-bound detach"]
+  - version: v1.4.4
+    date: 2026-08-26
+    changed: ["PR #12 full review round 3 restored independent Object Store detach for Remote-connected Workspaces whose complete Protected State contains no Object references. Asset-bearing Workspaces still require a verified Object Store, and full-local transition still detaches both external stores only after complete hydration"]
+  - version: v1.4.3
+    date: 2026-08-26
+    changed: ["PR #12 full review round 2 corrected the Asset failure flow. Missing or corrupt local Objects now enter Object recovery; Asset Decisions remain exclusive to competing Asset outcomes produced by Remote reconciliation. This preserves the product distinction between local recovery and synchronization decisions"]
+  - version: v1.4.2
+    date: 2026-08-26
+    changed: [Reviewed for PRD v1.3.2. The Link graph flow already models delivered ghost-Link creation and now classifies CAP-GRAPH-04 as delivered rather than active. No boundary or flow change is required]
+  - version: v1.4.1
+    date: 2026-08-26
+    changed: ["Reviewed for PRD v1.3.1. No structural change is required: Architecture already separates bounded structured local diagnostics from any off-device transmission and excludes content, credentials, signed locations, and content-derived telemetry"]
+  - version: v1.4.0
+    date: 2026-08-25
+    changed: ["Evolution pass for PRD v1.3.0 and the August 25 Tasks interview. This minor release expands the logical architecture for the feature-complete desktop, private Remote, Object Store, reconciliation, and release scope", Replaced the Git-specific eventual-sync strategy with a provider-independent local-first modular desktop strategy, "Replaced physical protocols, engines, token flows, tables, commands, and interface contracts with logical request, event, storage, and external-service categories", Made Presentation responsible for interaction state while Core Coordination remains the sole Workspace authority, "Separated device preferences, per-Workspace session state, authoritative Workspace bytes, rebuildable indexing, Remote history, and Object bytes", Reworked every flow so all 60 active P0 capabilities and the delivered baseline have explicit mappings and failure behavior]
+    added: ["Added Canonical Note Model, Workspace Model, Workspace Observer, Application State, Object Transfer Coordinator, Host Platform, Object Store, and Release Pipeline boundaries", "Added logical flows for desktop sessions, live monitoring, Asset adoption, Object Store lifecycle, complete reconciliation, history and diagnostics, and release upgrades", "Added durable logical state for guest decisions, reconciliation inputs, Object obligations, Protected State, migrations, and per-Workspace sessions", "Added trust notes and risks for guest writes, Provider and Remote input, Object integrity, release distribution, path portability, stale decisions, and split external transactions"]
+    removed: ["Removed stale loopback authorization, raw-marker conflict, ambient polling, physical serialization, filename-verbatim, and partial-Export designs from normative Architecture", "Removed retired Epic G, H, and I deferral banners. The forward architecture follows current PRD scope rather than provisional historical assignments"]
+    fixed: [Assigned authoritative session ownership only to Workspace Model and limited Application State to persistence and restoration, "Added the Agent filesystem trust path, Host filesystem edges, and a distinct Local Asset Store boundary", Made Export refusal terminal and made every attached Remote state reauthorizable or explicitly detachable, "Applied durable input recording and conditional finalization to content, lifecycle, and Asset reconciliation", "Added guest lifecycle monitoring for create, move, rename, and delete outcomes", Completed visible synchronization-state mapping and documented Release Distribution as an external boundary, "Routed Object bytes, identity verification, deduplication, Export closure, hydration, eviction, and retention through Local Asset Store", "Split content and Decision finalization guards, added retryable authorization-refresh states, and made missing Object recovery pause affected synchronization", "Routed every authoritative response through Core Coordination, corrected Observer and Derived Index edge directions, and moved ghost identity resolution to Workspace Model"]
+  - version: v1.3.0
+    date: 2026-08-21
+    changed: ["Evolution pass driven by the Realign interview of 2026-08-21 and PRD v1.2.0, closing the compliance gaps the audit named while leaving every logical container, boundary and pattern untouched"]
+  - version: v1.2.0
+    date: 2026-08-21
+    changed: ["Freshness pass at the close of Epic D (Workspace & Persistence). Patch-shaped in substance but recorded as a minor bump, because four risks moved from *mitigation planned* to *mitigation implemented* and that is a real change in what this layer asserts about the system. No container, flow or pattern was added, removed or repurposed"]
+  - version: v1.1.0
+    date: 2026-08-21
+    changed: ["Amendments driven by PRD v1.1.0 and the decisions recorded in tech-spec/ ADR-004 through ADR-008. Minor bump: an execution flow was added and two were materially rewritten, but no logical container was added, removed, or repurposed"]
+  - version: v1.0.1
+    date: 2026-07-22
+    changed: ["Constitution Freshness & Reconciliation Pass following Epic B execution (BURL-B001–B007). - Corrected containers.md's Local Repository description, which implied the raw OKF directory tree was encrypted by this container. The shipped implementation only encrypts the SQLite index (via SQLCipher); raw Markdown files rely on OS-level Full Disk Encryption, per prd/constraints.md's existing rationale (preserving native Git merge capability). This same inconsistency also existed in prd/capabilities.md (corrected there, see prd/changelog.md v1.0.1). - Corrected flows/flow-edit-note.md: reworded the Active Editing loop's \"updated localized AST\" to \"updated NoteState (full AST)\" — update_block returns the full note state, not a differential update (differential streaming remains the risk #1 fallback, not something implemented). Annotated the Close/Save phase (serialize AST to Markdown, commit to disk) as not yet implemented: save_note currently performs only the OCC bookkeeping check described in risk #6, with no Markdown serializer or file write-through existing yet. - Amended risks.md risk #6 (OCC for Background Sync) with a current-implementation-status note: the shipped save_note guards the notes.last_modified database column only, since no code path yet serializes the AST back to the on-disk Markdown file. Full protection against the file-clobbering scenario the risk describes is contingent on a future Markdown-serialization + Git-write-through ticket"]
+  - version: v1.0.0
+    date: 2026-07-24
+    changed: ["- Defined the Local-First Thick Client architectural strategy. - Decomposed the system into four logical containers: Presentation Container, Core Engine, Local Repository, and Sync Manager. - Established the FFI boundary rules (stateless UI streaming to a stateful engine). - Defined conflict resolution mechanics occurring within the Core Engine via AST generation. - Documented cross-cutting resilience concerns for offline operation and FFI serialization risks. - Upgraded Core Engine container to serve as a cryptographic boundary. - Added Secure Storage (OS Keychain) boundary container. - Added execution flows for OAuth Handshake (flow-auth-handshake.md) and Conflict Resolution (flow-conflict-resolution.md). - Expanded resilience matrix to cover secure storage failures"]
+  - version: v0.0.1
+    date: 2026-09-03
+    added: ["History before migration; the markdown changelog is in git"]
+    by: migrate
+    changed: ["Migration date retained for v0.0.1: no master commit introducing this version string was found.", "Migration date retained for v0.0.1: no master commit introducing this version string was found."]

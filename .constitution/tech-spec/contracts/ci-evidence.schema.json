@@ -1,0 +1,302 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://burlmd.local/schemas/ci-evidence.schema.json",
+  "title": "burlmd managed CI aggregate evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "expectedIdentity", "expectedIdentitySha256", "expectedIdentityArtifact", "generatedAt", "mode", "status", "roleEvidence", "coordinatorExecution", "aggregationChecks", "rejectionReasons"],
+  "properties": {
+    "schemaVersion": { "const": 10 },
+    "expectedIdentity": { "$ref": "ci-role-evidence.schema.json#/$defs/expectedIdentity" },
+    "expectedIdentitySha256": { "$ref": "#/$defs/sha256" },
+    "expectedIdentityArtifact": {
+      "$comment": "Semantic validation requires the accepted artifact name to equal managed-evidence-expected- plus expectedIdentity.artifactNonce. Rejected reports may use null when this artifact is missing.",
+      "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/artifactObservation" }]
+    },
+    "generatedAt": { "$ref": "#/$defs/rfc3339" },
+    "mode": { "const": "trusted-anchor-local" },
+    "status": { "enum": ["accepted", "rejected"] },
+    "roleEvidence": { "type": "array", "maxItems": 3, "items": { "$ref": "#/$defs/enrichedRoleEvidence" } },
+    "coordinatorExecution": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/coordinatorExecution" }] },
+    "aggregationChecks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rolesComplete", "identityCompared", "trustAnchorVerified", "trustedSurfacesUnchanged", "sourceAllowlistVerified", "evidenceProfileVerified", "roleResultsPassed", "originAuthenticated", "hostedOriginVerified", "jobTopologyVerified", "artifactNamesVerified", "artifactIntegrityVerified", "bundleContentsVerified", "imageVersionsCompatible"],
+      "properties": {
+        "rolesComplete": { "type": "boolean" },
+        "identityCompared": { "type": "boolean" },
+        "trustAnchorVerified": { "type": "boolean" },
+        "trustedSurfacesUnchanged": { "type": "boolean" },
+        "sourceAllowlistVerified": { "type": "boolean" },
+        "evidenceProfileVerified": { "type": "boolean" },
+        "roleResultsPassed": { "type": "boolean" },
+        "originAuthenticated": { "type": "boolean" },
+        "hostedOriginVerified": { "type": "boolean" },
+        "jobTopologyVerified": { "type": "boolean" },
+        "artifactNamesVerified": { "type": "boolean" },
+        "artifactIntegrityVerified": { "type": "boolean" },
+        "bundleContentsVerified": { "type": "boolean" },
+        "imageVersionsCompatible": { "type": "boolean" }
+      }
+    },
+    "rejectionReasons": { "type": "array", "items": { "$ref": "#/$defs/rejectionReason" } }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "status": { "const": "accepted" } }, "required": ["status"] },
+      "then": {
+        "properties": {
+          "roleEvidence": {
+            "type": "array",
+            "minItems": 3,
+            "maxItems": 3,
+            "allOf": [
+              { "contains": { "type": "object", "properties": { "manifest": { "type": "object", "properties": { "roleEvidence": { "type": "object", "properties": {
+                "role": { "const": "linux-x86_64" },
+                "viewport": { "type": "object", "properties": { "verified": { "const": true } } }
+              } } } } } } },
+              { "contains": { "type": "object", "properties": { "manifest": { "type": "object", "properties": { "roleEvidence": { "type": "object", "properties": {
+                "role": { "const": "macos-26-arm64" },
+                "viewport": { "type": "object", "properties": { "verified": { "const": true } } }
+              } } } } } } },
+              { "contains": { "type": "object", "properties": { "manifest": { "type": "object", "properties": { "roleEvidence": { "type": "object", "properties": {
+                "role": { "const": "macos-15-arm64" },
+                "viewport": { "type": "object", "properties": { "verified": { "const": true } } }
+              } } } } } } }
+            ]
+          },
+          "expectedIdentityArtifact": {
+            "allOf": [
+              { "$ref": "#/$defs/artifactObservation" },
+              { "type": "object", "properties": { "artifactName": { "type": "string", "pattern": "^managed-evidence-expected-[0-9a-f]{32}$" } } }
+            ]
+          },
+          "aggregationChecks": { "type": "object", "properties": {
+            "rolesComplete": { "const": true },
+            "identityCompared": { "const": true },
+            "trustAnchorVerified": { "const": true },
+            "trustedSurfacesUnchanged": { "const": true },
+            "sourceAllowlistVerified": { "const": true },
+            "evidenceProfileVerified": { "const": true },
+            "roleResultsPassed": { "const": true },
+            "originAuthenticated": { "const": true },
+            "hostedOriginVerified": { "const": true },
+            "jobTopologyVerified": { "const": true },
+            "artifactNamesVerified": { "const": true },
+            "artifactIntegrityVerified": { "const": true },
+            "bundleContentsVerified": { "const": true },
+            "imageVersionsCompatible": { "const": true }
+          } },
+          "rejectionReasons": { "type": "array", "maxItems": 0 }
+        },
+        "allOf": [
+          {
+            "if": { "properties": { "expectedIdentity": { "type": "object", "properties": { "ticketIdentity": { "const": "BURL-M003" } } } } },
+            "then": { "properties": { "coordinatorExecution": { "type": "null" } } },
+            "else": { "properties": { "coordinatorExecution": {
+              "allOf": [
+                { "$ref": "#/$defs/coordinatorExecution" },
+                { "type": "object", "properties": {
+                  "networkIsolated": { "const": true },
+                  "credentialsSanitized": { "const": true },
+                  "descriptorsClosed": { "const": true },
+                  "emptyUserState": { "const": true },
+                  "inputsReadOnly": { "const": true },
+                  "outputOnlyWritable": { "const": true },
+                  "forbiddenToolsAbsent": { "const": true },
+                  "credentialCanariesAbsent": { "const": true },
+                  "representativeResultPassed": { "const": true }
+                } }
+              ]
+            } } }
+          }
+        ]
+      },
+      "else": { "properties": { "rejectionReasons": { "type": "array", "minItems": 1 } } }
+    }
+  ],
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "gitSha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "rfc3339": {
+      "$comment": "The aggregator must parse this value and reject impossible calendar dates; this pattern checks shape only.",
+      "type": "string",
+      "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-([0-2][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\\.[0-9]+)?(Z|[+-]([01][0-9]|2[0-3]):[0-5][0-9])$"
+    },
+    "role": { "enum": ["linux-x86_64", "macos-26-arm64", "macos-15-arm64"] },
+    "signerWorkflow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["workflowPath", "jobWorkflowRef", "jobWorkflowSha", "builderId"],
+      "properties": {
+        "workflowPath": { "type": "string", "minLength": 1 },
+        "jobWorkflowRef": { "type": "string", "minLength": 1 },
+        "jobWorkflowSha": { "$ref": "#/$defs/gitSha" },
+        "builderId": { "type": "string", "pattern": "^https://github\\.com/SkrOYC/burlmd/\\.github/workflows/.+@refs/heads/master$" }
+      }
+    },
+    "jobObservation": {
+      "$comment": "The coordinator constructs this observation after the job API reports status completed. checkRunId comes from the API check_run_url. Accepted evidence requires conclusion success. For seal, runnerEnvironment is also bound by signed OIDC provenance and the pre-completion receipt locator.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["jobId", "checkRunId", "workflowJobKey", "runnerLabels", "runnerEnvironment", "status", "conclusion"],
+      "properties": {
+        "jobId": { "type": "integer", "minimum": 1 },
+        "checkRunId": { "type": "integer", "minimum": 1 },
+        "workflowJobKey": { "enum": ["candidate", "seal"] },
+        "runnerLabels": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+        "runnerEnvironment": { "const": "github-hosted" },
+        "status": { "const": "completed" },
+        "conclusion": { "const": "success" }
+      }
+    },
+    "artifactObservation": {
+      "$comment": "The pinned upload action emits uploadActionDigest as bare lowercase hexadecimal. The REST API and this aggregate use artifactDigest in canonical sha256:<hex> form. Semantic validation must require artifactDigest to equal 'sha256:' concatenated with uploadActionDigest.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifactId", "artifactName", "uploadActionDigest", "artifactDigest"],
+      "properties": {
+        "artifactId": { "type": "integer", "minimum": 1 },
+        "artifactName": {
+          "$comment": "The aggregator also requires this exact name to use the expected role and artifactNonce. The restricted alphabet excludes every character rejected by the pinned upload action.",
+          "type": "string",
+          "pattern": "^managed-evidence-(expected-[0-9a-f]{32}|(candidate|sealed)-(linux-x86_64|macos-26-arm64|macos-15-arm64)-[0-9a-f]{32})$"
+        },
+        "uploadActionDigest": { "$ref": "#/$defs/sha256" },
+        "artifactDigest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+      }
+    },
+    "origin": {
+      "$comment": "The attested sealing receipt is a separate artifact written before seal completes. It supplies the sealing check-run locator and immutable identity, candidate and sealed artifact, and bundle facts, but no final job state. After the workflow attempt completes, the coordinator resolves exactly one job API object through sealingCheckRunId and constructs sealingJob. Semantic validation requires sealingJob.checkRunId to equal sealingCheckRunId, distinct candidate and sealing job IDs, canonical digest equality, exact role-specific names derived from expectedIdentity.artifactNonce, one artifact per reserved name, and no other candidate, sealed, expected, or receipt artifact for that nonce.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repositoryId", "workflowRunId", "runAttempt", "trustAnchorSha", "testedSourceSha", "workflowSignerSha", "workflowSignerRef", "baseSha", "candidateJob", "sealingCheckRunId", "sealingJob", "signerWorkflow", "candidateArtifact", "sealedArtifact", "sealingReceiptSha256", "attestationIssuer", "sealedAttestationSubjectDigest", "sealedAttestationBundleSha256", "sealedAttestationVerified", "sealingReceiptAttestationSubjectDigest", "sealingReceiptAttestationBundleSha256", "sealingReceiptAttestationVerified", "roleBundleSha256", "sealedBundleSha256", "restApiVersion", "verifiedAt"],
+      "properties": {
+        "repositoryId": { "type": "integer", "minimum": 1 },
+        "workflowRunId": { "type": "integer", "minimum": 1 },
+        "runAttempt": { "type": "integer", "minimum": 1 },
+        "trustAnchorSha": { "$ref": "#/$defs/gitSha" },
+        "testedSourceSha": { "$ref": "#/$defs/gitSha" },
+        "workflowSignerSha": { "$ref": "#/$defs/gitSha" },
+        "workflowSignerRef": { "const": "refs/heads/master" },
+        "baseSha": { "$ref": "#/$defs/gitSha" },
+        "candidateJob": { "$ref": "#/$defs/jobObservation" },
+        "sealingCheckRunId": { "type": "integer", "minimum": 1 },
+        "sealingJob": { "$ref": "#/$defs/jobObservation" },
+        "signerWorkflow": { "$ref": "#/$defs/signerWorkflow" },
+        "candidateArtifact": { "$ref": "#/$defs/artifactObservation" },
+        "sealedArtifact": { "$ref": "#/$defs/artifactObservation" },
+        "sealingReceiptSha256": { "$ref": "#/$defs/sha256" },
+        "attestationIssuer": { "const": "https://token.actions.githubusercontent.com" },
+        "sealedAttestationSubjectDigest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "sealedAttestationBundleSha256": { "$ref": "#/$defs/sha256" },
+        "sealedAttestationVerified": { "const": true },
+        "sealingReceiptAttestationSubjectDigest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "sealingReceiptAttestationBundleSha256": { "$ref": "#/$defs/sha256" },
+        "sealingReceiptAttestationVerified": { "const": true },
+        "roleBundleSha256": {
+          "$comment": "Digest of the unchanged inner ci-role-evidence.tar.zst candidate bundle.",
+          "$ref": "#/$defs/sha256"
+        },
+        "sealedBundleSha256": {
+          "$comment": "Digest of the sealed bundle, which contains only the unchanged role bundle. The separate sealing receipt contains this digest, avoiding self-reference. The aggregator must require sealedAttestationSubjectDigest to equal sha256: followed by this value, and sealingReceiptAttestationSubjectDigest to equal sha256: followed by sealingReceiptSha256.",
+          "$ref": "#/$defs/sha256"
+        },
+        "restApiVersion": { "const": "2026-03-10" },
+        "verifiedAt": { "$ref": "#/$defs/rfc3339" }
+      }
+    },
+    "enrichedRoleEvidence": {
+      "$comment": "Semantic validation requires manifest.roleEvidence.evidenceClasses and the exact gates key set to equal manifest.expectedIdentity.requiredEvidenceClasses for that role. Every gate must be true. Accepted aggregation rejects both missing assigned classes and unassigned extra classes.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["manifest", "manifestSha256", "origin"],
+      "properties": {
+        "manifest": { "$ref": "ci-role-evidence.schema.json" },
+        "manifestSha256": { "$ref": "#/$defs/sha256" },
+        "origin": { "$ref": "#/$defs/origin" }
+      },
+      "allOf": [
+        {
+          "if": { "type": "object", "properties": { "manifest": { "type": "object", "properties": { "roleEvidence": { "type": "object", "properties": { "role": { "const": "linux-x86_64" } } } } } } },
+          "then": { "properties": { "origin": { "type": "object", "properties": {
+            "signerWorkflow": { "type": "object", "properties": {
+              "workflowPath": { "const": ".github/workflows/ci-role-linux-x86-64.yml" },
+              "jobWorkflowRef": { "const": "SkrOYC/burlmd/.github/workflows/ci-role-linux-x86-64.yml@refs/heads/master" },
+              "builderId": { "const": "https://github.com/SkrOYC/burlmd/.github/workflows/ci-role-linux-x86-64.yml@refs/heads/master" }
+            } },
+            "candidateJob": { "type": "object", "properties": { "workflowJobKey": { "const": "candidate" }, "runnerLabels": { "type": "array", "contains": { "const": "ubuntu-24.04" }, "not": { "contains": { "const": "self-hosted" } } } } },
+            "sealingJob": { "type": "object", "properties": { "workflowJobKey": { "const": "seal" }, "runnerLabels": { "type": "array", "contains": { "const": "ubuntu-24.04" }, "not": { "contains": { "const": "self-hosted" } } } } },
+            "candidateArtifact": { "type": "object", "properties": { "artifactName": { "type": "string", "pattern": "^managed-evidence-candidate-linux-x86_64-[0-9a-f]{32}$" } } },
+            "sealedArtifact": { "type": "object", "properties": { "artifactName": { "type": "string", "pattern": "^managed-evidence-sealed-linux-x86_64-[0-9a-f]{32}$" } } }
+          } } } }
+        },
+        {
+          "if": { "type": "object", "properties": { "manifest": { "type": "object", "properties": { "roleEvidence": { "type": "object", "properties": { "role": { "const": "macos-26-arm64" } } } } } } },
+          "then": { "properties": { "origin": { "type": "object", "properties": {
+            "signerWorkflow": { "type": "object", "properties": {
+              "workflowPath": { "const": ".github/workflows/ci-role-macos-26-arm64.yml" },
+              "jobWorkflowRef": { "const": "SkrOYC/burlmd/.github/workflows/ci-role-macos-26-arm64.yml@refs/heads/master" },
+              "builderId": { "const": "https://github.com/SkrOYC/burlmd/.github/workflows/ci-role-macos-26-arm64.yml@refs/heads/master" }
+            } },
+            "candidateJob": { "type": "object", "properties": { "workflowJobKey": { "const": "candidate" }, "runnerLabels": { "type": "array", "contains": { "const": "macos-26" }, "not": { "contains": { "const": "self-hosted" } } } } },
+            "sealingJob": { "type": "object", "properties": { "workflowJobKey": { "const": "seal" }, "runnerLabels": { "type": "array", "contains": { "const": "macos-26" }, "not": { "contains": { "const": "self-hosted" } } } } },
+            "candidateArtifact": { "type": "object", "properties": { "artifactName": { "type": "string", "pattern": "^managed-evidence-candidate-macos-26-arm64-[0-9a-f]{32}$" } } },
+            "sealedArtifact": { "type": "object", "properties": { "artifactName": { "type": "string", "pattern": "^managed-evidence-sealed-macos-26-arm64-[0-9a-f]{32}$" } } }
+          } } } }
+        },
+        {
+          "if": { "type": "object", "properties": { "manifest": { "type": "object", "properties": { "roleEvidence": { "type": "object", "properties": { "role": { "const": "macos-15-arm64" } } } } } } },
+          "then": { "properties": { "origin": { "type": "object", "properties": {
+            "signerWorkflow": { "type": "object", "properties": {
+              "workflowPath": { "const": ".github/workflows/ci-role-macos-15-arm64.yml" },
+              "jobWorkflowRef": { "const": "SkrOYC/burlmd/.github/workflows/ci-role-macos-15-arm64.yml@refs/heads/master" },
+              "builderId": { "const": "https://github.com/SkrOYC/burlmd/.github/workflows/ci-role-macos-15-arm64.yml@refs/heads/master" }
+            } },
+            "candidateJob": { "type": "object", "properties": { "workflowJobKey": { "const": "candidate" }, "runnerLabels": { "type": "array", "contains": { "const": "macos-15" }, "not": { "contains": { "const": "self-hosted" } } } } },
+            "sealingJob": { "type": "object", "properties": { "workflowJobKey": { "const": "seal" }, "runnerLabels": { "type": "array", "contains": { "const": "macos-15" }, "not": { "contains": { "const": "self-hosted" } } } } },
+            "candidateArtifact": { "type": "object", "properties": { "artifactName": { "type": "string", "pattern": "^managed-evidence-candidate-macos-15-arm64-[0-9a-f]{32}$" } } },
+            "sealedArtifact": { "type": "object", "properties": { "artifactName": { "type": "string", "pattern": "^managed-evidence-sealed-macos-15-arm64-[0-9a-f]{32}$" } } }
+          } } } }
+        }
+      ]
+    },
+    "coordinatorExecution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["executableSha256", "sourceTreeSha256", "lockfileSha256", "toolchainClosureSha256", "executionClosureSha256", "contractSha256", "buildCommandSha256", "sandbox", "networkIsolated", "credentialsSanitized", "descriptorsClosed", "emptyUserState", "inputsReadOnly", "outputOnlyWritable", "forbiddenToolsAbsent", "credentialCanariesAbsent", "representativeResultPassed"],
+      "properties": {
+        "executableSha256": { "$ref": "#/$defs/sha256" },
+        "sourceTreeSha256": { "$ref": "#/$defs/sha256" },
+        "lockfileSha256": { "$ref": "#/$defs/sha256" },
+        "toolchainClosureSha256": { "$ref": "#/$defs/sha256" },
+        "executionClosureSha256": { "$ref": "#/$defs/sha256" },
+        "contractSha256": { "$ref": "#/$defs/sha256" },
+        "buildCommandSha256": { "$ref": "#/$defs/sha256" },
+        "sandbox": { "const": "bubblewrap-0.11.2" },
+        "networkIsolated": { "type": "boolean" },
+        "credentialsSanitized": { "type": "boolean" },
+        "descriptorsClosed": { "type": "boolean" },
+        "emptyUserState": { "type": "boolean" },
+        "inputsReadOnly": { "type": "boolean" },
+        "outputOnlyWritable": { "type": "boolean" },
+        "forbiddenToolsAbsent": { "type": "boolean" },
+        "credentialCanariesAbsent": { "type": "boolean" },
+        "representativeResultPassed": { "type": "boolean" }
+      }
+    },
+    "rejectionReason": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "detail"],
+      "properties": {
+        "code": { "enum": ["expected-identity-invalid", "evidence-profile-mismatch", "artifact-name-invalid", "artifact-name-collision", "artifact-digest-mismatch", "trust-anchor-mismatch", "candidate-control-surface-changed", "source-allowlist-violation", "candidate-job-failed", "sealing-job-in-progress", "sealing-job-failed", "sealing-job-missing", "sealing-job-mismatch", "job-topology-mismatch", "role-manifest-invalid", "role-bundle-invalid", "missing-role", "duplicate-role", "unexpected-role", "role-gate-failed", "identity-mismatch", "stale-evidence", "workflow-signer-mismatch", "runner-label-mismatch", "runner-environment-mismatch", "untrusted-origin", "attestation-unavailable", "artifact-api-mismatch", "artifact-corrupt", "mixed-image-version", "coordinator-identity-mismatch", "coordinator-isolation-failed", "coordinator-credential-exposure", "aggregation-error"] },
+        "role": { "$ref": "#/$defs/role" },
+        "jobId": { "type": "integer", "minimum": 1 },
+        "jobStatus": { "enum": ["queued", "in_progress", "completed"] },
+        "jobConclusion": { "type": ["string", "null"], "enum": ["success", "failure", "cancelled", "skipped", "timed_out", "action_required", "neutral", "stale", "startup_failure", null] },
+        "detail": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://burlmd.local/schemas/device-preferences.schema.json",
   "title": "Device preferences",
-  "description": "Exactly one versioned JSON file stores these preferences in Platform application-support data. The file is not part of a Workspace, Git history, or `schema.sql`. The persistence layer replaces it atomically by writing a temporary file and renaming it. Unknown `schema_version` values or corrupt bytes produce in-memory defaults, isolate the corrupt file, and do not crash the application. The current schema version is 1. `platform_chrome` must not appear because SHELL-G001 removes that preference.",
+  "description": "Exactly one versioned JSON file stores these preferences in Platform application-support data. The file is not part of a Workspace, Git history, or `schema.sql`. The persistence layer replaces supported payloads atomically by writing a temporary file and renaming it. Corrupt bytes and unsupported later `schema_version` values are quarantined and preserved byte-for-byte without migration or overwrite; runtime uses in-memory defaults. A supported current file may be written later only at an explicitly safe path isolated from the preserved bytes. The current schema version is 1. `platform_chrome` must not appear because BURL-G001 removes that preference.",
   "type": "object",
   "required": [
     "schema_version",
@@ -54,7 +54,7 @@
       "type": "boolean"
     },
     "update_notifications": {
-      "description": "When true, check for and notify about compatible higher 0.x releases as specified by UPDATE-M010. When false, do not check.",
+      "description": "When true, check for and notify about compatible higher 0.x releases as specified by BURL-M010. When false, do not check.",
       "type": "boolean"
     }
   }

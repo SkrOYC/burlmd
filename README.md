@@ -23,7 +23,7 @@ full-text search, and recovery for unpersisted edits. The editor provides
 Live Preview, cross-Block selection and copy, structural editing, emphasis
 shortcuts, Link completion and follow, and atomic multi-Block range edits.
 
-The complete forward backlog is active: seven epics contain 80 tickets and 564 story points. Five decision Spikes are executable while Stage 3 remains provisional. `SHELL-G001`, `PREF-G002`, `STATE-G003`, `TABS-G004`, `CLOSE-G005`, and `NAV-G007` are the only production-code exceptions. Every other production ticket remains blocked. See [the critical path](.constitution/tasks/critical-path.md).
+The complete forward backlog is active: seven epics contain 80 tickets and 564 story points. Five decision Spikes are executable after their declared dependencies are satisfied. The only production-code exceptions are `SHELL-G001`, `PREF-G002`, `STATE-G003`, `TABS-G004`, `CLOSE-G005`, `NAV-G007`, `FLAKE-M002`, and `CI-M003`. Every other production ticket remains blocked. See [the critical path](.constitution/tasks/critical-path.md) for the authoritative execution rules.
 
 Desktop targets are x86-64 Linux and Apple Silicon macOS. The forward plan covers durable desktop sessions, canonical Workspace authority, Assets and first-class S3-compatible Object Storage, Export and Consolidation, a private GitHub Remote, reconciliation, diagnostics, packaging, and unsigned `0.x` releases. Authoritative Object Store deletion during `0.x`, mobile targets, multiple simultaneous Workspaces, graph visualization, HTML Publishing, a second Remote provider, self-updating binaries, and prerelease signing remain deferred.
 

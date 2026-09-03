@@ -1,3 +1,11 @@
+---
+job: JOB-06
+capabilities: [CAP-066, CAP-071, CAP-072, CAP-074]
+boundaries: [BND-01, BND-02, BND-04, BND-05, BND-10]
+view: state
+certainty: assumed
+assumption: "Migrated from markdown; not yet exercised by an integration test."
+---
 # Reconciliation flow
 
 **Maps to:** CAP-SYNC-04, CAP-SYNC-10, CAP-SYNC-11, CAP-SYNC-13.

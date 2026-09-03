@@ -1,0 +1,253 @@
+id: H
+name: canonical workspace authority
+kind: product
+capabilities: [CAP-015, CAP-036, CAP-037, CAP-038, CAP-039, CAP-040, CAP-041, CAP-042, CAP-050, CAP-051]
+depends_on: [M]
+scope:
+  paths: [".constitution/prototypes/ast/**", ".constitution/spikes/SPK-BURL-H001.md", ".constitution/prototypes/path/**", ".constitution/spikes/SPK-BURL-H002.md", "rust/src/markdown/**", rust/src/draft.rs, rust/Cargo.toml, rust/Cargo.lock, "rust/src/api/**", "rust/src/index/**", "rust/src/workspace/**", "lib/src/rust/**", lib/src/components/block_view.dart, lib/src/components/editor.dart, lib/src/providers/rust_api_provider.dart, "test/**", rust/src/okf/concept_id.rs, "rust/src/db/**", rust/src/api/ffi_api.rs, rust/src/workspace/bootstrap.rs, rust/src/index/scan.rs, "rust/src/okf/**", "lib/src/components/**", rust/src/git/operations.rs, lib/src/providers/workspace_provider.dart, lib/src/providers/note_providers.dart, lib/src/screens/workspace.dart, test/screens/workspace_rescan_test.dart]
+  tech_spec_patchable: []
+estimated_diff_lines: 14000
+tickets:
+  - id: BURL-H001
+    title: Select the canonical source-backed Markdown AST foundation
+    type: Spike
+    effort: 8
+    depends_on: []
+    category: Feature-Evolution
+    scope:
+      in: [".constitution/prototypes/ast/**", ".constitution/spikes/SPK-BURL-H001.md"]
+    verification:
+      command: "TRUST_ANCHOR_WORKTREE/scripts/managed-evidence.sh run --ticket BURL-H001 --trust-anchor-sha TRUST_ANCHOR_SHA --source-ref SOURCE_REF --tested-source-sha TESTED_SOURCE_SHA --base-sha BASE_SHA --output EVIDENCE_WORKTREE/.constitution/prototypes/ast/managed-evidence.json && git -C EVIDENCE_WORKTREE diff --check"
+      expected: "exit 0 with authenticated managed-role runs, .constitution/prototypes/ast/results.json, accepted .constitution/prototypes/ast/managed-evidence.json, and executor-authored .constitution/spikes/SPK-BURL-H001.md"
+    stop_conditions: ["STOP if a candidate can't preserve untouched bytes or represent any required syntax/domain case.", "STOP if the `BURL-M003` evidence pull request isn't merged, expected identity differs between roles, evidence is missing, mismatched, stale, corrupt, or unauthenticated, or aggregation is `rejected`.", "STOP if post-completion API observation doesn't resolve the receipt locator to one completed successful sealing job on the fixed hosted label, or if an expected, candidate, or sealed artifact name or normalized digest is invalid, missing, duplicate, extra, or inconsistent with the run nonce.", "STOP if the launcher isn't the clean trust-anchor copy, a trusted control file differs at the signer SHA, or the base-to-source diff leaves the AST write allowlist.", "STOP if the machine result is missing or invalid, or if the evidence commit doesn't contain that result, the accepted managed report, and the executor-authored Spike report together.", "STOP if a candidate process or coordinator can observe a credential canary, coordinator identity changes after preparation, isolation or network denial fails, an input is writable, or any path except the coordinator output is writable.", "STOP when the 3-day time box expires; record partial evidence without choosing by intuition."]
+    description: "Compare mdast, Comrak, and complete models derived separately from pulldown-cmark 0.12.2 and 0.13.4 using the full canonical-AST contract and corpus"
+    acceptance:
+      mode: contract_test
+      evidence: "Every declared candidate and gate has attributed evidence for syntax, positions, source fidelity, Links, rendered selections, structural edits, and Suggestions. All three roles provide `common-functional`. Linux and macOS 26 additionally provide `performance` and `ast-measurement`; macOS 15 provides no performance class. The AST profile doesn't claim platform-regression or authoritative visual evidence. Every candidate job captures image, OS, architecture, CPU, memory, storage, viewport, build, corpus, run, artifact nonce, and role identity in one complete untrusted bundle. Aggregation verifies that exact profile, the trust anchor, workflow signer, separate tested source, ticket base, AST allowlist, sealing provenance, every bundled internal artifact, the prepared coordinator identity, and the credential-free nonnetwork sandbox before recommending one foundation or leaving the decision unresolved. The CLI produces the authoritative schema-valid `results.json`; the executor commits its human interpretation with that result and the accepted managed report."
+    flows: [flow-edit-note]
+    certainty: assumed
+    status: planned
+    spike: SPK-BURL-H001
+  - id: BURL-H002
+    title: Select the canonical cross-platform path algorithm
+    type: Spike
+    effort: 8
+    depends_on: [BURL-H001]
+    category: Correctness
+    scope:
+      in: [".constitution/prototypes/path/**", ".constitution/spikes/SPK-BURL-H002.md"]
+    verification:
+      command: "TRUST_ANCHOR_WORKTREE/scripts/managed-evidence.sh run --ticket BURL-H002 --trust-anchor-sha TRUST_ANCHOR_SHA --source-ref SOURCE_REF --tested-source-sha TESTED_SOURCE_SHA --base-sha BASE_SHA --output EVIDENCE_WORKTREE/.constitution/prototypes/path/managed-evidence.json && git -C EVIDENCE_WORKTREE diff --check"
+      expected: "exit 0 with distinct filesystem runs, .constitution/prototypes/path/results.json, accepted .constitution/prototypes/path/managed-evidence.json, and executor-authored .constitution/spikes/SPK-BURL-H002.md"
+    stop_conditions: [STOP if identity remains host-dependent or an accepted path can escape/alias the Workspace., "STOP if the `BURL-M003` evidence pull request isn't merged into the tranche base, `BURL-H001` isn't committed, validated, and independently reviewed in this tranche, either filesystem role lacks authenticated evidence, or the aggregate is `rejected`.", "STOP if post-completion API observation doesn't resolve the receipt locator to one completed successful sealing job on the fixed hosted label, or if an expected, candidate, or sealed artifact name or normalized digest is invalid, missing, duplicate, extra, or inconsistent with the run nonce.", "STOP if the launcher isn't the clean trust-anchor copy, a trusted control file differs at the signer SHA, or the reviewed AST milestone-to-PATH diff leaves the PATH write allowlist.", "STOP if the machine result is missing or invalid, or if the evidence commit doesn't contain that result, the accepted managed report, and the executor-authored Spike report together.", "STOP if a candidate process or coordinator can observe a credential canary, coordinator identity changes after preparation, isolation or network denial fails, an input is writable, or any path except the coordinator output is writable.", "STOP when the 3-day time box expires; don't select a permanent format from incomplete platform evidence."]
+    description: "Compare the encoded-title and opaque-component candidates across Linux, default macOS, and Windows-compatible rules"
+    acceptance:
+      mode: invariant
+      evidence: "Generated and adversarial fixtures prove deterministic identity, collision freedom under all target equivalence rules, invertible ghost Links, safe case-only rename, and refusal of reserved, aliased, traversal, symlink, and submodule input. All three roles provide `common-functional`. Linux and macOS 26 additionally provide `filesystem-compatibility`; no role claims performance or visual evidence. Authenticated Linux ext4 and macOS 26 APFS bundles bind to the same trust anchor, workflow signer, tested source, ticket base, build, corpus, run identity, and artifact nonce. Aggregation rejects a missing assigned class, an unassigned extra class, incomplete or mismatched evidence, an invalid origin, or a filesystem-role error. The accepted aggregate records unchanged trusted controls, PATH allowlist conformance, candidate and sealing origins, the prepared path-coordinator identity, and successful coordinator isolation. The CLI produces the authoritative schema-valid `results.json`; the executor commits its human interpretation with that result and the accepted managed report."
+    flows: [flow-note-lifecycle]
+    certainty: assumed
+    status: planned
+    spike: SPK-BURL-H002
+  - id: BURL-H003
+    title: Implement the canonical source-backed Note document
+    type: Feature
+    effort: 8
+    depends_on: [BURL-H001, BURL-H002]
+    category: Feature-Evolution
+    scope:
+      in: ["rust/src/markdown/**", rust/src/draft.rs, rust/Cargo.toml, rust/Cargo.lock]
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && cargo clippy --workspace --all-targets --manifest-path rust/Cargo.toml -- -D warnings && git diff --check"
+      expected: "exit 0 with canonical corpus, fidelity, and migration tests passing"
+    stop_conditions: ["STOP if the H Spike and constitution evidence-finalization pull requests aren't merged into `master` or this tranche wasn't created from that merged revision.", "STOP if the final TechSpec hasn't accepted BURL-H001 or changes this ticket's physical model; reconcile scope and estimates first.", STOP if implementation keeps the old projection as a second authoritative AST.]
+    description: "Implement the accepted exhaustive Core document with original source, extended Markdown/domain nodes, exact ranges, editable identities, conformance state, and targeted splice/reparse coherence"
+    acceptance:
+      mode: invariant
+      evidence: "For the canonical corpus, parsing yields the accepted exhaustive tree and exact ranges; every supported targeted edit reparses into one coherent document; untouched bytes remain identical; and no second authoritative Note representation exists."
+    flows: [flow-edit-note]
+    certainty: assumed
+    status: planned
+  - id: BURL-H004
+    title: "Replace parser, FFI, rendering, and index projections"
+    type: Feature
+    effort: 8
+    depends_on: [BURL-H003, BURL-H005]
+    category: Tech-Debt
+    scope:
+      in: ["rust/src/api/**", "rust/src/index/**", "rust/src/workspace/**", "lib/src/rust/**", lib/src/components/block_view.dart, lib/src/components/editor.dart, lib/src/providers/rust_api_provider.dart, "test/**"]
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh adapt-h004 && git diff --check"
+      expected: exit 0 with old AstNode authority removed and rendering parity preserved
+    stop_conditions: ["STOP if `BURL-H005` isn't committed, validated, and independently reviewed in this tranche.", "STOP if the final FFI projection contract isn't accepted or if Flutter gains a second document model."]
+    description: "Replace the brownfield AstNode authority with adapters from the canonical document for Flutter rendering, interaction coordinates, Links, search/indexing, and conflict materialization"
+    acceptance:
+      mode: contract_test
+      evidence: "Generated bindings expose only the accepted projection; rendering/index fixtures derive from the canonical document; every UI mutation returns through Core; source ranges retain Core authority; and the old pseudo-AST no longer drives editing or indexing."
+    flows: [flow-edit-note, flow-search]
+    certainty: assumed
+    status: planned
+  - id: BURL-H005
+    title: Implement canonical paths and recoverable migration
+    type: Feature
+    effort: 8
+    depends_on: [BURL-H002, BURL-H003]
+    category: Correctness
+    scope:
+      in: [rust/src/okf/concept_id.rs, "rust/src/workspace/**", "rust/src/index/**", "rust/src/db/**", "test/**"]
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && cargo clippy --workspace --all-targets --manifest-path rust/Cargo.toml -- -D warnings && git diff --check"
+      expected: "exit 0 with format, collision, migration, and rollback tests passing"
+    stop_conditions: ["STOP if `BURL-H003` isn't committed, validated, and independently reviewed in this tranche or the accepted constitution finalization isn't merged into its base.", "STOP if the final TechSpec hasn't accepted BURL-H002 or migration would silently choose among collisions."]
+    description: "Implement canonical Note/Directory/Asset path validation and derivation, case-only rename, ghost-Link identity, and a previewable atomic migration from delivered title-verbatim paths"
+    acceptance:
+      mode: invariant
+      evidence: "Every burlmd-created path satisfies the accepted cross-platform grammar; migration preserves titles and bytes, rewrites identities/Links atomically, reports collisions for decision, and rolls back without partial publication on failure."
+    flows: [flow-note-lifecycle]
+    certainty: assumed
+    status: planned
+  - id: BURL-H006
+    title: Establish the canonical Workspace authority tree
+    type: Feature
+    effort: 8
+    depends_on: [BURL-H004, BURL-H005]
+    category: Correctness
+    scope:
+      in: ["rust/src/workspace/**", rust/src/draft.rs, "rust/src/index/**", rust/src/api/ffi_api.rs]
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && dart analyze && git diff --check"
+      expected: "exit 0 with authority, containment, session, and Protected State invariants passing"
+    stop_conditions: ["STOP if `BURL-H004` and `BURL-H005` aren't committed, validated, and independently reviewed in this tranche.", "STOP if Persistence, the index, a guest write, or Flutter can override Workspace Model authority."]
+    description: "Make one Workspace tree own Directories, canonical identities, authoritative Note sessions, lifecycle provenance, decision records, and Protected State roots while rejecting symlink/submodule/path escape input"
+    acceptance:
+      mode: invariant
+      evidence: "Exactly one Core Workspace tree decides every identity and open session; every mutation passes containment and conformance; derived/presentation state cannot override it; and all required local, history, reconciliation, and Consolidation roots are enumerable as Protected State."
+    flows: [flow-workspace-bootstrap, flow-note-lifecycle]
+    certainty: assumed
+    status: planned
+  - id: BURL-H007
+    title: Preflight and adopt an existing Workspace
+    type: Feature
+    effort: 8
+    depends_on: [BURL-H006]
+    category: Feature-Evolution
+    scope:
+      in: [rust/src/workspace/bootstrap.rs, rust/src/index/scan.rs, "rust/src/okf/**", rust/src/api/ffi_api.rs, "lib/src/components/**", "test/**"]
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh preflight-h007 && git diff --check"
+      expected: "exit 0 with conforming inclusion, invalid inventory, and exclusion tests passing"
+    stop_conditions: ["STOP if `BURL-H006` isn't committed, validated, and independently reviewed in this tranche.", "STOP if preflight rewrites source, follows unsupported aliases, or admits an invalid Note into the editor/index."]
+    description: "Scan a selected directory without mutation, include conforming Notes, inventory invalid/noncanonical paths and Notes, preserve original bytes, and let the Writer exclude items explicitly before adoption"
+    acceptance:
+      mode: gherkin
+      evidence: |
+        ```gherkin
+        Given a foreign directory contains conforming, invalid, aliased, and unsupported entries
+        When burlmd runs adoption preflight
+        Then only conforming contained Notes enter authoritative state
+        And every other entry is listed without changing a byte
+        And explicit exclusion preserves the original entry outside the editor and index
+        ```
+    flows: [flow-workspace-bootstrap]
+    certainty: assumed
+    status: planned
+  - id: BURL-H008
+    title: Preview and apply conformance/path repairs
+    type: Feature
+    effort: 8
+    depends_on: [BURL-H007]
+    category: Correctness
+    scope:
+      in: ["rust/src/okf/**", "rust/src/workspace/**", rust/src/api/ffi_api.rs, "lib/src/components/**", "test/**"]
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh repair-h008 && git diff --check"
+      expected: "exit 0 with preview fidelity, confirm, rollback, and exclude tests passing"
+    stop_conditions: ["STOP if the Writer can't inspect original and proposed bytes or if repair changes unrelated content."]
+    description: "Produce previewed conformance/path repairs, preserve original bytes, apply only confirmed changes as one recoverable lifecycle outcome, and retain Exclude as a non-mutating choice"
+    acceptance:
+      mode: invariant
+      evidence: "Every repair preview identifies exact byte/path changes; confirmation applies only those changes atomically and records recovery history; rejection/exclusion preserves original bytes; failure restores the prior authoritative Workspace."
+    flows: [flow-workspace-monitoring, flow-workspace-bootstrap]
+    certainty: assumed
+    status: planned
+  - id: BURL-H009
+    title: Add debounced live Workspace observation
+    type: Feature
+    effort: 8
+    depends_on: [BURL-H006]
+    category: Feature-Evolution
+    scope:
+      in: ["rust/src/workspace/**", "rust/src/api/**", rust/Cargo.toml, rust/Cargo.lock, "test/**"]
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && cargo clippy --workspace --all-targets --manifest-path rust/Cargo.toml -- -D warnings && ./scripts/check-generated-bindings.sh && cargo run --release --manifest-path rust/Cargo.toml --bin workspace-observer-meter -- --run-id linux-reference --profile github-ubuntu-24_04-x86_64 --operations 100 --output target/observer-meters/linux-reference.json && git diff --check"
+      expected: "exit 0 with burst/debounce/fallback and missed-event recovery tests passing Original verification detail: `ubuntu-24.04`: `cargo test --manifest-path rust/Cargo.toml && cargo clippy --workspace --all-targets --manifest-path rust/Cargo.toml -- -D warnings && ./scripts/check-generated-bindings.sh && cargo run --release --manifest-path rust/Cargo.toml --bin workspace-observer-meter -- --run-id linux-reference --profile github-ubuntu-24_04-x86_64 --operations 100 --output target/observer-meters/linux-reference.json && git diff --check`; Apple Silicon `macos-26`: `cargo test --manifest-path rust/Cargo.toml && cargo clippy --workspace --all-targets --manifest-path rust/Cargo.toml -- -D warnings && ./scripts/check-generated-bindings.sh && cargo run --release --manifest-path rust/Cargo.toml --bin workspace-observer-meter -- --run-id macos-reference --profile github-macos-26-arm64 --operations 100 --output target/observer-meters/macos-reference.json && git diff --check`; Apple Silicon `macos-15` functional compatibility: `cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && git diff --check`. Validate complete role bundles and the accepted aggregate through the `CI-M003` two-phase protocol."
+    stop_conditions: ["STOP if the final TechSpec hasn't pinned the observer adapter and polling fallback.", STOP if managed evidence is rejected or if macOS 15 contributes performance evidence., STOP if an event directly mutates authority without Core validation.]
+    description: Convert Platform filesystem events into debounced candidate create/edit/rename/move/delete proposals with fallback polling and explicit Rescan recovery
+    acceptance:
+      mode: benchmark
+      constraints: [NFC-06]
+      evidence: "The Linux x86-64 and macOS 26 managed roles record 100 deterministic single and burst operations apiece with captured image and environment identity. Each performance run produces one candidate set within the 2-second Goal, with no missed or duplicate history outcome and no direct authoritative mutation. macOS 15 proves functional compatibility only. Aggregation rejects identity, signer, artifact, image-version, corpus, or role mismatches."
+    flows: [flow-workspace-monitoring]
+    certainty: assumed
+    status: planned
+  - id: BURL-H010
+    title: Reconcile valid external Note and lifecycle changes
+    type: Feature
+    effort: 8
+    depends_on: [BURL-H009, BURL-H007]
+    category: Correctness
+    scope:
+      in: ["rust/src/workspace/**", "rust/src/index/**", rust/src/git/operations.rs, rust/src/api/ffi_api.rs, lib/src/providers/workspace_provider.dart, "test/**"]
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh ext-h010 && git diff --check"
+      expected: exit 0 with valid edit/create/rename/move/delete history and reload tests passing
+    stop_conditions: ["STOP if rename provenance is uncertain; route it to a decision rather than guessing."]
+    description: "Validate clean external changes, update the authoritative tree and index, record local history, reload clean open Notes, and apply the same lifecycle/Link rules as Writer actions"
+    acceptance:
+      mode: gherkin
+      evidence: |
+        ```gherkin
+        Given a clean open Workspace
+        When a guest performs a conforming create, edit, move, rename, or delete
+        Then burlmd validates it, records one local history outcome, updates authoritative state and the index, and reloads affected clean sessions
+        ```
+    flows: [flow-workspace-monitoring]
+    certainty: assumed
+    status: planned
+  - id: BURL-H011
+    title: "Resolve dirty, stale, and invalid external changes"
+    type: Feature
+    effort: 8
+    depends_on: [BURL-H010, BURL-H008]
+    category: Correctness
+    scope:
+      in: ["rust/src/workspace/**", rust/src/api/ffi_api.rs, "lib/src/components/**", lib/src/providers/note_providers.dart, "test/**"]
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh decide-h011 && git diff --check"
+      expected: exit 0 with Compare/Keep/Load/Repair/Exclude and stale-revision tests passing
+    stop_conditions: [STOP if same-device changes become Suggestion nodes or either version is discarded before resolution.]
+    description: "Pause writes for dirty or invalid external changes, preserve last-known-good and guest bytes, offer the valid decisions, compare exact revisions, and require renewed input after a guest revision advances"
+    acceptance:
+      mode: invariant
+      evidence: "Both versions remain recoverable through every decision; the reviewed guest revision is compared again before application; stale input never applies; invalid input never replaces authoritative state; and no path produces a Git Suggestion."
+    flows: [flow-workspace-monitoring]
+    certainty: assumed
+    status: planned
+  - id: BURL-H012
+    title: Retain Rescan as observation recovery
+    type: Feature
+    effort: 5
+    depends_on: [BURL-H009, BURL-H011]
+    category: Correctness
+    scope:
+      in: [rust/src/index/scan.rs, "rust/src/workspace/**", lib/src/screens/workspace.dart, test/screens/workspace_rescan_test.dart]
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && ./scripts/smoke-shot.sh rescan-h012 && git diff --check"
+      expected: exit 0 with observer-recovery and decision-preservation tests passing
+    stop_conditions: [STOP if Rescan bypasses live-monitor validation/decision rules or discards pending decisions.]
+    description: "Reconcile the delivered Rescan affordance with live observation as an explicit recovery path using the same candidate, validation, authority, and decision pipeline"
+    acceptance:
+      mode: contract_test
+      evidence: "After injected missed/coalesced events, Rescan converges the index and authoritative tree through the same validation rules, preserves drafts and pending decisions, and creates no duplicate history."
+    flows: [flow-workspace-bootstrap]
+    certainty: assumed
+    status: planned

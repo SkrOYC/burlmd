@@ -1,0 +1,6 @@
+artifact: device-preferences.schema.json
+surface: data-model
+flows: [flow-desktop-session]
+boundaries: [BND-08]
+certainty: assumed
+assumption: "Migrated; not yet exercised by a contract test."

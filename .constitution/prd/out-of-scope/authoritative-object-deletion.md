@@ -1,3 +1,7 @@
+---
+decision: deferred
+date: 2026-08-26
+---
 # Authoritative Object deletion
 
 **Decision:** Deferred during `0.x`.

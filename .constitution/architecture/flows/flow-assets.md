@@ -1,3 +1,11 @@
+---
+job: JOB-08
+capabilities: [CAP-031, CAP-052, CAP-053, CAP-056, CAP-057, CAP-059, CAP-060]
+boundaries: [BND-01, BND-02, BND-03, BND-04, BND-06, BND-05]
+view: sequence
+certainty: assumed
+assumption: "Migrated from markdown; not yet exercised by an integration test."
+---
 # Asset import and adoption flow
 
 **Maps to:** CAP-EDIT-06, CAP-ASSET-01, CAP-ASSET-02, CAP-ASSET-05, CAP-ASSET-06, CAP-ASSET-09, CAP-ASSET-10.

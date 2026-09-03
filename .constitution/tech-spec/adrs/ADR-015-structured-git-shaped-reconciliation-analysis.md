@@ -1,7 +1,14 @@
+---
+id: ADR-0015
+status: proposed
+date: 2026-08-26
+certainty: assumed
+assumption: "Migrated; the decision's ruling reference was not found in the status line."
+---
 # ADR-015: Structured Git-Shaped Reconciliation Analysis
 
 **Status:** Proposed; implementation-blocking Spike
-**Decision owner:** SPK-GIT-L001, then final Technical Implementation evolution
+**Decision owner:** SPK-BURL-L001, then final Technical Implementation evolution
 
 ## Context
 
@@ -19,7 +26,7 @@ Git 2.54.0 is available in the pinned environment. Its `merge-tree` command expo
 
 ## Evidence required
 
-SPK-GIT-L001 compares `merge-tree`, temporary-index plumbing, and isolated-worktree porcelain against the same generated merge matrix. It covers clean and overlapping text edits; add/add and modify/delete; rename/edit, rename/delete, rename/rename, rename/add, and many-to-one rename; file and Directory conflicts and Directory rename effects; mode, symlink, submodule, and type changes; binary assets; case and Unicode collisions; dirty tracked files and untracked blockers; invalid merge bases and unrelated histories; and literal conflict-marker examples in Markdown code fences and raw regions.
+SPK-BURL-L001 compares `merge-tree`, temporary-index plumbing, and isolated-worktree porcelain against the same generated merge matrix. It covers clean and overlapping text edits; add/add and modify/delete; rename/edit, rename/delete, rename/rename, rename/add, and many-to-one rename; file and Directory conflicts and Directory rename effects; mode, symlink, submodule, and type changes; binary assets; case and Unicode collisions; dirty tracked files and untracked blockers; invalid merge bases and unrelated histories; and literal conflict-marker examples in Markdown code fences and raw regions.
 
 The harness also injects interruption at every durable transition, including asset intent, Git commit creation, commit-identifier binding, queue repair, upload verification, and push. It must prove deterministic NUL-delimited parsing under `LC_ALL=C`, structured records with index stages, tentative tree IDs and exit status, no human-error-text parsing, no authoritative-worktree mutation, crash-resume and compare-and-swap inputs, and the commands needed to apply each decision.
 

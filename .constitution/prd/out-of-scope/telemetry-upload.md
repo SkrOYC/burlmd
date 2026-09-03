@@ -1,3 +1,7 @@
+---
+decision: rejected
+date: 2026-08-21
+---
 # Out of Scope: Telemetry Upload
 
 **Status:** Rejected

@@ -1,3 +1,7 @@
+---
+decision: deferred
+date: 2026-08-21
+---
 # Screen-reader certification
 
 **Status:** Deferred

@@ -1,3 +1,7 @@
+---
+decision: deferred
+date: 2026-08-26
+---
 # Prerelease signing and notarization
 
 **Context:** Direct distribution can add platform trust signing before the product reaches stability.

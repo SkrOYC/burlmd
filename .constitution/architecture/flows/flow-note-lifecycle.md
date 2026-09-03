@@ -1,3 +1,11 @@
+---
+job: JOB-03
+capabilities: [CAP-006, CAP-007, CAP-008, CAP-009, CAP-010, CAP-011, CAP-022, CAP-051]
+boundaries: [BND-01, BND-02, BND-04, BND-05, BND-07]
+view: sequence
+certainty: assumed
+assumption: "Migrated from markdown; not yet exercised by an integration test."
+---
 # Note and Directory lifecycle flow
 
 **Maps to delivered:** CAP-LIFE-01, CAP-LIFE-02, CAP-LIFE-03, CAP-LIFE-04, CAP-LIFE-05, CAP-LIFE-06, CAP-PORT-01.

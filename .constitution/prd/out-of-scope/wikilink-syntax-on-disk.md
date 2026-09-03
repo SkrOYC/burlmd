@@ -1,3 +1,7 @@
+---
+decision: rejected
+date: 2026-07-24
+---
 # Double-bracket Link syntax on disk
 
 **Status:** Rejected as a storage format (retained as an input affordance)

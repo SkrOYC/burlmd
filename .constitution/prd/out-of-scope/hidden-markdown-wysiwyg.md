@@ -1,3 +1,7 @@
+---
+decision: rejected
+date: 2026-07-24
+---
 # Out of Scope: Hidden-Markdown WYSIWYG Editing
 
 **Status:** Rejected (was P0 through v1.0.1)
