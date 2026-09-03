@@ -56,10 +56,13 @@ decisions:
       - name: design first
         pros: ["Migration-authored placeholder: the source register records the option name but no analysis."]
         cons: ["Migration-authored placeholder: the source register records the option name but no analysis."]
-      - name: interleaved
+      - name: interleave at named milestones only
         pros: ["Migration-authored placeholder: the source register records the option name but no analysis."]
         cons: ["Migration-authored placeholder: the source register records the option name but no analysis."]
-    recommendation: interleaved
+      - name: genuinely parallel tracks
+        pros: ["Recorded ruling: the user chose genuinely parallel tracks and delegated the concrete interleave to planning."]
+        cons: ["Stage 4 must draw the handoffs explicitly rather than assume parallelism is free."]
+    recommendation: genuinely parallel tracks
     closure: ruling
     ruler: "The user, at the next wave-planning pass"
     status: closed
@@ -73,7 +76,7 @@ decisions:
       ref: reports/2026-08-21-open-decisions.md
       date: 2026-08-21
       summary: The user chose genuinely parallel tracks and delegated the concrete interleave to planning.
-      chosen: interleaved
+      chosen: genuinely parallel tracks
   - id: OD-04
     question: "Which standards foundation should the Core-owned canonical extended Markdown AST be built on?"
     blocks: [BURL-H003, BURL-H004]
@@ -190,7 +193,7 @@ decisions:
       date: 2026-08-25
       in: reports/2026-08-25-interview-tasks.md
   - id: OD-09
-    question: "Should Epic M be split so that the release gates can depend on the product epics without making the epic graph cyclic?"
+    question: "Should Epic M be split so that the release gates can depend on the product epics without making the epic graph cyclic? Dropped cross-epic ticket dependencies: BURL-M004 ← BURL-G011, BURL-H012, BURL-I010, BURL-L012; BURL-M016 ← BURL-I001, BURL-G010; BURL-M005 ← BURL-G003, BURL-H006; BURL-M006 ← BURL-J006, BURL-J007, BURL-L012, BURL-G011; BURL-M007 ← BURL-J006, BURL-J007, BURL-L012; BURL-M008 ← BURL-J006, BURL-J007, BURL-L012; BURL-M010 ← BURL-G002; BURL-M014 ← BURL-K009."
     blocks: [EPIC-M]
     options:
       - name: Split Epic M into a CI bootstrap epic and a release-gate epic
@@ -206,14 +209,14 @@ decisions:
     closure: ruling
     ruler: "The user, at the next Stage 4 planning pass"
     interim:
-      assumption: "The migration set Epic M's depends_on to an empty list, because every other epic needs its BURL-M003 managed-validation matrix; the reverse dependencies of the release-gate tickets are recorded here instead of in the graph."
+      assumption: "The migration set Epic M's depends_on to an empty list, because every other epic needs its BURL-M003 managed-validation matrix; the reverse dependencies of the release-gate tickets are recorded here instead of in the graph. The dropped edges are listed in this question."
       applied_by: [tasks/epics/EPIC-M-quality-releases.yaml]
     status: open
     asked:
       date: 2026-09-03
       in: The 2026-09-03 structured-constitution migration
   - id: OD-10
-    question: "Which direction should own the ordering between Epic I's Object retention and Epic L's Remote refs, given that BURL-I011, BURL-I012, and BURL-I013 need BURL-L010 while BURL-L010 needs BURL-I007?"
+    question: "Which direction should own the ordering between Epic I's Object retention and Epic L's Remote refs, given that BURL-I011, BURL-I012, and BURL-I013 need BURL-L010 while BURL-L010 needs BURL-I007? Dropped cross-epic ticket dependencies: BURL-I011 ← BURL-L010; BURL-I012 ← BURL-L010; BURL-I013 ← BURL-L010."
     blocks: [BURL-I011, BURL-I012, BURL-I013]
     options:
       - name: "Epic L depends on Epic I, and the three Object Store lifecycle tickets move to Epic L"

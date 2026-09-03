@@ -115,7 +115,7 @@ pub enum TreeNode {
 /// `provider = "local"`.
 ///
 /// Requires no credential, no provider, and no network -- this is the call
-/// that makes the Local-First Mandate in `prd/constraints.md` literally true
+/// that makes the Local-First Mandate in `prd/constraints.yaml` literally true
 /// (CAP-WS-01). `path` is `None` to use the default location specified in
 /// `guidelines.md`.
 #[frb]
@@ -326,7 +326,7 @@ pub async fn delete_note(note_id: String) -> Result<LifecycleResult, AppError> {
 ///
 /// Refusing while any affected Note is open would also be a defensible answer.
 /// It is not the one taken, because `BURL-E005` makes renaming an open Note a
-/// criterion-backed workflow, `prd/capabilities.md` treats renaming as routine
+/// criterion-backed workflow, `prd/capabilities.yaml` treats renaming as routine
 /// during writing, and the set of *source* Notes is not something the user can
 /// see in order to close them first.
 ///

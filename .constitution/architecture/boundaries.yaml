@@ -277,6 +277,10 @@ edges:
     to: BND-05
     protocol: shared-storage
     note: "Encrypted SQLite index derived from the authoritative files; disposable and rebuildable"
+  - from: BND-07
+    to: BND-12
+    protocol: in-process
+    note: key request
   - from: BND-08
     to: BND-12
     protocol: in-process

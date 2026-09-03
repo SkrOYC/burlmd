@@ -5,7 +5,7 @@ date: 2026-08-21
 # Out of Scope: Telemetry Upload
 
 **Status:** Rejected
-**Related:** Zero Automatic Telemetry constraint (`constraints.md`), CAP-SUP-01 (Diagnostics Export)
+**Related:** Zero Automatic Telemetry constraint (`constraints.yaml`), CAP-SUP-01 (Diagnostics Export)
 
 ## The rejected concept
 Collecting and uploading usage metrics or error reports from installed applications to a project-operated endpoint — even behind an explicit opt-in consent step.

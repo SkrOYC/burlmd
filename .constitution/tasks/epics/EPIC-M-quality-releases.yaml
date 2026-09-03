@@ -178,7 +178,7 @@ tickets:
     scope:
       in: ["linux/**", "scripts/**", ".github/workflows/**", pubspec.yaml, pubspec.lock]
     verification:
-      command: "Run the accepted production AppImage build and installed probes derived from `SPK-PKG-M001`, then `git diff --check"
+      command: "Run the accepted production AppImage build and installed probes derived from `SPK-PKG-M001`, then `git diff --check`."
       expected: one installable artifact passes every accepted x86-64 Linux runtime probe with bundled version-locked Git
     stop_conditions: ["STOP if final TechSpec hasn't accepted BURL-M001 or artifact behavior depends on ambient Git/runtime libraries outside the accepted baseline."]
     description: "Package the complete release application, exact Git CLI/runtime, native library, Flutter assets, desktop metadata, and licenses as the general Linux AppImage"
@@ -236,7 +236,7 @@ tickets:
     scope:
       in: [".github/workflows/**", "scripts/**"]
     verification:
-      command: "Run the accepted release construction and artifact verification commands from final TechSpec, then `git diff --check"
+      command: "Run the accepted release construction and artifact verification commands from final TechSpec, then `git diff --check`."
       expected: "immutable unpublished candidates have checksums, provenance, compatibility labels, source revision, licenses, and unsigned disclosures"
     stop_conditions: ["STOP if final Stage 3 hasn't replaced the release-construction placeholder with exact accepted commands.", "STOP if a version isn't `0.x`, any candidate lacks checksum or a cryptographically verified GitHub Actions attestation, the attestation identity doesn't match the expected repository/workflow/revision, or metadata claims an untested system."]
     description: "Build immutable candidate AppImage and Apple Silicon archives plus the release-tagged Flake input and source archive from one revision. Generate checksums, licenses, disclosures, and keyless GitHub Actions artifact attestations using actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 with id-token: write, contents: read, and attestations: write; retain the candidates unpublished for installed verification. The accepted contract binds the GitHub/Sigstore trust root, SkrOYC/burlmd, the release workflow identity, release ref, source revision, and every artifact subject. Developer ID signing and notarization remain deferred"
@@ -274,7 +274,7 @@ tickets:
     scope:
       in: ["integration_test/**", "scripts/**", ".github/workflows/**", ".constitution/reports/**"]
     verification:
-      command: "Run the accepted x86-64 AppImage installed matrix from final TechSpec against the immutable `RELEASE-M009` candidate on every accepted Linux runtime. Run its common functional, performance, and exact private-headless platform-regression evidence on managed `ubuntu-24.04`, validate the authenticated role and aggregate schemas, then run `git diff --check"
+      command: "Run the accepted x86-64 AppImage installed matrix from final TechSpec against the immutable `RELEASE-M009` candidate on every accepted Linux runtime. Run its common functional, performance, and exact private-headless platform-regression evidence on managed `ubuntu-24.04`, validate the authenticated role and aggregate schemas, then run `git diff --check`."
       expected: the candidate hash passes the identical release-blocking matrix on every accepted x86-64 Linux runtime
     stop_conditions: ["STOP if final Stage 3 hasn't replaced the installed AppImage matrix placeholder with exact accepted commands.", "STOP release on any missing P0 capability, privacy/content leak, failed recovery path, artifact mismatch, or PRD Fail threshold."]
     description: "Install the immutable AppImage candidate on every accepted Linux runtime and gate it on local editing/session behavior, authority/monitoring, Assets/Object Store, Export, connection-time Consolidation before initial publication, private GitHub sync, every reconciliation form, secure storage, diagnostics, migration, recovery, and update notification"
@@ -293,7 +293,7 @@ tickets:
     scope:
       in: ["integration_test/**", "scripts/**", ".github/workflows/**", ".constitution/reports/**"]
     verification:
-      command: "Run the accepted Nix installed matrix from final TechSpec against the immutable `RELEASE-M009` Flake candidate on every exposed x86-64 Linux system. Run the managed `ubuntu-24.04` functional and performance roles through the authenticated `CI-M003` evidence protocol, then run `git diff --check"
+      command: "Run the accepted Nix installed matrix from final TechSpec against the immutable `RELEASE-M009` Flake candidate on every exposed x86-64 Linux system. Run the managed `ubuntu-24.04` functional and performance roles through the authenticated `CI-M003` evidence protocol, then run `git diff --check`."
       expected: the candidate revision passes the identical release-blocking matrix through a clean NixOS/Home Manager import
     stop_conditions: ["STOP if final Stage 3 hasn't replaced the installed Nix matrix placeholder with exact accepted commands.", "STOP release on any missing P0 capability, privacy/content leak, failed recovery path, closure mismatch, or PRD Fail threshold."]
     description: Import and install the immutable Flake candidate through clean NixOS/Home Manager fixtures and run the same complete application matrix without bypassing Nix upgrade authority
@@ -312,7 +312,7 @@ tickets:
     scope:
       in: ["integration_test/**", "scripts/**", ".github/workflows/**", ".constitution/reports/**"]
     verification:
-      command: "Run the accepted Apple Silicon installed matrix from final TechSpec against the immutable `RELEASE-M009` archive on managed Apple Silicon `macos-26` and `macos-15`. Run common functional evidence on both, performance and the sole authoritative macOS visual baseline on macOS 26 only, validate the authenticated role and aggregate schemas, then run `git diff --check"
+      command: "Run the accepted Apple Silicon installed matrix from final TechSpec against the immutable `RELEASE-M009` archive on managed Apple Silicon `macos-26` and `macos-15`. Run common functional evidence on both, performance and the sole authoritative macOS visual baseline on macOS 26 only, validate the authenticated role and aggregate schemas, then run `git diff --check`."
       expected: one candidate hash passes the common release-blocking matrix on both macOS roles and the performance and visual extensions on macOS 26
     stop_conditions: ["STOP if final Stage 3 hasn't replaced the installed macOS matrix placeholder with exact accepted commands.", "STOP release on any missing P0 capability, privacy/content leak, failed recovery path, artifact mismatch, macOS 26 PRD Fail threshold, or inaccurate unsigned-install disclosure.", STOP if macOS 15 produces performance evidence or creates or updates a visual baseline.]
     description: "Query Apple's official stable-version source, record the observed two-major pair and timestamp, then install the immutable unsigned archive candidate on both managed macOS roles. Run the common application matrix and Gatekeeper-disclosure checks on both; run performance and authoritative visual proof on macOS 26 only"

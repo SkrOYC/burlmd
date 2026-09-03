@@ -11,7 +11,7 @@ capabilities:
       kind: repository
       ref: lib/src/components/editor.dart
       date: 2026-09-03
-      note: "Delivered baseline in capabilities.md; the path was checked during the structured migration."
+      note: "Delivered baseline in capabilities.yaml; the path was checked during the structured migration."
   - id: CAP-002
     legacy_id: CAP-EDIT-02
     group: "Delivered baseline"
@@ -24,7 +24,7 @@ capabilities:
       kind: repository
       ref: lib/src/components/block_view.dart
       date: 2026-09-03
-      note: "Delivered baseline in capabilities.md; the path was checked during the structured migration."
+      note: "Delivered baseline in capabilities.yaml; the path was checked during the structured migration."
   - id: CAP-003
     legacy_id: CAP-EDIT-03
     group: "Delivered baseline"
@@ -37,7 +37,7 @@ capabilities:
       kind: repository
       ref: lib/src/components/block_editor.dart
       date: 2026-09-03
-      note: "Delivered baseline in capabilities.md; the path was checked during the structured migration."
+      note: "Delivered baseline in capabilities.yaml; the path was checked during the structured migration."
   - id: CAP-004
     legacy_id: CAP-EDIT-04
     group: "Delivered baseline"
@@ -50,7 +50,7 @@ capabilities:
       kind: repository
       ref: lib/src/components/range_text_input_client.dart
       date: 2026-09-03
-      note: "Delivered baseline in capabilities.md; the path was checked during the structured migration."
+      note: "Delivered baseline in capabilities.yaml; the path was checked during the structured migration."
   - id: CAP-005
     legacy_id: CAP-EDIT-05
     group: "Delivered baseline"
@@ -63,7 +63,7 @@ capabilities:
       kind: repository
       ref: lib/src/components/editor.dart
       date: 2026-09-03
-      note: "Delivered baseline in capabilities.md; the path was checked during the structured migration."
+      note: "Delivered baseline in capabilities.yaml; the path was checked during the structured migration."
   - id: CAP-006
     legacy_id: CAP-LIFE-01
     group: "Delivered baseline"
@@ -76,7 +76,7 @@ capabilities:
       kind: repository
       ref: rust/src/workspace/lifecycle.rs
       date: 2026-09-03
-      note: "Delivered baseline in capabilities.md; the path was checked during the structured migration."
+      note: "Delivered baseline in capabilities.yaml; the path was checked during the structured migration."
   - id: CAP-007
     legacy_id: CAP-LIFE-02
     group: "Delivered baseline"
@@ -89,7 +89,7 @@ capabilities:
       kind: repository
       ref: rust/src/workspace/links_rewrite.rs
       date: 2026-09-03
-      note: "Delivered baseline in capabilities.md; the path was checked during the structured migration."
+      note: "Delivered baseline in capabilities.yaml; the path was checked during the structured migration."
   - id: CAP-008
     legacy_id: CAP-LIFE-03
     group: "Delivered baseline"
@@ -102,7 +102,7 @@ capabilities:
       kind: repository
       ref: rust/src/workspace/links_rewrite.rs
       date: 2026-09-03
-      note: "Delivered baseline in capabilities.md; the path was checked during the structured migration."
+      note: "Delivered baseline in capabilities.yaml; the path was checked during the structured migration."
   - id: CAP-009
     legacy_id: CAP-LIFE-04
     group: "Delivered baseline"
@@ -115,7 +115,7 @@ capabilities:
       kind: repository
       ref: rust/src/workspace/lifecycle.rs
       date: 2026-09-03
-      note: "Delivered baseline in capabilities.md; the path was checked during the structured migration."
+      note: "Delivered baseline in capabilities.yaml; the path was checked during the structured migration."
   - id: CAP-010
     legacy_id: CAP-LIFE-05
     group: "Delivered baseline"
@@ -128,7 +128,7 @@ capabilities:
       kind: repository
       ref: rust/src/workspace/lifecycle.rs
       date: 2026-09-03
-      note: "Delivered baseline in capabilities.md; the path was checked during the structured migration."
+      note: "Delivered baseline in capabilities.yaml; the path was checked during the structured migration."
   - id: CAP-011
     legacy_id: CAP-LIFE-06
     group: "Delivered baseline"
@@ -141,7 +141,7 @@ capabilities:
       kind: repository
       ref: rust/src/workspace/lifecycle.rs
       date: 2026-09-03
-      note: "Delivered baseline in capabilities.md; the path was checked during the structured migration."
+      note: "Delivered baseline in capabilities.yaml; the path was checked during the structured migration."
   - id: CAP-012
     legacy_id: CAP-GRAPH-01
     group: "Delivered baseline"
@@ -154,7 +154,7 @@ capabilities:
       kind: repository
       ref: lib/src/components/workspace_tree.dart
       date: 2026-09-03
-      note: "Delivered baseline in capabilities.md; the path was checked during the structured migration."
+      note: "Delivered baseline in capabilities.yaml; the path was checked during the structured migration."
   - id: CAP-013
     legacy_id: CAP-GRAPH-02
     group: "Delivered baseline"
@@ -167,7 +167,7 @@ capabilities:
       kind: repository
       ref: lib/src/components/link_completion.dart
       date: 2026-09-03
-      note: "Delivered baseline in capabilities.md; the path was checked during the structured migration."
+      note: "Delivered baseline in capabilities.yaml; the path was checked during the structured migration."
   - id: CAP-014
     legacy_id: CAP-GRAPH-03
     group: "Delivered baseline"
@@ -180,7 +180,7 @@ capabilities:
       kind: repository
       ref: rust/src/okf/links.rs
       date: 2026-09-03
-      note: "Delivered baseline in capabilities.md; the path was checked during the structured migration."
+      note: "Delivered baseline in capabilities.yaml; the path was checked during the structured migration."
   - id: CAP-015
     legacy_id: CAP-GRAPH-04
     group: "Delivered baseline"
@@ -193,7 +193,7 @@ capabilities:
       kind: repository
       ref: rust/src/okf/links.rs
       date: 2026-09-03
-      note: "Delivered baseline in capabilities.md; the path was checked during the structured migration."
+      note: "Delivered baseline in capabilities.yaml; the path was checked during the structured migration."
   - id: CAP-016
     legacy_id: CAP-WS-01
     group: "Delivered baseline"
@@ -206,7 +206,7 @@ capabilities:
       kind: repository
       ref: rust/src/workspace/bootstrap.rs
       date: 2026-09-03
-      note: "Delivered baseline in capabilities.md; the path was checked during the structured migration."
+      note: "Delivered baseline in capabilities.yaml; the path was checked during the structured migration."
   - id: CAP-017
     legacy_id: CAP-WS-02
     group: "Delivered baseline"
@@ -219,7 +219,7 @@ capabilities:
       kind: repository
       ref: rust/src/workspace/persist.rs
       date: 2026-09-03
-      note: "Delivered baseline in capabilities.md; the path was checked during the structured migration."
+      note: "Delivered baseline in capabilities.yaml; the path was checked during the structured migration."
   - id: CAP-018
     legacy_id: CAP-WS-03
     group: "Delivered baseline"
@@ -232,7 +232,7 @@ capabilities:
       kind: repository
       ref: rust/src/draft.rs
       date: 2026-09-03
-      note: "Delivered baseline in capabilities.md; the path was checked during the structured migration."
+      note: "Delivered baseline in capabilities.yaml; the path was checked during the structured migration."
   - id: CAP-019
     legacy_id: CAP-WS-04
     group: "Delivered baseline"
@@ -245,7 +245,7 @@ capabilities:
       kind: repository
       ref: rust/src/security
       date: 2026-09-03
-      note: "Delivered baseline in capabilities.md; the path was checked during the structured migration."
+      note: "Delivered baseline in capabilities.yaml; the path was checked during the structured migration."
   - id: CAP-020
     legacy_id: CAP-WS-06
     group: "Delivered baseline"
@@ -258,7 +258,7 @@ capabilities:
       kind: repository
       ref: rust/src/index/scan.rs
       date: 2026-09-03
-      note: "Delivered baseline in capabilities.md; the path was checked during the structured migration."
+      note: "Delivered baseline in capabilities.yaml; the path was checked during the structured migration."
   - id: CAP-021
     legacy_id: CAP-FIND-01
     group: "Delivered baseline"
@@ -271,7 +271,7 @@ capabilities:
       kind: repository
       ref: rust/src/index/query.rs
       date: 2026-09-03
-      note: "Delivered baseline in capabilities.md; the path was checked during the structured migration."
+      note: "Delivered baseline in capabilities.yaml; the path was checked during the structured migration."
   - id: CAP-022
     legacy_id: CAP-PORT-01
     group: "Delivered baseline"
@@ -284,7 +284,7 @@ capabilities:
       kind: repository
       ref: rust/src/okf/frontmatter.rs
       date: 2026-09-03
-      note: "Delivered baseline in capabilities.md; the path was checked during the structured migration."
+      note: "Delivered baseline in capabilities.yaml; the path was checked during the structured migration."
   - id: CAP-023
     legacy_id: CAP-PREF-01
     group: "Desktop session"
