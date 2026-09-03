@@ -1,3 +1,7 @@
+---
+decision: deferred
+date: "2026-09-03"
+---
 # Out of Scope: Mobile Targets
 
 **Status:** Deferred

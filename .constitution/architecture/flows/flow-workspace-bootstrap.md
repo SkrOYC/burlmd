@@ -1,3 +1,11 @@
+---
+job: JOB-02
+capabilities: [CAP-016, CAP-019, CAP-020, CAP-036, CAP-043]
+boundaries: []
+view: state
+certainty: assumed
+assumption: "Migrated from markdown; not yet exercised by an integration test."
+---
 # Workspace bootstrap and adoption flow
 
 **Maps to delivered:** CAP-WS-01, CAP-WS-04, CAP-WS-06.

@@ -1,3 +1,11 @@
+---
+job: JOB-08
+capabilities: [CAP-054, CAP-055, CAP-056, CAP-057, CAP-058, CAP-061, CAP-062]
+boundaries: []
+view: state
+certainty: assumed
+assumption: "Migrated from markdown; not yet exercised by an integration test."
+---
 # Object Store lifecycle flow
 
 **Maps to:** CAP-ASSET-03, CAP-ASSET-04, CAP-ASSET-05, CAP-ASSET-06, CAP-ASSET-08, CAP-ASSET-11, CAP-ASSET-12.

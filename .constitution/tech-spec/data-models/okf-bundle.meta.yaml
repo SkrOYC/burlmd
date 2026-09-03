@@ -1,0 +1,6 @@
+artifact: okf-bundle.md
+surface: data-model
+flows: [flow-note-lifecycle, flow-workspace-bootstrap, flow-workspace-monitoring, flow-export, flow-link-graph]
+boundaries: [BND-05, BND-13]
+certainty: assumed
+assumption: "Migrated; not yet exercised by a contract test."

@@ -1,0 +1,63 @@
+entries:
+  - version: v2.0.0
+    date: 2026-09-03
+    added:
+      - "Added prd/constraints.yaml with 36 constraint records: the eleven scalar Planguage meters from constraints.md, and the reliability, correctness, security, privacy, compatibility, and release invariants restated with the observable scale, meter, goal, and fail each one implies. Image Import Size and the History Storage Health Warning are open against OD-06 and OD-07; Cross-Platform Path Identity is open against OD-05."
+      - "Added two deferred constraint classes with their risk named: cost, because nothing runs on infrastructure this project operates, and accessibility, because the screen-reader baseline has no meter and no reopening condition."
+    changed:
+      - "Converted prd/ to the structured layout. capabilities.md became capabilities.yaml with 80 records carrying stable CAP-NNN ids, the legacy CAP-<GROUP>-NN identifier in legacy_id, a job mapping, and certainty. constraints.md became constraints.yaml. glossary.md became glossary.yaml. vision.md, actors.md, domain-model.md, and out-of-scope/ stay prose."
+      - "Restated the ten jobs-to-be-done from vision.md as nine records in jobs.yaml. Write directly and Read finished merged into JOB-01, because they are the two halves of one raw-on-focus editing story and one flow tells it. Every other job kept its own record."
+      - "Recorded certainty on every capability, job, and constraint. The 22 delivered-baseline capabilities and the three jobs the delivered code finishes are settled against a checked repository path; everything still to be built is assumed with the assumption stated."
+      - "Pruned the glossary do_not_use lists to domain synonyms. Removed the six entries that banned another canonical term, and removed the generic English, technical, and external-specification words the surface check flagged: Author, Authority, Document, File, Concept, Collection, Reference, Wikilink, Tag, Database, Origin, Host, Cloud, Bucket, Backup, Package, Container, Node, Download, Merge, Diff, Migration, Revision, Snapshot, Telemetry, Attachment, and Attachment Directory."
+    fixed:
+      - "Recovered the whole capability set. The migration tool recognized neither the delivered-baseline table nor the priority bullet lists, so prd/capabilities.yaml arrived empty; all 80 capabilities were reconstructed from the markdown it deleted."
+      - "Recovered the whole constraint set, which the migration tool also emitted empty."
+    by: migrate
+  - version: v1.3.7
+    date: 2026-08-31
+    changed: ["Replaced physical workstation performance profiles with reproducible managed continuous-integration reference classes. The Linux x86-64 class has 4 logical CPUs and 16 GB of memory. The Apple Silicon macOS 26 class has M1-class compute, 3 logical CPUs, and 7 GB of memory", Kept every performance threshold and corpus size unchanged. Each run uses a deterministic logical viewport and records enough environment identity to reproduce and compare its evidence, "Made macOS 26 the performance and visual reference. macOS 15 remains a release-blocking functional compatibility target but doesn't define performance or visual baselines"]
+    fixed: ["Clarified the existing degraded-close behavior. A warning can continue one Note-to-Note replacement only when no batch or wider lifecycle operation exists. Batch close stops with unprocessed tabs preserved, and an enclosing Workspace switch or orderly shutdown is canceled", "Distinguished the required Linux zero-pixel platform-regression gate from product visual authority. macOS 26 remains the sole authoritative product visual reference, and Linux regression output can't substitute for it"]
+    by: migrate
+  - version: v1.3.6
+    date: 2026-08-26
+    fixed: ["Defined the Private Object Store Boundary across anonymous list, read, write, and delete access. Any permissive, missing, or stale result refuses connection or pauses synchronized publication"]
+  - version: v1.3.5
+    date: 2026-08-26
+    changed: ["Deferred authoritative Object Store deletion during 0.x. Git refs and generic S3-compatible deletion can't form an atomic transaction, and guest Remote pushes can't honor a burlmd-only lease. Verified 30-day local cache eviction remains active"]
+  - version: v1.3.4
+    date: 2026-08-26
+    added: [Added the Remote Automation Boundary. burlmd keeps local Workspaces usable but refuses to publish reachable .github/workflows/ history instead of requesting GitHub workflow-modification authority]
+  - version: v1.3.3
+    date: 2026-08-26
+    fixed: [Clarified that an offline Remote detach retains the Object Store. A full-local transition requires fresh authenticated Remote authority before burlmd verifies and detaches every protected Object]
+  - version: v1.3.2
+    date: 2026-08-26
+    fixed: ["Reclassified CAP-GRAPH-04 as delivered after the full sweep confirmed production Link completion, follow-time resolution, create-on-follow, FFI, UI, and regression coverage. Downstream work preserves and adapts the capability; it doesn't schedule it as unfinished"]
+  - version: v1.3.1
+    date: 2026-08-26
+    fixed: ["Clarified that Zero Automatic Telemetry prohibits automatic off-device transmission, not bounded content-excluding local diagnostics. Local diagnostic records and Writer-created exports still exclude content, credentials, signed locations, and content-derived telemetry; only the Writer may choose to share an export"]
+  - version: v1.3.0
+    date: 2026-08-25
+    changed: ["Evolution pass driven by the Tasks interview after PR #11. This minor release defines the complete forward product scope and removes delivered or deferred work from the active capability set", "Separated the delivered A-F capability baseline from unfinished P0 release scope so downstream Tasks don't replan shipped work", "Made Suggestions persistent through history and synchronization. Added separate Lifecycle Decision and Asset Decision outcomes for conflicts that aren't content edits", Replaced CAP-PORT-04 and provider-specific CAP-SYNC-09 with explicit deferrals, Declared System/Native as the only active archetype because mobile device applications remain deferred, "Moved GitHub, GitLab, S3-compatible storage, release architecture, and implementation choices into the operator-preferences appendix"]
+    added: ["Added active capabilities for desktop-session durability, live guest-change reconciliation, canonical cross-platform paths, Assets, a user-controlled Object Store, complete private-Remote reconciliation, installable prereleases, update notification, and safe application-state migration", "Added the Platform actor and clarified that an Agent is a guest to burlmd's Workspace authority", "Added Asset, Object, Local Asset Store, Object Store, Lifecycle Decision, and Asset Decision to the glossary and domain model", "Added measurable constraints for external-change detection, image import, repository-health warnings, Object integrity, protected history, release parity, and migration safety", "Added out-of-scope records for the second Remote provider, HTML output, Object-Store-only Workspaces, optional editing surfaces, the full history diff viewer, additional release architectures, self-updating binaries, and prerelease signing"]
+    removed: ["Removed emulated operating-system chrome, HTML output, the floating formatting toolbar, graph visualization, and a second Remote provider from active product scope"]
+    fixed: [Restored one-to-one traceability for every delivered capability instead of collapsing stable IDs into ranges, "Specified serial close, warning, failure, focus, guest-write, Export, asset-adoption, and delete-versus-edit outcomes that the first draft left ambiguous", Replaced mechanism-specific Remote polling with an observable freshness meter and defined reproducible corpus and desktop performance profiles, "Expanded Zero Automatic Telemetry to prohibit automatic usage, error, diagnostic, content, and content-derived reporting", "Added Provider, Protected State, Suggestion ownership, and Decision ownership relationships to the domain model", Updated the screen-reader deferral to reference the August 25 open-decision register, Separated device preferences from per-Workspace session state and Workspace synchronization, "Added informed guest repair, Workspace containment, coupled Remote and Object Store detachment, and release-artifact provenance requirements", "Corrected the Open Knowledge Format definition, transient encryption-key rule, technology-neutral history meter, and Search Latency failure threshold", "Excluded invalid guest Notes from editing until repair, restored every missing-Object recovery choice, and removed Note-level Version terminology from Workspace history retention", "Added explicit Workspace switching, binding release systems and macOS support windows, and the private Object Store boundary"]
+  - version: v1.2.0
+    date: 2026-08-21
+    changed: ["Evolution pass driven by the Realign interview of 2026-08-21 (see reports/2026-08-21-interview-realign.md), widening and deepening the layer after the operator judged the original planning shallow. Minor bump: new capabilities, a mandatory block the stage contract now requires, and materially expanded constraints; no restructuring of the stage"]
+  - version: v1.1.1
+    date: 2026-09-03
+    changed: ["Reviewed for downstream delta following Epic D execution (BURL-D001–D009); no layer-specific changes required. Epic D is Core-side only, so no capability's user-visible statement changed and no capability was added, reworded or descoped. - One narrowing was made downstream and is recorded here as a pointer rather than a PRD edit, so it is not mistaken for drift on the next pass: CAP-FIND-02 says a user jumps to a Note \"by typing part of its title\", while the Stage 3 contract and BURL-D009's implementation both match a leading prefix only. That is a deliberate Stage 3 reading, documented at find_notes_by_title in tech-spec/contracts/ffi_api.rs. Widening it to substring match would be a change to this layer and would need its own index strategy; if the narrowing is the wrong reading, the correction belongs here first"]
+  - version: v1.1.0
+    date: 2026-09-03
+    changed: ["Evolution pass driven by a pre-Tasks interview, which surfaced that the previous PRD described a different product for a different person than the one actually being built. Minor bump: new capabilities and materially expanded scope, no structural rewrite of the stage"]
+  - version: v1.0.1
+    date: 2026-09-03
+    changed: ["Constitution Freshness & Reconciliation Pass following Epic B execution (BURL-B001–B007). - Corrected capabilities.md's at-rest encryption capability, which implied Notes on disk and the SQLite index receive identical, uniform encryption. The shipped implementation (and constraints.md's own pre-existing rationale) draws a real distinction: Notes on disk are protected via OS-level Full Disk Encryption only, while the SQLite search index is additionally encrypted at the application level via SQLCipher. Reworded to state that distinction explicitly rather than imply both are encrypted the same way"]
+  - version: v1.0.0
+    date: 2026-09-03
+    changed: ["- Initial formulation of the Product Requirements Document. - Defined target persona as General Consumer seeking a Notion-like experience. - Established hybrid Markdown editing and hybrid OKF (Directory + Link) organization models. - Abstracted Git complexity via OAuth provisioning and inline Suggestion-based conflict resolution. - Set explicit bounds on local-first capabilities and user data sovereignty. - Expanded PRD to include detailed capabilities for inline formatting and block structures. - Added explicit Security & Auth Epic, formalizing OAuth and at-rest encryption requirements. - Expanded constraints to enforce AES-256 local encryption without compromising data portability"]
+  - version: v0.0.1
+    date: 2026-09-03
+    added: ["History before migration; the markdown changelog is in git"]
+    by: migrate

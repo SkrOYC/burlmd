@@ -1,3 +1,10 @@
+---
+id: ADR-0006
+status: accepted
+date: 2026-09-03
+certainty: assumed
+assumption: "Migrated; the decision's ruling reference was not found in the status line."
+---
 # ADR-006: Raw-on-Focus Block Editing via SelectionArea and Focus Promotion
 
 **Status:** Accepted
@@ -28,6 +35,6 @@ Separately, PRD v1.1.0's shift to raw editing removed the hardest problem this l
 - **Positive:** The editable widget is a plain text field over plain text. The Epic B regression where a multi-run paragraph collapsed into one flat unstyled field — invisible to six passing widget tests until a screenshot was inspected — becomes structurally impossible, because no run-to-span mapping exists in the editable path any more.
 - **Positive:** Flutter's own IME composition, caret, undo, and platform text actions are inherited rather than reimplemented.
 - **Negative:** The rendered and raw presentations of a Block are different text (`**bold**` versus **bold**), so the promotion is visibly a change. It must not also be a *layout* change — differing font metrics between the two states would make the Block jump on focus. Identical text styling across both paths is a hard requirement, verified by rendered-output inspection rather than widget-property assertions.
-- **Negative:** While a Block is focused for editing, its editable field does not participate in the surrounding `SelectionArea` (amended per `SPK-EDIT-F001`, verified empirically on Flutter 3.44.3): gestures inside it belong to the field alone, and region drags crossing it select around it, omitting its content — a selection can never be dragged out of the focused Block nor have an endpoint inside it. A pointer sequence that began in the field remains ineligible even if blur occurs mid-drag; only a fresh rendered selection after blur/`commit_block` may dispatch a range operation. Consequently every `BlockRange` offset is a rendered offset over an unfocused, reparsed Block and no focused-endpoint rule is needed.
+- **Negative:** While a Block is focused for editing, its editable field does not participate in the surrounding `SelectionArea` (amended per `SPK-BURL-F001`, verified empirically on Flutter 3.44.3): gestures inside it belong to the field alone, and region drags crossing it select around it, omitting its content — a selection can never be dragged out of the focused Block nor have an endpoint inside it. A pointer sequence that began in the field remains ineligible even if blur occurs mid-drag; only a fresh rendered selection after blur/`commit_block` may dispatch a range operation. Consequently every `BlockRange` offset is a rendered offset over an unfocused, reparsed Block and no focused-endpoint rule is needed.
 - **Negative:** Typing over a live cross-Block selection requires a replace-range round trip to Rust followed by re-render and caret placement in the resulting Block. This is the fiddliest interaction in the design and the most likely source of defects.
 - **Neutral:** Keyboard emphasis shortcuts (CAP-EDIT-05) become text manipulation — wrapping a selection in delimiters — rather than AST mutation, which is substantially simpler than under the rejected model.

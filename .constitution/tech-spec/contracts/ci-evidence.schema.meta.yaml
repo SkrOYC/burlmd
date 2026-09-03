@@ -1,0 +1,6 @@
+artifact: ci-evidence.schema.json
+surface: json
+flows: [flow-release]
+boundaries: [BND-15, BND-17]
+certainty: assumed
+assumption: "Migrated; not yet exercised by a contract test."

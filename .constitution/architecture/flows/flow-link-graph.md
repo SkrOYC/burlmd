@@ -1,3 +1,11 @@
+---
+job: JOB-03
+capabilities: [CAP-013, CAP-014, CAP-015, CAP-033, CAP-035]
+boundaries: [BND-01, BND-02, BND-03, BND-04, BND-07]
+view: sequence
+certainty: assumed
+assumption: "Migrated from markdown; not yet exercised by an integration test."
+---
 # Link graph flow
 
 **Maps to delivered:** CAP-GRAPH-02, CAP-GRAPH-03, CAP-GRAPH-04.

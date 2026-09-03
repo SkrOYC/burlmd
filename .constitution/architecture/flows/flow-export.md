@@ -1,3 +1,11 @@
+---
+job: JOB-05
+capabilities: [CAP-046, CAP-047, CAP-048, CAP-049]
+boundaries: [BND-01, BND-02, BND-04, BND-05, BND-06, BND-11]
+view: sequence
+certainty: assumed
+assumption: "Migrated from markdown; not yet exercised by an integration test."
+---
 # Workspace Export flow
 
 **Maps to:** CAP-PORT-02, CAP-PORT-06, CAP-PORT-07, CAP-PORT-08.
