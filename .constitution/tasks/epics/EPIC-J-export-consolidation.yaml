@@ -1,0 +1,159 @@
+id: J
+name: export consolidation
+kind: product
+capabilities: [CAP-046, CAP-047, CAP-048, CAP-049, CAP-070]
+depends_on: [G, H, I, M]
+scope:
+  paths: ["rust/src/workspace/**", rust/src/api/ffi_api.rs, "test/**", "rust/src/export/**", "rust/src/assets/**", "lib/src/components/**", lib/src/providers/workspace_provider.dart, lib/src/screens/workspace.dart, "lib/l10n/**", "integration_test/**"]
+  tech_spec_patchable: []
+estimated_diff_lines: 7000
+tickets:
+  - id: BURL-J001
+    title: Coordinate one stable Export revision
+    type: Feature
+    effort: 8
+    depends_on: []
+    category: Correctness
+    scope:
+      in: ["rust/src/workspace/**", rust/src/api/ffi_api.rs, "test/**"]
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && dart analyze && git diff --check"
+      expected: "exit 0 with flush, stable-revision, Directory-set, decision-block, and session-preservation tests passing"
+    stop_conditions: ["STOP if Export retires open sessions, reads across revisions, or proceeds with an unresolved external-file decision."]
+    description: "Acquire a stable Workspace Export lease, flush every open Note through normal durability without closing it, stop on unresolved authority, and bind the authoritative Directory set—including empty Directories—plus the complete Note/Object closure to the same Workspace revision. Release without mutating the Workspace"
+    acceptance:
+      mode: invariant
+      evidence: "Concurrent Note and Directory mutation tests prove every exported path, empty Directory, and Object belongs to one revision; all drafts are flushed; no session retires; unresolved external decisions stop before destination writes; and the authoritative Workspace remains unchanged."
+    flows: [flow-export]
+    certainty: assumed
+    status: planned
+  - id: BURL-J002
+    title: Publish an atomic plain-copy Export
+    type: Feature
+    effort: 8
+    depends_on: []
+    category: Feature-Evolution
+    scope:
+      in: ["rust/src/export/**", rust/src/api/ffi_api.rs, "test/**"]
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && dart analyze && git diff --check"
+      expected: "exit 0 with hydration, verification, nonempty-destination refusal, atomic rename, and cleanup tests passing"
+    stop_conditions: [STOP if any referenced Object is missing/unverified or partial output becomes visible at the selected destination.]
+    description: "Hydrate and verify the stable closure into a temporary sibling directory, validate the bundle, refuse nonempty destinations, and publish only by final atomic rename"
+    acceptance:
+      mode: invariant
+      evidence: "Success exposes one complete byte-preserved copy with all referenced Objects and reports every nonconforming Note without gating Export or repairing it. Every injected failure leaves the selected destination absent/unchanged and removes or reports only the bounded temporary sibling; a nonempty destination is never merged."
+    flows: [flow-export]
+    certainty: assumed
+    status: planned
+  - id: BURL-J003
+    title: Publish an atomic Bundle Archive
+    type: Feature
+    effort: 5
+    depends_on: []
+    category: Feature-Evolution
+    scope:
+      in: ["rust/src/export/**", rust/src/api/ffi_api.rs, "test/**"]
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && dart analyze && git diff --check"
+      expected: "exit 0 with archive round-trip, replacement confirmation, atomic publication, and failure cleanup tests passing"
+    stop_conditions: ["STOP if archive replacement occurs without confirmation or if extraction can't reproduce the verified stable closure."]
+    description: "Serialize the stable closure into the final .okf Bundle Archive contract, verify round-trip completeness, require replacement confirmation, and atomically publish from a temporary sibling"
+    acceptance:
+      mode: contract_test
+      evidence: "Schema and round-trip tests reproduce every Note, Directory, Link, manifest, and referenced Object byte. Existing archives survive refusal/failure, replacement requires explicit confirmation, and no partial archive is exposed as success."
+    flows: [flow-export]
+    certainty: assumed
+    status: planned
+  - id: BURL-J004
+    title: Plan non-destructive Workspace Consolidation
+    type: Feature
+    effort: 8
+    depends_on: []
+    category: Feature-Evolution
+    scope:
+      in: ["rust/src/workspace/**", rust/src/api/ffi_api.rs, "test/**"]
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && dart analyze && git diff --check"
+      expected: "exit 0 with read-only planning, Asset inventory, and exact collision records passing"
+    stop_conditions: [STOP if planning writes either Workspace or treats unrelated histories as mergeable.]
+    description: "Validate a source Workspace, inventory Notes/Assets, identify nonconflicting migrations and exact identity collisions, and return a stable decision plan without changing either side"
+    acceptance:
+      mode: contract_test
+      evidence: "Planning is byte-for-byte read-only, includes conforming Notes and portable Assets, reports invalid inputs, keys every collision by stable identity and revision, and rejects any request to merge histories."
+    flows: [flow-auth-handshake]
+    certainty: assumed
+    status: planned
+  - id: BURL-J005
+    title: Apply Consolidation and collision decisions atomically
+    type: Feature
+    effort: 8
+    depends_on: []
+    category: Correctness
+    scope:
+      in: ["rust/src/workspace/**", "rust/src/assets/**", rust/src/api/ffi_api.rs, "test/**"]
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && dart analyze && git diff --check"
+      expected: "exit 0 with stale-plan refusal, keep-local/incoming/both, Link rewrite, Asset copy, rollback, and source-identity tests passing"
+    stop_conditions: ["STOP if the plan inputs changed, a decision is missing, or the source Workspace would be modified."]
+    description: "Revalidate the plan, migrate nonconflicting Notes and Assets with fresh history, apply every explicit collision choice, rewrite affected Links, and publish one recoverable destination outcome"
+    acceptance:
+      mode: invariant
+      evidence: "The source Workspace remains byte-identical; stale inputs refuse before mutation; every collision has one explicit choice; Keep Both derives a valid canonical identity and rewrites Links; Objects verify; and injected failure rolls the active Workspace back completely."
+    flows: [flow-auth-handshake]
+    certainty: assumed
+    status: planned
+  - id: BURL-J006
+    title: Integrate plain-copy and archive Export surfaces
+    type: Feature
+    effort: 5
+    depends_on: []
+    category: Feature-Evolution
+    scope:
+      in: ["lib/src/components/**", lib/src/providers/workspace_provider.dart, lib/src/screens/workspace.dart, "lib/l10n/**", "test/**", "integration_test/**"]
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && ./scripts/smoke-shot.sh port-j006 && git diff --check"
+      expected: "exit 0 with Export destination, replacement confirmation, progress, failure, keyboard, and Semantics tests passing"
+    stop_conditions: [STOP if the UI presents partial Export output as success or parses error strings instead of typed Core state.]
+    description: "Add accessible plain-copy and Bundle Archive Export workflows over typed Core state, including destination rules, replacement confirmation, progress, terminal success, nonconformance reporting, and recoverable failures"
+    acceptance:
+      mode: gherkin
+      evidence: |
+        ```gherkin
+        Given a Workspace with open Notes, Assets, and possible nonconforming guest Notes
+        When the Writer completes plain-copy or archive Export using keyboard or pointer
+        Then every required flush, confirmation, verification, report, and atomic publication occurs
+        And failure reports a typed recovery state without claiming success
+        ```
+    flows: [flow-export]
+    certainty: assumed
+    status: planned
+  - id: BURL-J007
+    title: Integrate the Consolidation decision surface
+    type: Feature
+    effort: 5
+    depends_on: []
+    category: Feature-Evolution
+    scope:
+      in: ["lib/src/components/**", lib/src/providers/workspace_provider.dart, lib/src/screens/workspace.dart, "lib/l10n/**", "test/**", "integration_test/**"]
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && ./scripts/smoke-shot.sh consui-j007 && git diff --check"
+      expected: "exit 0 with source selection, plan, collision decision, progress, rollback, keyboard, and Semantics tests passing"
+    stop_conditions: ["STOP if Flutter constructs collision outcomes, mutates the source Workspace, or claims success before Core publishes the atomic result."]
+    description: "Present the typed Consolidation plan and explicit collision choices, collect Writer decisions accessibly, and surface authoritative progress, success, rollback, and retry outcomes. Expose this workflow as the optional Preparing → Consolidating → Preparing → Connected branch that BURL-K004 consumes before initial publication; the second preparation phase rechecks Object/privacy prerequisites and owns publication"
+    acceptance:
+      mode: gherkin
+      evidence: |
+        ```gherkin
+        Given a source Workspace produces typed collisions during Consolidation planning
+        When the Writer selects Consolidation during Remote connection and resolves every choice using keyboard or pointer
+        Then the UI submits only typed decisions to Core
+        And the source remains unchanged
+        And the Remote connection can't publish until Consolidation reaches its atomic destination outcome
+        And success returns to preparation for fresh Object/privacy prerequisite checks and initial publication
+        And success appears only after Consolidation and initial Remote publication complete
+        And a failed attempt exposes a recoverable typed outcome
+        ```
+    flows: [flow-auth-handshake]
+    certainty: assumed
+    status: planned

@@ -208,8 +208,8 @@ The pipeline assigns the following validation roles:
 
 - **Boundary kind:** Execution boundary.
 - **Logical type:** Pipeline-owned System/Native validation environment.
-- **Responsibility:** Runs one assigned validation role while owning its display, compositor, input, and declared process state independently of the Writer's active desktop. Candidate execution and evidence sealing use separate fresh pipeline-owned environments.
-- **Inputs and outputs:** Candidate execution accepts an artifact, run identity, required role, and authoritative expected source, execution, base, release, build, and corpus identities without origin-signing authority. It emits one complete untrusted bundle containing the role manifest and every named evidence file. The strict-containment role proves candidate-process teardown. Other hosted roles record bounded cleanup without claiming arbitrary candidate-process termination. A fresh sealing environment validates that bundle and the candidate environment identity before it authenticates an immutable sealed handoff.
+- **Responsibility:** Runs one assigned validation role while owning its display, compositor, input, and process state independently of the Writer's active desktop. Candidate execution and evidence sealing use separate fresh pipeline-owned environments.
+- **Inputs and outputs:** Candidate execution accepts an artifact, run identity, required role, and authoritative expected source, execution, base, release, build, and corpus identities without origin-signing authority. It emits one complete untrusted bundle containing the role manifest and every named evidence file. A fresh sealing environment validates that bundle and the candidate environment identity before it authenticates an immutable sealed handoff.
 - **Depends on:** Release Pipeline.
 
 ## Evidence aggregation

@@ -1,7 +1,14 @@
+---
+id: ADR-0014
+status: proposed
+date: 2026-09-03
+certainty: assumed
+assumption: "Migrated; the decision's ruling reference was not found in the status line."
+---
 # ADR-014: Canonical Cross-Platform Workspace Paths
 
 **Status:** Proposed; implementation-blocking Spike
-**Decision owner:** SPK-PATH-H002, then final Technical Implementation evolution
+**Decision owner:** SPK-BURL-H002, then final Technical Implementation evolution
 **Supersedes when accepted:** ADR-004's title-verbatim filename choice and the matching OKF bundle section
 
 ## Context
@@ -20,7 +27,7 @@ The user selected a lowest-common-denominator on-disk format but intentionally l
 
 ## Evidence required
 
-SPK-PATH-H002 must compare at least an encoded title-derived component and an opaque canonical component. It must cover Unicode normalization and case equivalence, Windows device names and invalid characters, trailing dots and spaces, component and full-path limits, deterministic collisions, case-only rename, round-trip title display, ghost creation, reserved burlmd paths, and path traversal. It must run filesystem probes on Linux and default macOS; Windows rules are fixture-driven in this phase.
+SPK-BURL-H002 must compare at least an encoded title-derived component and an opaque canonical component. It must cover Unicode normalization and case equivalence, Windows device names and invalid characters, trailing dots and spaces, component and full-path limits, deterministic collisions, case-only rename, round-trip title display, ghost creation, reserved burlmd paths, and path traversal. It must run filesystem probes on Linux and default macOS; Windows rules are fixture-driven in this phase.
 
 ## Consequences
 

@@ -1,3 +1,7 @@
+---
+decision: deferred
+date: "2026-09-03"
+---
 # HTML output
 
 **Context:** The PRD proposed a Workspace-wide self-contained HTML file. The interview also considered a single-Note HTML export as the more useful shape.

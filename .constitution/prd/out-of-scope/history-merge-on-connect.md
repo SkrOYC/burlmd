@@ -1,3 +1,7 @@
+---
+decision: rejected
+date: "2026-09-03"
+---
 # Divergent history unification during connection
 
 **Status:** Rejected

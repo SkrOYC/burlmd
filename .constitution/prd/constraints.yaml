@@ -1,0 +1,389 @@
+constraints:
+  - id: NFC-01
+    legacy_id: Search Latency
+    class: performance
+    statement: "Full-text search and title filtering stay interactive at the Corpus Scale Goal."
+    scale: "Time from submitting a full-text search or title-filter query to receiving results."
+    meter: "The 95th percentile over 1,000 deterministic queries against the Goal corpus on each reference class."
+    goal: "Under 100 milliseconds."
+    stretch: "Under 25 milliseconds."
+    fail: "Over 250 milliseconds at 10,000 Notes, or over 100 milliseconds at 1,000 Notes."
+    certainty: assumed
+    assumption: "The target comes from operator intent; no nightly benchmark run exists on either managed reference class yet, so nothing has measured it."
+  - id: NFC-02
+    legacy_id: UI Responsiveness
+    class: performance
+    statement: "Writing and editing, including a Block moving into and out of its raw editing state, hold a 60 Hz frame budget."
+    scale: "Frame time of writing and editing interactions, including the transition of a Block into and out of its raw editing state."
+    meter: "Frame timing over a 5-minute scripted session on the editing Note and each reference class."
+    goal: "At least 99% of frames complete within 16.7 milliseconds, with no input-to-effect delay above 50 milliseconds."
+    stretch: "At least 99.9% of frames complete within 16.7 milliseconds."
+    fail: "More than 1% of frames exceed 33.3 milliseconds or any input-to-effect delay exceeds 100 milliseconds."
+    certainty: assumed
+    assumption: "SPK-BURL-D001 measured the encrypted draft write on the typing path against this budget, but the scripted 5-minute frame-timing session it defines has never run on either reference class."
+  - id: NFC-03
+    legacy_id: Workspace Open Latency
+    class: performance
+    statement: "Opening a Workspace reaches an interactable shell quickly, with index construction continuing in the background."
+    scale: "Time from launch request to an interactable shell with the Workspace open."
+    meter: "The 95th percentile of 20 opens of the Goal corpus on each reference class."
+    goal: "No more than 1 second at the Corpus Scale Goal. Remaining index construction proceeds without blocking Workspace use."
+    stretch: "No more than 1 second at the Corpus Scale Stretch."
+    fail: "Open blocking longer than 3 seconds at the Corpus Scale Goal."
+    certainty: assumed
+    assumption: "The target comes from operator intent; no nightly benchmark run exists on either managed reference class yet, so nothing has measured it."
+  - id: NFC-04
+    legacy_id: Cold Start
+    class: performance
+    statement: "A cold process launch reaches the interactive shell without warm caches."
+    scale: "Time from process launch to the interactive shell, cold, with no warm caches assumed."
+    meter: "The 95th percentile of 20 cold launches on each reference class, including secure-storage and encrypted-index access."
+    goal: "1 second."
+    stretch: "500 milliseconds."
+    fail: "3 seconds."
+    certainty: assumed
+    assumption: "The Goal is deliberately aggressive by operator intent, to force optimization rather than neglect; if the first measurement lands above it, rebaseline explicitly here rather than silently accepting the result."
+  - id: NFC-05
+    legacy_id: Idle Memory
+    class: performance
+    statement: "Resident memory at rest stays modest and does not grow while idle."
+    scale: "Resident memory at rest, after opening a Workspace at the Corpus Scale Goal and letting activity settle."
+    meter: "Resident memory sampled each second for 10 minutes after a 5-minute settling period on each reference class."
+    goal: "400 MB."
+    stretch: "250 MB."
+    fail: "1 GB, or growth above 5% during a 4-hour idle run after the settling period."
+    certainty: assumed
+    assumption: "The target comes from operator intent; no nightly benchmark run exists on either managed reference class yet, so nothing has measured it."
+  - id: NFC-06
+    legacy_id: External Change Detection
+    class: performance
+    statement: "A guest filesystem change becomes visible as reconciled state or a required Writer decision while the Workspace is open."
+    scale: "Time from a guest filesystem change to a visible reconciled state or required Writer decision while the Workspace is open."
+    meter: "Timed create, edit, rename, move, and delete operations on supported filesystems, including burst writes."
+    goal: "Within 2 seconds after the final write in a burst."
+    stretch: "Within 500 milliseconds after the final write in a burst."
+    fail: "More than 10 seconds, a missed event, or duplicate history from one burst."
+    certainty: assumed
+    assumption: "No live observer exists yet; BURL-H009 builds the observer this meter measures, and its candidate library is still unpinned."
+  - id: NFC-07
+    legacy_id: Corpus Scale
+    class: performance
+    statement: "Every other meter holds over a Workspace of this size."
+    scale: "Number of Notes in the Workspace over which every other meter in this file must hold."
+    meter: "Synthetic corpora at each level, exercising search, tree building, open, and indexing."
+    goal: "10,000 Notes."
+    stretch: "50,000 Notes."
+    fail: "1,000 Notes. Below the Fail point, any missed meter is a defect rather than a scaling story."
+    certainty: assumed
+    assumption: "Deterministic corpus generation has not been published yet; Technical Implementation owes the generator and reference-class setup specification this meter depends on."
+  - id: NFC-08
+    legacy_id: Image Import Size
+    class: performance
+    statement: "One imported image can be accepted and used up to a stated encoded size without breaking another meter."
+    scale: "Encoded bytes in one imported image."
+    meter: "Import, decode, local persistence, and second-device hydration across representative image dimensions and formats."
+    goal: "Accept and use images up to the provisional 25 MiB limit without violating the UI Responsiveness or Idle Memory goals."
+    stretch: "The asset Spike can recommend a larger limit when every dependent meter remains within its Goal."
+    fail: "Accepting an image above the supported limit without an explicit refusal, or violating another Fail threshold below the limit."
+    certainty: open
+    decision: OD-06
+  - id: NFC-09
+    legacy_id: History Storage Health Warning
+    class: operability
+    statement: "The Writer is warned before the local history store becomes unhealthy."
+    scale: "Stored textual and manifest history in the local Version store."
+    meter: "Storage size, second-device bootstrap time, synchronization retrieval time, maintenance cost, and index cost at the Corpus Scale Goal."
+    goal: "Warn the Writer before the history store reaches the provisional 1 GiB threshold."
+    stretch: "The asset or performance Spike can recommend an evidence-based threshold that warns before user-visible degradation."
+    fail: "No warning at the accepted threshold, or a threshold that another PRD Fail meter disproves."
+    certainty: open
+    decision: OD-07
+  - id: NFC-10
+    legacy_id: Sync Latency While Connected
+    class: performance
+    statement: "A local Version reaches the Remote promptly while online and authorized."
+    scale: "Time from a local Version landing in history to its publication on the Remote, while online and authorized."
+    meter: "End-to-end timed pushes on a live connection."
+    goal: "Within 60 seconds."
+    stretch: "Within 15 seconds."
+    fail: "Beyond 15 minutes while the connection is healthy."
+    certainty: assumed
+    assumption: "No synchronization capability is delivered; the meter describes intended behavior that Epics K and L still have to build."
+  - id: NFC-11
+    legacy_id: Remote Change Freshness
+    class: performance
+    statement: "An incoming Remote change is presented or applied promptly, including after a long offline period."
+    scale: "Time from an incoming Remote change becoming available to burlmd presenting or applying that change while online and authorized."
+    meter: "End-to-end observation across 100 incoming changes and reconnection after 1 hour offline."
+    goal: "Within 60 seconds while connected and within 60 seconds after connectivity returns."
+    stretch: "Within 15 seconds while connected."
+    fail: "Beyond 15 minutes while connected, or beyond 1 hour after connectivity returns."
+    certainty: assumed
+    assumption: "No synchronization capability is delivered; the meter describes intended behavior that Epics K and L still have to build."
+  - id: NFC-12
+    legacy_id: Local-First Mandate
+    class: reliability
+    statement: "The application is fully functional while completely disconnected, and never requires an account, credential, or Provider authorization to create, read, edit, search, or organize Notes."
+    scale: "Local capabilities that still work with no network and no credential."
+    meter: "The release-blocking matrix exercised with the network disabled and secure storage holding no Provider token."
+    goal: "Every local capability resolves; reads, writes, searches, and Link traversals all resolve locally."
+    fail: "Any local capability blocks on a network call, an account, or a Provider authorization."
+    certainty: assumed
+    assumption: "Local-only operation is delivered, but no offline release-blocking matrix run has recorded it as evidence."
+  - id: NFC-13
+    legacy_id: Non-Blocking Sync
+    class: reliability
+    statement: "Background synchronization never blocks the main UI thread or interrupts editing, and a pending Decision pauses synchronization without blocking local editing or history."
+    scale: "UI thread occupancy and editing availability during synchronization."
+    meter: "Frame timing and editing availability during a scripted synchronization session with unresolved Suggestions and one pending Decision."
+    goal: "No dropped frame is attributable to synchronization, and editing and history stay available throughout."
+    fail: "Synchronization blocks the UI thread, or an unresolved Suggestion, Lifecycle Decision, or Asset Decision blocks local editing or history."
+    certainty: assumed
+    assumption: "No synchronization capability is delivered; the meter describes intended behavior that Epic L still has to build."
+  - id: NFC-14
+    legacy_id: Durability of In-Progress Work
+    class: reliability
+    statement: "Edits not yet written to a Note survive abrupt process termination, including termination the application receives no opportunity to handle."
+    scale: "In-progress editor content recovered after an unhandled process kill."
+    meter: "Kill the process without a signal handler at randomized points in a scripted editing session, then reopen the Workspace."
+    goal: "Every acknowledged keystroke is recoverable."
+    fail: "Any acknowledged in-progress content is lost."
+    certainty: assumed
+    assumption: "Recoverable drafts are delivered in rust/src/draft.rs, but no randomized kill harness has run against them."
+  - id: NFC-15
+    legacy_id: Orderly Session Closure
+    class: reliability
+    statement: "Every orderly tab close, Workspace switch, and application exit runs the Note durability and history lifecycle, and a partial batch close reports which Notes closed and preserves every unprocessed session."
+    scale: "Note sessions correctly retired or preserved during an orderly close."
+    meter: "Scripted single close, batch close, Workspace switch, and orderly shutdown, including an injected failure partway through a batch."
+    goal: "Every closed Note completed its durability and history lifecycle, and every unprocessed session survived."
+    fail: "A close path bypasses persistence, or a partial batch leaves an ambiguous or lost session."
+    certainty: assumed
+    assumption: "Tabs are visual-only today; BURL-G004 and BURL-G005 build the authoritative session lifecycle this meter measures."
+  - id: NFC-16
+    legacy_id: Recoverable Reconciliation
+    class: reliability
+    statement: "After a crash or local branch advance, burlmd recovers recorded reconciliation inputs, rejects stale tentative outcomes, and preserves every local and incoming state."
+    scale: "Reconciliation inputs and outcomes recovered after an interruption."
+    meter: "Crash injection at each reconciliation phase, followed by reopen and a compare-and-swap finalization attempt."
+    goal: "Every local and incoming state is preserved and every stale tentative outcome is rejected."
+    fail: "A stale outcome is applied, or either side's content is unrecoverable."
+    certainty: assumed
+    assumption: "No reconciliation capability is delivered; BURL-L008 builds the compare-and-swap finalization this meter measures."
+  - id: NFC-17
+    legacy_id: Object Availability
+    class: reliability
+    statement: "A connected Workspace does not publish Note history that references an Object until that Object is verified in the configured Object Store."
+    scale: "Published history entries whose referenced Objects are verified present."
+    meter: "Publication preflight against a seeded Object Store with deliberately missing and corrupt Objects."
+    goal: "Publication is refused until every referenced Object is verified."
+    fail: "Any published history references an unverified Object."
+    certainty: assumed
+    assumption: "No Object Store exists yet; Epic I builds the verification this meter measures."
+  - id: NFC-18
+    legacy_id: Edit Fidelity
+    class: reliability
+    statement: "Writing a Note to disk does not alter any region of that Note the Writer did not edit, including whitespace, delimiter style, and unmanaged metadata keys."
+    scale: "Bytes that change outside the edited Block when a Note is saved."
+    meter: "Byte diff of the saved file after a scripted single-Block edit across every supported syntax class and an Open Knowledge Format frontmatter block with unknown keys."
+    goal: "Zero bytes change outside the edited Block's source."
+    fail: "Any byte outside the edited Block's source differs, including whitespace and delimiter style."
+    certainty: settled
+    evidence:
+      kind: spike
+      ref: SPK-BURL-D001
+      date: 2026-08-05
+      note: "The span-invalidation spike measured the splice path that this invariant depends on and recorded the cost of the alternatives."
+  - id: NFC-19
+    legacy_id: Format Conformance
+    class: reliability
+    statement: "Every Note burlmd creates satisfies the Open Knowledge Format from creation, no burlmd operation makes a conformant Note nonconformant, and an invalid guest Note stays outside authoritative state until the Writer accepts a previewed repair."
+    scale: "Conformance of created and edited Notes, and containment of invalid guest Notes."
+    meter: "Validate every created and edited Note against okf-frontmatter.schema.json and the okf-bundle.md rules, plus adoption fixtures containing invalid guest Notes."
+    goal: "Every burlmd-written Note validates, and no invalid guest Note becomes editable or indexed without an accepted repair."
+    fail: "A burlmd operation produces a nonconformant Note, or an invalid guest Note enters authoritative state."
+    certainty: assumed
+    assumption: "Creation-time conformance is delivered in rust/src/okf/, but guest validation, Repair, and Exclude are planned work in Epic H."
+  - id: NFC-20
+    legacy_id: Non-Destructive Reconciliation
+    class: reliability
+    statement: "Reconciling concurrent edits never discards either side's content or duplicates a Note, and both variants stay recoverable until the Writer resolves the Suggestion."
+    scale: "Content recoverable from both sides after a concurrent edit."
+    meter: "Scripted concurrent-edit fixtures across content, structural, and delete-versus-edit cases, checked for both variants after reconciliation."
+    goal: "Base, local, and incoming content all remain recoverable and no Note is duplicated."
+    fail: "Either side's content is lost, or a Note is duplicated."
+    certainty: assumed
+    assumption: "No reconciliation capability is delivered; Epic L builds the Suggestion model this meter measures."
+  - id: NFC-21
+    legacy_id: Guest Authority Boundary
+    class: reliability
+    statement: "burlmd validates guest filesystem writes before they enter authoritative Workspace state; invalid input never replaces the last known-good Note and never triggers silent repair."
+    scale: "Guest writes admitted into authoritative state."
+    meter: "Live-observation fixtures writing conforming, nonconforming, and partially written files while the Workspace is open."
+    goal: "Only validated conforming writes are admitted, and the last known-good Note stays available for every rejected write."
+    fail: "An invalid guest write replaces authoritative content, or a repair happens without an explicit Writer decision."
+    certainty: assumed
+    assumption: "Live observation does not exist yet; Epic H builds the authority boundary this meter measures."
+  - id: NFC-22
+    legacy_id: Cross-Platform Path Identity
+    class: compatibility
+    statement: "A path burlmd creates retains one identity under supported Linux and macOS filesystems and Windows-compatible path rules."
+    scale: "Distinct identities one created path resolves to across supported filesystems."
+    meter: "Round-trip a generated corpus of adversarial titles through ext4, APFS, and a Windows-compatible target, comparing resolved identities."
+    goal: "Exactly one identity per created path on every supported target."
+    fail: "Case, Unicode normalization, a reserved name, or a trailing character produces a second identity."
+    certainty: open
+    decision: OD-05
+  - id: NFC-23
+    legacy_id: Object Integrity
+    class: reliability
+    statement: "burlmd verifies Object bytes against their content identity before exposing, publishing, migrating, restoring, or deleting them."
+    scale: "Object operations preceded by a content-identity verification."
+    meter: "Corrupt-byte fixtures injected before each Object operation."
+    goal: "Every operation verifies first and refuses on mismatch."
+    fail: "Any Object operation proceeds on unverified or mismatched bytes."
+    certainty: assumed
+    assumption: "No Object model exists yet; Epic I builds the verification this meter measures."
+  - id: NFC-24
+    legacy_id: Protected History
+    class: reliability
+    statement: "burlmd retains every Object reachable from a Protected State, and during 0.x never deletes authoritative Object Store bytes; only verified local cache copies may be evicted."
+    scale: "Objects reachable from a Protected State that remain retrievable."
+    meter: "Reachability sweep over current state, retained and unpublished local history, reachable published Remote history, pending reconciliation, and Consolidation, run before and after each eviction."
+    goal: "Every reachable Object remains retrievable and no authoritative Object Store byte is deleted."
+    fail: "A reachable Object becomes unretrievable, or an authoritative Object Store byte is deleted during 0.x."
+    certainty: assumed
+    assumption: "No Object model exists yet; BURL-I007 builds the reachability rule this meter measures."
+  - id: NFC-25
+    legacy_id: Workspace Containment
+    class: security
+    statement: "Workspace-controlled paths and indirections never grant access outside the Workspace boundary, and unsupported filesystem aliases or nested external repositories are rejected during adoption, monitoring, and synchronization."
+    scale: "Accesses resolving outside the Workspace root."
+    meter: "Adoption, observation, and synchronization fixtures containing symlinks, hard links, nested repositories, and traversal paths."
+    goal: "Every escape attempt is rejected at the boundary."
+    fail: "Any read or write resolves outside the Workspace root, or a nested external repository is adopted."
+    certainty: assumed
+    assumption: "Containment rules are specified but the adversarial adoption and observation fixtures are planned work in Epic H."
+  - id: NFC-26
+    legacy_id: Decentralized Storage
+    class: security
+    statement: "Note content is stored only on the Writer's own device and, when connected, in the Writer's designated Remote; no component this project operates acts as a storage broker, relay, or intermediary."
+    scale: "Network destinations that receive Note content."
+    meter: "Egress capture during a full release-blocking matrix run with a connected Remote."
+    goal: "Note content reaches only the Writer's configured Remote and Object Store."
+    fail: "Any Note content reaches a host this project operates."
+    certainty: assumed
+    assumption: "The architecture has no project-operated component, but no egress capture has recorded that as evidence."
+  - id: NFC-27
+    legacy_id: "At-Rest Protection (Local)"
+    class: security
+    statement: "Notes stay plaintext so standard tools work, while the aggregate search index is encrypted independently with persistent key material held only in Platform secure storage."
+    scale: "Index bytes readable without the Platform secure-storage key, and persistent key material found outside it."
+    meter: "Open the index file without the key, and scan the process image and on-disk state for persistent key material."
+    goal: "The index is unreadable without the key, and no persistent key material exists outside Platform secure storage; transient key material is zeroized promptly after use."
+    fail: "The index is readable without the key, or persistent key material is found outside Platform secure storage."
+    certainty: settled
+    evidence:
+      kind: repository
+      ref: rust/src/security
+      date: 2026-09-03
+      note: "SQLCipher-backed index encryption with the root key in the Platform keyring is delivered; see also ADR-0003."
+  - id: NFC-28
+    legacy_id: Credential Isolation
+    class: security
+    statement: "Remote and Object Store credentials are never persisted outside operating-system secure storage, and never written to logs, diagnostics, or version history."
+    scale: "Credential material found outside Platform secure storage."
+    meter: "Scan logs, Diagnostics Exports, the Workspace, and Git history for credential patterns after a full authorized session."
+    goal: "No credential material appears anywhere but Platform secure storage."
+    fail: "Any credential material appears in a log, a Diagnostics Export, the Workspace, or version history."
+    certainty: assumed
+    assumption: "Token storage through the Platform keyring is delivered, but the Diagnostics Export and structured logs that this meter also scans are planned work in Epic M."
+  - id: NFC-29
+    legacy_id: Non-Proprietary Storage
+    class: compatibility
+    statement: "Every Note remains a plain-text file in a published, openly specified format, fully readable and editable with any text editor and with no tooling this project produces."
+    scale: "Notes readable and editable without burlmd."
+    meter: "Open, edit, and re-open a generated Workspace using only a text editor and standard Markdown tooling."
+    goal: "Every Note round-trips through third-party tooling without loss."
+    fail: "Any Note requires burlmd-specific tooling to read or edit."
+    certainty: settled
+    evidence:
+      kind: repository
+      ref: rust/src/okf/frontmatter.rs
+      date: 2026-09-03
+      note: "burlmd writes Open Knowledge Format v0.2 Markdown bundles; see ADR-0004 and data-models/okf-bundle.md."
+  - id: NFC-30
+    legacy_id: Private Remote Boundary
+    class: security
+    statement: "A connected Remote stays private; burlmd pauses synchronization if the Remote becomes public or required access is lost."
+    scale: "Synchronization attempts against a Remote whose privacy or access changed."
+    meter: "Flip a connected test Remote to public and separately revoke access, then observe the next synchronization attempt."
+    goal: "Synchronization pauses and the complete local Workspace is preserved."
+    fail: "Synchronization continues against a public Remote, or local state is lost when access is revoked."
+    certainty: assumed
+    assumption: "No Remote connection is delivered; Epic K builds the privacy check this meter measures."
+  - id: NFC-31
+    legacy_id: Remote Automation Boundary
+    class: security
+    statement: "burlmd never requests GitHub workflow-modification authority and never publishes a commit reachable from a local publication ref that contains .github/workflows/**; local Workspace access stays available and Consolidation into a clean Workspace is offered instead."
+    scale: "Published commits containing workflow files, and requested Provider permissions."
+    meter: "Publication preflight over a Workspace whose history contains workflow files, plus an inspection of the requested App permissions."
+    goal: "Publication stops and offers Consolidation; the App requests no Workflows permission."
+    fail: "A workflow-bearing commit is published, or the App requests workflow-modification authority."
+    certainty: assumed
+    assumption: "The GitHub App is not registered yet; BURL-K009 and BURL-K004 build the permission set and preflight this meter measures."
+  - id: NFC-32
+    legacy_id: Private Object Store Boundary
+    class: security
+    statement: "burlmd refuses or pauses an Object Store when anonymous list, read, write, or delete access is detected, or when the complete storage-privacy result is missing or stale."
+    scale: "Anonymous access verbs reachable on the configured Object Store."
+    meter: "Unauthenticated probes for list, read, write, and delete against the configured bucket before connection and before each publication."
+    goal: "All four probes are refused and the result is fresh; otherwise the Object Store is refused or paused."
+    fail: "Any anonymous verb succeeds, or connection proceeds on a missing or stale privacy result."
+    certainty: assumed
+    assumption: "No Object Store client exists yet; BURL-I004 builds the privacy probe this meter measures."
+  - id: NFC-33
+    legacy_id: Zero Automatic Off-Device Telemetry
+    class: privacy
+    statement: "burlmd records bounded structured diagnostics locally but never automatically transmits usage metrics, errors, diagnostics, Note or Asset content, signed locations, or content-derived metadata; a Writer-created and Writer-shared Diagnostics Export is the only reporting path."
+    scale: "Automatic outbound transmissions not directed at the Writer's own Remote or Object Store, and content found in local diagnostics."
+    meter: "Egress capture over a full release-blocking matrix run, plus a content, credential, and signed-location scan of the local diagnostics store and a Diagnostics Export."
+    goal: "No automatic transmission leaves the device, and the diagnostics store and Export contain no content, credentials, signed locations, or content-derived telemetry."
+    fail: "Any automatic transmission occurs, or any excluded class appears in the diagnostics store or Export."
+    certainty: assumed
+    assumption: "Nothing transmits today because no synchronization exists, but the local diagnostics store and the Diagnostics Export that this meter scans are planned work in Epic M."
+  - id: NFC-34
+    legacy_id: Feature Parity
+    class: compatibility
+    statement: "Every supported release system passes the same release-blocking capability matrix; a launch-only check is not sufficient."
+    scale: "Release-blocking matrix results per supported system."
+    meter: "The full matrix run on the installed candidate for every named supported system."
+    goal: "Every supported system passes every matrix item."
+    fail: "Any supported system is declared supported on a launch-only check or a partial matrix."
+    certainty: assumed
+    assumption: "No release artifacts exist; BURL-M011 through BURL-M013 build the installed-candidate gates this meter measures."
+  - id: NFC-35
+    legacy_id: Version Policy
+    class: compatibility
+    statement: "Releases stay in the 0.x series until the user explicitly declares stability, and downgrade compatibility is not guaranteed."
+    scale: "Published release versions and downgrade claims."
+    meter: "Inspection of the published release metadata at each publication."
+    goal: "Every published version is 0.x and no downgrade guarantee is claimed."
+    fail: "A 1.x release is published without an explicit stability declaration, or a downgrade guarantee is claimed."
+    certainty: assumed
+    assumption: "Nothing is published yet, so the policy has never been exercised."
+  - id: NFC-36
+    legacy_id: Migration Safety
+    class: reliability
+    statement: "Application-state migrations create a backup, apply atomically, and restore the earlier state after failure, and never rewrite Note content unless an explicit product operation requires it."
+    scale: "Application state recovered after an interrupted or failed migration."
+    meter: "Interrupt each migration at randomized points and at each failure branch, then reopen."
+    goal: "The earlier state is restored intact and no Note content changed."
+    fail: "Application state is lost or left partially migrated, or a migration rewrote Note content."
+    certainty: assumed
+    assumption: "BURL-M005 builds the backup-and-atomic-migrate path this meter measures; nothing implements it yet."
+deferred:
+  - class: cost
+    risk: "No cost meter exists because nothing in the architecture runs on infrastructure this project operates: content lives on the Writer's device, their Remote, and their Object Store. If a project-operated component ever appears, this gap hides its running cost until someone pays it."
+  - class: accessibility
+    risk: "Keyboard completeness and Flutter Semantics labels are the accepted baseline, but screen-reader certification against Orca and VoiceOver is out of scope with no reopening condition, so nothing measures whether the baseline still holds. OD-02 carries the missing trigger."

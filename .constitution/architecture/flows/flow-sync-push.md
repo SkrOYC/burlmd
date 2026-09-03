@@ -1,3 +1,11 @@
+---
+job: JOB-04
+capabilities: [CAP-064, CAP-065]
+boundaries: []
+view: state
+certainty: assumed
+assumption: "Migrated from markdown; not yet exercised by an integration test."
+---
 # Background synchronization flow
 
 **Maps to:** CAP-SYNC-02, CAP-SYNC-03.

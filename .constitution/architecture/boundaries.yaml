@@ -1,0 +1,343 @@
+boundaries:
+  - id: BND-01
+    legacy_id: Presentation and Interaction
+    name: Presentation and Interaction
+    kind: module
+    type: Desktop interaction surface
+    responsibility: "Captures Writer intent and renders authoritative state, warnings, Decisions, Suggestions, diagnostics, and release information"
+    inputs: []
+    outputs: []
+    depends_on: [BND-02]
+    certainty: assumed
+    assumption: "Migrated from containers.md; not yet mapped to a code path."
+  - id: BND-02
+    legacy_id: Core Coordination
+    name: Core Coordination
+    kind: module
+    type: Application coordinator and authority boundary
+    responsibility: "Serializes commands against authoritative model state, enforces authority and conformance, and coordinates local and external state machines"
+    inputs: []
+    outputs: []
+    depends_on: [BND-03, BND-04, BND-05, BND-07, BND-08, BND-09, BND-10, BND-11, BND-12, BND-18]
+    certainty: assumed
+    assumption: "Migrated from containers.md; not yet mapped to a code path."
+  - id: BND-03
+    legacy_id: Canonical Note Model
+    name: Canonical Note Model
+    kind: module
+    type: Source-backed semantic model
+    responsibility: "Defines Note-local values and operations for parsing, rendering, source-preserving edits, undo, find and replace, Links, Assets, Suggestion representation, and conformance"
+    inputs: []
+    outputs: []
+    depends_on: []
+    certainty: assumed
+    assumption: "Migrated from containers.md; not yet mapped to a code path."
+  - id: BND-04
+    legacy_id: Workspace Model
+    name: Workspace Model
+    kind: module
+    type: Workspace authority model
+    responsibility: "Solely owns authoritative Workspace and session state: the Directory tree, canonical paths, Note identity, open-session registry, Protected State, lifecycle provenance, and the lifecycle of Suggestions, Lifecycle Decisions, Asset Decisions, and reconciliation records"
+    inputs: []
+    outputs: []
+    depends_on: [BND-03]
+    certainty: assumed
+    assumption: "Migrated from containers.md; not yet mapped to a code path."
+  - id: BND-05
+    legacy_id: Workspace Persistence
+    name: Workspace Persistence
+    kind: other
+    type: Local authoritative storage
+    responsibility: "Persists Note source, Directories, recoverable local history, and atomic lifecycle outcomes inside the Workspace boundary"
+    inputs: []
+    outputs: []
+    depends_on: [BND-13]
+    certainty: assumed
+    assumption: "Migrated from containers.md; not yet mapped to a code path."
+  - id: BND-06
+    legacy_id: Local Asset Store
+    name: Local Asset Store
+    kind: other
+    type: Local authoritative Object storage
+    responsibility: "Owns verified local Object bytes, active offline availability, hydration handoff, cache eviction, and retention of bytes reachable from Protected State"
+    inputs: []
+    outputs: []
+    depends_on: [BND-04, BND-05, BND-13]
+    certainty: assumed
+    assumption: "Migrated from containers.md; not yet mapped to a code path."
+  - id: BND-07
+    legacy_id: Derived Index
+    name: Derived Index
+    kind: other
+    type: Rebuildable local projection
+    responsibility: "Supports search, title lookup, backlinks, conformance inventory, and incremental Workspace views without becoming authoritative"
+    inputs: []
+    outputs: []
+    depends_on: [BND-05]
+    certainty: assumed
+    assumption: "Migrated from containers.md; not yet mapped to a code path."
+  - id: BND-08
+    legacy_id: Application State
+    name: Application State
+    kind: other
+    type: Non-Workspace durable state
+    responsibility: "Persists and restores snapshots of device preferences, per-Workspace session state, drafts, operation intents, reconciliation records, synchronization presentation, and migration metadata. It doesn't own authoritative session state"
+    inputs: []
+    outputs: []
+    depends_on: [BND-12]
+    certainty: assumed
+    assumption: "Migrated from containers.md; not yet mapped to a code path."
+  - id: BND-09
+    legacy_id: Workspace Observer
+    name: Workspace Observer
+    kind: module
+    type: Platform event adapter
+    responsibility: Converts filesystem event bursts into debounced change proposals without deciding authority or conformance
+    inputs: []
+    outputs: []
+    depends_on: [BND-13]
+    certainty: assumed
+    assumption: "Migrated from containers.md; not yet mapped to a code path."
+  - id: BND-10
+    legacy_id: Remote Sync Coordinator
+    name: Remote Sync Coordinator
+    kind: module
+    type: Optional asynchronous coordinator
+    responsibility: "Connects a Workspace to a private Remote, detects local and incoming history, coordinates reconciliation, and reports distinct synchronization states"
+    inputs: []
+    outputs: []
+    depends_on: [BND-02, BND-05, BND-08, BND-12, BND-14]
+    certainty: assumed
+    assumption: "Migrated from containers.md; not yet mapped to a code path."
+  - id: BND-11
+    legacy_id: Object Transfer Coordinator
+    name: Object Transfer Coordinator
+    kind: module
+    type: Optional asynchronous Object coordinator
+    responsibility: "Validates at connection, periodically, and before publication that anonymous callers can't list, read, write, or delete in the Object Store prefix; uploads and verifies required Objects before history publication; hydrates Objects; and coordinates migration, repair, rotation, and cleanup"
+    inputs: []
+    outputs: []
+    depends_on: [BND-02, BND-06, BND-08, BND-12, BND-14]
+    certainty: assumed
+    assumption: "Migrated from containers.md; not yet mapped to a code path."
+  - id: BND-12
+    legacy_id: Secure Storage
+    name: Secure Storage
+    kind: other
+    type: Credential and key persistence
+    responsibility: "Persists index keys, Provider credentials, and Object Store credentials outside Workspace content and diagnostics"
+    inputs: []
+    outputs: []
+    depends_on: [BND-13]
+    certainty: assumed
+    assumption: "Migrated from containers.md; not yet mapped to a code path."
+  - id: BND-13
+    legacy_id: Host Platform
+    name: Host Platform
+    kind: other
+    type: Operating system and filesystem authority
+    responsibility: "Owns window chrome, process lifecycle, filesystem events, secure storage, file selection, installation, and package-manager behavior"
+    inputs: []
+    outputs: []
+    depends_on: []
+    certainty: assumed
+    assumption: "Migrated from containers.md; not yet mapped to a code path."
+  - id: BND-14
+    legacy_id: "Provider, Remote, and Object Store"
+    name: "Provider, Remote, and Object Store"
+    kind: other
+    type: Optional user-controlled synchronization services
+    responsibility: "The Provider authorizes and locates a private Remote. The Remote stores Workspace history. The Object Store stores immutable Object bytes under the Writer's control"
+    inputs: []
+    outputs: []
+    depends_on: ["External network availability", "User-controlled Provider, Remote, and Object Store accounts"]
+    certainty: assumed
+    assumption: "Migrated from containers.md; not yet mapped to a code path."
+  - id: BND-15
+    legacy_id: Release Pipeline
+    name: Release Pipeline
+    kind: pipeline-stage
+    type: "Build, verification, and publication boundary"
+    responsibility: "Produces each supported artifact, assigns validation roles, establishes authoritative expected identity, requires complete accepted evidence, and publishes artifact integrity with authenticated build provenance"
+    inputs: []
+    outputs: []
+    depends_on: [BND-16, BND-17, BND-19, "Supported Platform build environments"]
+    certainty: assumed
+    assumption: "Migrated from containers.md; not yet mapped to a code path."
+  - id: BND-16
+    legacy_id: Isolated validation environment
+    name: Isolated validation environment
+    kind: other
+    type: Pipeline-owned System/Native validation environment
+    responsibility: "Runs one assigned validation role while owning its display, compositor, input, and process state independently of the Writer's active desktop. Candidate execution and evidence sealing use separate fresh pipeline-owned environments"
+    inputs: []
+    outputs: []
+    depends_on: [BND-15]
+    certainty: assumed
+    assumption: "Migrated from containers.md; not yet mapped to a code path."
+  - id: BND-17
+    legacy_id: Evidence aggregation
+    name: Evidence aggregation
+    kind: pipeline-stage
+    type: Evidence integrity and acceptance boundary
+    responsibility: "Authenticates the fresh sealing environment as managed origin, independently observes its final state after completion, verifies the trust-anchor relationship and ticket write boundary, verifies candidate and sealed handoff identities and complete bundle integrity, and compares captured identity with authoritative expected identity before isolated aggregation"
+    inputs: []
+    outputs: []
+    depends_on: [BND-16]
+    certainty: assumed
+    assumption: "Migrated from containers.md; not yet mapped to a code path."
+  - id: BND-18
+    legacy_id: Release Update Coordinator
+    name: Release Update Coordinator
+    kind: module
+    type: Optional asynchronous metadata coordinator
+    responsibility: "Checks compatible release metadata, reports a higher 0.x release, and hands installation authority to the Host Platform or package manager"
+    inputs: []
+    outputs: []
+    depends_on: [BND-19]
+    certainty: assumed
+    assumption: "Migrated from containers.md; not yet mapped to a code path."
+  - id: BND-19
+    legacy_id: Release Distribution
+    name: Release Distribution
+    kind: other
+    type: Artifact and release-metadata distribution
+    responsibility: "Publishes supported artifacts, integrity data, authenticated provenance, compatibility metadata, and release information without installing binaries"
+    inputs: []
+    outputs: []
+    depends_on: [BND-15, "External network availability"]
+    certainty: assumed
+    assumption: "Migrated from containers.md; not yet mapped to a code path."
+edges:
+  - from: BND-01
+    to: BND-02
+    protocol: in-process
+    note: "Writer intent as commands, and authoritative state, warnings, Decisions, and Suggestions back, across the FFI boundary"
+  - from: BND-02
+    to: BND-03
+    protocol: in-process
+    note: "One semantic Note operation at a time; the model returns a source-preserving result and its inverse"
+  - from: BND-02
+    to: BND-04
+    protocol: in-process
+    note: "Identity, session, containment, and Protected State questions answered by the single Workspace authority"
+  - from: BND-02
+    to: BND-05
+    protocol: in-process
+    note: "Reads and atomic writes of Note source, Directories, and recoverable local history"
+  - from: BND-02
+    to: BND-07
+    protocol: in-process
+    note: "Index queries for search and title lookup, and reindex requests after a committed change"
+  - from: BND-02
+    to: BND-08
+    protocol: in-process
+    note: "Device preferences, per-Workspace session snapshots, and recoverable draft state"
+  - from: BND-02
+    to: BND-09
+    protocol: event
+    note: "Debounced guest filesystem events, delivered as observations rather than authoritative writes"
+  - from: BND-02
+    to: BND-10
+    protocol: in-process
+    note: "Synchronization commands and state, with reconciliation outcomes returned as Suggestions and Decisions"
+  - from: BND-02
+    to: BND-11
+    protocol: in-process
+    note: "Object upload, hydration, and verification requests with progress back"
+  - from: BND-02
+    to: BND-12
+    protocol: in-process
+    note: "Root index key and Provider token retrieval; key material never crosses into the presentation boundary"
+  - from: BND-02
+    to: BND-18
+    protocol: in-process
+    note: "Update-availability queries; installation authority stays with the Platform"
+  - from: BND-04
+    to: BND-03
+    protocol: in-process
+    note: "Note-local values and operations the Workspace authority composes into tree-level outcomes"
+  - from: BND-05
+    to: BND-13
+    protocol: shared-storage
+    note: "Plain Markdown files and Directories on the host filesystem inside the Workspace boundary"
+  - from: BND-06
+    to: BND-13
+    protocol: shared-storage
+    note: "Object bytes kept at portable Workspace paths so guest tools can read them"
+  - from: BND-06
+    to: BND-04
+    protocol: in-process
+    note: "Asset reference resolution against canonical Workspace identity"
+  - from: BND-06
+    to: BND-05
+    protocol: in-process
+    note: "Asset references carried in Note source"
+  - from: BND-07
+    to: BND-05
+    protocol: shared-storage
+    note: "Encrypted SQLite index derived from the authoritative files; disposable and rebuildable"
+  - from: BND-08
+    to: BND-12
+    protocol: in-process
+    note: "Application state encrypted or key-wrapped through Platform secure storage"
+  - from: BND-09
+    to: BND-13
+    protocol: event
+    note: "Filesystem create, edit, move, rename, and delete notifications, with a polling fallback"
+  - from: BND-10
+    to: BND-14
+    protocol: request-response
+    note: "Authenticated Git and Provider API exchanges with the private Remote"
+  - from: BND-10
+    to: BND-05
+    protocol: in-process
+    note: "Local history reads and the reconciled state written back"
+  - from: BND-10
+    to: BND-08
+    protocol: in-process
+    note: "Durable reconciliation records and scheduler state"
+  - from: BND-10
+    to: BND-12
+    protocol: in-process
+    note: "Provider token retrieval and refresh"
+  - from: BND-11
+    to: BND-14
+    protocol: request-response
+    note: "S3-compatible object PUT, GET, and HEAD against the user-controlled Object Store"
+  - from: BND-11
+    to: BND-06
+    protocol: in-process
+    note: "Local Object bytes to publish and hydrated bytes to store"
+  - from: BND-11
+    to: BND-08
+    protocol: in-process
+    note: "Transfer progress and retention bookkeeping"
+  - from: BND-11
+    to: BND-12
+    protocol: in-process
+    note: "Object Store credential retrieval"
+  - from: BND-12
+    to: BND-13
+    protocol: ipc
+    note: "Platform secure-storage service calls; persistent key material never leaves it"
+  - from: BND-15
+    to: BND-16
+    protocol: file-handoff
+    note: "Role assignment and tested-source data handed to a fresh pipeline-owned environment"
+  - from: BND-16
+    to: BND-17
+    protocol: file-handoff
+    note: "Sealed role bundles with manifests, byte counts, and digests"
+  - from: BND-17
+    to: BND-15
+    protocol: file-handoff
+    note: "Accepted or rejected aggregate evidence that gates publication"
+  - from: BND-15
+    to: BND-19
+    protocol: file-handoff
+    note: "Verified artifacts, integrity data, and authenticated provenance for publication"
+  - from: BND-18
+    to: BND-19
+    protocol: request-response
+    note: "Release metadata queries for a compatible higher 0.x release"

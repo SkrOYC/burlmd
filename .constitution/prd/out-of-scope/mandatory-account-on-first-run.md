@@ -1,3 +1,7 @@
+---
+decision: rejected
+date: "2026-09-03"
+---
 # Out of Scope: Mandatory Account or Provider Authorization on First Run
 
 **Status:** Rejected (was implicitly P0 through v1.0.1)

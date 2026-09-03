@@ -1,3 +1,7 @@
+---
+decision: deferred
+date: "2026-09-03"
+---
 # Object-Store-only Workspaces
 
 **Context:** A Workspace could store authoritative Asset bytes only in the Object Store and hydrate them on demand.

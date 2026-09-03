@@ -72,7 +72,7 @@ This record captures a full-sweep Realign interview. The goal: widen and deepen 
 
 - **Q20: Accessibility baseline.** Keyboard completeness is a hard review bar, and Flutter `Semantics` labels are a standing coding standard. Screen-reader certification is explicitly deferred; see OD-02.
 
-- **Q21: i18n-ready.** Strings externalize through Flutter `gen-l10n`; no translation effort is scheduled. Recorded separately as a finding that needs no decision: IME/CJK composition surviving focus promotion needs an acceptance criterion on `EDIT-F002`.
+- **Q21: i18n-ready.** Strings externalize through Flutter `gen-l10n`; no translation effort is scheduled. Recorded separately as a finding that needs no decision: IME/CJK composition surviving focus promotion needs an acceptance criterion on `BURL-F002`.
 
 ### Phase B branch resolutions
 

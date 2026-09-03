@@ -1,0 +1,6 @@
+artifact: okf-frontmatter.schema.json
+surface: data-model
+flows: [flow-note-lifecycle, flow-workspace-bootstrap, flow-workspace-monitoring]
+boundaries: [BND-05]
+certainty: assumed
+assumption: "Migrated; not yet exercised by a contract test."

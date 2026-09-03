@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": ["schemaVersion", "expectedIdentity", "expectedIdentitySha256", "expectedIdentityArtifact", "generatedAt", "mode", "status", "roleEvidence", "coordinatorExecution", "aggregationChecks", "rejectionReasons"],
   "properties": {
-    "schemaVersion": { "const": 11 },
+    "schemaVersion": { "const": 10 },
     "expectedIdentity": { "$ref": "ci-role-evidence.schema.json#/$defs/expectedIdentity" },
     "expectedIdentitySha256": { "$ref": "#/$defs/sha256" },
     "expectedIdentityArtifact": {
@@ -50,11 +50,19 @@
             "type": "array",
             "minItems": 3,
             "maxItems": 3,
-            "$comment": "Role-manifest validation applies the conditional viewport requirement from ci-role-evidence.schema.json. Aggregate acceptance requires every role but does not require viewport.verified for every role.",
             "allOf": [
-              { "contains": { "type": "object", "properties": { "manifest": { "type": "object", "properties": { "roleEvidence": { "type": "object", "properties": { "role": { "const": "linux-x86_64" } } } } } } } },
-              { "contains": { "type": "object", "properties": { "manifest": { "type": "object", "properties": { "roleEvidence": { "type": "object", "properties": { "role": { "const": "macos-26-arm64" } } } } } } } },
-              { "contains": { "type": "object", "properties": { "manifest": { "type": "object", "properties": { "roleEvidence": { "type": "object", "properties": { "role": { "const": "macos-15-arm64" } } } } } } } }
+              { "contains": { "type": "object", "properties": { "manifest": { "type": "object", "properties": { "roleEvidence": { "type": "object", "properties": {
+                "role": { "const": "linux-x86_64" },
+                "viewport": { "type": "object", "properties": { "verified": { "const": true } } }
+              } } } } } } },
+              { "contains": { "type": "object", "properties": { "manifest": { "type": "object", "properties": { "roleEvidence": { "type": "object", "properties": {
+                "role": { "const": "macos-26-arm64" },
+                "viewport": { "type": "object", "properties": { "verified": { "const": true } } }
+              } } } } } } },
+              { "contains": { "type": "object", "properties": { "manifest": { "type": "object", "properties": { "roleEvidence": { "type": "object", "properties": {
+                "role": { "const": "macos-15-arm64" },
+                "viewport": { "type": "object", "properties": { "verified": { "const": true } } }
+              } } } } } } }
             ]
           },
           "expectedIdentityArtifact": {
@@ -83,7 +91,7 @@
         },
         "allOf": [
           {
-            "if": { "properties": { "expectedIdentity": { "type": "object", "properties": { "ticketIdentity": { "const": "CI-M003" } } } } },
+            "if": { "properties": { "expectedIdentity": { "type": "object", "properties": { "ticketIdentity": { "const": "BURL-M003" } } } } },
             "then": { "properties": { "coordinatorExecution": { "type": "null" } } },
             "else": { "properties": { "coordinatorExecution": {
               "allOf": [

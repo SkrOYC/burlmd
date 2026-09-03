@@ -1,3 +1,11 @@
+---
+job: JOB-09
+capabilities: [CAP-075, CAP-076, CAP-077, CAP-078, CAP-079, CAP-080]
+boundaries: []
+view: dag
+certainty: assumed
+assumption: "Migrated from markdown; not yet exercised by an integration test."
+---
 # Release and upgrade flow
 
 **Maps to:** CAP-REL-01, CAP-REL-02, CAP-REL-03, CAP-REL-04, CAP-REL-05, CAP-REL-06.
@@ -61,7 +69,7 @@ flowchart TD
 
 ## Failure path
 
-- Every validation environment owns its display, compositor, input, and declared process state. The strict-containment role proves candidate-process teardown. Other hosted roles record bounded cleanup and don't claim that arbitrary candidate processes ended. If display or input ownership isn't proven, the run produces no acceptable evidence.
+- Every validation environment owns its display, compositor, input, and process state. If ownership isn't proven, it produces no acceptable evidence.
 - The Writer's active desktop never supplies visual proof. The Writer's desktop state in a capture invalidates the complete run.
 - Missing authoritative trust-anchor, workflow-signer, tested-source, base, release, build, corpus, run, required-role, or role-specific evidence-class identity prevents evidence acceptance.
 - A candidate-defined launcher, signer workflow, expected identity, or change outside the ticket's declared write boundary prevents dispatch or evidence acceptance.
