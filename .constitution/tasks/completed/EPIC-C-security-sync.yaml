@@ -1,0 +1,74 @@
+id: C
+name: security sync
+kind: product
+capabilities: []
+depends_on: [B]
+scope:
+  paths: [rust/src/git/operations.rs, lib/src/screens/login.dart, rust/src/api/auth.rs, rust/src/sync/scheduler.rs]
+  tech_spec_patchable: []
+estimated_diff_lines: 2500
+tickets:
+  - id: BURL-C001
+    title: Implement Git Operations (gix)
+    type: Feature
+    effort: 8
+    depends_on: []
+    category: Correctness
+    scope:
+      in: [rust/src/git/operations.rs]
+    verification:
+      command: "git diff --check"
+      expected: exit 0
+    description: "Implement programmatic Git clone, commit, push, and pull operations against the local Workspace directory using gix (or shelling out to the git CLI if gix currently lacks robust working tree merge conflict generation)"
+    acceptance:
+      mode: gherkin
+      evidence: TODO
+    flows: []
+    certainty: assumed
+    status: done
+  - id: BURL-C002
+    title: Implement OAuth Handshake
+    type: Feature
+    effort: 5
+    depends_on: []
+    category: Security
+    scope:
+      in: [lib/src/screens/login.dart, rust/src/api/auth.rs]
+    verification:
+      command: "git diff --check"
+      expected: exit 0
+    description: "Build the OAuth web flow in Flutter to capture a GitHub authorization code, pass it to Rust, exchange it for tokens via PKCE, and store them via keyring"
+    acceptance:
+      mode: gherkin
+      evidence: TODO
+    flows: []
+    certainty: assumed
+    status: done
+  - id: BURL-C003
+    title: Background Sync Manager Scheduler
+    type: Feature
+    effort: 3
+    depends_on: []
+    category: Correctness
+    scope:
+      in: [rust/src/sync/scheduler.rs]
+    verification:
+      command: "git diff --check"
+      expected: exit 0
+    description: Implement a debounced background worker in Rust that calls the gix push/pull operations automatically every X minutes or after explicitly saving
+    acceptance:
+      mode: gherkin
+      evidence: TODO
+    flows: []
+    certainty: assumed
+    status: done
+closeout:
+  tickets_completed: [BURL-C001, BURL-C002, BURL-C003]
+  tickets_deferred: []
+  points_completed: 16
+  spec_patches: []
+  changelog_entries: []
+  candidate_terms: []
+  routed_upstream: []
+  follow_ups: []
+  settled: []

@@ -1,3 +1,11 @@
+---
+job: JOB-04
+capabilities: [CAP-063, CAP-067, CAP-068, CAP-069, CAP-070, CAP-073]
+boundaries: []
+view: state
+certainty: assumed
+assumption: "Migrated from markdown; not yet exercised by an integration test."
+---
 # Remote connection and authorization flow
 
 **Maps to:** CAP-SYNC-01, CAP-SYNC-05, CAP-SYNC-06, CAP-SYNC-07, CAP-SYNC-08, CAP-SYNC-12.

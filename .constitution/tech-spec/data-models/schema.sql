@@ -56,7 +56,7 @@ PRAGMA foreign_keys = ON;
 -- rename possible at all -- and with the pragma off they do not error, they
 -- simply do not fire, leaving orphaned `links` and `fts_mapping` rows behind
 -- with nothing to signal it. `guidelines.md` states this as a connection-open
--- obligation, and `WSPC-D004` carries a criterion for it: `db::connection`
+-- obligation, and `BURL-D004` carries a criterion for it: `db::connection`
 -- issues this pragma directly on every freshly opened connection (not only
 -- when this batch happens to run), because `open_encrypted_db_with_key` is
 -- reachable without `init_schema`.
@@ -159,7 +159,7 @@ CREATE TABLE IF NOT EXISTS links (
     -- graph the product itself encourages. The rewrite must therefore be
     -- `UPDATE OR REPLACE`, which drops the duplicate edge and keeps the
     -- renamed link's own `target_title` -- the same "the graph, not the prose"
-    -- trade-off already accepted above. See WSPC-D006.
+    -- trade-off already accepted above. See BURL-D006.
     PRIMARY KEY (workspace_id, source_id, target_id),
     -- ON UPDATE CASCADE is load-bearing, not defensive: renaming a Note
     -- rewrites `notes.id`, and without this a rename of any Note that links
@@ -168,7 +168,7 @@ CREATE TABLE IF NOT EXISTS links (
         ON DELETE CASCADE ON UPDATE CASCADE
     -- Deliberately no foreign key on target_id, to permit ghost links. Inbound
     -- links to a RENAMED Note therefore do not cascade and must be rewritten
-    -- explicitly, in the same transaction -- see WSPC-D006 and risk 8.
+    -- explicitly, in the same transaction -- see BURL-D006 and risk 8.
 );
 
 -- Backlink lookups (CAP-GRAPH-05) query by target within a Workspace. Without
@@ -240,7 +240,7 @@ CREATE TABLE IF NOT EXISTS drafts (
     raw_markdown TEXT NOT NULL,    -- Full current source text of the Note
     updated_at INTEGER NOT NULL,
     -- The Core's per-Note edit sequence at the moment this row was written,
-    -- and the reason tier 2's clear is safe. `SPK-WSPC-D001` §6.2.6: a tier 1
+    -- and the reason tier 2's clear is safe. `SPK-BURL-D001` §6.2.6: a tier 1
     -- write releases the state lock before its 8-23ms encrypted row write, so
     -- a timer that snapshotted at sequence N, wrote the file, and then
     -- compared an *in-memory* counter still reading N would clear a row the
@@ -255,7 +255,7 @@ CREATE TABLE IF NOT EXISTS drafts (
     -- Deliberately no foreign key to notes, for the RENAME case only: a
     -- draft must survive its Note's concept id changing, and adding a FK here
     -- would either block the rename or cascade it, neither of which is what
-    -- `WSPC-D006` needs while it re-keys rows explicitly in one transaction.
+    -- `BURL-D006` needs while it re-keys rows explicitly in one transaction.
     --
     -- Note this is NOT because a draft can precede its `notes` row. Under this
     -- design it cannot: `create_note` writes the file with conformant
@@ -267,7 +267,7 @@ CREATE TABLE IF NOT EXISTS drafts (
     -- deleting the `notes` row, or the `workspaces` row above it, leaves this
     -- row behind. `delete_note` and `delete_directory` therefore clear the
     -- affected draft rows explicitly, in the same transaction, exactly as
-    -- `WSPC-D006` re-keys them explicitly on rename.
+    -- `BURL-D006` re-keys them explicitly on rename.
     --
     -- An orphaned draft is nevertheless a state the Core has to REPORT, not one
     -- it can assume away: the schema does not forbid it, so anything that clears

@@ -1,3 +1,11 @@
+---
+job: JOB-03
+capabilities: [CAP-012, CAP-025]
+boundaries: [BND-01, BND-02, BND-04, BND-08]
+view: sequence
+certainty: assumed
+assumption: "Migrated from markdown; not yet exercised by an integration test."
+---
 # Workspace navigation flow
 
 **Maps to delivered:** CAP-GRAPH-01.

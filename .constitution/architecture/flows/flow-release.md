@@ -1,3 +1,11 @@
+---
+job: JOB-09
+capabilities: [CAP-075, CAP-076, CAP-077, CAP-078, CAP-079, CAP-080]
+boundaries: []
+view: dag
+certainty: assumed
+assumption: "Migrated from markdown; not yet exercised by an integration test."
+---
 # Release and upgrade flow
 
 **Maps to:** CAP-REL-01, CAP-REL-02, CAP-REL-03, CAP-REL-04, CAP-REL-05, CAP-REL-06.

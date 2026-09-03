@@ -79,7 +79,7 @@
       "additionalProperties": false,
       "required": ["ticketIdentity", "releaseIdentity", "trustAnchorSha", "testedSourceSha", "workflowSignerSha", "workflowSignerRef", "baseSha", "workflowEvent", "evidenceReportCommitPolicy", "sourceWriteAllowlist", "buildIdentity", "corpusIdentity", "runIdentity", "artifactNonce", "requiredRoleIdentities", "requiredRoleSigners", "requiredEvidenceClasses"],
       "properties": {
-        "ticketIdentity": { "enum": ["CI-M003", "AST-H001", "PATH-H002", "ASSET-I001", "GIT-L001", "PKG-M001"] },
+        "ticketIdentity": { "enum": ["BURL-M003", "BURL-H001", "BURL-H002", "BURL-I001", "BURL-L001", "BURL-M001"] },
         "releaseIdentity": { "type": "string", "minLength": 1 },
         "trustAnchorSha": { "$ref": "#/$defs/gitSha" },
         "testedSourceSha": { "$ref": "#/$defs/gitSha" },
@@ -147,7 +147,7 @@
       },
       "allOf": [
         {
-          "if": { "properties": { "ticketIdentity": { "const": "CI-M003" } }, "required": ["ticketIdentity"] },
+          "if": { "properties": { "ticketIdentity": { "const": "BURL-M003" } }, "required": ["ticketIdentity"] },
           "then": { "properties": { "requiredEvidenceClasses": { "const": {
             "linux-x86_64": ["common-functional", "managed-evidence-protocol", "managed-evidence-security", "managed-evidence-isolation", "generated-binding-check", "static-analysis", "desktop-integration"],
             "macos-26-arm64": ["common-functional", "managed-evidence-protocol", "managed-evidence-security", "static-analysis", "desktop-integration"],
@@ -155,7 +155,7 @@
           } } } }
         },
         {
-          "if": { "properties": { "ticketIdentity": { "const": "AST-H001" } }, "required": ["ticketIdentity"] },
+          "if": { "properties": { "ticketIdentity": { "const": "BURL-H001" } }, "required": ["ticketIdentity"] },
           "then": { "properties": { "requiredEvidenceClasses": { "const": {
             "linux-x86_64": ["common-functional", "performance", "ast-measurement"],
             "macos-26-arm64": ["common-functional", "performance", "ast-measurement"],
@@ -163,7 +163,7 @@
           } } } }
         },
         {
-          "if": { "properties": { "ticketIdentity": { "const": "PATH-H002" } }, "required": ["ticketIdentity"] },
+          "if": { "properties": { "ticketIdentity": { "const": "BURL-H002" } }, "required": ["ticketIdentity"] },
           "then": { "properties": { "requiredEvidenceClasses": { "const": {
             "linux-x86_64": ["common-functional", "filesystem-compatibility"],
             "macos-26-arm64": ["common-functional", "filesystem-compatibility"],
@@ -171,7 +171,7 @@
           } } } }
         },
         {
-          "if": { "properties": { "ticketIdentity": { "const": "ASSET-I001" } }, "required": ["ticketIdentity"] },
+          "if": { "properties": { "ticketIdentity": { "const": "BURL-I001" } }, "required": ["ticketIdentity"] },
           "then": { "properties": { "requiredEvidenceClasses": { "const": {
             "linux-x86_64": ["common-functional", "performance", "asset-measurement"],
             "macos-26-arm64": ["common-functional", "performance", "asset-measurement"],
@@ -179,7 +179,7 @@
           } } } }
         },
         {
-          "if": { "properties": { "ticketIdentity": { "const": "GIT-L001" } }, "required": ["ticketIdentity"] },
+          "if": { "properties": { "ticketIdentity": { "const": "BURL-L001" } }, "required": ["ticketIdentity"] },
           "then": { "properties": { "requiredEvidenceClasses": { "const": {
             "linux-x86_64": ["common-functional", "filesystem-compatibility", "git-protocol"],
             "macos-26-arm64": ["common-functional", "filesystem-compatibility", "git-protocol"],
@@ -187,7 +187,7 @@
           } } } }
         },
         {
-          "if": { "properties": { "ticketIdentity": { "const": "PKG-M001" } }, "required": ["ticketIdentity"] },
+          "if": { "properties": { "ticketIdentity": { "const": "BURL-M001" } }, "required": ["ticketIdentity"] },
           "then": { "properties": { "requiredEvidenceClasses": { "const": {
             "linux-x86_64": ["packaging-runtime"],
             "macos-26-arm64": ["packaging-runtime", "repeatable-construction"],
@@ -202,7 +202,7 @@
       "additionalProperties": false,
       "required": ["ticketIdentity", "releaseIdentity", "trustAnchorSha", "testedSourceSha", "workflowSignerSha", "workflowSignerRef", "baseSha", "workflowEvent", "sourceWriteAllowlist", "buildIdentity", "corpusIdentity", "runIdentity", "artifactNonce", "roleIdentity"],
       "properties": {
-        "ticketIdentity": { "enum": ["CI-M003", "AST-H001", "PATH-H002", "ASSET-I001", "GIT-L001", "PKG-M001"] },
+        "ticketIdentity": { "enum": ["BURL-M003", "BURL-H001", "BURL-H002", "BURL-I001", "BURL-L001", "BURL-M001"] },
         "releaseIdentity": { "type": "string", "minLength": 1 },
         "trustAnchorSha": { "$ref": "#/$defs/gitSha" },
         "testedSourceSha": { "$ref": "#/$defs/gitSha" },

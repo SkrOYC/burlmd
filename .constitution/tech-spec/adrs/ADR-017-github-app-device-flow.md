@@ -1,3 +1,10 @@
+---
+id: ADR-0017
+status: accepted
+date: 2026-09-03
+certainty: assumed
+assumption: "Migrated; the decision's ruling reference was not found in the status line."
+---
 # ADR-017: Private GitHub Remote Through GitHub App Device Flow
 
 **Status:** Accepted for final contract reconciliation

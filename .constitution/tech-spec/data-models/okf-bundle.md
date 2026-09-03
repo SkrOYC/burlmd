@@ -1,6 +1,6 @@
 # Data Model: The Workspace On Disk (OKF v0.2 Bundle)
 
-> **Forward status:** This is the delivered v1.6.x bundle contract. TechSpec v1.8.0-provisional reopens title-verbatim filenames through OD-05 and replaces the deferred attachment section with the required hybrid Local Asset Store and S3-compatible object model. SPK-PATH-H002 and SPK-ASSET-I001 must settle those physical forms before final Stage 3 rewrites this contract. Research Tasks must not implement the old filename or attachment text as forward behavior.
+> **Forward status:** This is the delivered v1.6.x bundle contract. TechSpec v1.8.0-provisional reopens title-verbatim filenames through OD-05 and replaces the deferred attachment section with the required hybrid Local Asset Store and S3-compatible object model. SPK-BURL-H002 and SPK-BURL-I001 must settle those physical forms before final Stage 3 rewrites this contract. Research Tasks must not implement the old filename or attachment text as forward behavior.
 
 `architecture/containers.md` gives the Local Repository two distinct storage forms: the OKF directory tree, and the encrypted search index. This file is the contract for the first; `schema.sql` is the contract for the second. The frontmatter block additionally has a machine-checkable contract in `okf-frontmatter.schema.json`.
 
@@ -92,7 +92,7 @@ See [Architecture](</projects/architecture.md>) for the container split.
 
 **Every link destination burlmd writes is enclosed in `<`…`>`.** Inside those brackets, a literal `\`, `<`, `>` or `&` in the path is prefixed with a backslash; nothing else is transformed.
 
-This is forced by the composition of two rules stated elsewhere in this file, which are individually fine and jointly broken without it. Filenames are derived from titles verbatim, so `Meeting Notes` yields `Meeting Notes.md` — and CommonMark forbids a *bare* link destination from containing a space. The bare form is therefore not a link at all for the ordinary case of a multi-word title. Measured against `pulldown-cmark` 0.12.2, the version `WSPC-D003` pins:
+This is forced by the composition of two rules stated elsewhere in this file, which are individually fine and jointly broken without it. Filenames are derived from titles verbatim, so `Meeting Notes` yields `Meeting Notes.md` — and CommonMark forbids a *bare* link destination from containing a space. The bare form is therefore not a link at all for the ordinary case of a multi-word title. Measured against `pulldown-cmark` 0.12.2, the version `BURL-D003` pins:
 
 ```
 [a](/Meeting Notes.md)      -> NOT A LINK  (emitted as literal text)
@@ -110,7 +110,7 @@ This is forced by the composition of two rules stated elsewhere in this file, wh
 [a](</A\&B.md>)             -> LINK, dest "/A&B.md"          <- ...and escaping it is too
 ```
 
-What a bare destination containing a space actually produces is not a malformed link but ordinary paragraph text, which is the reason this is worth this much space. Nothing reports an error. `WSPC-D005` records no `links` edge, so backlinks and `exists` come back empty; `WSPC-D006`'s inbound-Link rewrite then finds nothing to rewrite, so a rename silently leaves the old path sitting in the prose — risk 8's partial-rewrite corruption arriving through a path the atomicity STOP cannot see, because from the rewriter's perspective there was nothing there. And `WSPC-D006`'s criterion "all three links resolve to the new concept id" passes vacuously against any fixture whose Notes happen to have single-word titles.
+What a bare destination containing a space actually produces is not a malformed link but ordinary paragraph text, which is the reason this is worth this much space. Nothing reports an error. `BURL-D005` records no `links` edge, so backlinks and `exists` come back empty; `BURL-D006`'s inbound-Link rewrite then finds nothing to rewrite, so a rename silently leaves the old path sitting in the prose — risk 8's partial-rewrite corruption arriving through a path the atomicity STOP cannot see, because from the rewriter's perspective there was nothing there. And `BURL-D006`'s criterion "all three links resolve to the new concept id" passes vacuously against any fixture whose Notes happen to have single-word titles.
 
 **`&` is in that list because CommonMark decodes HTML entity references inside a link destination**, and the angle brackets do not suppress it. A title containing an entity-shaped substring — `Café` written as `Caf&eacute;`, or `Tom &amp; Jerry` — therefore parses back to a *different* concept id than the one written, with the same consequences as the space case: an edge pointing at a concept that does not exist, `exists` false, no backlinks, and nothing for a rename to find. `Tom &amp; Jerry` and `Tom & Jerry` are two distinct titles that collapse onto one `target_id`, so a rename of either rewrites both.
 
@@ -129,7 +129,7 @@ One case this deliberately does not repair: a **foreign** bundle may contain an 
 
 OKF §3.1 reserves `index.md` (directory listing, §8) and `log.md` (update history, §9). Both are optional, and §11 constrains their structure only when they are present.
 
-burlmd **reserves both names and generates neither** (ADR-004 decision 6). A Note whose title would derive to either filename is **rejected with `PathUnavailable`**, and the user is told. It is not silently disambiguated into a different filename — that is the same rule `create_note` states in `contracts/ffi_api.rs` and that `WSPC-D006` carries as a STOP condition, and silently altering a name the user chose is worse than refusing it.
+burlmd **reserves both names and generates neither** (ADR-004 decision 6). A Note whose title would derive to either filename is **rejected with `PathUnavailable`**, and the user is told. It is not silently disambiguated into a different filename — that is the same rule `create_note` states in `contracts/ffi_api.rs` and that `BURL-D006` carries as a STOP condition, and silently altering a name the user chose is worse than refusing it.
 
 One consequence is worth stating plainly: OKF §12 allows a bundle to declare its target specification version via `okf_version` in the frontmatter of a bundle-root `index.md` — and *only* there. Declining to generate that file means a burlmd-authored bundle ships untagged, and a consumer must infer the version. This is acceptable because §11's tolerance rules oblige consumers to accept unknown keys, unknown types, broken links, and missing indices regardless of version.
 

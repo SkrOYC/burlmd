@@ -1,0 +1,6 @@
+artifact: github-app-device-flow.toml
+surface: http
+flows: [flow-auth-handshake]
+boundaries: [BND-10, BND-14]
+certainty: assumed
+assumption: "Migrated; not yet exercised by a contract test."

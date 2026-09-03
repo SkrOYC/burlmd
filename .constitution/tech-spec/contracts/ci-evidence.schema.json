@@ -91,7 +91,7 @@
         },
         "allOf": [
           {
-            "if": { "properties": { "expectedIdentity": { "type": "object", "properties": { "ticketIdentity": { "const": "CI-M003" } } } } },
+            "if": { "properties": { "expectedIdentity": { "type": "object", "properties": { "ticketIdentity": { "const": "BURL-M003" } } } } },
             "then": { "properties": { "coordinatorExecution": { "type": "null" } } },
             "else": { "properties": { "coordinatorExecution": {
               "allOf": [

@@ -1,3 +1,11 @@
+---
+job: JOB-07
+capabilities: [CAP-037, CAP-038, CAP-039, CAP-040, CAP-041, CAP-042, CAP-050]
+boundaries: [BND-13, BND-09, BND-02, BND-04, BND-01]
+view: sequence
+certainty: assumed
+assumption: "Migrated from markdown; not yet exercised by an integration test."
+---
 # Live Workspace monitoring flow
 
 **Maps to:** CAP-WS-07, CAP-WS-08, CAP-WS-09, CAP-WS-10, CAP-WS-11, CAP-WS-12, CAP-PORT-03.

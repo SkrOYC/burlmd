@@ -1,0 +1,14 @@
+schema_version: 1
+acronym: BURL
+archetype:
+  primary: System/Native
+  secondary: []
+  confidence: high
+  rationale: "Desktop lifecycle, filesystem interoperability, input latency, memory use, and installability determine whether the product can serve as a daily writing environment. Mobile targets are deferred and don't define this phase's product surface"
+surfaces: [".constitution/tech-spec/contracts/**", ".constitution/tech-spec/data-models/**", "lib/l10n/*.arb", "rust/src/api/ffi_api.rs", "rust/src/db/schema.sql"]
+diff_exclusions: ["**/pubspec.lock", "**/Cargo.lock", "**/devenv.lock", "**/*.snap", "rust/src/frb_generated.rs", "lib/src/rust/**", "lib/l10n/generated/**", "test/goldens/**"]
+default_branch: master
+concurrency:
+  worktree: "../burlmd-<branch-slug>, created from merged master"
+  branch: "<type>/epic-<epic-id>-<slug>, for example feat/epic-g-desktop-session"
+  merge: rebase

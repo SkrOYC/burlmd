@@ -1,0 +1,6 @@
+artifact: spike-result.schema.json
+surface: json
+flows: [flow-release]
+boundaries: [BND-17]
+certainty: assumed
+assumption: "Migrated; not yet exercised by a contract test."

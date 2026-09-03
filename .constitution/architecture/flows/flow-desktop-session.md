@@ -1,3 +1,11 @@
+---
+job: JOB-02
+capabilities: [CAP-023, CAP-024, CAP-025, CAP-026, CAP-027, CAP-028, CAP-029, CAP-030]
+boundaries: []
+view: state
+certainty: assumed
+assumption: "Migrated from markdown; not yet exercised by an integration test."
+---
 # Desktop session flow
 
 **Maps to:** CAP-PREF-01, CAP-SHELL-02, CAP-SHELL-03, CAP-SHELL-04, CAP-SHELL-05, CAP-SHELL-06, CAP-SHELL-07, CAP-SHELL-08.

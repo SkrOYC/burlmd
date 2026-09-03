@@ -1,0 +1,809 @@
+capabilities:
+  - id: CAP-001
+    legacy_id: CAP-EDIT-01
+    group: "Delivered baseline"
+    priority: P0
+    statement: "The focused Block shows Markdown source, and other Blocks render formatted content."
+    rationale: "Writers edit real source without losing a readable Note."
+    jobs: [JOB-01]
+    certainty: settled
+    evidence:
+      kind: repository
+      ref: lib/src/components/editor.dart
+      date: 2026-09-03
+      note: "Delivered baseline in capabilities.md; the path was checked during the structured migration."
+  - id: CAP-002
+    legacy_id: CAP-EDIT-02
+    group: "Delivered baseline"
+    priority: P0
+    statement: "Writers can author and render headings, lists, blockquotes, code blocks, and thematic breaks."
+    rationale: "Notes can express structured thought."
+    jobs: [JOB-01]
+    certainty: settled
+    evidence:
+      kind: repository
+      ref: lib/src/components/block_view.dart
+      date: 2026-09-03
+      note: "Delivered baseline in capabilities.md; the path was checked during the structured migration."
+  - id: CAP-003
+    legacy_id: CAP-EDIT-03
+    group: "Delivered baseline"
+    priority: P0
+    statement: "Writers can create, split, merge, and delete Blocks through ordinary typing."
+    rationale: "Note structure can evolve during composition."
+    jobs: [JOB-01]
+    certainty: settled
+    evidence:
+      kind: repository
+      ref: lib/src/components/block_editor.dart
+      date: 2026-09-03
+      note: "Delivered baseline in capabilities.md; the path was checked during the structured migration."
+  - id: CAP-004
+    legacy_id: CAP-EDIT-04
+    group: "Delivered baseline"
+    priority: P0
+    statement: "Writers can select and copy content across Block boundaries as faithful Markdown."
+    rationale: "Common editing actions aren't limited by Block boundaries."
+    jobs: [JOB-01]
+    certainty: settled
+    evidence:
+      kind: repository
+      ref: lib/src/components/range_text_input_client.dart
+      date: 2026-09-03
+      note: "Delivered baseline in capabilities.md; the path was checked during the structured migration."
+  - id: CAP-005
+    legacy_id: CAP-EDIT-05
+    group: "Delivered baseline"
+    priority: P0
+    statement: "Writers can apply inline emphasis through standard keyboard shortcuts."
+    rationale: "Formatting doesn't require manual delimiter entry."
+    jobs: [JOB-01]
+    certainty: settled
+    evidence:
+      kind: repository
+      ref: lib/src/components/editor.dart
+      date: 2026-09-03
+      note: "Delivered baseline in capabilities.md; the path was checked during the structured migration."
+  - id: CAP-006
+    legacy_id: CAP-LIFE-01
+    group: "Delivered baseline"
+    priority: P0
+    statement: "Writers can create a Note in a chosen Directory."
+    rationale: "A Workspace needs a direct content-creation path."
+    jobs: [JOB-03]
+    certainty: settled
+    evidence:
+      kind: repository
+      ref: rust/src/workspace/lifecycle.rs
+      date: 2026-09-03
+      note: "Delivered baseline in capabilities.md; the path was checked during the structured migration."
+  - id: CAP-007
+    legacy_id: CAP-LIFE-02
+    group: "Delivered baseline"
+    priority: P0
+    statement: "Writers can rename a Note without breaking inbound Links."
+    rationale: "Routine renames must preserve the graph."
+    jobs: [JOB-03]
+    certainty: settled
+    evidence:
+      kind: repository
+      ref: rust/src/workspace/links_rewrite.rs
+      date: 2026-09-03
+      note: "Delivered baseline in capabilities.md; the path was checked during the structured migration."
+  - id: CAP-008
+    legacy_id: CAP-LIFE-03
+    group: "Delivered baseline"
+    priority: P0
+    statement: "Writers can move a Note without breaking inbound Links."
+    rationale: "Organization can evolve after writing."
+    jobs: [JOB-03]
+    certainty: settled
+    evidence:
+      kind: repository
+      ref: rust/src/workspace/links_rewrite.rs
+      date: 2026-09-03
+      note: "Delivered baseline in capabilities.md; the path was checked during the structured migration."
+  - id: CAP-009
+    legacy_id: CAP-LIFE-04
+    group: "Delivered baseline"
+    priority: P0
+    statement: "Writers can delete a Note with recoverable local history."
+    rationale: "Deletion remains safe to use."
+    jobs: [JOB-03]
+    certainty: settled
+    evidence:
+      kind: repository
+      ref: rust/src/workspace/lifecycle.rs
+      date: 2026-09-03
+      note: "Delivered baseline in capabilities.md; the path was checked during the structured migration."
+  - id: CAP-010
+    legacy_id: CAP-LIFE-05
+    group: "Delivered baseline"
+    priority: P0
+    statement: "Writers can create nested Directories."
+    rationale: "The Workspace supports hierarchical organization."
+    jobs: [JOB-03]
+    certainty: settled
+    evidence:
+      kind: repository
+      ref: rust/src/workspace/lifecycle.rs
+      date: 2026-09-03
+      note: "Delivered baseline in capabilities.md; the path was checked during the structured migration."
+  - id: CAP-011
+    legacy_id: CAP-LIFE-06
+    group: "Delivered baseline"
+    priority: P0
+    statement: "Writers can rename and delete Directories while preserving contained Notes and inbound Links."
+    rationale: "Hierarchy management is complete."
+    jobs: [JOB-03]
+    certainty: settled
+    evidence:
+      kind: repository
+      ref: rust/src/workspace/lifecycle.rs
+      date: 2026-09-03
+      note: "Delivered baseline in capabilities.md; the path was checked during the structured migration."
+  - id: CAP-012
+    legacy_id: CAP-GRAPH-01
+    group: "Delivered baseline"
+    priority: P0
+    statement: "Writers can browse the Workspace tree and open any Note."
+    rationale: "Every Note remains reachable."
+    jobs: [JOB-03]
+    certainty: settled
+    evidence:
+      kind: repository
+      ref: lib/src/components/workspace_tree.dart
+      date: 2026-09-03
+      note: "Delivered baseline in capabilities.md; the path was checked during the structured migration."
+  - id: CAP-013
+    legacy_id: CAP-GRAPH-02
+    group: "Delivered baseline"
+    priority: P0
+    statement: "Writers can insert a Link by searching existing Note titles."
+    rationale: "Link creation doesn't require path entry."
+    jobs: [JOB-03]
+    certainty: settled
+    evidence:
+      kind: repository
+      ref: lib/src/components/link_completion.dart
+      date: 2026-09-03
+      note: "Delivered baseline in capabilities.md; the path was checked during the structured migration."
+  - id: CAP-014
+    legacy_id: CAP-GRAPH-03
+    group: "Delivered baseline"
+    priority: P0
+    statement: "Writers can follow a rendered Link to its target Note."
+    rationale: "The knowledge graph is traversable."
+    jobs: [JOB-03]
+    certainty: settled
+    evidence:
+      kind: repository
+      ref: rust/src/okf/links.rs
+      date: 2026-09-03
+      note: "Delivered baseline in capabilities.md; the path was checked during the structured migration."
+  - id: CAP-015
+    legacy_id: CAP-GRAPH-04
+    group: "Delivered baseline"
+    priority: P0
+    statement: "Writers can create a Link to a Note that doesn't exist and create that Note by following the Link."
+    rationale: "Ghost Links and create-on-follow are implemented end to end."
+    jobs: [JOB-03]
+    certainty: settled
+    evidence:
+      kind: repository
+      ref: rust/src/okf/links.rs
+      date: 2026-09-03
+      note: "Delivered baseline in capabilities.md; the path was checked during the structured migration."
+  - id: CAP-016
+    legacy_id: CAP-WS-01
+    group: "Delivered baseline"
+    priority: P0
+    statement: "Writers can start in a local Workspace without an account or network connection."
+    rationale: "Local writing has no external gate."
+    jobs: [JOB-02]
+    certainty: settled
+    evidence:
+      kind: repository
+      ref: rust/src/workspace/bootstrap.rs
+      date: 2026-09-03
+      note: "Delivered baseline in capabilities.md; the path was checked during the structured migration."
+  - id: CAP-017
+    legacy_id: CAP-WS-02
+    group: "Delivered baseline"
+    priority: P0
+    statement: "Closing an edited Note records its session in local history."
+    rationale: "Local-only Workspaces retain recoverable versions."
+    jobs: [JOB-01]
+    certainty: settled
+    evidence:
+      kind: repository
+      ref: rust/src/workspace/persist.rs
+      date: 2026-09-03
+      note: "Delivered baseline in capabilities.md; the path was checked during the structured migration."
+  - id: CAP-018
+    legacy_id: CAP-WS-03
+    group: "Delivered baseline"
+    priority: P0
+    statement: "Drafts survive abrupt process termination."
+    rationale: "A crash doesn't discard in-progress work."
+    jobs: [JOB-01]
+    certainty: settled
+    evidence:
+      kind: repository
+      ref: rust/src/draft.rs
+      date: 2026-09-03
+      note: "Delivered baseline in capabilities.md; the path was checked during the structured migration."
+  - id: CAP-019
+    legacy_id: CAP-WS-04
+    group: "Delivered baseline"
+    priority: P0
+    statement: "The local aggregate search index is encrypted with a key in Platform secure storage."
+    rationale: "Aggregated Note content receives application-managed protection."
+    jobs: [JOB-02]
+    certainty: settled
+    evidence:
+      kind: repository
+      ref: rust/src/security
+      date: 2026-09-03
+      note: "Delivered baseline in capabilities.md; the path was checked during the structured migration."
+  - id: CAP-020
+    legacy_id: CAP-WS-06
+    group: "Delivered baseline"
+    priority: P0
+    statement: "Writers can run an explicit Workspace Rescan."
+    rationale: "Manual recovery remains available when automatic observation needs repair."
+    jobs: [JOB-02]
+    certainty: settled
+    evidence:
+      kind: repository
+      ref: rust/src/index/scan.rs
+      date: 2026-09-03
+      note: "Delivered baseline in capabilities.md; the path was checked during the structured migration."
+  - id: CAP-021
+    legacy_id: CAP-FIND-01
+    group: "Delivered baseline"
+    priority: P0
+    statement: "Writers can search all Notes and open a result."
+    rationale: "Knowledge remains retrievable as the Workspace grows."
+    jobs: [JOB-03]
+    certainty: settled
+    evidence:
+      kind: repository
+      ref: rust/src/index/query.rs
+      date: 2026-09-03
+      note: "Delivered baseline in capabilities.md; the path was checked during the structured migration."
+  - id: CAP-022
+    legacy_id: CAP-PORT-01
+    group: "Delivered baseline"
+    priority: P0
+    statement: "Every Note that burlmd creates conforms to the Open Knowledge Format."
+    rationale: "Guest tools can read and traverse burlmd-created content."
+    jobs: [JOB-03]
+    certainty: settled
+    evidence:
+      kind: repository
+      ref: rust/src/okf/frontmatter.rs
+      date: 2026-09-03
+      note: "Delivered baseline in capabilities.md; the path was checked during the structured migration."
+  - id: CAP-023
+    legacy_id: CAP-PREF-01
+    group: "Desktop session"
+    priority: P0
+    statement: "When the Writer changes the theme, font scale, prose measure, focus mode, or update-notification preference, burlmd restores that device-specific choice after restart without synchronizing it through Workspace content."
+    rationale: "The delivered preferences surface isn't complete until its choices persist."
+    jobs: [JOB-02]
+    certainty: assumed
+    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+  - id: CAP-024
+    legacy_id: CAP-SHELL-02
+    group: "Desktop session"
+    priority: P0
+    statement: "Every tab-close entry point closes the affected Note through its durability and history lifecycle before burlmd removes the tab."
+    rationale: "A tab button, middle-click, keyboard command, or batch action must not bypass Note persistence."
+    jobs: [JOB-02]
+    certainty: assumed
+    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+  - id: CAP-025
+    legacy_id: CAP-SHELL-03
+    group: "Desktop session"
+    priority: P0
+    statement: "After restart, burlmd reopens the last Workspace and restores that Workspace's open Notes, active Note, navigation state, search state, and synchronization presentation when those items remain available."
+    rationale: "A desktop writing environment must preserve working context across routine restarts."
+    jobs: [JOB-02, JOB-03]
+    certainty: assumed
+    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+  - id: CAP-026
+    legacy_id: CAP-SHELL-04
+    group: "Desktop session"
+    priority: P0
+    statement: "The host operating system provides all window chrome. burlmd doesn't display or offer emulated operating-system chrome."
+    rationale: "Presentation-only prototype controls conflict with the Platform and aren't part of the product."
+    jobs: [JOB-02]
+    certainty: assumed
+    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+  - id: CAP-027
+    legacy_id: CAP-SHELL-05
+    group: "Desktop session"
+    priority: P0
+    statement: "During a batch close, burlmd processes Notes serially and stops before unprocessed tabs after the first error or degraded-durability warning."
+    rationale: "Serial handling gives every closed or retained tab an unambiguous outcome."
+    jobs: [JOB-02]
+    certainty: assumed
+    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+  - id: CAP-028
+    legacy_id: CAP-SHELL-06
+    group: "Desktop session"
+    priority: P0
+    statement: "If burlmd retires a Note session with a degraded-durability warning, it removes that closed tab and reports the warning. A single Note-to-Note replacement continues only when no batch, Workspace switch, or orderly shutdown is in progress. A batch stops with every unprocessed tab preserved, and an enclosing Workspace switch or orderly shutdown is canceled."
+    rationale: "A retired session can't remain as an open but unusable tab."
+    jobs: [JOB-02]
+    certainty: assumed
+    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+  - id: CAP-029
+    legacy_id: CAP-SHELL-07
+    group: "Desktop session"
+    priority: P0
+    statement: "If a Note fails to close, burlmd keeps the failed and unprocessed tabs open, reports the partial result, and cancels the Workspace switch or orderly shutdown."
+    rationale: "A close failure must not discard an active session or let a wider lifecycle operation continue."
+    jobs: [JOB-02]
+    certainty: assumed
+    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+  - id: CAP-030
+    legacy_id: CAP-SHELL-08
+    group: "Desktop session"
+    priority: P0
+    statement: "After the active tab closes, burlmd selects the following tab or the preceding tab when no following tab remains."
+    rationale: "Deterministic focus preserves keyboard continuity."
+    jobs: [JOB-02]
+    certainty: assumed
+    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+  - id: CAP-031
+    legacy_id: CAP-EDIT-06
+    group: "Note editing and retrieval"
+    priority: P0
+    statement: "Writers can insert images from a file, clipboard, or drag-and-drop action and view them inline in the Note."
+    rationale: "Images are part of feature-complete daily note-taking."
+    jobs: [JOB-08]
+    certainty: assumed
+    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+  - id: CAP-032
+    legacy_id: CAP-EDIT-08
+    group: "Note editing and retrieval"
+    priority: P0
+    statement: "When the Writer invokes undo or redo, burlmd reverses or reapplies the most recent content operation in the open Note without consulting version history."
+    rationale: "Undo must cover structural and cross-Block editing without conflating editing with synchronization or lifecycle history."
+    jobs: [JOB-01]
+    certainty: assumed
+    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+  - id: CAP-033
+    legacy_id: CAP-FIND-02
+    group: "Note editing and retrieval"
+    priority: P0
+    statement: "Writers can open a Note by typing part of its title without leaving the keyboard."
+    rationale: "Title-based navigation is the primary retrieval path for a known Note."
+    jobs: [JOB-03]
+    certainty: assumed
+    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+  - id: CAP-034
+    legacy_id: CAP-FIND-03
+    group: "Note editing and retrieval"
+    priority: P0
+    statement: "Within an open Note, Writers can find matches, navigate between them, replace one match, or replace all matches as one undoable operation."
+    rationale: "Workspace search doesn't replace precise editing inside a long Note."
+    jobs: [JOB-01]
+    certainty: assumed
+    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+  - id: CAP-035
+    legacy_id: CAP-GRAPH-05
+    group: "Note editing and retrieval"
+    priority: P0
+    statement: "Writers can view the Notes that link to the open Note."
+    rationale: "Backlinks make the knowledge graph navigable in both directions."
+    jobs: [JOB-03]
+    certainty: assumed
+    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+  - id: CAP-036
+    legacy_id: CAP-WS-05
+    group: "Workspace authority and recovery"
+    priority: P0
+    statement: "When the Writer opens a directory that burlmd didn't create, burlmd validates it before adoption, includes conforming Notes, and lists invalid Notes for explicit Repair or Exclude decisions."
+    rationale: "Open storage permits guest tools, but burlmd remains the authority for Workspace semantics and must not rewrite foreign content silently."
+    jobs: [JOB-02]
+    certainty: assumed
+    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+  - id: CAP-037
+    legacy_id: CAP-WS-07
+    group: "Workspace authority and recovery"
+    priority: P0
+    statement: "While a Workspace is open, burlmd detects guest file creates, edits, moves, renames, and deletes without requiring Rescan."
+    rationale: "A guest tool can write while burlmd runs, and those changes must not remain invisible."
+    jobs: [JOB-07]
+    certainty: assumed
+    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+  - id: CAP-038
+    legacy_id: CAP-WS-08
+    group: "Workspace authority and recovery"
+    priority: P0
+    statement: "When a guest changes a clean open Note with conforming content, burlmd validates and indexes the change, records it in local history, and reloads the Note."
+    rationale: "A clean Note can adopt valid guest work without an unnecessary decision."
+    jobs: [JOB-07]
+    certainty: assumed
+    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+  - id: CAP-039
+    legacy_id: CAP-WS-09
+    group: "Workspace authority and recovery"
+    priority: P0
+    statement: "When a guest changes a Note with an unsaved burlmd draft, burlmd preserves both versions and offers **Compare**, **Keep burlmd version**, or **Load external version**."
+    rationale: "Same-device concurrent writes are file-authority decisions, not Remote Suggestions."
+    jobs: [JOB-07]
+    certainty: assumed
+    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+  - id: CAP-040
+    legacy_id: CAP-WS-10
+    group: "Workspace authority and recovery"
+    priority: P0
+    statement: "Before burlmd applies a dirty-Note decision, it verifies that the guest file revision hasn't changed and requests another decision when it has."
+    rationale: "A Writer's choice must not apply to a guest revision they didn't review."
+    jobs: [JOB-07]
+    certainty: assumed
+    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+  - id: CAP-041
+    legacy_id: CAP-WS-11
+    group: "Workspace authority and recovery"
+    priority: P0
+    statement: "Before repairing invalid guest content, burlmd preserves the original bytes and previews every proposed change for the Writer."
+    rationale: "Explicit repair isn't informed when the Writer can't inspect what burlmd will rewrite."
+    jobs: [JOB-07]
+    certainty: assumed
+    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+  - id: CAP-042
+    legacy_id: CAP-WS-12
+    group: "Workspace authority and recovery"
+    priority: P0
+    statement: "For an invalid guest write detected while the Workspace is open, burlmd preserves the last known-good Note and offers **Repair**, **Compare**, or **Exclude** before authoritative state changes."
+    rationale: "Invalid live input must not silently replace readable content or block access to the preserved version."
+    jobs: [JOB-07]
+    certainty: assumed
+    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+  - id: CAP-043
+    legacy_id: CAP-WS-13
+    group: "Workspace authority and recovery"
+    priority: P0
+    statement: "Writers can explicitly open or switch to an existing Workspace. burlmd keeps one Workspace active and completes the normal Note close lifecycle before switching."
+    rationale: "Workspace access must not depend only on restart restoration or first-time adoption."
+    jobs: [JOB-02]
+    certainty: assumed
+    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+  - id: CAP-044
+    legacy_id: CAP-HIST-01
+    group: "Workspace authority and recovery"
+    priority: P0
+    statement: "Writers can list a Note's past versions and restore a selected version after confirming the operation."
+    rationale: "The delivered session history must be visible and recoverable through the application."
+    jobs: [JOB-05]
+    certainty: assumed
+    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+  - id: CAP-045
+    legacy_id: CAP-SUP-01
+    group: "Workspace authority and recovery"
+    priority: P0
+    statement: "Writers can create a Diagnostics Export that contains application and schema versions, errors, retries, and failures without Note or Asset content."
+    rationale: "User-controlled diagnostics provide supportability without automatic telemetry."
+    jobs: [JOB-05]
+    certainty: assumed
+    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+  - id: CAP-046
+    legacy_id: CAP-PORT-02
+    group: "Portability and paths"
+    priority: P0
+    statement: "Writers can Export one stable Workspace revision as either a plain bundle copy or a single Bundle Archive."
+    rationale: "Both supported forms provide a complete exit path without application-specific tooling."
+    jobs: [JOB-05]
+    certainty: assumed
+    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+  - id: CAP-047
+    legacy_id: CAP-PORT-06
+    group: "Portability and paths"
+    priority: P0
+    statement: "Before Export, burlmd flushes every open Note through its durability lifecycle without retiring the session and stops when an external-file decision remains unresolved."
+    rationale: "Export must not capture stale drafts or an undecided authority state."
+    jobs: [JOB-05]
+    certainty: assumed
+    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+  - id: CAP-048
+    legacy_id: CAP-PORT-07
+    group: "Portability and paths"
+    priority: P0
+    statement: "A plain-copy Export refuses a nonempty destination, and a Bundle Archive requires confirmation before replacement."
+    rationale: "Export must not silently combine with or overwrite unrelated content."
+    jobs: [JOB-05]
+    certainty: assumed
+    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+  - id: CAP-049
+    legacy_id: CAP-PORT-08
+    group: "Portability and paths"
+    priority: P0
+    statement: "burlmd exposes an Export destination only after the complete output is verified. A failed Export doesn't appear successful or leave partial output at the selected destination."
+    rationale: "Atomic visibility keeps the portability guarantee trustworthy."
+    jobs: [JOB-05]
+    certainty: assumed
+    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+  - id: CAP-050
+    legacy_id: CAP-PORT-03
+    group: "Portability and paths"
+    priority: P0
+    statement: "When a guest tool changes Workspace files, burlmd validates the change against the published Workspace contract and preserves the last known-good state until invalid input is repaired or excluded."
+    rationale: "Interoperability requires clear authority and recovery rules, not silent trust in every filesystem write."
+    jobs: [JOB-07]
+    certainty: assumed
+    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+  - id: CAP-051
+    legacy_id: CAP-PORT-05
+    group: "Portability and paths"
+    priority: P0
+    statement: "Every Workspace path that burlmd creates remains unambiguous when the Workspace moves among supported Linux and macOS hosts and Windows-compatible storage."
+    rationale: "A Workspace must not change identity or develop collisions because another filesystem applies different case, normalization, or reserved-name rules."
+    jobs: [JOB-03]
+    certainty: assumed
+    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+  - id: CAP-052
+    legacy_id: CAP-ASSET-01
+    group: "Assets and object storage"
+    priority: P0
+    statement: "Each Asset uses a portable Workspace reference and remains available offline while the Asset is active."
+    rationale: "A Note must not depend on the source location from which the Writer imported an image."
+    jobs: [JOB-08]
+    certainty: assumed
+    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+  - id: CAP-053
+    legacy_id: CAP-ASSET-02
+    group: "Assets and object storage"
+    priority: P0
+    statement: "burlmd deduplicates byte-identical Objects and preserves distinct bytes when two Asset references conflict."
+    rationale: "Content identity reduces unnecessary storage without turning a collision into silent data loss."
+    jobs: [JOB-08]
+    certainty: assumed
+    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+  - id: CAP-054
+    legacy_id: CAP-ASSET-03
+    group: "Assets and object storage"
+    priority: P0
+    statement: "Before a Workspace with Assets connects to a Remote, the Writer connects a user-controlled Object Store and burlmd verifies that every protected Object is available there."
+    rationale: "A published Note history must not reference binary content that another device can't retrieve."
+    jobs: [JOB-08]
+    certainty: assumed
+    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+  - id: CAP-055
+    legacy_id: CAP-ASSET-04
+    group: "Assets and object storage"
+    priority: P0
+    statement: "After a Writer joins a connected Workspace on another device, active Assets become available progressively without blocking Note editing."
+    rationale: "Text remains usable during large transfers, and active context receives priority."
+    jobs: [JOB-08]
+    certainty: assumed
+    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+  - id: CAP-056
+    legacy_id: CAP-ASSET-05
+    group: "Assets and object storage"
+    priority: P0
+    statement: "When an Object is missing or corrupt, burlmd preserves verified copies, pauses affected synchronization, and offers **Retry**, **Repair from local copy**, **Choose replacement**, or **Remove reference** when each action is valid."
+    rationale: "Missing bytes must not become silent reference deletion or corrupt content."
+    jobs: [JOB-08]
+    certainty: assumed
+    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+  - id: CAP-057
+    legacy_id: CAP-ASSET-06
+    group: "Assets and object storage"
+    priority: P0
+    statement: "Writers can rotate Object Store credentials or replace the Object Store without losing any Object reachable from a Protected State."
+    rationale: "User-controlled storage must remain replaceable without weakening history."
+    jobs: [JOB-08]
+    certainty: assumed
+    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+  - id: CAP-058
+    legacy_id: CAP-ASSET-08
+    group: "Assets and object storage"
+    priority: P0
+    statement: "In a connected Workspace, burlmd can evict inactive local Object bytes after 30 days only when the Object Store contains a verified copy and no current Note requires the bytes offline."
+    rationale: "Local cache control must remain distinct from deleting an authoritative Object."
+    jobs: [JOB-08]
+    certainty: assumed
+    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+  - id: CAP-059
+    legacy_id: CAP-ASSET-09
+    group: "Assets and object storage"
+    priority: P0
+    statement: "Before adopting a Workspace with ordinary Asset files, burlmd inventories references and reports missing, ambiguous, oversized, or nonconforming Assets without changing the Workspace."
+    rationale: "Migration must not begin from incomplete or ambiguous input."
+    jobs: [JOB-08]
+    certainty: assumed
+    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+  - id: CAP-060
+    legacy_id: CAP-ASSET-10
+    group: "Assets and object storage"
+    priority: P0
+    statement: "After preflight succeeds, burlmd migrates referenced Assets to portable identities as one recoverable lifecycle outcome and keeps unreferenced files available for review."
+    rationale: "Adoption must preserve both referenced content and guest files that burlmd doesn't own."
+    jobs: [JOB-08]
+    certainty: assumed
+    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+  - id: CAP-061
+    legacy_id: CAP-ASSET-11
+    group: "Assets and object storage"
+    priority: P0
+    statement: "Before an asset-bearing Workspace becomes fully local, burlmd uses fresh authenticated Remote state to verify that every Object reachable from a Protected State is available locally, then atomically detaches both the Object Store and Remote. An offline Remote detach retains the Object Store."
+    rationale: "Returning to local operation must not strand history in storage that the Workspace no longer uses."
+    jobs: [JOB-08]
+    certainty: assumed
+    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+  - id: CAP-062
+    legacy_id: CAP-ASSET-12
+    group: "Assets and object storage"
+    priority: P0
+    statement: "burlmd blocks Object Store detachment when protected hydration is incomplete and doesn't keep an asset-bearing Workspace Remote-connected without a verified Object Store."
+    rationale: "Remote Note history and synchronized Object availability form one user-visible integrity guarantee."
+    jobs: [JOB-08]
+    certainty: assumed
+    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+  - id: CAP-063
+    legacy_id: CAP-SYNC-01
+    group: "Private Remote synchronization"
+    priority: P0
+    statement: "Writers can connect a local Workspace to an eligible private Remote by provisioning one or selecting an empty one, then publish local history after all prerequisites pass."
+    rationale: "Connection adds off-device durability without becoming a prerequisite for local use."
+    jobs: [JOB-04]
+    certainty: assumed
+    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+  - id: CAP-064
+    legacy_id: CAP-SYNC-02
+    group: "Private Remote synchronization"
+    priority: P0
+    statement: "After connection, burlmd synchronizes changes during application use and makes a bounded final attempt during orderly shutdown."
+    rationale: "Synchronization must continue without a resident background service or a manual command."
+    jobs: [JOB-04]
+    certainty: assumed
+    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+  - id: CAP-065
+    legacy_id: CAP-SYNC-03
+    group: "Private Remote synchronization"
+    priority: P0
+    statement: "Writers can distinguish clean, active, offline, behind, failed, authentication-required, paused-decision, and pending-Suggestion synchronization states."
+    rationale: "Different recovery actions require distinct and visible states."
+    jobs: [JOB-04]
+    certainty: assumed
+    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+  - id: CAP-066
+    legacy_id: CAP-SYNC-04
+    group: "Private Remote synchronization"
+    priority: P0
+    statement: "When concurrent edits affect the same Note content, burlmd preserves base, local, and incoming content and represents each smallest safe difference as an independently resolvable Suggestion."
+    rationale: "Content reconciliation must not expose raw conflict markers, duplicate Notes, or force an all-or-nothing choice."
+    jobs: [JOB-06]
+    certainty: assumed
+    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+  - id: CAP-067
+    legacy_id: CAP-SYNC-05
+    group: "Private Remote synchronization"
+    priority: P0
+    statement: "When authorization expires or is revoked, burlmd pauses Remote synchronization, keeps local capabilities available, and guides the Writer through reauthorization."
+    rationale: "Credential state is a synchronization concern, not a writing gate."
+    jobs: [JOB-04]
+    certainty: assumed
+    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+  - id: CAP-068
+    legacy_id: CAP-SYNC-06
+    group: "Private Remote synchronization"
+    priority: P0
+    statement: "Writers can sign out without removing the Remote, detach through an explicit operation that preserves local history and protected Assets, and reconnect later without loss."
+    rationale: "Authentication and Workspace attachment have different consequences and must remain separate."
+    jobs: [JOB-04]
+    certainty: assumed
+    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+  - id: CAP-069
+    legacy_id: CAP-SYNC-07
+    group: "Private Remote synchronization"
+    priority: P0
+    statement: "On another device, Writers can authorize the same Provider, select the connected private Remote, and create a complete local Workspace from it."
+    rationale: "Multi-device access is the primary value of Remote synchronization."
+    jobs: [JOB-04]
+    certainty: assumed
+    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+  - id: CAP-070
+    legacy_id: CAP-SYNC-08
+    group: "Private Remote synchronization"
+    priority: P0
+    statement: "During connection, Writers can consolidate Notes from another local Workspace by migrating nonconflicting Notes and deciding each identity collision without changing the source Workspace."
+    rationale: "Consolidation supports established local archives without merging unrelated histories."
+    jobs: [JOB-04]
+    certainty: assumed
+    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+  - id: CAP-071
+    legacy_id: CAP-SYNC-10
+    group: "Private Remote synchronization"
+    priority: P0
+    statement: "When synchronization produces a lifecycle or path-identity conflict, burlmd pauses Workspace synchronization and requires a Lifecycle Decision while keeping local editing and history available."
+    rationale: "Structural outcomes can't be represented safely as inline content Suggestions."
+    jobs: [JOB-06]
+    certainty: assumed
+    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+  - id: CAP-072
+    legacy_id: CAP-SYNC-11
+    group: "Private Remote synchronization"
+    priority: P0
+    statement: "When synchronization produces conflicting Asset bytes, references, or availability, burlmd pauses Workspace synchronization and requires an Asset Decision while keeping local editing and history available."
+    rationale: "Binary outcomes require explicit choices and verified Object state."
+    jobs: [JOB-06]
+    certainty: assumed
+    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+  - id: CAP-073
+    legacy_id: CAP-SYNC-12
+    group: "Private Remote synchronization"
+    priority: P0
+    statement: "If a connected Remote becomes public or loses required access, burlmd pauses synchronization and preserves the complete local Workspace until the Writer restores a valid private connection or detaches it."
+    rationale: "This phase promises private repositories and must fail closed when that privacy boundary changes."
+    jobs: [JOB-04]
+    certainty: assumed
+    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+  - id: CAP-074
+    legacy_id: CAP-SYNC-13
+    group: "Private Remote synchronization"
+    priority: P0
+    statement: "When one side deletes a Note and the other edits it, burlmd restores the edited Note as a Suggestion and requires confirmation before deletion wins."
+    rationale: "Delete-versus-edit contains recoverable content and must not collapse into a structural deletion choice."
+    jobs: [JOB-06]
+    certainty: assumed
+    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+  - id: CAP-075
+    legacy_id: CAP-REL-01
+    group: "Releases and upgrades"
+    priority: P0
+    statement: "Writers can install an Apple Silicon macOS or x86-64 Linux `0.x` release from published artifacts without building burlmd from source."
+    rationale: "A feature-complete desktop application isn't releasable if installation depends on the development environment."
+    jobs: [JOB-09]
+    certainty: assumed
+    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+  - id: CAP-076
+    legacy_id: CAP-REL-02
+    group: "Releases and upgrades"
+    priority: P0
+    statement: "Every supported release system passes the same release-blocking matrix for local editing, persistence, Export, synchronization, secure storage, recovery, and update notification."
+    rationale: "An artifact isn't supported merely because it launches."
+    jobs: [JOB-09]
+    certainty: assumed
+    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+  - id: CAP-077
+    legacy_id: CAP-REL-03
+    group: "Releases and upgrades"
+    priority: P0
+    statement: "When a compatible higher `0.x` release is available, burlmd notifies the Writer and opens the release information without replacing installed binaries."
+    rationale: "Update awareness is useful before the project owns a safe self-update mechanism."
+    jobs: [JOB-09]
+    certainty: assumed
+    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+  - id: CAP-078
+    legacy_id: CAP-REL-04
+    group: "Releases and upgrades"
+    priority: P0
+    statement: "After an application-state schema change, burlmd backs up affected state, migrates it atomically, and restores the earlier state when migration fails."
+    rationale: "Prerelease iteration must not make a Workspace unusable after an upgrade."
+    jobs: [JOB-09]
+    certainty: assumed
+    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+  - id: CAP-079
+    legacy_id: CAP-REL-05
+    group: "Releases and upgrades"
+    priority: P0
+    statement: "Writers can independently verify the integrity and provenance of every published release artifact."
+    rationale: "Installability without verifiable origin or bytes leaves the release trust boundary incomplete."
+    jobs: [JOB-09]
+    certainty: assumed
+    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+  - id: CAP-080
+    legacy_id: CAP-REL-06
+    group: "Releases and upgrades"
+    priority: P0
+    statement: "Each release supports the two most recent macOS major versions available on its release date and the x86-64 Linux runtime baseline accepted from OD-08 evidence."
+    rationale: "A release needs an explicit, evidence-backed compatibility window before its artifacts can be called supported."
+    jobs: [JOB-09]
+    certainty: assumed
+    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."

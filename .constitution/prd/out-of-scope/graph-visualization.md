@@ -1,3 +1,7 @@
+---
+decision: deferred
+date: "2026-09-03"
+---
 # Graph visualization
 
 **Context:** CAP-GRAPH-06 proposed a graphical map of Note relationships.

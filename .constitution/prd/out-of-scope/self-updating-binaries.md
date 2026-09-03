@@ -1,3 +1,7 @@
+---
+decision: deferred
+date: "2026-09-03"
+---
 # Self-updating binaries
 
 **Context:** burlmd could download and replace its installed executable after detecting a release.

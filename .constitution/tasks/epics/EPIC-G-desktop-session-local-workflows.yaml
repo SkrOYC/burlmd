@@ -1,0 +1,255 @@
+id: G
+name: desktop session local workflows
+kind: product
+capabilities: [CAP-023, CAP-024, CAP-025, CAP-026, CAP-027, CAP-028, CAP-029, CAP-030, CAP-032, CAP-033, CAP-034, CAP-035, CAP-043, CAP-044]
+depends_on: [H, M]
+scope:
+  paths: [lib/src/design/workspace_shell.dart, lib/src/design/burl_theme.dart, lib/src/providers/burl_preferences_provider.dart, lib/src/components/visual_parity_fixture.dart, "test/goldens/**", "lib/l10n/**", "test/**", "integration_test/**", scripts/visual-regression.sh, "lib/src/design/**", lib/src/screens/workspace.dart, "test/providers/**", "test/screens/**", lib/src/providers/workspace_provider.dart, lib/src/providers/search_provider.dart, "rust/src/db/**", "rust/src/workspace/**", rust/src/api/ffi_api.rs, rust/src/frb_generated.rs, "lib/src/rust/**", lib/src/providers/note_providers.dart, scripts/smoke-shot.sh, rust/src/workspace/persist.rs, rust/src/workspace/bootstrap.rs, "lib/src/components/**", "test/components/**", rust/src/draft.rs, "rust/src/markdown/**", lib/src/components/editor.dart, rust/src/git/operations.rs]
+  tech_spec_patchable: []
+estimated_diff_lines: 10500
+tickets:
+  - id: BURL-G001
+    title: Remove emulated Platform chrome
+    type: Chore
+    effort: 3
+    depends_on: []
+    category: Correctness
+    scope:
+      in: [lib/src/design/workspace_shell.dart, lib/src/design/burl_theme.dart, lib/src/providers/burl_preferences_provider.dart, lib/src/components/visual_parity_fixture.dart, "test/goldens/**", "lib/l10n/**", "test/**", "integration_test/**", scripts/visual-regression.sh]
+      out: ["linux/**"]
+    verification:
+      command: "flutter test && dart analyze && ./scripts/visual-regression.sh shell-g001 --baseline test/goldens/shell-g001-linux.png --max-different-pixels 0 && git diff --check && ! rg -n '\\[DEBUG-' lib rust test scripts"
+      expected: exit 0 and a smoke capture showing only host-owned window chrome
+    stop_conditions: ["STOP if any production or executable test surface still selects, renders, or labels emulated macOS/Linux chrome; remove the obsolete contract instead of hiding it.", "STOP before claiming managed reference evidence if the viewport isn't verified at 1920x1080 at 60 Hz, Linux capture touches the Writer's desktop, or macOS 15 contributes visual evidence."]
+    description: "Remove the Platform-chrome preference, state, widgets, localized copy, fixtures, tests, and executable visual assumptions introduced for prototype presentation. Preserve design provenance only in non-executable documentation"
+    acceptance:
+      mode: visual_regression
+      evidence: "The rebuilt `test/goldens/` shell baselines contain no simulated traffic lights, Linux title controls, Platform selector, or reserved fake-titlebar spacing. The M0 command allows zero different Linux pixels. After both `BURL-M003` pull requests merge, `BURL-G011` obtains required Linux exact platform-regression evidence from the owned headless environment and authoritative product visual evidence from macOS 26. macOS 15 remains functional-only. Production and executable tests contain no preference or code path that recreates emulated chrome. CAP-SHELL-04 passes with host-owned chrome."
+    flows: [flow-desktop-session]
+    certainty: assumed
+    status: planned
+  - id: BURL-G002
+    title: Persist device-global preferences
+    type: Feature
+    effort: 5
+    depends_on: []
+    category: Feature-Evolution
+    scope:
+      in: [lib/src/providers/burl_preferences_provider.dart, "lib/src/design/**", lib/src/screens/workspace.dart, "test/providers/**", "test/screens/**"]
+    verification:
+      command: "flutter test && dart analyze && ./scripts/smoke-shot.sh pref-g002 && git diff --check && ! rg -n '\\[DEBUG-' lib rust test scripts"
+      expected: exit 0 with restart tests passing
+    stop_conditions: ["STOP if persistence requires storing appearance or update choices in the Workspace; keep them device-global."]
+    description: "Persist theme, font scale, prose measure, focus mode, and update-notification choices through the Platform application-state seam defined by device-preferences.schema.json, with atomic replacement for supported state. Quarantine and preserve corrupt or unsupported later-version bytes without migration or overwrite while using in-memory defaults"
+    acceptance:
+      mode: gherkin
+      evidence: |
+        ```gherkin
+        Given each supported device preference has been changed
+        When the application process restarts
+        Then every preference is restored on that device
+        And no Workspace file or Git change contains the preference
+        ```
+        
+        BURL-G002 implements round-trip restore tests; corrupt- and unsupported-later-version fallback tests that prove original bytes remain unchanged; and an exclusion check that no Workspace or Git path contains these keys. It doesn't write defaults over preserved bytes. A later supported current file is permitted only through the explicitly safe isolated path owned by BURL-M005.
+    flows: [flow-desktop-session]
+    certainty: assumed
+    status: planned
+  - id: BURL-G003
+    title: Persist versioned per-Workspace session snapshots
+    type: Feature
+    effort: 5
+    depends_on: []
+    category: Correctness
+    scope:
+      in: [lib/src/providers/workspace_provider.dart, lib/src/providers/search_provider.dart, "rust/src/db/**", "rust/src/workspace/**", rust/src/api/ffi_api.rs, rust/src/frb_generated.rs, "lib/src/rust/**", "test/providers/**"]
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh state-g003 && git diff --check"
+      expected: "exit 0 with strict schema, semantic validation, quarantine, fallback, and provider restore tests passing"
+    stop_conditions: [STOP if a snapshot can become authoritative Note/session state or contain Note content or secrets., "STOP if Core restores a snapshot with empty, invalid, or duplicate identities; a mismatched Workspace ID; or an active Note outside the open-Note list."]
+    description: "Implement the Core-owned workspace-session-snapshot.schema.json contract and its active-Workspace FFI for versioned, atomic snapshots of open Note identities, active Note, tree expansion, last search state, and synchronization presentation. Enforce JSON Schema and Core semantic validation before restore. Quarantine and preserve corrupt, malformed current-version, or unsupported later-version bytes without migration or overwrite while using an empty session for the active Workspace"
+    acceptance:
+      mode: contract_test
+      evidence: "BURL-G003 implements round-trip, Workspace-partition, atomic-replace, fallback, and content, credential, and device-preference exclusion tests. Valid fixtures cover null and present active Notes. Adversarial fixtures cover an empty Workspace ID; empty, invalid, or duplicate Note and Directory identities; a Workspace ID that differs from the active Workspace; and an active Note absent from `open_note_ids`. Core rejects every malformed fixture before restore, quarantines and preserves its bytes, and returns an empty writable default for the active Workspace. Corrupt and unsupported-later-version fixtures also preserve the original bytes. A later supported current snapshot is permitted only through the explicitly safe isolated path owned by BURL-M005."
+    flows: [flow-desktop-session, flow-workspace-navigation]
+    certainty: assumed
+    status: planned
+  - id: BURL-G004
+    title: Replace visual-only tabs with authoritative Note sessions
+    type: Feature
+    effort: 8
+    depends_on: []
+    category: Correctness
+    scope:
+      in: [lib/src/design/workspace_shell.dart, lib/src/providers/note_providers.dart, lib/src/providers/workspace_provider.dart, lib/src/screens/workspace.dart, scripts/smoke-shot.sh, "test/**"]
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && BURLMD_SMOKE_TABS_G004=1 ./scripts/smoke-shot.sh tabs-g004 && git diff --check"
+      expected: exit 0 and a smoke capture with multiple Core-backed tabs
+    stop_conditions: ["STOP if Flutter invents or restores a writable Note session that Core doesn't own."]
+    description: "Bind every tab to a Core Note session, restore available tabs and the active Note, skip missing Notes with one report, and apply the following-then-preceding selection rule after an active close"
+    acceptance:
+      mode: gherkin
+      evidence: |
+        ```gherkin
+        Given the `BURLMD_SMOKE_TABS_G004` scenario stages several Core-backed open Notes and one missing Note
+        When the Workspace is restored and the active tab later closes
+        Then available Notes reopen as Core sessions
+        And the missing Note is reported without blocking startup
+        And focus moves to the following tab or the preceding tab at the end
+        ```
+    flows: [flow-desktop-session]
+    certainty: assumed
+    status: planned
+  - id: BURL-G005
+    title: Serialize every Note-close and batch-close lifecycle
+    type: Feature
+    effort: 8
+    depends_on: []
+    category: Correctness
+    scope:
+      in: [lib/src/design/workspace_shell.dart, lib/src/providers/note_providers.dart, lib/src/providers/workspace_provider.dart, rust/src/workspace/persist.rs, "test/**", "integration_test/**"]
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && ./scripts/smoke-shot.sh close-g005 && git diff --check"
+      expected: exit 0 with all close-entry and partial-batch scenarios passing
+    stop_conditions: ["STOP if any tab button, middle click, shortcut, Close Others, Close All, Workspace switch, or orderly shutdown removes a tab before Core returns its terminal close outcome."]
+    description: "Route all close entry points through one serialized coordinator. Continue after clean success. For a retired-session warning, remove the warned tab and continue only a single Note-to-Note replacement with no batch or wider operation. During batch close, stop with every unprocessed tab preserved. Cancel an enclosing Workspace switch or orderly shutdown after a warning or error"
+    acceptance:
+      mode: invariant
+      evidence: "For every close entry point and injected result sequence, processed Notes preserve input order and no two closes overlap. Clean sessions disappear. A warned retired session disappears and a standalone Note-to-Note replacement continues to its target. The same warning stops a batch, preserves every unprocessed tab, and cancels a Workspace switch or orderly shutdown. Failed and unprocessed sessions remain writable. A wider switch or shutdown proceeds only after an entirely clean batch."
+    flows: [flow-desktop-session]
+    certainty: assumed
+    status: planned
+  - id: BURL-G006
+    title: Restore and explicitly switch the active Workspace
+    type: Feature
+    effort: 8
+    depends_on: []
+    category: Feature-Evolution
+    scope:
+      in: [lib/src/screens/workspace.dart, lib/src/providers/workspace_provider.dart, rust/src/workspace/bootstrap.rs, "test/screens/**", "integration_test/**"]
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && ./scripts/smoke-shot.sh open-g006 && git diff --check"
+      expected: "exit 0 with startup, picker, switch, and cancellation flows passing"
+    stop_conditions: [STOP if switching bypasses BURL-G005 or permits two active Workspaces.]
+    description: "Reopen the last Workspace at startup, expose Open Workspace, run adoption preflight, restore its session snapshot, and keep the previous Workspace active when close or adoption fails"
+    acceptance:
+      mode: gherkin
+      evidence: |
+        ```gherkin
+        Given one Workspace is active with open Notes
+        When the Writer selects another valid Workspace
+        Then the first Workspace completes its serialized close lifecycle
+        And exactly one Workspace becomes active
+        And its own saved session state is restored
+        ```
+    flows: [flow-desktop-session, flow-workspace-bootstrap]
+    certainty: assumed
+    status: planned
+  - id: BURL-G007
+    title: Surface keyboard title jump and backlinks
+    type: Feature
+    effort: 5
+    depends_on: []
+    category: Feature-Evolution
+    scope:
+      in: ["lib/src/components/**", lib/src/providers/search_provider.dart, lib/src/providers/note_providers.dart, "test/components/**"]
+    verification:
+      command: "flutter test && dart analyze && ./scripts/smoke-shot.sh nav-g007 && git diff --check"
+      expected: exit 0 with keyboard and backlink navigation tests passing
+    stop_conditions: ["STOP if the UI reimplements title matching, Link resolution, or backlink queries."]
+    description: "Add a keyboard title-jump surface over the existing Core path and a backlinks surface for the open Note, preserving authoritative tab/session selection"
+    acceptance:
+      mode: gherkin
+      evidence: |
+        ```gherkin
+        Given indexed Notes and inbound Links
+        When the Writer searches a title or activates a backlink using only the keyboard
+        Then Core supplies the candidates and target
+        And the selected Note opens in an authoritative tab
+        ```
+    flows: [flow-link-graph, flow-search]
+    certainty: assumed
+    status: planned
+  - id: BURL-G008
+    title: Implement Core-owned undo and redo
+    type: Feature
+    effort: 8
+    depends_on: []
+    category: Correctness
+    scope:
+      in: [rust/src/draft.rs, "rust/src/markdown/**", rust/src/api/ffi_api.rs, lib/src/providers/note_providers.dart, lib/src/components/editor.dart, "test/components/**"]
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh edit-g008 && git diff --check"
+      expected: exit 0 with operation-stack and keyboard tests passing
+    stop_conditions: ["STOP if the final AST contract after BURL-H001 changes operation identity or inverse requirements; reconcile this ticket before implementation."]
+    description: "Implement the bounded Core command stack across splice, structural, range, and replace-all edits, with redo invalidation, tier-1 durability, and platform keyboard actions"
+    acceptance:
+      mode: invariant
+      evidence: "For every covered content operation, applying undo restores byte-identical prior source and authoritative caret/tree state; redo restores the forward state; a divergent edit clears redo; close/reload clears the stack; lifecycle and sync changes never enter it."
+    flows: [flow-edit-note]
+    certainty: assumed
+    status: planned
+  - id: BURL-G009
+    title: Implement in-Note find and atomic replace
+    type: Feature
+    effort: 8
+    depends_on: []
+    category: Feature-Evolution
+    scope:
+      in: ["rust/src/markdown/**", rust/src/api/ffi_api.rs, lib/src/components/editor.dart, lib/src/providers/note_providers.dart, "test/components/**"]
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh find-g009 && git diff --check"
+      expected: exit 0 with match navigation and one-operation replace-all tests passing
+    stop_conditions: [STOP if Flutter computes source ranges or replace-all dispatches a sequence of independently visible mutations.]
+    description: "Find matches through the canonical Note model, navigate them in the editor, replace one, and replace all as one durable undoable operation"
+    acceptance:
+      mode: contract_test
+      evidence: "Fixtures cover inline syntax, nested Blocks, Unicode, empty/no-match cases, single replacement, and replace-all. Core returns every range and one authoritative post-replace state; replace-all creates exactly one undo entry and no intermediate render state."
+    flows: [flow-edit-note]
+    certainty: assumed
+    status: planned
+  - id: BURL-G010
+    title: Surface and restore local Note history
+    type: Feature
+    effort: 5
+    depends_on: []
+    category: Feature-Evolution
+    scope:
+      in: [rust/src/git/operations.rs, rust/src/api/ffi_api.rs, "lib/src/components/**", lib/src/providers/note_providers.dart, "test/**"]
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh hist-g010 && git diff --check"
+      expected: "exit 0 with list, confirm, restore, and asset-rehydration handoff tests passing"
+    stop_conditions: [STOP if restore silently discards an unwritten draft or depends on a full diff viewer.]
+    description: "List session-granularity Note versions, show timestamps/messages, confirm destructive restore, create a new current history state, and request referenced Object hydration without rewriting earlier history"
+    acceptance:
+      mode: gherkin
+      evidence: |
+        ```gherkin
+        Given a Note has local session versions and an unwritten draft
+        When the Writer selects an earlier version
+        Then burlmd requires confirmation
+        And after confirmation restores it as the current source with recoverable history
+        And requests any referenced Object that is not locally hydrated
+        ```
+    flows: [flow-history-diagnostics]
+    certainty: assumed
+    status: planned
+  - id: BURL-G011
+    title: Integrate and harden the feature-complete local shell
+    type: Feature
+    effort: 8
+    depends_on: []
+    category: Correctness
+    scope:
+      in: ["lib/src/design/**", lib/src/screens/workspace.dart, "lib/src/components/**", "lib/l10n/**", "test/goldens/**", "test/**", "integration_test/**", scripts/visual-regression.sh]
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && ./scripts/visual-regression.sh shell-g011 --baseline test/goldens/shell-g011-linux.png --max-different-pixels 0 && git diff --check && ! rg -n '\\[DEBUG-' lib rust test scripts"
+      expected: exit 0 with the local feature matrix and reviewed visual evidence passing
+    stop_conditions: ["STOP if any pointer action lacks keyboard reachability, Writer-facing string bypasses localization, or state shown by the shell isn't authoritative.", "STOP if the final aggregate is rejected, Linux capture can observe the Writer's desktop, macOS 26 geometry isn't verified, or macOS 15 creates or updates a visual baseline."]
+    description: "Integrate the completed local workflows into the delivered design system, finish keyboard/focus/Semantics/localization coverage, and rebuild visual evidence after Platform-chrome removal"
+    acceptance:
+      mode: visual_regression
+      evidence: "The pipeline-owned Linux environment compares its exact capture with the named Linux baseline at a zero-different-pixel threshold without reading the Writer's desktop. This required platform-regression gate isn't authoritative product visual evidence. The actual hosted macOS 26 GUI verifies its logical viewport and compares with the sole authoritative product visual baseline. macOS 15 runs the same functional matrix without performance or visual evidence. Authenticated role bundles and the accepted aggregate bind every result to the trust anchor, workflow signer, separate tested source, ticket base, build, corpus, run, image, and artifact identity. Together with integration logs, the gates cover preferences, restored tabs, every close path, Workspace switch, title jump, backlinks, undo/redo, find/replace, and history restore. The shell preserves PR #11 design parity without fake Platform chrome, unreachable actions, hardcoded Writer-facing copy, or nonauthoritative placeholder state."
+    flows: [flow-desktop-session, flow-workspace-navigation]
+    certainty: assumed
+    status: planned

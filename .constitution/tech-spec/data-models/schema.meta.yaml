@@ -1,0 +1,6 @@
+artifact: schema.sql
+surface: data-model
+flows: [flow-search, flow-link-graph, flow-note-lifecycle, flow-workspace-bootstrap]
+boundaries: [BND-07]
+certainty: assumed
+assumption: "Migrated; not yet exercised by a contract test."

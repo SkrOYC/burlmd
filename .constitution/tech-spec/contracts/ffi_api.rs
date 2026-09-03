@@ -9,7 +9,7 @@
 // reconciliation-decision, and release surfaces remain absent.
 // Research-only Tasks must use contracts/provisional-spikes.toml and must not
 // implement or extend this FFI. The named Epic G exceptions may implement
-// their specified contracts. FLAKE-M002 and CI-M003 may bootstrap validation
+// their specified contracts. BURL-M015 and BURL-M003 may bootstrap validation
 // but may not change this interface. Each remaining production contract waits
 // only for its own evidence, final Stage 3 reconciliation, and Stage 4
 // adaptation.
@@ -248,7 +248,7 @@ pub struct NoteMetadata {
 /// before this returns, and `note_write_status` reports on it immediately.
 /// Stated because the alternative reading — create the file, return a state,
 /// register nothing — leaves the first `update_block` substituting into a
-/// buffer that was never established. `SHEL-E005` has a new Note "open for
+/// buffer that was never established. `BURL-E005` has a new Note "open for
 /// editing" the moment it is created.
 ///
 /// The filename is derived from `title` by the rule in
@@ -319,13 +319,13 @@ pub async fn delete_note(note_id: String) -> Result<LifecycleResult, AppError> {
 /// **Draft rows of affected Notes are rewritten too**, not merely re-keyed.
 /// A source Note with an unflushed draft holds the old Link text, and
 /// `open_note` parses the draft in preference to disk — so leaving it produces
-/// the same reversion one session later. `WSPC-D006` owns this.
+/// the same reversion one session later. `BURL-D006` owns this.
 ///
 /// A Note that links to *itself* is both cases at once and gets both
 /// substitutions.
 ///
 /// Refusing while any affected Note is open would also be a defensible answer.
-/// It is not the one taken, because `SHEL-E005` makes renaming an open Note a
+/// It is not the one taken, because `BURL-E005` makes renaming an open Note a
 /// criterion-backed workflow, `prd/capabilities.md` treats renaming as routine
 /// during writing, and the set of *source* Notes is not something the user can
 /// see in order to close them first.
@@ -526,7 +526,7 @@ pub enum InlineElement {
         /// this flag.** Without that rule, following a ghost Link to a concept
         /// created moments ago runs create-on-follow into `create_note` and
         /// gets `PathUnavailable` for a Link that resolves perfectly well --
-        /// and `SHEL-E005`'s STOP then forbids working around it client-side,
+        /// and `BURL-E005`'s STOP then forbids working around it client-side,
         /// so the user is simply told no. The mirror case returns `NotFound`
         /// instead of the create offer. What the flag is *for* is rendering:
         /// deciding whether to draw a Link distinctly is a per-frame question
@@ -534,9 +534,9 @@ pub enum InlineElement {
         /// trip per Link.
         ///
         /// Resolving this requires the index, not the parser: it is whether
-        /// `target_id` matches a `notes` row. `WSPC-D003` declares the field
+        /// `target_id` matches a `notes` row. `BURL-D003` declares the field
         /// and cannot fill it — it is upstream of the indexer — so
-        /// `WSPC-D005` populates it and carries the criterion.
+        /// `BURL-D005` populates it and carries the criterion.
         exists: bool,
         content: Vec<InlineElement>,
     },
@@ -982,7 +982,7 @@ pub fn merge_block_with_previous(
 /// list's `1. `, a code fence's gutter or line numbers. The rendered string is
 /// the Core's definition and the UI must map its own selection onto it rather
 /// than the reverse, because the alternative is the Core knowing the widget's
-/// presentation, which rule 3 exists to prevent. `EDIT-F003` owns proving the
+/// presentation, which rule 3 exists to prevent. `BURL-F003` owns proving the
 /// two agree, and its criteria must use a fixture containing a code block and
 /// a list, not three paragraphs.
 ///
@@ -1011,7 +1011,7 @@ pub fn merge_block_with_previous(
 /// yields it, and `delete_range`/`replace_range` therefore destroy it. This is
 /// the intended behaviour and the difference from the single-Block mutators,
 /// which step over those regions rather than into them: a range is an explicit
-/// span the user dragged, not a Block the Core picked. `EDIT-F004` builds the
+/// span the user dragged, not a Block the Core picked. `BURL-F004` builds the
 /// selection UI knowing it, and should decide there whether a selection
 /// crossing invisible content warrants a confirmation.
 ///
@@ -1020,7 +1020,7 @@ pub fn merge_block_with_previous(
 /// rejected with `ParseError` and leave the Note unchanged; Core never swaps
 /// endpoints because atomic-run boundary bias is endpoint-specific.
 ///
-/// `EDIT-F001` settled the former drag-outward question on Flutter 3.44.3:
+/// `BURL-F001` settled the former drag-outward question on Flutter 3.44.3:
 /// a focused `EditableText` does not participate in its enclosing
 /// `SelectionArea`. A gesture in the field is field-local; a region drag that
 /// crosses it selects around the field and omits its content. The mandatory
@@ -1205,7 +1205,7 @@ pub fn note_write_status(note_id: String) -> NoteWriteStatus {
 /// This is the other half of `RevisionMismatch`, and without it that error has
 /// no exit. Every document routes the recovery the same way -- risk 6's
 /// residual-risk paragraph, `NoteWriteStatus.last_error` above, and
-/// `SHEL-E007`'s criterion all say the user is offered a **reload** -- while
+/// `BURL-E007`'s criterion all say the user is offered a **reload** -- while
 /// earlier revisions of this contract gave the UI nothing to call. The one
 /// candidate, `open_note`, is specifically wrong for it: it restores an
 /// unflushed draft in preference to disk, and tier 2 deliberately leaves the
@@ -1269,7 +1269,7 @@ pub async fn pending_drafts() -> Result<Vec<NoteMetadata>, AppError> {
 }
 
 // ---------------------------------------------------------------------------
-// Workspace session snapshots (STATE-G003)
+// Workspace session snapshots (BURL-G003)
 // ---------------------------------------------------------------------------
 
 /// Defines the saved presentation-only synchronization label.
@@ -1367,7 +1367,7 @@ pub async fn search_notes(query: String, limit: u32) -> Result<Vec<NoteMetadata>
 ///
 /// **Prefix, not substring, and this is a deliberate Stage 3 narrowing of the
 /// capability.** CAP-FIND-02 says a user jumps to a Note "by typing part of
-/// its title"; this contract and `WSPC-D009`'s implementation both match a
+/// its title"; this contract and `BURL-D009`'s implementation both match a
 /// leading prefix only, so typing `lait` does not reach `Café au lait`.
 /// Prefix is the behaviour of the palettes this affordance is modelled on, and
 /// it is the form that *can* be made index-backed later: `title LIKE 'q%'` is
@@ -1408,7 +1408,7 @@ pub struct LinkCompletion {
     /// cannot produce a non-conformant one -- which is only true if the Core
     /// applies the wrapping, since the ordinary multi-word title produces a
     /// path with a space in it and the unwrapped form of that is not a link.
-    /// `EDIT-F006`'s STOP forbids the UI from repairing it afterwards.
+    /// `BURL-F006`'s STOP forbids the UI from repairing it afterwards.
     /// The link *text* is `title` with every whitespace run folded to a
     /// single space, so it is not always byte-identical to `title`: a title
     /// carrying an interior line terminator -- legal YAML, so reachable from a

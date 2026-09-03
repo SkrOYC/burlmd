@@ -1,0 +1,76 @@
+jobs:
+  - id: JOB-01
+    legacy_id: "Write directly / Read finished"
+    actor: Writer
+    statement: "Compose in real Markdown and read the same Note as a finished document, without an editor that hides or rewrites the syntax and without toggling into a separate preview mode"
+    priority: P0
+    certainty: settled
+    evidence:
+      kind: repository
+      ref: lib/src/components/editor.dart
+      date: 2026-09-03
+      note: "Raw-on-focus editing with formatted sibling Blocks is delivered; see also rust/src/markdown/ and ADR-0006."
+  - id: JOB-02
+    legacy_id: Start immediately
+    actor: Writer
+    statement: "Open the application and write the first Note with no account, no network connection, and no setup step, with the previous session's Workspace context back in place"
+    priority: P0
+    certainty: settled
+    evidence:
+      kind: repository
+      ref: rust/src/workspace/bootstrap.rs
+      date: 2026-09-03
+      note: "Local Workspace bootstrap without an account is delivered; session restoration across restarts is still planned in Epic G."
+  - id: JOB-03
+    legacy_id: Organize and connect
+    actor: Writer
+    statement: "Structure knowledge hierarchically in Directories, link related ideas laterally into a knowledge graph, and get back to any Note quickly"
+    priority: P0
+    certainty: settled
+    evidence:
+      kind: repository
+      ref: rust/src/index/query.rs
+      date: 2026-09-03
+      note: "Workspace tree, Link insertion and traversal, and full-text search are delivered; see also rust/src/okf/links.rs."
+  - id: JOB-04
+    legacy_id: Sync seamlessly
+    actor: Writer
+    statement: "Keep Notes up to date across devices automatically through a private Remote, tolerating long offline periods and never gating local writing on a credential"
+    priority: P0
+    certainty: assumed
+    assumption: "The vision names this job, but no delivered capability performs Remote synchronization; the whole synchronization capability group is still planned work in Epics K and L."
+  - id: JOB-05
+    legacy_id: Retain ownership
+    actor: Writer
+    statement: "Keep every Note as a portable file that outlives the application, recover an earlier version of a Note, and produce a diagnostics report without any content leaving the device"
+    priority: P0
+    certainty: assumed
+    assumption: "Open Knowledge Format conformance is delivered, but Export, version restore, and Diagnostics Export are planned work in Epics G and J, so the job is not yet finishable end to end."
+  - id: JOB-06
+    legacy_id: Resolve smoothly
+    actor: Writer
+    statement: "Reconcile concurrent offline edits without hand-editing conflict markers, duplicated Notes, or an all-or-nothing choice"
+    priority: P0
+    certainty: assumed
+    assumption: "No reconciliation capability is delivered; the Suggestion, Lifecycle Decision, and Asset Decision model exists only as specification until Epic L is built."
+  - id: JOB-07
+    legacy_id: Stay machine-readable
+    actor: Agent
+    statement: "Read, traverse, and amend the Workspace on disk against a published specification while burlmd is running, and have burlmd validate and reconcile those changes without silent data loss"
+    priority: P0
+    certainty: assumed
+    assumption: "burlmd writes conforming Open Knowledge Format bundles today, but live guest-write observation, validation, and the Repair or Exclude decisions are planned work in Epic H."
+  - id: JOB-08
+    legacy_id: Keep visual context
+    actor: Writer
+    statement: "Include images in Notes without putting large binary payloads in Note history and without losing offline access to the assets still in use"
+    priority: P0
+    certainty: assumed
+    assumption: "Image import and the hybrid Local Asset Store and Object Store model are specified but not built; Epic I owns the work and its asset Spike has not reported."
+  - id: JOB-09
+    legacy_id: Install confidently
+    actor: Writer
+    statement: "Install a tested 0.x prerelease on a supported desktop without building from source, and be told when a compatible update exists"
+    priority: P0
+    certainty: assumed
+    assumption: "No published release artifacts exist; packaging, the release-blocking matrix, and update notification are planned work in Epic M."

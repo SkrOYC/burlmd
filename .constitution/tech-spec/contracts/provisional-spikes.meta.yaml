@@ -1,0 +1,6 @@
+artifact: provisional-spikes.toml
+surface: cli
+flows: [flow-release]
+boundaries: [BND-15, BND-16, BND-17]
+certainty: assumed
+assumption: "Migrated; not yet exercised by a contract test."
