@@ -29,7 +29,7 @@ tickets:
     certainty: assumed
     status: planned
     deviations:
-      - files: [README.md, ".constitution/tech-spec/stack.md", ".constitution/tech-spec/data-models/schema.sql"]
+      - files: [README.md, ".constitution/tech-spec/stack.yaml", ".constitution/tech-spec/data-models/schema.sql"]
         justification: Review found restated production-stop and version banners outside the original M0 file list. Those copies would instruct executors to stop the authorized Epic G tickets.
   - id: BURL-G002
     title: Persist device-global preferences
