@@ -5,6 +5,11 @@ verification_commands:
     command: "./scripts/attest-github-app-token-expiration.sh --client-id \"$BURLMD_GITHUB_APP_CLIENT_ID\" --output .constitution/reports/github-app-token-expiration-attestation.json"
     exists: false
     owner: BURL-K009
+  - name: probe
+    label: "quoted by BURL-K009, BURL-M014"
+    command: "./scripts/verify-github-app-registration.sh --manifest config/github-app.release.toml --installation-url \"$BURLMD_GITHUB_APP_INSTALLATION_URL\" --expected-client-id \"$BURLMD_GITHUB_APP_CLIENT_ID\" --require-device-flow --require-private-repository-permissions --forbid-permission workflows --token-expiration-attestation .constitution/reports/github-app-token-expiration-attestation.json --max-attestation-age-hours 24 --output .constitution/reports/github-app-registration.json"
+    exists: false
+    owner: BURL-K009
   - name: test
     label: quoted by BURL-E001
     command: "./scripts/smoke-shot.sh harness-selftest && test -s .qa/harness-selftest.png"
@@ -221,6 +226,16 @@ verification_commands:
     command: "cargo test --manifest-path rust/Cargo.toml && cargo clippy --workspace --all-targets --manifest-path rust/Cargo.toml -- -D warnings && ./scripts/check-generated-bindings.sh && cargo run --release --manifest-path rust/Cargo.toml --bin workspace-observer-meter -- --run-id linux-reference --profile github-ubuntu-24_04-x86_64 --operations 100 --output target/observer-meters/linux-reference.json && git diff --check"
     exists: false
     owner: BURL-M003
+  - name: bench
+    label: quoted by BURL-H009
+    command: "cargo test --manifest-path rust/Cargo.toml && cargo clippy --workspace --all-targets --manifest-path rust/Cargo.toml -- -D warnings && ./scripts/check-generated-bindings.sh && cargo run --release --manifest-path rust/Cargo.toml --bin workspace-observer-meter -- --run-id macos-reference --profile github-macos-26-arm64 --operations 100 --output target/observer-meters/macos-reference.json && git diff --check"
+    exists: false
+    owner: BURL-H009
+  - name: test
+    label: quoted by BURL-H009
+    command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && git diff --check"
+    exists: false
+    owner: BURL-H009
   - name: test
     label: "quoted by BURL-I002, BURL-L002"
     command: "cargo test --manifest-path rust/Cargo.toml && cargo clippy --workspace --all-targets --manifest-path rust/Cargo.toml -- -D warnings && ./scripts/check-generated-bindings.sh && git diff --check"
@@ -233,6 +248,21 @@ verification_commands:
   - name: bench
     label: quoted by BURL-M004
     command: "cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && ./scripts/bench-prd-meters.sh --all --run-id linux-reference --expected-host-profile github-ubuntu-24_04-x86_64 --corpus-size 10000 --output .constitution/reports/nightly-prd-meters-linux.json && git diff --check"
+    exists: false
+    owner: BURL-M004
+  - name: bench
+    label: quoted by BURL-M004
+    command: "cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && ./scripts/bench-prd-meters.sh --all --run-id macos-reference --expected-host-profile github-macos-26-arm64 --corpus-size 10000 --output .constitution/reports/nightly-prd-meters-macos.json && git diff --check"
+    exists: false
+    owner: BURL-M004
+  - name: test
+    label: quoted by BURL-M004
+    command: "cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && git diff --check"
+    exists: false
+    owner: BURL-M004
+  - name: other
+    label: quoted by BURL-M004
+    command: "./scripts/aggregate-prd-meters.sh --require-run linux-reference=.constitution/reports/nightly-prd-meters-linux.json --require-run macos-reference=.constitution/reports/nightly-prd-meters-macos.json --require-same-corpus-hash --require-same-meter-definition-version --output .constitution/reports/nightly-prd-meters.json && git diff --check"
     exists: false
     owner: BURL-M004
   - name: test
@@ -277,6 +307,16 @@ verification_commands:
     command: "cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && ./scripts/visual-regression.sh shell-g011 --baseline test/goldens/shell-g011-linux.png --max-different-pixels 0 && git diff --check && ! rg -n '\\[DEBUG-' lib rust test scripts"
     exists: false
     owner: BURL-G001
+  - name: test
+    label: quoted by BURL-G011
+    command: "cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && ./scripts/visual-regression.sh shell-g011 --baseline test/goldens/shell-g011-macos.png --max-different-pixels 0 && git diff --check && ! rg -n '\\[DEBUG-' lib rust test scripts"
+    exists: false
+    owner: BURL-G011
+  - name: test
+    label: quoted by BURL-G011
+    command: "cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && git diff --check"
+    exists: false
+    owner: BURL-G011
   - name: test
     label: quoted by BURL-G004
     command: "cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && BURLMD_SMOKE_TABS_G004=1 ./scripts/smoke-shot.sh tabs-g004 && git diff --check"
@@ -443,27 +483,27 @@ verification_commands:
     owner: BURL-M003
   - name: other
     label: quoted by BURL-M006
-    command: "Run the accepted production AppImage build and installed probes derived from `SPK-PKG-M001`, then `git diff --check"
+    command: "Run the accepted production AppImage build and installed probes derived from `SPK-PKG-M001`, then `git diff --check`."
     exists: false
     owner: BURL-M006
   - name: other
     label: quoted by BURL-M009
-    command: "Run the accepted release construction and artifact verification commands from final TechSpec, then `git diff --check"
+    command: "Run the accepted release construction and artifact verification commands from final TechSpec, then `git diff --check`."
     exists: false
     owner: BURL-M009
   - name: other
     label: quoted by BURL-M011
-    command: "Run the accepted x86-64 AppImage installed matrix from final TechSpec against the immutable `RELEASE-M009` candidate on every accepted Linux runtime. Run its common functional, performance, and exact private-headless platform-regression evidence on managed `ubuntu-24.04`, validate the authenticated role and aggregate schemas, then run `git diff --check"
+    command: "Run the accepted x86-64 AppImage installed matrix from final TechSpec against the immutable `RELEASE-M009` candidate on every accepted Linux runtime. Run its common functional, performance, and exact private-headless platform-regression evidence on managed `ubuntu-24.04`, validate the authenticated role and aggregate schemas, then run `git diff --check`."
     exists: false
     owner: BURL-M011
   - name: other
     label: quoted by BURL-M012
-    command: "Run the accepted Nix installed matrix from final TechSpec against the immutable `RELEASE-M009` Flake candidate on every exposed x86-64 Linux system. Run the managed `ubuntu-24.04` functional and performance roles through the authenticated `CI-M003` evidence protocol, then run `git diff --check"
+    command: "Run the accepted Nix installed matrix from final TechSpec against the immutable `RELEASE-M009` Flake candidate on every exposed x86-64 Linux system. Run the managed `ubuntu-24.04` functional and performance roles through the authenticated `CI-M003` evidence protocol, then run `git diff --check`."
     exists: false
     owner: BURL-M012
   - name: other
     label: quoted by BURL-M013
-    command: "Run the accepted Apple Silicon installed matrix from final TechSpec against the immutable `RELEASE-M009` archive on managed Apple Silicon `macos-26` and `macos-15`. Run common functional evidence on both, performance and the sole authoritative macOS visual baseline on macOS 26 only, validate the authenticated role and aggregate schemas, then run `git diff --check"
+    command: "Run the accepted Apple Silicon installed matrix from final TechSpec against the immutable `RELEASE-M009` archive on managed Apple Silicon `macos-26` and `macos-15`. Run common functional evidence on both, performance and the sole authoritative macOS visual baseline on macOS 26 only, validate the authenticated role and aggregate schemas, then run `git diff --check`."
     exists: false
     owner: BURL-M013
 layout:
@@ -740,7 +780,7 @@ Linux platform-regression capture extends the committed private headless Sway an
 
 macOS 26 visual capture runs the actual Apple Silicon hosted desktop application. It produces the sole authoritative product visual baseline set and verifies the 1920x1080 logical application viewport before capture. The installed Flutter 3.44.3 source provides `FlutterDriver.screenshot`, but it doesn't guarantee the host window geometry. `BURL-M003` runs functional desktop integration on this environment without claiming authoritative visual evidence. A later shell or release gate that names `macos-authoritative-visual` must prove geometry before capture. Widget-test or Linux platform-regression output can't substitute. macOS 15 never creates or updates visual baselines.
 
-All workflow actions use the full commit SHAs in `stack.md`. The workflow uses the repository's Nix, Rust, Cargo, and Pub locks rather than hosted preinstalled tool versions. It captures any unavoidable host utility version. The OS-major labels and image versions remain evidence inputs, not lockfile replacements.
+All workflow actions use the full commit SHAs in `stack.yaml`. The workflow uses the repository's Nix, Rust, Cargo, and Pub locks rather than hosted preinstalled tool versions. It captures any unavoidable host utility version. The OS-major labels and image versions remain evidence inputs, not lockfile replacements.
 
 ## Commits
 This repository uses [Conventional Commits](https://www.conventionalcommits.org/):
@@ -836,12 +876,12 @@ The directories marked **Planned** are the physical homes for the forward bounda
 `android/` and `ios/` are absent by design: mobile targets are deferred per
 `tasks/critical-path.md`, and no mobile toolchain is provisioned. `ANDROID_HOME`
 is pointed at an in-repo path that deliberately holds no SDK, so Flutter cannot silently
-adopt an SDK from the contributor's home directory; see `stack.md`.
+adopt an SDK from the contributor's home directory; see `stack.yaml`.
 
 ## Toolchain
 All commands below assume the `devenv` shell (`devenv shell`, or automatic via
 `direnv`). Toolchain versions are pinned there and in `rust-toolchain.toml`; see
-`stack.md` for the compatibility policy.
+`stack.yaml` for the compatibility policy.
 
 ## Coding Standards
 1. **Rust:**
