@@ -29,7 +29,7 @@ tickets:
     certainty: assumed
     status: planned
     deviations:
-      - files: [README.md, ".constitution/tech-spec/stack.md", ".constitution/tech-spec/data-models/schema.sql", ".constitution/tech-spec/data-models/okf-bundle.md"]
+      - files: [README.md, ".constitution/tech-spec/stack.yaml", ".constitution/tech-spec/data-models/schema.sql", ".constitution/tech-spec/data-models/okf-bundle.md"]
         justification: Review found restated production-stop and version banners outside the original M0 file list. Those copies would instruct executors to stop the authorized Epic G tickets.
       - files: [.constitution/tasks/epics/EPIC-G-desktop-session-local-workflows.yaml, devenv.nix, scripts/smoke-shot.sh]
         justification: The executable Linux visual gate owns a pinned headless Sway compositor and receives smoke-shot's launched PID through an inherited FD bound to a private gate-owned file; this eliminates active-desktop windows, focus, geometry, input, desktop noise, and caller-path symlink races from exact capture provenance.
