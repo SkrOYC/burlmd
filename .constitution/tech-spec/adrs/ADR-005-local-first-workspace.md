@@ -1,7 +1,7 @@
 ---
 id: ADR-0005
 status: accepted
-date: 2026-09-03
+date: 2026-07-24
 certainty: assumed
 assumption: "Migrated; the decision's ruling reference was not found in the status line."
 ---
@@ -11,7 +11,7 @@ assumption: "Migrated; the decision's ruling reference was not found in the stat
 **Supersedes in part:** the clone-on-login step of `architecture/flows/flow-auth-handshake.md`
 
 ## Context
-`prd/constraints.md` has carried a Local-First Mandate since v1.0.0: the application "must be 100% functional when completely disconnected from the internet." The capability set contradicted it. OAuth was the only documented path to a Workspace, and `flow-auth-handshake.md` sequenced it as authorize → exchange tokens → store key → **clone repository** → initialize index → ready. There was no branch through that flow that did not involve a Remote.
+`prd/constraints.yaml` has carried a Local-First Mandate since v1.0.0: the application "must be 100% functional when completely disconnected from the internet." The capability set contradicted it. OAuth was the only documented path to a Workspace, and `flow-auth-handshake.md` sequenced it as authorize → exchange tokens → store key → **clone repository** → initialize index → ready. There was no branch through that flow that did not involve a Remote.
 
 The shipped implementation followed the flow faithfully, and the result is that `lib/main.dart` gates the entire application behind `LoginScreen` unless `authControllerProvider` reports `AuthStatus.success`. Combined with Epic C's deferred item 1 — no GitHub OAuth App is registered, so `BURLMD_GITHUB_CLIENT_ID`/`BURLMD_GITHUB_CLIENT_SECRET` are unset — the gate cannot currently be passed at all. The application is presently unusable for its stated purpose, and the cause is a specification error rather than a coding error.
 

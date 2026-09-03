@@ -1,6 +1,6 @@
 ---
 decision: deferred
-date: "2026-09-03"
+date: 2026-07-24
 ---
 # Out of Scope: Multiple Simultaneous Workspaces
 

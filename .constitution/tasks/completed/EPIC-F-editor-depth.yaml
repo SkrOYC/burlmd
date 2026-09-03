@@ -41,7 +41,7 @@ tickets:
     title: Live Preview Block Promotion
     type: Feature
     effort: 8
-    depends_on: []
+    depends_on: [BURL-F001]
     category: Correctness
     scope:
       in: [lib/src/components/editor.dart, lib/src/components/block_view.dart, lib/src/components/block_editor.dart, lib/src/providers/rust_api_provider.dart, "lib/src/rust/**", rust/src/api/ffi_api.rs, rust/src/markdown/spans.rs, rust/src/workspace/persist.rs, rust/src/frb_generated.rs, test/components/editor_test.dart]
@@ -100,7 +100,7 @@ tickets:
     title: Cross-Block Selection and Copy
     type: Feature
     effort: 5
-    depends_on: []
+    depends_on: [BURL-F002]
     category: Correctness
     scope:
       in: [lib/src/components/editor.dart, lib/src/components/block_view.dart, test/components/selection_test.dart]
@@ -141,7 +141,7 @@ tickets:
     title: "Block Creation, Splitting and Merging"
     type: Feature
     effort: 5
-    depends_on: []
+    depends_on: [BURL-F002]
     category: Correctness
     scope:
       in: [lib/src/components/block_editor.dart, lib/src/components/editor.dart, test/components/block_editing_test.dart]
@@ -194,7 +194,7 @@ tickets:
     title: Inline Emphasis Shortcuts
     type: Feature
     effort: 2
-    depends_on: []
+    depends_on: [BURL-F002]
     category: Correctness
     scope:
       in: [lib/src/components/block_editor.dart, lib/main.dart, scripts/smoke-shot.sh, test/components/emphasis_shortcuts_test.dart]
@@ -236,7 +236,7 @@ tickets:
     title: Link Insertion Completion
     type: Feature
     effort: 8
-    depends_on: []
+    depends_on: [BURL-F002]
     category: Correctness
     scope:
       in: [lib/src/components/link_completion.dart, lib/src/components/block_editor.dart, lib/src/components/block_view.dart, lib/src/components/editor.dart, lib/src/providers/rust_api_provider.dart, "lib/src/rust/**", pubspec.yaml, pubspec.lock, l10n.yaml, lib/l10n/app_en.arb, "lib/l10n/generated/**", lib/main.dart, scripts/smoke-shot.sh, rust/src/api/ffi_api.rs, rust/src/index/mod.rs, rust/src/index/query.rs, rust/src/okf/concept_id.rs, rust/src/workspace/lifecycle.rs, rust/src/frb_generated.rs, test/components/link_completion_test.dart, test/components/editor_test.dart]
@@ -320,7 +320,7 @@ tickets:
     title: Editing Across a Multi-Block Selection
     type: Feature
     effort: 8
-    depends_on: []
+    depends_on: [BURL-F003, BURL-F004]
     category: Correctness
     scope:
       in: [lib/src/components/editor.dart, lib/src/components/block_editor.dart, lib/src/components/range_text_input_client.dart, lib/src/providers/rust_api_provider.dart, "lib/src/rust/**", lib/main.dart, scripts/smoke-shot.sh, rust/src/api/ffi_api.rs, rust/src/markdown/splice.rs, rust/src/workspace/persist.rs, rust/src/frb_generated.rs, test/components/selection_editing_test.dart, test/components/text_input_client_test.dart, test/components/selection_test.dart]

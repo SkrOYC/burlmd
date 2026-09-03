@@ -33,6 +33,6 @@
 ## Downstream impact
 
 - **ADRs to write or update:** accept/replace ADR-014; supersede ADR-004's title-verbatim path decision
-- **Tickets unblocked in `tasks/active/`:** BURL-H005 directly; BURL-H006, BURL-H007, and their lifecycle, monitoring, Asset, Export, and sync dependents transitively
+- **Tickets unblocked in `tasks/epics/`:** BURL-H005 directly; BURL-H006, BURL-H007, and their lifecycle, monitoring, Asset, Export, and sync dependents transitively
 - **Tickets to add or split:** adapt or split BURL-H005 and downstream tickets if migration evidence changes their atomic boundary
 - **Spec edits required:** final Technical Implementation; Architecture and Product Requirements only if measured behavior changes a boundary or user outcome

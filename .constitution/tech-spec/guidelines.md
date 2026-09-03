@@ -6,271 +6,316 @@ verification_commands:
     exists: false
     owner: BURL-K009
   - name: test
-    label: "quoted by BURL-E001"
+    label: quoted by BURL-E001
     command: "./scripts/smoke-shot.sh harness-selftest && test -s .qa/harness-selftest.png"
     exists: true
   - name: other
-    label: "quoted by BURL-B004"
-    command: "cargo build"
+    label: quoted by BURL-B004
+    command: cargo build
     exists: true
   - name: test
-    label: "quoted by BURL-B007"
+    label: quoted by BURL-B007
     command: "cargo build && flutter test"
     exists: true
   - name: format
-    label: "quoted by BURL-M003"
+    label: quoted by BURL-M003
     command: "cargo fmt --manifest-path rust/Cargo.toml -- --check && cargo clippy --workspace --all-targets --all-features --manifest-path rust/Cargo.toml -- -D warnings && cargo test --manifest-path rust/Cargo.toml && dart format --output=none --set-exit-if-changed lib test test_driver integration_test && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ! rg -n '\\[DEBUG-' lib rust test scripts && actionlint && ./scripts/assert-ci-matrix.sh --workflow .github/workflows/ci.yml --require-runner ubuntu-24.04 --require-runner macos-26 --require-runner macos-15 --require-role-schema .constitution/tech-spec/contracts/ci-role-evidence.schema.json --require-aggregate-schema .constitution/tech-spec/contracts/ci-evidence.schema.json && ./scripts/assert-managed-evidence-isolation.sh --contract .constitution/tech-spec/contracts/provisional-spikes.toml --sandbox bubblewrap --expected-version 0.11.2 && git diff --check"
-    exists: true
+    exists: false
+    owner: BURL-M003
   - name: test
-    label: "quoted by BURL-A002"
+    label: quoted by BURL-A002
     command: "cargo test --color=always --package rust --lib"
     exists: true
   - name: test
-    label: "quoted by BURL-F002"
+    label: quoted by BURL-F002
     command: "cargo test --lib --manifest-path rust/Cargo.toml && flutter_rust_bridge_codegen generate && flutter test test/components/editor_test.dart test/components/selection_test.dart test/components/lifecycle_actions_test.dart test/components/block_editing_test.dart && BURLMD_SMOKE_F002=1 ./scripts/smoke-shot.sh f002-live-preview && dart analyze && git diff --check && ! rg -n '\\[DEBUG-' lib rust test scripts"
-    exists: true
+    exists: false
+    owner: BURL-M003
   - name: test
-    label: "quoted by BURL-F003"
+    label: quoted by BURL-F003
     command: "cargo test --lib --manifest-path rust/Cargo.toml && flutter_rust_bridge_codegen generate && flutter test test/components/selection_test.dart test/components/editor_test.dart && BURLMD_SMOKE_F003=1 ./scripts/smoke-shot.sh f003-selection && dart analyze && git diff --check && ! rg -n '\\[DEBUG-' lib rust test scripts"
-    exists: true
+    exists: false
+    owner: BURL-M003
   - name: test
-    label: "quoted by BURL-F006"
+    label: quoted by BURL-F006
     command: "cargo test --lib --manifest-path rust/Cargo.toml link_completion_limit_is_ten -- --list | rg -q ': test' && cargo test --lib --manifest-path rust/Cargo.toml link_completion_limit_is_ten && cargo test --lib --manifest-path rust/Cargo.toml prospective_ghost_completion -- --list | rg -q ': test' && cargo test --lib --manifest-path rust/Cargo.toml prospective_ghost_completion && cargo test --lib --manifest-path rust/Cargo.toml resolve_link_target -- --list | rg -q ': test' && cargo test --lib --manifest-path rust/Cargo.toml resolve_link_target && cargo test --lib --manifest-path rust/Cargo.toml create_link_target -- --list | rg -q ': test' && cargo test --lib --manifest-path rust/Cargo.toml create_link_target && flutter_rust_bridge_codegen generate && flutter gen-l10n && flutter test test/components/link_completion_test.dart test/components/editor_test.dart && BURLMD_SMOKE_F006=1 ./scripts/smoke-shot.sh f006-link-completion && dart analyze && git diff --check && ! rg -n '\\[DEBUG-' lib rust test scripts"
-    exists: true
+    exists: false
+    owner: BURL-M003
   - name: test
-    label: "quoted by BURL-F007"
+    label: quoted by BURL-F007
     command: "cargo test --lib --manifest-path rust/Cargo.toml range_edit_result_reports_phantom -- --list | rg -q ': test' && cargo test --lib --manifest-path rust/Cargo.toml range_edit_result_reports_phantom && cargo test --lib --manifest-path rust/Cargo.toml range_edit_result_rejects_utf16_surrogate -- --list | rg -q ': test' && cargo test --lib --manifest-path rust/Cargo.toml range_edit_result_rejects_utf16_surrogate && cargo test --lib --manifest-path rust/Cargo.toml && flutter_rust_bridge_codegen generate && flutter test test/components/selection_editing_test.dart test/components/text_input_client_test.dart test/components/selection_test.dart && BURLMD_SMOKE_F007=1 ./scripts/smoke-shot.sh f007-range-editing && dart analyze && git diff --check && ! rg -n '\\[DEBUG-' lib rust test scripts"
-    exists: true
+    exists: false
+    owner: BURL-M003
   - name: test
-    label: "quoted by BURL-K005"
+    label: quoted by BURL-K005
     command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && dart analyze && ./scripts/verify-second-device-join.sh --private-remote \"$BURLMD_TEST_PRIVATE_REMOTE_URL\" --object-endpoint \"$BURLMD_TEST_S3_ENDPOINT\" --output target/runbooks/clone-k005.json && git diff --check"
-    exists: true
+    exists: false
+    owner: BURL-M003
   - name: test
     label: "quoted by BURL-H006, BURL-J001, BURL-J002, BURL-J003, BURL-J004, BURL-J005, BURL-K006, BURL-L004, BURL-L008"
     command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && dart analyze && git diff --check"
-    exists: true
+    exists: false
+    owner: BURL-M003
   - name: test
-    label: "quoted by BURL-H004"
+    label: quoted by BURL-H004
     command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh adapt-h004 && git diff --check"
-    exists: true
+    exists: false
+    owner: BURL-M003
   - name: test
-    label: "quoted by BURL-I009"
+    label: quoted by BURL-I009
     command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh adopt-i009 && git diff --check && ! rg -n '\\[DEBUG-' lib rust test scripts"
-    exists: true
+    exists: false
+    owner: BURL-M003
   - name: test
-    label: "quoted by BURL-I010"
+    label: quoted by BURL-I010
     command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh asset-i010 && git diff --check"
-    exists: true
+    exists: false
+    owner: BURL-M003
   - name: test
-    label: "quoted by BURL-L007"
+    label: quoted by BURL-L007
     command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh asset-l007 && git diff --check"
-    exists: true
+    exists: false
+    owner: BURL-M003
   - name: test
-    label: "quoted by BURL-K001"
+    label: quoted by BURL-K001
     command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh auth-k001 && git diff --check && ! rg -n '\\[DEBUG-' lib rust test scripts"
-    exists: true
+    exists: false
+    owner: BURL-M003
   - name: test
-    label: "quoted by BURL-H011"
+    label: quoted by BURL-H011
     command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh decide-h011 && git diff --check"
-    exists: true
+    exists: false
+    owner: BURL-M003
   - name: test
-    label: "quoted by BURL-L011"
+    label: quoted by BURL-L011
     command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh delete-l011 && git diff --check && ! rg -n '\\[DEBUG-' lib rust test scripts"
-    exists: true
+    exists: false
+    owner: BURL-M003
   - name: test
-    label: "quoted by BURL-I012"
+    label: quoted by BURL-I012
     command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh detach-i012 && git diff --check"
-    exists: true
+    exists: false
+    owner: BURL-M003
   - name: test
-    label: "quoted by BURL-G008"
+    label: quoted by BURL-G008
     command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh edit-g008 && git diff --check"
-    exists: true
+    exists: false
+    owner: BURL-M003
   - name: test
-    label: "quoted by BURL-H010"
+    label: quoted by BURL-H010
     command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh ext-h010 && git diff --check"
-    exists: true
+    exists: false
+    owner: BURL-M003
   - name: test
-    label: "quoted by BURL-G009"
+    label: quoted by BURL-G009
     command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh find-g009 && git diff --check"
-    exists: true
+    exists: false
+    owner: BURL-M003
   - name: test
-    label: "quoted by BURL-M016"
+    label: quoted by BURL-M016
     command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh health-m004 && git diff --check"
-    exists: true
+    exists: false
+    owner: BURL-M003
   - name: test
-    label: "quoted by BURL-G010"
+    label: quoted by BURL-G010
     command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh hist-g010 && git diff --check"
-    exists: true
+    exists: false
+    owner: BURL-M003
   - name: test
-    label: "quoted by BURL-I003"
+    label: quoted by BURL-I003
     command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh image-i003 && git diff --check"
-    exists: true
+    exists: false
+    owner: BURL-M003
   - name: test
-    label: "quoted by BURL-L006"
+    label: quoted by BURL-L006
     command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh life-l006 && git diff --check"
-    exists: true
+    exists: false
+    owner: BURL-M003
   - name: test
-    label: "quoted by BURL-M002"
+    label: quoted by BURL-M002
     command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh log-m002 && git diff --check && ! rg -n '\\[DEBUG-' lib rust test scripts"
-    exists: true
+    exists: false
+    owner: BURL-M003
   - name: test
-    label: "quoted by BURL-I011"
+    label: quoted by BURL-I011
     command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh migrate-i011 && git diff --check"
-    exists: true
+    exists: false
+    owner: BURL-M003
   - name: test
-    label: "quoted by BURL-I004"
+    label: quoted by BURL-I004
     command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh object-i004 && git diff --check && ! rg -n '\\[DEBUG-' lib rust test scripts"
-    exists: true
+    exists: false
+    owner: BURL-M003
   - name: test
-    label: "quoted by BURL-H007"
+    label: quoted by BURL-H007
     command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh preflight-h007 && git diff --check"
-    exists: true
+    exists: false
+    owner: BURL-M003
   - name: test
-    label: "quoted by BURL-I006"
+    label: quoted by BURL-I006
     command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh recover-i006 && git diff --check"
-    exists: true
+    exists: false
+    owner: BURL-M003
   - name: test
-    label: "quoted by BURL-H008"
+    label: quoted by BURL-H008
     command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh repair-h008 && git diff --check"
-    exists: true
+    exists: false
+    owner: BURL-M003
   - name: test
-    label: "quoted by BURL-K003"
+    label: quoted by BURL-K003
     command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh repo-k003 && git diff --check && ! rg -n '\\[DEBUG-' lib rust test scripts"
-    exists: true
+    exists: false
+    owner: BURL-M003
   - name: test
-    label: "quoted by BURL-I008"
+    label: quoted by BURL-I008
     command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh rotate-i008 && git diff --check && ! rg -n '\\[DEBUG-' lib rust test scripts"
-    exists: true
+    exists: false
+    owner: BURL-M003
   - name: bench
-    label: "quoted by BURL-L003"
+    label: quoted by BURL-L003
     command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh sched-l003 && cargo run --release --manifest-path rust/Cargo.toml --bin sync-freshness-meter -- --private-remote \"$BURLMD_TEST_PRIVATE_REMOTE_URL\" --local-versions 100 --incoming-versions 100 --offline-cycles 10 --offline-duration-seconds 3600 --output target/sync-meters/sched-l003.json && git diff --check"
-    exists: true
+    exists: false
+    owner: BURL-M003
   - name: test
-    label: "quoted by BURL-G003"
+    label: quoted by BURL-G003
     command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh state-g003 && git diff --check"
-    exists: true
+    exists: false
+    owner: BURL-M003
   - name: test
-    label: "quoted by BURL-L009"
+    label: quoted by BURL-L009
     command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh state-l009 && git diff --check"
-    exists: true
+    exists: false
+    owner: BURL-M003
   - name: test
-    label: "quoted by BURL-L005"
+    label: quoted by BURL-L005
     command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh sug-l005 && git diff --check"
-    exists: true
+    exists: false
+    owner: BURL-M003
   - name: test
-    label: "quoted by BURL-K002"
+    label: quoted by BURL-K002
     command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh token-k002 && git diff --check"
-    exists: true
+    exists: false
+    owner: BURL-M003
   - name: test
-    label: "quoted by BURL-I005"
+    label: quoted by BURL-I005
     command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh transfer-i005 && git diff --check"
-    exists: true
+    exists: false
+    owner: BURL-M003
   - name: test
-    label: "quoted by BURL-I013"
+    label: quoted by BURL-I013
     command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh unlink-i013 && git diff --check"
-    exists: true
+    exists: false
+    owner: BURL-M003
   - name: test
-    label: "quoted by BURL-M010"
+    label: quoted by BURL-M010
     command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh update-m010 && git diff --check"
-    exists: true
+    exists: false
+    owner: BURL-M003
   - name: test
-    label: "quoted by BURL-K004"
+    label: quoted by BURL-K004
     command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test integration_test/connect_consolidation_flow_test.dart -d linux && dart analyze && git diff --check"
-    exists: true
+    exists: false
+    owner: BURL-M003
   - name: bench
-    label: "quoted by BURL-H009"
+    label: quoted by BURL-H009
     command: "cargo test --manifest-path rust/Cargo.toml && cargo clippy --workspace --all-targets --manifest-path rust/Cargo.toml -- -D warnings && ./scripts/check-generated-bindings.sh && cargo run --release --manifest-path rust/Cargo.toml --bin workspace-observer-meter -- --run-id linux-reference --profile github-ubuntu-24_04-x86_64 --operations 100 --output target/observer-meters/linux-reference.json && git diff --check"
-    exists: true
+    exists: false
+    owner: BURL-M003
   - name: test
     label: "quoted by BURL-I002, BURL-L002"
     command: "cargo test --manifest-path rust/Cargo.toml && cargo clippy --workspace --all-targets --manifest-path rust/Cargo.toml -- -D warnings && ./scripts/check-generated-bindings.sh && git diff --check"
-    exists: true
+    exists: false
+    owner: BURL-M003
   - name: test
     label: "quoted by BURL-H003, BURL-H005, BURL-I007, BURL-L010"
     command: "cargo test --manifest-path rust/Cargo.toml && cargo clippy --workspace --all-targets --manifest-path rust/Cargo.toml -- -D warnings && git diff --check"
     exists: true
   - name: bench
-    label: "quoted by BURL-M004"
+    label: quoted by BURL-M004
     command: "cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && ./scripts/bench-prd-meters.sh --all --run-id linux-reference --expected-host-profile github-ubuntu-24_04-x86_64 --corpus-size 10000 --output .constitution/reports/nightly-prd-meters-linux.json && git diff --check"
-    exists: true
+    exists: false
+    owner: BURL-M004
   - name: test
-    label: "quoted by BURL-K008"
+    label: quoted by BURL-K008
     command: "cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && ./scripts/run-private-github-canary.sh --private-remote \"$BURLMD_TEST_PRIVATE_REMOTE_URL\" --object-endpoint \"$BURLMD_TEST_S3_ENDPOINT\" --cleanup always --output .constitution/reports/canary-k008.json && ./scripts/verify-device-authorization-runbook.sh --require-human-approval --output .constitution/reports/device-auth-k008.json && git diff --check"
-    exists: true
+    exists: false
+    owner: BURL-K008
   - name: test
-    label: "quoted by BURL-G005"
+    label: quoted by BURL-G005
     command: "cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && ./scripts/smoke-shot.sh close-g005 && git diff --check"
     exists: true
   - name: test
-    label: "quoted by BURL-J007"
+    label: quoted by BURL-J007
     command: "cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && ./scripts/smoke-shot.sh consui-j007 && git diff --check"
     exists: true
   - name: test
-    label: "quoted by BURL-L012"
+    label: quoted by BURL-L012
     command: "cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && ./scripts/smoke-shot.sh integ-l012 && git diff --check"
     exists: true
   - name: test
-    label: "quoted by BURL-M005"
+    label: quoted by BURL-M005
     command: "cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && ./scripts/smoke-shot.sh migrate-m005 && git diff --check"
     exists: true
   - name: test
-    label: "quoted by BURL-G006"
+    label: quoted by BURL-G006
     command: "cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && ./scripts/smoke-shot.sh open-g006 && git diff --check"
     exists: true
   - name: test
-    label: "quoted by BURL-J006"
+    label: quoted by BURL-J006
     command: "cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && ./scripts/smoke-shot.sh port-j006 && git diff --check"
     exists: true
   - name: test
-    label: "quoted by BURL-K007"
+    label: quoted by BURL-K007
     command: "cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && ./scripts/smoke-shot.sh remote-k007 && git diff --check"
     exists: true
   - name: test
-    label: "quoted by BURL-H012"
+    label: quoted by BURL-H012
     command: "cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && ./scripts/smoke-shot.sh rescan-h012 && git diff --check"
     exists: true
   - name: test
-    label: "quoted by BURL-G011"
+    label: quoted by BURL-G011
     command: "cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && ./scripts/visual-regression.sh shell-g011 --baseline test/goldens/shell-g011-linux.png --max-different-pixels 0 && git diff --check && ! rg -n '\\[DEBUG-' lib rust test scripts"
-    exists: true
+    exists: false
+    owner: BURL-G001
   - name: test
-    label: "quoted by BURL-G004"
+    label: quoted by BURL-G004
     command: "cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && BURLMD_SMOKE_TABS_G004=1 ./scripts/smoke-shot.sh tabs-g004 && git diff --check"
     exists: true
   - name: test
-    label: "quoted by BURL-M015"
+    label: quoted by BURL-M015
     command: "cargo test --manifest-path rust/Cargo.toml a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success && ./scripts/repeat-test.sh --count 100 -- cargo test --manifest-path rust/Cargo.toml a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success && git diff --check"
-    exists: true
+    exists: false
+    owner: BURL-M015
   - name: test
-    label: "quoted by BURL-D008"
+    label: quoted by BURL-D008
     command: "cargo test --manifest-path rust/Cargo.toml api::ffi_api -- --list | grep -q ': test' && cargo test --manifest-path rust/Cargo.toml api::ffi_api && cargo clippy --manifest-path rust/Cargo.toml --all-targets -- -D warnings && dart analyze"
     exists: true
   - name: test
-    label: "quoted by BURL-D005"
+    label: quoted by BURL-D005
     command: "cargo test --manifest-path rust/Cargo.toml index:: -- --list | grep -q ': test' && cargo test --manifest-path rust/Cargo.toml index:: && cargo clippy --manifest-path rust/Cargo.toml --all-targets -- -D warnings"
     exists: true
   - name: test
-    label: "quoted by BURL-D009"
+    label: quoted by BURL-D009
     command: "cargo test --manifest-path rust/Cargo.toml index::query -- --list | grep -q ': test' && cargo test --manifest-path rust/Cargo.toml index::query && cargo clippy --manifest-path rust/Cargo.toml --all-targets -- -D warnings && dart analyze"
     exists: true
   - name: test
-    label: "quoted by BURL-D003"
+    label: quoted by BURL-D003
     command: "cargo test --manifest-path rust/Cargo.toml markdown:: -- --list | grep -q ': test' && cargo test --manifest-path rust/Cargo.toml markdown:: && cargo clippy --manifest-path rust/Cargo.toml --all-targets -- -D warnings"
     exists: true
   - name: test
-    label: "quoted by BURL-D002"
+    label: quoted by BURL-D002
     command: "cargo test --manifest-path rust/Cargo.toml okf:: -- --list | grep -q ': test' && cargo test --manifest-path rust/Cargo.toml okf:: && cargo test --manifest-path rust/Cargo.toml -- --skip keyring && cargo clippy --manifest-path rust/Cargo.toml --all-targets -- -D warnings"
     exists: true
   - name: test
-    label: "quoted by BURL-D004"
+    label: quoted by BURL-D004
     command: "cargo test --manifest-path rust/Cargo.toml workspace::bootstrap -- --list | grep -q ': test' && cargo test --manifest-path rust/Cargo.toml workspace::bootstrap && cargo test --manifest-path rust/Cargo.toml -- --skip keyring && cargo clippy --manifest-path rust/Cargo.toml --all-targets -- -D warnings"
     exists: true
   - name: test
-    label: "quoted by BURL-D006"
+    label: quoted by BURL-D006
     command: "cargo test --manifest-path rust/Cargo.toml workspace::lifecycle -- --list | grep -q ': test' && cargo test --manifest-path rust/Cargo.toml workspace::lifecycle && cargo clippy --manifest-path rust/Cargo.toml --all-targets -- -D warnings && dart analyze"
     exists: true
   - name: test
-    label: "quoted by BURL-D007"
+    label: quoted by BURL-D007
     command: "cargo test --manifest-path rust/Cargo.toml workspace::persist -- --list | grep -q ': test' && cargo test --manifest-path rust/Cargo.toml workspace::persist && cargo clippy --manifest-path rust/Cargo.toml --all-targets -- -D warnings"
     exists: true
   - name: test
@@ -278,118 +323,149 @@ verification_commands:
     command: "cargo test db::"
     exists: true
   - name: test
-    label: "quoted by BURL-B001"
+    label: quoted by BURL-B001
     command: "cargo test security::"
     exists: true
   - name: other
-    label: "quoted by BURL-B005"
-    command: "flutter analyze"
+    label: quoted by BURL-B005
+    command: flutter analyze
     exists: true
   - name: build
-    label: "quoted by BURL-M008"
+    label: quoted by BURL-M008
     command: "flutter build macos --release && git diff --check"
     exists: true
   - name: other
-    label: "quoted by BURL-A001"
-    command: "flutter run -d macos"
+    label: quoted by BURL-A001
+    command: flutter run -d macos
     exists: true
   - name: test
-    label: "quoted by BURL-B006"
-    command: "flutter test"
+    label: quoted by BURL-B006
+    command: flutter test
     exists: true
   - name: test
-    label: "quoted by BURL-E002"
+    label: quoted by BURL-E002
     command: "flutter test && ./scripts/smoke-shot.sh e002-workspace-opens"
     exists: true
   - name: test
-    label: "quoted by BURL-E008"
+    label: quoted by BURL-E008
     command: "flutter test && ./scripts/smoke-shot.sh shel-e008"
     exists: true
   - name: test
-    label: "quoted by BURL-G007"
+    label: quoted by BURL-G007
     command: "flutter test && dart analyze && ./scripts/smoke-shot.sh nav-g007 && git diff --check"
     exists: true
   - name: test
-    label: "quoted by BURL-G002"
+    label: quoted by BURL-G002
     command: "flutter test && dart analyze && ./scripts/smoke-shot.sh pref-g002 && git diff --check && ! rg -n '\\[DEBUG-' lib rust test scripts"
-    exists: true
+    exists: false
+    owner: BURL-M003
   - name: test
-    label: "quoted by BURL-G001"
+    label: quoted by BURL-G001
     command: "flutter test && dart analyze && ./scripts/visual-regression.sh shell-g001 --baseline test/goldens/shell-g001-linux.png --max-different-pixels 0 && git diff --check && ! rg -n '\\[DEBUG-' lib rust test scripts"
-    exists: true
+    exists: false
+    owner: BURL-G001
   - name: test
-    label: "quoted by BURL-F004"
+    label: quoted by BURL-F004
     command: "flutter test test/components/block_editing_test.dart && BURLMD_SMOKE_F004=1 ./scripts/smoke-shot.sh f004-block-editing"
     exists: true
   - name: test
-    label: "quoted by BURL-E007"
+    label: quoted by BURL-E007
     command: "flutter test test/components/draft_recovery_test.dart && ./scripts/smoke-shot.sh e007-draft-recovery"
     exists: true
   - name: test
-    label: "quoted by BURL-E004"
+    label: quoted by BURL-E004
     command: "flutter test test/components/editor_test.dart && ./scripts/smoke-shot.sh e004-editor-mounted"
     exists: true
   - name: test
-    label: "quoted by BURL-F005"
+    label: quoted by BURL-F005
     command: "flutter test test/components/emphasis_shortcuts_test.dart && BURLMD_SMOKE_F005=1 ./scripts/smoke-shot.sh f005-emphasis && dart analyze && git diff --check && ! rg -n '\\[DEBUG-' lib rust test scripts"
-    exists: true
+    exists: false
+    owner: BURL-M003
   - name: test
-    label: "quoted by BURL-E005"
+    label: quoted by BURL-E005
     command: "flutter test test/components/lifecycle_actions_test.dart && ./scripts/smoke-shot.sh e005-lifecycle"
     exists: true
   - name: test
-    label: "quoted by BURL-E006"
+    label: quoted by BURL-E006
     command: "flutter test test/components/search_panel_test.dart && ./scripts/smoke-shot.sh e006-search"
     exists: true
   - name: test
-    label: "quoted by BURL-E003"
+    label: quoted by BURL-E003
     command: "flutter test test/components/workspace_tree_test.dart && ./scripts/smoke-shot.sh e003-tree"
     exists: true
   - name: other
-    label: "quoted by BURL-A003"
+    label: quoted by BURL-A003
     command: "flutter_rust_bridge_codegen generate && cargo build"
-    exists: true
+    exists: false
+    owner: BURL-M003
   - name: other
     label: "quoted by BURL-C001, BURL-C002, BURL-C003, BURL-M006, BURL-M009, BURL-M011, BURL-M012, BURL-M013"
-    command: "git diff --check"
+    command: git diff --check
     exists: true
   - name: build
-    label: "quoted by BURL-M007"
+    label: quoted by BURL-M007
     command: "nix flake check && nix build .#packages.x86_64-linux.default && git diff --check"
     exists: true
   - name: test
-    label: "quoted by BURL-D001"
+    label: quoted by BURL-D001
     command: "test -s .constitution/spikes/SPK-BURL-D001.md && ! grep -q 'Status: placeholder' .constitution/spikes/SPK-BURL-D001.md && ! grep -q 'To be filled' .constitution/spikes/SPK-BURL-D001.md && git diff --quiet HEAD~1 HEAD -- rust/src"
-    exists: true
+    exists: false
+    owner: BURL-M003
   - name: test
-    label: "quoted by BURL-F001"
+    label: quoted by BURL-F001
     command: "test -s .constitution/spikes/SPK-BURL-F001.md && ! grep -q 'Status: placeholder' .constitution/spikes/SPK-BURL-F001.md && ! grep -q 'To be filled' .constitution/spikes/SPK-BURL-F001.md && git diff --quiet a960e34afb59e46ead601375bbfd6424eb4193ec^ a960e34afb59e46ead601375bbfd6424eb4193ec -- lib rust/src && git diff --check HEAD^ HEAD && flutter test test/components/editor_test.dart test/components/selection_test.dart && dart analyze && ! rg -n '\\[DEBUG-' lib rust test scripts"
-    exists: true
+    exists: false
+    owner: BURL-M003
   - name: probe
-    label: "quoted by BURL-H001"
+    label: quoted by BURL-H001
     command: "TRUST_ANCHOR_WORKTREE/scripts/managed-evidence.sh run --ticket BURL-H001 --trust-anchor-sha TRUST_ANCHOR_SHA --source-ref SOURCE_REF --tested-source-sha TESTED_SOURCE_SHA --base-sha BASE_SHA --output EVIDENCE_WORKTREE/.constitution/prototypes/ast/managed-evidence.json && git -C EVIDENCE_WORKTREE diff --check"
     exists: false
     owner: BURL-M003
   - name: probe
-    label: "quoted by BURL-H002"
+    label: quoted by BURL-H002
     command: "TRUST_ANCHOR_WORKTREE/scripts/managed-evidence.sh run --ticket BURL-H002 --trust-anchor-sha TRUST_ANCHOR_SHA --source-ref SOURCE_REF --tested-source-sha TESTED_SOURCE_SHA --base-sha BASE_SHA --output EVIDENCE_WORKTREE/.constitution/prototypes/path/managed-evidence.json && git -C EVIDENCE_WORKTREE diff --check"
     exists: false
     owner: BURL-M003
   - name: probe
-    label: "quoted by BURL-I001"
+    label: quoted by BURL-I001
     command: "TRUST_ANCHOR_WORKTREE/scripts/managed-evidence.sh run --ticket BURL-I001 --trust-anchor-sha TRUST_ANCHOR_SHA --source-ref SOURCE_REF --tested-source-sha TESTED_SOURCE_SHA --base-sha BASE_SHA --output EVIDENCE_WORKTREE/.constitution/prototypes/assets/managed-evidence.json && git -C EVIDENCE_WORKTREE diff --check"
     exists: false
     owner: BURL-M003
   - name: probe
-    label: "quoted by BURL-L001"
+    label: quoted by BURL-L001
     command: "TRUST_ANCHOR_WORKTREE/scripts/managed-evidence.sh run --ticket BURL-L001 --trust-anchor-sha TRUST_ANCHOR_SHA --source-ref SOURCE_REF --tested-source-sha TESTED_SOURCE_SHA --base-sha BASE_SHA --output EVIDENCE_WORKTREE/.constitution/prototypes/git-analysis/managed-evidence.json && git -C EVIDENCE_WORKTREE diff --check"
     exists: false
     owner: BURL-M003
   - name: probe
-    label: "quoted by BURL-M001"
+    label: quoted by BURL-M001
     command: "TRUST_ANCHOR_WORKTREE/scripts/managed-evidence.sh run --ticket BURL-M001 --trust-anchor-sha TRUST_ANCHOR_SHA --source-ref SOURCE_REF --tested-source-sha TESTED_SOURCE_SHA --base-sha BASE_SHA --output EVIDENCE_WORKTREE/.constitution/prototypes/packaging/managed-evidence.json && git -C EVIDENCE_WORKTREE diff --check"
     exists: false
     owner: BURL-M003
+  - name: other
+    label: quoted by BURL-M006
+    command: "Run the accepted production AppImage build and installed probes derived from `SPK-PKG-M001`, then `git diff --check"
+    exists: false
+    owner: BURL-M006
+  - name: other
+    label: quoted by BURL-M009
+    command: "Run the accepted release construction and artifact verification commands from final TechSpec, then `git diff --check"
+    exists: false
+    owner: BURL-M009
+  - name: other
+    label: quoted by BURL-M011
+    command: "Run the accepted x86-64 AppImage installed matrix from final TechSpec against the immutable `RELEASE-M009` candidate on every accepted Linux runtime. Run its common functional, performance, and exact private-headless platform-regression evidence on managed `ubuntu-24.04`, validate the authenticated role and aggregate schemas, then run `git diff --check"
+    exists: false
+    owner: BURL-M011
+  - name: other
+    label: quoted by BURL-M012
+    command: "Run the accepted Nix installed matrix from final TechSpec against the immutable `RELEASE-M009` Flake candidate on every exposed x86-64 Linux system. Run the managed `ubuntu-24.04` functional and performance roles through the authenticated `CI-M003` evidence protocol, then run `git diff --check"
+    exists: false
+    owner: BURL-M012
+  - name: other
+    label: quoted by BURL-M013
+    command: "Run the accepted Apple Silicon installed matrix from final TechSpec against the immutable `RELEASE-M009` archive on managed Apple Silicon `macos-26` and `macos-15`. Run common functional evidence on both, performance and the sole authoritative macOS visual baseline on macOS 26 only, validate the authenticated role and aggregate schemas, then run `git diff --check"
+    exists: false
+    owner: BURL-M013
 layout:
   - path: ".agents"
     purpose: Agent skill definitions (Dart/Flutter workflows)
@@ -773,7 +849,7 @@ All commands below assume the `devenv` shell (`devenv shell`, or automatic via
    - Must be formatted with `cargo fmt`.
    - Avoid async/await unless absolutely necessary (e.g., long-running sync operations on a dedicated thread). Local index queries remain synchronous for maximum performance, except where `tech-spec/contracts/ffi_api.rs` itself declares a function `async` (e.g. `search_notes`) — the contract's FFI-boundary signature takes precedence over this preference; the function's own body should still execute synchronously to completion rather than actually yielding to an executor.
    - In the delivered v1.6.x model, source spans are Core-side state keyed by `block_path` and aren't fields of the reduced `AstNode` render projection. Forward work must instead keep source ranges inside the canonical Core document/AST state required by ADR-013; a Flutter render projection still receives only the coordinates its interaction contract needs. Final Stage 3 settles the exact range and projection types after SPK-BURL-H001. No UI code may treat a byte offset into Core-owned source as independent authority.
-   - No code path may rewrite bytes outside the span of an edited Block. This is the Edit Fidelity constraint in `prd/constraints.md` and it is the reason no AST-to-Markdown serializer exists for the save path; adding one for that path reintroduces exactly the failure the constraint forbids.
+   - No code path may rewrite bytes outside the span of an edited Block. This is the Edit Fidelity constraint in `prd/constraints.yaml` and it is the reason no AST-to-Markdown serializer exists for the save path; adding one for that path reintroduces exactly the failure the constraint forbids.
 2. **Dart:**
    - Must pass `dart analyze`.
    - Must be formatted with `dart format`.
@@ -840,7 +916,7 @@ For any malformed current-version snapshot, Core quarantines and preserves the o
 
 ## Terminology introduced at this layer
 
-`prd/glossary.md` owns the product vocabulary and deliberately holds no implementation terms. Four terms this specification introduces are load-bearing across the contract, the ADRs and every Epic D ticket, and are defined here because they belong to the physical layer:
+`prd/glossary.yaml` owns the product vocabulary and deliberately holds no implementation terms. Four terms this specification introduces are load-bearing across the contract, the ADRs and every Epic D ticket, and are defined here because they belong to the physical layer:
 
 | Term | Definition |
 | :--- | :--- |
@@ -942,3 +1018,12 @@ This caught a real regression during Epic B's closeout that six passing
 single-run, so the bug (a multi-run paragraph silently collapsing to one
 uniform, unstyled `TextField` once made editable) was invisible to the suite
 until an actual rendered screenshot was inspected.
+
+## Execution conventions
+
+- Production authorization is contract-scoped. Epic G M0 keeps `SHELL-G001`, `PREF-G002`, `STATE-G003`, `TABS-G004`, `CLOSE-G005`, and `NAV-G007` executable. The bootstrap additionally makes `FLAKE-M002` and `CI-M003` executable. Every other production ticket has an implicit STOP until its own decision evidence, any required Product Requirements or Architecture evolution, final Stage 3 contract, and Stage 4 adaptation are merged. An unrelated unresolved Spike doesn't block an otherwise authorized ticket.
+- The five `Spike` tickets remain research-only and executable within their exhaustive allowlists after their declared dependencies are satisfied. `CI-M003` satisfies those dependencies only after both its reviewed implementation pull request and dedicated reviewed evidence pull request merge. Every managed Spike runs the launcher from a clean immutable trust-anchor checkout; the trusted default-branch workflow checks out the separate tested source as data. Before dispatch and during collection, the launcher rejects any change outside the ticket's exact write allowlist or any changed validation control. Within the declared H Spike tranche, the committed, validated, and independently reviewed `AST-H001` milestone satisfies `PATH-H002`; a draft or unmerged branch never satisfies a cross-tranche or cross-branch dependency.
+- A ticket that scopes `rust/src/api/ffi_api.rs` also scopes both generated outputs: `lib/src/rust/**` and `rust/src/frb_generated.rs`. Its verification must regenerate and compare both byte for byte, fail on stale output, and leave the pre-check working tree unchanged. This convention avoids repeating generated files in every FFI ticket without transferring ownership away from the ticket.
+- `CI-M003` is authorized to bootstrap with the provisionally aligned Flutter Rust Bridge generator, Rust crate, and Dart package at `2.12.0`. It must implement the missing non-mutating generated-binding checker before the ordered gate invokes that file. The reviewed implementation merge establishes `TRUST_ANCHOR_SHA`; `docs/epic-m-ci-evidence` records the accepted self-validation and completes the ticket only after independent review and merge. Any later validation-control change repeats this anchor rotation. Final Stage 3 must revalidate the triple and generated bytes before a downstream production ticket relies on it.
+
+PR #11 remains the delivered redesign foundation and isn’t retroactively assigned to an epic. `SHELL-G001` removes the presentation-only Platform chrome that leaked from its prototype.

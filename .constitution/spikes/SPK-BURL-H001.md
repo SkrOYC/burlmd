@@ -33,6 +33,6 @@
 ## Downstream impact
 
 - **ADRs to write or update:** accept/replace ADR-013; revise ADR-007 and FFI contracts in final Stage 3
-- **Tickets unblocked in `tasks/active/`:** BURL-H003 directly; BURL-H004, BURL-G008, BURL-G009, BURL-L004, and later dependents transitively
+- **Tickets unblocked in `tasks/epics/`:** BURL-H003 directly; BURL-H004, BURL-G008, BURL-G009, BURL-L004, and later dependents transitively
 - **Tickets to add or split:** adapt these tickets when the accepted model changes physical scope or estimates
 - **Spec edits required:** measured Technical Implementation evolution; earlier stages only if evidence changes product behavior or boundaries

@@ -33,6 +33,6 @@
 ## Downstream impact
 
 - **ADRs to write or update:** accept/replace ADR-015 and bind the Git responsibility split in final Stage 3
-- **Tickets unblocked in `tasks/active/`:** BURL-L002 directly; BURL-L003, BURL-L004, BURL-L006, BURL-L007, BURL-L008, and packaging dependents transitively
+- **Tickets unblocked in `tasks/epics/`:** BURL-L002 directly; BURL-L003, BURL-L004, BURL-L006, BURL-L007, BURL-L008, and packaging dependents transitively
 - **Tickets to add or split:** adapt the Git/reconciliation tickets if the accepted protocol changes command ownership or durable record boundaries
 - **Spec edits required:** final Technical Implementation; Architecture only if evidence changes the logical reconciliation flow

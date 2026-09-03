@@ -1,7 +1,7 @@
 id: K
 name: private github remote
 kind: product
-capabilities: [CAP-054, CAP-061, CAP-062, CAP-063, CAP-067, CAP-068, CAP-069, CAP-073]
+capabilities: [CAP-054, CAP-061, CAP-062, CAP-063, CAP-067, CAP-068, CAP-069, CAP-073, CAP-070]
 depends_on: [G, H, I, J, M]
 scope:
   paths: [config/github-app.release.toml, docs/github-app-installation.md, scripts/attest-github-app-token-expiration.sh, scripts/verify-github-app-registration.sh, ".github/workflows/**", ".constitution/reports/**", rust/src/api/auth.rs, rust/src/api/ffi_api.rs, lib/src/providers/auth_provider.dart, lib/src/screens/login.dart, test/providers/auth_provider_test.dart, test/screens/login_test.dart, "rust/src/security/**", "test/**", "rust/src/provider/**", "lib/src/components/**", rust/src/git/operations.rs, "rust/src/sync/**", integration_test/connect_consolidation_flow_test.dart, rust/src/workspace/bootstrap.rs, "rust/src/object_store/**", scripts/verify-second-device-join.sh, lib/src/providers/workspace_provider.dart, lib/src/screens/workspace.dart, "lib/l10n/**", "integration_test/**", "scripts/**"]
@@ -18,7 +18,7 @@ tickets:
       in: [config/github-app.release.toml, docs/github-app-installation.md, scripts/attest-github-app-token-expiration.sh, scripts/verify-github-app-registration.sh, ".github/workflows/**", ".constitution/reports/**"]
     verification:
       command: "./scripts/attest-github-app-token-expiration.sh --client-id \"$BURLMD_GITHUB_APP_CLIENT_ID\" --output .constitution/reports/github-app-token-expiration-attestation.json"
-      expected: "exit 0 with a non-placeholder public client ID, reachable installation URL, exact versioned Contents/Administration/implicit Metadata permissions, no Workflows permission, required versioned REST headers, a successful device-code request, a fresh expiring-token attestation, and a drift-free release report"
+      expected: "exit 0 with a non-placeholder public client ID, reachable installation URL, exact versioned Contents/Administration/implicit Metadata permissions, no Workflows permission, required versioned REST headers, a successful device-code request, a fresh expiring-token attestation, and a drift-free release report Original verification detail: Run `./scripts/attest-github-app-token-expiration.sh --client-id \"$BURLMD_GITHUB_APP_CLIENT_ID\" --output .constitution/reports/github-app-token-expiration-attestation.json`, complete the displayed device-flow authorization as the project administrator, then run `./scripts/verify-github-app-registration.sh --manifest config/github-app.release.toml --installation-url \"$BURLMD_GITHUB_APP_INSTALLATION_URL\" --expected-client-id \"$BURLMD_GITHUB_APP_CLIENT_ID\" --require-device-flow --require-private-repository-permissions --forbid-permission workflows --token-expiration-attestation .constitution/reports/github-app-token-expiration-attestation.json --max-attestation-age-hours 24 --output .constitution/reports/github-app-registration.json && git diff --check`."
     stop_conditions: ["STOP if release configuration uses a placeholder client ID, requires a client secret/private key in the binary or CI, omits the public installation URL, or differs from the versioned permission manifest."]
     description: "Register the project-owned GitHub App through the administrator runbook, publish its installation URL, version its repository and account permissions, enable device flow and expiring user tokens, and inject the public release client ID. Automate public metadata, installation URL, permission, client-ID, and device-code checks. Require a fresh administrator-approved device-flow attestation for token expiration before release"
     acceptance:
@@ -31,7 +31,7 @@ tickets:
     title: Replace legacy OAuth with GitHub App device flow
     type: Security
     effort: 8
-    depends_on: []
+    depends_on: [BURL-K009]
     category: Security
     scope:
       in: [rust/src/api/auth.rs, rust/src/api/ffi_api.rs, lib/src/providers/auth_provider.dart, lib/src/screens/login.dart, test/providers/auth_provider_test.dart, test/screens/login_test.dart]
@@ -50,7 +50,7 @@ tickets:
     title: "Persist, refresh, and revoke the user token pair safely"
     type: Security
     effort: 8
-    depends_on: []
+    depends_on: [BURL-K001]
     category: Security
     scope:
       in: [rust/src/api/auth.rs, "rust/src/security/**", rust/src/api/ffi_api.rs, lib/src/providers/auth_provider.dart, "test/**"]
@@ -69,7 +69,7 @@ tickets:
     title: Discover installations and select or provision a private repository
     type: Feature
     effort: 8
-    depends_on: []
+    depends_on: [BURL-K002]
     category: Security
     scope:
       in: ["rust/src/provider/**", rust/src/api/ffi_api.rs, "lib/src/components/**", "test/**"]
@@ -88,7 +88,7 @@ tickets:
     title: Attach and publish an existing local Workspace
     type: Feature
     effort: 8
-    depends_on: []
+    depends_on: [BURL-K003]
     category: Feature-Evolution
     scope:
       in: [rust/src/git/operations.rs, "rust/src/provider/**", "rust/src/sync/**", rust/src/api/ffi_api.rs, "test/**", integration_test/connect_consolidation_flow_test.dart]
@@ -107,7 +107,7 @@ tickets:
     title: Join a connected Workspace on another device
     type: Feature
     effort: 8
-    depends_on: []
+    depends_on: [BURL-K003]
     category: Feature-Evolution
     scope:
       in: [rust/src/workspace/bootstrap.rs, rust/src/git/operations.rs, "rust/src/provider/**", "rust/src/object_store/**", rust/src/api/ffi_api.rs, scripts/verify-second-device-join.sh, "test/**"]
@@ -126,7 +126,7 @@ tickets:
     title: "Separate sign-out, detach, reconnect, and full-local transition"
     type: Feature
     effort: 8
-    depends_on: []
+    depends_on: [BURL-K004]
     category: Correctness
     scope:
       in: ["rust/src/sync/**", rust/src/git/operations.rs, "rust/src/object_store/**", rust/src/api/ffi_api.rs, "test/**"]
@@ -145,7 +145,7 @@ tickets:
     title: "Integrate Remote settings, privacy, and authorization states"
     type: Feature
     effort: 8
-    depends_on: []
+    depends_on: [BURL-K004, BURL-K005, BURL-K006]
     category: Feature-Evolution
     scope:
       in: ["lib/src/components/**", lib/src/providers/auth_provider.dart, lib/src/providers/workspace_provider.dart, lib/src/screens/workspace.dart, "lib/l10n/**", "test/**"]
@@ -172,7 +172,7 @@ tickets:
     title: Establish layered private GitHub verification
     type: Chore
     effort: 5
-    depends_on: []
+    depends_on: [BURL-K005, BURL-K006]
     category: Security
     scope:
       in: [".github/workflows/**", "integration_test/**", "scripts/**", ".constitution/reports/**"]

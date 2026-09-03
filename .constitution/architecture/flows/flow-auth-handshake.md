@@ -1,7 +1,7 @@
 ---
 job: JOB-04
 capabilities: [CAP-063, CAP-067, CAP-068, CAP-069, CAP-070, CAP-073]
-boundaries: []
+boundaries: [BND-01, BND-02, BND-04, BND-05, BND-10, BND-11, BND-12, BND-14]
 view: state
 certainty: assumed
 assumption: "Migrated from markdown; not yet exercised by an integration test."

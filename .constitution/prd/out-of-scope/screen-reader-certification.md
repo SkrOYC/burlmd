@@ -1,6 +1,6 @@
 ---
 decision: deferred
-date: "2026-08-25"
+date: 2026-08-21
 ---
 # Screen-reader certification
 

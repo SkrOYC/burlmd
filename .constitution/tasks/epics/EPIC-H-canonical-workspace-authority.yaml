@@ -32,7 +32,7 @@ tickets:
     title: Select the canonical cross-platform path algorithm
     type: Spike
     effort: 8
-    depends_on: []
+    depends_on: [BURL-H001]
     category: Correctness
     scope:
       in: [".constitution/prototypes/path/**", ".constitution/spikes/SPK-BURL-H002.md"]
@@ -52,7 +52,7 @@ tickets:
     title: Implement the canonical source-backed Note document
     type: Feature
     effort: 8
-    depends_on: []
+    depends_on: [BURL-H001, BURL-H002]
     category: Feature-Evolution
     scope:
       in: ["rust/src/markdown/**", rust/src/draft.rs, rust/Cargo.toml, rust/Cargo.lock]
@@ -71,7 +71,7 @@ tickets:
     title: "Replace parser, FFI, rendering, and index projections"
     type: Feature
     effort: 8
-    depends_on: []
+    depends_on: [BURL-H003, BURL-H005]
     category: Tech-Debt
     scope:
       in: ["rust/src/api/**", "rust/src/index/**", "rust/src/workspace/**", "lib/src/rust/**", lib/src/components/block_view.dart, lib/src/components/editor.dart, lib/src/providers/rust_api_provider.dart, "test/**"]
@@ -90,7 +90,7 @@ tickets:
     title: Implement canonical paths and recoverable migration
     type: Feature
     effort: 8
-    depends_on: []
+    depends_on: [BURL-H002, BURL-H003]
     category: Correctness
     scope:
       in: [rust/src/okf/concept_id.rs, "rust/src/workspace/**", "rust/src/index/**", "rust/src/db/**", "test/**"]
@@ -109,7 +109,7 @@ tickets:
     title: Establish the canonical Workspace authority tree
     type: Feature
     effort: 8
-    depends_on: []
+    depends_on: [BURL-H004, BURL-H005]
     category: Correctness
     scope:
       in: ["rust/src/workspace/**", rust/src/draft.rs, "rust/src/index/**", rust/src/api/ffi_api.rs]
@@ -128,7 +128,7 @@ tickets:
     title: Preflight and adopt an existing Workspace
     type: Feature
     effort: 8
-    depends_on: []
+    depends_on: [BURL-H006]
     category: Feature-Evolution
     scope:
       in: [rust/src/workspace/bootstrap.rs, rust/src/index/scan.rs, "rust/src/okf/**", rust/src/api/ffi_api.rs, "lib/src/components/**", "test/**"]
@@ -154,7 +154,7 @@ tickets:
     title: Preview and apply conformance/path repairs
     type: Feature
     effort: 8
-    depends_on: []
+    depends_on: [BURL-H007]
     category: Correctness
     scope:
       in: ["rust/src/okf/**", "rust/src/workspace/**", rust/src/api/ffi_api.rs, "lib/src/components/**", "test/**"]
@@ -173,13 +173,13 @@ tickets:
     title: Add debounced live Workspace observation
     type: Feature
     effort: 8
-    depends_on: []
+    depends_on: [BURL-H006]
     category: Feature-Evolution
     scope:
       in: ["rust/src/workspace/**", "rust/src/api/**", rust/Cargo.toml, rust/Cargo.lock, "test/**"]
     verification:
       command: "cargo test --manifest-path rust/Cargo.toml && cargo clippy --workspace --all-targets --manifest-path rust/Cargo.toml -- -D warnings && ./scripts/check-generated-bindings.sh && cargo run --release --manifest-path rust/Cargo.toml --bin workspace-observer-meter -- --run-id linux-reference --profile github-ubuntu-24_04-x86_64 --operations 100 --output target/observer-meters/linux-reference.json && git diff --check"
-      expected: exit 0 with burst/debounce/fallback and missed-event recovery tests passing
+      expected: "exit 0 with burst/debounce/fallback and missed-event recovery tests passing Original verification detail: `ubuntu-24.04`: `cargo test --manifest-path rust/Cargo.toml && cargo clippy --workspace --all-targets --manifest-path rust/Cargo.toml -- -D warnings && ./scripts/check-generated-bindings.sh && cargo run --release --manifest-path rust/Cargo.toml --bin workspace-observer-meter -- --run-id linux-reference --profile github-ubuntu-24_04-x86_64 --operations 100 --output target/observer-meters/linux-reference.json && git diff --check`; Apple Silicon `macos-26`: `cargo test --manifest-path rust/Cargo.toml && cargo clippy --workspace --all-targets --manifest-path rust/Cargo.toml -- -D warnings && ./scripts/check-generated-bindings.sh && cargo run --release --manifest-path rust/Cargo.toml --bin workspace-observer-meter -- --run-id macos-reference --profile github-macos-26-arm64 --operations 100 --output target/observer-meters/macos-reference.json && git diff --check`; Apple Silicon `macos-15` functional compatibility: `cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && git diff --check`. Validate complete role bundles and the accepted aggregate through the `CI-M003` two-phase protocol."
     stop_conditions: ["STOP if the final TechSpec hasn't pinned the observer adapter and polling fallback.", STOP if managed evidence is rejected or if macOS 15 contributes performance evidence., STOP if an event directly mutates authority without Core validation.]
     description: Convert Platform filesystem events into debounced candidate create/edit/rename/move/delete proposals with fallback polling and explicit Rescan recovery
     acceptance:
@@ -193,7 +193,7 @@ tickets:
     title: Reconcile valid external Note and lifecycle changes
     type: Feature
     effort: 8
-    depends_on: []
+    depends_on: [BURL-H009, BURL-H007]
     category: Correctness
     scope:
       in: ["rust/src/workspace/**", "rust/src/index/**", rust/src/git/operations.rs, rust/src/api/ffi_api.rs, lib/src/providers/workspace_provider.dart, "test/**"]
@@ -217,7 +217,7 @@ tickets:
     title: "Resolve dirty, stale, and invalid external changes"
     type: Feature
     effort: 8
-    depends_on: []
+    depends_on: [BURL-H010, BURL-H008]
     category: Correctness
     scope:
       in: ["rust/src/workspace/**", rust/src/api/ffi_api.rs, "lib/src/components/**", lib/src/providers/note_providers.dart, "test/**"]
@@ -236,7 +236,7 @@ tickets:
     title: Retain Rescan as observation recovery
     type: Feature
     effort: 5
-    depends_on: []
+    depends_on: [BURL-H009, BURL-H011]
     category: Correctness
     scope:
       in: [rust/src/index/scan.rs, "rust/src/workspace/**", lib/src/screens/workspace.dart, test/screens/workspace_rescan_test.dart]

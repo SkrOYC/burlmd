@@ -1,6 +1,6 @@
 ---
 decision: rejected
-date: "2026-09-03"
+date: 2026-07-24
 ---
 # Out of Scope: Mandatory Account or Provider Authorization on First Run
 

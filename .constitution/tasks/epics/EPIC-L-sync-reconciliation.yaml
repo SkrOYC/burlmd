@@ -32,7 +32,7 @@ tickets:
     title: Implement typed read-only Git reconciliation analysis
     type: Security
     effort: 8
-    depends_on: []
+    depends_on: [BURL-L001]
     category: Security
     scope:
       in: ["rust/src/git/**", "rust/src/sync/**", rust/src/api/ffi_api.rs, rust/Cargo.toml, rust/Cargo.lock, "test/**"]
@@ -51,7 +51,7 @@ tickets:
     title: Complete the durable synchronization scheduler
     type: Feature
     effort: 8
-    depends_on: []
+    depends_on: [BURL-L002]
     category: Correctness
     scope:
       in: ["rust/src/sync/**", "rust/src/git/**", rust/src/bin/sync_freshness_meter.rs, rust/src/api/ffi_api.rs, lib/src/providers/workspace_provider.dart, "test/**"]
@@ -71,7 +71,7 @@ tickets:
     title: Materialize content conflicts as canonical AST Suggestions
     type: Feature
     effort: 8
-    depends_on: []
+    depends_on: [BURL-L002]
     category: Correctness
     scope:
       in: ["rust/src/markdown/**", "rust/src/sync/**", "rust/src/git/**", rust/src/api/ffi_api.rs, "test/**"]
@@ -90,7 +90,7 @@ tickets:
     title: Resolve Suggestions independently in the editor
     type: Feature
     effort: 8
-    depends_on: []
+    depends_on: [BURL-L004]
     category: Feature-Evolution
     scope:
       in: [lib/src/components/editor.dart, lib/src/components/block_view.dart, lib/src/providers/note_providers.dart, rust/src/api/ffi_api.rs, "test/**"]
@@ -116,7 +116,7 @@ tickets:
     title: Implement durable Lifecycle Decisions
     type: Feature
     effort: 8
-    depends_on: []
+    depends_on: [BURL-L002]
     category: Correctness
     scope:
       in: ["rust/src/sync/**", "rust/src/workspace/**", "rust/src/git/**", rust/src/api/ffi_api.rs, "lib/src/components/**", "test/**"]
@@ -135,7 +135,7 @@ tickets:
     title: Implement durable Asset Decisions
     type: Feature
     effort: 8
-    depends_on: []
+    depends_on: [BURL-L002]
     category: Correctness
     scope:
       in: ["rust/src/sync/**", "rust/src/assets/**", "rust/src/object_store/**", rust/src/api/ffi_api.rs, "lib/src/components/**", "test/**"]
@@ -154,7 +154,7 @@ tickets:
     title: Finalize reconciliation with compare-and-swap and crash recovery
     type: Feature
     effort: 8
-    depends_on: []
+    depends_on: [BURL-L004, BURL-L006, BURL-L007]
     category: Correctness
     scope:
       in: ["rust/src/sync/**", "rust/src/git/**", "rust/src/db/**", rust/src/api/ffi_api.rs, "test/**"]
@@ -173,7 +173,7 @@ tickets:
     title: Expose complete synchronization state and recovery actions
     type: Feature
     effort: 5
-    depends_on: []
+    depends_on: [BURL-L003, BURL-L005, BURL-L008]
     category: Feature-Evolution
     scope:
       in: [rust/src/api/ffi_api.rs, lib/src/providers/workspace_provider.dart, "lib/src/components/**", "lib/l10n/**", "test/**"]
@@ -199,7 +199,7 @@ tickets:
     title: Integrate complete Remote refs with Protected Object retention
     type: Feature
     effort: 8
-    depends_on: []
+    depends_on: [BURL-L003]
     category: Correctness
     scope:
       in: ["rust/src/git/**", "rust/src/sync/**", "rust/src/assets/**", "rust/src/object_store/**", "test/**"]
@@ -218,7 +218,7 @@ tickets:
     title: Resolve delete-versus-edit without content loss
     type: Feature
     effort: 5
-    depends_on: []
+    depends_on: [BURL-L004, BURL-L006]
     category: Correctness
     scope:
       in: ["rust/src/sync/**", "rust/src/markdown/**", "rust/src/workspace/**", rust/src/api/ffi_api.rs, "lib/src/components/**", "test/**"]
@@ -243,7 +243,7 @@ tickets:
     title: Validate the complete synchronization lifecycle
     type: Feature
     effort: 8
-    depends_on: []
+    depends_on: [BURL-L009, BURL-L010, BURL-L011]
     category: Correctness
     scope:
       in: ["rust/src/sync/**", "rust/src/git/**", "rust/src/assets/**", "lib/src/components/**", "lib/src/providers/**", "test/**", "integration_test/**"]
