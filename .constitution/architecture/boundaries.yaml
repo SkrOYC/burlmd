@@ -158,34 +158,39 @@ boundaries:
     name: Release Pipeline
     kind: pipeline-stage
     type: "Build, verification, and publication boundary"
-    responsibility: "Produces each supported artifact, assigns validation roles, establishes authoritative expected identity, requires complete accepted evidence, and publishes artifact integrity with authenticated build provenance"
+    responsibility: "Produces each supported artifact, assigns validation roles, establishes authoritative expected identity, requires complete accepted evidence, and publishes artifact integrity with authenticated provenance"
     inputs: [Accepts a release identity and Platform matrix.]
     outputs: ["Emits verified artifacts, evidence, and metadata to Release Distribution."]
     depends_on: [BND-16, BND-17, BND-19, Supported Platform build environments]
     certainty: assumed
-    assumption: "Migrated from containers.md; not yet mapped to a code path."
+    assumption: "The reviewed release design defines this boundary, but its implementation remains unmerged and no published release has exercised it end to end."
   - id: BND-16
     legacy_id: Isolated validation environment
     name: Isolated validation environment
     kind: other
-    type: Pipeline-owned System/Native validation environment
-    responsibility: "Runs one assigned validation role while owning its display, compositor, input, and process state independently of the Writer's active desktop. Candidate execution and evidence sealing use separate fresh pipeline-owned environments"
-    inputs: ["Candidate execution accepts an artifact, run identity, required role, and authoritative expected source, execution, base, release, build, and corpus identities without origin-signing authority."]
-    outputs: [It emits one complete untrusted bundle containing the role manifest and every named evidence file., A fresh sealing environment validates that bundle and the candidate environment identity before it authenticates an immutable sealed handoff.]
+    type: Pipeline-owned paired validation environments
+    responsibility: "Runs one assigned validation role in a candidate environment isolated from the Writer's device, then seals its untrusted file handoff in a separate fresh authority environment that never executes candidate bytes"
+    inputs: ["Candidate commands accept an artifact, run identity, required role, and authoritative expected source, execution, base, release, build, and corpus identities without provenance authority."]
+    outputs: ["A trusted wrapper may upload one complete untrusted handoff containing the role manifest and every named evidence file.", "The strict-containment role proves candidate-process teardown before the wrapper uploads the handoff; other hosted roles record bounded cleanup without claiming arbitrary-process containment.", "The fresh sealing environment validates handoff identity and integrity before it alone authenticates immutable provenance."]
     depends_on: [BND-15, BND-17]
-    certainty: assumed
-    assumption: "Migrated from containers.md; not yet mapped to a code path."
+    trust_boundary: true
+    certainty: settled
+    evidence:
+      kind: ruling
+      ref: "2026-09-04 user ruling: fresh-seal authority"
+      date: 2026-09-04
+      note: "The user ruled that fresh sealing is the sole provenance authority, candidate output is untrusted, strict containment is role-specific, and hosted survivors cannot cross into sealing authority."
   - id: BND-17
     legacy_id: Evidence aggregation
     name: Evidence aggregation
     kind: pipeline-stage
     type: Evidence integrity and acceptance boundary
-    responsibility: "Authenticates the fresh sealing environment as managed origin, independently observes its final state after completion, verifies the trust-anchor relationship and ticket write boundary, verifies candidate and sealed handoff identities and complete bundle integrity, and compares captured identity with authoritative expected identity before isolated aggregation"
-    inputs: ["Accepts expected trust-anchor, workflow-signer, tested-source, base, release, build, corpus, run, and required-role identities from Release Pipeline.", Accepts one authenticated sealed bundle per role and the pipeline-owned candidate and sealing environment records., Credentialed acquisition produces verified read-only inputs.]
+    responsibility: "Verifies that accepted provenance came only from a completed fresh sealing environment, checks the trust-anchor relationship and write boundary, and compares captured handoff identity and integrity with authoritative expected identity before isolated aggregation"
+    inputs: ["Accepts expected trust-anchor, validation-control signer, tested-source, base, release, build, corpus, run, and required-role identities from Release Pipeline.", "Accepts one fresh-sealed bundle per role and the pipeline-owned candidate and sealing environment records.", "Credentialed acquisition produces verified read-only inputs."]
     outputs: [Credentialed acquisition produces verified read-only inputs., "Returns an accepted complete set or explicit unmanaged, candidate-controlled, out-of-boundary, untrusted, missing, duplicated, mismatched, stale, corrupt, unsealed, credential-exposed, or isolation-failed outcomes."]
     depends_on: [BND-16, BND-15]
     certainty: assumed
-    assumption: "Migrated from containers.md; not yet mapped to a code path."
+    assumption: "The reviewed acceptance design defines this boundary, but its implementation remains unmerged and no complete release evidence set has exercised it."
   - id: BND-18
     legacy_id: Release Update Coordinator
     name: Release Update Coordinator
@@ -212,7 +217,7 @@ edges:
   - from: BND-01
     to: BND-02
     protocol: in-process
-    note: "Writer intent as commands, and authoritative state, warnings, Decisions, and Suggestions back, across the FFI boundary"
+    note: "Writer intent as commands, and authoritative state, warnings, Decisions, and Suggestions back, across the presentation-to-coordination seam"
   - from: BND-02
     to: BND-03
     protocol: in-process
@@ -276,7 +281,7 @@ edges:
   - from: BND-07
     to: BND-05
     protocol: shared-storage
-    note: "Encrypted SQLite index derived from the authoritative files; disposable and rebuildable"
+    note: "Encrypted derived index built from the authoritative files; disposable and rebuildable"
   - from: BND-07
     to: BND-12
     protocol: in-process
@@ -292,7 +297,7 @@ edges:
   - from: BND-10
     to: BND-14
     protocol: request-response
-    note: Authenticated Git and Provider API exchanges with the private Remote
+    note: Authenticated history and authorization exchanges with the private Remote
   - from: BND-10
     to: BND-05
     protocol: in-process
@@ -308,7 +313,7 @@ edges:
   - from: BND-11
     to: BND-14
     protocol: request-response
-    note: "S3-compatible object PUT, GET, and HEAD against the user-controlled Object Store"
+    note: "Authenticated Object write, read, and identity-verification requests against the user-controlled Object Store"
   - from: BND-11
     to: BND-06
     protocol: in-process
@@ -328,11 +333,11 @@ edges:
   - from: BND-15
     to: BND-16
     protocol: file-handoff
-    note: "validation request and authoritative expected-identity handoff: Role assignment and tested-source data handed to a fresh pipeline-owned environment"
+    note: "Validation request and authoritative expected identity handed to the candidate side of a pipeline-owned role"
   - from: BND-16
     to: BND-17
     protocol: file-handoff
-    note: "authenticated-origin complete evidence bundle handoff: Sealed role bundles with manifests, byte counts, and digests"
+    note: "Fresh-sealed evidence handoff whose provenance, manifest, byte counts, and integrity identifiers are verified before aggregation"
   - from: BND-17
     to: BND-15
     protocol: file-handoff
@@ -355,17 +360,5 @@ edges:
     note: "asynchronous Object obligation and result: asynchronous Object obligation and result"
   - from: BND-15
     to: BND-17
-    protocol: in-process
-    note: "authoritative expected-identity handoff: authoritative expected-identity handoff"
-  - from: BND-16
-    to: BND-15
-    protocol: in-process
-    note: validation request and authoritative expected-identity handoff
-  - from: BND-17
-    to: BND-16
-    protocol: in-process
-    note: authenticated-origin complete evidence bundle handoff
-  - from: BND-19
-    to: BND-15
-    protocol: in-process
-    note: "artifact, evidence, and provenance handoff"
+    protocol: file-handoff
+    note: "Authoritative expected identity delivered independently of candidate output"
