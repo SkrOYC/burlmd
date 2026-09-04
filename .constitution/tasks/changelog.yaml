@@ -1,4 +1,20 @@
 entries:
+  - version: v3.0.1
+    date: 2026-09-04
+    changed:
+      - "Translated the reviewed Stage 4 v2.2.1 through v2.2.7 lineage into the canonical structured task records against PRD v2.0.0, Architecture v2.0.1, and TechSpec v2.0.1. Conditional viewport verification, complete host profiles, runner-label reconciliation, and the platform-specific fresh-seal ruling now remain explicit where their tickets consume them."
+      - "Mapped the live managed-validation references CI-M003, FLAKE-M002, AST-H001, PATH-H002, ASSET-I001, GIT-L001, and PKG-M001 to BURL-M003, BURL-M015, BURL-H001, BURL-H002, BURL-I001, BURL-L001, and BURL-M001. Updated the tranche record without changing its single-axis milestone sequence."
+      - "Moved the planned BURL-M003 completion artifacts to .constitution/evidence/BURL-M003/managed-evidence.json, completion.md, and manifest.yaml, preserving the two-pull-request completion gate and leaving all ticket statuses planned."
+      - "Preserved all 80 active tickets, 564 points, epic and ticket dependencies, acceptance modes, and the generated seven-wave graph. Completed epic archives contain no actuals blocks, so no observed diff-lines-per-point or review-rounds-per-point calibration was available; this correction changes no estimate."
+    fixed:
+      - "Copied the canonical TechSpec verification commands byte-for-byte into BURL-M006, BURL-M011, BURL-M012, and BURL-M013, replacing their temporary legacy aliases."
+      - "Restored the reviewed evidence boundary: Linux candidate execution has strict private-PID teardown, hosted macOS performs bounded cleanup without claiming universal containment, candidate commands remain credential-free, the trusted wrapper alone uploads the immutable untrusted handoff, and the fresh non-executing seal alone receives OIDC and attestation authority."
+      - "Made BURL-I001 verify a recorded viewport only when its authenticated evidence assignment contains a viewport-bound class, and made BURL-M003 reject runner-label mismatch before ordered evidence-class comparison."
+    upstream:
+      prd: v2.0.0
+      architecture: v2.0.1
+      tech-spec: v2.0.1
+    by: patch-lane
   - version: v3.0.0
     date: 2026-09-03
     added: ["Added the concurrency mechanics to constitution.yaml from the practice the v2.2.0 entry describes: one worktree and branch per epic, created from merged master, rebase-merged back."]
