@@ -482,11 +482,6 @@ verification_commands:
     exists: false
     owner: BURL-M003
   - name: other
-    label: "temporary legacy Stage 4 alias quoted by BURL-M006; remove after its verification.command migrates"
-    command: "Run the accepted production AppImage build and installed probes derived from `SPK-PKG-M001`, then `git diff --check`."
-    exists: false
-    owner: BURL-M006
-  - name: other
     label: canonical BURL verification for BURL-M006
     command: "Run the accepted production AppImage build and installed probes derived from `SPK-BURL-M001`, then `git diff --check`."
     exists: false
@@ -497,30 +492,15 @@ verification_commands:
     exists: false
     owner: BURL-M009
   - name: other
-    label: "temporary legacy Stage 4 alias quoted by BURL-M011; remove after its verification.command migrates"
-    command: "Run the accepted x86-64 AppImage installed matrix from final TechSpec against the immutable `RELEASE-M009` candidate on every accepted Linux runtime. Run its common functional, performance, and exact private-headless platform-regression evidence on managed `ubuntu-24.04`, validate the authenticated role and aggregate schemas, then run `git diff --check`."
-    exists: false
-    owner: BURL-M011
-  - name: other
     label: canonical BURL verification for BURL-M011
     command: "Run the accepted x86-64 AppImage installed matrix from final TechSpec against the immutable `BURL-M009` candidate on every accepted Linux runtime. Run its common functional, performance, and exact private-headless platform-regression evidence on managed `ubuntu-24.04`, validate the authenticated role and aggregate schemas, then run `git diff --check`."
     exists: false
     owner: BURL-M011
   - name: other
-    label: "temporary legacy Stage 4 alias quoted by BURL-M012; remove after its verification.command migrates"
-    command: "Run the accepted Nix installed matrix from final TechSpec against the immutable `RELEASE-M009` Flake candidate on every exposed x86-64 Linux system. Run the managed `ubuntu-24.04` functional and performance roles through the authenticated `CI-M003` evidence protocol, then run `git diff --check`."
-    exists: false
-    owner: BURL-M012
-  - name: other
     label: canonical BURL verification for BURL-M012
     command: "Run the accepted Nix installed matrix from final TechSpec against the immutable `BURL-M009` Flake candidate on every exposed x86-64 Linux system. Run the managed `ubuntu-24.04` functional and performance roles through the authenticated `BURL-M003` evidence protocol, then run `git diff --check`."
     exists: false
     owner: BURL-M012
-  - name: other
-    label: "temporary legacy Stage 4 alias quoted by BURL-M013; remove after its verification.command migrates"
-    command: "Run the accepted Apple Silicon installed matrix from final TechSpec against the immutable `RELEASE-M009` archive on managed Apple Silicon `macos-26` and `macos-15`. Run common functional evidence on both, performance and the sole authoritative macOS visual baseline on macOS 26 only, validate the authenticated role and aggregate schemas, then run `git diff --check`."
-    exists: false
-    owner: BURL-M013
   - name: other
     label: canonical BURL verification for BURL-M013
     command: "Run the accepted Apple Silicon installed matrix from final TechSpec against the immutable `BURL-M009` archive on managed Apple Silicon `macos-26` and `macos-15`. Run common functional evidence on both, performance and the sole authoritative macOS visual baseline on macOS 26 only, validate the authenticated role and aggregate schemas, then run `git diff --check`."
@@ -1081,7 +1061,7 @@ until an actual rendered screenshot was inspected.
 
 ## Execution conventions
 
-Four verification-command aliases in the front matter preserve validator compatibility with the current Stage 4 `verification.command` fields for `BURL-M006`, `BURL-M011`, `BURL-M012`, and `BURL-M013`. Each alias is labeled temporary and sits beside its canonical BURL command. They grant no runtime compatibility. Immediately after a Stage 4 pass replaces those four fields with the canonical commands, the next Stage 3 cleanup must remove the legacy aliases.
+The Stage 4 `verification.command` fields for `BURL-M006`, `BURL-M011`, `BURL-M012`, and `BURL-M013` use the canonical BURL verification commands listed in this front matter.
 
 - Production authorization is contract-scoped. Epic G M0 keeps `BURL-G001`, `BURL-G002`, `BURL-G003`, `BURL-G004`, `BURL-G005`, and `BURL-G007` executable. The bootstrap additionally makes `BURL-M015` and `BURL-M003` executable. Every other production ticket has an implicit STOP until its own decision evidence, any required Product Requirements or Architecture evolution, final Stage 3 contract, and Stage 4 adaptation are merged. An unrelated unresolved Spike doesn't block an otherwise authorized ticket.
 - The five `Spike` tickets remain research-only and executable within their exhaustive allowlists after their declared dependencies are satisfied. `BURL-M003` satisfies those dependencies only after both its reviewed implementation pull request and dedicated reviewed evidence pull request merge. Every managed Spike runs the launcher from a clean immutable trust-anchor checkout; the trusted default-branch workflow checks out the separate tested source as data. Before dispatch and during collection, the launcher rejects any change outside the ticket's exact write allowlist or any changed validation control. Within the declared H Spike tranche, the committed, validated, and independently reviewed `BURL-H001` milestone satisfies `BURL-H002`; a draft or unmerged branch never satisfies a cross-tranche or cross-branch dependency.
