@@ -43,7 +43,7 @@ pub use crate::index::query::{LinkCompletion, LinkCompletionKind, LinkTargetReso
 /// process — see `security::keyring::get_or_create_root_key`.
 ///
 /// Requires no credential, no provider, and no network — this is the call
-/// that makes the Local-First Mandate in `prd/constraints.md` literally true
+/// that makes the Local-First Mandate in `.constitution/prd/constraints.yaml` literally true
 /// (CAP-WS-01). `path` is `None` to use the default location specified in
 /// `guidelines.md`.
 ///
@@ -57,7 +57,7 @@ pub async fn open_or_create_local_workspace(
 ) -> Result<WorkspaceInfo, AppError> {
     // No `with_connection` wrapper here on purpose: bootstrap initializes a
     // repository, sweeps the bundle and reads every Note in it, and holding the
-    // process-wide connection mutex across all three is what `SPK-WSPC-D001`
+    // process-wide connection mutex across all three is what `SPK-BURL-D001`
     // §6.2.7 forbids. The bootstrap acquires the connection itself, for its
     // statements only.
     let info = crate::workspace::bootstrap::open_or_create_local_workspace(path)?;
@@ -97,7 +97,7 @@ pub async fn open_workspace(path: String) -> Result<WorkspaceInfo, AppError> {
 /// **Two phases, and only the second holds the connection.** The walk reads and
 /// parses every Note in the Workspace; running it inside the `with_connection`
 /// closure held the process-wide mutex — the one a keystroke's own tier 1 draft
-/// write waits on — for the whole of it, which `SPK-WSPC-D001` §6.2.7 forbids.
+/// write waits on — for the whole of it, which `SPK-BURL-D001` §6.2.7 forbids.
 /// `scan_bundle` derives the rows with nothing held; `write_scanned_bundle` is
 /// SQL only.
 ///

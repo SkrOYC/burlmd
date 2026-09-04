@@ -8,7 +8,7 @@
 let
   # Flutter SDK pin. This replaces `fvm` from the original tech-spec: fvm fetches
   # unpatched SDK binaries that do not run on NixOS, and it would defeat the
-  # reproducibility guarantee of the Nix store. See tech-spec/stack.md.
+  # reproducibility guarantee of the Nix store. See .constitution/tech-spec/stack.yaml.
   flutter = pkgs.flutterPackages.v3_44;
 
   # Native dependencies for the Flutter Linux desktop embedder (GTK). The current

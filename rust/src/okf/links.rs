@@ -170,7 +170,7 @@ fn resolve_path(containing_dir: &str, dest: &str) -> Option<String> {
 ///
 /// Not just a leading one. `Other.md#section` is **External** to [`classify`],
 /// which tests the destination exactly as written and finds it does not end in
-/// `.md` -- the same no-decoding-on-read stance `tech-spec/changelog.md`
+/// `.md` -- the same no-decoding-on-read stance `.constitution/tech-spec/changelog.yaml`
 /// records for percent-encoding. So the bundle carries no `links` edge for it,
 /// no backlink names it, and no rename rewrites it.
 ///

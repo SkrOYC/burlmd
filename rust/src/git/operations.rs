@@ -145,7 +145,7 @@ pub fn clone_repo(
 /// open writes nothing and must therefore commit nothing.
 pub fn init_repo(dest: &Path) -> Result<bool, AppError> {
     // Bootstrap's first phase, and one of the three that used to run inside a
-    // `with_connection` closure — `SPK-WSPC-D001` §6.2.7's first standing rule.
+    // `with_connection` closure — `SPK-BURL-D001` §6.2.7's first standing rule.
     crate::db::connection::assert_no_io_under_the_connection("initializing a repository");
 
     if gix::open(dest).is_ok() {
@@ -770,7 +770,7 @@ fn is_at_or_under(path: &[u8], removed: &[u8]) -> bool {
 /// Unix only, and unconditionally so for the reason
 /// [`persist::atomic_write`](crate::workspace::persist)'s permission
 /// carry-forward gives: burlmd ships to desktop Linux and macOS
-/// (`tech-spec/stack.md`), and Windows has no bit to read. A metadata call
+/// (`.constitution/tech-spec/stack.yaml`), and Windows has no bit to read. A metadata call
 /// that fails is not an error here — the bytes were already read successfully
 /// — so it falls back to the ordinary mode.
 #[cfg(unix)]

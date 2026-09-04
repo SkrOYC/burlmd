@@ -58,7 +58,7 @@ pub struct ScannedBundle {
 /// The split exists because the previous shape put exactly this work inside a
 /// `with_connection` closure: a full rebuild reads and parses every file in the
 /// Workspace, and it ran holding the process-wide connection mutex — the one a
-/// keystroke's own tier 1 draft write waits on. `SPK-WSPC-D001` §6.2.7 forbids
+/// keystroke's own tier 1 draft write waits on. `SPK-BURL-D001` §6.2.7 forbids
 /// it in as many words ("no closure passed to `with_connection` may perform
 /// file I/O"), and this is the largest violation of it the crate had: a
 /// thousand-Note bundle held the mutex for the whole walk, on every Workspace
@@ -696,7 +696,7 @@ mod tests {
     }
 
     /// Gherkin: an indexed Workspace of at least one thousand Notes answers a
-    /// full-text query in under 100ms (`prd/constraints.md`).
+    /// full-text query in under 100ms (`.constitution/prd/constraints.yaml`).
     ///
     /// The PRD's budget is asserted literally, in both profiles, because the
     /// margin turned out to be nearly three orders of magnitude: measured

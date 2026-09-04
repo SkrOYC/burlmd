@@ -11,7 +11,7 @@
 //! Three properties this module exists to guarantee:
 //!
 //! - **Only the destination bytes move.** The Link's display text is the
-//!   user's own prose — `prd/constraints.md`'s Edit Fidelity constraint — and
+//!   user's own prose — `.constitution/prd/constraints.yaml`'s Edit Fidelity constraint — and
 //!   re-serializing it would double-escape a title an author already escaped
 //!   by hand. Everything outside the destination span is copied verbatim.
 //! - **The destination is written by the real serializer.** A multi-word title

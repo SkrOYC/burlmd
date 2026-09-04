@@ -46,7 +46,7 @@ pub fn open_encrypted_db(path: &Path) -> Result<Connection, AppError> {
 /// off and does not persist it in the file, so every connection must set it
 /// itself; every `ON UPDATE CASCADE` in `schema.sql` is inert without it),
 /// and `journal_mode = WAL` / `synchronous = NORMAL` per
-/// `SPK-WSPC-D001.md` §7: worth roughly 2.3-3.3x on a tier-1 draft write
+/// `SPK-BURL-D001.md` §7: worth roughly 2.3-3.3x on a tier-1 draft write
 /// around 100KiB by removing the rollback journal's double write and two of
 /// three per-commit `fsync` calls — a real but size-dependent win, not a fix
 /// for tier 1's own cost, which is worth little at 1MiB and remains
@@ -355,7 +355,7 @@ pub fn connection() -> Result<&'static Mutex<Connection>, AppError> {
 /// FFI function needing the DB doesn't repeat the "get the singleton, lock
 /// it, map a poisoned-lock error" preamble.
 ///
-/// **No `f` may perform file I/O** (`SPK-WSPC-D001` §6.2.7). The mutex taken
+/// **No `f` may perform file I/O** (`SPK-BURL-D001` §6.2.7). The mutex taken
 /// here is process-wide and is the one a keystroke's own tier 1 draft write
 /// waits on, so anything slow inside a closure is latency charged to typing.
 /// The rule is enforced rather than merely written down: the scope entered
@@ -416,7 +416,7 @@ pub(crate) fn in_connection_closure() -> bool {
 /// Panics in debug builds when `what` is being done while the connection is
 /// held.
 ///
-/// `SPK-WSPC-D001` §6.2.7's three standing review rules are the ones "a tier 2
+/// `SPK-BURL-D001` §6.2.7's three standing review rules are the ones "a tier 2
 /// implementation would break first", and the first of them — no file I/O
 /// inside a connection closure — is invisible at the call site once the I/O is
 /// two functions away. This turns it into a test failure rather than a review
@@ -426,7 +426,7 @@ pub(crate) fn assert_no_io_under_the_connection(what: &str) {
         !in_connection_closure(),
         "{what} ran inside a connection closure: the process-wide connection \
          mutex would be held across file I/O, which is what a keystroke's own \
-         tier 1 write then waits on (SPK-WSPC-D001 §6.2.7)"
+         tier 1 write then waits on (SPK-BURL-D001 §6.2.7)"
     );
 }
 
@@ -453,7 +453,7 @@ static ACTIVE_WORKSPACE: Mutex<Option<ActiveWorkspace>> = Mutex::new(None);
 /// call — every open, every lifecycle operation, every status poll — and each
 /// one was taking the process-wide connection mutex to read one `local_path`
 /// that cannot change while a Workspace is open. That is the mutex a
-/// keystroke's own tier 1 draft write waits on (`SPK-WSPC-D001` §6.2), so the
+/// keystroke's own tier 1 draft write waits on (`SPK-BURL-D001` §6.2), so the
 /// round trip was contention bought for a constant.
 ///
 /// `local_path` is written once, by `workspace::bootstrap::converge`, and
@@ -754,7 +754,7 @@ mod tests {
         assert_eq!(enabled, 1, "foreign key enforcement must be on by default");
     }
 
-    /// WSPC-D004 / SPK-WSPC-D001 §7: WAL plus `synchronous = NORMAL` belongs
+    /// WSPC-D004 / SPK-BURL-D001 §7: WAL plus `synchronous = NORMAL` belongs
     /// on every connection, alongside the other connection-time obligations.
     #[test]
     fn journal_mode_is_wal_and_synchronous_is_normal_on_a_freshly_opened_connection() {
@@ -1030,7 +1030,7 @@ mod tests {
         *ACTIVE_WORKSPACE.lock().unwrap() = None;
     }
 
-    /// `SPK-WSPC-D001` §6.2.7's first standing rule, enforced at the
+    /// `SPK-BURL-D001` §6.2.7's first standing rule, enforced at the
     /// acquisition every caller in the crate actually goes through.
     ///
     /// The regression this pins: the guard was entered only by

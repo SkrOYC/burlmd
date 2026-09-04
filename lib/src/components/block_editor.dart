@@ -22,7 +22,7 @@ final _commonMarkPunctuation = RegExp(r'^[\p{P}\p{S}]$', unicode: true);
 ///
 /// Typographic stability is inherited from [blockTextStyle]'s shared style
 /// factory via [style], plus two pins this widget applies itself per
-/// `SPK-EDIT-F001` §3b: `maxLines: null` soft wrap at the same width the
+/// `SPK-BURL-F001` §3b: `maxLines: null` soft wrap at the same width the
 /// rendered form occupies, and leading distribution pinned to **even**
 /// through [DefaultTextHeightBehavior] — `RenderParagraph` defaults to even
 /// while `RenderEditable` defaults to proportional, and left implicit that
@@ -866,7 +866,7 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
         );
       },
       child: DefaultTextHeightBehavior(
-        // SPK-EDIT-F001 §3b: pin leading distribution to even. RenderParagraph
+        // SPK-BURL-F001 §3b: pin leading distribution to even. RenderParagraph
         // (the formatted path) defaults to even; RenderEditable defaults to
         // proportional — unpinned, glyphs wobble ~2px at every promotion.
         textHeightBehavior: const TextHeightBehavior(
@@ -875,7 +875,7 @@ class _BlockEditorState extends ConsumerState<BlockEditor> {
         // A bare EditableText rather than TextField: TextField's InputDecorator
         // imposes a 48px minimum height on the field, which would make every
         // single-line Block visibly grow at promotion — precisely the movement
-        // SPK-EDIT-F001 §3b forbids. The decorator adds nothing this editor
+        // SPK-BURL-F001 §3b forbids. The decorator adds nothing this editor
         // wants (no label, hint, border or counter), so the field goes straight
         // to the text-painting render object and inherits no minimum.
         // The key-event intercept sits directly above the field so Enter and

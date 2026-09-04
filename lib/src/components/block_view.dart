@@ -16,7 +16,7 @@ import 'package:flutter_lucide/flutter_lucide.dart';
 /// [blockTextStyle] factory this file uses, so promotion between the two
 /// presentations cannot drift typographically.
 ///
-/// The property table this enforces comes from `SPK-EDIT-F001` §3b: font
+/// The property table this enforces comes from `SPK-BURL-F001` §3b: font
 /// size/family/weight per Block type, an **explicit** `TextStyle.height`
 /// (the sharpest trap — `Text.rich` inherits `DefaultTextStyle`'s height
 /// while `EditableText` reads its style literally, so an implicit height
@@ -68,7 +68,7 @@ TextStyle blockTextStyle(
 };
 
 /// The container decoration around a Block's text surface, shared by BOTH
-/// presentations (`SPK-EDIT-F001` §3b, "replicate the exact container widget
+/// presentations (`SPK-BURL-F001` §3b, "replicate the exact container widget
 /// around the promoted field"): [child] is either the formatted rendering of
 /// the Block's content (unfocused, via [renderBlock]) or the promoted raw
 /// editable field (focused, via `editor.dart`). Because one builder draws the
@@ -84,7 +84,7 @@ TextStyle blockTextStyle(
 ///
 /// Heading and Paragraph paint no container on either path, so [child] is
 /// returned as-is; ThematicBreak's rule-to-`---` change is intrinsic content
-/// movement CAP-EDIT-01 sanctions (`SPK-EDIT-F001` §4), not decoration drift.
+/// movement CAP-EDIT-01 sanctions (`SPK-BURL-F001` §4), not decoration drift.
 Widget blockContainer(AstNode node, Widget child) => switch (node) {
   AstNode_CodeBlock() => child,
   AstNode_Blockquote() => Builder(

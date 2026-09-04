@@ -259,7 +259,7 @@ fn canonicalize_workspace_dir(dir: &Path) -> Result<PathBuf, AppError> {
 /// the caller's `with_connection` closure, because this function took a
 /// `&Connection` and the caller was obliged to hold one to call it — so opening
 /// a Workspace held the process-wide connection mutex for the length of a whole
-/// bundle walk, which is exactly what `SPK-WSPC-D001` §6.2.7 forbids and what a
+/// bundle walk, which is exactly what `SPK-BURL-D001` §6.2.7 forbids and what a
 /// keystroke's own tier 1 draft write would then have queued behind.
 ///
 /// So the connection is reached through an [`IndexHandle`] and acquired twice,
@@ -518,7 +518,7 @@ fn resolve_workspace_row(
 /// contains no bundle content.
 fn sweep_scratch_files(dir: &Path) -> ScratchSweep {
     // Recurses the whole bundle, so it belongs outside the connection for the
-    // same reason the scan does (`SPK-WSPC-D001` §6.2.7).
+    // same reason the scan does (`SPK-BURL-D001` §6.2.7).
     crate::db::connection::assert_no_io_under_the_connection("the scratch sweep");
 
     let mut outcome = ScratchSweep::default();
@@ -832,7 +832,7 @@ mod tests {
     /// scratch sweep and a read-and-parse of every Note in the bundle all ran
     /// inside `with_connection`, holding the process-wide mutex a keystroke's
     /// own tier 1 draft write waits on for the length of a whole bundle walk
-    /// (`SPK-WSPC-D001` §6.2.7). A whole successful bootstrap here is the
+    /// (`SPK-BURL-D001` §6.2.7). A whole successful bootstrap here is the
     /// assertion: each of the three phases now asserts it is unguarded, so any
     /// of them slipping back under the connection is a panic, not a review
     /// finding.

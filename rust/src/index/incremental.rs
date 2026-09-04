@@ -79,7 +79,7 @@ pub fn index_note(
 /// closure — `workspace::persist`'s tier 2 write, which has just written the
 /// source it would otherwise ask this module to re-read, and which runs under
 /// the process-wide connection mutex a keystroke's own draft write waits on
-/// (`SPK-WSPC-D001` §6.2.7). **This function executes SQL and nothing else.**
+/// (`SPK-BURL-D001` §6.2.7). **This function executes SQL and nothing else.**
 pub fn stored_content_hash(
     conn: &Connection,
     workspace_id: &str,
