@@ -10,10 +10,10 @@ Editing is Live Preview: the Block you are in shows the real Markdown source,
 every other Block renders as it will read — no hidden syntax, ever. Notes live
 in an Open Knowledge Format bundle that any tool or agent can read directly.
 
-The full product, architecture, implementation and execution specifications live
-under [`.constitution/`](.constitution/). Start with
+The full product requirements, solution architecture, technical implementation,
+and execution specifications live under [`.constitution/`](.constitution/). Start with
 [`prd/vision.md`](.constitution/prd/vision.md) and
-[`tech-spec/stack.md`](.constitution/tech-spec/stack.md).
+[`tech-spec/stack.yaml`](.constitution/tech-spec/stack.yaml).
 
 ## Status
 
@@ -23,7 +23,7 @@ full-text search, and recovery for unpersisted edits. The editor provides
 Live Preview, cross-Block selection and copy, structural editing, emphasis
 shortcuts, Link completion and follow, and atomic multi-Block range edits.
 
-The complete forward backlog is active: seven epics contain 80 tickets and 564 story points. Five decision Spikes are executable after their declared dependencies are satisfied. The only production-code exceptions are `SHELL-G001`, `PREF-G002`, `STATE-G003`, `TABS-G004`, `CLOSE-G005`, `NAV-G007`, `FLAKE-M002`, and `CI-M003`. Every other production ticket remains blocked. See [the critical path](.constitution/tasks/critical-path.md) for the authoritative execution rules.
+The complete forward backlog is active: seven epics contain 80 tickets and 564 story points. The five `Spike` tickets are research-only and executable within their declared allowlists after their dependencies are satisfied. Contract-scoped production authorization covers `BURL-G001`, `BURL-G002`, `BURL-G003`, `BURL-G004`, `BURL-G005`, `BURL-G007`, `BURL-M015`, and `BURL-M003`. Every other production ticket remains blocked. See [the critical path](.constitution/tasks/critical-path.md) for the authoritative execution rules.
 
 Desktop targets are x86-64 Linux and Apple Silicon macOS. The forward plan covers durable desktop sessions, canonical Workspace authority, Assets and first-class S3-compatible Object Storage, Export and Consolidation, a private GitHub Remote, reconciliation, diagnostics, packaging, and unsigned `0.x` releases. Authoritative Object Store deletion during `0.x`, mobile targets, multiple simultaneous Workspaces, graph visualization, HTML Publishing, a second Remote provider, self-updating binaries, and prerelease signing remain deferred.
 
@@ -73,10 +73,9 @@ outside the Nix store.
 | `flutter_rust_bridge_codegen` | 2.12.0 | `nixpkgs` via `devenv.nix` |
 | SQLCipher CLI | 4.16.0 | `nixpkgs` via `devenv.nix` |
 
-Once `CORE-A001` adds `rusqlite`, the library the app links is the SQLCipher
-**4.14.0** vendored by `bundled-sqlcipher` — not the CLI above. The two float
-independently; the CLI is present only for inspecting the encrypted index during
-development.
+`BURL-B002` adds `rusqlite` with `bundled-sqlcipher`; the app links the vendored
+SQLCipher **4.14.0**, not the CLI above. The two float independently; the CLI is
+present only for inspecting the encrypted index during development.
 
 No Android SDK is provisioned — mobile is out of product scope — but discovery
 is pinned shut. `ANDROID_HOME` and `ANDROID_SDK_ROOT` point at a deliberately
@@ -124,11 +123,11 @@ Entering the shell installs Git pre-commit hooks enforcing the standards in
 - `nixfmt` on any `*.nix` file — today that is only `devenv.nix`, the only source file in the repository,
   and so the only hook that can fail today
 
-The language hooks are a no-op until the manifest each one needs
-(`rust/Cargo.toml`, `pubspec.yaml`) exists, so they activate on their own as
-`CORE-A001` lands — but they fail loudly rather than silently skipping if a
-manifest turns up somewhere unexpected. All of them exclude `.constitution/`, so
-editing the tech-spec's `ffi_api.rs` contract does not trigger a build gate.
+The language hooks are active because the manifests each one needs
+(`rust/Cargo.toml`, `pubspec.yaml`) exist. They fail loudly rather than silently
+skipping if a manifest turns up somewhere unexpected. All of them exclude
+`.constitution/`, so editing the tech-spec's `ffi_api.rs` contract does not
+trigger a build gate.
 
 These are the only automated gates. There is no CI, and nothing runs tests.
 
@@ -147,5 +146,5 @@ The environment was not assumed to work — it was exercised. Inside the shell:
   query against a keyed SQLCipher connection.
 
 Two findings from that exercise were reconciled back into the tech-spec (see
-`.constitution/tech-spec/changelog.md`, v1.0.1): the Rust pin must be ≥ 1.95, and
+`.constitution/tech-spec/changelog.yaml`, v1.0.1): the Rust pin must be ≥ 1.95, and
 `rusqlite` 0.40 no longer exposes an `fts5` feature.
