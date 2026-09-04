@@ -49,8 +49,8 @@ boundaries:
     kind: other
     type: Local authoritative storage
     responsibility: "Persists Note source, Directories, recoverable local history, and atomic lifecycle outcomes inside the Workspace boundary"
-    inputs: [Stores and retrieves authoritative Workspace bytes and Versions.]
-    outputs: [Stores and retrieves authoritative Workspace bytes and Versions.]
+    inputs: [Accepts requests to store or retrieve authoritative Workspace bytes and Versions.]
+    outputs: [Returns authoritative Workspace bytes, Versions, and persistence outcomes.]
     depends_on: [BND-13]
     certainty: assumed
     assumption: "Migrated from containers.md; not yet mapped to a code path."
@@ -82,8 +82,8 @@ boundaries:
     kind: other
     type: Non-Workspace durable state
     responsibility: "Persists and restores snapshots of device preferences, per-Workspace session state, drafts, operation intents, reconciliation records, synchronization presentation, and migration metadata. It doesn't own authoritative session state"
-    inputs: [Persists and restores device or Workspace-scoped application state.]
-    outputs: [Persists and restores device or Workspace-scoped application state.]
+    inputs: [Accepts device or Workspace-scoped application state and requests to restore it.]
+    outputs: [Returns restored device or Workspace-scoped application state and persistence outcomes.]
     depends_on: [BND-12]
     certainty: assumed
     assumption: "Migrated from containers.md; not yet mapped to a code path."
@@ -93,9 +93,9 @@ boundaries:
     kind: module
     type: Platform event adapter
     responsibility: Converts filesystem event bursts into debounced change proposals without deciding authority or conformance
-    inputs: ["Receives Platform events and emits candidate creates, edits, moves, renames, and deletes."]
-    outputs: ["Receives Platform events and emits candidate creates, edits, moves, renames, and deletes."]
-    depends_on: [BND-13]
+    inputs: [Receives Platform events.]
+    outputs: [Emits candidate creates, edits, moves, renames, and deletes.]
+    depends_on: [BND-13, BND-02]
     certainty: assumed
     assumption: "Migrated from containers.md; not yet mapped to a code path."
   - id: BND-10
@@ -126,8 +126,8 @@ boundaries:
     kind: other
     type: Credential and key persistence
     responsibility: "Persists index keys, Provider credentials, and Object Store credentials outside Workspace content and diagnostics"
-    inputs: ["Stores, reads, rotates, and removes secret material for authorized callers."]
-    outputs: ["Stores, reads, rotates, and removes secret material for authorized callers."]
+    inputs: [Accepts authorized requests to store, read, rotate, or remove secret material.]
+    outputs: [Returns secret material and operation outcomes to authorized callers.]
     depends_on: [BND-13]
     certainty: assumed
     assumption: "Migrated from containers.md; not yet mapped to a code path."
@@ -137,8 +137,8 @@ boundaries:
     kind: other
     type: Operating system and filesystem authority
     responsibility: "Owns window chrome, process lifecycle, filesystem events, secure storage, file selection, installation, and package-manager behavior"
-    inputs: [Provides Platform services and lifecycle signals.]
-    outputs: [Provides Platform services and lifecycle signals.]
+    inputs: [Accepts filesystem, secure-storage, file-selection, installation, and lifecycle operations.]
+    outputs: [Returns Platform service outcomes and lifecycle signals.]
     depends_on: []
     certainty: assumed
     assumption: "Migrated from containers.md; not yet mapped to a code path."
@@ -148,8 +148,8 @@ boundaries:
     kind: other
     type: Optional user-controlled synchronization services
     responsibility: "The Provider authorizes and locates a private Remote. The Remote stores Workspace history. The Object Store stores immutable Object bytes under the Writer's control"
-    inputs: ["Accept authenticated repository or Object operations and return explicit authorization, privacy, integrity, and availability outcomes."]
-    outputs: ["Accept authenticated repository or Object operations and return explicit authorization, privacy, integrity, and availability outcomes."]
+    inputs: [Accepts authenticated repository or Object operations.]
+    outputs: [Returns explicit authorization, privacy, integrity, and availability outcomes.]
     depends_on: [External network availability, "User-controlled Provider, Remote, and Object Store accounts"]
     certainty: assumed
     assumption: "Migrated from containers.md; not yet mapped to a code path."
@@ -160,7 +160,7 @@ boundaries:
     type: "Build, verification, and publication boundary"
     responsibility: "Produces each supported artifact, assigns validation roles, establishes authoritative expected identity, requires complete accepted evidence, and publishes artifact integrity with authenticated provenance"
     inputs: [Accepts a release identity and Platform matrix.]
-    outputs: ["Emits verified artifacts, evidence, and metadata to Release Distribution."]
+    outputs: ["Sends validation and aggregation the expected trust-anchor, validation-control signer, tested-source, base, release, build, corpus, run, required-role, and role-specific evidence-class identities.", "Emits verified artifacts, evidence, and metadata to Release Distribution."]
     depends_on: [BND-16, BND-17, BND-19, Supported Platform build environments]
     certainty: assumed
     assumption: "The reviewed release design defines this boundary, but its implementation remains unmerged and no published release has exercised it end to end."
@@ -170,9 +170,9 @@ boundaries:
     kind: other
     type: Pipeline-owned paired validation environments
     responsibility: "Runs one assigned validation role in a candidate environment isolated from the Writer's device, then seals its untrusted file handoff in a separate fresh authority environment that never executes candidate bytes"
-    inputs: ["Candidate commands accept an artifact, run identity, required role, and authoritative expected source, execution, base, release, build, and corpus identities without provenance authority."]
-    outputs: ["A trusted wrapper may upload one complete untrusted handoff containing the role manifest and every named evidence file.", "The strict-containment role proves candidate-process teardown before the wrapper uploads the handoff; other hosted roles record bounded cleanup without claiming arbitrary-process containment.", "The fresh sealing environment validates handoff identity and integrity before it alone authenticates immutable provenance."]
-    depends_on: [BND-15, BND-17]
+    inputs: ["Accepts an artifact, run identity, required role, and authoritative expected source, execution, base, release, build, and corpus identities from Release Pipeline. The input grants candidate commands no provenance authority."]
+    outputs: ["Emits one complete untrusted handoff containing the role manifest and every named evidence file through a trusted wrapper.", "The strict-containment role emits candidate-process teardown proof; other hosted roles emit bounded-cleanup records without claiming arbitrary-process containment.", "The fresh sealing environment emits authenticated immutable provenance only after validating handoff identity and integrity."]
+    depends_on: [BND-15]
     trust_boundary: true
     certainty: settled
     evidence:
@@ -186,8 +186,8 @@ boundaries:
     kind: pipeline-stage
     type: Evidence integrity and acceptance boundary
     responsibility: "Verifies that accepted provenance came only from a completed fresh sealing environment, checks the trust-anchor relationship and write boundary, and compares captured handoff identity and integrity with authoritative expected identity before isolated aggregation"
-    inputs: ["Accepts expected trust-anchor, validation-control signer, tested-source, base, release, build, corpus, run, and required-role identities from Release Pipeline.", "Accepts one fresh-sealed bundle per role and the pipeline-owned candidate and sealing environment records.", "Credentialed acquisition produces verified read-only inputs."]
-    outputs: [Credentialed acquisition produces verified read-only inputs., "Returns an accepted complete set or explicit unmanaged, candidate-controlled, out-of-boundary, untrusted, missing, duplicated, mismatched, stale, corrupt, unsealed, credential-exposed, or isolation-failed outcomes."]
+    inputs: ["Accepts expected trust-anchor, validation-control signer, tested-source, base, release, build, corpus, run, and required-role identities from Release Pipeline.", "Accepts one fresh-sealed bundle per role and the pipeline-owned candidate and sealing environment records.", "Receives verified read-only inputs produced by credentialed acquisition."]
+    outputs: ["Returns an accepted complete evidence set.", "Returns explicit rejection outcomes for unmanaged, candidate-controlled, out-of-boundary, untrusted, missing, duplicated, mismatched, stale, corrupt, or unsealed evidence.", "Returns explicit rejection outcomes for exposed credentials or failed isolation."]
     depends_on: [BND-16, BND-15]
     certainty: assumed
     assumption: "The reviewed acceptance design defines this boundary, but its implementation remains unmerged and no complete release evidence set has exercised it."
@@ -197,9 +197,9 @@ boundaries:
     kind: module
     type: Optional asynchronous metadata coordinator
     responsibility: "Checks compatible release metadata, reports a higher 0.x release, and hands installation authority to the Host Platform or package manager"
-    inputs: [Receives update-check intent and returns compatible release information.]
-    outputs: [Receives update-check intent and returns compatible release information. It never replaces installed binaries.]
-    depends_on: [BND-19]
+    inputs: [Receives update-check intent.]
+    outputs: [Returns compatible release information without replacing installed binaries.]
+    depends_on: [BND-19, BND-02]
     certainty: assumed
     assumption: "Migrated from containers.md; not yet mapped to a code path."
   - id: BND-19
@@ -208,8 +208,8 @@ boundaries:
     kind: other
     type: Artifact and release-metadata distribution
     responsibility: "Publishes supported artifacts, integrity data, authenticated provenance, compatibility metadata, and release information without installing binaries"
-    inputs: [Accepts verified release outputs and serves immutable artifacts and compatible release metadata.]
-    outputs: [Accepts verified release outputs and serves immutable artifacts and compatible release metadata.]
+    inputs: [Accepts verified release outputs.]
+    outputs: [Serves immutable artifacts and compatible release metadata.]
     depends_on: [BND-15, External network availability]
     certainty: assumed
     assumption: "Migrated from containers.md; not yet mapped to a code path."
