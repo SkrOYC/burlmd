@@ -120,6 +120,26 @@ constraints:
     fail: "Beyond 15 minutes while connected, or beyond 1 hour after connectivity returns."
     certainty: assumed
     assumption: "No synchronization capability is delivered; the meter describes intended behavior that Epics K and L still have to build."
+  - id: NFC-12
+    legacy_id: Local-First Mandate
+    class: reliability
+    statement: "Creating, reading, editing, searching, organizing, and traversing Links remain fully functional without a network connection, account, credential, or Provider authorization."
+    scale: Completion of every required local capability while the device has no network connection and no external authorization.
+    meter: "Run the local capability acceptance matrix with networking disabled and with no account, credential, or Provider authorization configured."
+    goal: "Every create, read, edit, search, organize, and Link-traversal scenario completes from local state."
+    fail: "Any required local scenario needs a network connection, account, credential, or Provider authorization, or fails because one is absent."
+    certainty: assumed
+    assumption: "The delivered baseline includes local Workspace, editing, search, organization, and Link capabilities, but no complete offline acceptance matrix has measured the full mandate."
+  - id: NFC-13
+    legacy_id: Non-Blocking Sync
+    class: reliability
+    statement: "Background synchronization never blocks the main UI thread or interrupts editing; pending Decisions can pause synchronization but not local editing or history."
+    scale: UI-thread blocking, editing interruption, and local-history availability during synchronization and unresolved reconciliation states.
+    meter: "Exercise editing and local-history operations during active synchronization, pending Suggestions, and pending Lifecycle and Asset Decisions, while recording UI-thread work and operation outcomes."
+    goal: "Synchronization performs no blocking work on the main UI thread, editing continues in every state, and unresolved Suggestions don't gate commits or pushes after burlmd records valid reconciled state."
+    fail: "Synchronization blocks the main UI thread, interrupts editing, lets unresolved state corrupt publication, or a pending Decision blocks local editing or history."
+    certainty: assumed
+    assumption: "Synchronization and Decision workflows are planned in CAP-064, CAP-066, CAP-071, and CAP-072 but aren't delivered or measured."
   - id: NFC-14
     legacy_id: Durability of In-Progress Work
     class: reliability
@@ -130,56 +150,228 @@ constraints:
     fail: Any acknowledged in-progress content is lost.
     certainty: assumed
     assumption: "Recoverable drafts are delivered in rust/src/draft.rs, but no randomized kill harness has run against them."
+  - id: NFC-15
+    legacy_id: Orderly Session Closure
+    class: reliability
+    statement: "Every orderly tab close, Workspace switch, and application exit runs the Note durability and history lifecycle, reports partial results, and preserves unprocessed sessions."
+    scale: Correct lifecycle outcomes across all orderly close entry points and every clean, degraded, failed, and unprocessed session sequence.
+    meter: "Run the close-state transition matrix for tab close, batch close, Workspace switch, and application exit with injected lifecycle outcomes."
+    goal: "Every processed Note completes the durability and history lifecycle; partial closure reports exact outcomes, and every unprocessed session remains available."
+    fail: "Any entry point bypasses the lifecycle, loses an unprocessed session, misreports a partial result, or continues a wider operation after an outcome that requires cancellation."
+    certainty: assumed
+    assumption: "CAP-024 and CAP-027 through CAP-029 define the complete closure behavior, but the unified close coordinator and its acceptance matrix are planned rather than delivered."
+  - id: NFC-16
+    legacy_id: Recoverable Reconciliation
+    class: reliability
+    statement: "After a crash or local branch advance, burlmd recovers recorded reconciliation inputs, rejects stale tentative outcomes, and preserves every local and incoming state."
+    scale: Preservation and validity of reconciliation state after interruption or an authoritative local-history advance.
+    meter: "Interrupt reconciliation at every durable transition and advance local history before finalization, then resume and compare the recovered base, local, incoming, tentative, and decision states."
+    goal: "Every input state remains recoverable, stale tentative outcomes are rejected, and reconciliation resumes or recomputes from the authoritative history tip."
+    fail: "Any local or incoming state is lost, a stale outcome is applied, or recovery finalizes against a history tip different from its recorded input."
+    certainty: assumed
+    assumption: "The reconciliation record and recovery behavior are defined downstream, but Epics K and L haven't delivered or measured them."
+  - id: NFC-17
+    legacy_id: Object Availability
+    class: reliability
+    statement: "A connected Workspace never publishes Note history that references an Object before verifying that Object in the configured Object Store."
+    scale: Published Note-history states whose reachable Object closure is verified in the configured Object Store before publication.
+    meter: "Attempt publication across complete, missing, corrupt, stale, and concurrently changing Object-availability fixtures, then inspect publication and verification outcomes."
+    goal: "Every published history state has a freshly verified Object closure in the configured Object Store."
+    fail: "Any history publishes with a missing, corrupt, unverified, or stale Object obligation."
+    certainty: assumed
+    assumption: "CAP-054 and the Object Transfer boundary define this gate, but Object Store publication isn't delivered or measured."
+  - id: NFC-18
+    legacy_id: Edit Fidelity
+    class: reliability
+    statement: "Writing an edited Note changes only the source region the Writer edited and preserves every other byte, including unmanaged metadata."
+    scale: Byte differences inside and outside the source ranges selected by an edit.
+    meter: "Apply generated edits across supported syntax, whitespace, delimiter, and metadata variants, then compare the written Note byte-for-byte with the original outside edited ranges."
+    goal: "Every byte outside the edited source ranges remains identical, and the intended edit is represented only inside those ranges."
+    fail: "Any unedited byte changes, any unmanaged metadata changes, or the write alters a delimiter or whitespace outside the edited ranges."
+    certainty: assumed
+    assumption: "The editor and persistence baseline exists, but no accepted cross-syntax property suite measures this complete byte-fidelity contract."
+  - id: NFC-19
+    legacy_id: Format Conformance
+    class: reliability
+    statement: "Every Note burlmd creates remains conformant with the Open Knowledge Format, and invalid guest Notes remain outside authoritative state until the Writer accepts a conforming repair."
+    scale: Conformance and authority state of created Notes, operated-on conformant Notes, and invalid guest Notes before and after repair decisions.
+    meter: "Validate generated Notes after every Note operation and exercise invalid guest fixtures through previewed Repair and Exclude decisions while preserving their original bytes."
+    goal: "All burlmd-created and burlmd-modified Notes conform; invalid guest Notes remain uneditable and nonauthoritative until an accepted repair conforms."
+    fail: "burlmd creates or causes a nonconformant Note, silently repairs guest input, edits invalid guest input, admits it to authoritative state, or loses its original bytes."
+    certainty: assumed
+    assumption: "CAP-022 settles creation conformance, but CAP-036 and the complete no-regression and guest-repair matrix remain planned and unmeasured."
+  - id: NFC-20
+    legacy_id: Non-Destructive Reconciliation
+    class: reliability
+    statement: "Concurrent content reconciliation never discards either side, never duplicates a Note, and keeps both variants recoverable until the Writer resolves the Suggestion."
+    scale: Preservation, recoverability, and Note identity across concurrent content-edit scenarios before and after Suggestion resolution.
+    meter: "Generate overlapping and independent concurrent edits, reconcile them, and compare base, local, incoming, tentative, and resolved history plus the resulting Note identities."
+    goal: "Both variants remain recoverable until resolution, every safe difference has a decision path, and reconciliation retains one Note identity."
+    fail: "Either variant is lost, content becomes unrecoverable before resolution, raw conflict state escapes, or reconciliation duplicates the Note."
+    certainty: assumed
+    assumption: "CAP-066 defines persistent Suggestion behavior, but concurrent synchronization and its preservation suite aren't delivered or measured."
+  - id: NFC-21
+    legacy_id: Guest Authority Boundary
+    class: reliability
+    statement: "burlmd validates guest filesystem writes before admitting them to authoritative Workspace state and preserves the last known-good Note when input is invalid."
+    scale: Authority transitions and byte preservation for valid, invalid, partial, reordered, and adversarial guest filesystem writes.
+    meter: "Apply guest-write fixtures while a Workspace is open, then inspect validation, authoritative state, history, repair prompts, and the preserved last known-good bytes."
+    goal: "Only conforming guest input enters authoritative state; invalid input preserves both its original bytes and the last known-good authoritative Note without silent repair."
+    fail: "Invalid or partial input replaces authoritative state, changes the last known-good Note, triggers silent repair, becomes editable, or loses its original bytes."
+    certainty: assumed
+    assumption: "CAP-050 defines the authority boundary, but live guest-write validation and its adversarial acceptance suite are planned in Epic H."
+  - id: NFC-22
+    legacy_id: Cross-Platform Path Identity
+    class: compatibility
+    statement: "Every path burlmd creates retains one unambiguous identity across supported Linux and macOS filesystems and Windows-compatible path rules."
+    scale: Path identity and collision behavior under the case, Unicode normalization, reserved-name, trailing-character, alias, and traversal rules of every supported storage target.
+    meter: "Generate equivalent and adversarial path pairs, round-trip them through each target rule set, and compare their canonical identities and rejection outcomes."
+    goal: "Each accepted path has one stable identity on every target, and burlmd rejects or deterministically disambiguates every collision before mutation."
+    fail: "A path gains a second identity, aliases another path, escapes the Workspace, or collides after moving between supported targets."
+    certainty: open
+    decision: OD-05
+  - id: NFC-23
+    legacy_id: Object Integrity
+    class: reliability
+    statement: "burlmd verifies Object bytes against their content identity before exposing, publishing, migrating, restoring, or deleting them."
+    scale: Content-identity verification outcomes for every operation that consumes, transfers, restores, exposes, or removes Object bytes.
+    meter: "Exercise each Object operation with matching, corrupt, truncated, substituted, and concurrently changed bytes, then inspect the operation and resulting state."
+    goal: "Only bytes that match their content identity can complete an Object operation, and failed verification preserves known-good state."
+    fail: "Any operation accepts mismatched bytes, exposes corrupt content, destroys a verified copy, or records an identity that doesn't match the bytes."
+    certainty: assumed
+    assumption: "The Object model and verification boundaries are specified, but the Asset and Object Store capabilities in Epics I and K aren't delivered or measured."
+  - id: NFC-24
+    legacy_id: Protected History
+    class: reliability
+    statement: "burlmd retains every Object reachable from a Protected State and, during `0.x`, never deletes authoritative Object Store bytes."
+    scale: Retention of Objects reachable from current, retained, unpublished, published, pending-reconciliation, and Consolidation states across cleanup operations.
+    meter: "Construct each Protected State and overlapping reachability graph, run local cache eviction, migration, detach, and cleanup operations, then verify every reachable Object and deletion target."
+    goal: "Every reachable Object remains available; only verified local cache copies with no active offline need can be evicted, and no authoritative Object Store byte is deleted during `0.x`."
+    fail: "Any reachable Object becomes unavailable, an unverified or active local copy is evicted, or authoritative Object Store bytes are deleted during `0.x`."
+    certainty: assumed
+    assumption: "CAP-057, CAP-058, CAP-061, and CAP-062 define retention behavior, but the Protected State and Object lifecycle aren't delivered or measured."
+  - id: NFC-25
+    legacy_id: Workspace Containment
+    class: security
+    statement: "Workspace-controlled paths and indirections never grant access outside the Workspace boundary."
+    scale: Filesystem reads, writes, watches, adoption, and synchronization targets reachable through Workspace paths and indirections.
+    meter: "Run traversal, absolute-path, symlink, alias, nested-repository, replacement-race, and normalization fixtures through adoption, monitoring, and synchronization operations."
+    goal: "Every accepted target resolves inside the Workspace boundary, and every unsupported alias or external repository is rejected before access or mutation."
+    fail: "Any Workspace-controlled input reads, writes, watches, publishes, or grants access outside the Workspace boundary."
+    certainty: assumed
+    assumption: "Containment is a binding boundary across Epics H through L, but the complete adversarial suite hasn't run against all planned surfaces."
+  - id: NFC-26
+    legacy_id: Decentralized Storage
+    class: security
+    statement: "Note content is stored only on the Writer's device and designated Remote; no project-operated component brokers, relays, or stores it."
+    scale: Every durable storage destination and network recipient that can receive Note content in local and connected operation.
+    meter: "Trace Note-content writes and transmissions across local use, Remote connection, synchronization, diagnostics, release checks, and failure handling."
+    goal: "Note content reaches only the Writer's device and designated Remote, with no project-operated storage, broker, relay, or intermediary in the data path."
+    fail: "Any project-operated component receives, relays, or stores Note content, or content reaches an undeclared durable destination."
+    certainty: assumed
+    assumption: "The architecture assigns content to Writer-controlled local and Remote storage, but the connected product and a complete data-flow verification aren't delivered."
+  - id: NFC-27
+    legacy_id: At-Rest Protection (Local)
+    class: security
+    statement: "Notes remain plaintext so standard tools can use them. Platform storage protection remains a Writer-controlled installation choice that burlmd doesn't guarantee; burlmd encrypts the aggregate search index independently, keeps persistent keys in Platform secure storage, and erases transient key material after use."
+    scale: Plaintext portability of Notes, protection claims for Platform storage, encryption state of the aggregate index, and location and lifetime of persistent and transient key material.
+    meter: "Inspect Note and index storage plus product protection claims across create, search, restart, recovery, and failure paths; probe persistent key locations and verify transient key erasure after each authorized operation."
+    goal: "Notes remain readable as plaintext, Platform protection is represented as an external Writer choice, aggregate index content isn't readable without its key, persistent keys exist only in Platform secure storage, and transient copies don't remain after use."
+    fail: "A Note requires burlmd to read, burlmd guarantees Platform protection of Note files, aggregate index content is plaintext, persistent key material appears outside secure storage, or transient key material remains after its operation."
+    certainty: assumed
+    assumption: "CAP-019 settles the delivered index-encryption capability, but no accepted end-to-end inspection measures every storage, key-lifetime, and failure-path invariant."
+  - id: NFC-28
+    legacy_id: Credential Isolation
+    class: security
+    statement: "Remote and Object Store credentials persist only in Platform secure storage and never enter logs, diagnostics, Workspace content, or version history."
+    scale: Credential presence across persistent storage, process handoffs, diagnostics, logs, Workspace bytes, and version history.
+    meter: "Inject unique credential canaries into authorization and storage operations, inspect every permitted persistence and diagnostic surface, and scan resulting Workspace history and artifacts."
+    goal: "Persistent credentials appear only in Platform secure storage, and no credential canary appears in logs, diagnostics, Workspace content, or version history."
+    fail: "A credential persists outside Platform secure storage or any credential value reaches a log, diagnostic, Workspace file, history object, or unrelated process boundary."
+    certainty: assumed
+    assumption: "Credential isolation is specified for the Provider and Object Store boundaries, but those connected capabilities and their canary suite aren't delivered."
+  - id: NFC-29
+    legacy_id: Non-Proprietary Storage
+    class: compatibility
+    statement: "Every Note remains a plain-text file in the published Open Knowledge Format and is readable and editable without tooling produced by this project."
+    scale: Readability, editability, and conformance of Notes when only generic text and filesystem tools are available.
+    meter: "Create and modify representative Notes with burlmd and independent text tools, then validate their bytes and Open Knowledge Format conformance without project tooling in the read-and-edit path."
+    goal: "Every Note is plain text, follows the published format, and can be read and edited with an independent text editor."
+    fail: "Any Note requires proprietary storage, an unpublished format, or project tooling for ordinary reading or editing."
+    certainty: assumed
+    assumption: "Delivered Notes are plain-text Open Knowledge Format files, but the full cross-tool round-trip contract hasn't been measured across all planned Note operations."
+  - id: NFC-30
+    legacy_id: Private Remote Boundary
+    class: security
+    statement: "A connected Remote remains private, and burlmd pauses synchronization when the Remote becomes public or required access is lost."
+    scale: Synchronization state after Remote privacy and access checks at connection, reconnection, periodic validation, and publication.
+    meter: "Change Remote visibility and required access at each check boundary, including stale and unavailable results, then observe publication and local Workspace behavior."
+    goal: "Synchronization proceeds only with a fresh private and accessible result; every privacy or access failure pauses publication while preserving local use."
+    fail: "burlmd publishes to a public or inaccessible Remote, treats missing or stale eligibility as valid, or blocks local Workspace use after the failure."
+    certainty: assumed
+    assumption: "CAP-073 defines fail-closed Remote behavior, but the private Remote capability isn't delivered or measured."
+  - id: NFC-31
+    legacy_id: Remote Automation Boundary
+    class: security
+    statement: "burlmd never requests workflow-modification authority or publishes history containing `.github/workflows/**`; it preserves local access and offers Consolidation instead."
+    scale: Requested Provider authority and workflow-path reachability across every local publication ref before Remote publication.
+    meter: "Inspect requested permissions and attempt publication with workflow paths in current and historical commits across every reachable local publication ref."
+    goal: "No workflow-modification authority is requested; workflow-bearing history is refused before publication, local use remains available, and clean-Workspace Consolidation is offered."
+    fail: "burlmd requests workflow-modification authority, publishes reachable workflow content, blocks local use, or proceeds without the required refusal and Consolidation path."
+    certainty: assumed
+    assumption: "The Provider permission and prepublication boundary are specified in Epic K, but no delivered Remote path proves the complete invariant."
+  - id: NFC-32
+    legacy_id: Private Object Store Boundary
+    class: security
+    statement: "burlmd refuses or pauses an Object Store when anonymous list, read, write, or delete access exists, or when the complete privacy result is missing or stale."
+    scale: Object Store acceptance and publication state for anonymous access across list, read, write, and delete operations, including result completeness and freshness.
+    meter: "Probe all four anonymous operations at connection, periodically, before publication, and after access changes; inject missing, partial, stale, and unavailable results."
+    goal: "An Object Store is active only after a fresh complete result denies every anonymous operation; any other result refuses connection or pauses publication."
+    fail: "burlmd accepts or continues with anonymous access, an incomplete or stale result, or a probe that didn't cover all four operations."
+    certainty: assumed
+    assumption: "The Object Transfer boundary defines the complete privacy probe, but Object Store connection and publication aren't delivered or measured."
+  - id: NFC-33
+    legacy_id: Zero Automatic Off-Device Telemetry
+    class: privacy
+    statement: "burlmd can record bounded structured diagnostics locally but never transmits usage metrics, errors, diagnostics, Note or Asset content, signed locations, or content-derived metadata automatically. Only the Writer can create and share a Diagnostics Export."
+    scale: Off-device transmissions and sensitive-field presence in local diagnostics and Writer-created Diagnostics Exports.
+    meter: "Inject content, credential, signed-location, and content-derived canaries, exercise success and failure paths with network observation, and inspect local diagnostics and exported bytes."
+    goal: "No automatic reporting request occurs; local diagnostics and Diagnostics Exports exclude Note and Asset content, credentials, signed locations, and content-derived data, and sharing requires an explicit Writer action."
+    fail: "Any automatic off-device report occurs, prohibited data enters diagnostics or an Export, or burlmd shares an Export without the Writer's action."
+    certainty: assumed
+    assumption: "CAP-045 defines Writer-controlled diagnostics, but the diagnostics surface and its network and canary checks are planned in Epic M."
+  - id: NFC-34
+    legacy_id: Feature Parity
+    class: compatibility
+    statement: "Every supported release system passes the same release-blocking capability matrix; launching alone never establishes support."
+    scale: Required capability outcomes for every supported release system and release artifact.
+    meter: "Run the common release-blocking matrix for local editing, persistence, Export, synchronization, secure storage, recovery, and update notification on each supported system."
+    goal: "Every required matrix cell passes on every supported system for the exact release artifact."
+    fail: "Any supported system skips or fails a required cell, receives a weaker capability matrix, or is accepted from a launch-only check."
+    certainty: assumed
+    assumption: "CAP-076 defines parity, but installable release artifacts and the authenticated cross-system matrix are planned in Epic M."
+  - id: NFC-35
+    legacy_id: Version Policy
+    class: compatibility
+    statement: "Releases remain in the `0.x` series until the user explicitly declares stability, and downgrade compatibility isn't guaranteed."
+    scale: Public version identifiers and downgrade claims across release artifacts, manifests, update metadata, and release information.
+    meter: "Audit every candidate release surface for its version series and compatibility claims before publication."
+    goal: "Every release stays in `0.x` before an explicit stability declaration, and no surface promises downgrade compatibility."
+    fail: "A release leaves `0.x` without the declaration or any release surface guarantees downgrade compatibility."
+    certainty: assumed
+    assumption: "The release line and downgrade policy are declared, but no production release workflow enforces the audit yet."
+  - id: NFC-36
+    legacy_id: Migration Safety
+    class: reliability
+    statement: "Application-state migrations create a backup, apply atomically, restore earlier state after failure, and never rewrite Note content unless an explicit product operation requires it."
+    scale: State recoverability, atomic visibility, and Note-byte preservation across every supported migration and injected failure point.
+    meter: "Snapshot application state and Note bytes, interrupt each migration before and after every durable transition, then reopen and compare the visible state, backup, and Notes."
+    goal: "A successful migration exposes one complete new state; every failure restores the complete earlier state, and Note bytes remain identical unless a separate explicit operation changes them."
+    fail: "A migration lacks a backup, exposes partial state, can't restore earlier state, or rewrites Note content without an explicit product operation."
+    certainty: assumed
+    assumption: "CAP-078 defines migration safety, but the migration framework and failure-injection matrix are planned in Epic M."
 deferred:
   - class: cost
     risk: "No cost meter exists because nothing in the architecture runs on infrastructure this project operates: content lives on the Writer's device, their Remote, and their Object Store. If a project-operated component ever appears, this gap hides its running cost until someone pays it."
   - class: accessibility
     risk: "Keyboard completeness and Flutter Semantics labels are the accepted baseline, but screen-reader certification against Orca and VoiceOver is out of scope with no reopening condition, so nothing measures whether the baseline still holds. OD-02 carries the missing trigger."
-  - class: NFC-12 reliability
-    risk: "Rule: The application is fully functional while completely disconnected, and never requires an account, credential, or Provider authorization to create, read, edit, search, or organize Notes. Risk: Treating this prose rule as a quantified meter would invent a scale, meter, goal, and fail that the source did not state."
-  - class: NFC-13 reliability
-    risk: "Rule: Background synchronization never blocks the main UI thread or interrupts editing, and a pending Decision pauses synchronization without blocking local editing or history. Risk: Treating this prose rule as a quantified meter would invent a scale, meter, goal, and fail that the source did not state."
-  - class: NFC-15 reliability
-    risk: "Rule: Every orderly tab close, Workspace switch, and application exit runs the Note durability and history lifecycle, and a partial batch close reports which Notes closed and preserves every unprocessed session. Risk: Treating this prose rule as a quantified meter would invent a scale, meter, goal, and fail that the source did not state."
-  - class: NFC-16 reliability
-    risk: "Rule: After a crash or local branch advance, burlmd recovers recorded reconciliation inputs, rejects stale tentative outcomes, and preserves every local and incoming state. Risk: Treating this prose rule as a quantified meter would invent a scale, meter, goal, and fail that the source did not state."
-  - class: NFC-17 reliability
-    risk: "Rule: A connected Workspace does not publish Note history that references an Object until that Object is verified in the configured Object Store. Risk: Treating this prose rule as a quantified meter would invent a scale, meter, goal, and fail that the source did not state."
-  - class: NFC-18 reliability
-    risk: "Rule: Writing a Note to disk does not alter any region of that Note the Writer did not edit, including whitespace, delimiter style, and unmanaged metadata keys. Risk: Treating this prose rule as a quantified meter would invent a scale, meter, goal, and fail that the source did not state."
-  - class: NFC-19 reliability
-    risk: "Rule: Every Note burlmd creates satisfies the Open Knowledge Format from creation, no burlmd operation makes a conformant Note nonconformant, and an invalid guest Note stays outside authoritative state until the Writer accepts a previewed repair. Risk: Treating this prose rule as a quantified meter would invent a scale, meter, goal, and fail that the source did not state."
-  - class: NFC-20 reliability
-    risk: "Rule: Reconciling concurrent edits never discards either side's content or duplicates a Note, and both variants stay recoverable until the Writer resolves the Suggestion. Risk: Treating this prose rule as a quantified meter would invent a scale, meter, goal, and fail that the source did not state."
-  - class: NFC-21 reliability
-    risk: "Rule: burlmd validates guest filesystem writes before they enter authoritative Workspace state; invalid input never replaces the last known-good Note and never triggers silent repair. Risk: Treating this prose rule as a quantified meter would invent a scale, meter, goal, and fail that the source did not state."
-  - class: NFC-22 compatibility
-    risk: "Rule: A path burlmd creates retains one identity under supported Linux and macOS filesystems and Windows-compatible path rules. Risk: Treating this prose rule as a quantified meter would invent a scale, meter, goal, and fail that the source did not state."
-  - class: NFC-23 reliability
-    risk: "Rule: burlmd verifies Object bytes against their content identity before exposing, publishing, migrating, restoring, or deleting them. Risk: Treating this prose rule as a quantified meter would invent a scale, meter, goal, and fail that the source did not state."
-  - class: NFC-24 reliability
-    risk: "Rule: burlmd retains every Object reachable from a Protected State, and during 0.x never deletes authoritative Object Store bytes; only verified local cache copies may be evicted. Risk: Treating this prose rule as a quantified meter would invent a scale, meter, goal, and fail that the source did not state."
-  - class: NFC-25 security
-    risk: "Rule: Workspace-controlled paths and indirections never grant access outside the Workspace boundary, and unsupported filesystem aliases or nested external repositories are rejected during adoption, monitoring, and synchronization. Risk: Treating this prose rule as a quantified meter would invent a scale, meter, goal, and fail that the source did not state."
-  - class: NFC-26 security
-    risk: "Rule: Note content is stored only on the Writer's own device and, when connected, in the Writer's designated Remote; no component this project operates acts as a storage broker, relay, or intermediary. Risk: Treating this prose rule as a quantified meter would invent a scale, meter, goal, and fail that the source did not state."
-  - class: NFC-27 security
-    risk: "Rule: Notes stay plaintext so standard tools work, while the aggregate search index is encrypted independently with persistent key material held only in Platform secure storage. Risk: Treating this prose rule as a quantified meter would invent a scale, meter, goal, and fail that the source did not state."
-  - class: NFC-28 security
-    risk: "Rule: Remote and Object Store credentials are never persisted outside operating-system secure storage, and never written to logs, diagnostics, or version history. Risk: Treating this prose rule as a quantified meter would invent a scale, meter, goal, and fail that the source did not state."
-  - class: NFC-29 compatibility
-    risk: "Rule: Every Note remains a plain-text file in a published, openly specified format, fully readable and editable with any text editor and with no tooling this project produces. Risk: Treating this prose rule as a quantified meter would invent a scale, meter, goal, and fail that the source did not state."
-  - class: NFC-30 security
-    risk: "Rule: A connected Remote stays private; burlmd pauses synchronization if the Remote becomes public or required access is lost. Risk: Treating this prose rule as a quantified meter would invent a scale, meter, goal, and fail that the source did not state."
-  - class: NFC-31 security
-    risk: "Rule: burlmd never requests GitHub workflow-modification authority and never publishes a commit reachable from a local publication ref that contains .github/workflows/**; local Workspace access stays available and Consolidation into a clean Workspace is offered instead. Risk: Treating this prose rule as a quantified meter would invent a scale, meter, goal, and fail that the source did not state."
-  - class: NFC-32 security
-    risk: "Rule: burlmd refuses or pauses an Object Store when anonymous list, read, write, or delete access is detected, or when the complete storage-privacy result is missing or stale. Risk: Treating this prose rule as a quantified meter would invent a scale, meter, goal, and fail that the source did not state."
-  - class: NFC-33 privacy
-    risk: "Rule: burlmd records bounded structured diagnostics locally but never automatically transmits usage metrics, errors, diagnostics, Note or Asset content, signed locations, or content-derived metadata; a Writer-created and Writer-shared Diagnostics Export is the only reporting path. Risk: Treating this prose rule as a quantified meter would invent a scale, meter, goal, and fail that the source did not state."
-  - class: NFC-34 compatibility
-    risk: "Rule: Every supported release system passes the same release-blocking capability matrix; a launch-only check is not sufficient. Risk: Treating this prose rule as a quantified meter would invent a scale, meter, goal, and fail that the source did not state."
-  - class: NFC-35 compatibility
-    risk: "Rule: Releases stay in the 0.x series until the user explicitly declares stability, and downgrade compatibility is not guaranteed. Risk: Treating this prose rule as a quantified meter would invent a scale, meter, goal, and fail that the source did not state."
-  - class: NFC-36 reliability
-    risk: "Rule: Application-state migrations create a backup, apply atomically, and restore the earlier state after failure, and never rewrite Note content unless an explicit product operation requires it. Risk: Treating this prose rule as a quantified meter would invent a scale, meter, goal, and fail that the source did not state."

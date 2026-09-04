@@ -21,7 +21,7 @@ terms:
     definition: The root container holding all Notes and Directories. It is local by default and may optionally be connected to a Remote
     do_not_use: [Vault, Brain, Repo]
   - term: Remote
-    definition: "The user's private hosted repository that a connected Workspace synchronizes with. A Workspace remains fully functional without a Remote"
+    definition: "The Writer's private hosted repository that a connected Workspace synchronizes with. A Workspace remains fully functional without a Remote"
     do_not_use: [Server, Backend]
   - term: Provider
     definition: "An external service through which the Writer authorizes, selects, provisions, and uses a Remote"
@@ -30,10 +30,10 @@ terms:
     definition: A persistent inline decision for resolving a concurrent content change without exposing raw conflict markers. Synonym Merge was removed from the banned list because rust/src/api/ffi_api.rs uses it in its ordinary sense. Synonym Diff was removed from the banned list because .constitution/tech-spec/contracts/ci-role-evidence.schema.json uses it in its ordinary sense.
     do_not_use: [Conflict (as a synonym for Suggestion), Fork]
   - term: Lifecycle Decision
-    definition: "A required user choice that resolves a conflicting add, delete, rename, move, Directory, type, or path-identity outcome. Delete-versus-edit remains a Suggestion instead"
+    definition: "A required Writer choice that resolves a conflicting add, delete, rename, move, Directory, type, or path-identity outcome. Delete-versus-edit remains a Suggestion instead"
     do_not_use: [Structural conflict (as a synonym), File conflict]
   - term: Asset Decision
-    definition: "A required user choice that resolves conflicting asset bytes, references, or availability"
+    definition: "A required Writer choice that resolves conflicting asset bytes, references, or availability"
     do_not_use: [Binary conflict, Attachment conflict]
   - term: Block
     definition: "A structural element within a Note, such as a paragraph, list item, or heading"
@@ -54,13 +54,13 @@ terms:
     definition: "The guided, one-time migration of non-conflicting Notes from a previous local Workspace into a freshly connected one, with explicit resolution of every identity collision"
     do_not_use: [Import (as a synonym)]
   - term: Diagnostics Export
-    definition: "A user-produced export describing recent application behavior — errors, retries, failures — with Note content excluded. Synonym Telemetry was removed from the banned list because .constitution/tech-spec/contracts/ffi_api.rs uses it in its ordinary sense."
+    definition: "A Writer-produced export describing recent application behavior — errors, retries, failures — with Note content excluded. Synonym Telemetry was removed from the banned list because .constitution/tech-spec/contracts/ffi_api.rs uses it in its ordinary sense."
     do_not_use: [Log dump, Crash report]
   - term: Version
     definition: A recoverable past state of one Note in local history. Synonym Revision was removed from the banned list because rust/src/api/ffi_api.rs uses it in its ordinary sense. Synonym Snapshot was removed from the banned list because rust/src/api/ffi_api.rs uses it in its ordinary sense. Synonym Backup was removed from the banned list because .constitution/tech-spec/contracts/provisional-spikes.toml uses it in its ordinary sense.
     do_not_use: []
   - term: Asset
-    definition: "User-visible non-Note content that a Note references, such as an image"
+    definition: "Non-Note content that a Note references and presents to the Writer, such as an image"
     do_not_use: [Blob, Attachment]
   - term: Object
     definition: Immutable asset bytes identified by their content. An Asset refers to one Object at a time
@@ -69,7 +69,7 @@ terms:
     definition: The Workspace area that keeps active Object bytes available through portable paths for offline use and guest tools
     do_not_use: [Local Object Store, Asset Cache]
   - term: Object Store
-    definition: User-controlled remote storage that synchronizes Object bytes for a connected Workspace
+    definition: Writer-controlled remote storage that synchronizes Object bytes for a connected Workspace
     do_not_use: [Backend]
   - term: Protected State
     definition: Current or historical Workspace state whose reachable Objects burlmd must retain
