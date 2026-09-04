@@ -53,7 +53,7 @@ tickets:
         Then every preference is restored on that device
         And no Workspace file or Git change contains the preference
         ```
-        
+
         BURL-G002 implements round-trip restore tests; corrupt- and unsupported-later-version fallback tests that prove original bytes remain unchanged; and an exclusion check that no Workspace or Git path contains these keys. It doesn't write defaults over preserved bytes. A later supported current file is permitted only through the explicitly safe isolated path owned by BURL-M005.
     flows: [flow-desktop-session]
     certainty: assumed
