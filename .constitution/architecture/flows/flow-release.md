@@ -16,7 +16,7 @@ flowchart TD
     Trust[Immutable reviewed validation trust anchor]
     Expected[Authoritative expected identity\ntrust anchor, validation-control signer, tested source, base, build, corpus, run, roles, and required evidence classes]
     Linux[Strict-containment candidate role\nassigned Linux x86-64 evidence classes and proves teardown before upload]
-    MacReference[Hosted reference candidate role\nassigned macOS 26 evidence classes and records bounded cleanup]
+    MacReference[Hosted reference candidate role\nassigned Apple Silicon macOS 26 evidence classes and records bounded cleanup]
     MacCompatibility[Hosted compatibility candidate role\nassigned macOS 15 evidence classes and records bounded cleanup]
     Seal[Fresh sealing environments\nvalidate identity and integrity, never execute candidate bytes, and alone authenticate provenance]
     Observe[Post-completion observation\nrequire successful sealing environment]
