@@ -1,4 +1,10 @@
 entries:
+  - version: v2.0.2
+    date: 2026-09-04
+    fixed: ["Reconciled all 19 structured boundary records with the retained container contracts.", "Separated directional inputs and outputs and restored omitted logical dependencies.", "Preserved product scope and the fresh-seal authority ruling.", "Populated boundary traceability for the Workspace bootstrap, background synchronization, and Object Store lifecycle flows.", "Removed the duplicated v2.0.0 migration-date note."]
+    upstream:
+      prd: v2.0.1
+    by: patch-lane
   - version: v2.0.1
     date: 2026-09-04
     changed: ["Translated the reviewed Architecture v1.4.16 fresh-seal lineage into the structured v2 records without changing the BND-15 Release Pipeline boundary or product scope.", "Classified candidate output as an untrusted file handoff: candidate commands receive no provenance authority, while a trusted wrapper may upload the handoff for validation.", "Recorded BND-16 as settled by the 2026-09-04 user ruling and mapped the release flow to its existing BND-13 and BND-15 through BND-19 records."]
@@ -10,7 +16,7 @@ entries:
   - version: v2.0.0
     date: 2026-09-03
     added: ["Added 33 protocol-labeled edges to boundaries.yaml, one per communication the container diagram and the flows describe, covering the in-process Core seams, the filesystem and secure-storage Platform seams, the two network seams to the Remote and the Object Store, and the release pipeline handoffs."]
-    changed: ["Converted architecture/ to the structured layout. containers.md became boundaries.yaml with 19 boundary records; strategy.md, resilience.md, risks.md, and containers.md stay prose.", "Gave every flow front matter its job and its capability list. The sixteen flows now map onto the nine jobs; four jobs are told by more than one flow, which is why the flows were not merged.", "Cleaned the boundary depends_on lists the conversion left as prose fragments, so every entry is either a BND id or a named external entity.", "Migration date retained for v2.0.0: no master commit introducing this version string was found.", "Migration date retained for v2.0.0: no master commit introducing this version string was found."]
+    changed: ["Converted architecture/ to the structured layout. containers.md became boundaries.yaml with 19 boundary records; strategy.md, resilience.md, risks.md, and containers.md stay prose.", "Gave every flow front matter its job and its capability list. The sixteen flows now map onto the nine jobs; four jobs are told by more than one flow, which is why the flows were not merged.", "Cleaned the boundary depends_on lists the conversion left as prose fragments, so every entry is either a BND id or a named external entity.", "Migration date retained for v2.0.0: no master commit introducing this version string was found."]
     by: migrate
     upstream:
       prd: v2.0.0
