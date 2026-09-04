@@ -1,4 +1,12 @@
 entries:
+  - version: v2.0.2
+    date: 2026-09-04
+    changed:
+      - "Removed the four temporary verification-command compatibility entries after Stage 4 migrated BURL-M006, BURL-M011, BURL-M012, and BURL-M013 to the canonical BURL commands."
+    by: patch-lane
+    upstream:
+      prd: v2.0.0
+      architecture: v2.0.1
   - version: v2.0.1
     date: 2026-09-04
     changed:
