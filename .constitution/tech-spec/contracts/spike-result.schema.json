@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": ["schemaVersion", "spikeId", "generatedAt", "corpus", "candidates", "gates", "runs", "recommendation", "unresolved"],
   "properties": {
-    "schemaVersion": { "const": 17 },
+    "schemaVersion": { "const": 20 },
     "spikeId": { "pattern": "^SPK-[A-Z]+-[A-Z][0-9]{3}$", "type": "string" },
     "generatedAt": { "$comment": "The mandatory result validator must semantically parse this value as RFC 3339 and reject impossible calendar dates; this pattern checks shape only.", "type": "string", "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-([0-2][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\\.[0-9]+)?(Z|[+-]([01][0-9]|2[0-3]):[0-5][0-9])$" },
     "corpus": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
@@ -47,14 +47,78 @@
         "additionalProperties": false,
         "allOf": [
           {
+            "if": {
+              "properties": {
+                "claimedEvidenceClasses": {
+                  "type": "array",
+                  "contains": {
+                    "enum": ["performance", "linux-platform-regression", "macos-authoritative-visual"]
+                  }
+                }
+              },
+              "required": ["claimedEvidenceClasses"]
+            },
+            "then": {
+              "properties": {
+                "host": {
+                  "type": "object",
+                  "required": ["profile"],
+                  "properties": {
+                    "profile": {
+                      "type": "object",
+                      "properties": {
+                        "logicalViewportVerified": { "const": true }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "host": {
+                  "type": "object",
+                  "required": ["profile"],
+                  "properties": {
+                    "profile": {
+                      "type": "object",
+                      "required": ["runnerLabel"],
+                      "properties": { "runnerLabel": { "const": "macos-15" } }
+                    }
+                  }
+                }
+              },
+              "required": ["host"]
+            },
+            "then": {
+              "properties": {
+                "claimedEvidenceClasses": {
+                  "type": "array",
+                  "items": {
+                    "enum": ["common-functional", "managed-evidence-protocol", "managed-evidence-security", "static-analysis", "desktop-integration", "packaging-runtime-compatibility"]
+                  }
+                }
+              }
+            }
+          },
+          {
             "if": { "properties": { "role": { "enum": ["linux-x86_64-performance", "macos-26-performance", "macos-current-stable", "macos-repeat-construction", "macos-previous-stable"] } }, "required": ["role"] },
             "then": { "properties": { "host": { "type": "object", "required": ["profile"], "properties": { "profile": {} } } } }
           }
         ],
-        "required": ["id", "role", "inputContext", "host", "toolchain", "commandResults", "measurements", "artifacts"],
+        "required": ["id", "role", "claimedEvidenceClasses", "inputContext", "host", "toolchain", "commandResults", "measurements", "artifacts"],
         "properties": {
           "id": { "type": "string", "minLength": 1 },
           "role": { "type": "string", "minLength": 1 },
+          "claimedEvidenceClasses": {
+            "$comment": "This run claim is not self-authorizing. The trusted collector must require exact equality with the authenticated expectedIdentity.requiredEvidenceClasses entry for the role that supplied this run.",
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": { "$ref": "#/$defs/evidenceClass" }
+          },
           "inputContext": {
             "type": "object",
             "additionalProperties": false,
@@ -77,7 +141,7 @@
           "host": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["hostFingerprint", "os", "osVersion", "architecture", "filesystem"],
+            "required": ["hostFingerprint", "os", "osVersion", "architecture", "filesystem", "profile"],
             "properties": {
               "hostFingerprint": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
               "os": { "type": "string", "minLength": 1 },
@@ -89,6 +153,24 @@
               "profile": {
                 "type": "object",
                 "additionalProperties": false,
+                "allOf": [
+                  {
+                    "if": {
+                      "properties": { "runnerLabel": { "const": "macos-15" } },
+                      "required": ["runnerLabel"]
+                    },
+                    "then": {
+                      "properties": {
+                        "capabilities": {
+                          "type": "array",
+                          "items": {
+                            "enum": ["common-functional", "common-functional-compatibility"]
+                          }
+                        }
+                      }
+                    }
+                  }
+                ],
                 "required": ["runnerLabel", "imageOS", "imageVersion", "cpuModel", "logicalCpuCount", "memoryBytes", "storageBytes", "logicalViewportWidth", "logicalViewportHeight", "logicalViewportRefreshHz", "logicalViewportVerified", "capabilities"],
                 "properties": {
                   "runnerLabel": { "enum": ["ubuntu-24.04", "macos-26", "macos-15"] },
@@ -101,8 +183,12 @@
                   "logicalViewportWidth": { "const": 1920 },
                   "logicalViewportHeight": { "const": 1080 },
                   "logicalViewportRefreshHz": { "const": 60 },
-                  "logicalViewportVerified": { "const": true },
+                  "logicalViewportVerified": {
+                    "$comment": "True only when the role-owned probe observes the exact logical viewport. False records that no exact viewport observation exists and cannot satisfy a viewport-bound claimed evidence class.",
+                    "type": "boolean"
+                  },
                   "capabilities": {
+                    "$comment": "Observed host capabilities are descriptive only. They don't authorize evidence or determine viewport verification.",
                     "type": "array",
                     "minItems": 1,
                     "uniqueItems": true,
@@ -181,5 +267,10 @@
     },
     "recommendation": { "type": "string", "minLength": 1 },
     "unresolved": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+  },
+  "$defs": {
+    "evidenceClass": {
+      "enum": ["common-functional", "performance", "linux-platform-regression", "macos-authoritative-visual", "managed-evidence-protocol", "managed-evidence-security", "managed-evidence-isolation", "generated-binding-check", "static-analysis", "desktop-integration", "ast-measurement", "filesystem-compatibility", "git-protocol", "asset-measurement", "packaging-runtime", "packaging-runtime-compatibility", "repeatable-construction"]
+    }
   }
 }

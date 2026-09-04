@@ -1,7 +1,7 @@
-// FORWARD STATUS (TechSpec v1.8.0-provisional): this is the delivered
+// FORWARD STATUS (TechSpec v2.0.1-provisional, translated from reviewed v1.8.7-provisional): this is the delivered
 // brownfield interface, with the Epic G session-restore exception specified.
-// It is not otherwise an implementation-ready contract for PRD v1.3.7 and
-// Architecture v1.4.15.
+// It is not otherwise an implementation-ready contract for structured PRD v2.0.0 and
+// Architecture v2.0.1.
 // In particular, AstNode is a rendering projection rather than the required
 // canonical extended AST; the OAuth redirect flow is superseded by the
 // GitHub App device-flow decision; title-verbatim path derivation is under
