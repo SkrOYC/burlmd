@@ -17,7 +17,7 @@ import 'package:flutter_test/flutter_test.dart';
 /// copy produced by the Core (`copy_range_as_markdown`) rather than
 /// serialized in Dart.
 ///
-/// Method note (`SPK-EDIT-F001` §5): assertions read real interaction
+/// Method note (`SPK-BURL-F001` §5): assertions read real interaction
 /// outcomes — actual pointer drags through a live [SelectionArea], real
 /// clipboard traffic captured at the platform-channel boundary, and the
 /// [BlockRange] the fake Core actually received — never widget-property
@@ -265,7 +265,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // Visible selection, read from rendered state (SPK-EDIT-F001 §5): the
+    // Visible selection, read from rendered state (SPK-BURL-F001 §5): the
     // region's registered per-Block selectables report an uncollapsed
     // selection — exactly the state that drives highlight painting — and it
     // spans from Block 0 into Block 2.

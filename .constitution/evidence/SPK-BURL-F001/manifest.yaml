@@ -3,12 +3,12 @@ mode: hitl_sil
 produced:
   date: 2026-08-23
   commit: e0cbdb885d846115ffcc1a63691df7f861d1204c
-  command: "BURLMD_SMOKE_F001=1 BURLMD_SMOKE_SHOT_DIR=\"$PWD/.constitution/evidence/edit-f001\" ./scripts/smoke-shot.sh <name>"
+  command: "BURLMD_SMOKE_F001=1 BURLMD_SMOKE_SHOT_DIR=\"$PWD/.constitution/evidence/SPK-BURL-F001\" ./scripts/smoke-shot.sh <name>"
   host: "Wayland session with grim, Flutter 3.44.3 and Dart 3.12.2"
 files:
   - path: README.md
-    sha256: 4333e1eb05979b289ab8cf20b8fd708c36587ac158eab855a8719afb91043461
-    bytes: 1945
+    sha256: 2800128c6c740072269dcd9a3da71b6404a35f6f9a863e85b8e34b9ae7c90a93
+    bytes: 1961
     role: transcript
   - path: formatted.png
     sha256: 7f7360672ab2c6115561066e3236da92465c031d3bc0b1e47c680256cbba3e9c

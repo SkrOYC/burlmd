@@ -25,7 +25,7 @@ tickets:
     acceptance:
       mode: gherkin
       evidence: |
-        Given the spike report at .constitution/spikes/SPK-WSPC-D001.md
+        Given the spike report at .constitution/spikes/SPK-BURL-D001.md
         When it is reviewed
         Then it records measured reparse timings across at least three Note sizes spanning small, typical and pathological
         And it states the Note size at which reparse approaches the 16ms frame budget

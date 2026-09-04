@@ -1,6 +1,6 @@
 # Interview record — Realign, 2026-08-21
 
-This record captures a full-sweep Realign interview. The goal: widen and deepen a constitution the user judged too shallow, written against an earlier revision of the stage-skill instructions, and bring it into compliance with the current output contracts. The codebase and constitution are current for Epics A through D, and Epics E and F are active, so the audit ran as a Brownfield diff plus Evolution scoping for all deferred work. Each ruling records what was decided and why, so later sessions can honor the decisions without asking again. Companion register: `2026-08-21-open-decisions.md`.
+This record captures a full-sweep Realign interview. The goal: widen and deepen a constitution the user judged too shallow, written against an earlier revision of the stage-skill instructions, and bring it into compliance with the current output contracts. The codebase and constitution are current for Epics A through D, and Epics E and F are active, so the audit ran as a Brownfield diff plus Evolution scoping for all deferred work. Each ruling records what was decided and why, so later sessions can honor the decisions without asking again. Companion register: `open-decisions.yaml`.
 
 ## Audit findings accepted as realignment scope
 

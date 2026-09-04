@@ -1,5 +1,5 @@
 //! ADR-008's four persistence tiers, and the lock discipline
-//! `SPK-WSPC-D001` §6.2 settled for them.
+//! `SPK-BURL-D001` §6.2 settled for them.
 //!
 //! # The four tiers
 //!
@@ -25,7 +25,7 @@
 //!
 //! # The locks, and why there are five of them
 //!
-//! `SPK-WSPC-D001` §4.4 measured four shapes. Under one process-wide mutex a
+//! `SPK-BURL-D001` §4.4 measured four shapes. Under one process-wide mutex a
 //! keystroke waits a p95 of 10.4ms (WAL) or 55.9ms (SQLite defaults) in front
 //! of buffer work that performs no I/O at all — the ADR-008 hazard reproduced
 //! as a number. The shape below measured 0.031ms.
@@ -76,7 +76,7 @@
 //! things, `commit_stage_failure` and `restate`, and both are pure functions
 //! over an `AppError` that take no lock at all.
 //!
-//! # Three standing review rules (`SPK-WSPC-D001` §6.2.7)
+//! # Three standing review rules (`SPK-BURL-D001` §6.2.7)
 //!
 //! No closure passed to `with_connection` may perform file I/O; no lock a
 //! keystroke can contend for may be held across an `fsync`; and no tier 2
@@ -227,7 +227,7 @@ impl Workspace {
     ///
     /// Every caller in this module holds no state lock when it calls this, per
     /// the acquisition order in the module documentation, and **no `f` may
-    /// perform file I/O** (`SPK-WSPC-D001` §6.2.7): the connection is
+    /// perform file I/O** (`SPK-BURL-D001` §6.2.7): the connection is
     /// process-wide, so anything slow inside a closure is time a keystroke's
     /// own tier 1 write spends waiting. The rule is enforced rather than merely
     /// written down — see
@@ -978,7 +978,7 @@ impl NoteSession {
     /// working buffer, adjust the spans arithmetically, and write the draft
     /// row. No parse, no file, no AST returned.
     ///
-    /// The ordering is `SPK-WSPC-D001` §6.2.2 with one per-Note extension:
+    /// The ordering is `SPK-BURL-D001` §6.2.2 with one per-Note extension:
     /// acquire tier 1, mutate, bump the sequence, snapshot, release the state
     /// lock, then write the row while retaining tier 1. The row write is not
     /// cheap: 7.96ms at 102 KiB and 22.79ms at 1 MiB against the
@@ -1118,7 +1118,7 @@ impl NoteSession {
     /// whenever a Block is blurred with no intervening keystrokes.
     ///
     /// The reparse runs holding **no lock at all** — it is the 3.4ms-at-102 KiB
-    /// operation of `SPK-WSPC-D001` §4.1, far too long to hold a lock the timer
+    /// operation of `SPK-BURL-D001` §4.1, far too long to hold a lock the timer
     /// needs. The install is guarded by an edit-sequence check rather than an
     /// assumption: under FRB the synchronous calls for one Note are serialized
     /// on the Dart thread and the timer never mutates the buffer, so the retry
@@ -2366,7 +2366,7 @@ impl NoteSession {
     ///
     /// `close_note` needs the sequence, not just the revision: clearing the
     /// draft row unconditionally afterwards would destroy a keystroke that
-    /// landed between the write and the clear, and `SPK-WSPC-D001` §6.2.6's
+    /// landed between the write and the clear, and `SPK-BURL-D001` §6.2.6's
     /// asymmetry says that direction of error costs the user's work while the
     /// other costs one spurious recovery notice.
     fn flush_covering(&self) -> Result<WrittenThrough, AppError> {
@@ -2466,7 +2466,7 @@ impl NoteSession {
         // that stale baseline and raised `RevisionMismatch`, whose only exit is
         // `reload` — and reload discards the buffer. A recoverable index error
         // was being converted into a prompt that destroys the user's unwritten
-        // work, which is exactly the direction `SPK-WSPC-D001` §6.2.6 forbids.
+        // work, which is exactly the direction `SPK-BURL-D001` §6.2.6 forbids.
         //
         // Taken and released on its own, rather than by hoisting the whole
         // state update up here: the two calls below acquire the connection, and
@@ -2551,7 +2551,7 @@ impl NoteSession {
     /// wrong one here: it re-reads the file, stats it, and on a changed hash
     /// parses it — all O(file) work, and all of it would run under the
     /// process-wide connection mutex that a keystroke's own tier 1 write has to
-    /// acquire. That is the composition `SPK-WSPC-D001` §6.2.7 forbids in as
+    /// acquire. That is the composition `SPK-BURL-D001` §6.2.7 forbids in as
     /// many words ("no closure passed to `with_connection` may perform file
     /// I/O"), and it is exactly what this tier would have broken first. The
     /// bytes are already in hand, so the hash comparison, the `stat` and the
@@ -2586,7 +2586,7 @@ impl NoteSession {
     /// on disk**, evaluated atomically against the row rather than against a
     /// counter that leads it.
     ///
-    /// `SPK-WSPC-D001` §6.2.6 is what forbids the obvious alternative: a tier 1
+    /// `SPK-BURL-D001` §6.2.6 is what forbids the obvious alternative: a tier 1
     /// write releases the state lock before its own 8-23ms row write, so a
     /// timer that snapshotted at sequence N, wrote the file, re-acquired and
     /// observed an in-memory counter still reading N would clear a row the
@@ -2655,7 +2655,7 @@ impl NoteSession {
     /// sense that matters: without the lock, a concurrent idle write can land
     /// between this read and the baseline it derives from it, leaving the Core
     /// recording a revision the file no longer has — the time-of-check to
-    /// time-of-use hole `SPK-WSPC-D001` §6.2.5 gave the lock to close. The
+    /// time-of-use hole `SPK-BURL-D001` §6.2.5 gave the lock to close. The
     /// acquisition order is unchanged: write lock, then state, then connection.
     ///
     /// **It does not clear `session_edited`**, and that is a decision rather
@@ -2804,7 +2804,7 @@ impl NoteSession {
     /// is nothing on disk to commit — and **the draft row is left in place**,
     /// which is what turns the deletion into recoverable work: the row survives
     /// in the encrypted index and `pending_drafts` reports it. That is
-    /// `SPK-WSPC-D001` §6.2.6's asymmetry applied to the harshest case, and it
+    /// `SPK-BURL-D001` §6.2.6's asymmetry applied to the harshest case, and it
     /// keeps `architecture/resilience.md`'s promise that unwritten work
     /// survives events the application never got to handle.
     /// Closes this session and tells the caller whether the close completed
@@ -3908,7 +3908,7 @@ fn read_draft(
 /// rewrite the whole file with the replacement characters *and* re-record that
 /// mangled text as the OCC baseline — destroying bytes the user never touched,
 /// silently, in a file this application was only asked to edit one Block of.
-/// That is precisely what `prd/constraints.md`'s Edit Fidelity and CAP-PORT-03
+/// That is precisely what `.constitution/prd/constraints.yaml`'s Edit Fidelity and CAP-PORT-03
 /// forbid, and refusing is the same call `lifecycle::read_source` already makes
 /// for the same reason on the Link-rewrite path.
 ///
@@ -3942,7 +3942,7 @@ fn decode_source(path: &Path, bytes: Vec<u8>) -> Result<String, AppError> {
 /// interleaved one, because the bytes were `fsync`ed into the temporary file
 /// before the rename published them. Losing the last write to a power cut is
 /// already the accepted cost of `synchronous = NORMAL` on the index the draft
-/// row lives in (`SPK-WSPC-D001` §6.3), and tier 1's purpose is to survive an
+/// row lives in (`SPK-BURL-D001` §6.3), and tier 1's purpose is to survive an
 /// application crash, which this handles unconditionally.
 ///
 /// **The temporary file is private from the instant it exists** and only then
@@ -4108,7 +4108,7 @@ fn create_private_temp(temp: &Path) -> std::io::Result<std::fs::File> {
 }
 
 /// See the `unix` twin above. Windows has no mode bits to set at creation, and
-/// `tech-spec/stack.md` ships desktop Linux and macOS, so this is the whole of
+/// `.constitution/tech-spec/stack.yaml` ships desktop Linux and macOS, so this is the whole of
 /// the second implementation rather than a placeholder for one.
 #[cfg(not(unix))]
 fn create_private_temp(temp: &Path) -> std::io::Result<std::fs::File> {
@@ -4122,7 +4122,7 @@ fn create_private_temp(temp: &Path) -> std::io::Result<std::fs::File> {
 /// umask is then exactly the right answer for what its mode should be.
 ///
 /// Unix only, and unconditionally so rather than behind a runtime check —
-/// burlmd ships to desktop Linux and macOS (`tech-spec/stack.md`), and Windows
+/// burlmd ships to desktop Linux and macOS (`.constitution/tech-spec/stack.yaml`), and Windows
 /// has no equivalent bits to carry, so the `cfg` is the whole story rather than
 /// a placeholder for a second implementation.
 #[cfg(unix)]
@@ -4657,7 +4657,7 @@ fn leading_newlines(text: &str) -> usize {
 /// Every seam this module emits is measured CRLF-aware by [`trailing_newlines`]
 /// and used to be *written* LF-only, which put a bare `\n` into a
 /// CRLF-authored Note on every insert and every delete. The Note still parses —
-/// CommonMark accepts either — but `prd/constraints.md`'s Edit Fidelity is about
+/// CommonMark accepts either — but `.constitution/prd/constraints.yaml`'s Edit Fidelity is about
 /// the bytes: a mixed-ending file shows the user a diff line for a seam they
 /// never touched, and a Windows-authored bundle grows one of those per edit.
 /// Deriving the spelling from the text the seam is being welded onto is what
@@ -5238,7 +5238,7 @@ mod tests {
 
     /// A fixture on storage that really fsyncs.
     ///
-    /// `SPK-WSPC-D001` §3 records this as one of the two methodological points
+    /// `SPK-BURL-D001` §3 records this as one of the two methodological points
     /// that changed its own answers: `/tmp` is `tmpfs` on this project's target
     /// machine, where every write runs at memory speed and `fsync` is a no-op,
     /// and its first pass understated tier 2's atomic write by roughly 20x.
@@ -5555,7 +5555,7 @@ mod tests {
     }
 
     /// A 100 KiB Note, one Block edit, measured rather than assumed:
-    /// `SPK-WSPC-D001` §4.3 corrected ADR-008's claim that this tier is cheap
+    /// `SPK-BURL-D001` §4.3 corrected ADR-008's claim that this tier is cheap
     /// (7.96ms at 102 KiB with SQLite's defaults, 2.41ms under the WAL settings
     /// `WSPC-D004` now applies), and the measurement mutates the buffer on
     /// every call because rewriting a constant string reports 0.22ms and is
@@ -5577,7 +5577,7 @@ mod tests {
             // Content that actually changes on every call, as a keystroke does.
             // A benchmark looping over a constant string measures a SQLCipher
             // no-op — 0.22ms against 7.96ms, wrong by a factor of 36
-            // (`SPK-WSPC-D001` §3).
+            // (`SPK-BURL-D001` §3).
             let typed = format!("Sed ut perspiciatis unde omnis iste natus error{iteration}.\n");
             // Paced rather than tight: after an idle gap the core is at a lower
             // clock and the working set is out of cache, which is the state a
@@ -7143,7 +7143,7 @@ mod tests {
     /// the buffer, so the first idle write after any edit rewrote the whole
     /// file with the replacement characters and re-recorded that mangled text
     /// as the baseline — destroying bytes the user never touched, in a file
-    /// this application was asked to edit one Block of (`prd/constraints.md`
+    /// this application was asked to edit one Block of (`.constitution/prd/constraints.yaml`
     /// Edit Fidelity, CAP-PORT-03).
     #[test]
     fn a_note_that_is_not_valid_utf8_is_refused_rather_than_decoded_lossily() {
@@ -7323,7 +7323,7 @@ mod tests {
     /// gained a bare `\n` at every insert, split and delete — Blocks the user
     /// never touched showing up as whitespace changes in their diff, one more
     /// per edit, in a project whose Edit Fidelity constraint
-    /// (`prd/constraints.md`) is exactly that.
+    /// (`.constitution/prd/constraints.yaml`) is exactly that.
     #[test]
     fn a_structural_edit_on_a_crlf_note_emits_crlf_seams() {
         let f = fixture();
@@ -8041,7 +8041,7 @@ mod tests {
     /// so deleting the paragraph *before* one of them deleted the region too.
     /// `parser`'s module documentation states the opposite as a guarantee ("no
     /// edit can corrupt them and they survive every save byte-identically"),
-    /// and `prd/constraints.md`'s Edit Fidelity is what that guarantee serves.
+    /// and `.constitution/prd/constraints.yaml`'s Edit Fidelity is what that guarantee serves.
     #[test]
     fn deleting_a_block_leaves_the_unaddressable_region_after_it_byte_identical() {
         // A raw HTML block between two paragraphs: deleting the first must
@@ -8227,7 +8227,7 @@ mod tests {
         assert_eq!(indexed, 1, "the index does not track what was written");
     }
 
-    /// `SPK-WSPC-D001` §6.2.6's interleaving, without the thread: the timer's
+    /// `SPK-BURL-D001` §6.2.6's interleaving, without the thread: the timer's
     /// clear runs with the sequence it snapshotted, and a keystroke's later row
     /// has landed in the meantime. That row must survive.
     #[test]
@@ -8828,7 +8828,7 @@ mod tests {
 
     // -- review findings -----------------------------------------------------
 
-    /// `SPK-WSPC-D001` §6.2.7's first standing rule: no closure passed to the
+    /// `SPK-BURL-D001` §6.2.7's first standing rule: no closure passed to the
     /// connection may perform file I/O. The process-wide connection is what a
     /// keystroke's own tier 1 write waits on, so anything slow inside a closure
     /// is latency charged to typing — and the obvious `index_note` call on the
@@ -8914,7 +8914,7 @@ mod tests {
 
     /// A keystroke landing between the close-time flush and the draft clear is
     /// work no write has covered. Clearing it would destroy it, which is the
-    /// direction `SPK-WSPC-D001` §6.2.6 says must never be taken.
+    /// direction `SPK-BURL-D001` §6.2.6 says must never be taken.
     #[test]
     fn a_close_clears_only_the_draft_the_flush_covered() {
         let f = fixture();

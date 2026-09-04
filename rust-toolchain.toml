@@ -1,4 +1,4 @@
-# Source of truth for the Rust toolchain (see .constitution/tech-spec/stack.md).
+# Source of truth for the Rust toolchain (see .constitution/.constitution/tech-spec/stack.yaml).
 # devenv reads this file via `languages.rust.toolchainFile`; rustup users get the
 # same toolchain automatically when entering the repository.
 [toolchain]

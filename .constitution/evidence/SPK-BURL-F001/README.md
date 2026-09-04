@@ -23,8 +23,8 @@ identical. That is the numerical counterpart to these production-font images.
 Recreate the files from the repository root (Wayland plus `grim` required):
 
 ```sh
-BURLMD_SMOKE_F001=1 BURLMD_SMOKE_SHOT_DIR="$PWD/.constitution/evidence/edit-f001" ./scripts/smoke-shot.sh formatted
-BURLMD_SMOKE_F001=1 BURLMD_SMOKE_F001_FOCUSED_INDEX=0 BURLMD_SMOKE_SHOT_DIR="$PWD/.constitution/evidence/edit-f001" ./scripts/smoke-shot.sh paragraph-focused
-BURLMD_SMOKE_F001=1 BURLMD_SMOKE_F001_FOCUSED_INDEX=1 BURLMD_SMOKE_SHOT_DIR="$PWD/.constitution/evidence/edit-f001" ./scripts/smoke-shot.sh heading-focused
-BURLMD_SMOKE_F001=1 BURLMD_SMOKE_F001_FOCUSED_INDEX=2 BURLMD_SMOKE_SHOT_DIR="$PWD/.constitution/evidence/edit-f001" ./scripts/smoke-shot.sh list-focused
+BURLMD_SMOKE_F001=1 BURLMD_SMOKE_SHOT_DIR="$PWD/.constitution/evidence/SPK-BURL-F001" ./scripts/smoke-shot.sh formatted
+BURLMD_SMOKE_F001=1 BURLMD_SMOKE_F001_FOCUSED_INDEX=0 BURLMD_SMOKE_SHOT_DIR="$PWD/.constitution/evidence/SPK-BURL-F001" ./scripts/smoke-shot.sh paragraph-focused
+BURLMD_SMOKE_F001=1 BURLMD_SMOKE_F001_FOCUSED_INDEX=1 BURLMD_SMOKE_SHOT_DIR="$PWD/.constitution/evidence/SPK-BURL-F001" ./scripts/smoke-shot.sh heading-focused
+BURLMD_SMOKE_F001=1 BURLMD_SMOKE_F001_FOCUSED_INDEX=2 BURLMD_SMOKE_SHOT_DIR="$PWD/.constitution/evidence/SPK-BURL-F001" ./scripts/smoke-shot.sh list-focused
 ```

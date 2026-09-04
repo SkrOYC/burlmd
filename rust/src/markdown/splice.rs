@@ -2,7 +2,7 @@
 //!
 //! An edit is a textual substitution into the Note's source over one Block's
 //! span. Bytes outside that span are never rewritten, which is what makes the
-//! Edit Fidelity constraint in `prd/constraints.md` a property of the design
+//! Edit Fidelity constraint in `.constitution/prd/constraints.yaml` a property of the design
 //! rather than something to test for afterwards: no code path here is capable
 //! of rewriting an unedited region, because nothing here can produce Markdown
 //! from an AST at all. There is no serializer on the save path by design
@@ -10,7 +10,7 @@
 //! the constraint forbids.
 //!
 //! Every committed splice is followed by a whole-file reparse that rebuilds the
-//! span map from scratch. `SPK-WSPC-D001` §5 rejected offset arithmetic here on
+//! span map from scratch. `SPK-BURL-D001` §5 rejected offset arithmetic here on
 //! two independent grounds: a reparse already fits the frame budget with margin
 //! at realistic Note sizes, and a *committed* splice is precisely the operation
 //! that may change a Block's node shape — a paragraph gaining a leading `- `
@@ -113,10 +113,10 @@ pub fn splice_source(
 /// fallback and no background-thread escape hatch, deliberately: a second
 /// strategy chosen by input size would be the one that gets the least testing,
 /// on the rarest inputs, while producing silent corruption rather than a
-/// visible fault (`SPK-WSPC-D001` §5, option C).
+/// visible fault (`SPK-BURL-D001` §5, option C).
 ///
 /// **Measured cost, so the next person to look at a slow blur finds the number
-/// instead of re-deriving it** (`SPK-WSPC-D001` §4.1-4.2, `pulldown-cmark`
+/// instead of re-deriving it** (`SPK-BURL-D001` §4.1-4.2, `pulldown-cmark`
 /// 0.12.2, release profile, Ryzen 7 PRO 4750U): 0.1ms at 2.5 KiB, 3.4ms at
 /// 102 KiB, 9.6ms at 257 KiB. Against a 16ms frame budget the p95 crossing is
 /// around **360 KiB of ordinary Markdown** and around **150 KiB of the densest
@@ -485,7 +485,7 @@ mod tests {
     /// The emphasis delimiters, the blank line between the Blocks and the
     /// trailing newline of the first are all picked up because extraction
     /// slices *between* two resolved offsets rather than concatenating run
-    /// sources — which `SPK-WSPC-D001` §2 warns is wrong precisely because
+    /// sources — which `SPK-BURL-D001` §2 warns is wrong precisely because
     /// runs do not tile a Block's source.
     #[test]
     fn a_selection_across_two_blocks_extracts_exactly_the_spanned_source() {

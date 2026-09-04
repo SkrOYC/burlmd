@@ -398,7 +398,7 @@ class EditorState extends ConsumerState<Editor> {
     // The list sits inside ONE SelectionArea (`EDIT-F003`, CAP-EDIT-04): the
     // unfocused Blocks participate in a single selection region, so a drag
     // can span them and select-all covers the whole Note. Per
-    // SPK-EDIT-F001 §3c a focused EditableText does NOT participate in the
+    // SPK-BURL-F001 §3c a focused EditableText does NOT participate in the
     // region at all (verified on Flutter 3.44.3), so a cross-Block selection
     // exists only while no Block holds focus — which is exactly why every
     // `BlockRange` offset is a rendered offset over unfocused Blocks and no
@@ -602,7 +602,7 @@ class EditorState extends ConsumerState<Editor> {
     // pass-through registrar, so this container knows exactly which painted
     // selectables belong to THIS Block (`EDIT-F003`). While a Block IS
     // focused, its field does not register with the region at all
-    // (SPK-EDIT-F001 §3c), which is what keeps a focused endpoint impossible.
+    // (SPK-BURL-F001 §3c), which is what keeps a focused endpoint impossible.
     broker.leafIndices = List<int>.generate(
       blockRenderedLeafCount(note.ast[index]),
       (leafIndex) => leafIndex,
@@ -1161,7 +1161,7 @@ class EditorState extends ConsumerState<Editor> {
       // Do not retain a range that crossed the field while it was focused.
       // `commit_block` reparses its source and this empty broker set requires
       // a fresh rendered SelectionArea gesture before a range can be sent to
-      // the Core (ADR-006 / SPK-EDIT-F001).
+      // the Core (ADR-006 / SPK-BURL-F001).
       _selectionBrokers.clear();
       _wholeNoteSelectedId = null;
     });
@@ -1918,7 +1918,7 @@ class EditorState extends ConsumerState<Editor> {
 
   /// Testing/QA hook: the range the container would currently send to the
   /// Core for a copy request — a direct read of the live selection state of
-  /// each Block's registered selectables (SPK-EDIT-F001 §5: rendered-state
+  /// each Block's registered selectables (SPK-BURL-F001 §5: rendered-state
   /// inspection, not widget-property guesses).
   @visibleForTesting
   BlockRange? debugSelectedRange() => selectedBlockRange();
@@ -2047,7 +2047,7 @@ class EditorState extends ConsumerState<Editor> {
       return null;
     }
     // While a Block holds focus its selection belongs to the platform field
-    // (raw source text), and no cross-Block selection can exist (SPK-EDIT-F001
+    // (raw source text), and no cross-Block selection can exist (SPK-BURL-F001
     // §4b): fall through to the default so the focused Block behaves normally.
     if (_focused != null) {
       // ignore: invalid_use_of_protected_member

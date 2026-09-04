@@ -1661,7 +1661,7 @@ fn apply_reidentify_locked(
     }
 
     // Derived out here rather than inside the connection closure: deriving
-    // reads and parses, and `SPK-WSPC-D001` §6.2.7 forbids file I/O under the
+    // reads and parses, and `SPK-BURL-D001` §6.2.7 forbids file I/O under the
     // process-wide connection mutex a keystroke's own draft write waits on.
     // Only the candidates that have a file. One that arrived through its draft
     // row or its session with no file behind it has no bytes to derive rows
@@ -2672,7 +2672,7 @@ fn rewrite_frontmatter_title(source: &str, new_title: &str) -> Option<String> {
             // touches its terminator; this branch emits a whole line, so it has
             // to spell one — and spelling it LF-only put a lone `\n` into a
             // CRLF-authored Note on every rename that added a title. The Note
-            // still parses (CommonMark accepts either) but `prd/constraints.md`
+            // still parses (CommonMark accepts either) but `.constitution/prd/constraints.yaml`
             // Edit Fidelity is about the bytes, and a mixed-ending file shows
             // the user a diff line for a seam they never touched. Same
             // derivation, and the same single definition,
@@ -4310,7 +4310,7 @@ mod tests {
     /// touches its terminator. The insert branch writes a whole line and so has
     /// to spell one, and it used to emit a bare `\n`: one mixed ending per
     /// rename, in a file the user then sees a spurious diff line for
-    /// (`prd/constraints.md`, Edit Fidelity).
+    /// (`.constitution/prd/constraints.yaml`, Edit Fidelity).
     #[test]
     fn a_rename_inserting_a_title_into_a_crlf_note_writes_a_crlf_line() {
         let f = fixture();
@@ -4438,7 +4438,7 @@ mod tests {
         );
         // The Link's *display text* is deliberately untouched: it is the user's
         // own prose, and re-serializing it would double-escape a title an
-        // author escaped by hand (`prd/constraints.md`, Edit Fidelity). Only
+        // author escaped by hand (`.constitution/prd/constraints.yaml`, Edit Fidelity). Only
         // the destination carries identity.
         assert!(
             source.contains("[Me Myself](</You Yourself.md>)"),
@@ -5069,7 +5069,7 @@ mod tests {
     /// move, on both sides of the `.md` line.
     ///
     /// This is the consistency half of a decision recorded in
-    /// `tech-spec/changelog.md`: `okf::links::classify` reads `Other.md#frag`
+    /// `.constitution/tech-spec/changelog.yaml`: `okf::links::classify` reads `Other.md#frag`
     /// as **External**, because it tests the destination as written and no
     /// destination ending in `#frag` ends in `.md` — the same
     /// no-decoding-on-read stance the percent-encoding entry describes. So

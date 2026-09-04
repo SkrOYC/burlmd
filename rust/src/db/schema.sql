@@ -168,7 +168,7 @@ CREATE TABLE IF NOT EXISTS links (
 CREATE INDEX IF NOT EXISTS idx_links_target ON links(workspace_id, target_id);
 
 -- FTS5 virtual table backing full-text search (CAP-FIND-01, <100ms per
--- `prd/constraints.md`). A standard (non-external-content) FTS table; to avoid
+-- `.constitution/prd/constraints.yaml`). A standard (non-external-content) FTS table; to avoid
 -- an O(N) scan when deleting a Note's row, the Core Engine maintains
 -- `fts_mapping` alongside it. FTS5 cannot express a foreign key or a composite
 -- primary key, which is precisely why `fts_mapping` carries both on its behalf.
@@ -232,7 +232,7 @@ CREATE TABLE IF NOT EXISTS drafts (
     raw_markdown TEXT NOT NULL,    -- Full current source text of the Note
     updated_at INTEGER NOT NULL,
     -- The Core's per-Note edit sequence at the moment this row was written,
-    -- and the reason tier 2's clear is safe. `SPK-WSPC-D001` §6.2.6: a tier 1
+    -- and the reason tier 2's clear is safe. `SPK-BURL-D001` §6.2.6: a tier 1
     -- write releases the state lock before its 8-23ms encrypted row write, so
     -- a timer that snapshotted at sequence N, wrote the file, and then
     -- compared an *in-memory* counter still reading N would clear a row the

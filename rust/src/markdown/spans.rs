@@ -32,7 +32,7 @@
 //! ADR-007 decision 8's worked example — `hello **bold** world`, where
 //! rendered offset 6 resolves to source offset 8 — is the case where a run's
 //! rendered text and its source bytes are *the same bytes*, so
-//! `source.start + (offset - rendered.start)` is right. `SPK-WSPC-D001` §2
+//! `source.start + (offset - rendered.start)` is right. `SPK-BURL-D001` §2
 //! measured the cases where they are not, against the same `pulldown-cmark`
 //! 0.12.2 this crate pins:
 //!
@@ -213,7 +213,7 @@ impl SourceResolution {
 /// The map from `block_path` to a byte range in the working source, with
 /// inline granularity inside each Block.
 ///
-/// Built during the same parse that produces the AST (`SPK-WSPC-D001` §6.1:
+/// Built during the same parse that produces the AST (`SPK-BURL-D001` §6.1:
 /// the incremental cost is 1.11-1.35x rising with Note size, where a second
 /// pass would be 2x) and discarded and rebuilt with it.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -441,7 +441,7 @@ impl SpanMap {
     /// silently wrong map.
     ///
     /// This is the **one** place offset arithmetic is permitted to stand in
-    /// for a reparse, and `SPK-WSPC-D001` §6.1 states the boundary
+    /// for a reparse, and `SPK-BURL-D001` §6.1 states the boundary
     /// exhaustively: one Block's text changed, its structure deliberately not
     /// re-derived until blur, a single uniform delta applied to what follows,
     /// and a full reparse following immediately at `commit_block`. Reparsing
@@ -816,7 +816,7 @@ pub(crate) mod invariants {
 
 /// The fixture corpus every span and splice test runs over.
 ///
-/// `SPK-WSPC-D001` §6.1 is explicit that `hello **bold** world` alone passes
+/// `SPK-BURL-D001` §6.1 is explicit that `hello **bold** world` alone passes
 /// against a broken implementation, so the corpus carries every shape whose
 /// rendered and source lengths disagree — inline code spans, named and numeric
 /// entity references, backslash escapes and links — alongside the delimiter
@@ -1202,7 +1202,7 @@ mod tests {
         assert_eq!(&source[6..8], "**");
     }
 
-    /// `SPK-WSPC-D001` §2's first counterexample: interpolating inside a code
+    /// `SPK-BURL-D001` §2's first counterexample: interpolating inside a code
     /// span returns the backtick, so the run resolves whole instead.
     #[test]
     fn offset_inside_a_code_span_resolves_to_the_whole_run() {
@@ -1301,7 +1301,7 @@ mod tests {
         }
     }
 
-    /// The escape case is the one `SPK-WSPC-D001` §2 records as *not* a length
+    /// The escape case is the one `SPK-BURL-D001` §2 records as *not* a length
     /// mismatch. Measured against `pulldown-cmark` 0.12.2, `esc \*not
     /// emphasis\* end` yields `Text("*not emphasis")` at source `5..18`: the
     /// bytes are identical, so the run interpolates soundly, and the hazard is

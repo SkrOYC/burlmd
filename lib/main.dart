@@ -188,7 +188,7 @@ class _HomeState extends ConsumerState<_Home> {
     ref.read(selectedNoteIdProvider.notifier).select(state!.metadata.id);
   }
 
-  /// Production-font fixture for SPK-EDIT-F001's durable visual evidence.
+  /// Production-font fixture for SPK-BURL-F001's durable visual evidence.
   /// Each source sits deliberately near a natural wrap boundary in the real
   /// editor pane; `BURLMD_SMOKE_F001_FOCUSED_INDEX` chooses which one is raw.
   Future<void> _stageSmokeF001() async {

@@ -90,7 +90,7 @@ So `EditableText`/`TextField` does not merely resist extending selection outward
 
 ## 5. Durable visual and boundary evidence
 
-The original scratch measurements remain useful for line-height and leading-distribution diagnosis, but they do not exercise proportional production fonts at a wrap boundary. The checked-in [production-font captures](../evidence/edit-f001/README.md) now provide side-by-side formatted/focused evidence for paragraph, heading, and list item. They are generated exclusively by `scripts/smoke-shot.sh`; no image is hand-authored.
+The original scratch measurements remain useful for line-height and leading-distribution diagnosis, but they do not exercise proportional production fonts at a wrap boundary. The checked-in [production-font captures](../evidence/SPK-BURL-F001/README.md) now provide side-by-side formatted/focused evidence for paragraph, heading, and list item. They are generated exclusively by `scripts/smoke-shot.sh`; no image is hand-authored.
 
 The companion regression in `test/components/editor_test.dart` sets a 320 logical-pixel viewport and searches actual `RenderParagraph` and `RenderEditable` line boxes until raw source takes an additional painted line for each of paragraph, heading, and list item. Its assertion is against the live entry `Rect`, not a `TextStyle`: the formatted footprint stays unchanged. This found a real missing stabilization in the first F002 implementation — matching font metrics is insufficient because the raw delimiter/prefix bytes shift a soft-wrap boundary. `blockPromotionSlot` now retains the formatted layout footprint and lets the focused raw field scroll inside it. That is the minimum local stabilization; no Stage 3 redesign is required.
 

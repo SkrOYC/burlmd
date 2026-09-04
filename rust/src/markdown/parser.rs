@@ -2,7 +2,7 @@
 //!
 //! One pass rather than two because `Parser::into_offset_iter()` already
 //! yields a byte range for every event, inline events included (ADR-007
-//! decision 8), and `SPK-WSPC-D001` §4.1 measured the incremental cost of
+//! decision 8), and `SPK-BURL-D001` §4.1 measured the incremental cost of
 //! building the map alongside the AST at 1.11-1.35x — rising with Note size —
 //! against the 2x a second parse would cost.
 //!

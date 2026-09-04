@@ -941,7 +941,7 @@ void main() {
       focused.size,
       before.size,
       reason:
-          'SPK-EDIT-F001 §3b: pinned height/leading distribution make '
+          'SPK-BURL-F001 §3b: pinned height/leading distribution make '
           'the two states geometrically identical',
     );
     expect(after, before, reason: 'blur restores the exact pre-focus geometry');
@@ -1074,7 +1074,7 @@ void main() {
     await promoteByTap(tester, find.byKey(const ValueKey('block-0')));
 
     // The themed body the unfocused render draws is the same body containing
-    // the promoted field (SPK-EDIT-F001 §3b).
+    // the promoted field (SPK-BURL-F001 §3b).
     final body = find.ancestor(
       of: _writableFields(),
       matching: find.byKey(const ValueKey('code-block-body')),
