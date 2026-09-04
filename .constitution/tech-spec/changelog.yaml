@@ -1,4 +1,22 @@
 entries:
+  - version: v2.0.1
+    date: 2026-09-04
+    changed:
+      - "Translated the reviewed post-migration TechSpec lineage into the structured Stage 3 layout against PRD v2.0.0 and Architecture v2.0.1. Reviewed v1.8.1 corrected conditional viewport verification; v1.8.2 through v1.8.4 carried that policy into Spike results and required complete host profiles; v1.8.5 and v1.8.6 made runner-label reconciliation executable and structurally valid; v1.8.7 established the platform-specific candidate and fresh-seal authority model."
+      - "Advanced the provisional raw contract to version 24 and the Spike-result schema to version 20 while retaining role schema version 9 and aggregate schema version 11, including explicit result_schema_version = 20 and conditional viewport, role-profile, and runner-label reconciliation."
+      - "Translated every live managed-validation identity to BURL-M003, BURL-H001, BURL-H002, BURL-I001, BURL-L001, and BURL-M001, with BURL-M015 retaining the reproducibility exception."
+      - "Added canonical BURL verification-command entries beside four explicitly labeled temporary aliases whose exact legacy strings are still quoted by Stage 4. The aliases grant no runtime compatibility and must be removed by Stage 3 immediately after Stage 4 migrates BURL-M006, BURL-M011, BURL-M012, and BURL-M013."
+      - "Moved BURL-M003 acceptance evidence to .constitution/evidence/BURL-M003/managed-evidence.json, completion.md, and manifest.yaml; reports are not acceptance-evidence storage."
+      - "Reconciled trusted_control_paths to the explicit transitive workflow, helper, CI-contract, and toolchain-lock set implemented by PR #15 at 6d65e94, including rust/Cargo.lock and excluding unrelated scripts and contracts."
+    fixed:
+      - "Preserved the reviewed exact ticket-by-role evidence profiles, role and aggregate acceptance rules, immutable artifact and receipt identities, canonical digest normalization, post-completion job observation, credential-separated coordination, two-pull-request bootstrap, API version 2026-03-10, generated-binding check, and exact CLI output and exit behavior."
+      - "Replaced the deleted static viewport-fixture directory with raw policy that points to the executable PR #15 reconciliation, role-production, and seal-validator fixtures."
+    security:
+      - "Accepted ADR-0019 by ruling: Linux proves private-PID teardown before upload; hosted macOS records bounded cleanup without an arbitrary-process containment claim; candidate commands remain credential-free; a trusted wrapper may upload only an untrusted handoff; and the fresh non-executing seal alone receives provenance authority."
+    by: patch-lane
+    upstream:
+      prd: v2.0.0
+      architecture: v2.0.1
   - version: v2.0.0
     date: 2026-09-03
     added: ["Added 96 verification commands to the guidelines front matter, one per distinct command the 117 tickets quote, each labeled with the tickets that quote it. Six are marked exists: false: the five managed-evidence runs owned by BURL-M003 and the GitHub App attestation script owned by BURL-K009.", "Replaced the TODO upgrade_boundaries with the real rule: which bumps re-run which verification, and which need an ADR."]

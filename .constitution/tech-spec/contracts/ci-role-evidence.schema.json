@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": ["schemaVersion", "expectedIdentity", "expectedIdentitySha256", "roleEvidence"],
   "properties": {
-    "schemaVersion": { "const": 8 },
+    "schemaVersion": { "const": 9 },
     "expectedIdentity": { "$ref": "#/$defs/expectedIdentity" },
     "expectedIdentitySha256": { "$ref": "#/$defs/sha256" },
     "roleEvidence": { "$ref": "#/$defs/roleEvidence" }
@@ -242,6 +242,7 @@
       }
     },
     "viewport": {
+      "$comment": "verified is true only when this role owns a probe that observes the exact width, height, and refreshHz values. False means the role did not establish that exact viewport; validators must not treat the fixed dimensions as observed evidence.",
       "type": "object",
       "additionalProperties": false,
       "required": ["width", "height", "refreshHz", "verified"],
@@ -294,6 +295,27 @@
         "internalArtifacts": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/internalArtifact" } }
       },
       "allOf": [
+        {
+          "if": {
+            "properties": {
+              "evidenceClasses": {
+                "type": "array",
+                "contains": {
+                  "enum": ["performance", "linux-platform-regression", "macos-authoritative-visual"]
+                }
+              }
+            },
+            "required": ["evidenceClasses"]
+          },
+          "then": {
+            "properties": {
+              "viewport": {
+                "type": "object",
+                "properties": { "verified": { "const": true } }
+              }
+            }
+          }
+        },
         {
           "if": { "properties": { "role": { "const": "linux-x86_64" } }, "required": ["role"] },
           "then": { "properties": {
