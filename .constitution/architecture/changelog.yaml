@@ -1,4 +1,12 @@
 entries:
+  - version: v2.0.1
+    date: 2026-09-04
+    changed: ["Translated the reviewed Architecture v1.4.16 fresh-seal lineage into the structured v2 records without changing the BND-15 Release Pipeline boundary or product scope.", "Classified candidate output as an untrusted file handoff: candidate commands receive no provenance authority, while a trusted wrapper may upload the handoff for validation.", "Recorded BND-16 as settled by the 2026-09-04 user ruling and mapped the release flow to its existing BND-13 and BND-15 through BND-19 records."]
+    fixed: ["Removed the migrated universal candidate-process termination claim. The strict-containment role proves teardown; other hosted roles record bounded cleanup without claiming arbitrary-process containment.", "Removed physical implementation names from the current Stage 2 records touched by this pass."]
+    security: ["Made the fresh sealing environment the sole provenance authority: it never executes candidate bytes, validates handoff identity and integrity before authentication, and remains unreachable to a candidate survivor that can only corrupt or deny its untrusted upload.", "Preserved Writer-device isolation and fail-closed evidence rejection for missing ownership, invalid handoffs, identity mismatch, incomplete sealing, and isolation failure."]
+    upstream:
+      prd: v2.0.0
+    by: patch-lane
   - version: v2.0.0
     date: 2026-09-03
     added: ["Added 33 protocol-labeled edges to boundaries.yaml, one per communication the container diagram and the flows describe, covering the in-process Core seams, the filesystem and secure-storage Platform seams, the two network seams to the Remote and the Object Store, and the release pipeline handoffs."]

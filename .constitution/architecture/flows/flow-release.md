@@ -1,10 +1,10 @@
 ---
 job: JOB-09
 capabilities: [CAP-075, CAP-076, CAP-077, CAP-078, CAP-079, CAP-080]
-boundaries: []
+boundaries: [BND-13, BND-15, BND-16, BND-17, BND-18, BND-19]
 view: dag
 certainty: assumed
-assumption: "Migrated from markdown; not yet exercised by an integration test."
+assumption: "The user has settled the fresh-seal authority model, but the complete release and upgrade path remains unexercised across all six capabilities."
 ---
 # Release and upgrade flow
 
@@ -14,13 +14,13 @@ assumption: "Migrated from markdown; not yet exercised by an integration test."
 flowchart TD
     Build[Build supported artifacts]
     Trust[Immutable reviewed validation trust anchor]
-    Expected[Authoritative expected identity\ntrust anchor, workflow signer, tested source, base, build, corpus, run, roles, and required evidence classes]
-    Linux[Linux x86-64 validation role\nassigned subset of functional, performance, and exact platform regression]
-    MacReference[Apple Silicon macOS 26 validation role\nassigned subset of functional, performance, and authoritative product visual]
-    MacCompatibility[macOS 15 validation role\nassigned functional compatibility classes only]
-    Seal[Fresh pipeline-owned sealing environments\nvalidate bundle and record immutable handoff identity]
+    Expected[Authoritative expected identity\ntrust anchor, validation-control signer, tested source, base, build, corpus, run, roles, and required evidence classes]
+    Linux[Strict-containment candidate role\nassigned Linux x86-64 evidence classes and proves teardown before upload]
+    MacReference[Hosted reference candidate role\nassigned macOS 26 evidence classes and records bounded cleanup]
+    MacCompatibility[Hosted compatibility candidate role\nassigned macOS 15 evidence classes and records bounded cleanup]
+    Seal[Fresh sealing environments\nvalidate identity and integrity, never execute candidate bytes, and alone authenticate provenance]
     Observe[Post-completion observation\nrequire successful sealing environment]
-    Integrity[Authenticate managed validation origin and verify complete evidence bundle integrity]
+    Integrity[Verify fresh-seal provenance and complete evidence handoff integrity]
     Identity[Compare captured identity with authoritative expected identity]
     Complete[Require complete current evidence set]
     Report[Review evidence-only integration after tested source]
@@ -43,17 +43,18 @@ flowchart TD
     Expected -->|authoritative expected-identity handoff| MacReference
     Expected -->|authoritative expected-identity handoff| MacCompatibility
     Expected -->|authoritative expected-identity handoff| Identity
-    Linux -->|complete untrusted role bundle| Seal
-    MacReference -->|complete untrusted role bundle| Seal
-    MacCompatibility -->|complete untrusted role bundle| Seal
-    Seal -->|authenticated bundle and pre-completion locator| Observe
+    Linux -->|trusted-wrapper file handoff: complete untrusted role bundle| Seal
+    MacReference -->|trusted-wrapper file handoff: complete untrusted role bundle| Seal
+    MacCompatibility -->|trusted-wrapper file handoff: complete untrusted role bundle| Seal
+    Seal -->|fresh-sealed bundle and pre-completion locator| Observe
     Observe -->|completed successful sealing handoff| Integrity
     Linux -->|ownership or validation failure| Failed
     MacReference -->|ownership or validation failure| Failed
     MacCompatibility -->|ownership or validation failure| Failed
+    Seal -->|identity, integrity, or authority separation failure| Rejected
     Observe -->|in-progress, failed, missing, duplicate, substituted, or mismatched handoff| Rejected
-    Integrity -->|origin and artifact valid| Identity
-    Integrity -->|untrusted origin, missing artifact, or corrupt artifact| Rejected
+    Integrity -->|provenance and handoff valid| Identity
+    Integrity -->|untrusted provenance, missing handoff, or corrupt handoff| Rejected
     Identity -->|captured identity matches expected identity| Complete
     Identity -->|expected identity missing or captured identity mismatched or stale| Rejected
     Complete -->|all assigned roles accepted| Report
@@ -69,13 +70,15 @@ flowchart TD
 
 ## Failure path
 
-- Every validation environment owns its display, compositor, input, and process state. If ownership isn't proven, it produces no acceptable evidence.
-- The Writer's active desktop never supplies visual proof. The Writer's desktop state in a capture invalidates the complete run.
-- Missing authoritative trust-anchor, workflow-signer, tested-source, base, release, build, corpus, run, required-role, or role-specific evidence-class identity prevents evidence acceptance.
-- A candidate-defined launcher, signer workflow, expected identity, or change outside the ticket's declared write boundary prevents dispatch or evidence acceptance.
-- Candidate execution has no origin-signing authority. A sealing environment can't attest its own final result before it finishes. Aggregation must observe one completed successful sealing environment independently; an in-progress, failed, missing, duplicate, substituted, or role-inconsistent handoff prevents evidence acceptance.
+- Every validation role owns its display, compositor, and input state. The strict-containment role proves candidate-process teardown before its trusted wrapper uploads the handoff. Other hosted roles record bounded cleanup and don't claim that arbitrary candidate processes ended. A missing assigned ownership, teardown, or cleanup result produces no acceptable evidence.
+- The Writer's active device never supplies visual proof or validation input. Writer windows, desktop state, or active-device input in a capture invalidate the complete run.
+- Missing authoritative trust-anchor, validation-control signer, tested-source, base, release, build, corpus, run, required-role, or role-specific evidence-class identity prevents evidence acceptance.
+- A candidate-defined launcher, provenance control, expected identity, or change outside the declared write boundary prevents dispatch or evidence acceptance.
+- Candidate commands receive no provenance authority. A trusted wrapper may upload the complete candidate bundle, but the file handoff remains untrusted. A candidate survivor can corrupt or deny that upload and fail the role; it can't enter the fresh sealing environment or gain its authority.
+- The fresh sealing environment is the sole provenance authority. It never executes candidate bytes and authenticates a sealed handoff only after validating candidate-environment identity, exact inventory, and complete integrity. If that separation or validation can't be proved, evidence is rejected.
+- A sealing environment can't attest its own final result before it finishes. Aggregation must observe one completed successful sealing environment independently; an in-progress, failed, missing, duplicate, substituted, or role-inconsistent handoff prevents evidence acceptance.
 - Validation bootstrap needs a reviewed implementation integration followed by a reviewed evidence-only integration. The validation capability remains incomplete between them.
-- An untrusted or unmanaged validation origin, an incomplete evidence bundle, or corrupt evidence fails verification before aggregation.
+- Untrusted or unmanaged sealing provenance, an incomplete evidence handoff, or corrupt evidence fails verification before aggregation.
 - Candidate-controlled aggregation never shares the authenticated acquisition context. Missing coordinator identity, reachable credentials or user configuration, writable inputs, an extra writable filesystem boundary, or available network access rejects the run.
 - Aggregation compares captured identity with the expected identity supplied directly by Release Pipeline. Self-description alone is insufficient.
 - A captured identity that is mismatched or stale is rejected. Evidence from another run can't satisfy the current release gate.
