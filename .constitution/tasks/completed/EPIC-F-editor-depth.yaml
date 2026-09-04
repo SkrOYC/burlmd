@@ -58,40 +58,40 @@ tickets:
         Given a Note with a paragraph containing bold text
         When that paragraph is not focused
         Then it renders with the bold run styled and no delimiters visible
-        
+
         Given the same paragraph
         When it receives focus
         Then it displays its raw Markdown source including the emphasis delimiters
-        
+
         Given a heading, a list item, a blockquote and a code Block
         When each receives focus in turn
         Then each displays its own raw source and accepts edits
-        
+
         Given a thematic break
         When it is not focused
         Then it renders as a rule, and when focused it displays its own source like any other Block — completing the `CAP-EDIT-02` Block-type list, whose last member no criterion previously mentioned
-        
+
         Given a Block is clicked partway through its text
         When it is promoted
         Then the caret is placed at the clicked position rather than at the start
-        
+
         Given a list or blockquote container with an editable descendant leaf
         When it is promoted, split, inserted after, or merged with its predecessor
         Then every Core edit address is that real leaf path (for example `[0, 1, 0]`), never the top-level container path `[0]`, which `update_block` rejects
-        
+
         Given a Block is focused and then blurred
         When it returns to formatted output
         Then its position and size are unchanged from before it was focused
-        
+
         Given a paragraph's raw source is edited to begin with a list marker
         When focus leaves the Block
         Then it renders as a list item and focus is re-derived from the returned state
-        
+
         Given an IME composition is live — a marked, not-yet-committed string such as CJK input
         When the Block commits (blur) or the user navigates away and back
         Then no composed or committed characters are lost, duplicated, or reordered, and the composition either completes into the Block's source or is visibly cancelled — never silently discarded
         ```
-        
+
         The last scenario exists because ADR-006 inherits the platform IME inside the focused field and nothing anywhere tested that a mid-composition string survives a commit; losing it is a correctness defect, not an edge case. It rides this ticket because this is where promotion first meets composition.
     flows: []
     certainty: assumed
@@ -117,19 +117,19 @@ tickets:
         Given a Note with several Blocks and none focused
         When a selection is dragged from within the first Block to within the third
         Then the selection spans all three Blocks and is visibly highlighted across them
-        
+
         Given a selection spanning three Blocks
         When it is copied
         Then the clipboard contains Markdown reproducing the selected content across all three
-        
+
         Given a Note whose Blocks include a code block, a list and a paragraph
         When a selection spanning all three is copied
         Then the clipboard reproduces each — the fixture is specified to be heterogeneous because the rendered-text offsets a range is expressed in are defined per `AstNode` variant, and a three-paragraph fixture exercises exactly one of those definitions while passing the criterion above
-        
+
         Given a selection spanning Blocks
         When select-all is invoked
         Then the whole Note is selected
-        
+
         Given a Block is focused for editing
         When text within it is selected
         Then the selection behaves normally within that Block
@@ -158,31 +158,31 @@ tickets:
         Given the caret is at the end of a Block
         When Enter is pressed
         Then a new empty Block receives focus, held as UI-side caret position rather than committed to the Core — CommonMark has no representation of an empty paragraph, so no empty `continue_block_after` call is made and there is no `block_path` for the first keystroke to address
-        
+
         Given that new empty Block
         When the first character is typed
         Then `continue_block_after` is called with that character as its source, and every subsequent keystroke goes through `update_block` against the returned path
-        
+
         Given that new empty Block
         When focus leaves it without anything being typed
         Then no continuation is called and the Note is unchanged
-        
+
         Given a real Block was edited before Enter opens its empty successor
         When that empty successor is abandoned
         Then `commit_block` adopts the preceding edit exactly once before it renders formatted again
-        
+
         Given the caret is in the middle of a Block's text
         When Enter is pressed
         Then the Block splits at the caret and the combined source of the two Blocks equals the original
-        
+
         Given the caret is at the start of a Block that is not the first
         When Backspace is pressed
         Then the Block merges into its predecessor and the caret sits at the join
-        
+
         Given the caret is at the start of the first Block
         When Backspace is pressed
         Then nothing changes
-        
+
         Given a new empty Note
         When text is typed and Enter is pressed twice
         Then the Note contains the expected Blocks in order
@@ -212,19 +212,19 @@ tickets:
         When platform-primary B, I, or E is pressed
         Then the selected source is wrapped or unwrapped with bold, italic, or inline-code delimiters respectively
         And the same base/extent direction remains selected
-        
+
         Given a focused raw Block selection
         When platform-primary+Shift+X is pressed
         Then the selection is wrapped or unwrapped with strikethrough delimiters
-        
+
         Given no text is selected
         When any supported emphasis shortcut is pressed
         Then its delimiters are inserted at the caret with the caret placed between them
-        
+
         Given an IME composition is active in the focused Block
         When any supported shortcut is pressed
         Then neither Core source nor controller selection is mutated until composition ends
-        
+
         Given `BURLMD_SMOKE_F005=1`
         When the smoke harness captures `f005-emphasis`
         Then it succeeds only after the staged focused-Block shortcut readiness marker is present
@@ -254,61 +254,61 @@ tickets:
         When a collapsed caret has a last unmatched `[[` on the same line
         Then a completion appears for the text after that trigger with no more than 10 Core candidates
         And `link_completion_limit_is_ten` proves the Core bound
-        
+
         Given the query is a valid future target/title in the current Note's Directory
         When no existing candidate has that exact target
         Then Core returns one labeled prospective ghost within the same 10-candidate limit
         And `prospective_ghost_completion` proves its target and insert text are Core-derived
-        
+
         Given `[[` occurs before a newline, is closed by `]]`, or the selection is not collapsed
         When the focused source changes
         Then no completion is eligible
-        
+
         Given the completion is open
         When its saved source and trigger range still match and a candidate is accepted
         Then exactly that range is replaced by the Core-supplied Markdown link and no double brackets remain there
-        
+
         Given the completion is open
         When any edit, selection expansion, focus change, newline, or closing brackets invalidate its immutable snapshot
         Then it dismisses and cannot insert a stale candidate
-        
+
         Given a Block containing a Link to an existing Note
         When the Block is rendered
         Then following it calls `resolve_link_target` and opens only the returned `Existing.note_id`
-        
+
         Given a Block containing a Link whose target does not exist
         When the Block is rendered
         Then the Link renders distinctly from a resolving Link
-        
+
         Given a Link whose target does not exist
         When it is followed
         Then `resolve_link_target` returns `Missing` with Core-derived creation fields
         And accepting creation calls `create_link_target` with exactly that target id and opens the result
         And missing parent Directories are created atomically while a file/path collision is refused
-        
+
         Given a Note is open holding a ghost Link, and its target is created elsewhere in the meantime
         When that Link is followed
         Then re-resolution returns `Existing` and opens it without creation
-        
+
         Given a Note is open holding a resolving Link, and its target is deleted elsewhere in the meantime
         When that Link is followed
         Then re-resolution returns `Missing` and presents create-on-follow rather than a not-found error
-        
+
         Given the focused raw Block receives a valid `[[` trigger through the keyboard
         When the completion opens
         Then its active candidate receives keyboard focus
-        
+
         Given the completion has keyboard focus
         When arrow keys move its active item, Enter accepts it, or Escape is pressed
         Then focus movement, acceptance, and dismissal are keyboard-complete without pointer input
-        
+
         Given a rendered internal Link has keyboard focus
         When Enter activates it
         Then it follows through `resolve_link_target` without pointer input
-        
+
         Given the completion, its candidate list, a prospective ghost, a rendered Link, or a create-on-follow offer is displayed
         Then each has a localized `Semantics` label from `lib/l10n/app_en.arb`, with the ghost and create offer distinguishable from an existing Note
-        
+
         Given `BURLMD_SMOKE_F006=1`
         When the smoke harness captures `f006-link-completion`
         Then it succeeds only after a staged valid completion and rendered-Link follow readiness marker is present
@@ -337,49 +337,49 @@ tickets:
         Given a selection spanning three Blocks
         When a character is typed
         Then one `replace_range` call is made and its `RangeEditResult.caret` places the caret after the inserted character
-        
+
         Given a selection spanning three Blocks
         When Delete or Backspace is pressed
         Then exactly one `delete_range` call is made and no per-Block Core calls occur
         And the dispatch comes from the explicit `DeleteCharacterIntent` Action, not `updateEditingValue`
-        
+
         Given a selection spanning three Blocks
         When clipboard paste replaces it
         Then exactly one `replace_range` call carries the pasted text
         And the dispatch comes from the explicit `PasteTextIntent` Action
-        
+
         Given the cross-Block proxy gains focus
         When it attaches to the platform text input
         Then its initial `TextEditingValue.empty` is sent through `setEditingState` before `show`
         And copy uses `CopySelectionTextIntent` with Core Markdown rather than a hidden field
         And cut writes that Core Markdown to the clipboard before one `delete_range` call
-        
+
         Given the direct proxy is attached
         When Flutter reads its required `TextInputClient` members or sends floating-cursor, autocorrection, action, private-command, or connection-closed callbacks
         Then it returns its ephemeral value and null autofill scope, no-ops unsupported desktop callbacks without mutating Core, and invalidates callbacks after close
-        
+
         Given a selection spanning parts of two Blocks
         When it is replaced
         Then the unselected remainders of both Blocks are preserved and joined correctly
-        
+
         Given a range deletion removes the final editable Block
         When Core returns `RangeEditCaret::Phantom(insertion_index)`
         Then Presentation creates no Dart Block and focuses the existing phantom insertion slot at that index
         And `range_edit_result_reports_phantom` proves the Core result
-        
+
         Given a selection or replacement contains an emoji
         When Core returns `RangeEditCaret::Block.source_offset_utf16`
         Then the UTF-16 caret is applied without splitting a surrogate pair
         And `range_edit_result_rejects_utf16_surrogate` proves the Core refusal case
-        
+
         Given an IME composing range is active in the proxy
         When the platform updates the composing value, selection changes, or focus leaves
         Then no Core range mutation occurs until composition commits, or the connection is closed and composition visibly cancels
-        
+
         Given an IME composition commits while a cross-Block selection is active
         When its committed text replaces that selection
         Then exactly one `replace_range` operation carries the committed text
-        
+
         Given `BURLMD_SMOKE_F007=1`
         When the smoke harness captures `f007-range-editing`
         Then it succeeds only after staged type input, production Action paste,
