@@ -153,3 +153,13 @@ owner: tasks
 | BURL-M013 | BURL-O013 |
 | BURL-M014 | BURL-O014 |
 | BURL-M016 | BURL-O016 |
+
+## Stage 4 second-hop workspace mappings
+
+| First structured ID | Second-hop ID |
+| --- | --- |
+| BURL-H008 | BURL-P001 |
+| BURL-H009 | BURL-P002 |
+| BURL-H010 | BURL-P003 |
+| BURL-H011 | BURL-P004 |
+| BURL-H012 | BURL-P005 |

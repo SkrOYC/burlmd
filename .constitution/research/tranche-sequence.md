@@ -13,4 +13,7 @@ Each tranche uses its own isolated worktree, branch, and pull request created fr
 5. `feat/epic-h-authority-foundation`: `BURL-H003`, `BURL-H005`, `BURL-H004`, `BURL-H006`, then `BURL-H007`.
 6. Recreate `feat/epic-g-desktop-session` from merged `master`, surgically replay the reviewed Epic G M0 changes without overwriting the merged CI and headless-capture foundation, then execute the remaining Epic G dependency sequence.
 
-Epic M completes after the evidence merge. Both H tranches remain partial delivery and don't archive Epic H. The session's terminal objective is to complete and archive Epic G after its replay.
+Epic M completes after the evidence merge. Completing `BURL-H001` through
+`BURL-H007` archives the seven-ticket Epic H. Epic P is downstream and isn't
+part of this tranche. The session's terminal objective is to complete and
+archive Epic G after its replay.

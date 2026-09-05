@@ -17,6 +17,7 @@ depends_on:
   - K
   - M
   - N
+  - P
 scope:
   paths:
     - .constitution/prototypes/packaging/**
@@ -259,17 +260,28 @@ tickets:
         - NFC-05
         - NFC-06
         - NFC-07
+        - NFC-08
+        - NFC-09
         - NFC-10
         - NFC-11
-      evidence: Linux x86-64 and macOS 26 performance bundles record the managed image
-        and environment identity, run, profile, corpus hash, meter-definition
-        version, samples, percentile or threshold, exact command, and Goal or
-        Fail disposition for every scalar PRD meter. macOS 15 records common
-        functional compatibility only. The managed aggregation verifies expected
-        identity, GitHub-hosted role signer, bundle integrity, exact evidence
-        classes, corpus, and meter definitions. The nightly job is nonblocking
-        during `0.x` but produces a durable regression report; release gates consume
-        the same definitions. A later evidence-only pull request changes only
+        - NFC-37
+        - NFC-38
+        - NFC-39
+      evidence: Linux x86-64 and macOS 26 performance bundles use the NFC-37
+        reference environments and record the complete managed image,
+        environment, build, corpus, run, and profile identity. Each bundle
+        records the meter-definition version, samples, percentile or threshold,
+        exact command, and Goal or Fail disposition for every scalar PRD meter,
+        including NFC-08 image import and NFC-09 history storage health. The
+        NFC-02 session uses the fixed NFC-38 editing fixture with exactly 2,000
+        Blocks, every supported syntax class, and 1 MiB before edits. macOS 15
+        records common functional compatibility only. The managed aggregation
+        verifies expected identity, GitHub-hosted role signer, bundle integrity,
+        exact evidence classes, corpus, editing fixture, and meter definitions.
+        The NFC-39 job runs nightly in each applicable reference environment,
+        reports regressions without blocking merges during `0.x`, and produces
+        a durable report. Release gates consume the same definitions. A later
+        evidence-only pull request changes only
         `.constitution/evidence/BURL-O004/` and contains managed-evidence.json,
         nightly-prd-meters.json, and manifest.yaml with the byte count and
         SHA-256 digest for each artifact. Independent review and merge of that
