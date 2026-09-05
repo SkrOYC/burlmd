@@ -1,4 +1,14 @@
 entries:
+  - version: v2.1.1
+    date: 2026-09-05
+    changed:
+      - "Reconciled the authoritative ci_bootstrap rejection inventory and filesystem evidence semantics: omission, empty, tampered, and mismatched observed filesystem values now produce the typed filesystem-evidence-mismatch rejection with filesystemEvidenceVerified false, and the fixture policy covers each case across candidate, sealing, and aggregate boundaries."
+      - "Advanced provisional-spikes.toml from raw-contract version 31 to 32 and its identifier to tech-spec-v2.1.1-provisional. ci-role-evidence remains schema version 14, ci-evidence remains schema version 16, and Spike-result remains version 20 because their schemas do not change."
+      - "Restored the complete machine-readable purposes for lib/src/screens, rust/src/assets, rust/src/draft.rs, rust/src/index, rust/src/okf, and rust/src/workspace from the intact Monorepo Layout tree without changing paths or layout existence."
+    by: stage
+    upstream:
+      prd: v2.0.5
+      architecture: v2.1.1
   - version: v2.1.0
     date: 2026-09-05
     changed:
