@@ -1,4 +1,16 @@
 entries:
+  - version: v2.0.12
+    date: 2026-09-05
+    changed:
+      - "Corrected every root-level Cargo verification command and migrated Task consumer to use rust/Cargo.toml: BURL-A003 FRB-generation-and-build, BURL-B004 build, BURL-B007 build-and-Flutter-test, BURL-A002 library test, BURL-B002/BURL-B003 database tests, and BURL-B001 security tests. The installed Cargo 1.97.1 CLI accepts each corrected form from the repository root."
+      - "Added the canonical BURL-A001 command for FRB generation, release Rust build, and manual macOS application launch acceptance. It derives from the pre-migration CORE-A001 macOS-or-Linux launch acceptance; the historical Linux-only launch evidence required the release Rust artifact, so this change records no unperformed macOS launch claim."
+      - "Reconciled ADR-019 with the live ci-role-evidence schema version 12 and ci-evidence aggregate schema version 14. Raw contract and schema semantics are unchanged."
+    deprecated:
+      - "Temporary Stage 4 aliases retain the exact old Task command strings for BURL-A002, BURL-A003, BURL-B001, BURL-B002, BURL-B003, BURL-B004, and BURL-B007. Each is owned by active BURL-M003 and must be removed after Tasks migrates to its root-safe canonical command."
+    by: patch-lane
+    upstream:
+      prd: v2.0.3
+      architecture: v2.0.5
   - version: v2.0.11
     date: 2026-09-05
     changed:

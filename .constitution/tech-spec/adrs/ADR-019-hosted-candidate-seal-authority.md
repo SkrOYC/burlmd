@@ -68,7 +68,7 @@ survive. The release contract must not make that claim.
   itself.
 - Reviewed source and test contracts remain required. Provenance validation
   doesn't replace source review or test review.
-- The role and aggregate JSON schemas are versions `10` and `12`. They
+- The role and aggregate JSON schemas are versions `12` and `14`. They
   record identity, job, artifact, and provenance facts; they don't encode a
   platform-independent process-termination assertion. The raw contract and
   executable PR #15 fixtures own this platform-specific execution policy.
