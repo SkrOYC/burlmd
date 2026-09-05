@@ -1,4 +1,23 @@
 entries:
+  - version: v3.1.4
+    date: 2026-09-05
+    changed:
+      - Updated the completed BURL-A001, BURL-A002, BURL-A003, BURL-B001,
+        BURL-B002, BURL-B003, BURL-B004, and BURL-B007 verification records to
+        quote their canonical root-safe TechSpec v2.0.12 commands byte-for-byte.
+      - Reconciled BURL-A001's expected output and acceptance evidence with its
+        recorded FRB generation, release Rust build, and macOS launch command;
+        the record makes no Rust-test claim because that command runs no Rust tests.
+      - Regenerated critical-path.md from the unchanged active epic graph.
+    fixed:
+      - Removed the temporary root-unsafe command aliases from the completed
+        Epic A and Epic B Task consumers while preserving their historical scope,
+        status, dependencies, effort, and evidence.
+    upstream:
+      prd: v2.0.3
+      architecture: v2.0.5
+      tech-spec: v2.0.12
+    by: patch-lane
   - version: v3.1.3
     date: 2026-09-05
     changed:
