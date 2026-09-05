@@ -513,7 +513,7 @@ layout:
   - path: lib/src/rust
     purpose: Auto-generated FRB Dart bindings
   - path: lib/src/screens
-    purpose: "Full-screen routes (workspace.dart, login.dart —"
+    purpose: "Full-screen routes (workspace.dart, login.dart — login retained for the deferred connect flow, no longer a startup gate since BURL-E002)"
   - path: scripts
     purpose: Repository-owned validation entry points
   - path: scripts/smoke-shot.sh
@@ -548,23 +548,23 @@ layout:
   - path: rust/src/db
     purpose: rusqlite database management
   - path: rust/src/assets
-    purpose: "Planned: Local Asset Store identity, manifest,"
+    purpose: "Planned: Local Asset Store identity, manifest, hydration, verification, and retention"
     exists: false
   - path: rust/src/diagnostics
     purpose: "Planned: rotating structured log and export"
     exists: false
   - path: rust/src/draft.rs
-    purpose: "Active-draft-state domain: NoteState/NoteMetadata,"
+    purpose: "Active-draft-state domain: NoteState/NoteMetadata, the open-note cache, block_path-addressed edits"
   - path: rust/src/error.rs
     purpose: "Shared AppError, so db/security don't depend on api"
   - path: rust/src/git
     purpose: gix integration
   - path: rust/src/index
-    purpose: "Bundle -> SQLite indexer: notes, notes_fts,"
+    purpose: "Bundle -> SQLite indexer: notes, notes_fts, fts_mapping, links, directories. scan (full walk, owns reindex_workspace), incremental (single-Note reindex, content_hash short-circuit), query (read paths: search, backlinks, tree, title prefix)."
   - path: rust/src/markdown
     purpose: "AST parsing logic; owns the span map (ADR-007)"
   - path: rust/src/okf
-    purpose: "OKF v0.2 bundle domain: frontmatter (read and"
+    purpose: "OKF v0.2 bundle domain: frontmatter (read and validate), concept_id (concept-id <-> path, reserved-filename rules), links (target resolution and serialization)"
   - path: rust/src/export
     purpose: "Planned: stable-revision copy/archive Export"
     exists: false
@@ -594,7 +594,7 @@ layout:
     purpose: "Planned: compatible release-metadata checks"
     exists: false
   - path: rust/src/workspace
-    purpose: "bootstrap (init/open, Git repo adoption),"
+    purpose: "bootstrap (init/open, Git repo adoption), lifecycle (note & directory create/rename/move/delete, atomic write), links_rewrite (inbound-Link source rewriting on rename), persist (the ADR-008 tiers and their locks)"
   - path: rust/src/test_support.rs
     purpose: "#[cfg(test)]-only fixtures shared across unit test modules"
   - path: pubspec.yaml
@@ -619,7 +619,7 @@ commit_convention: Conventional Commits
 
 ## Provisional research boundary
 
-TechSpec v2.1.0 (translated from reviewed v1.8.7-provisional) permits research code only under `.constitution/prototypes/`. The existing Epic G M0 production exceptions remain unchanged. `BURL-M015` and `BURL-M003` may write production code only for their reproducibility and validation bootstrap. Every other production ticket remains blocked by its own decision evidence and a matching Stage 3 and Stage 4 adaptation. Except for these contract-scoped exceptions, production directories (`lib/`, `rust/`, `linux/`, and `macos/`) are read-only inputs to this research wave.
+TechSpec v2.1.1 (translated from reviewed v1.8.7-provisional) permits research code only under `.constitution/prototypes/`. The existing Epic G M0 production exceptions remain unchanged. `BURL-M015` and `BURL-M003` may write production code only for their reproducibility and validation bootstrap. Every other production ticket remains blocked by its own decision evidence and a matching Stage 3 and Stage 4 adaptation. Except for these contract-scoped exceptions, production directories (`lib/`, `rust/`, `linux/`, and `macos/`) are read-only inputs to this research wave.
 
 The five exact prototype roots and verification commands are machine-readable in `contracts/provisional-spikes.toml`. Its allowlist is exhaustive: each Spike may write only its named prototype root and report path. Every unlisted repository path is read-only. Framework bookkeeping may update the owning active Task after the Spike process exits, but that isn't part of the Spike's write authority.
 
@@ -762,7 +762,7 @@ The local `run` client uses a token with Actions write permission only to dispat
 
 GitHub artifact attestations for private or internal repositories require GitHub Enterprise Cloud. Repository plan eligibility isn't guaranteed by this specification. If the candidate repository can't create and verify the attestation, `BURL-M003` must return a rejected aggregate with `attestation-unavailable`. It must not substitute a hash-only protocol.
 
-Aggregation verifies each bundle and compares its captured identities with the independently supplied expected identity. For each role, `evidenceClasses` and the `gates` key set must equal `requiredEvidenceClasses` exactly, and every gate must be true. A missing assigned class, an unassigned extra class, or a class that the role can't produce rejects the aggregate. Every role also records a non-empty observed `environment.filesystem` string from its system API. Sealing and aggregation revalidate that exact manifest value after every archive boundary, reject omission, an empty value, or a changed value as filesystem-evidence mismatch, and never infer a filesystem type from the hosted label. For a managed Spike, the later evidence commit contains exactly the accepted `REPORT_JSON`, authoritative `results.json`, and executor-authored human report declared by the raw contract. For bootstrap, `docs/epic-m-ci-evidence` contains only `.constitution/evidence/BURL-M003/managed-evidence.json`, `.constitution/evidence/BURL-M003/completion.md`, and `.constitution/evidence/BURL-M003/manifest.yaml`. The workflow never pushes repository content. Milestone review starts only from accepted evidence. A draft pull request alone is not evidence.
+Aggregation verifies each bundle and compares its captured identities with the independently supplied expected identity. For each role, `evidenceClasses` and the `gates` key set must equal `requiredEvidenceClasses` exactly, and every gate must be true. A missing assigned class, an unassigned extra class, or a class that the role can't produce rejects the aggregate. Every role also records a non-empty observed `environment.filesystem` string from its system API. Sealing and aggregation revalidate that exact manifest value after every archive boundary, reject omission, an empty value, tampering, or a changed value as `filesystem-evidence-mismatch` with `filesystemEvidenceVerified` false, and never infer a filesystem type from the hosted label. For a managed Spike, the later evidence commit contains exactly the accepted `REPORT_JSON`, authoritative `results.json`, and executor-authored human report declared by the raw contract. For bootstrap, `docs/epic-m-ci-evidence` contains only `.constitution/evidence/BURL-M003/managed-evidence.json`, `.constitution/evidence/BURL-M003/completion.md`, and `.constitution/evidence/BURL-M003/manifest.yaml`. The workflow never pushes repository content. Milestone review starts only from accepted evidence. A draft pull request alone is not evidence.
 
 The hosted OS labels are mutable image channels. Every result records `ImageOS` and `ImageVersion`, and performance or visual aggregation refuses mixed image versions. GitHub doesn't guarantee physical host identity, CPU scheduling, storage throughput, or absence of neighboring load. Repeated samples and captured resource facts bound the claim; they don't turn a hosted label into physical-workstation proof.
 
@@ -878,7 +878,7 @@ The repository follows the default `flutter_rust_bridge` template structure to m
 └── flutter_rust_bridge.yaml # FRB configuration
 ```
 
-The directories marked **Planned** are the physical homes for the forward boundaries accepted by Architecture v2.1.0. They remain absent until their owning implementation ticket begins. A Spike never creates them. `rust/benches/prd-meters-coordinator/` is specifically owned by active non-Spike ticket BURL-O004; after its reviewed merge, the managed-validation trust anchor must rotate before that package can be prepared as trusted control. Final Stage 3 may refine files inside a planned directory after evidence, but moving responsibility to a different boundary requires Architecture review and a Tasks adaptation.
+The directories marked **Planned** are the physical homes for the forward boundaries accepted by Architecture v2.1.1. They remain absent until their owning implementation ticket begins. A Spike never creates them. `rust/benches/prd-meters-coordinator/` is specifically owned by active non-Spike ticket BURL-O004; after its reviewed merge, the managed-validation trust anchor must rotate before that package can be prepared as trusted control. Final Stage 3 may refine files inside a planned directory after evidence, but moving responsibility to a different boundary requires Architecture review and a Tasks adaptation.
 
 The external physical seams remain distinct. `rust/src/provider/` implements `BND-14` authorization, eligible private-Remote selection or provisioning, and location only. `rust/src/sync/` implements `BND-10` coordination and `BND-20` authenticated history transfer and ref inventory. `rust/src/object_store/` implements `BND-11` transfer, privacy verification, hydration, and migration against `BND-21`. Provider code must not store or reconcile history. Remote code must not transfer Object bytes. Object Store code must not derive authority from Provider responses.
 
