@@ -1,13 +1,13 @@
 ---
 verification_commands:
   - name: probe
-    label: "quoted by BURL-K009, BURL-M014"
-    command: "./scripts/attest-github-app-token-expiration.sh --client-id \"$BURLMD_GITHUB_APP_CLIENT_ID\" --output .constitution/reports/github-app-token-expiration-attestation.json"
+    label: canonical BURL verification for BURL-K009 and BURL-O014
+    command: "./scripts/attest-github-app-token-expiration.sh --client-id \"$BURLMD_GITHUB_APP_CLIENT_ID\" --output .constitution/reports/github-app-token-expiration-attestation.json && ./scripts/verify-github-app-registration.sh --manifest config/github-app.release.toml --installation-url \"$BURLMD_GITHUB_APP_INSTALLATION_URL\" --expected-client-id \"$BURLMD_GITHUB_APP_CLIENT_ID\" --require-device-flow --require-private-repository-permissions --forbid-permission workflows --token-expiration-attestation .constitution/reports/github-app-token-expiration-attestation.json --max-attestation-age-hours 24 --output .constitution/reports/github-app-registration.json && git diff --check"
     exists: false
     owner: BURL-K009
   - name: probe
-    label: "quoted by BURL-K009, BURL-M014"
-    command: "./scripts/verify-github-app-registration.sh --manifest config/github-app.release.toml --installation-url \"$BURLMD_GITHUB_APP_INSTALLATION_URL\" --expected-client-id \"$BURLMD_GITHUB_APP_CLIENT_ID\" --require-device-flow --require-private-repository-permissions --forbid-permission workflows --token-expiration-attestation .constitution/reports/github-app-token-expiration-attestation.json --max-attestation-age-hours 24 --output .constitution/reports/github-app-registration.json"
+    label: "temporary Stage 4 compatibility alias quoted by current BURL-K009 and BURL-M014"
+    command: "./scripts/attest-github-app-token-expiration.sh --client-id \"$BURLMD_GITHUB_APP_CLIENT_ID\" --output .constitution/reports/github-app-token-expiration-attestation.json"
     exists: false
     owner: BURL-K009
   - name: test
@@ -117,7 +117,7 @@ verification_commands:
     exists: false
     owner: BURL-M003
   - name: test
-    label: quoted by BURL-M016
+    label: quoted by BURL-O016
     command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh health-m004 && git diff --check"
     exists: false
     owner: BURL-M003
@@ -137,7 +137,7 @@ verification_commands:
     exists: false
     owner: BURL-M003
   - name: test
-    label: quoted by BURL-M002
+    label: quoted by BURL-O002
     command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh log-m002 && git diff --check && ! rg -n '\\[DEBUG-' lib rust test scripts"
     exists: false
     owner: BURL-M003
@@ -212,7 +212,7 @@ verification_commands:
     exists: false
     owner: BURL-M003
   - name: test
-    label: quoted by BURL-M010
+    label: quoted by BURL-O010
     command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh update-m010 && git diff --check"
     exists: false
     owner: BURL-M003
@@ -221,19 +221,14 @@ verification_commands:
     command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test integration_test/connect_consolidation_flow_test.dart -d linux && dart analyze && git diff --check"
     exists: false
     owner: BURL-M003
-  - name: bench
-    label: quoted by BURL-H009
-    command: "cargo test --manifest-path rust/Cargo.toml && cargo clippy --workspace --all-targets --manifest-path rust/Cargo.toml -- -D warnings && ./scripts/check-generated-bindings.sh && cargo run --release --manifest-path rust/Cargo.toml --bin workspace-observer-meter -- --run-id linux-reference --profile github-ubuntu-24_04-x86_64 --operations 100 --output target/observer-meters/linux-reference.json && git diff --check"
-    exists: false
-    owner: BURL-M003
-  - name: bench
-    label: quoted by BURL-H009
-    command: "cargo test --manifest-path rust/Cargo.toml && cargo clippy --workspace --all-targets --manifest-path rust/Cargo.toml -- -D warnings && ./scripts/check-generated-bindings.sh && cargo run --release --manifest-path rust/Cargo.toml --bin workspace-observer-meter -- --run-id macos-reference --profile github-macos-26-arm64 --operations 100 --output target/observer-meters/macos-reference.json && git diff --check"
+  - name: probe
+    label: canonical managed verification for BURL-H009
+    command: "TRUST_ANCHOR_WORKTREE/scripts/managed-evidence.sh run --ticket BURL-H009 --trust-anchor-sha TRUST_ANCHOR_SHA --source-ref SOURCE_REF --tested-source-sha TESTED_SOURCE_SHA --base-sha BASE_SHA --output EVIDENCE_WORKTREE/.constitution/evidence/BURL-H009/managed-evidence.json && git -C EVIDENCE_WORKTREE diff --check"
     exists: false
     owner: BURL-H009
-  - name: test
-    label: quoted by BURL-H009
-    command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && git diff --check"
+  - name: bench
+    label: temporary Stage 4 compatibility alias quoted by current BURL-H009
+    command: "cargo test --manifest-path rust/Cargo.toml && cargo clippy --workspace --all-targets --manifest-path rust/Cargo.toml -- -D warnings && ./scripts/check-generated-bindings.sh && cargo run --release --manifest-path rust/Cargo.toml --bin workspace-observer-meter -- --run-id linux-reference --profile github-ubuntu-24_04-x86_64 --operations 100 --output target/observer-meters/linux-reference.json && git diff --check"
     exists: false
     owner: BURL-H009
   - name: test
@@ -245,24 +240,14 @@ verification_commands:
     label: "quoted by BURL-H003, BURL-H005, BURL-I007, BURL-L010"
     command: "cargo test --manifest-path rust/Cargo.toml && cargo clippy --workspace --all-targets --manifest-path rust/Cargo.toml -- -D warnings && git diff --check"
     exists: true
+  - name: probe
+    label: canonical managed verification for BURL-O004; temporary current owner BURL-M004
+    command: "TRUST_ANCHOR_WORKTREE/scripts/managed-evidence.sh run --ticket BURL-O004 --trust-anchor-sha TRUST_ANCHOR_SHA --source-ref SOURCE_REF --tested-source-sha TESTED_SOURCE_SHA --base-sha BASE_SHA --output EVIDENCE_WORKTREE/.constitution/evidence/BURL-O004/managed-evidence.json && TRUST_ANCHOR_WORKTREE/scripts/aggregate-prd-meters.sh --require-run linux-reference=EVIDENCE_WORKTREE/.constitution/evidence/BURL-O004/managed-evidence-coordinator/roles/linux-x86_64/nightly-prd-meters-linux.json --require-run macos-reference=EVIDENCE_WORKTREE/.constitution/evidence/BURL-O004/managed-evidence-coordinator/roles/macos-26-arm64/nightly-prd-meters-macos.json --require-same-corpus-hash --require-same-meter-definition-version --output EVIDENCE_WORKTREE/.constitution/evidence/BURL-O004/nightly-prd-meters.json && git -C EVIDENCE_WORKTREE diff --check"
+    exists: false
+    owner: BURL-M004
   - name: bench
-    label: quoted by BURL-M004
+    label: temporary Stage 4 compatibility alias quoted by current BURL-M004
     command: "cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && ./scripts/bench-prd-meters.sh --all --run-id linux-reference --expected-host-profile github-ubuntu-24_04-x86_64 --corpus-size 10000 --output .constitution/reports/nightly-prd-meters-linux.json && git diff --check"
-    exists: false
-    owner: BURL-M004
-  - name: bench
-    label: quoted by BURL-M004
-    command: "cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && ./scripts/bench-prd-meters.sh --all --run-id macos-reference --expected-host-profile github-macos-26-arm64 --corpus-size 10000 --output .constitution/reports/nightly-prd-meters-macos.json && git diff --check"
-    exists: false
-    owner: BURL-M004
-  - name: test
-    label: quoted by BURL-M004
-    command: "cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && git diff --check"
-    exists: false
-    owner: BURL-M004
-  - name: other
-    label: quoted by BURL-M004
-    command: "./scripts/aggregate-prd-meters.sh --require-run linux-reference=.constitution/reports/nightly-prd-meters-linux.json --require-run macos-reference=.constitution/reports/nightly-prd-meters-macos.json --require-same-corpus-hash --require-same-meter-definition-version --output .constitution/reports/nightly-prd-meters.json && git diff --check"
     exists: false
     owner: BURL-M004
   - name: test
@@ -283,7 +268,7 @@ verification_commands:
     command: "cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && ./scripts/smoke-shot.sh integ-l012 && git diff --check"
     exists: true
   - name: test
-    label: quoted by BURL-M005
+    label: quoted by BURL-O005
     command: "cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && ./scripts/smoke-shot.sh migrate-m005 && git diff --check"
     exists: true
   - name: test
@@ -302,18 +287,18 @@ verification_commands:
     label: quoted by BURL-H012
     command: "cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && ./scripts/smoke-shot.sh rescan-h012 && git diff --check"
     exists: true
-  - name: test
-    label: quoted by BURL-G011
-    command: "cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && ./scripts/visual-regression.sh shell-g011 --baseline test/goldens/shell-g011-linux.png --max-different-pixels 0 && git diff --check && ! rg -n '\\[DEBUG-' lib rust test scripts"
-    exists: false
-    owner: BURL-G001
-  - name: test
-    label: quoted by BURL-G011
-    command: "cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && ./scripts/visual-regression.sh shell-g011 --baseline test/goldens/shell-g011-macos.png --max-different-pixels 0 && git diff --check && ! rg -n '\\[DEBUG-' lib rust test scripts"
+  - name: probe
+    label: canonical managed verification for BURL-G011
+    command: "TRUST_ANCHOR_WORKTREE/scripts/managed-evidence.sh run --ticket BURL-G011 --trust-anchor-sha TRUST_ANCHOR_SHA --source-ref SOURCE_REF --tested-source-sha TESTED_SOURCE_SHA --base-sha BASE_SHA --output EVIDENCE_WORKTREE/.constitution/evidence/BURL-G011/managed-evidence.json && git -C EVIDENCE_WORKTREE diff --check"
     exists: false
     owner: BURL-G011
   - name: test
-    label: quoted by BURL-G011
+    label: temporary Stage 4 compatibility alias quoted by current BURL-G011
+    command: "cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && ./scripts/visual-regression.sh shell-g011 --baseline test/goldens/shell-g011-linux.png --max-different-pixels 0 && git diff --check && ! rg -n '\\[DEBUG-' lib rust test scripts"
+    exists: false
+    owner: BURL-G011
+  - name: test
+    label: quoted by BURL-G011 post-matrix common functional check
     command: "cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && git diff --check"
     exists: false
     owner: BURL-G011
@@ -371,7 +356,7 @@ verification_commands:
     command: flutter analyze
     exists: true
   - name: build
-    label: quoted by BURL-M008
+    label: quoted by BURL-O008
     command: "flutter build macos --release && git diff --check"
     exists: true
   - name: other
@@ -439,11 +424,11 @@ verification_commands:
     exists: false
     owner: BURL-M003
   - name: other
-    label: "quoted by BURL-C001, BURL-C002, BURL-C003, BURL-M006, BURL-M009, BURL-M011, BURL-M012, BURL-M013"
+    label: "quoted by BURL-C001, BURL-C002, BURL-C003, BURL-O006, BURL-O009, BURL-O011, BURL-O012, BURL-O013"
     command: git diff --check
     exists: true
   - name: build
-    label: quoted by BURL-M007
+    label: quoted by BURL-O007
     command: "nix flake check && nix build .#packages.x86_64-linux.default && git diff --check"
     exists: true
   - name: test
@@ -477,32 +462,57 @@ verification_commands:
     exists: false
     owner: BURL-M003
   - name: probe
-    label: quoted by BURL-M001
+    label: canonical managed verification for BURL-O001
+    command: "TRUST_ANCHOR_WORKTREE/scripts/managed-evidence.sh run --ticket BURL-O001 --trust-anchor-sha TRUST_ANCHOR_SHA --source-ref SOURCE_REF --tested-source-sha TESTED_SOURCE_SHA --base-sha BASE_SHA --output EVIDENCE_WORKTREE/.constitution/prototypes/packaging/managed-evidence.json && git -C EVIDENCE_WORKTREE diff --check"
+    exists: false
+    owner: BURL-M003
+  - name: probe
+    label: temporary Stage 4 compatibility alias quoted by current BURL-M001
     command: "TRUST_ANCHOR_WORKTREE/scripts/managed-evidence.sh run --ticket BURL-M001 --trust-anchor-sha TRUST_ANCHOR_SHA --source-ref SOURCE_REF --tested-source-sha TESTED_SOURCE_SHA --base-sha BASE_SHA --output EVIDENCE_WORKTREE/.constitution/prototypes/packaging/managed-evidence.json && git -C EVIDENCE_WORKTREE diff --check"
     exists: false
     owner: BURL-M003
   - name: other
-    label: canonical BURL verification for BURL-M006
+    label: canonical BURL verification for BURL-O006; temporary current owner BURL-M006
+    command: "Run the accepted production AppImage build and installed probes derived from `SPK-BURL-O001`, then `git diff --check`."
+    exists: false
+    owner: BURL-M006
+  - name: other
+    label: temporary Stage 4 compatibility alias quoted by current BURL-M006
     command: "Run the accepted production AppImage build and installed probes derived from `SPK-BURL-M001`, then `git diff --check`."
     exists: false
     owner: BURL-M006
   - name: other
-    label: quoted by BURL-M009
+    label: quoted by BURL-O009; temporary current owner BURL-M009
     command: "Run the accepted release construction and artifact verification commands from final TechSpec, then `git diff --check`."
     exists: false
     owner: BURL-M009
   - name: other
-    label: canonical BURL verification for BURL-M011
+    label: canonical BURL verification for BURL-O011; temporary current owner BURL-M011
+    command: "Run the accepted x86-64 AppImage installed matrix from final TechSpec against the immutable `BURL-O009` candidate on every accepted Linux runtime. Run its common functional, performance, and exact private-headless platform-regression evidence on managed `ubuntu-24.04`, validate the authenticated role and aggregate schemas, then run `git diff --check`."
+    exists: false
+    owner: BURL-M011
+  - name: other
+    label: temporary Stage 4 compatibility alias quoted by current BURL-M011
     command: "Run the accepted x86-64 AppImage installed matrix from final TechSpec against the immutable `BURL-M009` candidate on every accepted Linux runtime. Run its common functional, performance, and exact private-headless platform-regression evidence on managed `ubuntu-24.04`, validate the authenticated role and aggregate schemas, then run `git diff --check`."
     exists: false
     owner: BURL-M011
   - name: other
-    label: canonical BURL verification for BURL-M012
+    label: canonical BURL verification for BURL-O012; temporary current owner BURL-M012
+    command: "Run the accepted Nix installed matrix from final TechSpec against the immutable `BURL-O009` Flake candidate on every exposed x86-64 Linux system. Run the managed `ubuntu-24.04` functional and performance roles through the authenticated `BURL-M003` evidence protocol, then run `git diff --check`."
+    exists: false
+    owner: BURL-M012
+  - name: other
+    label: temporary Stage 4 compatibility alias quoted by current BURL-M012
     command: "Run the accepted Nix installed matrix from final TechSpec against the immutable `BURL-M009` Flake candidate on every exposed x86-64 Linux system. Run the managed `ubuntu-24.04` functional and performance roles through the authenticated `BURL-M003` evidence protocol, then run `git diff --check`."
     exists: false
     owner: BURL-M012
   - name: other
-    label: canonical BURL verification for BURL-M013
+    label: canonical BURL verification for BURL-O013; temporary current owner BURL-M013
+    command: "Run the accepted Apple Silicon installed matrix from final TechSpec against the immutable `BURL-O009` archive on managed Apple Silicon `macos-26` and `macos-15`. Run common functional evidence on both, performance and the sole authoritative macOS visual baseline on macOS 26 only, validate the authenticated role and aggregate schemas, then run `git diff --check`."
+    exists: false
+    owner: BURL-M013
+  - name: other
+    label: temporary Stage 4 compatibility alias quoted by current BURL-M013
     command: "Run the accepted Apple Silicon installed matrix from final TechSpec against the immutable `BURL-M009` archive on managed Apple Silicon `macos-26` and `macos-15`. Run common functional evidence on both, performance and the sole authoritative macOS visual baseline on macOS 26 only, validate the authenticated role and aggregate schemas, then run `git diff --check`."
     exists: false
     owner: BURL-M013
@@ -734,7 +744,10 @@ The raw contract defines the following required evidence profiles. Environment c
 | `BURL-H002` | Common functional, filesystem compatibility | Common functional, filesystem compatibility | Common functional |
 | `BURL-I001` | Common functional, performance, asset measurement | Common functional, performance, asset measurement | Common functional |
 | `BURL-L001` | Common functional, filesystem compatibility, Git protocol | Common functional, filesystem compatibility, Git protocol | Common functional |
-| `BURL-M001` | Packaging runtime | Packaging runtime, repeatable construction | Packaging runtime compatibility |
+| `BURL-O001` | Packaging runtime | Packaging runtime, repeatable construction | Packaging runtime compatibility |
+| `BURL-G011` | Common functional, Linux platform regression | Common functional, authoritative macOS visual | Common functional |
+| `BURL-H009` | Common functional, performance | Common functional, performance | Common functional |
+| `BURL-O004` | Common functional, performance | Common functional, performance | Common functional |
 
 Each signer is a reusable workflow with exactly two role jobs, `candidate` and `seal`, on the same fixed hosted label. `seal` needs the successful `candidate` job and runs on a fresh environment. The trusted caller uses the static same-repository form `./.github/workflows/WORKFLOW_FILE`; expressions and ref suffixes are forbidden in `jobs.<job_id>.uses`. GitHub resolves each local workflow from `WORKFLOW_SIGNER_SHA`, which is the dispatched `master` commit. The expected identity records `job_workflow_ref` on `refs/heads/master` and `job_workflow_sha`. Aggregation requires the static role path and requires `job_workflow_sha` to equal `workflowSignerSha`. It separately requires the complete tested checkout and role manifest to name `testedSourceSha`; those SHAs don't need to match. The trust-surface comparison binds the signer commit to `trustAnchorSha`.
 
@@ -1061,7 +1074,7 @@ until an actual rendered screenshot was inspected.
 
 ## Execution conventions
 
-The Stage 4 `verification.command` fields for `BURL-M006`, `BURL-M011`, `BURL-M012`, and `BURL-M013` use the canonical BURL verification commands listed in this front matter.
+The future Stage 4 `verification.command` fields for `BURL-O006`, `BURL-O011`, `BURL-O012`, and `BURL-O013` use the canonical BURL verification commands listed in this front matter. The explicitly labeled current-M aliases remain only until that Stage 4 migration lands.
 
 - Production authorization is contract-scoped. Epic G M0 keeps `BURL-G001`, `BURL-G002`, `BURL-G003`, `BURL-G004`, `BURL-G005`, and `BURL-G007` executable. The bootstrap additionally makes `BURL-M015` and `BURL-M003` executable. Every other production ticket has an implicit STOP until its own decision evidence, any required Product Requirements or Architecture evolution, final Stage 3 contract, and Stage 4 adaptation are merged. An unrelated unresolved Spike doesn't block an otherwise authorized ticket.
 - The five `Spike` tickets remain research-only and executable within their exhaustive allowlists after their declared dependencies are satisfied. `BURL-M003` satisfies those dependencies only after both its reviewed implementation pull request and dedicated reviewed evidence pull request merge. Every managed Spike runs the launcher from a clean immutable trust-anchor checkout; the trusted default-branch workflow checks out the separate tested source as data. Before dispatch and during collection, the launcher rejects any change outside the ticket's exact write allowlist or any changed validation control. Within the declared H Spike tranche, the committed, validated, and independently reviewed `BURL-H001` milestone satisfies `BURL-H002`; a draft or unmerged branch never satisfies a cross-tranche or cross-branch dependency.

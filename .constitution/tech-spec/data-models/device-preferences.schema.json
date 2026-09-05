@@ -54,7 +54,7 @@
       "type": "boolean"
     },
     "update_notifications": {
-      "description": "When true, check for and notify about compatible higher 0.x releases as specified by BURL-M010. When false, do not check.",
+      "description": "When true, check for and notify about compatible higher 0.x releases as specified by BURL-O010. When false, do not check.",
       "type": "boolean"
     }
   }
