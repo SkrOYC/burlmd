@@ -33,6 +33,6 @@
 ## Downstream impact
 
 - **ADRs to write or update:** accept/replace ADR-016 and define final manifest, state, credential, and object-key contracts
-- **Tickets unblocked in `tasks/epics/`:** BURL-I002, BURL-I004, and BURL-M016 directly; the remaining Asset/Object tickets, Export, Consolidation, synchronization, and release tickets transitively, including BURL-I008, BURL-I011, and BURL-I012
+- **Tickets unblocked in `tasks/epics/`:** BURL-I002, BURL-I004, and BURL-O016 directly; the remaining Asset/Object tickets, Export, Consolidation, synchronization, and release tickets transitively, including BURL-I008, BURL-N002, and BURL-N003
 - **Tickets to add or split:** adapt the planned Asset/Object and history-health tickets when the accepted client, manifest, image limit, or history threshold changes scope
 - **Spec edits required:** Product Requirements for OD-06/OD-07; Architecture review if thresholds change flows; final Technical Implementation

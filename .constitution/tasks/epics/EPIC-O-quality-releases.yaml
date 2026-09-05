@@ -1,0 +1,817 @@
+id: O
+name: quality releases
+kind: product
+capabilities:
+  - CAP-045
+  - CAP-075
+  - CAP-076
+  - CAP-077
+  - CAP-078
+  - CAP-079
+  - CAP-080
+depends_on:
+  - G
+  - H
+  - I
+  - J
+  - K
+  - M
+  - N
+scope:
+  paths:
+    - .constitution/prototypes/packaging/**
+    - .constitution/spikes/SPK-BURL-O001.md
+    - rust/src/diagnostics/**
+    - rust/src/api/ffi_api.rs
+    - rust/Cargo.toml
+    - rust/Cargo.lock
+    - lib/src/components/**
+    - test/**
+    - rust/benches/**
+    - integration_test/**
+    - scripts/**
+    - .github/workflows/**
+    - .constitution/reports/**
+    - rust/src/git/**
+    - lib/src/providers/**
+    - rust/src/db/**
+    - rust/src/workspace/**
+    - linux/**
+    - pubspec.yaml
+    - pubspec.lock
+    - flake.nix
+    - flake.lock
+    - nix/**
+    - macos/**
+    - rust/src/update/**
+    - lib/src/providers/burl_preferences_provider.dart
+    - config/github-app.release.toml
+  tech_spec_patchable: []
+estimated_diff_lines: 13200
+tickets:
+  - id: BURL-O001
+    title: Prove prerelease packaging feasibility and Linux baseline
+    type: Spike
+    effort: 8
+    depends_on: []
+    category: DX
+    scope:
+      in:
+        - .constitution/prototypes/packaging/**
+        - .constitution/spikes/SPK-BURL-O001.md
+    verification:
+      command: TRUST_ANCHOR_WORKTREE/scripts/managed-evidence.sh run --ticket
+        BURL-O001 --trust-anchor-sha TRUST_ANCHOR_SHA --source-ref SOURCE_REF
+        --tested-source-sha TESTED_SOURCE_SHA --base-sha BASE_SHA --output
+        EVIDENCE_WORKTREE/.constitution/prototypes/packaging/managed-evidence.json
+        && git -C EVIDENCE_WORKTREE diff --check
+      expected: exit 0 with .constitution/prototypes/packaging/results.json, accepted
+        .constitution/prototypes/packaging/managed-evidence.json,
+        executor-authored .constitution/spikes/SPK-BURL-O001.md, and an OD-08
+        recommendation
+    stop_conditions:
+      - STOP if the harness uses ambient Git, omits installed-runtime probes, or
+        infers one Platform result from another.
+      - STOP if the `BURL-M003` evidence pull request isn't merged or any
+        required role bundle is missing, incomplete, stale, mismatched, corrupt,
+        self-hosted, unauthenticated, or rejected.
+      - STOP if post-completion API observation doesn't resolve the receipt
+        locator to one completed successful sealing job on the fixed hosted
+        label, or if an expected, candidate, or sealed artifact name or
+        normalized digest is invalid, missing, duplicate, extra, or inconsistent
+        with the run nonce.
+      - STOP if the launcher isn't the clean trust-anchor copy, a trusted
+        control file differs at the signer SHA, or the base-to-source diff
+        leaves the packaging write allowlist.
+      - STOP if any cross-role archive comes from a manual or
+        environment-selected source, the machine result is missing or invalid,
+        or the evidence commit omits the machine result, accepted managed
+        report, or executor-authored Spike report.
+      - STOP if a candidate command can observe a credential canary or OIDC or
+        attestation capability; if the trusted upload wrapper lacks its
+        job-scoped artifact runtime authority; if valid immutable untrusted
+        candidate output doesn't cross into fresh seal; if that output is
+        treated as trusted before seal; if candidate execution or processes gain
+        seal OIDC or attestation authority or cross the fresh environment
+        boundary; or if the coordinator can observe an authentication or
+        credential canary, its identity changes after preparation, isolation or
+        its network denial fails, an input is writable, or a path other than its
+        output is writable.
+      - STOP and reconcile the contract if Apple's published stable-version list
+        no longer identifies macOS 26 and macOS 15 as the two most recent stable
+        major versions.
+      - STOP when the 8-point Spike budget is exhausted and leave unsupported
+        hosts outside the recommendation.
+    description: Build and install the representative harness as AppImage, tagged
+      Nix Flake package, and unsigned Apple Silicon archive across the required
+      Linux and macOS matrix. Authenticate managed role evidence through
+      BURL-M003. Prove the checksum and provenance-metadata layout inside the
+      prototype; release-candidate attestations remain production workflow work
+      owned by BURL-O009 and BURL-O014
+    acceptance:
+      mode: hitl_sil
+      evidence: "Unique hashed and logged runs verify installed Git and runtime,
+        secure storage, file selection, native loading, secret injection, update
+        selection, host chrome, repeatability, and every named Linux candidate.
+        The Linux role provides `packaging-runtime`; macOS 26 provides
+        `packaging-runtime` and `repeatable-construction`; macOS 15 provides
+        `packaging-runtime-compatibility`. This Spike doesn't claim performance,
+        Linux platform-regression, or authoritative macOS visual evidence.
+        Candidate commands produce an untrusted bundle containing the manifest
+        plus every named result, log, raw measurement, and handoff without
+        token, artifact-runtime, OIDC, or attestation access. After candidate
+        commands finish, the trusted workflow wrapper uses job-scoped artifact
+        runtime authority to upload that untrusted bundle. A fresh dependent
+        sealing job validates the immutable bundle and alone authenticates the
+        sealed artifact. Aggregation verifies the exact packaging evidence
+        profile, trust anchor, workflow signer, separate tested source, ticket
+        base, packaging allowlist, sealing provenance, bundle integrity, and
+        internal artifact hashes. Each named runtime check obtains guest
+        operating system, distribution, version, and architecture from inside
+        the installed probe environment; aggregation requires exact Ubuntu
+        22.04, 24.04, and 26.04 plus Debian 12 and 13 x86-64 evidence rather
+        than trusting run IDs or the outer Nix host. The versioned build script
+        runs `flutter clean`, enforces the committed dependency lock, normalizes
+        archive metadata from the source revision's epoch, and emits the actual
+        deterministic `.tar.gz` release artifact for each construction. macOS 26
+        constructs that archive twice from identical inputs; aggregation
+        requires byte-identical archive hashes. Extraction rejects path escape
+        and proves the archive preserves required modes, symlink targets,
+        extended attributes, and one application bundle. The first archive
+        travels in the authenticated macOS 26 sealed bundle. Only after
+        verifying and staging that bundle does the macOS 15 role extract and
+        probe the same bytes. Final aggregation stages all three sealed role
+        bundles under fixed role directories and requires both macOS probes to
+        name the same archive SHA-256. Nix out-links are only build sources: the
+        result tool copies their resolved bytes or closures into `artifacts/`
+        inside the Spike allowlist before size and SHA-256 recording. The
+        aggregate records the prebuilt result-tool identity and proves no
+        network, credential, writable input, or host user state entered
+        coordinator execution. The CLI produces authoritative schema-valid
+        `results.json`; the executor authors its human interpretation and
+        commits both with the accepted managed report."
+    flows:
+      - flow-release
+    certainty: assumed
+    status: planned
+    spike: SPK-BURL-O001
+  - id: BURL-O002
+    title: Add content-excluding structured diagnostics
+    type: Feature
+    effort: 8
+    depends_on: []
+    category: Security
+    scope:
+      in:
+        - rust/src/diagnostics/**
+        - rust/src/api/ffi_api.rs
+        - rust/Cargo.toml
+        - rust/Cargo.lock
+        - lib/src/components/**
+        - test/**
+    verification:
+      command: cargo test --manifest-path rust/Cargo.toml &&
+        ./scripts/check-generated-bindings.sh && flutter test && dart analyze &&
+        ./scripts/smoke-shot.sh log-m002 && git diff --check && ! rg -n
+        '\[DEBUG-' lib rust test scripts
+      expected: exit 0 with rotation, failure isolation, redaction, export, and
+        no-network tests passing
+    stop_conditions:
+      - STOP if Note/Asset content, credentials, tokens, signed locations,
+        content-derived telemetry, or secret-bearing debug values can enter logs
+        or Diagnostics Export.
+    description: Add a rotating best-effort local structured log for
+      failures/retries/state decisions and a Writer-created Diagnostics Export
+      containing app/schema versions without content, signed locations,
+      content-derived telemetry, or automatic transmission
+    acceptance:
+      mode: invariant
+      evidence: Generated content, credential, signed-location, and content-derived
+        canaries never appear in files or export; required failures and state
+        transitions do; rotation caps storage; logging failure never becomes a
+        product failure; export performs no network request.
+    flows:
+      - flow-history-diagnostics
+    certainty: assumed
+    status: planned
+  - id: BURL-O004
+    title: Implement deterministic nightly PRD meters
+    type: Chore
+    effort: 8
+    depends_on:
+      - BURL-O016
+    category: Perf
+    scope:
+      in:
+        - rust/benches/**
+        - integration_test/**
+        - scripts/**
+        - .github/workflows/**
+        - .constitution/reports/**
+    verification:
+      command: TRUST_ANCHOR_WORKTREE/scripts/managed-evidence.sh run --ticket
+        BURL-O004 --trust-anchor-sha TRUST_ANCHOR_SHA --source-ref SOURCE_REF
+        --tested-source-sha TESTED_SOURCE_SHA --base-sha BASE_SHA --output
+        EVIDENCE_WORKTREE/.constitution/evidence/BURL-O004/managed-evidence.json
+        && TRUST_ANCHOR_WORKTREE/scripts/aggregate-prd-meters.sh --require-run
+        linux-reference=EVIDENCE_WORKTREE/.constitution/evidence/BURL-O004/managed-evidence-coordinator/roles/linux-x86_64/nightly-prd-meters-linux.json
+        --require-run
+        macos-reference=EVIDENCE_WORKTREE/.constitution/evidence/BURL-O004/managed-evidence-coordinator/roles/macos-26-arm64/nightly-prd-meters-macos.json
+        --require-same-corpus-hash --require-same-meter-definition-version
+        --output
+        EVIDENCE_WORKTREE/.constitution/evidence/BURL-O004/nightly-prd-meters.json
+        && git -C EVIDENCE_WORKTREE diff --check
+      expected: "deterministic corpus generation succeeds on both managed performance
+        roles, macOS 15 functional compatibility passes, and aggregation emits
+        one authenticated machine-readable nonblocking result for every meter
+        Original verification detail: `ubuntu-24.04`: `cargo test
+        --manifest-path rust/Cargo.toml && flutter test && dart analyze &&
+        ./scripts/bench-prd-meters.sh --all --run-id linux-reference
+        --expected-host-profile github-ubuntu-24_04-x86_64 --corpus-size 10000
+        --output .constitution/reports/nightly-prd-meters-linux.json && git diff
+        --check`; Apple Silicon `macos-26`: `cargo test --manifest-path
+        rust/Cargo.toml && flutter test && dart analyze &&
+        ./scripts/bench-prd-meters.sh --all --run-id macos-reference
+        --expected-host-profile github-macos-26-arm64 --corpus-size 10000
+        --output .constitution/reports/nightly-prd-meters-macos.json && git diff
+        --check`; Apple Silicon `macos-15` functional compatibility: `cargo test
+        --manifest-path rust/Cargo.toml && flutter test && dart analyze && git
+        diff --check`; coordinator: `./scripts/aggregate-prd-meters.sh
+        --require-run
+        linux-reference=.constitution/reports/nightly-prd-meters-linux.json
+        --require-run
+        macos-reference=.constitution/reports/nightly-prd-meters-macos.json
+        --require-same-corpus-hash --require-same-meter-definition-version
+        --output .constitution/reports/nightly-prd-meters.json && git diff
+        --check`. Validate all role and aggregate evidence through `BURL-M003`."
+    stop_conditions:
+      - STOP if a meter uses a different corpus/profile/definition than PRD
+        constraints or changes a threshold outside Product Requirements
+        Evolution.
+      - STOP if macOS 15 contributes a performance meter or managed evidence
+        lacks authenticated expected-identity and artifact verification.
+    description: Generate the 10,000-Note and editing corpora and measure search,
+      UI, open, cold start, idle memory, external changes, capacity, image,
+      history health, and synchronization freshness on named profiles
+    acceptance:
+      mode: benchmark
+      constraints:
+        - NFC-01
+        - NFC-02
+        - NFC-03
+        - NFC-04
+        - NFC-05
+        - NFC-06
+        - NFC-07
+        - NFC-10
+        - NFC-11
+      evidence: Linux x86-64 and macOS 26 performance bundles record the managed image
+        and environment identity, run, profile, corpus hash, meter-definition
+        version, samples, percentile or threshold, exact command, and Goal or
+        Fail disposition for every scalar PRD meter. macOS 15 records common
+        functional compatibility only. Aggregation verifies expected identity,
+        GitHub-hosted role signer, bundle integrity, exact evidence classes,
+        corpus, and meter definitions. The nightly job is nonblocking during
+        `0.x` but produces a durable regression report; release gates consume
+        the same definitions.
+    flows:
+      - flow-release
+    certainty: assumed
+    status: planned
+  - id: BURL-O016
+    title: Warn before local history storage becomes unhealthy
+    type: Feature
+    effort: 5
+    depends_on: []
+    category: Correctness
+    scope:
+      in:
+        - rust/src/git/**
+        - rust/src/api/ffi_api.rs
+        - lib/src/components/**
+        - lib/src/providers/**
+        - test/**
+    verification:
+      command: cargo test --manifest-path rust/Cargo.toml &&
+        ./scripts/check-generated-bindings.sh && flutter test && dart analyze &&
+        ./scripts/smoke-shot.sh health-m004 && git diff --check
+      expected: exit 0 with accepted-threshold, deduplication, recovery-action, and
+        boundary tests passing
+    stop_conditions:
+      - STOP if final Stage 3 hasn't accepted the history-health meter and
+        threshold after BURL-I001, or if the warning performs destructive
+        maintenance automatically.
+    description: Measure stored textual and manifest history against the accepted
+      health threshold, warn the Writer before the threshold, explain the local
+      consequences, and expose only non-destructive inspection and recovery
+      actions
+    acceptance:
+      mode: gherkin
+      evidence: >
+        ```gherkin
+
+        Given local textual and manifest history approaches the accepted health
+        threshold
+
+        When the pre-warning boundary is crossed
+
+        Then burlmd presents one actionable Writer-facing warning before the
+        threshold
+
+        And repeated measurements don't create warning spam
+
+        And no history or Object is deleted automatically
+
+        And returning below the reset boundary permits a later warning
+
+        ```
+    flows:
+      - flow-history-diagnostics
+    certainty: assumed
+    status: planned
+  - id: BURL-O005
+    title: Back up and atomically migrate application state
+    type: Feature
+    effort: 8
+    depends_on: []
+    category: Correctness
+    scope:
+      in:
+        - rust/src/db/**
+        - rust/src/workspace/**
+        - lib/src/providers/**
+        - test/**
+    verification:
+      command: cargo test --manifest-path rust/Cargo.toml && flutter test && dart
+        analyze && ./scripts/smoke-shot.sh migrate-m005 && git diff --check
+      expected: exit 0 with backup, forward migration, rebuild, fault injection,
+        rollback, and later-version refusal tests passing
+    stop_conditions:
+      - STOP if migration can partially publish, changes Markdown unnecessarily,
+        or destroys the only usable prior state before success.
+      - STOP if unsupported later-version preference or Workspace-snapshot bytes
+        are migrated, overwritten, normalized, or discarded.
+    description: Version application state, back up affected supported data, migrate
+      forward atomically, rebuild derived index state when safer, restore backup
+      on failure, and refuse unsupported later versions. Quarantine and preserve
+      unsupported later-version bytes exactly; runtime may use in-memory
+      defaults, and it may write a separate supported current file only through
+      an explicitly safe path isolated from the preserved bytes
+    acceptance:
+      mode: invariant
+      evidence: Fault injection at every migration step leaves either the complete
+        prior state or complete new state; backup remains recoverable until
+        validation; Workspace Markdown stays unchanged unless the accepted path
+        migration explicitly requires it. Unsupported later-version device
+        preferences and Workspace snapshots are refused, quarantined, and
+        preserved byte-for-byte. Runtime defaults remain in memory, and any
+        later supported current-format write uses a separate explicitly safe
+        isolation path without modifying the preserved bytes.
+    flows:
+      - flow-desktop-session
+    certainty: assumed
+    status: planned
+  - id: BURL-O006
+    title: Package the complete x86-64 AppImage
+    type: Chore
+    effort: 8
+    depends_on:
+      - BURL-O001
+    category: DX
+    scope:
+      in:
+        - linux/**
+        - scripts/**
+        - .github/workflows/**
+        - pubspec.yaml
+        - pubspec.lock
+    verification:
+      command: Run the accepted production AppImage build and installed probes derived
+        from `SPK-BURL-O001`, then `git diff --check`.
+      expected: one installable artifact passes every accepted x86-64 Linux runtime
+        probe with bundled version-locked Git
+    stop_conditions:
+      - STOP if final TechSpec hasn't accepted BURL-O001 or artifact behavior
+        depends on ambient Git/runtime libraries outside the accepted baseline.
+    description: Package the complete release application, exact Git CLI/runtime,
+      native library, Flutter assets, desktop metadata, and licenses as the
+      general Linux AppImage
+    acceptance:
+      mode: hitl_sil
+      evidence: The built AppImage launches on every accepted named Linux system and
+        passes installed probes for local editing, persistence, Export, GitHub
+        sync, secure storage, recovery, update notification, native loading,
+        file selection, and host-owned chrome without ambient Git.
+    flows:
+      - flow-release
+    certainty: assumed
+    status: planned
+  - id: BURL-O007
+    title: Publish an importable release-tagged Nix Flake package
+    type: Chore
+    effort: 5
+    depends_on:
+      - BURL-O001
+    category: DX
+    scope:
+      in:
+        - flake.nix
+        - flake.lock
+        - nix/**
+        - .github/workflows/**
+    verification:
+      command: nix flake check && nix build .#packages.x86_64-linux.default && git
+        diff --check
+      expected: exit 0 and the installed package probe uses the exact Git package in
+        its closure
+    stop_conditions:
+      - STOP if final TechSpec hasn't accepted BURL-O001 or the Flake exposes an
+        unverified system.
+    description: Add a locked Flake that users can import from a release tag in
+      NixOS or Home Manager, exposing only verified systems and the complete
+      runtime closure
+    acceptance:
+      mode: runbook_probe
+      evidence: Building from a clean tagged checkout yields the default x86-64 Linux
+        package; NixOS/Home Manager import examples evaluate; the closure
+        contains exact Git/native dependencies; installed feature probes pass;
+        Nix remains the upgrade authority.
+    flows:
+      - flow-release
+    certainty: assumed
+    status: planned
+  - id: BURL-O008
+    title: Package Apple Silicon macOS for two current major versions
+    type: Chore
+    effort: 8
+    depends_on:
+      - BURL-O001
+    category: DX
+    scope:
+      in:
+        - macos/**
+        - scripts/**
+        - .github/workflows/**
+        - pubspec.yaml
+        - pubspec.lock
+      out:
+        - 0.x
+    verification:
+      command: flutter build macos --release && git diff --check
+      expected: the unsigned Apple Silicon archive is constructed reproducibly with
+        its complete pinned runtime closure and installation disclosure
+    stop_conditions:
+      - STOP if final TechSpec hasn't accepted BURL-O001, the archive uses
+        ambient Git, or construction metadata claims installed-host verification
+        owned by BURL-O013.
+      - STOP if this construction ticket treats macOS 15 as a performance or
+        visual reference.
+    description: Construct the complete Apple Silicon application archive with exact
+      Git/runtime, native library, Flutter assets, licenses, and unsigned 0.x
+      installation disclosure. Installed verification on the two supported macOS
+      majors belongs to BURL-O013
+    acceptance:
+      mode: contract_test
+      evidence: Archive inspection proves Apple Silicon architecture, the exact
+        bundled Git/runtime/native closure, Flutter assets, licenses, source
+        revision, and unsigned installation disclosure. Construction is
+        reproducible from the pinned input and emits no Intel artifact,
+        signing/notarization claim, emulated Platform chrome, or assertion that
+        installed-host gates have already passed.
+    flows:
+      - flow-release
+    certainty: assumed
+    status: planned
+  - id: BURL-O009
+    title: Construct immutable 0.x release candidates and provenance
+    type: Chore
+    effort: 5
+    depends_on:
+      - BURL-O002
+      - BURL-O004
+      - BURL-O005
+      - BURL-O006
+      - BURL-O007
+      - BURL-O008
+      - BURL-O010
+    category: Security
+    scope:
+      in:
+        - .github/workflows/**
+        - scripts/**
+    verification:
+      command: Run the accepted release construction and artifact verification
+        commands from final TechSpec, then `git diff --check`.
+      expected: immutable unpublished candidates have checksums, provenance,
+        compatibility labels, source revision, licenses, and unsigned
+        disclosures
+    stop_conditions:
+      - STOP if final Stage 3 hasn't replaced the release-construction
+        placeholder with exact accepted commands.
+      - STOP if a version isn't `0.x`, any candidate lacks checksum or a
+        cryptographically verified GitHub Actions attestation, the attestation
+        identity doesn't match the expected repository/workflow/revision, or
+        metadata claims an untested system.
+    description: "Build immutable candidate AppImage and Apple Silicon archives plus
+      the release-tagged Flake input and source archive from one revision.
+      Generate checksums, licenses, disclosures, and keyless GitHub Actions
+      artifact attestations using
+      actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 with id-token:
+      write, contents: read, and attestations: write; retain the candidates
+      unpublished for installed verification. The accepted contract binds the
+      GitHub/Sigstore trust root, SkrOYC/burlmd, the release workflow identity,
+      release ref, source revision, and every artifact subject. Developer ID
+      signing and notarization remain deferred"
+    acceptance:
+      mode: runbook_probe
+      evidence: Independent verification reproduces every SHA-256 from immutable
+        candidate bytes and runs `gh attestation verify` against the expected
+        `SkrOYC/burlmd` repository plus the accepted release-workflow and
+        source-revision constraints. Tampered bytes, a different repository or
+        workflow identity, an unexpected ref/revision, an untrusted issuer, or a
+        wrong subject fails closed. Compatibility labels match intended systems;
+        unsigned macOS warnings are explicit; candidates remain unpublished and
+        install without source builds. This authenticated build provenance
+        doesn't claim Developer ID signing or notarization.
+    flows:
+      - flow-release
+    certainty: assumed
+    status: planned
+  - id: BURL-O010
+    title: Notify about compatible higher 0.x releases
+    type: Feature
+    effort: 5
+    depends_on:
+      - BURL-O001
+    category: Feature-Evolution
+    scope:
+      in:
+        - rust/src/update/**
+        - rust/src/api/ffi_api.rs
+        - lib/src/components/**
+        - lib/src/providers/burl_preferences_provider.dart
+        - test/**
+    verification:
+      command: cargo test --manifest-path rust/Cargo.toml &&
+        ./scripts/check-generated-bindings.sh && flutter test && dart analyze &&
+        ./scripts/smoke-shot.sh update-m010 && git diff --check
+      expected: exit 0 with
+        compatibility/version/preference/offline/rate-limit/release-page tests
+        passing
+    stop_conditions:
+      - STOP if update handling mutates the installed application or bypasses
+        Nix/package-manager authority.
+    description: Check GitHub prerelease metadata according to the stored
+      preference, compare compatible 0.x versions, notify once, and open the
+      release page for manual installation
+    acceptance:
+      mode: contract_test
+      evidence: Version fixtures distinguish higher compatible 0.x, current/older,
+        incompatible system, and malformed data; disabled preference performs no
+        check; transient failures are nonblocking; notification opens only the
+        release page and never replaces binaries.
+    flows:
+      - flow-release
+    certainty: assumed
+    status: planned
+  - id: BURL-O011
+    title: Gate the installed x86-64 AppImage candidate
+    type: Chore
+    effort: 5
+    depends_on:
+      - BURL-O002
+      - BURL-O004
+      - BURL-O005
+      - BURL-O009
+    category: Correctness
+    scope:
+      in:
+        - integration_test/**
+        - scripts/**
+        - .github/workflows/**
+        - .constitution/reports/**
+    verification:
+      command: Run the accepted x86-64 AppImage installed matrix from final TechSpec
+        against the immutable `BURL-O009` candidate on every accepted Linux
+        runtime. Run its common functional, performance, and exact
+        private-headless platform-regression evidence on managed `ubuntu-24.04`,
+        validate the authenticated role and aggregate schemas, then run `git
+        diff --check`.
+      expected: the candidate hash passes the identical release-blocking matrix on
+        every accepted x86-64 Linux runtime
+    stop_conditions:
+      - STOP if final Stage 3 hasn't replaced the installed AppImage matrix
+        placeholder with exact accepted commands.
+      - STOP release on any missing P0 capability, privacy/content leak, failed
+        recovery path, artifact mismatch, or PRD Fail threshold.
+    description: Install the immutable AppImage candidate on every accepted Linux
+      runtime and gate it on local editing/session behavior,
+      authority/monitoring, Assets/Object Store, Export, connection-time
+      Consolidation before initial publication, private GitHub sync, every
+      reconciliation form, secure storage, diagnostics, migration, recovery, and
+      update notification
+    acceptance:
+      mode: hitl_sil
+      evidence: The same versioned matrix passes for the AppImage candidate on every
+        accepted Linux runtime. The managed Linux bundle records candidate hash,
+        image and environment identity, app and source version, verified logical
+        viewport, all P0 outcomes, PRD meters, private GitHub canary,
+        S3-compatible credentials, interruption recovery, diagnostics content
+        exclusion, and update notification. Required exact platform-regression
+        capture uses only the pipeline-owned headless Sway and Wayland
+        environment and doesn't claim product visual authority. The
+        authenticated aggregate binds the result to the trust anchor, workflow
+        signer, tested source, ticket base, build, corpus, run, and artifact
+        identity. The matrix connects a local Workspace, enters Consolidation,
+        resolves a collision, and proves that initial Remote publication waits
+        for the atomic Consolidation result. Any failure blocks publication.
+    flows:
+      - flow-release
+    certainty: assumed
+    status: planned
+  - id: BURL-O012
+    title: Gate the installed x86-64 Nix Flake candidate
+    type: Chore
+    effort: 5
+    depends_on:
+      - BURL-O002
+      - BURL-O004
+      - BURL-O005
+      - BURL-O009
+    category: Correctness
+    scope:
+      in:
+        - integration_test/**
+        - scripts/**
+        - .github/workflows/**
+        - .constitution/reports/**
+    verification:
+      command: Run the accepted Nix installed matrix from final TechSpec against the
+        immutable `BURL-O009` Flake candidate on every exposed x86-64 Linux
+        system. Run the managed `ubuntu-24.04` functional and performance roles
+        through the authenticated `BURL-M003` evidence protocol, then run `git
+        diff --check`.
+      expected: the candidate revision passes the identical release-blocking matrix
+        through a clean NixOS/Home Manager import
+    stop_conditions:
+      - STOP if final Stage 3 hasn't replaced the installed Nix matrix
+        placeholder with exact accepted commands.
+      - STOP release on any missing P0 capability, privacy/content leak, failed
+        recovery path, closure mismatch, or PRD Fail threshold.
+    description: Import and install the immutable Flake candidate through clean
+      NixOS/Home Manager fixtures and run the same complete application matrix
+      without bypassing Nix upgrade authority
+    acceptance:
+      mode: runbook_probe
+      evidence: Clean evaluation, build, import, install, and matrix probes reproduce
+        the candidate revision and closure. The managed Linux evidence records
+        the same P0, privacy, meter, integration, environment,
+        expected-identity, signer, and artifact-integrity outcomes as the
+        AppImage gate. Any failure blocks publication.
+    flows:
+      - flow-release
+    certainty: assumed
+    status: planned
+  - id: BURL-O013
+    title: Gate the installed Apple Silicon macOS candidate
+    type: Chore
+    effort: 5
+    depends_on:
+      - BURL-O002
+      - BURL-O004
+      - BURL-O005
+      - BURL-O009
+    category: Correctness
+    scope:
+      in:
+        - integration_test/**
+        - scripts/**
+        - .github/workflows/**
+        - .constitution/reports/**
+    verification:
+      command: Run the accepted Apple Silicon installed matrix from final TechSpec
+        against the immutable `BURL-O009` archive on managed Apple Silicon
+        `macos-26` and `macos-15`. Run common functional evidence on both,
+        performance and the sole authoritative macOS visual baseline on macOS 26
+        only, validate the authenticated role and aggregate schemas, then run
+        `git diff --check`.
+      expected: one candidate hash passes the common release-blocking matrix on both
+        macOS roles and the performance and visual extensions on macOS 26
+    stop_conditions:
+      - STOP if final Stage 3 hasn't replaced the installed macOS matrix
+        placeholder with exact accepted commands.
+      - STOP release on any missing P0 capability, privacy/content leak, failed
+        recovery path, artifact mismatch, macOS 26 PRD Fail threshold, or
+        inaccurate unsigned-install disclosure.
+      - STOP if macOS 15 produces performance evidence or creates or updates a
+        visual baseline.
+    description: Query Apple's official stable-version source, record the observed
+      two-major pair and timestamp, then install the immutable unsigned archive
+      candidate on both managed macOS roles. Run the common application matrix
+      and Gatekeeper-disclosure checks on both; run performance and
+      authoritative visual proof on macOS 26 only
+    acceptance:
+      mode: hitl_sil
+      evidence: Both managed macOS roles record the same candidate hash, Apple's
+        observed stable-major pair and source timestamp, complete common
+        functional outcomes, image and environment identity, expected identity,
+        signer provenance, and artifact integrity. macOS 26 additionally records
+        the PRD meters, verified hosted-GUI geometry, and the one authoritative
+        macOS visual baseline. macOS 15 records functional compatibility only.
+        Unsigned installation instructions are accurate. Any required failure
+        blocks publication.
+    flows:
+      - flow-release
+    certainty: assumed
+    status: planned
+  - id: BURL-O014
+    title: Publish the verified GitHub 0.x prerelease
+    type: Chore
+    effort: 5
+    depends_on:
+      - BURL-O011
+      - BURL-O012
+      - BURL-O013
+    category: Security
+    scope:
+      in:
+        - .github/workflows/**
+        - .constitution/reports/**
+        - config/github-app.release.toml
+        - scripts/**
+    verification:
+      command: ./scripts/attest-github-app-token-expiration.sh --client-id
+        "$BURLMD_GITHUB_APP_CLIENT_ID" --output
+        .constitution/reports/github-app-token-expiration-attestation.json &&
+        ./scripts/verify-github-app-registration.sh --manifest
+        config/github-app.release.toml --installation-url
+        "$BURLMD_GITHUB_APP_INSTALLATION_URL" --expected-client-id
+        "$BURLMD_GITHUB_APP_CLIENT_ID" --require-device-flow
+        --require-private-repository-permissions --forbid-permission workflows
+        --token-expiration-attestation
+        .constitution/reports/github-app-token-expiration-attestation.json
+        --max-attestation-age-hours 24 --output
+        .constitution/reports/github-app-registration.json && git diff --check
+      expected: 'one GitHub 0.x prerelease exposes exactly the gated immutable
+        artifacts, checksums, provenance, compatibility labels, source revision,
+        licenses, and unsigned disclosures Original verification detail: Run
+        `./scripts/attest-github-app-token-expiration.sh --client-id
+        "$BURLMD_GITHUB_APP_CLIENT_ID" --output
+        .constitution/reports/github-app-token-expiration-attestation.json`,
+        complete the displayed device-flow authorization as the project
+        administrator, then run `./scripts/verify-github-app-registration.sh
+        --manifest config/github-app.release.toml --installation-url
+        "$BURLMD_GITHUB_APP_INSTALLATION_URL" --expected-client-id
+        "$BURLMD_GITHUB_APP_CLIENT_ID" --require-device-flow
+        --require-private-repository-permissions --forbid-permission workflows
+        --token-expiration-attestation
+        .constitution/reports/github-app-token-expiration-attestation.json
+        --max-attestation-age-hours 24 --output
+        .constitution/reports/github-app-registration.json`; run the accepted
+        GitHub prerelease publication and remote verification commands from
+        final TechSpec for the already-gated candidate hashes; then run `git
+        diff --check`.'
+    stop_conditions:
+      - STOP if final Stage 3 hasn't replaced the GitHub publication placeholder
+        with exact accepted commands.
+      - STOP if any published byte differs from the gated candidate, any gate is
+        missing or older than its accepted freshness window, the version isn't
+        `0.x`, an artifact attestation fails the accepted
+        repository/workflow/ref/revision trust policy, or metadata claims an
+        untested system.
+      - STOP if the fresh GitHub App registration report is missing, the
+        administrator-approved expiring-token attestation is older than the
+        24-hour freshness window, or the App's client ID, installation URL,
+        device-flow setting, private-repository permissions, or absence of
+        Workflows permission has drifted.
+      - STOP and return to BURL-O013 if Apple's official stable-version source
+        no longer matches the gate's recorded two-major pair or if that
+        observation is older than the 24-hour freshness window; reconcile the
+        packaging contract first when the pair changes.
+    description: Immediately before publication, rerun the BURL-K009 GitHub App
+      registration and device-flow verification with fresh
+      administrator-approved token-expiration evidence no older than the 24-hour
+      freshness window. Query Apple's official stable-version source and require
+      the BURL-O013 pair and observation to be current within the 24-hour
+      freshness window. Publish the already-gated AppImage, Apple Silicon
+      archive, and attested Flake source archive; expose the gated
+      release-tagged Flake revision; attach their existing checksums,
+      attestations, licenses, and disclosures; and mark the GitHub Release as a
+      prerelease without rebuilding
+    acceptance:
+      mode: runbook_probe
+      evidence: "Remote verification matches every published byte and Flake revision
+        to the three gate reports and verifies each GitHub Actions attestation
+        against the accepted GitHub/Sigstore issuer, `SkrOYC/burlmd`, release
+        workflow, release ref, source revision, and subject identity. Every
+        GitHub REST publication and verification fixture asserts `Accept:
+        application/vnd.github+json` and `X-GitHub-Api-Version: 2026-03-10`. The
+        publication record includes a fresh drift-free GitHub App registration
+        report, its administrator-approved token-expiration attestation age, the
+        fresh official Apple version observation, and the matching BURL-O013
+        pair. The release is marked prerelease, compatibility and unsigned
+        disclosures are accurate, and no publication step rebuilt an artifact."
+    flows:
+      - flow-release
+    certainty: assumed
+    status: planned

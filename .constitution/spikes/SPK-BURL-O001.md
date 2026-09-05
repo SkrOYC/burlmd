@@ -1,8 +1,8 @@
-# Spike report: BURL-M001 Installable 0.x desktop artifacts
+# Spike report: BURL-O001 Installable 0.x desktop artifacts
 
 ## Effort budget
 
-- **Budget:** 8 points, matching the effort of the owning Spike ticket BURL-M001
+- **Budget:** 8 points, matching the effort of the owning Spike ticket BURL-O001
 - **Stop rule:** stop and report when the budget is spent, whatever the state of the answer
 
 ## Question
@@ -33,6 +33,6 @@
 ## Downstream impact
 
 - **ADRs to write or update:** accept/replace ADR-018 and bind final artifact/build/update contracts
-- **Tickets unblocked in `tasks/epics/`:** BURL-M006, BURL-M007, BURL-M008, and BURL-M010 directly; BURL-M009, BURL-M011, BURL-M012, BURL-M013, and BURL-M014 transitively
+- **Tickets unblocked in `tasks/epics/`:** BURL-O006, BURL-O007, BURL-O008, and BURL-O010 directly; BURL-O009, BURL-O011, BURL-O012, BURL-O013, and BURL-O014 transitively
 - **Tickets to add or split:** adapt packaging/release tickets when the accepted Linux baseline or artifact construction changes scope
 - **Spec edits required:** Product Requirements for OD-08; final Technical Implementation; Architecture only if packaging evidence changes a boundary
