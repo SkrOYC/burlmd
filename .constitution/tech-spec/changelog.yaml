@@ -1,4 +1,13 @@
 entries:
+  - version: v2.0.9
+    date: 2026-09-05
+    changed:
+      - "Removed exactly three explicitly labeled temporary Stage 4 compatibility aliases for BURL-O011, BURL-O012, and BURL-O013 after the active Tasks graph migrated each gate to its canonical managed-evidence command. Every active Task command remains represented with its canonical owner, and no compatibility alias remains."
+      - "Retained the canonical managed-evidence commands and every lower-level managed role/profile command byte-for-byte; no raw contract or schema version or semantics changed."
+    by: patch-lane
+    upstream:
+      prd: v2.0.2
+      architecture: v2.0.4
   - version: v2.0.8
     date: 2026-09-05
     changed:
