@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": ["schemaVersion", "expectedIdentity", "expectedIdentitySha256", "roleEvidence"],
   "properties": {
-    "schemaVersion": { "const": 12 },
+    "schemaVersion": { "const": 13 },
     "expectedIdentity": { "$ref": "#/$defs/expectedIdentity" },
     "expectedIdentitySha256": { "$ref": "#/$defs/sha256" },
     "roleEvidence": { "$ref": "#/$defs/roleEvidence" }
@@ -79,7 +79,7 @@
       "additionalProperties": false,
       "required": ["ticketIdentity", "releaseIdentity", "trustAnchorSha", "testedSourceSha", "workflowSignerSha", "workflowSignerRef", "baseSha", "workflowEvent", "evidenceReportCommitPolicy", "sourceWriteAllowlist", "buildIdentity", "corpusIdentity", "runIdentity", "artifactNonce", "requiredRoleIdentities", "requiredRoleSigners", "requiredEvidenceClasses"],
       "properties": {
-        "ticketIdentity": { "enum": ["BURL-M003", "BURL-H001", "BURL-H002", "BURL-I001", "BURL-L001", "BURL-O001", "BURL-G011", "BURL-H009", "BURL-O004", "BURL-O011", "BURL-O012", "BURL-O013"] },
+        "ticketIdentity": { "enum": ["BURL-M003", "BURL-H001", "BURL-H002", "BURL-I001", "BURL-L001", "BURL-O001", "BURL-G011", "BURL-P002", "BURL-H009", "BURL-O004", "BURL-O011", "BURL-O012", "BURL-O013"] },
         "releaseIdentity": { "type": "string", "minLength": 1 },
         "trustAnchorSha": { "$ref": "#/$defs/gitSha" },
         "testedSourceSha": { "$ref": "#/$defs/gitSha" },
@@ -203,7 +203,7 @@
           } } } }
         },
         {
-          "if": { "properties": { "ticketIdentity": { "enum": ["BURL-H009", "BURL-O004"] } }, "required": ["ticketIdentity"] },
+          "if": { "properties": { "ticketIdentity": { "enum": ["BURL-P002", "BURL-H009", "BURL-O004"] } }, "required": ["ticketIdentity"] },
           "then": { "properties": { "requiredEvidenceClasses": { "const": {
             "linux-x86_64": ["common-functional", "performance"],
             "macos-26-arm64": ["common-functional", "performance"],
@@ -234,7 +234,7 @@
       "additionalProperties": false,
       "required": ["ticketIdentity", "releaseIdentity", "trustAnchorSha", "testedSourceSha", "workflowSignerSha", "workflowSignerRef", "baseSha", "workflowEvent", "sourceWriteAllowlist", "buildIdentity", "corpusIdentity", "runIdentity", "artifactNonce", "roleIdentity"],
       "properties": {
-        "ticketIdentity": { "enum": ["BURL-M003", "BURL-H001", "BURL-H002", "BURL-I001", "BURL-L001", "BURL-O001", "BURL-G011", "BURL-H009", "BURL-O004", "BURL-O011", "BURL-O012", "BURL-O013"] },
+        "ticketIdentity": { "enum": ["BURL-M003", "BURL-H001", "BURL-H002", "BURL-I001", "BURL-L001", "BURL-O001", "BURL-G011", "BURL-P002", "BURL-H009", "BURL-O004", "BURL-O011", "BURL-O012", "BURL-O013"] },
         "releaseIdentity": { "type": "string", "minLength": 1 },
         "trustAnchorSha": { "$ref": "#/$defs/gitSha" },
         "testedSourceSha": { "$ref": "#/$defs/gitSha" },
@@ -256,9 +256,10 @@
       }
     },
     "environment": {
+      "$comment": "filesystem is an observed system-API string. Sealing and aggregation must compare the exact non-empty value carried by the candidate and sealed manifests and reject omission, emptiness, or tampering; no hosted-label inference is permitted.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["runnerLabel", "imageOS", "imageVersion", "osRelease", "architecture", "cpuModel", "logicalCpuCount", "documentedMemoryBytes", "documentedStorageBytes", "observedMemoryBytes", "observedStorageAvailableBytes"],
+      "required": ["runnerLabel", "imageOS", "imageVersion", "osRelease", "architecture", "cpuModel", "logicalCpuCount", "documentedMemoryBytes", "documentedStorageBytes", "observedMemoryBytes", "observedStorageAvailableBytes", "filesystem"],
       "properties": {
         "runnerLabel": { "enum": ["ubuntu-24.04", "macos-26", "macos-15"] },
         "imageOS": { "type": "string", "minLength": 1 },
@@ -270,7 +271,8 @@
         "documentedMemoryBytes": { "type": "integer", "minimum": 1 },
         "documentedStorageBytes": { "type": "integer", "minimum": 1 },
         "observedMemoryBytes": { "type": "integer", "minimum": 1 },
-        "observedStorageAvailableBytes": { "type": "integer", "minimum": 1 }
+        "observedStorageAvailableBytes": { "type": "integer", "minimum": 1 },
+        "filesystem": { "type": "string", "minLength": 1 }
       }
     },
     "viewport": {
