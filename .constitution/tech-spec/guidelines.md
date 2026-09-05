@@ -345,7 +345,11 @@ verification_commands:
     command: "flutter build macos --release && git diff --check"
     exists: true
   - name: other
-    label: "canonical BURL verification for BURL-A001: manual macOS launch acceptance"
+    label: "canonical BURL verification for BURL-A001: FRB generation, Rust build and tests, Flutter tests, and Dart analysis"
+    command: "flutter_rust_bridge_codegen generate && cargo build --manifest-path rust/Cargo.toml && cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze"
+    exists: true
+  - name: other
+    label: "temporary Stage 4 alias for BURL-A001's completed Task; remove when Tasks migrates"
     command: "flutter_rust_bridge_codegen generate && cargo build --release --manifest-path rust/Cargo.toml && flutter run -d macos"
     exists: true
   - name: test
