@@ -12,7 +12,7 @@ assumption: "Migrated; the decision's ruling reference was not found in the stat
 
 ## Context
 
-The product requires standard Markdown image paths that work offline and a first-class, user-controlled S3-compatible object boundary. Git retains Notes and small textual manifests; it must not carry binary payload history. The exact content hash, filename, manifest, client library, image limit, and repository-health warning remain evidence-dependent.
+The product requires standard Markdown image paths that work offline and a Writer-controlled S3-compatible Object Store. `BND-06` keeps verified local bytes. `BND-11` owns transfer and privacy verification, and `BND-21` stores external immutable bytes. Git retains Notes and small textual manifests through Remote (`BND-20`); it must not carry binary payload history. Provider (`BND-14`) authorizes and locates that Remote but doesn't transfer or store Objects. The exact content hash, filename, manifest, client library, image limit, and repository-health warning remain evidence-dependent.
 
 ## Candidate decision
 
@@ -21,7 +21,7 @@ The product requires standard Markdown image paths that work offline and a first
 3. S3-compatible keys are content-addressed beneath the configured Workspace prefix. Endpoint, region, bucket, prefix, and addressing style are non-secret configuration; credentials stay in Platform secure storage.
 4. Connection validation proves authenticated list, read, write, and delete with disposable probe objects and rejects anonymous list, read, write, or delete access. Burlmd doesn't mutate bucket policy or provision accounts.
 5. Reachability is derived from the canonical AST across every protected state defined by PRD v1.3.2. Age never overrides protected reachability.
-6. A verified remote copy permits local cache eviction after 30 unused days when no active Note needs the bytes offline. During `0.x`, burlmd never deletes authoritative remote Object bytes. Git refs and generic S3-compatible storage can't make publication and deletion atomic, and guest Remote pushes can't honor a burlmd-only lease.
+6. A verified `BND-21` Object Store copy permits local cache eviction after 30 unused days when no active Note needs the bytes offline. During `0.x`, burlmd never deletes authoritative Object Store bytes. `BND-20` Git refs and S3-compatible `BND-21` storage can't make publication and deletion atomic. Guest Remote pushes also can't honor a burlmd-only lease.
 7. Plain-copy and `.okf` Export hydrate and verify the full referenced object closure before atomically publishing output.
 
 ## Evidence required

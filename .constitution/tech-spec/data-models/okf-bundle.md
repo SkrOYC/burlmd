@@ -1,6 +1,6 @@
 # Data Model: The Workspace On Disk (OKF v0.2 Bundle)
 
-> **Forward status:** This is the delivered v1.6.x bundle contract. TechSpec v2.0.1-provisional (reviewed v1.8.7 lineage) reopens title-verbatim filenames through OD-05 and replaces the deferred Asset section with the required hybrid Local Asset Store and S3-compatible object model. SPK-BURL-H002 and SPK-BURL-I001 must settle those physical forms before final Stage 3 rewrites this contract. Research Tasks must not implement the old filename or Asset text as forward behavior.
+> **Forward status:** This is the delivered v1.6.x bundle contract. TechSpec v2.1.0 (reviewed v1.8.7 lineage) reopens title-verbatim filenames through OD-05 and replaces the deferred Asset section with the required hybrid Local Asset Store and S3-compatible object model. SPK-BURL-H002 and SPK-BURL-I001 must settle those physical forms before final Stage 3 rewrites this contract. Research Tasks must not implement the old filename or Asset text as forward behavior.
 
 `architecture/containers.md` gives the Local Repository two distinct storage forms: the OKF directory tree, and the encrypted search index. This file is the contract for the first; `schema.sql` is the contract for the second. The frontmatter block additionally has a machine-checkable contract in `okf-frontmatter.schema.json`.
 

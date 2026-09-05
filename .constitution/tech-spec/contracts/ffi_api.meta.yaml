@@ -1,6 +1,6 @@
 artifact: ffi_api.rs
 surface: native
-flows: [flow-edit-note, flow-note-lifecycle, flow-link-graph, flow-search, flow-workspace-bootstrap, flow-workspace-navigation, flow-workspace-monitoring, flow-history-diagnostics, flow-desktop-session]
-boundaries: [BND-01, BND-02]
+flows: [flow-edit-note, flow-note-lifecycle, flow-link-graph, flow-search, flow-workspace-bootstrap, flow-workspace-navigation, flow-workspace-monitoring, flow-history-diagnostics, flow-desktop-session, flow-auth-handshake, flow-sync-push, flow-conflict-resolution]
+boundaries: [BND-01, BND-02, BND-10, BND-14, BND-20]
 certainty: assumed
 assumption: "Migrated; not yet exercised by a contract test."

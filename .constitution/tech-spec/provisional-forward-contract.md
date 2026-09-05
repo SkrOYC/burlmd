@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document prevents the research wave from becoming an accidental implementation wave. Structured PRD v2.0.0 and Architecture v2.0.1 are binding. The delivered v1.6.x physical contracts remain valid only for already-delivered behavior. Where they conflict with the forward constitution, the forward requirement is authoritative.
+This document prevents the research wave from becoming an accidental implementation wave. Structured PRD v2.0.5 and Architecture v2.1.0 are binding. The delivered v1.6.x physical contracts remain valid only for already-delivered behavior. Where they conflict with the forward constitution, the forward requirement is authoritative.
 
 ## Decision gates
 
@@ -14,8 +14,8 @@ This document prevents the research wave from becoming an accidental implementat
 | Live Workspace monitoring | Manual Rescan only | Final verification of `notify` 8.2.0 and fallback behavior | Observer event contract, debouncing, revision checks, external-change decisions |
 | Local history, undo, find, backlinks | Some planned FFI, incomplete production wiring | Canonical AST and path contracts first | Reconciled state and FFI contracts using authoritative Note sessions |
 | Atomic Export | Brownfield contract permits partial output | AST, path, and asset closure contracts first | Copy and `.okf` schemas, stable-revision lease, collision and atomic publication contracts |
-| Local assets and Object Store | No physical contract | SPK-BURL-I001 plus measured PRD/Architecture review | Asset manifest schema, identity/hash/key format, secure configuration schema, hydration and retention state machine |
-| Private GitHub Remote | Old OAuth redirect and marker-centric merge | ADR-017 plus SPK-BURL-L001 | Device-flow FFI, GitHub API contract, typed analysis and decision schemas, credential adapter |
+| Local assets and Object Store | No physical contract | SPK-BURL-I001 plus measured PRD/Architecture review | `BND-06` Local Asset Store model, `BND-11` transfer and verification contract, `BND-21` Object Store configuration and operation contract, identity and key format, hydration, and retention state machine; `BND-14` Provider and `BND-20` Remote don't own Object bytes |
+| Private GitHub connection | Superseded OAuth redirect and marker-based merge | ADR-017 plus SPK-BURL-L001 | `BND-14` Provider device authorization, repository selection and provisioning, and eligible `BND-20` Remote location; `BND-20` authenticated history and ref contract; typed `BND-10` analysis and decision schemas; credential adapter; no Object transfer or storage responsibility |
 | Releases and updates | Development builds plus committed Epic G headless capture | SPK-BURL-O001 for package choices; BURL-M003 for managed validation bootstrap | Untrusted candidate bundles, fresh-job sealed role bundles, role-specific workflow signers, accepted or rejected authenticated aggregation, update metadata, installed-app release matrix |
 | Platform chrome | PR #11 presentation prototype leaked into production | Settled product decision | Remove preference/state/rendering/copy/tests and regenerate visual evidence; no replacement window-frame abstraction |
 

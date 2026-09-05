@@ -68,10 +68,16 @@ survive. The release contract must not make that claim.
   itself.
 - Reviewed source and test contracts remain required. Provenance validation
   doesn't replace source review or test review.
-- The role and aggregate JSON schemas are versions `12` and `14`. They
+- The role and aggregate JSON schemas are versions `14` and `16`. They
   record identity, job, artifact, and provenance facts; they don't encode a
   platform-independent process-termination assertion. The raw contract and
   executable PR #15 fixtures own this platform-specific execution policy.
+- Managed non-Spike source-write authority is an immutable ordered mapping in
+  the trust-anchor raw contract. Candidate input can't select, widen, reorder,
+  or omit it. BURL-O004 additionally prepares its locked coordinator before
+  authentication and executes only the identified binary against fixed
+  read-only `/inputs`, with `/output/nightly-prd-meters.json` as its sole
+  writable result and no repository mount.
 
 ## Verification anchors
 

@@ -89,6 +89,7 @@
         "workflowEvent": { "const": "workflow_dispatch" },
         "evidenceReportCommitPolicy": { "const": "later-reviewed-evidence-pr-with-declared-evidence-only-diff" },
         "sourceWriteAllowlist": {
+          "$comment": "run constructs this exact ordered array from provisional-spikes.toml in the immutable trust-anchor checkout. The conditional constants below bind every managed non-Spike ticket. Candidate input can't select or alter it, and collect reconstructs and compares it before acceptance.",
           "type": "array",
           "minItems": 1,
           "uniqueItems": true,
@@ -225,6 +226,22 @@
             "macos-26-arm64": ["common-functional", "performance", "macos-authoritative-visual"],
             "macos-15-arm64": ["common-functional"]
           } } } }
+        },
+        {
+          "if": { "properties": { "ticketIdentity": { "const": "BURL-G011" } }, "required": ["ticketIdentity"] },
+          "then": { "properties": { "sourceWriteAllowlist": { "const": ["lib/src/design/**", "lib/src/screens/workspace.dart", "lib/src/components/**", "lib/l10n/**", "test/goldens/**", "test/**", "integration_test/**", "scripts/visual-regression.sh"] } } }
+        },
+        {
+          "if": { "properties": { "ticketIdentity": { "const": "BURL-P002" } }, "required": ["ticketIdentity"] },
+          "then": { "properties": { "sourceWriteAllowlist": { "const": ["rust/src/workspace/**", "rust/src/api/**", "rust/Cargo.toml", "rust/Cargo.lock", "test/**"] } } }
+        },
+        {
+          "if": { "properties": { "ticketIdentity": { "const": "BURL-O004" } }, "required": ["ticketIdentity"] },
+          "then": { "properties": { "sourceWriteAllowlist": { "const": ["rust/benches/**", "integration_test/**", "scripts/**", ".github/workflows/**"] } } }
+        },
+        {
+          "if": { "properties": { "ticketIdentity": { "enum": ["BURL-O011", "BURL-O012", "BURL-O013"] } }, "required": ["ticketIdentity"] },
+          "then": { "properties": { "sourceWriteAllowlist": { "const": ["integration_test/**", "scripts/**", ".github/workflows/**"] } } }
         }
       ]
     },
@@ -243,6 +260,7 @@
         "baseSha": { "$ref": "#/$defs/gitSha" },
         "workflowEvent": { "const": "workflow_dispatch" },
         "sourceWriteAllowlist": {
+          "$comment": "The role captures the exact expected array. Semantic aggregation compares every ordered array entry; the conditional constants reject non-Spike omission, widening, substitution, or reordering.",
           "type": "array",
           "minItems": 1,
           "uniqueItems": true,
@@ -253,7 +271,25 @@
         "runIdentity": { "type": "string", "pattern": "^managed:[0-9a-f]{32}$" },
         "artifactNonce": { "type": "string", "pattern": "^[0-9a-f]{32}$" },
         "roleIdentity": { "$ref": "#/$defs/role" }
-      }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "ticketIdentity": { "const": "BURL-G011" } }, "required": ["ticketIdentity"] },
+          "then": { "properties": { "sourceWriteAllowlist": { "const": ["lib/src/design/**", "lib/src/screens/workspace.dart", "lib/src/components/**", "lib/l10n/**", "test/goldens/**", "test/**", "integration_test/**", "scripts/visual-regression.sh"] } } }
+        },
+        {
+          "if": { "properties": { "ticketIdentity": { "const": "BURL-P002" } }, "required": ["ticketIdentity"] },
+          "then": { "properties": { "sourceWriteAllowlist": { "const": ["rust/src/workspace/**", "rust/src/api/**", "rust/Cargo.toml", "rust/Cargo.lock", "test/**"] } } }
+        },
+        {
+          "if": { "properties": { "ticketIdentity": { "const": "BURL-O004" } }, "required": ["ticketIdentity"] },
+          "then": { "properties": { "sourceWriteAllowlist": { "const": ["rust/benches/**", "integration_test/**", "scripts/**", ".github/workflows/**"] } } }
+        },
+        {
+          "if": { "properties": { "ticketIdentity": { "enum": ["BURL-O011", "BURL-O012", "BURL-O013"] } }, "required": ["ticketIdentity"] },
+          "then": { "properties": { "sourceWriteAllowlist": { "const": ["integration_test/**", "scripts/**", ".github/workflows/**"] } } }
+        }
+      ]
     },
     "environment": {
       "$comment": "filesystem is an observed system-API string. Sealing and aggregation must compare the exact non-empty value carried by the candidate and sealed manifests and reject omission, emptiness, or tampering; no hosted-label inference is permitted.",

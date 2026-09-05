@@ -1,4 +1,17 @@
 entries:
+  - version: v2.1.0
+    date: 2026-09-05
+    changed:
+      - "Reconciled every affected physical surface with Architecture v2.1.0: BND-14 owns Provider authorization and eligible private-Remote location, BND-20 owns authenticated Remote history and ref exchange, and BND-21 owns external Object storage through BND-11 transfer and privacy verification. Updated raw contracts, sidecars, ADRs, layout guidance, and live forward-status prose without collapsing those responsibilities."
+      - "Added immutable ordered trusted-anchor source-write allowlists for managed non-Spike tickets BURL-G011, BURL-P002, BURL-O004, BURL-O011, BURL-O012, and BURL-O013. The arrays derive from each active ticket's source scope, exclude its later evidence-only directory, are constructed and reconstructed by run and collect without a synthetic Spike record, and require absence and mismatch fixtures."
+      - "Specified BURL-O004's pre-authentication coordinator as a planned locked Rust package under rust/benches/**, owned by BURL-O004. The trust-anchor contract fixes its manifest, lockfile, ordered source inventory, offline release build, executable identity, two read-only /inputs artifacts, single /output/nightly-prd-meters.json result, trust-anchor rotation, and repository-free one-shot sandbox execution and cleanup."
+      - "Advanced provisional-spikes.toml from raw-contract version 30 to 31 and its identifier to tech-spec-v2.1.0-provisional. ci-role-evidence remains schema version 14, ci-evidence remains schema version 16, and Spike-result remains schema version 20 because no JSON shape changed."
+    fixed:
+      - "Updated ADR-019's live role and aggregate schema inventory to versions 14 and 16, and added BURL-O011, BURL-O012, and BURL-O013 to the human evidence-profile table so it matches the binding TOML and role schema."
+    by: stage
+    upstream:
+      prd: v2.0.5
+      architecture: v2.1.0
   - version: v2.0.17
     date: 2026-09-05
     fixed:

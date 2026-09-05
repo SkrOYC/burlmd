@@ -1,6 +1,6 @@
 artifact: provisional-forward-models.md
 surface: data-model
 flows: [flow-assets, flow-object-store-lifecycle, flow-conflict-resolution, flow-workspace-monitoring, flow-release]
-boundaries: [BND-03, BND-04, BND-06, BND-10, BND-11]
+boundaries: [BND-03, BND-04, BND-06, BND-08, BND-09, BND-10, BND-11, BND-15, BND-16, BND-17, BND-18, BND-19, BND-20, BND-21]
 certainty: assumed
 assumption: "Migrated; not yet exercised by a contract test."
