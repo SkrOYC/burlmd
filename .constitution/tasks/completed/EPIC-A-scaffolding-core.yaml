@@ -17,18 +17,21 @@ tickets:
     scope:
       in: [pubspec.yaml, rust/Cargo.toml, flutter_rust_bridge.yaml]
     verification:
-      command: "flutter_rust_bridge_codegen generate && cargo build --release --manifest-path rust/Cargo.toml && flutter run -d macos"
-      expected: FRB code generation succeeds, the release Rust build succeeds, and the macOS application launches.
+      command: "flutter_rust_bridge_codegen generate && cargo build --manifest-path rust/Cargo.toml && cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze"
+      expected: "Immutable PR #3 merge commit 4a8c2bbcac1583dd3c34d44907125fcfc725c973 records successful FRB generation, the root-safe Rust build and tests, Flutter tests, and Dart analysis."
     stop_conditions: [STOP if FFI generation fails due to missing system dependencies.]
     description: "Set up the standard flutter_rust_bridge monorepo. Clear out the default counter code and establish the rust/src/api directory structure. FRB scaffolds rust_builder/cargokit/ containing vendored third-party Dart that upstream says to ignore; add analyzer.exclude for it in analysis_options.yaml, or the dart analyze pre-commit hook will gate on code this project does not own. The dart format hook is already scoped to lib/ and test/ for the same reason"
     acceptance:
       mode: gherkin
       evidence: |
         Given a fresh clone of the repository
-        When I run `flutter_rust_bridge_codegen generate && cargo build --release --manifest-path rust/Cargo.toml && flutter run -d macos`
+        When I run `flutter_rust_bridge_codegen generate && cargo build --manifest-path rust/Cargo.toml && cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze`
         Then the Dart bindings are successfully generated without errors
-        And the release Rust build succeeds
-        And the macOS application launches
+        And the root-safe Rust build succeeds
+        And the Rust tests pass
+        And Flutter tests pass
+        And Dart analysis passes
+        And immutable PR #3 merge commit `4a8c2bbcac1583dd3c34d44907125fcfc725c973` is the historical evidence for these checks
     flows: []
     certainty: assumed
     status: done

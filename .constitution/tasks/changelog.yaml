@@ -1,4 +1,13 @@
 entries:
+  - version: v3.2.1
+    date: 2026-09-05
+    fixed:
+      - "Corrected completed BURL-A001 to quote the canonical TechSpec v2.0.16 command byte-for-byte: FRB generation, root-safe Cargo build and tests, Flutter tests, and Dart analysis. Replaced the unsupported macOS-launch output and acceptance claim with the immutable PR #3 merge commit 4a8c2bbcac1583dd3c34d44907125fcfc725c973, whose PR body records those verification checks without launch evidence. Preserved BURL-A001's done status, scope, effort, and dependencies; the Epic A graph is unchanged."
+    upstream:
+      prd: v2.0.4
+      architecture: v2.0.5
+      tech-spec: v2.0.16
+    by: patch-lane
   - version: v3.2.0
     date: 2026-09-05
     changed:
