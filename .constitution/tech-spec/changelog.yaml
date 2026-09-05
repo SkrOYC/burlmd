@@ -1,4 +1,13 @@
 entries:
+  - version: v2.0.5
+    date: 2026-09-05
+    changed:
+      - "Removed the Stage 4 migration bridge after the active Tasks graph adopted canonical N and O ticket identities. Canonical verification records now name their active owners: BURL-O004, BURL-N009, BURL-O006, BURL-O009, BURL-O011, BURL-O012, and BURL-O013."
+      - "Removed the obsolete token-attestation, Linux observer, Linux meter, Linux visual, managed-packaging, and pre-replan AppImage/installed-matrix compatibility command aliases. Retained canonical BURL-K009, BURL-G011, BURL-H009, BURL-O001, BURL-O004, BURL-O006, BURL-O011, BURL-O012, and BURL-O013 commands and live lower-level role commands required by current profiles."
+    by: patch-lane
+    upstream:
+      prd: v2.0.1
+      architecture: v2.0.2
   - version: v2.0.4
     date: 2026-09-04
     changed:
