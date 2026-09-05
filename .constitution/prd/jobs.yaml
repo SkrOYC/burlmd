@@ -39,21 +39,21 @@ jobs:
     statement: "Keep Notes up to date across devices automatically through a private Remote, tolerating long offline periods and never gating local writing on a credential"
     priority: P0
     certainty: assumed
-    assumption: "The vision names this job, but no delivered capability performs Remote synchronization; the whole synchronization capability group is still planned work in Epics K and L."
+    assumption: "No delivered evidence demonstrates automatic Remote synchronization across devices or after long offline periods."
   - id: JOB-05
     legacy_id: Retain ownership
     actor: Writer
     statement: "Keep every Note as a portable file that outlives the application, recover an earlier version of a Note, and produce a diagnostics report without any content leaving the device"
     priority: P0
     certainty: assumed
-    assumption: "Open Knowledge Format conformance is delivered, but Export, version restore, and Diagnostics Export are planned work in Epics G and J, so the job is not yet finishable end to end."
+    assumption: "Open Knowledge Format conformance is delivered, but no evidence demonstrates Export, Version restore, and Diagnostics Export end to end."
   - id: JOB-06
     legacy_id: Resolve smoothly
     actor: Writer
     statement: "Reconcile concurrent offline edits without hand-editing conflict markers, duplicated Notes, or an all-or-nothing choice"
     priority: P0
     certainty: assumed
-    assumption: "No reconciliation capability is delivered; the Suggestion, Lifecycle Decision, and Asset Decision model exists only as specification until Epic L is built."
+    assumption: "No delivered evidence demonstrates concurrent-edit reconciliation through Suggestions, Lifecycle Decisions, and Asset Decisions."
   - id: JOB-07
     legacy_id: Stay machine-readable
     actor: Agent
@@ -67,7 +67,7 @@ jobs:
     statement: "Include images in Notes without putting large binary payloads in Note history and without losing offline access to the assets still in use"
     priority: P0
     certainty: assumed
-    assumption: "Image import and the hybrid Local Asset Store and Object Store model are specified but not built; Epic I owns the work and its asset Spike has not reported."
+    assumption: "No delivered evidence demonstrates image import, offline availability through the Local Asset Store, or Object synchronization through the Object Store."
   - id: JOB-09
     legacy_id: Install confidently
     actor: Writer

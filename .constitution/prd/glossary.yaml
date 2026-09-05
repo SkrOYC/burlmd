@@ -1,6 +1,6 @@
 terms:
   - term: Writer
-    definition: "The primary person who creates, organizes, and synchronizes knowledge through burlmd. Synonym Author was removed from the banned list because .constitution/tech-spec/data-models/okf-frontmatter.schema.json uses it in its ordinary sense."
+    definition: "The primary person who creates, organizes, and synchronizes knowledge through burlmd"
     do_not_use: [User (when the Writer role is intended), Customer]
   - term: Agent
     definition: An automated guest that the Writer authorizes to read or write Workspace files. burlmd remains the authority for Workspace semantics
@@ -27,7 +27,7 @@ terms:
     definition: "An external service through which the Writer authorizes, selects, provisions, and uses a Remote"
     do_not_use: []
   - term: Suggestion
-    definition: A persistent inline decision for resolving a concurrent content change without exposing raw conflict markers. Synonym Merge was removed from the banned list because rust/src/api/ffi_api.rs uses it in its ordinary sense. Synonym Diff was removed from the banned list because .constitution/tech-spec/contracts/ci-role-evidence.schema.json uses it in its ordinary sense.
+    definition: A persistent inline decision for resolving a concurrent content change without exposing raw conflict markers
     do_not_use: [Conflict (as a synonym for Suggestion), Fork]
   - term: Lifecycle Decision
     definition: "A required Writer choice that resolves a conflicting add, delete, rename, move, Directory, type, or path-identity outcome. Delete-versus-edit remains a Suggestion instead"
@@ -54,10 +54,10 @@ terms:
     definition: "The guided, one-time migration of non-conflicting Notes from a previous local Workspace into a freshly connected one, with explicit resolution of every identity collision"
     do_not_use: [Import (as a synonym)]
   - term: Diagnostics Export
-    definition: "A Writer-produced export describing recent application behavior — errors, retries, failures — with Note content excluded. Synonym Telemetry was removed from the banned list because .constitution/tech-spec/contracts/ffi_api.rs uses it in its ordinary sense."
+    definition: "A Writer-produced export describing recent application errors, retries, and failures with Note content excluded"
     do_not_use: [Log dump, Crash report]
   - term: Version
-    definition: A recoverable past state of one Note in local history. Synonym Revision was removed from the banned list because rust/src/api/ffi_api.rs uses it in its ordinary sense. Synonym Snapshot was removed from the banned list because rust/src/api/ffi_api.rs uses it in its ordinary sense. Synonym Backup was removed from the banned list because .constitution/tech-spec/contracts/provisional-spikes.toml uses it in its ordinary sense.
+    definition: A recoverable past state of one Note in local history
     do_not_use: []
   - term: Asset
     definition: "Non-Note content that a Note references and presents to the Writer, such as an image"
