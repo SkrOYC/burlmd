@@ -81,6 +81,8 @@ tickets:
         .constitution/evidence/BURL-K009/, omits either GitHub App artifact or
         manifest.yaml with their byte counts and SHA-256 digests, or lacks
         independent review and merge.
+      - STOP if work would include embedding a client secret, GitHub App private
+        key, or installation-token minting authority; don't expand this ticket.
     description: Register the project-owned GitHub App through the administrator
       runbook, publish its installation URL, version its repository and account
       permissions, enable device flow and expiring user tokens, and inject the
@@ -138,6 +140,8 @@ tickets:
     stop_conditions:
       - STOP if implementation needs an embedded client secret, App private key,
         callback listener, or automated browser approval.
+      - STOP if work would include an OAuth redirect listener, client secret,
+        GitHub App private key, or GitLab; don't expand this ticket.
     description: Implement the accepted GitHub App device-code request and polling
       contract, expose verification URI/code and typed progress, and remove the
       old PKCE redirect/client-secret path. Treat both expired_token and
@@ -185,6 +189,8 @@ tickets:
     stop_conditions:
       - STOP if tokens transit persistent Dart state, logs, diagnostics, Git
         config, a remote URL, or Workspace files.
+      - STOP if work would include Workspace attachment or Git remote
+        configuration; don't expand this ticket.
     description: Store expiring access/refresh tokens only in Platform secure
       storage, serialize refresh, atomically rotate the pair before expiry or
       after one authenticated 401, replay the failed operation at most once,
@@ -238,6 +244,8 @@ tickets:
     stop_conditions:
       - STOP if repository privacy, emptiness, App installation coverage,
         Contents write, or required Administration permission isn't established.
+      - STOP if work would include public repositories or non-GitHub Providers;
+        don't expand this ticket.
     description: List App installations and accessible repositories, select an
       eligible private empty repository or provision one privately, explain
       Administration write, and pause until the installation covers a new
@@ -283,6 +291,8 @@ tickets:
       - STOP if any commit reachable from a local publication ref contains
         `.github/workflows/**`; keep the Workspace local and offer Consolidation
         into a clean Workspace.
+      - STOP if work would include reconciliation against a populated unrelated
+        repository; don't expand this ticket.
     description: Recheck private/empty eligibility, Object readiness, and the
       complete local publication closure, then enter the connection Preparing
       state. Refuse workflow-bearing history without requesting Workflows

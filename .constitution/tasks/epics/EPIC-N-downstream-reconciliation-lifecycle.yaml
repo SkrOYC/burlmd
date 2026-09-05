@@ -75,6 +75,8 @@ tickets:
     stop_conditions:
       - STOP if resolving one Suggestion implicitly resolves another or if UI
         owns conflict source.
+      - STOP if work would include same-device external-change decisions; don't
+        expand this ticket.
     description: Render canonical Suggestions inline and support independent
       accept-local, accept-incoming, accept-both, and custom source replacement
       while retaining unresolved siblings through history and sync
@@ -129,6 +131,8 @@ tickets:
       - STOP if a Remote-detached Workspace with prior published history
         attempts replacement migration; reconnect the exact prior Remote for
         coordinated migration or remain in `LocalWithObjectStore`.
+      - STOP if work would include credential rotation or S3-only Workspaces;
+        don't expand this ticket.
     description: Route the replacement through the complete BURL-I004 private-store
       validation before publishing migration intent or copying any Object.
       Publish a durable migration intent with non-secret old/new store
@@ -201,6 +205,9 @@ tickets:
         published Remote refs immediately before closure computation.
       - STOP if `LocalWithObjectStore` can issue readiness before reconnecting
         the exact prior Remote.
+      - STOP if work would include Remote or Object Store attachment mutation
+        owned by BURL-N007, or S3-only Workspace operation; don't expand this
+        ticket.
     description: Require an attached, authenticated Remote for full-local
       preparation. A Workspace in LocalWithObjectStore first reconnects the
       exact prior Remote. Then re-enumerate every published Remote ref, compute
@@ -260,6 +267,8 @@ tickets:
       - STOP if published history is incomplete, any Protected Object exists,
         the enumerated revision has advanced, or Object Store detach can alter
         Remote attachment/history.
+      - STOP if work would include full-local Remote detach owned by BURL-N003
+        and BURL-N007; don't expand this ticket.
     description: Enumerate every Protected State through the complete published-ref
       inventory, prove the protected Object set is empty at compare-and-swap
       time, remove only the Object Store configuration and local credential,
@@ -304,6 +313,8 @@ tickets:
     stop_conditions:
       - STOP if UI state becomes an authority for Object availability or hides
         an unresolved integrity failure.
+      - STOP if work would include Remote Asset Decisions owned by Epic L;
+        don't expand this ticket.
     description: Integrate progressive availability, recovery, version restore
       rehydration, adoption, and local-only state into authoritative shell
       surfaces and Core handoffs used by Export and Consolidation
@@ -348,6 +359,10 @@ tickets:
         asset-bearing history lacks a verified Object Store configuration, or a
         retained migration fallback can't be credentialed or serviced by an
         already credentialed peer.
+      - STOP if work would include consolidating another archive owned by Epic
+        J; don't expand this ticket.
+      - STOP if work would include choosing or retiring Object Store migration
+        authority owned by BURL-N002; don't expand this ticket.
     description: Authorize, select an accessible private Remote, clone into a safe
       destination, run canonical preflight/bootstrap, configure authoritative
       replacement Object access, and detect any retained old-store fallback
@@ -401,6 +416,8 @@ tickets:
       - STOP if removing the Object Store from `LocalWithObjectStore` can
         proceed without reconnecting the exact prior Remote and obtaining fresh
         authenticated ref/revision-bound readiness from BURL-N003.
+      - STOP if work would include deleting Remote repositories or Object Store
+        buckets; don't expand this ticket.
     description: Keep sign-out credential-only. Offline Remote detachment moves to
       LocalWithObjectStore and retains Object Store configuration. From that
       state, reconnect the exact prior Remote before either resuming publication
@@ -450,6 +467,8 @@ tickets:
     stop_conditions:
       - STOP if authentication gates local writing or UI conflates sign-out with
         detach.
+      - STOP if work would include reconciliation UI owned by BURL-N001; don't
+        expand this ticket.
     description: Present device flow, repository selection/provisioning, Object
       prerequisites, optional prepublication Consolidation, initial attachment,
       second-device authorize/select/clone join, reauthorization, privacy
@@ -508,6 +527,8 @@ tickets:
         .constitution/evidence/BURL-N009/, omits either declared artifact or
         manifest.yaml with their byte counts and SHA-256 digests, or lacks
         independent review and merge.
+      - STOP if work would include fork-originated secret access or automated
+        device-code approval; don't expand this ticket.
     description: Add hermetic protocol tests for every PR, a scheduled live canary
       against dedicated private repositories, and a manual prerelease
       device-authorization runbook with cleanup
@@ -553,6 +574,8 @@ tickets:
     stop_conditions:
       - STOP if pending Suggestions are presented as clean or a paused Decision
         shares the same action model as offline/auth failure.
+      - STOP if work would include string parsing of Core errors or status;
+        don't expand this ticket.
     description: Expose and render typed synchronization states, timestamps, pending
       commits, pending Suggestions, decision pauses, privacy failures, and only
       the recovery actions valid for each
@@ -594,6 +617,8 @@ tickets:
     stop_conditions:
       - STOP if any full-lifecycle path loses local/incoming state, publishes a
         Note before its Objects, or blocks local editing on network state.
+      - STOP if work would include GitLab or resident background services;
+        don't expand this ticket.
     description: Exercise connect, multi-device sync, offline/reconnect,
       content/lifecycle/asset conflicts, unresolved Suggestions, privacy/auth
       failure, crash recovery, shutdown attempt, detach, and reconnect as one

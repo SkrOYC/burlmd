@@ -1,4 +1,26 @@
 entries:
+  - version: v3.1.2
+    date: 2026-09-05
+    changed:
+      - Restored all 82 legacy Out-of-Scope clauses across the 80 active
+        tickets. Literal ownership exclusions remain in scope.out, and product
+        or behavioral boundaries are explicit stop conditions.
+      - Replaced the BURL-O011, BURL-O012, and BURL-O013 compatibility aliases
+        with the canonical managed-evidence commands. Each gate owns its exact
+        evidence directory and requires a later independently reviewed,
+        manifest-backed evidence-only pull request.
+      - Bound BURL-O014 to the three reviewed accepted gate aggregates, their
+        manifests, and one common BURL-O009 release identity. Restored
+        CHANGELOG.md ownership to BURL-O009 and BURL-O014.
+      - Regenerated critical-path.md from the corrected epic records.
+    fixed:
+      - Removed the non-path 0.x value from BURL-O008 scope.out and restored its
+        release boundary as a stop condition.
+    upstream:
+      prd: v2.0.2
+      architecture: v2.0.4
+      tech-spec: v2.0.8
+    by: patch-lane
   - version: v3.1.1
     date: 2026-09-05
     changed:

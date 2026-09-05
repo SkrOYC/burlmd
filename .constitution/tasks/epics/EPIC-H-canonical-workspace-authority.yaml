@@ -96,6 +96,8 @@ tickets:
         except the coordinator output is writable.
       - STOP when the 8-point Spike budget is exhausted; record partial evidence
         without choosing by intuition.
+      - STOP if work touches any repository path outside this ticket's scope or
+        changes production or active specifications; don't expand this ticket.
     description: Compare mdast, Comrak, and complete models derived separately from
       pulldown-cmark 0.12.2 and 0.13.4 using the full canonical-AST contract and
       corpus
@@ -172,6 +174,8 @@ tickets:
         except the coordinator output is writable.
       - STOP when the 8-point Spike budget is exhausted; don't select a
         permanent format from incomplete platform evidence.
+      - STOP if work touches any repository path outside this ticket's scope or
+        changes production or active specifications; don't expand this ticket.
     description: Compare the encoded-title and opaque-component candidates across
       Linux, default macOS, and Windows-compatible rules
     acceptance:
@@ -225,6 +229,8 @@ tickets:
         ticket's physical model; reconcile scope and estimates first.
       - STOP if implementation keeps the old projection as a second
         authoritative AST.
+      - STOP if work would include Flutter rendering or the derived index
+        adapters owned by BURL-H004; don't expand this ticket.
     description: Implement the accepted exhaustive Core document with original
       source, extended Markdown/domain nodes, exact ranges, editable identities,
       conformance state, and targeted splice/reparse coherence
@@ -266,6 +272,8 @@ tickets:
         reviewed in this tranche.
       - STOP if the final FFI projection contract isn't accepted or if Flutter
         gains a second document model.
+      - STOP if work would include whole-tree Markdown serialization on the edit
+        or save path; don't expand this ticket.
     description: Replace the brownfield AstNode authority with adapters from the
       canonical document for Flutter rendering, interaction coordinates, Links,
       search/indexing, and conflict materialization
@@ -306,6 +314,8 @@ tickets:
         merged into its base.
       - STOP if the final TechSpec hasn't accepted BURL-H002 or migration would
         silently choose among collisions.
+      - STOP if work would include the guest repair UI owned by BURL-H008; don't
+        expand this ticket.
     description: Implement canonical Note/Directory/Asset path validation and
       derivation, case-only rename, ghost-Link identity, and a previewable
       atomic migration from delivered title-verbatim paths
@@ -344,6 +354,8 @@ tickets:
         independently reviewed in this tranche.
       - STOP if Persistence, the index, a guest write, or Flutter can override
         Workspace Model authority.
+      - STOP if work would include Object reachability implementation owned by
+        Epic I; don't expand this ticket.
     description: Make one Workspace tree own Directories, canonical identities,
       authoritative Note sessions, lifecycle provenance, decision records, and
       Protected State roots while rejecting symlink/submodule/path escape input
@@ -385,6 +397,8 @@ tickets:
         reviewed in this tranche.
       - STOP if preflight rewrites source, follows unsupported aliases, or
         admits an invalid Note into the editor/index.
+      - STOP if work would include repair mutation owned by BURL-H008; don't
+        expand this ticket.
     description: Scan a selected directory without mutation, include conforming
       Notes, inventory invalid/noncanonical paths and Notes, preserve original
       bytes, and let the Writer exclude items explicitly before adoption
@@ -433,6 +447,8 @@ tickets:
     stop_conditions:
       - STOP if the Writer can't inspect original and proposed bytes or if
         repair changes unrelated content.
+      - STOP if work would include automatic or silent repair; don't expand this
+        ticket.
     description: Produce previewed conformance/path repairs, preserve original
       bytes, apply only confirmed changes as one recoverable lifecycle outcome,
       and retain Exclude as a non-mutating choice
@@ -499,6 +515,8 @@ tickets:
         .constitution/evidence/BURL-H009/, omits managed-evidence.json or
         manifest.yaml with its byte count and SHA-256 digest, or lacks
         independent review and merge.
+      - STOP if work would include authority decisions owned by BURL-H010 or
+        BURL-H011; don't expand this ticket.
     description: Convert Platform filesystem events into debounced candidate
       create/edit/rename/move/delete proposals with fallback polling and
       explicit Rescan recovery
@@ -546,6 +564,8 @@ tickets:
     stop_conditions:
       - STOP if rename provenance is uncertain; route it to a decision rather
         than guessing.
+      - STOP if work would include dirty or invalid decisions owned by
+        BURL-H011; don't expand this ticket.
     description: Validate clean external changes, update the authoritative tree and
       index, record local history, reload clean open Notes, and apply the same
       lifecycle/Link rules as Writer actions
@@ -590,6 +610,8 @@ tickets:
     stop_conditions:
       - STOP if same-device changes become Suggestion nodes or either version is
         discarded before resolution.
+      - STOP if work would include Git Suggestions or Remote reconciliation
+        owned by Epic L; don't expand this ticket.
     description: Pause writes for dirty or invalid external changes, preserve
       last-known-good and guest bytes, offer the valid decisions, compare exact
       revisions, and require renewed input after a guest revision advances
@@ -624,6 +646,8 @@ tickets:
     stop_conditions:
       - STOP if Rescan bypasses live-monitor validation/decision rules or
         discards pending decisions.
+      - STOP if work would include a second authority or alternate conformance
+        path; don't expand this ticket.
     description: Reconcile the delivered Rescan affordance with live observation as
       an explicit recovery path using the same candidate, validation, authority,
       and decision pipeline

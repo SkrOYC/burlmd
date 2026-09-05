@@ -47,6 +47,8 @@ tickets:
     stop_conditions:
       - STOP if Export retires open sessions, reads across revisions, or
         proceeds with an unresolved external-file decision.
+      - STOP if work would include destination serialization owned by BURL-J002
+        and BURL-J003; don't expand this ticket.
     description: Acquire a stable Workspace Export lease, flush every open Note
       through normal durability without closing it, stop on unresolved
       authority, and bind the authoritative Directory set—including empty
@@ -84,6 +86,8 @@ tickets:
     stop_conditions:
       - STOP if any referenced Object is missing/unverified or partial output
         becomes visible at the selected destination.
+      - STOP if work would include HTML output or Publishing; don't expand this
+        ticket.
     description: Hydrate and verify the stable closure into a temporary sibling
       directory, validate the bundle, refuse nonempty destinations, and publish
       only by final atomic rename
@@ -119,6 +123,8 @@ tickets:
     stop_conditions:
       - STOP if archive replacement occurs without confirmation or if extraction
         can't reproduce the verified stable closure.
+      - STOP if work would include Workspace-wide or single-Note HTML export;
+        don't expand this ticket.
     description: Serialize the stable closure into the final .okf Bundle Archive
       contract, verify round-trip completeness, require replacement
       confirmation, and atomically publish from a temporary sibling
@@ -152,6 +158,8 @@ tickets:
     stop_conditions:
       - STOP if planning writes either Workspace or treats unrelated histories
         as mergeable.
+      - STOP if work would include Git history merging or source-Workspace
+        mutation; don't expand this ticket.
     description: Validate a source Workspace, inventory Notes/Assets, identify
       nonconflicting migrations and exact identity collisions, and return a
       stable decision plan without changing either side
@@ -186,6 +194,8 @@ tickets:
     stop_conditions:
       - STOP if the plan inputs changed, a decision is missing, or the source
         Workspace would be modified.
+      - STOP if work would include source-Workspace writes; don't expand this
+        ticket.
     description: Revalidate the plan, migrate nonconflicting Notes and Assets with
       fresh history, apply every explicit collision choice, rewrite affected
       Links, and publish one recoverable destination outcome
@@ -223,6 +233,8 @@ tickets:
     stop_conditions:
       - STOP if the UI presents partial Export output as success or parses error
         strings instead of typed Core state.
+      - STOP if work would include Consolidation UI, HTML output, Publishing, or
+        a history diff viewer; don't expand this ticket.
     description: Add accessible plain-copy and Bundle Archive Export workflows over
       typed Core state, including destination rules, replacement confirmation,
       progress, terminal success, nonconformance reporting, and recoverable
@@ -271,6 +283,8 @@ tickets:
     stop_conditions:
       - STOP if Flutter constructs collision outcomes, mutates the source
         Workspace, or claims success before Core publishes the atomic result.
+      - STOP if work would include Export UI, automatic collision choices, or a
+        history diff viewer; don't expand this ticket.
     description: Present the typed Consolidation plan and explicit collision
       choices, collect Writer decisions accessibly, and surface authoritative
       progress, success, rollback, and retry outcomes. Expose this workflow as

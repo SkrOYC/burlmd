@@ -31,8 +31,16 @@ scope:
     - integration_test/**
     - scripts/**
     - .github/workflows/**
-    - .constitution/reports/**
     - .constitution/evidence/BURL-O004/**
+    - .constitution/evidence/BURL-O011/**
+    - .constitution/evidence/BURL-O011/managed-evidence.json
+    - .constitution/evidence/BURL-O011/manifest.yaml
+    - .constitution/evidence/BURL-O012/**
+    - .constitution/evidence/BURL-O012/managed-evidence.json
+    - .constitution/evidence/BURL-O012/manifest.yaml
+    - .constitution/evidence/BURL-O013/**
+    - .constitution/evidence/BURL-O013/managed-evidence.json
+    - .constitution/evidence/BURL-O013/manifest.yaml
     - .constitution/evidence/BURL-O014/**
     - rust/src/git/**
     - lib/src/providers/**
@@ -48,6 +56,7 @@ scope:
     - rust/src/update/**
     - lib/src/providers/burl_preferences_provider.dart
     - config/github-app.release.toml
+    - CHANGELOG.md
   tech_spec_patchable: []
 estimated_diff_lines: 13200
 tickets:
@@ -104,6 +113,9 @@ tickets:
         major versions.
       - STOP when the 8-point Spike budget is exhausted and leave unsupported
         hosts outside the recommendation.
+      - STOP if work touches any repository path outside this ticket's scope,
+        packages production, or edits active specifications; don't expand this
+        ticket.
     description: Build and install the representative harness as AppImage, tagged
       Nix Flake package, and unsigned Apple Silicon archive across the required
       Linux and macOS matrix. Authenticate managed role evidence through
@@ -182,6 +194,8 @@ tickets:
       - STOP if Note/Asset content, credentials, tokens, signed locations,
         content-derived telemetry, or secret-bearing debug values can enter logs
         or Diagnostics Export.
+      - STOP if work would include automatic telemetry or upload; don't expand
+        this ticket.
     description: Add a rotating best-effort local structured log for
       failures/retries/state decisions and a Writer-created Diagnostics Export
       containing app/schema versions without content, signed locations,
@@ -259,6 +273,8 @@ tickets:
         .constitution/evidence/BURL-O004/, omits managed-evidence.json,
         nightly-prd-meters.json, or manifest.yaml with their byte counts and
         SHA-256 digests, or lacks independent review and merge.
+      - STOP if work would include silently changing PRD thresholds; don't
+        expand this ticket.
     description: Generate the 10,000-Note and editing corpora and measure search,
       UI, open, cold start, idle memory, external changes, capacity, image,
       history health, and synchronization freshness on named profiles
@@ -314,6 +330,9 @@ tickets:
       - STOP if final Stage 3 hasn't accepted the history-health meter and
         threshold after BURL-I001, or if the warning performs destructive
         maintenance automatically.
+      - STOP if work would include automatic history deletion, compaction, or
+        threshold changes outside Product Requirements Evolution; don't expand
+        this ticket.
     description: Measure stored textual and manifest history against the accepted
       health threshold, warn the Writer before the threshold, explain the local
       consequences, and expose only non-destructive inspection and recovery
@@ -364,6 +383,8 @@ tickets:
         or destroys the only usable prior state before success.
       - STOP if unsupported later-version preference or Workspace-snapshot bytes
         are migrated, overwritten, normalized, or discarded.
+      - STOP if work would include downgrade compatibility or unnecessary Note
+        or OKF rewrites; don't expand this ticket.
     description: Version application state, back up affected supported data, migrate
       forward atomically, rebuild derived index state when safer, restore backup
       on failure, and refuse unsupported later versions. Quarantine and preserve
@@ -406,6 +427,8 @@ tickets:
     stop_conditions:
       - STOP if final TechSpec hasn't accepted BURL-O001 or artifact behavior
         depends on ambient Git/runtime libraries outside the accepted baseline.
+      - STOP if work would include Linux ARM64, signing, or self-update; don't
+        expand this ticket.
     description: Package the complete release application, exact Git CLI/runtime,
       native library, Flutter assets, desktop metadata, and licenses as the
       general Linux AppImage
@@ -440,6 +463,8 @@ tickets:
     stop_conditions:
       - STOP if final TechSpec hasn't accepted BURL-O001 or the Flake exposes an
         unverified system.
+      - STOP if work would include systems not verified by CI or Nix-managed
+        self-replacement; don't expand this ticket.
     description: Add a locked Flake that users can import from a release tag in
       NixOS or Home Manager, exposing only verified systems and the complete
       runtime closure
@@ -467,8 +492,6 @@ tickets:
         - .github/workflows/**
         - pubspec.yaml
         - pubspec.lock
-      out:
-        - 0.x
     verification:
       command: flutter build macos --release && git diff --check
       expected: the unsigned Apple Silicon archive is constructed reproducibly with
@@ -479,6 +502,8 @@ tickets:
         owned by BURL-O013.
       - STOP if this construction ticket treats macOS 15 as a performance or
         visual reference.
+      - STOP if work would include Intel macOS, Developer ID signing, or
+        notarization during 0.x; don't expand this ticket.
     description: Construct the complete Apple Silicon application archive with exact
       Git/runtime, native library, Flutter assets, licenses, and unsigned 0.x
       installation disclosure. Installed verification on the two supported macOS
@@ -512,6 +537,7 @@ tickets:
       in:
         - .github/workflows/**
         - scripts/**
+        - CHANGELOG.md
     verification:
       command: Run the accepted release construction and artifact verification
         commands from final TechSpec, then `git diff --check`.
@@ -525,6 +551,9 @@ tickets:
         cryptographically verified GitHub Actions attestation, the attestation
         identity doesn't match the expected repository/workflow/revision, or
         metadata claims an untested system.
+      - STOP if work would include GitHub Release publication, stable-release
+        signing, notarization, or automatic binary replacement; don't expand
+        this ticket.
     description: "Build immutable candidate AppImage and Apple Silicon archives plus
       the release-tagged Flake input and source archive from one revision.
       Generate checksums, licenses, disclosures, and keyless GitHub Actions
@@ -574,6 +603,8 @@ tickets:
     stop_conditions:
       - STOP if update handling mutates the installed application or bypasses
         Nix/package-manager authority.
+      - STOP if work would include downloading or replacing installed binaries;
+        don't expand this ticket.
     description: Check GitHub prerelease metadata according to the stored
       preference, compare compatible 0.x versions, notify once, and open the
       release page for manual installation
@@ -602,21 +633,24 @@ tickets:
         - integration_test/**
         - scripts/**
         - .github/workflows/**
-        - .constitution/reports/**
+        - .constitution/evidence/BURL-O011/**
     verification:
-      command: Run the accepted x86-64 AppImage installed matrix from final TechSpec
-        against the immutable `BURL-O009` candidate on every accepted Linux
-        runtime. Run its common functional, performance, and exact
-        private-headless platform-regression evidence on managed `ubuntu-24.04`,
-        validate the authenticated role and aggregate schemas, then run `git
-        diff --check`.
-      expected: the candidate hash passes the identical release-blocking matrix on
-        every accepted x86-64 Linux runtime
+      command: TRUST_ANCHOR_WORKTREE/scripts/managed-evidence.sh run --ticket BURL-O011 --trust-anchor-sha TRUST_ANCHOR_SHA --source-ref SOURCE_REF --tested-source-sha TESTED_SOURCE_SHA --base-sha BASE_SHA --output EVIDENCE_WORKTREE/.constitution/evidence/BURL-O011/managed-evidence.json && git -C EVIDENCE_WORKTREE diff --check
+      expected: an accepted BURL-O011 aggregate passes the AppImage matrix and a
+        later independently reviewed evidence-only pull request merges the
+        manifest-backed report for the immutable BURL-O009 candidate
     stop_conditions:
-      - STOP if final Stage 3 hasn't replaced the installed AppImage matrix
-        placeholder with exact accepted commands.
       - STOP release on any missing P0 capability, privacy/content leak, failed
         recovery path, artifact mismatch, or PRD Fail threshold.
+      - STOP if work would include waiving a failed P0 feature or PRD Fail
+        threshold; don't expand this ticket.
+      - STOP if the report isn't accepted with the exact BURL-O011 profile, or
+        its manifest doesn't bind the producing command and tested-source
+        commit; don't improvise evidence.
+      - STOP if the evidence-only pull request changes a path outside
+        .constitution/evidence/BURL-O011/, omits managed-evidence.json or
+        manifest.yaml with its byte count and SHA-256 digest, or lacks
+        independent review and merge.
     description: Install the immutable AppImage candidate on every accepted Linux
       runtime and gate it on local editing/session behavior,
       authority/monitoring, Assets/Object Store, Export, connection-time
@@ -637,7 +671,14 @@ tickets:
         signer, tested source, ticket base, build, corpus, run, and artifact
         identity. The matrix connects a local Workspace, enters Consolidation,
         resolves a collision, and proves that initial Remote publication waits
-        for the atomic Consolidation result. Any failure blocks publication.
+        for the atomic Consolidation result. The managed report validates
+        against ci-evidence.schema.json with status accepted, the BURL-O011
+        ticket identity, and the exact role profile. Its manifest validates
+        against evidence-manifest.schema.json, records BURL-O011 and hitl_sil,
+        and binds the report bytes, SHA-256 digest, producing command, and tested
+        source. A later evidence-only pull request changes only
+        .constitution/evidence/BURL-O011/ and must receive independent review
+        and merge before acceptance. Any failure blocks publication.
     flows:
       - flow-release
     certainty: assumed
@@ -657,15 +698,12 @@ tickets:
         - integration_test/**
         - scripts/**
         - .github/workflows/**
-        - .constitution/reports/**
+        - .constitution/evidence/BURL-O012/**
     verification:
-      command: "Run the accepted Nix installed matrix from final TechSpec against the immutable `BURL-O009` Flake candidate on every exposed x86-64 Linux system. To preserve NFC-34 parity, run its complete common functional and performance matrix plus required non-authoritative exact private-headless Linux platform-regression evidence on managed `ubuntu-24.04` through the authenticated `BURL-M003` evidence protocol; that regression result never substitutes for the macOS 26 authoritative product visual baseline. Validate the authenticated role and aggregate schemas, then run `git diff --check`."
-      expected: the candidate revision passes the identical release-blocking matrix
-        through a clean NixOS/Home Manager import, including the complete common
-        functional and performance matrix and required non-authoritative exact
-        private-headless Linux platform-regression evidence on managed
-        `ubuntu-24.04`. The regression preserves NFC-34 parity and never
-        substitutes for the macOS 26 authoritative product visual baseline.
+      command: TRUST_ANCHOR_WORKTREE/scripts/managed-evidence.sh run --ticket BURL-O012 --trust-anchor-sha TRUST_ANCHOR_SHA --source-ref SOURCE_REF --tested-source-sha TESTED_SOURCE_SHA --base-sha BASE_SHA --output EVIDENCE_WORKTREE/.constitution/evidence/BURL-O012/managed-evidence.json && git -C EVIDENCE_WORKTREE diff --check
+      expected: an accepted BURL-O012 aggregate passes the Nix matrix, including
+        required Linux platform-regression evidence, and a later independently
+        reviewed evidence-only pull request merges its manifest-backed report
     stop_conditions:
       - STOP release on any missing P0 capability, privacy/content leak, failed
         recovery path, closure mismatch, or PRD Fail threshold.
@@ -673,6 +711,15 @@ tickets:
         platform regression isn't recorded on managed `ubuntu-24.04`, if it
         substitutes for the macOS 26 authoritative product visual baseline, or
         if the authenticated role or aggregate schema validation fails.
+      - STOP if work would include AppImage or macOS verification, or waiving a
+        failed P0 capability or PRD Fail threshold; don't expand this ticket.
+      - STOP if the report isn't accepted with the exact BURL-O012 profile, or
+        its manifest doesn't bind the producing command and tested-source
+        commit; don't improvise evidence.
+      - STOP if the evidence-only pull request changes a path outside
+        .constitution/evidence/BURL-O012/, omits managed-evidence.json or
+        manifest.yaml with its byte count and SHA-256 digest, or lacks
+        independent review and merge.
     description: Import and install the immutable Flake candidate through clean
       NixOS/Home Manager fixtures and run the same complete application matrix
       without bypassing Nix upgrade authority
@@ -687,7 +734,14 @@ tickets:
         The evidence records the same P0, privacy, meter, integration,
         environment, expected-identity, signer, and artifact-integrity outcomes
         as the AppImage gate. Authenticated role and aggregate schemas validate
-        every result. Any failure blocks publication.
+        every result. The managed report validates against
+        ci-evidence.schema.json with status accepted, the BURL-O012 ticket
+        identity, and the exact role profile. Its manifest validates against
+        evidence-manifest.schema.json, records BURL-O012 and runbook_probe, and
+        binds the report bytes, SHA-256 digest, producing command, and tested
+        source. A later evidence-only pull request changes only
+        .constitution/evidence/BURL-O012/ and must receive independent review
+        and merge before acceptance. Any failure blocks publication.
     flows:
       - flow-release
     certainty: assumed
@@ -707,24 +761,28 @@ tickets:
         - integration_test/**
         - scripts/**
         - .github/workflows/**
-        - .constitution/reports/**
+        - .constitution/evidence/BURL-O013/**
     verification:
-      command: Run the accepted Apple Silicon installed matrix from final TechSpec
-        against the immutable `BURL-O009` archive on managed Apple Silicon
-        `macos-26` and `macos-15`. Run common functional evidence on both,
-        performance and the sole authoritative macOS visual baseline on macOS 26
-        only, validate the authenticated role and aggregate schemas, then run
-        `git diff --check`.
-      expected: one candidate hash passes the common release-blocking matrix on both
-        macOS roles and the performance and visual extensions on macOS 26
+      command: TRUST_ANCHOR_WORKTREE/scripts/managed-evidence.sh run --ticket BURL-O013 --trust-anchor-sha TRUST_ANCHOR_SHA --source-ref SOURCE_REF --tested-source-sha TESTED_SOURCE_SHA --base-sha BASE_SHA --output EVIDENCE_WORKTREE/.constitution/evidence/BURL-O013/managed-evidence.json && git -C EVIDENCE_WORKTREE diff --check
+      expected: an accepted BURL-O013 aggregate passes the common matrix on both
+        macOS roles and the macOS 26 extensions, and a later independently
+        reviewed evidence-only pull request merges its manifest-backed report
     stop_conditions:
-      - STOP if final Stage 3 hasn't replaced the installed macOS matrix
-        placeholder with exact accepted commands.
       - STOP release on any missing P0 capability, privacy/content leak, failed
         recovery path, artifact mismatch, macOS 26 PRD Fail threshold, or
         inaccurate unsigned-install disclosure.
       - STOP if macOS 15 produces performance evidence or creates or updates a
         visual baseline.
+      - STOP if work would include Intel macOS, signing or notarization, or
+        waiving a failed P0 capability or PRD Fail threshold; don't expand this
+        ticket.
+      - STOP if the report isn't accepted with the exact BURL-O013 profile, or
+        its manifest doesn't bind the producing command and tested-source
+        commit; don't improvise evidence.
+      - STOP if the evidence-only pull request changes a path outside
+        .constitution/evidence/BURL-O013/, omits managed-evidence.json or
+        manifest.yaml with its byte count and SHA-256 digest, or lacks
+        independent review and merge.
     description: Query Apple's official stable-version source, record the observed
       two-major pair and timestamp, then install the immutable unsigned archive
       candidate on both managed macOS roles. Run the common application matrix
@@ -738,8 +796,14 @@ tickets:
         signer provenance, and artifact integrity. macOS 26 additionally records
         the PRD meters, verified hosted-GUI geometry, and the one authoritative
         macOS visual baseline. macOS 15 records functional compatibility only.
-        Unsigned installation instructions are accurate. Any required failure
-        blocks publication.
+        The managed report validates against ci-evidence.schema.json with status
+        accepted, the BURL-O013 ticket identity, and the exact role profile. Its
+        manifest validates against evidence-manifest.schema.json, records
+        BURL-O013 and hitl_sil, and binds the report bytes, SHA-256 digest,
+        producing command, and tested source. A later evidence-only pull request
+        changes only .constitution/evidence/BURL-O013/ and must receive
+        independent review and merge before acceptance. Unsigned installation
+        instructions are accurate. Any required failure blocks publication.
     flows:
       - flow-release
     certainty: assumed
@@ -756,33 +820,23 @@ tickets:
     scope:
       in:
         - .github/workflows/**
+        - .constitution/evidence/BURL-O011/managed-evidence.json
+        - .constitution/evidence/BURL-O011/manifest.yaml
+        - .constitution/evidence/BURL-O012/managed-evidence.json
+        - .constitution/evidence/BURL-O012/manifest.yaml
+        - .constitution/evidence/BURL-O013/managed-evidence.json
+        - .constitution/evidence/BURL-O013/manifest.yaml
         - .constitution/evidence/BURL-O014/**
         - config/github-app.release.toml
         - scripts/**
+        - CHANGELOG.md
     verification:
       command: './scripts/attest-github-app-token-expiration.sh --client-id "$BURLMD_GITHUB_APP_CLIENT_ID" --output .constitution/evidence/BURL-O014/github-app-token-expiration-attestation.json && ./scripts/verify-github-app-registration.sh --manifest config/github-app.release.toml --installation-url "$BURLMD_GITHUB_APP_INSTALLATION_URL" --expected-client-id "$BURLMD_GITHUB_APP_CLIENT_ID" --require-device-flow --require-private-repository-permissions --forbid-permission workflows --token-expiration-attestation .constitution/evidence/BURL-O014/github-app-token-expiration-attestation.json --max-attestation-age-hours 24 --output .constitution/evidence/BURL-O014/github-app-registration.json && git diff --check'
-      expected: 'one GitHub 0.x prerelease exposes exactly the gated immutable
-        artifacts, checksums, provenance, compatibility labels, source revision,
-        licenses, and unsigned disclosures. A later evidence-only pull request
-        contains github-app-token-expiration-attestation.json,
-        github-app-registration.json, and manifest.yaml with their byte counts
-        and SHA-256 digests. Original verification detail: Run
-        `./scripts/attest-github-app-token-expiration.sh --client-id
-        "$BURLMD_GITHUB_APP_CLIENT_ID" --output
-        .constitution/evidence/BURL-O014/github-app-token-expiration-attestation.json`,
-        complete the displayed device-flow authorization as the project
-        administrator, then run `./scripts/verify-github-app-registration.sh
-        --manifest config/github-app.release.toml --installation-url
-        "$BURLMD_GITHUB_APP_INSTALLATION_URL" --expected-client-id
-        "$BURLMD_GITHUB_APP_CLIENT_ID" --require-device-flow
-        --require-private-repository-permissions --forbid-permission workflows
-        --token-expiration-attestation
-        .constitution/evidence/BURL-O014/github-app-token-expiration-attestation.json
-        --max-attestation-age-hours 24 --output
-        .constitution/evidence/BURL-O014/github-app-registration.json`; run the accepted
-        GitHub prerelease publication and remote verification commands from
-        final TechSpec for the already-gated candidate hashes; then run `git
-        diff --check`.'
+      expected: one GitHub 0.x prerelease exposes exactly the gated immutable
+        artifacts after BURL-O014 validates only the three independently
+        reviewed manifest-backed gate aggregates and their common BURL-O009
+        release identity. A later evidence-only pull request merges the
+        manifest-backed BURL-O014 registration evidence.
     stop_conditions:
       - STOP if final Stage 3 hasn't replaced the GitHub publication placeholder
         with exact accepted commands.
@@ -804,6 +858,16 @@ tickets:
         no longer matches the gate's recorded two-major pair or if that
         observation is older than the 24-hour freshness window; reconcile the
         packaging contract first when the pair changes.
+      - STOP if any gate input comes from .constitution/reports, an ephemeral or
+        unmanifested file, or a pull request without independent review and
+        merge; don't improvise evidence.
+      - STOP if the three accepted gate reports are incomplete, rejected, bind
+        different BURL-O009 release identities or tested-source SHAs, use the
+        wrong ticket identity or profile, or lack producing-command and
+        tested-source bindings.
+      - STOP if work would include rebuilding candidates during publication,
+        stable signing or notarization, or automatic binary replacement; don't
+        expand this ticket.
     description: Immediately before publication, rerun the BURL-K009 GitHub App
       registration and device-flow verification with fresh
       administrator-approved token-expiration evidence no older than the 24-hour
@@ -816,8 +880,16 @@ tickets:
       prerelease without rebuilding
     acceptance:
       mode: runbook_probe
-      evidence: "Remote verification matches every published byte and Flake revision
-        to the three gate reports and verifies each GitHub Actions attestation
+      evidence: "BURL-O014 consumes only the BURL-O011, BURL-O012, and BURL-O013
+        managed reports and manifests after their independently reviewed
+        evidence-only pull requests merge. Each manifest validates against
+        evidence-manifest.schema.json and binds the report's exact byte count,
+        SHA-256 digest, producing command, and tested-source commit. Each report
+        validates against ci-evidence.schema.json with status accepted, its
+        matching ticket identity, and its exact profile. All three reports bind
+        the same immutable BURL-O009 release identity and tested-source SHA.
+        Remote verification matches every published byte and Flake revision to
+        those three gate reports and verifies each GitHub Actions attestation
         against the accepted GitHub/Sigstore issuer, `SkrOYC/burlmd`, release
         workflow, release ref, source revision, and subject identity. Every
         GitHub REST publication and verification fixture asserts `Accept:

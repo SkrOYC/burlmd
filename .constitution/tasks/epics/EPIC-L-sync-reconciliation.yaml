@@ -81,6 +81,8 @@ tickets:
         the authoritative worktree, or executes repository-controlled behavior.
       - STOP when the 8-point Spike budget is exhausted and report uncovered
         conflict classes.
+      - STOP if work touches any repository path outside this ticket's scope or
+        changes production or active specifications; don't expand this ticket.
     description: Compare merge-tree, temporary-index plumbing, and isolated-worktree
       porcelain across the complete Git corpus and fault matrix
     acceptance:
@@ -133,6 +135,8 @@ tickets:
     stop_conditions:
       - STOP if final TechSpec hasn't accepted BURL-L001 or any analysis path
         uses ambient/version-unchecked Git.
+      - STOP if work would include applying Writer decisions; don't expand this
+        ticket.
     description: Wrap the accepted version-locked Git protocol in typed records for
       exact base/local/incoming commits, paths, stages, tentative trees,
       Suggestions, Lifecycle Decisions, Asset Decisions, and unsupported entries
@@ -178,6 +182,8 @@ tickets:
       - STOP before push if any commit reachable from a local publication ref
         contains `.github/workflows/**`; preserve durable intent and offer
         Consolidation into a clean Workspace.
+      - STOP if work would include a resident daemon or operating-system
+        background service; don't expand this ticket.
     description: Wire commit activity and application lifecycle into durable
       fetch/analyze/reconcile/push scheduling, retry/backoff,
       authorization/privacy pauses, workflow-history refusal, and one bounded
@@ -224,6 +230,8 @@ tickets:
     stop_conditions:
       - STOP if literal marker text is misclassified, either side is lost, or
         unresolved Suggestions can't live in a valid two-parent merge commit.
+      - STOP if work would include raw conflict-marker UI; don't expand this
+        ticket.
     description: Convert source-backed Markdown content conflicts into independently
       resolvable canonical AST Suggestions, preserve all three variants, and
       materialize a valid merge tree that can continue syncing while Suggestions
@@ -262,6 +270,8 @@ tickets:
     stop_conditions:
       - STOP if uncertain guest rename provenance is accepted automatically or
         local editing/history is blocked while sync pauses.
+      - STOP if work would include Content Suggestions or Asset Decisions;
+        don't expand this ticket.
     description: Persist and present explicit decisions for
       add/delete/rename/move/Directory/type/path-identity conflicts, preserve
       candidates, pause Workspace sync, and apply one validated lifecycle
@@ -300,6 +310,8 @@ tickets:
     stop_conditions:
       - STOP if either byte candidate is discarded before decision or a chosen
         Object isn't verified locally and remotely before resume.
+      - STOP if work would include silent binary merge or reference deletion;
+        don't expand this ticket.
     description: Persist and present Asset Decisions for conflicting bytes,
       references, or availability; preserve every candidate Object; coordinate
       recovery and Object publication; and pause only affected Workspace
@@ -340,6 +352,8 @@ tickets:
     stop_conditions:
       - STOP if a decision can apply to different commit/tree identities than
         the Writer reviewed.
+      - STOP if work would include force-updating a branch after it advances;
+        don't expand this ticket.
     description: Persist base/local/incoming/tentative identities and decisions
       before input, recover them after crash, CAS the branch from recorded
       local, recompute after advancement, and require renewed input for changed
@@ -381,6 +395,8 @@ tickets:
       - STOP and mark Remote authority incomplete if advertisement or quarantine
         work exceeds 100,000 refs, 16 MiB of advertised-ref bytes, 2 GiB of
         cumulative fetched data, or 30 minutes of wall-clock time.
+      - STOP if work would include reflog-only or non-advertised
+        Provider-internal refs as Protected State; don't expand this ticket.
     description: Run unfiltered git ls-remote --refs against the attached Remote and
       stream-parse every advertised refs/* entry under explicit count and byte
       limits. Fetch each Object ID into an isolated, bounded, no-prune temporary
@@ -438,6 +454,8 @@ tickets:
     stop_conditions:
       - STOP if edited content becomes only a structural decision or deletion
         wins without explicit confirmation.
+      - STOP if work would include automatic deletion victory; don't expand
+        this ticket.
     description: Restore the edited Note, represent the content difference as a
       Suggestion, preserve both outcomes, and require explicit confirmation
       before deletion wins
