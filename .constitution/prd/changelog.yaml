@@ -1,4 +1,11 @@
 entries:
+  - version: v2.0.3
+    date: 2026-09-05
+    fixed:
+      - "Restored the benchmark reference environments as NFC-37, the fixed scripted editing fixture as NFC-38, and the nightly verification cadence as NFC-39."
+      - "Restored the established PR #11 product baseline in vision.md so downstream work evolves the delivered design, responsive shell, preferences, localization, accessibility, semantics, and visual-evidence foundation instead of replanning it."
+      - "Restored the exact CPU, memory, viewport, refresh-rate, environment-identity, Goal-corpus distribution, editing-fixture, and nightly-cadence requirements lost during structured migration, and made every dependent meter reference its owning constraint."
+    by: patch-lane
   - version: v2.0.2
     date: 2026-09-05
     fixed:

@@ -15,6 +15,12 @@ version: v1.3.7
 
 burlmd is a local-first desktop note-taking application for people who write Markdown by choice. Notes remain plain files in a published open format on the user's disk. A Workspace combines a Directory tree with a knowledge graph of Links. The focused Block exposes its source, and other Blocks render as formatted content. A Workspace works without an account or network connection. An optional private Remote adds multi-device synchronization. burlmd presents content conflicts as Suggestions and gives structural or asset conflicts their own explicit decisions.
 
+## Established product baseline
+
+PR #11 established the design system, responsive shell, preferences surface, localization foundation, keyboard accessibility, semantic labels, and deterministic visual evidence. The repository retains this foundation in `lib/src/design/`, `lib/src/screens/workspace.dart`, `lib/src/providers/burl_preferences_provider.dart`, `lib/l10n/`, `integration_test/`, and `test_driver/`. `REDESIGN.md` preserves the completed visual-redesign record.
+
+Downstream product work must evolve this delivered baseline. It must not schedule a retrospective design epic to recreate it.
+
 ## Jobs to be done
 
 - **Write directly:** Compose in real Markdown without an editor that hides, rewrites, or second-guesses the syntax.
