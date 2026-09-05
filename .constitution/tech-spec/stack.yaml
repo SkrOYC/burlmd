@@ -146,6 +146,14 @@ bill_of_materials:
       ref: rust/Cargo.lock
       date: 2026-09-03
       note: "rust/Cargo.toml declares the exact requirement =0.12.2, not a caret range."
+  - name: pulldown-cmark
+    role: library
+    version: "0.13.4"
+    ecosystem: cargo
+    justification: "Candidate complete Markdown model independently measured by SPK-BURL-H001 against the delivered 0.12.2 splice parser; it is not a replacement pin until that decision evidence is accepted."
+    radar: assess
+    certainty: assumed
+    assumption: "provisional-spikes.toml requires SPK-BURL-H001 to evaluate the 0.13.4 complete model independently of the delivered 0.12.2 parser."
   - name: saphyr
     role: library
     version: "0.0.11"
@@ -249,6 +257,14 @@ bill_of_materials:
     radar: assess
     certainty: assumed
     assumption: "No Object Store client exists today; SPK-BURL-I001 settles the client and the S3 compatibility floor."
+  - name: aws-config
+    role: library
+    version: "1.11.0"
+    ecosystem: cargo
+    justification: "Companion candidate configuration library for aws-sdk-s3 1.144.0 endpoint and path-style configuration in the SPK-BURL-I001 comparison."
+    radar: assess
+    certainty: assumed
+    assumption: "provisional-spikes.toml names aws-sdk-s3 1.144.0 plus aws-config 1.11.0 as one candidate; no Object Store client exists today."
   - name: object_store
     role: library
     version: "0.14.1"

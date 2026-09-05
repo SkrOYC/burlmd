@@ -3,12 +3,12 @@ id: ADR-0018
 status: proposed
 date: 2026-08-26
 certainty: assumed
-assumption: "The packaging decision remains provisional until SPK-BURL-M001 produces accepted evidence and the final Stage 3 evolution settles it."
+assumption: "The packaging decision remains provisional until SPK-BURL-O001 produces accepted evidence and the final Stage 3 evolution settles it."
 ---
 # ADR-018: Installable Unsigned 0.x Desktop Artifacts
 
 **Status:** Proposed; packaging feasibility Spike
-**Decision owner:** SPK-BURL-M001, measured PRD, then final Technical Implementation evolution
+**Decision owner:** SPK-BURL-O001, measured PRD, then final Technical Implementation evolution
 
 ## Context
 
@@ -30,7 +30,7 @@ Every release in this phase is `0.x` until the user changes that policy. GitHub 
 
 ## Evidence required
 
-SPK-BURL-M001 packages a representative harness early. It must verify installed launch, the version-locked Git CLI and runtime, Platform secure storage, file selection, bundled native loading, secret-injection seams, compatible `0.x` prerelease update-channel selection, checksum and provenance metadata layout, absence of emulated chrome, and repeatable release construction. The macOS test constructs the actual deterministic release archive twice, compares archive bytes, safely extracts it, and launches the extracted application on both supported majors; inspecting an unpackaged build directory isn't evidence. It must determine the oldest supportable Linux runtime and named tested distributions for OD-08.
+SPK-BURL-O001 packages a representative harness early. It must verify installed launch, the version-locked Git CLI and runtime, Platform secure storage, file selection, bundled native loading, secret-injection seams, compatible `0.x` prerelease update-channel selection, checksum and provenance metadata layout, absence of emulated chrome, and repeatable release construction. The macOS test constructs the actual deterministic release archive twice, compares archive bytes, safely extracts it, and launches the extracted application on both supported majors; inspecting an unpackaged build directory isn't evidence. It must determine the oldest supportable Linux runtime and named tested distributions for OD-08.
 
 Managed validation runs the ticket-specific profile on the three roles in decision 8. Role-produced bytes validate against `contracts/ci-role-evidence.schema.json`; the enriched coordinator report validates against `contracts/ci-evidence.schema.json`. `BURL-M003` requires common functional, protocol, security, static-analysis, and desktop-integration outcomes on all three roles. Linux also requires isolation and generated-binding outcomes. The bootstrap doesn't require performance, Linux platform-regression, or authoritative macOS visual evidence. AST and Asset Spikes require performance only on Linux and macOS 26. Path and Git Spikes require their filesystem classes. Packaging requires its runtime and repeatable-construction classes. Later shell, benchmark, and release gates retain the PRD performance and visual obligations they explicitly assign.
 
