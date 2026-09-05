@@ -18,9 +18,9 @@ stateDiagram-v2
     ChooseWorkspace --> Active: Open Workspace succeeds
     Active --> Active: Device preference persists outside Workspace
     Active --> Closing: Close tab, switch Workspace, or exit
-    Closing --> Active: Clean close; continue serial batch
-    Closing --> Active: Single replacement warning; continue to target Note
-    Closing --> Partial: Batch or wider operation warning; stop and cancel
+    Closing --> Active: Clean close, continue serial batch
+    Closing --> Active: Single replacement warning, continue to target Note
+    Closing --> Partial: Batch or wider operation warning, stop and cancel
     Closing --> Partial: Close failure
     Partial --> Active: Preserve unprocessed sessions
     Closing --> [*]: Orderly exit completes

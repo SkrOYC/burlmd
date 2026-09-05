@@ -21,7 +21,7 @@ sequenceDiagram
     participant Destination as Export Destination
 
     UI->>Core: Export form and destination
-    Core->>Workspace: Flush every open Note; require resolved guest decisions
+    Core->>Workspace: Flush every open Note, require resolved guest decisions
     Core->>Persist: Pin one stable Workspace revision
     Core->>Workspace: Derive referenced Object closure for pinned revision
     Core->>LocalAssets: Verify every referenced Object
@@ -37,7 +37,7 @@ sequenceDiagram
                 Core->>Destination: Publish complete output atomically
                 Core-->>UI: Export success
             else Destination is nonempty
-                Core-->>UI: Refuse; terminal outcome
+                Core-->>UI: Refuse, terminal outcome
             end
         else Bundle Archive
             alt Replacement is absent or confirmed
@@ -45,11 +45,11 @@ sequenceDiagram
                 Core->>Destination: Publish complete output atomically
                 Core-->>UI: Export success
             else Replacement isn't confirmed
-                Core-->>UI: Refuse; terminal outcome
+                Core-->>UI: Refuse, terminal outcome
             end
         end
     else Object is unavailable or corrupt
-        Core-->>UI: Stop Export and enter Object recovery; terminal outcome
+        Core-->>UI: Stop Export and enter Object recovery, terminal outcome
     end
 ```
 
