@@ -48,7 +48,7 @@ scope:
     - lib/l10n/**
     - .github/workflows/**
     - scripts/**
-    - .constitution/reports/**
+    - .constitution/evidence/BURL-N009/**
     - rust/src/git/**
   tech_spec_patchable: []
 estimated_diff_lines: 11850
@@ -493,22 +493,21 @@ tickets:
         - .github/workflows/**
         - integration_test/**
         - scripts/**
-        - .constitution/reports/**
+        - .constitution/evidence/BURL-N009/**
     verification:
-      command: cargo test --manifest-path rust/Cargo.toml && flutter test && dart
-        analyze && ./scripts/run-private-github-canary.sh --private-remote
-        "$BURLMD_TEST_PRIVATE_REMOTE_URL" --object-endpoint
-        "$BURLMD_TEST_S3_ENDPOINT" --cleanup always --output
-        .constitution/reports/canary-k008.json &&
-        ./scripts/verify-device-authorization-runbook.sh
-        --require-human-approval --output
-        .constitution/reports/device-auth-k008.json && git diff --check
+      command: 'cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && ./scripts/run-private-github-canary.sh --private-remote "$BURLMD_TEST_PRIVATE_REMOTE_URL" --object-endpoint "$BURLMD_TEST_S3_ENDPOINT" --cleanup always --output .constitution/evidence/BURL-N009/canary-n009.json && ./scripts/verify-device-authorization-runbook.sh --require-human-approval --output .constitution/evidence/BURL-N009/device-auth-n009.json && git diff --check'
       expected: hermetic PR tests, scheduled live canary apply/probe/cleanup, and
         manual human-authorized device-flow runbook all pass with isolated
-        secret boundaries
+        secret boundaries. A later evidence-only pull request contains
+        canary-n009.json, device-auth-n009.json, and manifest.yaml with their
+        byte counts and SHA-256 digests.
     stop_conditions:
       - STOP if canary secrets can reach fork workflows or a browser is
         automated to approve device codes.
+      - STOP if the evidence-only pull request changes a path outside
+        .constitution/evidence/BURL-N009/, omits either declared artifact or
+        manifest.yaml with their byte counts and SHA-256 digests, or lacks
+        independent review and merge.
     description: Add hermetic protocol tests for every PR, a scheduled live canary
       against dedicated private repositories, and a manual prerelease
       device-authorization runbook with cleanup
@@ -520,7 +519,11 @@ tickets:
         failure; secret contexts exclude forks; and the manual device-flow gate
         records human authorization without browser automation. Each report ends
         in a declared clean state or identifies the bounded residual for manual
-        cleanup.
+        cleanup. A later evidence-only pull request changes only
+        `.constitution/evidence/BURL-N009/` and includes canary-n009.json,
+        device-auth-n009.json, and manifest.yaml with the byte count and
+        SHA-256 digest for each artifact. Independent review and merge of that
+        manifest-backed pull request are required before acceptance.
     flows:
       - flow-auth-handshake
     certainty: assumed

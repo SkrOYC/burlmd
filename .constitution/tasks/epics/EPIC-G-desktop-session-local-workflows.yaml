@@ -51,6 +51,7 @@ scope:
     - rust/src/markdown/**
     - lib/src/components/editor.dart
     - rust/src/git/operations.rs
+    - .constitution/evidence/BURL-G011/**
   tech_spec_patchable: []
 estimated_diff_lines: 10500
 tickets:
@@ -528,14 +529,17 @@ tickets:
         - test/**
         - integration_test/**
         - scripts/visual-regression.sh
+        - .constitution/evidence/BURL-G011/**
     verification:
       command: TRUST_ANCHOR_WORKTREE/scripts/managed-evidence.sh run --ticket
         BURL-G011 --trust-anchor-sha TRUST_ANCHOR_SHA --source-ref SOURCE_REF
         --tested-source-sha TESTED_SOURCE_SHA --base-sha BASE_SHA --output
         EVIDENCE_WORKTREE/.constitution/evidence/BURL-G011/managed-evidence.json
         && git -C EVIDENCE_WORKTREE diff --check
-      expected: "exit 0 with the local feature matrix and reviewed visual evidence
-        passing Original verification detail: `ubuntu-24.04`: `cargo test
+      expected: "exit 0 with the local feature matrix, reviewed visual evidence, and
+        managed-evidence.json passing. A later evidence-only pull request contains
+        managed-evidence.json and manifest.yaml with its byte count and SHA-256
+        digest. Original verification detail: `ubuntu-24.04`: `cargo test
         --manifest-path rust/Cargo.toml && flutter test && dart analyze &&
         ./scripts/visual-regression.sh shell-g011 --baseline
         test/goldens/shell-g011-linux.png --max-different-pixels 0 && git diff
@@ -554,6 +558,10 @@ tickets:
       - STOP if the final aggregate is rejected, Linux capture can observe the
         Writer's desktop, macOS 26 geometry isn't verified, or macOS 15 creates
         or updates a visual baseline.
+      - STOP if the evidence-only pull request changes a path outside
+        .constitution/evidence/BURL-G011/, omits managed-evidence.json or
+        manifest.yaml with its byte count and SHA-256 digest, or lacks
+        independent review and merge.
     description: Integrate the completed local workflows into the delivered design
       system, finish keyboard/focus/Semantics/localization coverage, and rebuild
       visual evidence after Platform-chrome removal
@@ -573,7 +581,11 @@ tickets:
         Workspace switch, title jump, backlinks, undo/redo, find/replace, and
         history restore. The shell preserves PR #11 design parity without fake
         Platform chrome, unreachable actions, hardcoded Writer-facing copy, or
-        nonauthoritative placeholder state."
+        nonauthoritative placeholder state. A later evidence-only pull request
+        changes only `.constitution/evidence/BURL-G011/` and contains
+        managed-evidence.json plus manifest.yaml with its byte count and SHA-256
+        digest. Independent review and merge of that manifest-backed pull
+        request are required before acceptance."
     flows:
       - flow-desktop-session
       - flow-workspace-navigation
