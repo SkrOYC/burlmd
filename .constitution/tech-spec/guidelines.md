@@ -15,22 +15,37 @@ verification_commands:
     command: "./scripts/smoke-shot.sh harness-selftest && test -s .qa/harness-selftest.png"
     exists: true
   - name: other
-    label: quoted by BURL-B004
+    label: canonical BURL verification for BURL-B004
+    command: cargo build --manifest-path rust/Cargo.toml
+    exists: true
+  - name: other
+    label: "temporary Stage 4 alias: exact old Task command quoted by BURL-B004 and BURL-A001 acceptance; migrate consumers to their root-safe canonical commands"
     command: cargo build
+    exists: false
+    owner: BURL-M003
+  - name: test
+    label: canonical BURL verification for BURL-B007
+    command: "cargo build --manifest-path rust/Cargo.toml && flutter test"
     exists: true
   - name: test
-    label: quoted by BURL-B007
+    label: "temporary Stage 4 alias: exact old Task command quoted by BURL-B007; migrate the consumer to the root-safe canonical command"
     command: "cargo build && flutter test"
-    exists: true
+    exists: false
+    owner: BURL-M003
   - name: format
     label: quoted by BURL-M003
     command: "cargo fmt --manifest-path rust/Cargo.toml -- --check && cargo clippy --workspace --all-targets --all-features --manifest-path rust/Cargo.toml -- -D warnings && cargo test --manifest-path rust/Cargo.toml && dart format --output=none --set-exit-if-changed lib test test_driver integration_test && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ! rg -n '\\[DEBUG-' lib rust test scripts && actionlint && ./scripts/assert-ci-matrix.sh --workflow .github/workflows/ci.yml --require-runner ubuntu-24.04 --require-runner macos-26 --require-runner macos-15 --require-role-schema .constitution/tech-spec/contracts/ci-role-evidence.schema.json --require-aggregate-schema .constitution/tech-spec/contracts/ci-evidence.schema.json && ./scripts/assert-managed-evidence-isolation.sh --contract .constitution/tech-spec/contracts/provisional-spikes.toml --sandbox bubblewrap --expected-version 0.11.2 && git diff --check"
     exists: false
     owner: BURL-M003
   - name: test
-    label: quoted by BURL-A002
-    command: "cargo test --color=always --package rust --lib"
+    label: canonical BURL verification for BURL-A002
+    command: "cargo test --color=always --package rust --lib --manifest-path rust/Cargo.toml"
     exists: true
+  - name: test
+    label: "temporary Stage 4 alias: exact old Task command quoted by BURL-A002; migrate the consumer to the root-safe canonical command"
+    command: "cargo test --color=always --package rust --lib"
+    exists: false
+    owner: BURL-M003
   - name: test
     label: quoted by BURL-F002
     command: "cargo test --lib --manifest-path rust/Cargo.toml && flutter_rust_bridge_codegen generate && flutter test test/components/editor_test.dart test/components/selection_test.dart test/components/lifecycle_actions_test.dart test/components/block_editing_test.dart && BURLMD_SMOKE_F002=1 ./scripts/smoke-shot.sh f002-live-preview && dart analyze && git diff --check && ! rg -n '\\[DEBUG-' lib rust test scripts"
@@ -329,13 +344,23 @@ verification_commands:
     command: "cargo test --manifest-path rust/Cargo.toml workspace::persist -- --list | grep -q ': test' && cargo test --manifest-path rust/Cargo.toml workspace::persist && cargo clippy --manifest-path rust/Cargo.toml --all-targets -- -D warnings"
     exists: true
   - name: test
-    label: "quoted by BURL-B002, BURL-B003"
-    command: "cargo test db::"
+    label: "canonical BURL verification for BURL-B002, BURL-B003"
+    command: "cargo test --manifest-path rust/Cargo.toml db::"
     exists: true
   - name: test
-    label: quoted by BURL-B001
-    command: "cargo test security::"
+    label: "temporary Stage 4 alias: exact old Task command quoted by BURL-B002 and BURL-B003; migrate consumers to the root-safe canonical command"
+    command: "cargo test db::"
+    exists: false
+    owner: BURL-M003
+  - name: test
+    label: canonical BURL verification for BURL-B001
+    command: "cargo test --manifest-path rust/Cargo.toml security::"
     exists: true
+  - name: test
+    label: "temporary Stage 4 alias: exact old Task command quoted by BURL-B001; migrate the consumer to the root-safe canonical command"
+    command: "cargo test security::"
+    exists: false
+    owner: BURL-M003
   - name: other
     label: quoted by BURL-B005
     command: flutter analyze
@@ -345,8 +370,8 @@ verification_commands:
     command: "flutter build macos --release && git diff --check"
     exists: true
   - name: other
-    label: quoted by BURL-A001
-    command: flutter run -d macos
+    label: "canonical BURL verification for BURL-A001: manual macOS launch acceptance"
+    command: "flutter_rust_bridge_codegen generate && cargo build --release --manifest-path rust/Cargo.toml && flutter run -d macos"
     exists: true
   - name: test
     label: quoted by BURL-B006
@@ -404,7 +429,11 @@ verification_commands:
     command: "flutter test test/components/workspace_tree_test.dart && ./scripts/smoke-shot.sh e003-tree"
     exists: true
   - name: other
-    label: quoted by BURL-A003
+    label: canonical BURL verification for BURL-A003
+    command: "flutter_rust_bridge_codegen generate && cargo build --manifest-path rust/Cargo.toml"
+    exists: true
+  - name: other
+    label: "temporary Stage 4 alias: exact old Task command quoted by BURL-A003; migrate the consumer to a root-safe Cargo command"
     command: "flutter_rust_bridge_codegen generate && cargo build"
     exists: false
     owner: BURL-M003
