@@ -1,4 +1,11 @@
 entries:
+  - version: v2.0.5
+    date: 2026-09-05
+    changed:
+      - "Revalidated every Architecture boundary, flow, strategy, resilience, and risk record against PRD v2.0.3 after NFC-37, NFC-38, and NFC-39 were restored. The existing validation roles, isolated environment ownership, captured environment, build, corpus, role, and run identity, and evidence-aggregation boundary already support deterministic reference environments, viewport-bound evidence, the fixed editing fixture, and scheduled non-blocking regression reporting, so no logical topology changed."
+    upstream:
+      prd: v2.0.3
+    by: patch-lane
   - version: v2.0.4
     date: 2026-09-05
     fixed:
