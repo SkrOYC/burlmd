@@ -1,4 +1,17 @@
 entries:
+  - version: v2.0.8
+    date: 2026-09-05
+    changed:
+      - "Replaced the BURL-O011, BURL-O012, and BURL-O013 canonical prose gates with managed-evidence commands that write their aggregate reports only to their respective ticket-owned evidence directories. Each gate now has a complete manifest-backed, later independently reviewed evidence-only integration contract, and BURL-O014 consumes only those verified durable reports before publication."
+      - "Added exact AppImage, Nix, and Apple Silicon release-gate role profiles, identity binding, no-coordinator treatment, source-allowlist entries, and evidence-only outputs while retaining Linux private-headless regression requirements and macOS 26's sole authoritative visual role."
+      - "Advanced the evolved provisional raw-contract identifier from tech-spec-v2.0.3-provisional to tech-spec-v2.0.8-provisional and its schema version from 26 to 27."
+    fixed:
+      - "Retained exactly three explicitly labeled temporary Stage 4 compatibility aliases for the current BURL-O011, BURL-O012, and BURL-O013 Task command strings; canonical commands are the evidence-directory commands and no acceptance evidence belongs in reports/."
+      - "Advanced ci-role-evidence from schema version 11 to 12 and ci-evidence from 13 to 14 because their accepted identity and exact profile sets now bind BURL-O011 and BURL-O013. Spike-result remains version 20 because no Spike contract changed."
+    by: patch-lane
+    upstream:
+      prd: v2.0.2
+      architecture: v2.0.4
   - version: v2.0.7
     date: 2026-09-05
     changed:
