@@ -18,20 +18,10 @@ verification_commands:
     label: canonical BURL verification for BURL-B004
     command: cargo build --manifest-path rust/Cargo.toml
     exists: true
-  - name: other
-    label: "temporary Stage 4 alias: exact old Task command quoted by BURL-B004 and BURL-A001 acceptance; migrate consumers to their root-safe canonical commands"
-    command: cargo build
-    exists: false
-    owner: BURL-M003
   - name: test
     label: canonical BURL verification for BURL-B007
     command: "cargo build --manifest-path rust/Cargo.toml && flutter test"
     exists: true
-  - name: test
-    label: "temporary Stage 4 alias: exact old Task command quoted by BURL-B007; migrate the consumer to the root-safe canonical command"
-    command: "cargo build && flutter test"
-    exists: false
-    owner: BURL-M003
   - name: format
     label: quoted by BURL-M003
     command: "cargo fmt --manifest-path rust/Cargo.toml -- --check && cargo clippy --workspace --all-targets --all-features --manifest-path rust/Cargo.toml -- -D warnings && cargo test --manifest-path rust/Cargo.toml && dart format --output=none --set-exit-if-changed lib test test_driver integration_test && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ! rg -n '\\[DEBUG-' lib rust test scripts && actionlint && ./scripts/assert-ci-matrix.sh --workflow .github/workflows/ci.yml --require-runner ubuntu-24.04 --require-runner macos-26 --require-runner macos-15 --require-role-schema .constitution/tech-spec/contracts/ci-role-evidence.schema.json --require-aggregate-schema .constitution/tech-spec/contracts/ci-evidence.schema.json && ./scripts/assert-managed-evidence-isolation.sh --contract .constitution/tech-spec/contracts/provisional-spikes.toml --sandbox bubblewrap --expected-version 0.11.2 && git diff --check"
@@ -41,11 +31,6 @@ verification_commands:
     label: canonical BURL verification for BURL-A002
     command: "cargo test --color=always --package rust --lib --manifest-path rust/Cargo.toml"
     exists: true
-  - name: test
-    label: "temporary Stage 4 alias: exact old Task command quoted by BURL-A002; migrate the consumer to the root-safe canonical command"
-    command: "cargo test --color=always --package rust --lib"
-    exists: false
-    owner: BURL-M003
   - name: test
     label: quoted by BURL-F002
     command: "cargo test --lib --manifest-path rust/Cargo.toml && flutter_rust_bridge_codegen generate && flutter test test/components/editor_test.dart test/components/selection_test.dart test/components/lifecycle_actions_test.dart test/components/block_editing_test.dart && BURLMD_SMOKE_F002=1 ./scripts/smoke-shot.sh f002-live-preview && dart analyze && git diff --check && ! rg -n '\\[DEBUG-' lib rust test scripts"
@@ -348,19 +333,9 @@ verification_commands:
     command: "cargo test --manifest-path rust/Cargo.toml db::"
     exists: true
   - name: test
-    label: "temporary Stage 4 alias: exact old Task command quoted by BURL-B002 and BURL-B003; migrate consumers to the root-safe canonical command"
-    command: "cargo test db::"
-    exists: false
-    owner: BURL-M003
-  - name: test
     label: canonical BURL verification for BURL-B001
     command: "cargo test --manifest-path rust/Cargo.toml security::"
     exists: true
-  - name: test
-    label: "temporary Stage 4 alias: exact old Task command quoted by BURL-B001; migrate the consumer to the root-safe canonical command"
-    command: "cargo test security::"
-    exists: false
-    owner: BURL-M003
   - name: other
     label: quoted by BURL-B005
     command: flutter analyze
@@ -432,11 +407,6 @@ verification_commands:
     label: canonical BURL verification for BURL-A003
     command: "flutter_rust_bridge_codegen generate && cargo build --manifest-path rust/Cargo.toml"
     exists: true
-  - name: other
-    label: "temporary Stage 4 alias: exact old Task command quoted by BURL-A003; migrate the consumer to a root-safe Cargo command"
-    command: "flutter_rust_bridge_codegen generate && cargo build"
-    exists: false
-    owner: BURL-M003
   - name: other
     label: "quoted by BURL-C001, BURL-C002, BURL-C003, BURL-O006, BURL-O009, BURL-O011, BURL-O012, BURL-O013"
     command: git diff --check
