@@ -237,6 +237,11 @@ verification_commands:
     exists: true
   - name: probe
     label: canonical managed verification for BURL-O004
+    command: "TRUST_ANCHOR_WORKTREE/scripts/managed-evidence.sh run --ticket BURL-O004 --trust-anchor-sha TRUST_ANCHOR_SHA --source-ref SOURCE_REF --tested-source-sha TESTED_SOURCE_SHA --base-sha BASE_SHA --output EVIDENCE_WORKTREE/.constitution/evidence/BURL-O004/managed-evidence.json && git -C EVIDENCE_WORKTREE diff --check"
+    exists: false
+    owner: BURL-O004
+  - name: probe
+    label: temporary Stage 4 compatibility alias for the active BURL-O004 Task command; do not use for acceptance
     command: "TRUST_ANCHOR_WORKTREE/scripts/managed-evidence.sh run --ticket BURL-O004 --trust-anchor-sha TRUST_ANCHOR_SHA --source-ref SOURCE_REF --tested-source-sha TESTED_SOURCE_SHA --base-sha BASE_SHA --output EVIDENCE_WORKTREE/.constitution/evidence/BURL-O004/managed-evidence.json && TRUST_ANCHOR_WORKTREE/scripts/aggregate-prd-meters.sh --require-run linux-reference=EVIDENCE_WORKTREE/.constitution/evidence/BURL-O004/managed-evidence-coordinator/roles/linux-x86_64/nightly-prd-meters-linux.json --require-run macos-reference=EVIDENCE_WORKTREE/.constitution/evidence/BURL-O004/managed-evidence-coordinator/roles/macos-26-arm64/nightly-prd-meters-macos.json --require-same-corpus-hash --require-same-meter-definition-version --output EVIDENCE_WORKTREE/.constitution/evidence/BURL-O004/nightly-prd-meters.json && git -C EVIDENCE_WORKTREE diff --check"
     exists: false
     owner: BURL-O004
@@ -909,7 +914,7 @@ All commands below assume the `devenv` shell (`devenv shell`, or automatic via
 6. **Internationalization readiness (standing standard, same timing):**
    - User-facing strings externalize through Flutter `gen-l10n` from the first screen onward; no new hardcoded UI text lands once Epic E begins.
    - No translation effort is scheduled; this standard exists because retrofitting string extraction across painted screens is a sweep nobody enjoys.
-   - The current repository has **no** `l10n.yaml`, ARB source, or generated localization output despite that standing rule. `BURL-F006` must establish `flutter: generate: true`, `l10n.yaml`, and `lib/l10n/app_en.arb` before it adds completion, Link, or create-offer strings. It runs `flutter pub add "flutter_localizations@{sdk: flutter}" intl@0.20.2`, committing `pubspec.lock`; `intl` `0.20.2` is the direct requirement of pinned Flutter 3.44.3 `flutter_localizations`. Its pinned configuration is `arb-dir: lib/l10n`, `output-dir: lib/l10n/generated`, `output-localization-file: app_localizations.dart`, and imports `package:burlmd/l10n/generated/app_localizations.dart`. `flutter gen-l10n --help` confirms synthetic packages cannot be enabled in this SDK and default output is the ARB directory, so the explicit output directory is required. `lib/l10n/generated/**` is repository-owned generated Dart: refresh it with `flutter gen-l10n` and commit it with its ARB/config change; never hand-edit it.
+   - The repository configures `flutter: generate: true` and `l10n.yaml`, with `lib/l10n/app_en.arb` as the template ARB file. The configuration sets `arb-dir: lib/l10n`, `output-dir: lib/l10n/generated`, and `output-localization-file: app_localizations.dart`; code imports `package:burlmd/l10n/generated/app_localizations.dart`. The committed `lib/l10n/generated/**` files are repository-owned generated Dart. When you change an ARB file or `l10n.yaml`, run `flutter gen-l10n`, commit the regenerated output, and don't edit generated Dart by hand. The BURL-F006 verification command runs `flutter gen-l10n` before tests and `git diff --check`, which verifies that generation leaves no uncommitted output.
 
 ## Persistence lock rules
 
