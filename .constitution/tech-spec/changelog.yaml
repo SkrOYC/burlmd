@@ -1,4 +1,16 @@
 entries:
+  - version: v2.0.14
+    date: 2026-09-05
+    changed:
+      - "Bridged the reviewed planned workspace-authority split without editing Tasks: BURL-H008→BURL-P001, BURL-H009→BURL-P002, BURL-H010→BURL-P003, BURL-H011→BURL-P004, and BURL-H012→BURL-P005. Canonical labels, owners, and normative references now use the P identities while stable implementation artifact names repair-h008, ext-h010, decide-h011, and rescan-h012 remain unchanged."
+      - "Added BURL-P002's canonical managed-evidence command, exact performance role profile, evidence-only integration, manifest binding, declared artifacts, and accepted ticket identity. The current BURL-H009 command and profile remain only as an explicitly labeled temporary Stage 4 compatibility bridge until the active Task migrates."
+      - "Required each managed role to capture a non-empty observed filesystem string, preserve it through sealing and aggregation, and prove it through semantic comparison and tamper checks. ci-role-evidence advances from schema version 12 to 13; ci-evidence advances from 14 to 15 because it embeds role manifests; provisional-spikes.toml advances from raw-contract version 28 to 29. Spike-result remains version 20."
+    deprecated:
+      - "BURL-H009's exact command, role profile, and evidence directory are a temporary Stage 4 compatibility bridge for the current active Task only. Canonical planned acceptance is BURL-P002 at .constitution/evidence/BURL-P002/; remove the bridge when Tasks adopts BURL-P002."
+    by: patch-lane
+    upstream:
+      prd: v2.0.4
+      architecture: v2.0.5
   - version: v2.0.13
     date: 2026-09-05
     changed:
