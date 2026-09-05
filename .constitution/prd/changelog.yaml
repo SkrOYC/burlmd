@@ -1,4 +1,9 @@
 entries:
+  - version: v2.0.4
+    date: 2026-09-05
+    fixed:
+      - "Removed downstream task ownership from JOB-07, NFC-06, NFC-21, and NFC-25 while preserving their product outcomes and assumed certainty for planned or unmeasured observation, validation, repair, and containment."
+    by: patch-lane
   - version: v2.0.3
     date: 2026-09-05
     fixed:

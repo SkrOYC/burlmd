@@ -60,7 +60,7 @@ jobs:
     statement: "Read, traverse, and amend the Workspace on disk against a published specification while burlmd is running, and have burlmd validate and reconcile those changes without silent data loss"
     priority: P0
     certainty: assumed
-    assumption: "burlmd writes conforming Open Knowledge Format bundles today, but live guest-write observation, validation, and the Repair or Exclude decisions are planned work in Epic H."
+    assumption: "burlmd writes conforming Open Knowledge Format bundles. Live guest-write observation, validation, and the Repair or Exclude decisions remain planned and unmeasured."
   - id: JOB-08
     legacy_id: Keep visual context
     actor: Writer

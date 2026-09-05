@@ -64,7 +64,7 @@ constraints:
     stretch: Within 500 milliseconds after the final write in a burst.
     fail: "More than 10 seconds, a missed event, or duplicate history from one burst."
     certainty: assumed
-    assumption: "No live observer exists yet; BURL-H009 builds the observer this meter measures, and its candidate library is still unpinned."
+    assumption: "Live guest-write observation remains planned, and this meter hasn't been measured."
   - id: NFC-07
     legacy_id: Corpus Scale
     class: performance
@@ -219,7 +219,7 @@ constraints:
     goal: "Only conforming guest input enters authoritative state; invalid input preserves both its original bytes and the last known-good authoritative Note without silent repair."
     fail: "Invalid or partial input replaces authoritative state, changes the last known-good Note, triggers silent repair, becomes editable, or loses its original bytes."
     certainty: assumed
-    assumption: "CAP-050 defines the authority boundary, but live guest-write validation and its adversarial acceptance suite are planned in Epic H."
+    assumption: "CAP-050 defines the authority boundary, but live guest-write validation and its adversarial acceptance suite remain planned and unmeasured."
   - id: NFC-22
     legacy_id: Cross-Platform Path Identity
     class: compatibility
@@ -259,7 +259,7 @@ constraints:
     goal: "Every accepted target resolves inside the Workspace boundary, and every unsupported alias or external repository is rejected before access or mutation."
     fail: "Any Workspace-controlled input reads, writes, watches, publishes, or grants access outside the Workspace boundary."
     certainty: assumed
-    assumption: "Containment is a binding boundary across Epics H through L, but the complete adversarial suite hasn't run against all planned surfaces."
+    assumption: "Workspace containment is a binding boundary, but the complete adversarial suite hasn't run against all planned surfaces."
   - id: NFC-26
     legacy_id: Decentralized Storage
     class: security
