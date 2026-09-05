@@ -44,6 +44,7 @@ scope:
     - lib/src/providers/note_providers.dart
     - lib/src/screens/workspace.dart
     - test/screens/workspace_rescan_test.dart
+    - .constitution/evidence/BURL-H009/**
   tech_spec_patchable: []
 estimated_diff_lines: 14000
 tickets:
@@ -460,6 +461,7 @@ tickets:
         - rust/Cargo.toml
         - rust/Cargo.lock
         - test/**
+        - .constitution/evidence/BURL-H009/**
     verification:
       command: TRUST_ANCHOR_WORKTREE/scripts/managed-evidence.sh run --ticket
         BURL-H009 --trust-anchor-sha TRUST_ANCHOR_SHA --source-ref SOURCE_REF
@@ -467,7 +469,9 @@ tickets:
         EVIDENCE_WORKTREE/.constitution/evidence/BURL-H009/managed-evidence.json
         && git -C EVIDENCE_WORKTREE diff --check
       expected: "exit 0 with burst/debounce/fallback and missed-event recovery tests
-        passing Original verification detail: `ubuntu-24.04`: `cargo test
+        passing, plus a managed report. A later evidence-only pull request
+        contains managed-evidence.json and manifest.yaml with its byte count and
+        SHA-256 digest. Original verification detail: `ubuntu-24.04`: `cargo test
         --manifest-path rust/Cargo.toml && cargo clippy --workspace
         --all-targets --manifest-path rust/Cargo.toml -- -D warnings &&
         ./scripts/check-generated-bindings.sh && cargo run --release
@@ -491,6 +495,10 @@ tickets:
       - STOP if managed evidence is rejected or if macOS 15 contributes
         performance evidence.
       - STOP if an event directly mutates authority without Core validation.
+      - STOP if the evidence-only pull request changes a path outside
+        .constitution/evidence/BURL-H009/, omits managed-evidence.json or
+        manifest.yaml with its byte count and SHA-256 digest, or lacks
+        independent review and merge.
     description: Convert Platform filesystem events into debounced candidate
       create/edit/rename/move/delete proposals with fallback polling and
       explicit Rescan recovery
@@ -504,7 +512,11 @@ tickets:
         2-second Goal, with no missed or duplicate history outcome and no direct
         authoritative mutation. macOS 15 proves functional compatibility only.
         Aggregation rejects identity, signer, artifact, image-version, corpus,
-        or role mismatches.
+        or role mismatches. A later evidence-only pull request changes only
+        `.constitution/evidence/BURL-H009/` and contains managed-evidence.json
+        plus manifest.yaml with its byte count and SHA-256 digest. Independent
+        review and merge of that manifest-backed pull request are required
+        before acceptance.
     flows:
       - flow-workspace-monitoring
     certainty: assumed

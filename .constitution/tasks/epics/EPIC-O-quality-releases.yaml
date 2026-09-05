@@ -32,6 +32,8 @@ scope:
     - scripts/**
     - .github/workflows/**
     - .constitution/reports/**
+    - .constitution/evidence/BURL-O004/**
+    - .constitution/evidence/BURL-O014/**
     - rust/src/git/**
     - lib/src/providers/**
     - rust/src/db/**
@@ -207,7 +209,7 @@ tickets:
         - integration_test/**
         - scripts/**
         - .github/workflows/**
-        - .constitution/reports/**
+        - .constitution/evidence/BURL-O004/**
     verification:
       command: TRUST_ANCHOR_WORKTREE/scripts/managed-evidence.sh run --ticket
         BURL-O004 --trust-anchor-sha TRUST_ANCHOR_SHA --source-ref SOURCE_REF
@@ -223,7 +225,10 @@ tickets:
         && git -C EVIDENCE_WORKTREE diff --check
       expected: "deterministic corpus generation succeeds on both managed performance
         roles, macOS 15 functional compatibility passes, and aggregation emits
-        one authenticated machine-readable nonblocking result for every meter
+        one authenticated machine-readable nonblocking result for every meter.
+        A later evidence-only pull request contains managed-evidence.json,
+        nightly-prd-meters.json, and manifest.yaml with the byte count and
+        SHA-256 digest for each artifact.
         Original verification detail: `ubuntu-24.04`: `cargo test
         --manifest-path rust/Cargo.toml && flutter test && dart analyze &&
         ./scripts/bench-prd-meters.sh --all --run-id linux-reference
@@ -250,6 +255,10 @@ tickets:
         Evolution.
       - STOP if macOS 15 contributes a performance meter or managed evidence
         lacks authenticated expected-identity and artifact verification.
+      - STOP if the evidence-only pull request changes a path outside
+        .constitution/evidence/BURL-O004/, omits managed-evidence.json,
+        nightly-prd-meters.json, or manifest.yaml with their byte counts and
+        SHA-256 digests, or lacks independent review and merge.
     description: Generate the 10,000-Note and editing corpora and measure search,
       UI, open, cold start, idle memory, external changes, capacity, image,
       history health, and synchronization freshness on named profiles
@@ -273,7 +282,11 @@ tickets:
         GitHub-hosted role signer, bundle integrity, exact evidence classes,
         corpus, and meter definitions. The nightly job is nonblocking during
         `0.x` but produces a durable regression report; release gates consume
-        the same definitions.
+        the same definitions. A later evidence-only pull request changes only
+        `.constitution/evidence/BURL-O004/` and contains managed-evidence.json,
+        nightly-prd-meters.json, and manifest.yaml with the byte count and
+        SHA-256 digest for each artifact. Independent review and merge of that
+        manifest-backed pull request are required before acceptance.
     flows:
       - flow-release
     certainty: assumed
@@ -646,18 +659,20 @@ tickets:
         - .github/workflows/**
         - .constitution/reports/**
     verification:
-      command: Run the accepted Nix installed matrix from final TechSpec against the
-        immutable `BURL-O009` Flake candidate on every exposed x86-64 Linux
-        system. Run the managed `ubuntu-24.04` functional and performance roles
-        through the authenticated `BURL-M003` evidence protocol, then run `git
-        diff --check`.
+      command: "Run the accepted Nix installed matrix from final TechSpec against the immutable `BURL-O009` Flake candidate on every exposed x86-64 Linux system. To preserve NFC-34 parity, run its complete common functional and performance matrix plus required non-authoritative exact private-headless Linux platform-regression evidence on managed `ubuntu-24.04` through the authenticated `BURL-M003` evidence protocol; that regression result never substitutes for the macOS 26 authoritative product visual baseline. Validate the authenticated role and aggregate schemas, then run `git diff --check`."
       expected: the candidate revision passes the identical release-blocking matrix
-        through a clean NixOS/Home Manager import
+        through a clean NixOS/Home Manager import, including the complete common
+        functional and performance matrix and required non-authoritative exact
+        private-headless Linux platform-regression evidence on managed
+        `ubuntu-24.04`. The regression preserves NFC-34 parity and never
+        substitutes for the macOS 26 authoritative product visual baseline.
     stop_conditions:
-      - STOP if final Stage 3 hasn't replaced the installed Nix matrix
-        placeholder with exact accepted commands.
       - STOP release on any missing P0 capability, privacy/content leak, failed
         recovery path, closure mismatch, or PRD Fail threshold.
+      - STOP if the required non-authoritative exact private-headless Linux
+        platform regression isn't recorded on managed `ubuntu-24.04`, if it
+        substitutes for the macOS 26 authoritative product visual baseline, or
+        if the authenticated role or aggregate schema validation fails.
     description: Import and install the immutable Flake candidate through clean
       NixOS/Home Manager fixtures and run the same complete application matrix
       without bypassing Nix upgrade authority
@@ -665,9 +680,14 @@ tickets:
       mode: runbook_probe
       evidence: Clean evaluation, build, import, install, and matrix probes reproduce
         the candidate revision and closure. The managed Linux evidence records
-        the same P0, privacy, meter, integration, environment,
-        expected-identity, signer, and artifact-integrity outcomes as the
-        AppImage gate. Any failure blocks publication.
+        the complete common functional and performance matrix, plus the exact
+        non-authoritative private-headless Linux platform regression on managed
+        `ubuntu-24.04`. That regression preserves NFC-34 parity and never
+        substitutes for the macOS 26 authoritative product visual baseline.
+        The evidence records the same P0, privacy, meter, integration,
+        environment, expected-identity, signer, and artifact-integrity outcomes
+        as the AppImage gate. Authenticated role and aggregate schemas validate
+        every result. Any failure blocks publication.
     flows:
       - flow-release
     certainty: assumed
@@ -736,28 +756,20 @@ tickets:
     scope:
       in:
         - .github/workflows/**
-        - .constitution/reports/**
+        - .constitution/evidence/BURL-O014/**
         - config/github-app.release.toml
         - scripts/**
     verification:
-      command: ./scripts/attest-github-app-token-expiration.sh --client-id
-        "$BURLMD_GITHUB_APP_CLIENT_ID" --output
-        .constitution/reports/github-app-token-expiration-attestation.json &&
-        ./scripts/verify-github-app-registration.sh --manifest
-        config/github-app.release.toml --installation-url
-        "$BURLMD_GITHUB_APP_INSTALLATION_URL" --expected-client-id
-        "$BURLMD_GITHUB_APP_CLIENT_ID" --require-device-flow
-        --require-private-repository-permissions --forbid-permission workflows
-        --token-expiration-attestation
-        .constitution/reports/github-app-token-expiration-attestation.json
-        --max-attestation-age-hours 24 --output
-        .constitution/reports/github-app-registration.json && git diff --check
+      command: './scripts/attest-github-app-token-expiration.sh --client-id "$BURLMD_GITHUB_APP_CLIENT_ID" --output .constitution/evidence/BURL-O014/github-app-token-expiration-attestation.json && ./scripts/verify-github-app-registration.sh --manifest config/github-app.release.toml --installation-url "$BURLMD_GITHUB_APP_INSTALLATION_URL" --expected-client-id "$BURLMD_GITHUB_APP_CLIENT_ID" --require-device-flow --require-private-repository-permissions --forbid-permission workflows --token-expiration-attestation .constitution/evidence/BURL-O014/github-app-token-expiration-attestation.json --max-attestation-age-hours 24 --output .constitution/evidence/BURL-O014/github-app-registration.json && git diff --check'
       expected: 'one GitHub 0.x prerelease exposes exactly the gated immutable
         artifacts, checksums, provenance, compatibility labels, source revision,
-        licenses, and unsigned disclosures Original verification detail: Run
+        licenses, and unsigned disclosures. A later evidence-only pull request
+        contains github-app-token-expiration-attestation.json,
+        github-app-registration.json, and manifest.yaml with their byte counts
+        and SHA-256 digests. Original verification detail: Run
         `./scripts/attest-github-app-token-expiration.sh --client-id
         "$BURLMD_GITHUB_APP_CLIENT_ID" --output
-        .constitution/reports/github-app-token-expiration-attestation.json`,
+        .constitution/evidence/BURL-O014/github-app-token-expiration-attestation.json`,
         complete the displayed device-flow authorization as the project
         administrator, then run `./scripts/verify-github-app-registration.sh
         --manifest config/github-app.release.toml --installation-url
@@ -765,9 +777,9 @@ tickets:
         "$BURLMD_GITHUB_APP_CLIENT_ID" --require-device-flow
         --require-private-repository-permissions --forbid-permission workflows
         --token-expiration-attestation
-        .constitution/reports/github-app-token-expiration-attestation.json
+        .constitution/evidence/BURL-O014/github-app-token-expiration-attestation.json
         --max-attestation-age-hours 24 --output
-        .constitution/reports/github-app-registration.json`; run the accepted
+        .constitution/evidence/BURL-O014/github-app-registration.json`; run the accepted
         GitHub prerelease publication and remote verification commands from
         final TechSpec for the already-gated candidate hashes; then run `git
         diff --check`.'
@@ -784,6 +796,10 @@ tickets:
         24-hour freshness window, or the App's client ID, installation URL,
         device-flow setting, private-repository permissions, or absence of
         Workflows permission has drifted.
+      - STOP if the evidence-only pull request changes a path outside
+        .constitution/evidence/BURL-O014/, omits either GitHub App artifact or
+        manifest.yaml with their byte counts and SHA-256 digests, or lacks
+        independent review and merge.
       - STOP and return to BURL-O013 if Apple's official stable-version source
         no longer matches the gate's recorded two-major pair or if that
         observation is older than the 24-hour freshness window; reconcile the
@@ -810,7 +826,13 @@ tickets:
         report, its administrator-approved token-expiration attestation age, the
         fresh official Apple version observation, and the matching BURL-O013
         pair. The release is marked prerelease, compatibility and unsigned
-        disclosures are accurate, and no publication step rebuilt an artifact."
+        disclosures are accurate, and no publication step rebuilt an artifact.
+        A later evidence-only pull request changes only
+        `.constitution/evidence/BURL-O014/` and contains
+        `github-app-token-expiration-attestation.json`,
+        `github-app-registration.json`, and `manifest.yaml` with the byte count
+        and SHA-256 digest for each artifact. Independent review and merge of
+        that manifest-backed pull request are required before acceptance."
     flows:
       - flow-release
     certainty: assumed

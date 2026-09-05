@@ -18,7 +18,7 @@ scope:
     - scripts/attest-github-app-token-expiration.sh
     - scripts/verify-github-app-registration.sh
     - .github/workflows/**
-    - .constitution/reports/**
+    - .constitution/evidence/BURL-K009/**
     - rust/src/api/auth.rs
     - rust/src/api/ffi_api.rs
     - lib/src/providers/auth_provider.dart
@@ -48,28 +48,20 @@ tickets:
         - scripts/attest-github-app-token-expiration.sh
         - scripts/verify-github-app-registration.sh
         - .github/workflows/**
-        - .constitution/reports/**
+        - .constitution/evidence/BURL-K009/**
     verification:
-      command: ./scripts/attest-github-app-token-expiration.sh --client-id
-        "$BURLMD_GITHUB_APP_CLIENT_ID" --output
-        .constitution/reports/github-app-token-expiration-attestation.json &&
-        ./scripts/verify-github-app-registration.sh --manifest
-        config/github-app.release.toml --installation-url
-        "$BURLMD_GITHUB_APP_INSTALLATION_URL" --expected-client-id
-        "$BURLMD_GITHUB_APP_CLIENT_ID" --require-device-flow
-        --require-private-repository-permissions --forbid-permission workflows
-        --token-expiration-attestation
-        .constitution/reports/github-app-token-expiration-attestation.json
-        --max-attestation-age-hours 24 --output
-        .constitution/reports/github-app-registration.json && git diff --check
+      command: './scripts/attest-github-app-token-expiration.sh --client-id "$BURLMD_GITHUB_APP_CLIENT_ID" --output .constitution/evidence/BURL-K009/github-app-token-expiration-attestation.json && ./scripts/verify-github-app-registration.sh --manifest config/github-app.release.toml --installation-url "$BURLMD_GITHUB_APP_INSTALLATION_URL" --expected-client-id "$BURLMD_GITHUB_APP_CLIENT_ID" --require-device-flow --require-private-repository-permissions --forbid-permission workflows --token-expiration-attestation .constitution/evidence/BURL-K009/github-app-token-expiration-attestation.json --max-attestation-age-hours 24 --output .constitution/evidence/BURL-K009/github-app-registration.json && git diff --check'
       expected: 'exit 0 with a non-placeholder public client ID, reachable
         installation URL, exact versioned Contents/Administration/implicit
         Metadata permissions, no Workflows permission, required versioned REST
         headers, a successful device-code request, a fresh expiring-token
-        attestation, and a drift-free release report Original verification
-        detail: Run `./scripts/attest-github-app-token-expiration.sh --client-id
+        attestation, and a drift-free release report. A later evidence-only pull
+        request contains github-app-token-expiration-attestation.json,
+        github-app-registration.json, and manifest.yaml with their byte counts
+        and SHA-256 digests. Original verification detail: Run
+        `./scripts/attest-github-app-token-expiration.sh --client-id
         "$BURLMD_GITHUB_APP_CLIENT_ID" --output
-        .constitution/reports/github-app-token-expiration-attestation.json`,
+        .constitution/evidence/BURL-K009/github-app-token-expiration-attestation.json`,
         complete the displayed device-flow authorization as the project
         administrator, then run `./scripts/verify-github-app-registration.sh
         --manifest config/github-app.release.toml --installation-url
@@ -77,14 +69,18 @@ tickets:
         "$BURLMD_GITHUB_APP_CLIENT_ID" --require-device-flow
         --require-private-repository-permissions --forbid-permission workflows
         --token-expiration-attestation
-        .constitution/reports/github-app-token-expiration-attestation.json
+        .constitution/evidence/BURL-K009/github-app-token-expiration-attestation.json
         --max-attestation-age-hours 24 --output
-        .constitution/reports/github-app-registration.json && git diff
+        .constitution/evidence/BURL-K009/github-app-registration.json && git diff
         --check`.'
     stop_conditions:
       - STOP if release configuration uses a placeholder client ID, requires a
         client secret/private key in the binary or CI, omits the public
         installation URL, or differs from the versioned permission manifest.
+      - STOP if the evidence-only pull request changes a path outside
+        .constitution/evidence/BURL-K009/, omits either GitHub App artifact or
+        manifest.yaml with their byte counts and SHA-256 digests, or lacks
+        independent review and merge.
     description: Register the project-owned GitHub App through the administrator
       runbook, publish its installation URL, version its repository and account
       permissions, enable device flow and expiring user tokens, and inject the
@@ -105,7 +101,12 @@ tickets:
         attestation records their presence and lifetimes but never their values,
         securely discards the tokens, and expires after the 24-hour freshness
         window. Missing or stale evidence blocks BURL-K001 and release
-        verification."
+        verification. A later evidence-only pull request changes only
+        `.constitution/evidence/BURL-K009/` and contains
+        `github-app-token-expiration-attestation.json`,
+        `github-app-registration.json`, and `manifest.yaml` with the byte count
+        and SHA-256 digest for each artifact. Independent review and merge of
+        that manifest-backed pull request are required before acceptance."
     flows:
       - flow-auth-handshake
     certainty: assumed

@@ -1,4 +1,24 @@
 entries:
+  - version: v3.1.1
+    date: 2026-09-05
+    changed:
+      - Corrected active and completed ticket verification records against the
+        Stage 3 v2.0.6 commands. BURL-K009, BURL-N009, and BURL-O014 write only
+        their canonical evidence directories. BURL-O012 includes the required
+        non-authoritative Linux platform regression while preserving NFC-34
+        parity. BURL-A001 runs Rust and Flutter checks.
+      - Added manifest-backed, independently reviewed evidence-only acceptance
+        requirements and exact evidence-directory ownership for BURL-G011,
+        BURL-H009, BURL-O004, BURL-K009, BURL-N009, and BURL-O014.
+      - Regenerated critical-path.md from the unchanged epic graph.
+    fixed:
+      - Removed the duplicated migration-date sentence from the historical
+        v0.0.1 entry.
+    upstream:
+      prd: v2.0.2
+      architecture: v2.0.4
+      tech-spec: v2.0.6
+    by: patch-lane
   - version: v3.1.0
     date: 2026-09-05
     changed:
@@ -1016,6 +1036,3 @@ entries:
     added:
       - History before migration; the markdown changelog is in git
     by: migrate
-    changed:
-      - "Migration date retained for v0.0.1: no master commit introducing this
-        version string was found."
