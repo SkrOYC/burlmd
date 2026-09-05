@@ -231,7 +231,10 @@ decisions:
       - name: Split Epic I into a core asset epic and an Object Store lifecycle epic
         pros: [Both directions become expressible with no ticket moving between unrelated epics., "Epic I is already the largest epic at 14,500 estimated diff lines."]
         cons: [Another Stage 4 replan with new epic ids and a new wave plan., "The two halves share rust/src/assets and rust/src/object_store paths, so they could not run concurrently anyway."]
-    recommendation: "Epic L depends on Epic I, and the three Object Store lifecycle tickets move to Epic L"
+      - name: Keep Epic I upstream and create downstream Epic N after Epic L
+        pros: ["Preserves the acyclic Epic I → Epic K → Epic L → Epic N authority order while allowing BURL-N002 through BURL-N005 to consume BURL-L010.", "Keeps the coupled downstream K and L lifecycle work together, so BURL-N006 and BURL-N007 can consume BURL-N002 and BURL-N003 without recreating the K↔L cycle."]
+        cons: [Requires moving and renaming eleven downstream tickets from Epics I, K, and L and migrating their references., Adds another serial epic with broad overlapping scope, so the cut improves graph correctness rather than concurrency.]
+    recommendation: "Keep Epic I upstream and create downstream Epic N after Epic L"
     closure: ruling
     ruler: "The lead, under the user's delegated authority on 2026-09-04"
     status: closed
@@ -241,5 +244,5 @@ decisions:
     ruling:
       ref: reports/2026-09-04-interview-tasks.md
       date: 2026-09-04
-      summary: "Under the user's delegated authority, adopted the direction of the recommended option: Epic I remains upstream and lifecycle work moves downstream of BURL-L010. Preserving every historical prerequisite without cycles requires the downstream EPIC-N lifecycle-reconciliation epic, rather than placing all moved work directly in Epic L; BURL-N002, BURL-N003, and BURL-N004 follow BURL-L010, and the cut also carries their completion gate BURL-N005."
-      chosen: "Keep Epic I upstream and move the Object Store lifecycle work downstream of BURL-L010"
+      summary: "Under the user's delegated authority, adopted the downstream EPIC-N refinement: Epic I remains upstream, Epic L retains BURL-L010, and EPIC-N carries BURL-N002, BURL-N003, BURL-N004, and their BURL-N005 completion gate after Epic L. Direct placement in Epic L cannot preserve the downstream K obligations because second-device join and detach consume the lifecycle work while Epic L already depends on Epic K; adding the reverse Epic K → Epic L dependency would recreate the K↔L cycle. The EPIC-N cut preserves the acyclic Epic I → Epic K → Epic L → Epic N order."
+      chosen: "Keep Epic I upstream and create downstream Epic N after Epic L"
