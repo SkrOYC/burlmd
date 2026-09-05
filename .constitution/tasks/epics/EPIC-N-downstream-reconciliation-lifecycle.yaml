@@ -23,6 +23,7 @@ depends_on:
   - K
   - L
   - M
+  - P
 scope:
   paths:
     - lib/src/components/editor.dart

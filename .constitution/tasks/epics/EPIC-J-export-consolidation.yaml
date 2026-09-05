@@ -12,6 +12,7 @@ depends_on:
   - H
   - I
   - M
+  - P
 scope:
   paths:
     - rust/src/workspace/**

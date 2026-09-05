@@ -1,4 +1,26 @@
 entries:
+  - version: v3.2.0
+    date: 2026-09-05
+    changed:
+      - Split Workspace repair and live observation from Epic H into the
+        five-ticket Epic P. Preserved all ticket effort, behavioral scope,
+        acceptance evidence, and canonical verification commands while mapping
+        BURL-H008 through BURL-H012 to BURL-P001 through BURL-P005.
+      - Reduced Epic H to its seven authority-foundation tickets and added Epic
+        P after Epics H and I. Updated the downstream epic dependencies without
+        changing the 80-ticket, 564-point plan.
+      - Expanded BURL-O004 to cover NFC-01 through NFC-11 and NFC-37 through
+        NFC-39, including the reference environments, identity record, editing
+        fixture, and nonblocking nightly cadence.
+      - Regenerated critical-path.md from the 10-epic graph.
+    fixed:
+      - Kept the authorized tranche focused on completing Epic H and replaying
+        Epic G. Epic P remains downstream and outside the tranche.
+    upstream:
+      prd: v2.0.4
+      architecture: v2.0.5
+      tech-spec: v2.0.14
+    by: stage
   - version: v3.1.4
     date: 2026-09-05
     changed:
