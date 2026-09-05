@@ -148,14 +148,14 @@ decisions:
       in: reports/2026-08-25-interview-tasks.md
   - id: OD-07
     question: "At what stored-history size should burlmd warn that the local Version store is becoming unhealthy?"
-    blocks: [BURL-M016]
+    blocks: [BURL-O016]
     options:
       - name: Keep the provisional 1 GiB threshold
-        pros: [Already accepted at the Tasks interview and already written into the History Storage Health Warning meter., Lets BURL-M016 ship without waiting for a spike.]
+        pros: [Already accepted at the Tasks interview and already written into the History Storage Health Warning meter., Lets BURL-O016 ship without waiting for a spike.]
         cons: ["Chosen before binary payloads moved out of Git, so the number describes a history shape that no longer exists.", A threshold nobody measured either warns too early or too late.]
       - name: Set the threshold from the asset or performance spike measurement
         pros: [Warns before user-visible degradation rather than at a round number., "The spike already measures clone, fetch, maintenance, and index cost."]
-        cons: [BURL-M016 cannot state its threshold until the spike reports., The measured value may need revisiting once Assets are in real use.]
+        cons: [BURL-O016 cannot state its threshold until the spike reports., The measured value may need revisiting once Assets are in real use.]
       - name: Drop the warning entirely
         pros: [Removes a meter and a user-facing message that may never fire., Git maintenance already handles most growth.]
         cons: [A Workspace that becomes unclonable on a second device is exactly the failure the warning exists to prevent., The PRD names the warning as a capability of the release.]
@@ -171,7 +171,7 @@ decisions:
       in: reports/2026-08-25-interview-tasks.md
   - id: OD-08
     question: "Which oldest x86-64 Linux runtime baseline and named distributions does a supported 0.x release have to run on?"
-    blocks: [BURL-M006, BURL-M011]
+    blocks: [BURL-O006, BURL-O011]
     options:
       - name: An Ubuntu 22.04-era glibc baseline
         pros: [Covers long-term-support distributions that many desktop users still run., Widens the audience for the first published AppImage.]
@@ -184,7 +184,7 @@ decisions:
         cons: [The AppImage and its gate cannot state a support matrix until the spike reports., The measured baseline may be narrower than the project would like to promise.]
     recommendation: The baseline the packaging spike measures
     closure: spike
-    spike: SPK-BURL-M001
+    spike: SPK-BURL-O001
     interim:
       assumption: The release notes say x86-64 Linux without naming distributions until the spike reports.
       applied_by: [tech-spec/adrs/ADR-018-prerelease-desktop-artifacts.md]
@@ -193,15 +193,15 @@ decisions:
       date: 2026-08-25
       in: reports/2026-08-25-interview-tasks.md
   - id: OD-09
-    question: "Should Epic M be split so that the release gates can depend on the product epics without making the epic graph cyclic? Dropped cross-epic ticket dependencies: BURL-M004 ← BURL-G011, BURL-H012, BURL-I010, BURL-L012; BURL-M016 ← BURL-I001, BURL-G010; BURL-M005 ← BURL-G003, BURL-H006; BURL-M006 ← BURL-J006, BURL-J007, BURL-L012, BURL-G011; BURL-M007 ← BURL-J006, BURL-J007, BURL-L012; BURL-M008 ← BURL-J006, BURL-J007, BURL-L012; BURL-M010 ← BURL-G002; BURL-M014 ← BURL-K009."
-    blocks: [EPIC-M]
+    question: "Should the quality-and-release plan be split between the existing EPIC-M CI bootstrap and downstream EPIC-O quality releases so that the release gates can depend on the product epics without making the epic graph cyclic? The pre-replan omitted dependencies, expressed with the current ticket identifiers, were: BURL-O004 ← BURL-G011, BURL-H012, BURL-N005, BURL-N011; BURL-O016 ← BURL-I001, BURL-G010; BURL-O005 ← BURL-G003, BURL-H006; BURL-O006 ← BURL-J006, BURL-J007, BURL-N011, BURL-G011; BURL-O007 ← BURL-J006, BURL-J007, BURL-N011; BURL-O008 ← BURL-J006, BURL-J007, BURL-N011; BURL-O010 ← BURL-G002; BURL-O014 ← BURL-K009."
+    blocks: [EPIC-M, EPIC-O]
     options:
       - name: Split Epic M into a CI bootstrap epic and a release-gate epic
-        pros: ["The bootstrap epic becomes the root every other epic depends on, and the gate epic depends on the finished product epics; both edges are then honest.", Removes the cycle without dropping any real dependency.]
+        pros: ["EPIC-M becomes the CI bootstrap root every other epic depends on, and EPIC-O depends on the finished product epics; both edges are then honest.", Removes the cycle without dropping any real dependency.]
         cons: ["Requires a Stage 4 replan, new epic ids, and a rewritten wave plan.", Splits one coherent quality-and-release story into two files.]
       - name: Keep one Epic M and rely on ticket order inside it
         pros: ["No replan; the epic file already sequences the bootstrap tickets before the gate tickets.", Keeps the release story in one place.]
-        cons: [The epic graph no longer records that BURL-M006 and BURL-M011 through BURL-M014 need the product epics complete., A wave scheduler could start a release gate before the product exists.]
+        cons: [The epic graph no longer records that BURL-O006 and BURL-O011 through BURL-O014 need the product epics complete., A wave scheduler could start a release gate before the product exists.]
       - name: Move the release gates into an out-of-band epic later
         pros: [Defers the decision until the product epics are close to done., An out-of-band epic sits outside the critical path by design.]
         cons: [Leaves the graph wrong in the meantime., "Out-of-band epics are meant for issues, not for planned release work."]
@@ -215,11 +215,11 @@ decisions:
     ruling:
       ref: reports/2026-09-04-interview-tasks.md
       date: 2026-09-04
-      summary: "Under the user's delegated authority, adopted the recommended split. Validator-compliant execution keeps BURL-M015 and BURL-M003 in Epic M as the CI bootstrap and moves every remaining release and quality ticket to a later downstream epic whose epic dependencies restore the omitted product prerequisites."
+      summary: "Under the user's delegated authority, adopted the recommended split. Validator-compliant execution keeps BURL-M015 and BURL-M003 in the existing EPIC-M CI bootstrap and moves every remaining release and quality ticket to the downstream EPIC-O quality-releases epic, whose dependencies restore the omitted product prerequisites."
       chosen: Split Epic M into a CI bootstrap epic and a release-gate epic
   - id: OD-10
-    question: "Which direction should own the ordering between Epic I's Object retention and Epic L's Remote refs, given that BURL-I011, BURL-I012, and BURL-I013 need BURL-L010 while BURL-L010 needs BURL-I007? Dropped cross-epic ticket dependencies: BURL-I011 ← BURL-L010; BURL-I012 ← BURL-L010; BURL-I013 ← BURL-L010."
-    blocks: [BURL-I011, BURL-I012, BURL-I013]
+    question: "Which direction should own the ordering between Epic I's Object retention and Epic L's Remote refs, given that the downstream BURL-N002, BURL-N003, and BURL-N004 lifecycle tickets follow BURL-L010 while BURL-L010 needs BURL-I007, and their completion gate BURL-N005 consumes all three?"
+    blocks: [BURL-N002, BURL-N003, BURL-N004, BURL-N005]
     options:
       - name: "Epic L depends on Epic I, and the three Object Store lifecycle tickets move to Epic L"
         pros: ["Epic I stays the upstream provider of Object identity and retention, which Epics K and L both already need.", Removes the only remaining cycle in the active graph.]
@@ -240,5 +240,5 @@ decisions:
     ruling:
       ref: reports/2026-09-04-interview-tasks.md
       date: 2026-09-04
-      summary: "Under the user's delegated authority, adopted the direction of the recommended option: Epic I remains upstream and lifecycle work moves downstream of BURL-L010. Preserving every historical prerequisite without cycles requires a downstream lifecycle-reconciliation epic, rather than placing all moved work directly in Epic L; the cut also carries BURL-I010 because it depends on BURL-I011, BURL-I012, and BURL-I013."
+      summary: "Under the user's delegated authority, adopted the direction of the recommended option: Epic I remains upstream and lifecycle work moves downstream of BURL-L010. Preserving every historical prerequisite without cycles requires the downstream EPIC-N lifecycle-reconciliation epic, rather than placing all moved work directly in Epic L; BURL-N002, BURL-N003, and BURL-N004 follow BURL-L010, and the cut also carries their completion gate BURL-N005."
       chosen: "Keep Epic I upstream and move the Object Store lifecycle work downstream of BURL-L010"
