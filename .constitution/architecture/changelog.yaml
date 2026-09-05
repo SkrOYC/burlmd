@@ -1,4 +1,11 @@
 entries:
+  - version: v2.0.4
+    date: 2026-09-05
+    fixed:
+      - "Fixed Mermaid syntax in all affected Architecture flow labels and renamed the reserved Note participant identifier without changing displayed meaning."
+    upstream:
+      prd: v2.0.2
+    by: patch-lane
   - version: v2.0.3
     date: 2026-09-05
     fixed:

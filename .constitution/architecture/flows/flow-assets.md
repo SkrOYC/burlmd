@@ -14,7 +14,7 @@ assumption: "Migrated from markdown; not yet exercised by an integration test."
 sequenceDiagram
     participant UI as Presentation and Interaction
     participant Core as Core Coordination
-    participant Note as Canonical Note Model
+    participant CanonicalNote as Canonical Note Model
     participant Workspace as Workspace Model
     participant LocalAssets as Local Asset Store
     participant Persist as Workspace Persistence
@@ -24,16 +24,16 @@ sequenceDiagram
         Core->>LocalAssets: Copy bytes, verify identity, and deduplicate Object
         LocalAssets-->>Core: Verified Object identity
         Core->>Workspace: Create portable Asset reference
-        Core->>Note: Insert standard image reference through source-preserving edit
+        Core->>CanonicalNote: Insert standard image reference through source-preserving edit
         Core->>Persist: Record updated Note and recoverable lifecycle outcome
     else Adopt ordinary Asset files
         UI->>Core: Begin Asset preflight
         Core->>Workspace: Inventory references and validate every candidate
         alt Missing, ambiguous, oversized, or nonconforming input
-            Core-->>UI: Report all blockers; mutate nothing
+            Core-->>UI: Report all blockers, mutate nothing
         else Preflight succeeds
             Core->>LocalAssets: Migrate and verify referenced Object bytes
-            Core->>Note: Rewrite affected references through source-preserving edits
+            Core->>CanonicalNote: Rewrite affected references through source-preserving edits
             Core->>Persist: Record one recoverable adoption outcome
             Core-->>UI: Preserve unreferenced files for review
         end

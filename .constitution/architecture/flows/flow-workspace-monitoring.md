@@ -20,7 +20,7 @@ sequenceDiagram
 
     Host->>Observer: Filesystem event burst
     Observer->>Core: Debounced candidate change set
-    Core->>Workspace: Re-read disk state; validate containment and conformance
+    Core->>Workspace: Re-read disk state, validate containment and conformance
     alt Valid create, move, rename, or delete
         Core->>Workspace: Validate canonical identity, provenance, ambiguity, and current revision
         Workspace-->>Core: One recoverable lifecycle outcome or required confirmation
@@ -29,13 +29,13 @@ sequenceDiagram
         Core->>Workspace: Record guest change in local history and authoritative tree
         Core-->>UI: Reload Note and affected tree state
     else Dirty open Note
-        Core-->>UI: Preserve both; offer Compare, Keep burlmd version, Load external version
+        Core-->>UI: Preserve both, offer Compare, Keep burlmd version, Load external version
         UI->>Core: Reviewed decision
         Core->>Workspace: Revalidate guest revision
         Workspace-->>Core: Apply decision or request renewed review
         Core-->>UI: Authoritative result or renewed review
     else Invalid guest write
-        Core-->>UI: Preserve last known-good and original bytes; offer Repair, Compare, Exclude
+        Core-->>UI: Preserve last known-good and original bytes, offer Repair, Compare, Exclude
     end
 ```
 
