@@ -75,7 +75,7 @@ decisions:
     ruling:
       ref: reports/2026-08-21-interview-realign.md
       date: 2026-08-21
-      summary: The user chose genuinely parallel tracks and delegated the concrete interleave to planning.
+      summary: "The user chose genuinely parallel tracks and delegated the concrete interleave to planning. This remains the historical ruling, but .constitution/research/tranche-sequence.md and the 2026-09-04 dependency rulings in reports/2026-09-04-interview-tasks.md supersede it for executable whole-epic scheduling."
       chosen: genuinely parallel tracks
   - id: OD-04
     question: "Which standards foundation should the Core-owned canonical extended Markdown AST be built on?"
@@ -207,14 +207,16 @@ decisions:
         cons: [Leaves the graph wrong in the meantime., "Out-of-band epics are meant for issues, not for planned release work."]
     recommendation: Split Epic M into a CI bootstrap epic and a release-gate epic
     closure: ruling
-    ruler: "The user, at the next Stage 4 planning pass"
-    interim:
-      assumption: "The migration set Epic M's depends_on to an empty list, because every other epic needs its BURL-M003 managed-validation matrix; the reverse dependencies of the release-gate tickets are recorded here instead of in the graph. The dropped edges are listed in this question."
-      applied_by: [tasks/epics/EPIC-M-quality-releases.yaml]
-    status: open
+    ruler: "The lead, under the user's delegated authority on 2026-09-04"
+    status: closed
     asked:
       date: 2026-09-03
       in: The 2026-09-03 structured-constitution migration
+    ruling:
+      ref: reports/2026-09-04-interview-tasks.md
+      date: 2026-09-04
+      summary: "Under the user's delegated authority, adopted the recommended split. Validator-compliant execution keeps BURL-M015 and BURL-M003 in Epic M as the CI bootstrap and moves every remaining release and quality ticket to a later downstream epic whose epic dependencies restore the omitted product prerequisites."
+      chosen: Split Epic M into a CI bootstrap epic and a release-gate epic
   - id: OD-10
     question: "Which direction should own the ordering between Epic I's Object retention and Epic L's Remote refs, given that BURL-I011, BURL-I012, and BURL-I013 need BURL-L010 while BURL-L010 needs BURL-I007? Dropped cross-epic ticket dependencies: BURL-I011 ← BURL-L010; BURL-I012 ← BURL-L010; BURL-I013 ← BURL-L010."
     blocks: [BURL-I011, BURL-I012, BURL-I013]
@@ -230,11 +232,13 @@ decisions:
         cons: [Another Stage 4 replan with new epic ids and a new wave plan., "The two halves share rust/src/assets and rust/src/object_store paths, so they could not run concurrently anyway."]
     recommendation: "Epic L depends on Epic I, and the three Object Store lifecycle tickets move to Epic L"
     closure: ruling
-    ruler: "The user, at the next Stage 4 planning pass"
-    interim:
-      assumption: "The migration removed L from Epic I's depends_on so the graph is acyclic; BURL-I011, BURL-I012, and BURL-I013 still say in their own text that they need BURL-L010, and must not start before it."
-      applied_by: [tasks/epics/EPIC-I-assets-object-store.yaml]
-    status: open
+    ruler: "The lead, under the user's delegated authority on 2026-09-04"
+    status: closed
     asked:
       date: 2026-09-03
       in: The 2026-09-03 structured-constitution migration
+    ruling:
+      ref: reports/2026-09-04-interview-tasks.md
+      date: 2026-09-04
+      summary: "Under the user's delegated authority, adopted the direction of the recommended option: Epic I remains upstream and lifecycle work moves downstream of BURL-L010. Preserving every historical prerequisite without cycles requires a downstream lifecycle-reconciliation epic, rather than placing all moved work directly in Epic L; the cut also carries BURL-I010 because it depends on BURL-I011, BURL-I012, and BURL-I013."
+      chosen: "Keep Epic I upstream and move the Object Store lifecycle work downstream of BURL-L010"
