@@ -1,4 +1,18 @@
 entries:
+  - version: v2.0.6
+    date: 2026-09-05
+    changed:
+      - "Defined managed evidence-only integration for BURL-G011, BURL-H009, and BURL-O004: each has a ticket-owned evidence directory, mandatory manifest-backed later review, and declared managed report path; BURL-O004 also declares its aggregate meter result. A run or unreviewed evidence pull request never completes a ticket."
+      - "Made the canonical BURL-K009, BURL-N009, and BURL-O014 verification commands write only to their ticket-owned evidence directories and require later manifest-backed review. The active Tasks graph still quotes two explicitly labeled report-path compatibility aliases, retained byte-for-byte until the Stage 4 evidence-path migration."
+      - "Added BURL-O012's authenticated installed-Nix evidence profile: common functional, performance, and required non-authoritative exact Linux platform-regression evidence preserve NFC-34 parity without replacing the macOS 26 authoritative visual baseline."
+      - "Corrected active TechSpec ADR references to the three-digit filenames while retaining four-digit structured front-matter identifiers and historical changelog text."
+    fixed:
+      - "Removed stale future-O-migration and current-M-alias prose, and removed the duplicate migration-date sentence from the historical v0.0.1 entry."
+      - "Advanced provisional-spikes.toml from schema version 25 to 26, ci-role-evidence from 10 to 11, and ci-evidence from 12 to 13 for the added BURL-O012 identity and exact role profile. Spike-result remains version 20 because no Spike result contract changed."
+    by: patch-lane
+    upstream:
+      prd: v2.0.2
+      architecture: v2.0.4
   - version: v2.0.5
     date: 2026-09-05
     changed:
@@ -234,4 +248,4 @@ entries:
     date: 2026-09-03
     added: ["History before migration; the markdown changelog is in git"]
     by: migrate
-    changed: ["Migration date retained for v0.0.1: no master commit introducing this version string was found.", "Migration date retained for v0.0.1: no master commit introducing this version string was found."]
+    changed: ["Migration date retained for v0.0.1: no master commit introducing this version string was found."]

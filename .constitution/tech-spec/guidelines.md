@@ -1,7 +1,17 @@
 ---
 verification_commands:
   - name: probe
-    label: canonical BURL verification for BURL-K009 and BURL-O014
+    label: canonical BURL verification for BURL-K009
+    command: "./scripts/attest-github-app-token-expiration.sh --client-id \"$BURLMD_GITHUB_APP_CLIENT_ID\" --output .constitution/evidence/BURL-K009/github-app-token-expiration-attestation.json && ./scripts/verify-github-app-registration.sh --manifest config/github-app.release.toml --installation-url \"$BURLMD_GITHUB_APP_INSTALLATION_URL\" --expected-client-id \"$BURLMD_GITHUB_APP_CLIENT_ID\" --require-device-flow --require-private-repository-permissions --forbid-permission workflows --token-expiration-attestation .constitution/evidence/BURL-K009/github-app-token-expiration-attestation.json --max-attestation-age-hours 24 --output .constitution/evidence/BURL-K009/github-app-registration.json && git diff --check"
+    exists: false
+    owner: BURL-K009
+  - name: probe
+    label: canonical BURL verification for BURL-O014
+    command: "./scripts/attest-github-app-token-expiration.sh --client-id \"$BURLMD_GITHUB_APP_CLIENT_ID\" --output .constitution/evidence/BURL-O014/github-app-token-expiration-attestation.json && ./scripts/verify-github-app-registration.sh --manifest config/github-app.release.toml --installation-url \"$BURLMD_GITHUB_APP_INSTALLATION_URL\" --expected-client-id \"$BURLMD_GITHUB_APP_CLIENT_ID\" --require-device-flow --require-private-repository-permissions --forbid-permission workflows --token-expiration-attestation .constitution/evidence/BURL-O014/github-app-token-expiration-attestation.json --max-attestation-age-hours 24 --output .constitution/evidence/BURL-O014/github-app-registration.json && git diff --check"
+    exists: false
+    owner: BURL-O014
+  - name: probe
+    label: temporary Stage 4 compatibility alias quoted by BURL-K009 and BURL-O014; remove after the Tasks evidence-path migration
     command: "./scripts/attest-github-app-token-expiration.sh --client-id \"$BURLMD_GITHUB_APP_CLIENT_ID\" --output .constitution/reports/github-app-token-expiration-attestation.json && ./scripts/verify-github-app-registration.sh --manifest config/github-app.release.toml --installation-url \"$BURLMD_GITHUB_APP_INSTALLATION_URL\" --expected-client-id \"$BURLMD_GITHUB_APP_CLIENT_ID\" --require-device-flow --require-private-repository-permissions --forbid-permission workflows --token-expiration-attestation .constitution/reports/github-app-token-expiration-attestation.json --max-attestation-age-hours 24 --output .constitution/reports/github-app-registration.json && git diff --check"
     exists: false
     owner: BURL-K009
@@ -236,7 +246,12 @@ verification_commands:
     exists: false
     owner: BURL-O004
   - name: test
-    label: quoted by BURL-N009
+    label: canonical BURL verification for BURL-N009
+    command: "cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && ./scripts/run-private-github-canary.sh --private-remote \"$BURLMD_TEST_PRIVATE_REMOTE_URL\" --object-endpoint \"$BURLMD_TEST_S3_ENDPOINT\" --cleanup always --output .constitution/evidence/BURL-N009/canary-n009.json && ./scripts/verify-device-authorization-runbook.sh --require-human-approval --output .constitution/evidence/BURL-N009/device-auth-n009.json && git diff --check"
+    exists: false
+    owner: BURL-N009
+  - name: test
+    label: temporary Stage 4 compatibility alias quoted by BURL-N009; remove after the Tasks evidence-path migration
     command: "cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && ./scripts/run-private-github-canary.sh --private-remote \"$BURLMD_TEST_PRIVATE_REMOTE_URL\" --object-endpoint \"$BURLMD_TEST_S3_ENDPOINT\" --cleanup always --output .constitution/reports/canary-k008.json && ./scripts/verify-device-authorization-runbook.sh --require-human-approval --output .constitution/reports/device-auth-k008.json && git diff --check"
     exists: false
     owner: BURL-N009
@@ -463,6 +478,11 @@ verification_commands:
     owner: BURL-O011
   - name: other
     label: canonical BURL verification for BURL-O012
+    command: "Run the accepted Nix installed matrix from final TechSpec against the immutable `BURL-O009` Flake candidate on every exposed x86-64 Linux system. To preserve NFC-34 parity, run its complete common functional and performance matrix plus required non-authoritative exact private-headless Linux platform-regression evidence on managed `ubuntu-24.04` through the authenticated `BURL-M003` evidence protocol; that regression result never substitutes for the macOS 26 authoritative product visual baseline. Validate the authenticated role and aggregate schemas, then run `git diff --check`."
+    exists: false
+    owner: BURL-O012
+  - name: other
+    label: temporary Stage 4 compatibility alias quoted by BURL-O012; remove after the Tasks installed-Nix profile migration
     command: "Run the accepted Nix installed matrix from final TechSpec against the immutable `BURL-O009` Flake candidate on every exposed x86-64 Linux system. Run the managed `ubuntu-24.04` functional and performance roles through the authenticated `BURL-M003` evidence protocol, then run `git diff --check`."
     exists: false
     owner: BURL-O012
@@ -1027,9 +1047,13 @@ single-run, so the bug (a multi-run paragraph silently collapsing to one
 uniform, unstyled `TextField` once made editable) was invisible to the suite
 until an actual rendered screenshot was inspected.
 
-## Execution conventions
+## Evidence-only acceptance handoff
 
-The future Stage 4 `verification.command` fields for `BURL-O006`, `BURL-O011`, `BURL-O012`, and `BURL-O013` use the canonical BURL verification commands listed in this front matter. The explicitly labeled current-M aliases remain only until that Stage 4 migration lands.
+An accepted managed run is an input to review, not ticket completion. `BURL-G011` and `BURL-H009` each write their managed report to `.constitution/evidence/BURL-G011/managed-evidence.json` and `.constitution/evidence/BURL-H009/managed-evidence.json`; `BURL-O004` additionally writes `.constitution/evidence/BURL-O004/nightly-prd-meters.json`. For each ticket, a later evidence-only pull request may change only that ticket's exact evidence directory, adds the declared managed report and any result artifact, and includes `.constitution/evidence/BURL-<TICKET>/manifest.yaml` with the byte count and SHA-256 digest for every accepted file. Independent review and merge of that manifest-backed pull request are mandatory; neither a successful run nor a draft or unreviewed evidence pull request completes the ticket.
+
+Canonical acceptance artifacts for `BURL-K009`, `BURL-N009`, and `BURL-O014` likewise live only in `.constitution/evidence/BURL-K009/`, `.constitution/evidence/BURL-N009/`, and `.constitution/evidence/BURL-O014/`. Their reports retain the specified credential-free, permission, device-flow, and freshness checks; a later manifest-backed evidence-only review is still required before acceptance. The two explicitly labeled front-matter compatibility aliases are temporary only because the active Tasks commands still write their legacy `.constitution/reports/` paths.
+
+## Execution conventions
 
 - Production authorization is contract-scoped. Epic G M0 keeps `BURL-G001`, `BURL-G002`, `BURL-G003`, `BURL-G004`, `BURL-G005`, and `BURL-G007` executable. The bootstrap additionally makes `BURL-M015` and `BURL-M003` executable. Every other production ticket has an implicit STOP until its own decision evidence, any required Product Requirements or Architecture evolution, final Stage 3 contract, and Stage 4 adaptation are merged. An unrelated unresolved Spike doesn't block an otherwise authorized ticket.
 - The five `Spike` tickets remain research-only and executable within their exhaustive allowlists after their declared dependencies are satisfied. `BURL-M003` satisfies those dependencies only after both its reviewed implementation pull request and dedicated reviewed evidence pull request merge. Every managed Spike runs the launcher from a clean immutable trust-anchor checkout; the trusted default-branch workflow checks out the separate tested source as data. Before dispatch and during collection, the launcher rejects any change outside the ticket's exact write allowlist or any changed validation control. Within the declared H Spike tranche, the committed, validated, and independently reviewed `BURL-H001` milestone satisfies `BURL-H002`; a draft or unmerged branch never satisfies a cross-tranche or cross-branch dependency.
