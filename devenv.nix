@@ -136,8 +136,8 @@ let
   # with a dot, so a bare `dart format .` reaches the Dart sources FRB scaffolds
   # under rust_builder/cargokit/ — vendored third-party glue whose own README
   # says to ignore it. Formatting only the directories this project owns keeps
-  # the gate off code we do not control. `dart analyze` needs the equivalent via
-  # `analyzer.exclude` in analysis_options.yaml, which CORE-A001 must add.
+  # the gate off code we do not control. The `analysis_options.yaml` file
+  # excludes the same vendored tree through `analyzer.exclude`.
   dartFormatBody = ''
     # Anything .dart outside the owned roots is a guard failure, not a silent
     # skip — the same rule the manifest guards above follow. rust_builder/ is

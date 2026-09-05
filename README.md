@@ -116,12 +116,15 @@ verified against devenv 2.1.2.
 Entering the shell installs Git pre-commit hooks enforcing the standards in
 [`.constitution/tech-spec/guidelines.md`](.constitution/tech-spec/guidelines.md):
 
-- `cargo fmt --all -- --check`
-- `cargo clippy --workspace --all-targets -- -D warnings`
-- `dart format --output=none --set-exit-if-changed lib test`
-- `dart analyze`
-- `nixfmt` on any `*.nix` file — today that is only `devenv.nix`, the only source file in the repository,
-  and so the only hook that can fail today
+- `nixfmt` runs on changed `*.nix` files, excluding `.constitution/`.
+- `cargo fmt --all -- --check` checks Rust source changes.
+- `cargo clippy --workspace --all-targets -- -D warnings` checks Rust source,
+  Cargo manifest, lockfile, and toolchain changes.
+- `dart format --output=none --set-exit-if-changed lib test integration_test test_driver`
+  checks Dart source changes in the project-owned roots.
+- `dart analyze` runs for Dart source or `pubspec.yaml` changes and analyzes the
+  root package. The analyzer excludes the vendored `rust_builder/cargokit/`
+  sources.
 
 The language hooks are active because the manifests each one needs
 (`rust/Cargo.toml`, `pubspec.yaml`) exist. They fail loudly rather than silently
