@@ -488,7 +488,7 @@ capabilities:
     group: "Workspace authority and recovery"
     priority: P0
     statement: "Writers can create a Diagnostics Export that contains application and schema versions, errors, retries, and failures without Note or Asset content."
-    rationale: "User-controlled diagnostics provide supportability without automatic telemetry."
+    rationale: "Writer-controlled diagnostics provide supportability without automatic telemetry."
     jobs: [JOB-05]
     certainty: assumed
     assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
@@ -568,7 +568,7 @@ capabilities:
     legacy_id: CAP-ASSET-03
     group: "Assets and object storage"
     priority: P0
-    statement: "Before a Workspace with Assets connects to a Remote, the Writer connects a user-controlled Object Store and burlmd verifies that every protected Object is available there."
+    statement: "Before a Workspace with Assets connects to a Remote, the Writer connects an Object Store they control and burlmd verifies that every protected Object is available there."
     rationale: "A published Note history must not reference binary content that another device can't retrieve."
     jobs: [JOB-08]
     certainty: assumed
@@ -596,7 +596,7 @@ capabilities:
     group: "Assets and object storage"
     priority: P0
     statement: "Writers can rotate Object Store credentials or replace the Object Store without losing any Object reachable from a Protected State."
-    rationale: "User-controlled storage must remain replaceable without weakening history."
+    rationale: "Writer-controlled storage must remain replaceable without weakening history."
     jobs: [JOB-08]
     certainty: assumed
     assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
