@@ -754,7 +754,7 @@ mod tests {
         assert_eq!(enabled, 1, "foreign key enforcement must be on by default");
     }
 
-    /// WSPC-D004 / SPK-BURL-D001 §7: WAL plus `synchronous = NORMAL` belongs
+    /// BURL-D004 / SPK-BURL-D001 §7: WAL plus `synchronous = NORMAL` belongs
     /// on every connection, alongside the other connection-time obligations.
     #[test]
     fn journal_mode_is_wal_and_synchronous_is_normal_on_a_freshly_opened_connection() {

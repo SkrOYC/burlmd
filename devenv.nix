@@ -49,20 +49,22 @@ let
     sqlcipher
   ];
 
-  # Hooks are written defensively on two axes. They no-op until the manifest they
-  # need exists, because this repository is intentionally empty of application
-  # code until CORE-A001 lands; and they invoke absolute store paths rather than
-  # bare `cargo`/`dart`, so that a commit made outside the devenv shell (a GUI
-  # client, an editor's built-in git, a terminal where direnv was never allowed)
-  # runs the real check instead of failing with `command not found`.
+  # Hooks are written defensively on two axes. The Rust hook runs from `rust/`
+  # when `rust/Cargo.toml` exists and otherwise accepts a root `Cargo.toml`; the
+  # Dart hook runs when the root `pubspec.yaml` exists. If no supported manifest
+  # exists, the relevant hook exits successfully, while an unexpected manifest
+  # location fails loudly. Both invoke absolute store paths rather than bare
+  # `cargo`/`dart`, so that a commit made outside the devenv shell (a GUI client,
+  # an editor's built-in git, a terminal where direnv was never allowed) runs the
+  # real check instead of failing with `command not found`.
   # `toolchainPackage`, not `toolchain.cargo`: when `toolchainFile` is set, the
   # combined toolchain lands in the former, while the latter silently falls back
   # to nixpkgs' cargo — a different version from the one the shell provides.
   cargo = "${config.languages.rust.toolchainPackage}/bin/cargo";
   dart = "${flutter}/bin/dart";
 
-  # The guards distinguish "no manifest exists yet" (skip, we are pre-CORE-A001)
-  # from "a manifest exists somewhere unexpected" (fail loudly). A bare
+  # The guards distinguish "no supported manifest exists" (skip) from "a
+  # manifest exists somewhere unexpected" (fail loudly). A bare
   # `[ -f rust/Cargo.toml ] || exit 0` would turn a layout change into a green
   # commit with no checks run and nothing said about it.
   #
