@@ -4,40 +4,40 @@ constraints:
     class: performance
     statement: Full-text search and title filtering stay interactive at the Corpus Scale Goal.
     scale: Time from submitting a full-text search or title-filter query to receiving results.
-    meter: "The 95th percentile over 1,000 deterministic queries against the Goal corpus on each reference class."
+    meter: "The 95th percentile over 1,000 deterministic queries against the NFC-07 Goal corpus on both NFC-37 reference classes."
     goal: Under 100 milliseconds.
     stretch: Under 25 milliseconds.
     fail: "Over 250 milliseconds at 10,000 Notes, or over 100 milliseconds at 1,000 Notes."
     certainty: assumed
-    assumption: "The target comes from operator intent; no nightly benchmark run exists on either managed reference class yet, so nothing has measured it."
+    assumption: "The target comes from operator intent; no NFC-39 nightly benchmark run exists on either NFC-37 reference class yet, so nothing has measured it."
   - id: NFC-02
     legacy_id: UI Responsiveness
     class: performance
     statement: "Writing and editing, including a Block moving into and out of its raw editing state, hold a 60 Hz frame budget."
     scale: "Frame time of writing and editing interactions, including the transition of a Block into and out of its raw editing state."
-    meter: Frame timing over a 5-minute scripted session on the editing Note and each reference class.
+    meter: Frame timing over a 5-minute scripted session on the NFC-38 editing fixture in both NFC-37 reference classes.
     goal: "At least 99% of frames complete within 16.7 milliseconds, with no input-to-effect delay above 50 milliseconds."
     stretch: "At least 99.9% of frames complete within 16.7 milliseconds."
     fail: "More than 1% of frames exceed 33.3 milliseconds or any input-to-effect delay exceeds 100 milliseconds."
     certainty: assumed
-    assumption: "SPK-BURL-D001 measured the encrypted draft write on the typing path against this budget, but the scripted 5-minute frame-timing session it defines has never run on either reference class."
+    assumption: "SPK-BURL-D001 measured the encrypted draft write on the typing path against this budget, but the scripted 5-minute frame-timing session has never run on either NFC-37 reference class."
   - id: NFC-03
     legacy_id: Workspace Open Latency
     class: performance
     statement: "Opening a Workspace reaches an interactable shell quickly, with index construction continuing in the background."
     scale: Time from launch request to an interactable shell with the Workspace open.
-    meter: The 95th percentile of 20 opens of the Goal corpus on each reference class.
+    meter: The 95th percentile of 20 opens of the NFC-07 Goal corpus on both NFC-37 reference classes.
     goal: No more than 1 second at the Corpus Scale Goal. Remaining index construction proceeds without blocking Workspace use.
     stretch: No more than 1 second at the Corpus Scale Stretch.
     fail: Open blocking longer than 3 seconds at the Corpus Scale Goal.
     certainty: assumed
-    assumption: "The target comes from operator intent; no nightly benchmark run exists on either managed reference class yet, so nothing has measured it."
+    assumption: "The target comes from operator intent; no NFC-39 nightly benchmark run exists on either NFC-37 reference class yet, so nothing has measured it."
   - id: NFC-04
     legacy_id: Cold Start
     class: performance
     statement: A cold process launch reaches the interactive shell without warm caches.
     scale: "Time from process launch to the interactive shell, cold, with no warm caches assumed."
-    meter: "The 95th percentile of 20 cold launches on each reference class, including secure-storage and encrypted-index access."
+    meter: "The 95th percentile of 20 cold launches on both NFC-37 reference classes, including secure-storage and encrypted-index access."
     goal: 1 second.
     stretch: 500 milliseconds.
     fail: 3 seconds.
@@ -48,12 +48,12 @@ constraints:
     class: performance
     statement: Resident memory at rest stays modest and does not grow while idle.
     scale: "Resident memory at rest, after opening a Workspace at the Corpus Scale Goal and letting activity settle."
-    meter: Resident memory sampled each second for 10 minutes after a 5-minute settling period on each reference class.
+    meter: Resident memory sampled each second for 10 minutes after a 5-minute settling period with the NFC-07 Goal corpus on both NFC-37 reference classes.
     goal: 400 MB.
     stretch: 250 MB.
     fail: "1 GB, or growth above 5% during a 4-hour idle run after the settling period."
     certainty: assumed
-    assumption: "The target comes from operator intent; no nightly benchmark run exists on either managed reference class yet, so nothing has measured it."
+    assumption: "The target comes from operator intent; no NFC-39 nightly benchmark run exists on either NFC-37 reference class yet, so nothing has measured it."
   - id: NFC-06
     legacy_id: External Change Detection
     class: performance
@@ -68,14 +68,14 @@ constraints:
   - id: NFC-07
     legacy_id: Corpus Scale
     class: performance
-    statement: Every other meter holds over a Workspace of this size.
-    scale: Number of Notes in the Workspace over which every other meter in this file must hold.
-    meter: "Synthetic corpora at each level, exercising search, tree building, open, and indexing."
-    goal: "10,000 Notes."
+    statement: Every other meter holds over a deterministically generated Workspace at this corpus scale and Note-size distribution.
+    scale: Number and size distribution of Notes in the Workspace over which every other meter in this file must hold.
+    meter: "Use a published deterministic generator to produce synthetic corpora at each level, then exercise search, tree building, open, and indexing."
+    goal: "10,000 Notes with a 4 KiB median, a 64 KiB 95th percentile, and a 1 MiB maximum Note."
     stretch: "50,000 Notes."
     fail: "1,000 Notes. Below the Fail point, any missed meter is a defect rather than a scaling story."
     certainty: assumed
-    assumption: "Deterministic corpus generation has not been published yet; Technical Implementation owes the generator and reference-class setup specification this meter depends on."
+    assumption: "Deterministic corpus generation has not been published yet; Technical Implementation owes the generator and NFC-37 reference-class setup specification this meter depends on."
   - id: NFC-08
     legacy_id: Image Import Size
     class: performance
@@ -92,7 +92,7 @@ constraints:
     class: operability
     statement: The Writer is warned before the local history store becomes unhealthy.
     scale: Stored textual and manifest history in the local Version store.
-    meter: "Storage size, second-device bootstrap time, synchronization retrieval time, maintenance cost, and index cost at the Corpus Scale Goal."
+    meter: "Storage size, second-device bootstrap time, synchronization retrieval time, maintenance cost, and index cost at the NFC-07 Corpus Scale Goal."
     goal: Warn the Writer before the history store reaches the provisional 1 GiB threshold.
     stretch: The asset or performance Spike can recommend an evidence-based threshold that warns before user-visible degradation.
     fail: "No warning at the accepted threshold, or a threshold that another PRD Fail meter disproves."
@@ -370,6 +370,36 @@ constraints:
     fail: "A migration lacks a backup, exposes partial state, can't restore earlier state, or rewrites Note content without an explicit product operation."
     certainty: assumed
     assumption: "This constraint remains assumed until application-state migrations pass the failure-injection matrix."
+  - id: NFC-37
+    legacy_id: Reference Classes
+    class: performance
+    statement: "Performance meters run in reproducible managed continuous-integration environments on the Linux x86-64 performance reference and the Apple Silicon macOS 26 performance and visual reference."
+    scale: Reference-environment conformance and identity completeness for each performance or visual evidence run.
+    meter: "Before measurement, compare the environment with the published deterministic setup and required CPU, memory, viewport, and refresh-rate profile, then inspect its recorded environment and evidence identity."
+    goal: "The Linux x86-64 reference has 4 logical CPUs and 16 GB of available memory. The Apple Silicon macOS 26 reference has M1-class compute, 3 logical CPUs, and 7 GB of available memory. Both use a fixed 1920×1080 logical viewport at 60 Hz and record the environment image identity, operating-system release, architecture, CPU allocation and model class, available memory, storage characteristics, viewport, refresh rate, build identity, and corpus identity. The reference-class setup is published and deterministic."
+    fail: "A run uses another resource profile, viewport, or refresh rate; omits a required identity field; or presents incomplete-identity evidence as valid."
+    certainty: assumed
+    assumption: "No managed benchmark evidence measures both reference classes with the complete required identity."
+  - id: NFC-38
+    legacy_id: Scripted Editing Note
+    class: performance
+    statement: The UI Responsiveness meter uses one fixed editing fixture that exercises every supported syntax class.
+    scale: Block count, supported-syntax coverage, and pre-edit encoded size of the scripted editing Note.
+    meter: "Before the NFC-02 session, count the fixture's Blocks, verify that every supported syntax class appears, and measure its encoded size before edits."
+    goal: "Exactly 2,000 Blocks across every supported syntax class and exactly 1 MiB before edits."
+    fail: "The fixture has another Block count or pre-edit size, omits a supported syntax class, or changes between comparable runs."
+    certainty: assumed
+    assumption: "The required editing fixture hasn't been published or measured."
+  - id: NFC-39
+    legacy_id: Verification
+    class: operability
+    statement: Every scalar meter is verified by scheduled nightly benchmark runs in each applicable NFC-37 reference class.
+    scale: Scheduled-run cadence, scalar-meter coverage, reference-class coverage, regression reporting, and environment-identity capture.
+    meter: "Inspect each managed continuous-integration nightly run for every applicable scalar meter, required reference class, regression report, and NFC-37 environment identity."
+    goal: "Every applicable scalar meter runs nightly in each applicable reference class, reports regressions without blocking merges, and captures the required environment identity."
+    fail: "A nightly run omits an applicable scalar meter or reference class, omits required environment identity, fails to report a regression, or makes the benchmark regression itself a merge-blocking gate."
+    certainty: assumed
+    assumption: "No scheduled nightly benchmark run covers every applicable scalar meter and reference class."
 deferred:
   - class: cost
     risk: "No cost meter exists because nothing in the architecture runs on infrastructure this project operates: content lives on the Writer's device, their Remote, and their Object Store. If a project-operated component ever appears, this gap hides its running cost until someone pays it."
