@@ -106,7 +106,7 @@ boundaries:
     responsibility: "Connects a Workspace to a private Remote, detects local and incoming history, coordinates reconciliation, and reports distinct synchronization states"
     inputs: [Accepts durable synchronization intents.]
     outputs: ["Returns authentication, privacy, transfer, divergence, and completion outcomes."]
-    depends_on: [BND-02, BND-05, BND-08, BND-12, BND-14]
+    depends_on: [BND-02, BND-05, BND-08, BND-12, BND-14, BND-20]
     certainty: assumed
     assumption: "Migrated from containers.md; not yet mapped to a code path."
   - id: BND-11
@@ -117,7 +117,7 @@ boundaries:
     responsibility: "Validates at connection, periodically, and before publication that anonymous callers can't list, read, write, or delete in the Object Store prefix; uploads and verifies required Objects before history publication; hydrates Objects; and coordinates migration, repair, rotation, and cleanup"
     inputs: [Accepts Object obligations and retention roots.]
     outputs: ["Returns verification, hydration, migration, and recovery outcomes."]
-    depends_on: [BND-02, BND-06, BND-08, BND-12, BND-14]
+    depends_on: [BND-02, BND-06, BND-08, BND-12, BND-21]
     certainty: assumed
     assumption: "Migrated from containers.md; not yet mapped to a code path."
   - id: BND-12
@@ -144,15 +144,16 @@ boundaries:
     assumption: "Migrated from containers.md; not yet mapped to a code path."
   - id: BND-14
     legacy_id: "Provider, Remote, and Object Store"
-    name: "Provider, Remote, and Object Store"
+    name: Provider
     kind: other
-    type: Optional Writer-controlled synchronization services
-    responsibility: "The Provider authorizes and locates a private Remote. The Remote stores Workspace history. The Object Store stores immutable Object bytes under the Writer's control"
-    inputs: [Accepts authenticated repository or Object operations.]
-    outputs: [Returns explicit authorization, privacy, integrity, and availability outcomes.]
-    depends_on: [External network availability, "Writer-controlled Provider, Remote, and Object Store accounts"]
+    type: External authorization and location boundary
+    responsibility: "Authorizes the Writer and selects, provisions, and locates an eligible private Remote"
+    inputs: ["Accepts authorization, Remote selection, provisioning, location, privacy, and access requests."]
+    outputs: ["Returns explicit authorization, private Remote location, provisioning, privacy, and access outcomes."]
+    depends_on: [BND-20, External network availability, Writer-controlled Provider account]
+    trust_boundary: true
     certainty: assumed
-    assumption: "Migrated from containers.md; not yet mapped to a code path."
+    assumption: "The PRD defines Provider authorization and private Remote eligibility, but the connection hasn't been exercised end to end."
   - id: BND-15
     legacy_id: Release Pipeline
     name: Release Pipeline
@@ -213,6 +214,28 @@ boundaries:
     depends_on: [BND-15, External network availability]
     certainty: assumed
     assumption: "Migrated from containers.md; not yet mapped to a code path."
+  - id: BND-20
+    name: Remote
+    kind: other
+    type: Private external history storage
+    responsibility: "Stores and exchanges the private Workspace history for one connected Workspace"
+    inputs: ["Accepts authenticated history reads, writes, and published-ref enumeration."]
+    outputs: ["Returns Workspace history, advertised refs, transfer outcomes, and availability outcomes."]
+    depends_on: [BND-14, External network availability, Writer-controlled private Remote]
+    trust_boundary: true
+    certainty: assumed
+    assumption: "The PRD defines private Remote history and access behavior, but synchronization hasn't been exercised end to end."
+  - id: BND-21
+    name: Object Store
+    kind: other
+    type: Writer-controlled external Object storage
+    responsibility: "Stores and exchanges immutable Object bytes for a connected Workspace under the Writer's control"
+    inputs: ["Accepts authenticated Object operations and anonymous list, read, write, and delete privacy probes."]
+    outputs: ["Returns verified Object bytes and explicit privacy, integrity, and availability outcomes."]
+    depends_on: [External network availability, Writer-controlled Object Store account]
+    trust_boundary: true
+    certainty: assumed
+    assumption: "The PRD defines Writer-controlled Object storage and privacy behavior, but Object transfer hasn't been exercised end to end."
 edges:
   - from: BND-01
     to: BND-02
@@ -301,7 +324,11 @@ edges:
   - from: BND-10
     to: BND-14
     protocol: request-response
-    note: Authenticated history and authorization exchanges with the private Remote
+    note: Provider authorization, private Remote selection, provisioning, location, privacy, and access exchanges
+  - from: BND-10
+    to: BND-20
+    protocol: request-response
+    note: Authenticated history transfer and published-ref enumeration against the private Remote
   - from: BND-10
     to: BND-05
     protocol: in-process
@@ -315,9 +342,9 @@ edges:
     protocol: in-process
     note: Provider token retrieval and refresh
   - from: BND-11
-    to: BND-14
+    to: BND-21
     protocol: request-response
-    note: "Authenticated Object write, read, and identity-verification requests against the Writer-controlled Object Store"
+    note: "Authenticated Object transfer, identity-verification, and complete anonymous-privacy probes against the Writer-controlled Object Store"
   - from: BND-11
     to: BND-06
     protocol: in-process
@@ -366,3 +393,7 @@ edges:
     to: BND-17
     protocol: file-handoff
     note: "Authoritative expected identity delivered independently of candidate output"
+  - from: BND-14
+    to: BND-20
+    protocol: request-response
+    note: Provisioned private Remote location and access metadata

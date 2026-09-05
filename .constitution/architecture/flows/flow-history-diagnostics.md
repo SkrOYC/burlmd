@@ -1,7 +1,7 @@
 ---
 job: JOB-05
 capabilities: [CAP-044, CAP-045]
-boundaries: [BND-01, BND-02, BND-05, BND-08]
+boundaries: [BND-01, BND-02, BND-05, BND-06, BND-08, BND-11, BND-13, BND-21]
 view: sequence
 certainty: assumed
 assumption: "Migrated from markdown; not yet exercised by an integration test."
