@@ -1,4 +1,18 @@
 entries:
+  - version: v2.1.0
+    date: 2026-09-05
+    added:
+      - "Added BND-20 as the private Remote history boundary and BND-21 as the Writer-controlled Object Store boundary."
+      - "Gave the Provider, Remote, and Object Store distinct responsibilities, trust classifications, inputs, outputs, and dependencies."
+    changed:
+      - "Narrowed BND-14 to Provider authorization and private Remote location, while preserving BND-15 through BND-19."
+      - "Separated Provider authorization, Remote history, Object Store transfer, and Provider-to-Remote location into four request-response edges."
+      - "Updated affected flow participants for the split external boundaries and added the Host Platform to Writer-selected Export writes."
+    fixed:
+      - "Added the Local Asset Store, Object Transfer Coordinator, Object Store, and Host Platform to the history and diagnostics flow for missing-Object recovery and Writer-selected destination writes."
+    upstream:
+      prd: v2.0.5
+    by: stage
   - version: v2.0.5
     date: 2026-09-05
     changed:

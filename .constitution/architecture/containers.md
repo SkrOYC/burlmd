@@ -53,12 +53,12 @@ flowchart LR
     Sync -->|credential request| Secure
     ObjectTransfer -->|credential request| Secure
     Secure <-->|Platform credential access| Host
-    Sync <-->|authenticated service request| Provider
-    Sync <-->|authenticated history transfer| Remote
+    Sync <-->|request-response: Provider authorization and Remote location| Provider
+    Sync <-->|request-response: authenticated history transfer and ref inventory| Remote
     Sync <-->|history handoff| Persist
     Sync <-->|durable synchronization state| State
-    Provider -->|hosts and locates| Remote
-    ObjectTransfer <-->|authenticated Object transfer| ObjectStore
+    Provider -->|request-response: provisioned Remote location and access metadata| Remote
+    ObjectTransfer <-->|request-response: Object transfer and privacy verification| ObjectStore
     ObjectTransfer <-->|local Object handoff| LocalAssets
     ObjectTransfer <-->|durable Object state| State
     WorkspaceModel -->|Protected State roots| LocalAssets
@@ -182,13 +182,29 @@ Device preferences never enter Workspace content. Session and navigation state r
 - **Inputs and outputs:** Provides Platform services and lifecycle signals.
 - **Depends on:** None.
 
-## Provider, Remote, and Object Store
+## Provider
 
-- **Boundary kind:** External service and storage boundaries.
-- **Logical type:** Optional Writer-controlled synchronization services.
-- **Responsibility:** The Provider authorizes and locates a private Remote. The Remote stores Workspace history. The Object Store stores immutable Object bytes under the Writer's control.
-- **Inputs and outputs:** Accept authenticated repository or Object operations and return explicit authorization, privacy, integrity, and availability outcomes.
-- **Depends on:** External network availability and Writer-controlled accounts.
+- **Boundary kind:** External trust boundary.
+- **Logical type:** External authorization and location boundary.
+- **Responsibility:** Authorizes the Writer and selects, provisions, and locates an eligible private Remote.
+- **Inputs and outputs:** Accepts authorization, Remote selection, provisioning, location, privacy, and access requests. Returns explicit authorization, private Remote location, provisioning, privacy, and access outcomes.
+- **Depends on:** Remote, external network availability, and a Writer-controlled Provider account.
+
+## Remote
+
+- **Boundary kind:** External storage and trust boundary.
+- **Logical type:** Private external history storage.
+- **Responsibility:** Stores and exchanges the private Workspace history for one connected Workspace.
+- **Inputs and outputs:** Accepts authenticated history reads, writes, and published-ref enumeration. Returns Workspace history, advertised refs, transfer outcomes, and availability outcomes.
+- **Depends on:** Provider, external network availability, and the Writer-controlled private Remote.
+
+## Object Store
+
+- **Boundary kind:** External storage and trust boundary.
+- **Logical type:** Writer-controlled external Object storage.
+- **Responsibility:** Stores and exchanges immutable Object bytes for a connected Workspace under the Writer's control.
+- **Inputs and outputs:** Accepts authenticated Object operations and anonymous list, read, write, and delete privacy probes. Returns verified Object bytes and explicit privacy, integrity, and availability outcomes.
+- **Depends on:** External network availability and a Writer-controlled Object Store account.
 
 ## Release Pipeline
 

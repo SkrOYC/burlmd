@@ -1,7 +1,7 @@
 ---
 job: JOB-02
 capabilities: [CAP-016, CAP-019, CAP-020, CAP-036, CAP-043]
-boundaries: [BND-01, BND-02, BND-03, BND-04, BND-05, BND-07, BND-08, BND-10, BND-12, BND-13, BND-14]
+boundaries: [BND-01, BND-02, BND-03, BND-04, BND-05, BND-07, BND-08, BND-10, BND-12, BND-13, BND-14, BND-20]
 view: state
 certainty: assumed
 assumption: "Migrated from markdown; not yet exercised by an integration test."
