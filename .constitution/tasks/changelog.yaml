@@ -19,7 +19,7 @@ entries:
     upstream:
       prd: v2.0.2
       architecture: v2.0.4
-      tech-spec: v2.0.8
+      tech-spec: v2.0.9
     by: patch-lane
   - version: v3.1.1
     date: 2026-09-05
