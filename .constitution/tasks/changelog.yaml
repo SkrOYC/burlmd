@@ -1,4 +1,15 @@
 entries:
+  - version: v3.2.2
+    date: 2026-09-05
+    changed:
+      - "Revalidated the active task graph against Architecture v2.1.0 and TechSpec v2.1.0 without duplicating upstream contracts. The exact non-Spike source-write allowlists remain covered by BURL-G011, BURL-P002, BURL-O004, and BURL-O011 through BURL-O013, and BURL-O004's planned rust/benches/prd-meters-coordinator package remains inside its ticket scope; the 10-epic, 80-ticket, 564-point plan is unchanged."
+      - "Clarified BURL-O012's STOP boundary to exclude AppImage verification and installed macOS artifact/package verification owned by BURL-O013 while retaining the required common-functional evidence on both macOS roles."
+      - "Regenerated critical-path.md from the unchanged 10-epic graph."
+    upstream:
+      prd: v2.0.5
+      architecture: v2.1.0
+      tech-spec: v2.1.0
+    by: stage
   - version: v3.2.1
     date: 2026-09-05
     fixed:

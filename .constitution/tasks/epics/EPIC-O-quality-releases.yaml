@@ -694,8 +694,11 @@ tickets:
         platform regression isn't recorded on managed `ubuntu-24.04`, if it
         substitutes for the macOS 26 authoritative product visual baseline, or
         if the authenticated role or aggregate schema validation fails.
-      - STOP if work would include AppImage or macOS verification, or waiving a
-        failed P0 capability or PRD Fail threshold; don't expand this ticket.
+      - STOP if work would include AppImage verification or installed macOS
+        artifact/package verification owned by BURL-O013. This boundary does
+        not exclude BURL-O012's required common-functional evidence on both
+        macOS roles; execute that evidence. Also STOP if waiving a failed P0
+        capability or PRD Fail threshold; don't expand this ticket.
       - STOP if the report isn't accepted with the exact BURL-O012 profile, or
         its manifest doesn't bind the producing command and tested-source
         commit; don't improvise evidence.
