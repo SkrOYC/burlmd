@@ -1,10 +1,19 @@
 owner: SPK-BURL-F001
 mode: hitl_sil
 produced:
-  date: 2026-08-23
-  commit: e0cbdb885d846115ffcc1a63691df7f861d1204c
-  command: "BURLMD_SMOKE_F001=1 BURLMD_SMOKE_SHOT_DIR=\"$PWD/.constitution/evidence/SPK-BURL-F001\" ./scripts/smoke-shot.sh <name>"
-  host: "Wayland session with grim, Flutter 3.44.3 and Dart 3.12.2"
+  date: 2026-09-05
+  commit: bb77a6c49102d3f6435930569c55a6176414312f
+  command: >-
+    LC_ALL=C git archive --format=tar
+    bb77a6c49102d3f6435930569c55a6176414312f --
+    .constitution/evidence/SPK-BURL-F001/README.md
+    .constitution/evidence/SPK-BURL-F001/formatted.png
+    .constitution/evidence/SPK-BURL-F001/heading-focused.png
+    .constitution/evidence/SPK-BURL-F001/list-focused.png
+    .constitution/evidence/SPK-BURL-F001/paragraph-focused.png
+    .constitution/evidence/SPK-BURL-F001/provenance.md
+    | tar -x -C .
+  host: "Historical capture environment: Wayland session with grim, Flutter 3.44.3 and Dart 3.12.2 (capture on 2026-08-23; preserved at produced.commit)"
 files:
   - path: README.md
     sha256: 2800128c6c740072269dcd9a3da71b6404a35f6f9a863e85b8e34b9ae7c90a93
@@ -26,4 +35,15 @@ files:
     sha256: df73bdd6093ffa46200ee8cb5aa58da630553ee8ff01f4c68c3212b3f5227e17
     bytes: 703760
     role: screenshot
-pass_criteria: "A rerun must show the focused capture adding the raw Markdown delimiters while the following Block keeps the same top edge as formatted.png; the digests above record the accepted run, not a byte-equality gate."
+  - path: provenance.md
+    sha256: 16d263b5b57be6f09c4b2391269207570cc70ac47b5a39a1735c8c9c9760209f
+    bytes: 2373
+    role: log
+pass_criteria: >-
+  Historical record: README.md and provenance.md describe the accepted capture
+  behavior and its original 2026-08-23 capture environment; the listed byte
+  counts and SHA-256 values are recorded facts for produced.commit, not claims
+  that produced.commit captured the screenshots. Repeatable integrity gate: from
+  the repository root, run produced.command and require exactly the six listed
+  paths under .constitution/evidence/SPK-BURL-F001/, with every recovered file
+  matching its listed byte count and SHA-256.
