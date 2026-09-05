@@ -1,4 +1,13 @@
 entries:
+  - version: v2.0.7
+    date: 2026-09-05
+    changed:
+      - "Removed exactly three temporary Stage 4 compatibility verification-command aliases after the active Tasks graph adopted the canonical evidence paths: the shared BURL-K009/BURL-O014 GitHub App report-path alias, the BURL-N009 canary/device-authorization report-path alias, and the pre-profile-migration BURL-O012 installed-Nix profile alias. Canonical BURL-K009, BURL-N009, BURL-O014, and BURL-O012 commands remain byte-identical, as do every legitimate lower-level managed role/profile command."
+      - "Removed the stale compatibility-alias label and handoff prose. Active acceptance verification commands no longer write to `.constitution/reports/`; no raw contract or schema version changed."
+    by: patch-lane
+    upstream:
+      prd: v2.0.2
+      architecture: v2.0.4
   - version: v2.0.6
     date: 2026-09-05
     changed:
