@@ -463,16 +463,31 @@ verification_commands:
     owner: BURL-O009
   - name: other
     label: canonical BURL verification for BURL-O011
+    command: "TRUST_ANCHOR_WORKTREE/scripts/managed-evidence.sh run --ticket BURL-O011 --trust-anchor-sha TRUST_ANCHOR_SHA --source-ref SOURCE_REF --tested-source-sha TESTED_SOURCE_SHA --base-sha BASE_SHA --output EVIDENCE_WORKTREE/.constitution/evidence/BURL-O011/managed-evidence.json && git -C EVIDENCE_WORKTREE diff --check"
+    exists: false
+    owner: BURL-O011
+  - name: other
+    label: temporary Stage 4 compatibility alias quoted by BURL-O011; remove after the Tasks release-evidence migration
     command: "Run the accepted x86-64 AppImage installed matrix from final TechSpec against the immutable `BURL-O009` candidate on every accepted Linux runtime. Run its common functional, performance, and exact private-headless platform-regression evidence on managed `ubuntu-24.04`, validate the authenticated role and aggregate schemas, then run `git diff --check`."
     exists: false
     owner: BURL-O011
   - name: other
     label: canonical BURL verification for BURL-O012
+    command: "TRUST_ANCHOR_WORKTREE/scripts/managed-evidence.sh run --ticket BURL-O012 --trust-anchor-sha TRUST_ANCHOR_SHA --source-ref SOURCE_REF --tested-source-sha TESTED_SOURCE_SHA --base-sha BASE_SHA --output EVIDENCE_WORKTREE/.constitution/evidence/BURL-O012/managed-evidence.json && git -C EVIDENCE_WORKTREE diff --check"
+    exists: false
+    owner: BURL-O012
+  - name: other
+    label: temporary Stage 4 compatibility alias quoted by BURL-O012; remove after the Tasks release-evidence migration
     command: "Run the accepted Nix installed matrix from final TechSpec against the immutable `BURL-O009` Flake candidate on every exposed x86-64 Linux system. To preserve NFC-34 parity, run its complete common functional and performance matrix plus required non-authoritative exact private-headless Linux platform-regression evidence on managed `ubuntu-24.04` through the authenticated `BURL-M003` evidence protocol; that regression result never substitutes for the macOS 26 authoritative product visual baseline. Validate the authenticated role and aggregate schemas, then run `git diff --check`."
     exists: false
     owner: BURL-O012
   - name: other
     label: canonical BURL verification for BURL-O013
+    command: "TRUST_ANCHOR_WORKTREE/scripts/managed-evidence.sh run --ticket BURL-O013 --trust-anchor-sha TRUST_ANCHOR_SHA --source-ref SOURCE_REF --tested-source-sha TESTED_SOURCE_SHA --base-sha BASE_SHA --output EVIDENCE_WORKTREE/.constitution/evidence/BURL-O013/managed-evidence.json && git -C EVIDENCE_WORKTREE diff --check"
+    exists: false
+    owner: BURL-O013
+  - name: other
+    label: temporary Stage 4 compatibility alias quoted by BURL-O013; remove after the Tasks release-evidence migration
     command: "Run the accepted Apple Silicon installed matrix from final TechSpec against the immutable `BURL-O009` archive on managed Apple Silicon `macos-26` and `macos-15`. Run common functional evidence on both, performance and the sole authoritative macOS visual baseline on macOS 26 only, validate the authenticated role and aggregate schemas, then run `git diff --check`."
     exists: false
     owner: BURL-O013
@@ -1034,7 +1049,9 @@ until an actual rendered screenshot was inspected.
 
 ## Evidence-only acceptance handoff
 
-An accepted managed run is an input to review, not ticket completion. `BURL-G011` and `BURL-H009` each write their managed report to `.constitution/evidence/BURL-G011/managed-evidence.json` and `.constitution/evidence/BURL-H009/managed-evidence.json`; `BURL-O004` additionally writes `.constitution/evidence/BURL-O004/nightly-prd-meters.json`. For each ticket, a later evidence-only pull request may change only that ticket's exact evidence directory, adds the declared managed report and any result artifact, and includes `.constitution/evidence/BURL-<TICKET>/manifest.yaml` with the byte count and SHA-256 digest for every accepted file. Independent review and merge of that manifest-backed pull request are mandatory; neither a successful run nor a draft or unreviewed evidence pull request completes the ticket.
+An accepted managed run is an input to review, not ticket completion. `BURL-G011` and `BURL-H009` each write their managed report to `.constitution/evidence/BURL-G011/managed-evidence.json` and `.constitution/evidence/BURL-H009/managed-evidence.json`; `BURL-O004` additionally writes `.constitution/evidence/BURL-O004/nightly-prd-meters.json`; and the installed-release gates each write only `.constitution/evidence/BURL-O011/managed-evidence.json`, `.constitution/evidence/BURL-O012/managed-evidence.json`, or `.constitution/evidence/BURL-O013/managed-evidence.json`. For each ticket, a later evidence-only pull request may change only that ticket's exact evidence directory, adds the declared managed report and any result artifact, and includes `.constitution/evidence/BURL-<TICKET>/manifest.yaml` with the byte count and SHA-256 digest for every accepted file. Independent review and merge of that manifest-backed pull request are mandatory; neither a successful run nor a draft or unreviewed evidence pull request completes the ticket.
+
+`BURL-O014` consumes the three gate directories only after independently reviewed evidence-only pull requests merge. It validates each manifest, the manifest-bound aggregate report, its accepted identity and exact role profile, and the common immutable `BURL-O009` release identity before it publishes. It never accepts a report from `.constitution/reports/`, an ephemeral handoff, an unmanifested file, or an unreviewed commit. The three temporary compatibility aliases above exist solely because the current Stage 4 task strings still quote the former prose commands; they are not durable evidence commands and must be removed together once Tasks quote the canonical managed-evidence commands.
 
 Canonical acceptance artifacts for `BURL-K009`, `BURL-N009`, and `BURL-O014` likewise live only in `.constitution/evidence/BURL-K009/`, `.constitution/evidence/BURL-N009/`, and `.constitution/evidence/BURL-O014/`. Their reports retain the specified credential-free, permission, device-flow, and freshness checks; a later manifest-backed evidence-only review is still required before acceptance.
 

@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": ["schemaVersion", "expectedIdentity", "expectedIdentitySha256", "expectedIdentityArtifact", "generatedAt", "mode", "status", "roleEvidence", "coordinatorExecution", "aggregationChecks", "rejectionReasons"],
   "properties": {
-    "schemaVersion": { "const": 13 },
+    "schemaVersion": { "const": 14 },
     "expectedIdentity": { "$ref": "ci-role-evidence.schema.json#/$defs/expectedIdentity" },
     "expectedIdentitySha256": { "$ref": "#/$defs/sha256" },
     "expectedIdentityArtifact": {
@@ -83,7 +83,7 @@
         },
         "allOf": [
           {
-            "if": { "properties": { "expectedIdentity": { "type": "object", "properties": { "ticketIdentity": { "enum": ["BURL-M003", "BURL-G011", "BURL-H009", "BURL-O012"] } } } } },
+            "if": { "properties": { "expectedIdentity": { "type": "object", "properties": { "ticketIdentity": { "enum": ["BURL-M003", "BURL-G011", "BURL-H009", "BURL-O011", "BURL-O012", "BURL-O013"] } } } } },
             "then": { "properties": { "coordinatorExecution": { "type": "null" } } },
             "else": { "properties": { "coordinatorExecution": {
               "allOf": [
