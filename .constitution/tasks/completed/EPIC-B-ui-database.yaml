@@ -17,7 +17,7 @@ tickets:
     scope:
       in: [rust/src/security/keyring.rs]
     verification:
-      command: "cargo test security::"
+      command: "cargo test --manifest-path rust/Cargo.toml security::"
       expected: exit 0
     description: Implement Rust keyring integration to generate and securely store a 256-bit root AES key in the host OS secure enclave
     acceptance:
@@ -41,7 +41,7 @@ tickets:
     scope:
       in: [rust/src/db/connection.rs]
     verification:
-      command: "cargo test db::"
+      command: "cargo test --manifest-path rust/Cargo.toml db::"
       expected: exit 0
     description: Configure the rusqlite initialization to issue PRAGMA key using the root key from BURL-B001
     acceptance:
@@ -65,7 +65,7 @@ tickets:
     scope:
       in: [rust/src/db/connection.rs, rust/src/db/schema.sql]
     verification:
-      command: "cargo test db::"
+      command: "cargo test --manifest-path rust/Cargo.toml db::"
       expected: exit 0
     description: "Implement rusqlite setup logic to initialize the local encrypted database file, applying the notes, links, and notes_fts tables using the TechSpec schema"
     acceptance:
@@ -86,7 +86,7 @@ tickets:
     scope:
       in: [rust/src/api/ffi_api.rs]
     verification:
-      command: cargo build
+      command: cargo build --manifest-path rust/Cargo.toml
       expected: exit 0
     description: "Expose search_notes and save_note functions across the FRB boundary, wiring them to the rusqlite database operations"
     acceptance:
@@ -158,7 +158,7 @@ tickets:
     scope:
       in: [lib/src/components/editor.dart, rust/src/api/ffi_api.rs]
     verification:
-      command: "cargo build && flutter test"
+      command: "cargo build --manifest-path rust/Cargo.toml && flutter test"
       expected: exit 0
     description: "Wire the Editor widget to send block updates (keystrokes) to the update_block FFI function, and re-render the AST returned by the Core Engine"
     acceptance:
