@@ -1,4 +1,12 @@
 entries:
+  - version: v2.0.13
+    date: 2026-09-05
+    changed:
+      - "Removed exactly six explicitly labeled temporary Stage 4 compatibility aliases covering BURL-A001, BURL-A002, BURL-A003, BURL-B001, BURL-B002, BURL-B003, BURL-B004, and BURL-B007 after completed Tasks migrated each consumer to its canonical root-safe command. Canonical commands remain byte-for-byte unchanged; no raw contract or schema versions changed."
+    by: patch-lane
+    upstream:
+      prd: v2.0.3
+      architecture: v2.0.5
   - version: v2.0.12
     date: 2026-09-05
     changed:
