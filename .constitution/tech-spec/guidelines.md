@@ -87,7 +87,7 @@ verification_commands:
     exists: false
     owner: BURL-M003
   - name: test
-    label: canonical planned BURL verification for BURL-P004; temporary Stage 4 compatibility for active BURL-H011
+    label: canonical BURL verification for BURL-P004
     command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh decide-h011 && git diff --check"
     exists: false
     owner: BURL-M003
@@ -107,7 +107,7 @@ verification_commands:
     exists: false
     owner: BURL-M003
   - name: test
-    label: canonical planned BURL verification for BURL-P003; temporary Stage 4 compatibility for active BURL-H010
+    label: canonical BURL verification for BURL-P003
     command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh ext-h010 && git diff --check"
     exists: false
     owner: BURL-M003
@@ -162,7 +162,7 @@ verification_commands:
     exists: false
     owner: BURL-M003
   - name: test
-    label: canonical planned BURL verification for BURL-P001; temporary Stage 4 compatibility for active BURL-H008
+    label: canonical BURL verification for BURL-P001
     command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh repair-h008 && git diff --check"
     exists: false
     owner: BURL-M003
@@ -222,15 +222,10 @@ verification_commands:
     exists: false
     owner: BURL-M003
   - name: probe
-    label: canonical planned managed verification for BURL-P002
+    label: canonical managed verification for BURL-P002
     command: "TRUST_ANCHOR_WORKTREE/scripts/managed-evidence.sh run --ticket BURL-P002 --trust-anchor-sha TRUST_ANCHOR_SHA --source-ref SOURCE_REF --tested-source-sha TESTED_SOURCE_SHA --base-sha BASE_SHA --output EVIDENCE_WORKTREE/.constitution/evidence/BURL-P002/managed-evidence.json && git -C EVIDENCE_WORKTREE diff --check"
     exists: false
-    owner: BURL-M003
-  - name: probe
-    label: temporary Stage 4 compatibility command quoted by active BURL-H009; canonical planned identity is BURL-P002
-    command: "TRUST_ANCHOR_WORKTREE/scripts/managed-evidence.sh run --ticket BURL-H009 --trust-anchor-sha TRUST_ANCHOR_SHA --source-ref SOURCE_REF --tested-source-sha TESTED_SOURCE_SHA --base-sha BASE_SHA --output EVIDENCE_WORKTREE/.constitution/evidence/BURL-H009/managed-evidence.json && git -C EVIDENCE_WORKTREE diff --check"
-    exists: false
-    owner: BURL-H009
+    owner: BURL-P002
   - name: test
     label: "quoted by BURL-I002, BURL-L002"
     command: "cargo test --manifest-path rust/Cargo.toml && cargo clippy --workspace --all-targets --manifest-path rust/Cargo.toml -- -D warnings && ./scripts/check-generated-bindings.sh && git diff --check"
@@ -279,7 +274,7 @@ verification_commands:
     command: "cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && ./scripts/smoke-shot.sh remote-k007 && git diff --check"
     exists: true
   - name: test
-    label: canonical planned BURL verification for BURL-P005; temporary Stage 4 compatibility for active BURL-H012
+    label: canonical BURL verification for BURL-P005
     command: "cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && ./scripts/smoke-shot.sh rescan-h012 && git diff --check"
     exists: true
   - name: probe
@@ -648,7 +643,7 @@ The client also resolves `SOURCE_REF`, `TESTED_SOURCE_SHA`, and `BASE_SHA` from 
 
 The one repository-owned entry point is `./scripts/managed-evidence.sh`. `BURL-M003` implements it as a narrow client, not as a general workflow framework. It uses GitHub REST API version `2026-03-10` and the fixed `.github/workflows/ci.yml` file. `GH_TOKEN` must never appear in an argument, log, report, or artifact. The command has exactly two forms:
 
-- `./scripts/managed-evidence.sh run --ticket TICKET_ID --trust-anchor-sha TRUST_ANCHOR_SHA --source-ref SOURCE_REF --tested-source-sha TESTED_SOURCE_SHA --base-sha BASE_SHA --output REPORT_JSON` verifies the anchor and source guards. For a managed Spike, it also builds and identifies the locked coordinator before reading `GH_TOKEN`. It then creates canonical expected identity with a fresh run identity of `managed:` plus 32 lowercase hexadecimal digits. The launcher derives the artifact nonce as those exact 32 digits and dispatches the caller on `master`. It requires the dispatch response's exact workflow run ID, waits up to 7,200 seconds for attempt 1, and collects that run. It accepts `BURL-M003` only for the post-merge self-validation where the anchor, signer, tested source, and `master` tip are equal. Other tickets require the merged CI completion record. The canonical planned observer invocation is `--ticket BURL-P002` with output `.constitution/evidence/BURL-P002/managed-evidence.json`; the exact `BURL-H009` invocation remains only as the temporary Stage 4 bridge for the current Task.
+- `./scripts/managed-evidence.sh run --ticket TICKET_ID --trust-anchor-sha TRUST_ANCHOR_SHA --source-ref SOURCE_REF --tested-source-sha TESTED_SOURCE_SHA --base-sha BASE_SHA --output REPORT_JSON` verifies the anchor and source guards. For a managed Spike, it also builds and identifies the locked coordinator before reading `GH_TOKEN`. It then creates canonical expected identity with a fresh run identity of `managed:` plus 32 lowercase hexadecimal digits. The launcher derives the artifact nonce as those exact 32 digits and dispatches the caller on `master`. It requires the dispatch response's exact workflow run ID, waits up to 7,200 seconds for attempt 1, and collects that run. It accepts `BURL-M003` only for the post-merge self-validation where the anchor, signer, tested source, and `master` tip are equal. Other tickets require the merged CI completion record. The observer invocation is `--ticket BURL-P002` with output `.constitution/evidence/BURL-P002/managed-evidence.json`.
 - `./scripts/managed-evidence.sh collect --ticket TICKET_ID --trust-anchor-sha TRUST_ANCHOR_SHA --source-ref SOURCE_REF --tested-source-sha TESTED_SOURCE_SHA --base-sha BASE_SHA --run-identity RUN_IDENTITY --run-id RUN_ID --attempt RUN_ATTEMPT --output REPORT_JSON` resumes one dispatched run. It reconstructs the exact expected identity and verifies the returned run, attempt, event, signer, tested-source input, expected-identity bytes, and both guards before it accepts evidence.
 
 `TRUST_ANCHOR_WORKTREE` is the clean detached checkout whose `HEAD` equals `TRUST_ANCHOR_SHA`. `EVIDENCE_WORKTREE` is the separate checkout that will receive the declared evidence-only commit. `SOURCE_REF` is the full pushed `refs/heads/...` reference. `TESTED_SOURCE_SHA`, `BASE_SHA`, and `TRUST_ANCHOR_SHA` are full 40-hex commit SHAs. `BASE_SHA` is the reviewed ticket base: the merged tranche base for the first milestone or the reviewed preceding milestone in the same tranche. `RUN_IDENTITY` is the `managed:` prefix plus the launcher's 32-hex nonce. `ARTIFACT_NONCE` is exactly that lowercase hexadecimal suffix, never an independent input. Semantic validation requires `RUN_IDENTITY` to equal `managed:` plus `ARTIFACT_NONCE`. `RUN_ID` and `RUN_ATTEMPT` identify the dispatched workflow attempt. `REPORT_JSON` is an absolute path under `EVIDENCE_WORKTREE` that matches a declared evidence path. `OUTPUT_DIR` is its parent directory. The launcher rejects output inside the anchor checkout or outside the declared evidence worktree.
@@ -1038,7 +1033,7 @@ until an actual rendered screenshot was inspected.
 
 ## Evidence-only acceptance handoff
 
-An accepted managed run is an input to review, not ticket completion. `BURL-G011` and planned `BURL-P002` each write their managed report to `.constitution/evidence/BURL-G011/managed-evidence.json` and `.constitution/evidence/BURL-P002/managed-evidence.json`; the exact `.constitution/evidence/BURL-H009/managed-evidence.json` path remains only for the temporary active-Task compatibility bridge. `BURL-O004` additionally writes `.constitution/evidence/BURL-O004/nightly-prd-meters.json`; and the installed-release gates each write only `.constitution/evidence/BURL-O011/managed-evidence.json`, `.constitution/evidence/BURL-O012/managed-evidence.json`, or `.constitution/evidence/BURL-O013/managed-evidence.json`. For each ticket, a later evidence-only pull request may change only that ticket's exact evidence directory, adds the declared managed report and any result artifact, and includes `.constitution/evidence/BURL-<TICKET>/manifest.yaml` with the byte count and SHA-256 digest for every accepted file. Independent review and merge of that manifest-backed pull request are mandatory; neither a successful run nor a draft or unreviewed evidence pull request completes the ticket.
+An accepted managed run is an input to review, not ticket completion. `BURL-G011` and `BURL-P002` each write their managed report to `.constitution/evidence/BURL-G011/managed-evidence.json` and `.constitution/evidence/BURL-P002/managed-evidence.json`. `BURL-O004` additionally writes `.constitution/evidence/BURL-O004/nightly-prd-meters.json`; and the installed-release gates each write only `.constitution/evidence/BURL-O011/managed-evidence.json`, `.constitution/evidence/BURL-O012/managed-evidence.json`, or `.constitution/evidence/BURL-O013/managed-evidence.json`. For each ticket, a later evidence-only pull request may change only that ticket's exact evidence directory, adds the declared managed report and any result artifact, and includes `.constitution/evidence/BURL-<TICKET>/manifest.yaml` with the byte count and SHA-256 digest for every accepted file. Independent review and merge of that manifest-backed pull request are mandatory; neither a successful run nor a draft or unreviewed evidence pull request completes the ticket.
 
 `BURL-O014` consumes the three gate directories only after independently reviewed evidence-only pull requests merge. It validates each manifest, the manifest-bound aggregate report, its accepted identity and exact role profile, and the common immutable `BURL-O009` release identity before it publishes. It never accepts a report from `.constitution/reports/`, an ephemeral handoff, an unmanifested file, or an unreviewed commit.
 

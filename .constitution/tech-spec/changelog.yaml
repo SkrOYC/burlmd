@@ -1,4 +1,14 @@
 entries:
+  - version: v2.0.15
+    date: 2026-09-05
+    changed:
+      - "Removed the temporary BURL-H009 managed-evidence command, role profile, allowed-ticket identity, schema identity, evidence-only integration, evidence paths, and bridge policy after Stage 4 adopted active BURL-P002. The canonical BURL-P002 command, profile, and evidence-only integration remain byte-for-byte unchanged; its missing-command owner is now BURL-P002."
+      - "Removed stale active-Task BURL-H008, BURL-H010, BURL-H011, and BURL-H012 labels from the canonical BURL-P001 through BURL-P005 command inventory while preserving the stable repair-h008, ext-h010, decide-h011, and rescan-h012 artifact names."
+      - "Advanced provisional-spikes.toml from raw-contract version 29 to 30 and its identifier to tech-spec-v2.0.15-provisional. ci-role-evidence advances from schema version 13 to 14 and ci-evidence from 15 to 16 because their accepted ticket identity sets no longer include BURL-H009. Spike-result remains version 20."
+    by: patch-lane
+    upstream:
+      prd: v2.0.4
+      architecture: v2.0.5
   - version: v2.0.14
     date: 2026-09-05
     changed:

@@ -248,7 +248,7 @@ bill_of_materials:
     justification: "Candidate live Workspace observer, with a polling fallback for unsupported or network filesystems"
     radar: assess
     certainty: assumed
-    assumption: "Only explicit Rescan exists today; final Stage 3 must pin and contract the observer before planned BURL-P002 builds against it. The current BURL-H009 Task remains a temporary Stage 4 compatibility bridge."
+    assumption: "Only explicit Rescan exists today; final Stage 3 must pin and contract the observer before BURL-P002 builds against it."
   - name: aws-sdk-s3
     role: library
     version: "1.144.0"
