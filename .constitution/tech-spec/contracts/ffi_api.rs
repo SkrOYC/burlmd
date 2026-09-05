@@ -1,12 +1,16 @@
-// FORWARD STATUS (TechSpec v2.0.1-provisional, translated from reviewed v1.8.7-provisional): this is the delivered
+// FORWARD STATUS (TechSpec v2.1.0, translated from reviewed v1.8.7-provisional): this is the delivered
 // brownfield interface, with the Epic G session-restore exception specified.
-// It is not otherwise an implementation-ready contract for structured PRD v2.0.0 and
-// Architecture v2.0.1.
+// It is not otherwise an implementation-ready contract for structured PRD v2.0.5 and
+// Architecture v2.1.0.
 // In particular, AstNode is a rendering projection rather than the required
 // canonical extended AST; the OAuth redirect flow is superseded by the
 // GitHub App device-flow decision; title-verbatim path derivation is under
 // OD-05; export predates atomic object-complete export; and asset, monitoring,
-// reconciliation-decision, and release surfaces remain absent.
+// reconciliation-decision, Object Transfer Coordinator (BND-11), Object Store
+// (BND-21), and release surfaces remain absent. Its current connection surface
+// crosses Presentation/Core (BND-01/BND-02), Remote Sync Coordinator (BND-10),
+// Provider authorization/location (BND-14), and Remote history (BND-20); it
+// never assigns Remote history or Object transfer/storage to Provider.
 // Research-only Tasks must use contracts/provisional-spikes.toml and must not
 // implement or extend this FFI. The named Epic G exceptions may implement
 // their specified contracts. BURL-M015 and BURL-M003 may bootstrap validation
@@ -1591,12 +1595,11 @@ pub async fn authenticate_workspace(
 /// push). Updates `workspaces.provider` and `remote_url` in place; never
 /// re-clones or discards local state.
 ///
-/// **Provider seam (ADR-009):** `provider` names an entry in the provider
-/// registry, not a hard-coded branch. GitHub ships first as the proven
-/// surface; GitLab (CAP-SYNC-09) is the seam's second consumer and lands
-/// behind it. Adding a provider must be additive: one auth/provisioning
-/// module plus a registry entry, with no changes to any function in this
-/// contract.
+/// **External boundaries:** the Remote Sync Coordinator (BND-10) asks the
+/// Provider (BND-14) only for authorization, private repository selection or
+/// provisioning, and the eligible Remote location. It then publishes history
+/// to the Remote (BND-20). Object transfer and storage remain separately owned
+/// by the Object Transfer Coordinator (BND-11) and Object Store (BND-21).
 #[frb]
 pub async fn connect_remote(
     provider: String,

@@ -13,8 +13,10 @@ assumption: "Migrated; the decision's ruling reference was not found in the stat
 ## Context
 Earlier planning named GitHub and GitLab together. PRD v1.3.2 now limits this phase to a complete private GitHub lifecycle and defers every second provider until that lifecycle works. ADR-017 also replaces the assumed PKCE redirect flow with GitHub App device flow.
 
+Architecture v2.1.0 makes the seam precise. Provider (`BND-14`) owns authorization, eligible private-Remote selection or provisioning, and location. Remote (`BND-20`) owns authenticated history and ref exchange. Object Store (`BND-21`) owns Object bytes through the separate `BND-11` coordinator. ADR-017 supersedes any language that assigned Git transfer to a provider module.
+
 ## Decision
-1. **`connect_remote(provider, ...)` is a registry dispatch, not a branch.** Each provider supplies one module implementing a small surface: OAuth authorization (PKCE), token storage naming, repository provisioning, repository emptiness verification, and HTTPS remote URL construction. The sync machinery itself — fetch, merge, push — is already provider-agnostic because it speaks Git.
+1. **`connect_remote(provider, ...)` is a registry dispatch, not a branch.** Each provider supplies authorization, token storage naming, repository provisioning and eligibility checks, and HTTPS Remote location construction. The `BND-10` sync machinery fetches from and pushes to `BND-20`; Provider never owns history exchange.
 2. **GitHub implements the surface first**, as the proven case. A second provider is deferred until the private GitHub lifecycle works; its implementation may adjust the surface *once*, before a third provider could exist.
 3. **Adding a provider must be additive:** a new module plus a registry entry. No function signature in `contracts/ffi_api.rs` changes, no existing provider's module is edited, and no caller branches on provider identity beyond registry lookup.
 4. **Provider differences live inside their modules.** Scopes, API endpoints, rate limits, and error mapping are that module's private affair; the contract's types describe outcomes (`SessionState`, `WorkspaceInfo`), never vendor payloads.

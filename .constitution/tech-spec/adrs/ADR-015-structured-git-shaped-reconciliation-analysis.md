@@ -18,7 +18,7 @@ Git 2.54.0 is available in the pinned environment. Its `merge-tree` command expo
 
 ## Candidate decision
 
-1. Remote reconciliation starts with a read-only analysis plan over exact base, local, and incoming object identities before the authoritative Workspace changes.
+1. Remote reconciliation starts with a read-only analysis plan over exact base, local, and incoming object identities before the authoritative Workspace changes. `BND-10` obtains authenticated history and advertised refs from Remote (`BND-20`). Provider (`BND-14`) supplies only authorization and location. Asset outcomes can refer to Object identities, but transfer and storage remain `BND-11` and `BND-21` responsibilities.
 2. The plan classifies content conflicts, Lifecycle Decisions, Asset Decisions, unsupported repository entries, and clean changes. It retains Git object IDs and paths needed to revalidate the plan before application.
 3. Text Suggestions are derived only for conflicting Note content that the canonical AST can represent. Markers aren't the source of truth.
 4. Lifecycle and asset choices apply as explicit Core transactions. The operation rechecks heads and affected object identities before publication and refuses a stale plan.

@@ -10,7 +10,9 @@ assumption: "Migrated; the decision's ruling reference was not found in the stat
 **Status:** Accepted
 
 ## Context
-While the remote repository (e.g., GitHub) is secured by the provider's infrastructure and the user's OAuth tokens, the local mobile device or laptop is highly vulnerable to theft or unauthorized filesystem access. We initially considered encrypting the local Markdown files via AES-GCM before letting Git manage them. However, encrypting files locally fundamentally breaks Git's line-based merge logic for conflict resolution, and locking the encryption key to a single device prevents cross-device syncing via standard Git clones.
+The external service protects private history in Remote (`BND-20`) by using authorization from Provider (`BND-14`). Provider authorizes and locates the Remote; it doesn't store the history. The local desktop remains vulnerable to theft or unauthorized filesystem access.
+
+We initially considered encrypting local Markdown files with AES-GCM before Git manages them. However, local encryption breaks Git's line-based conflict resolution. A device-bound key also prevents synchronization through standard Git clones.
 
 ## Decision
 1. **SQLite:** We will use `sqlcipher` (bundled via `rusqlite`) to transparently encrypt the entire SQLite index and FTS5 virtual tables using AES-256. This prevents sandbox escapes from scraping the user's aggregated knowledge graph in bulk.

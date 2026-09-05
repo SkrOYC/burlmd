@@ -572,12 +572,24 @@ layout:
     purpose: "Planned: S3-compatible transfer and validation"
     exists: false
   - path: rust/src/provider
-    purpose: "Planned: private GitHub App/provider integration"
+    purpose: "Planned BND-14 Provider authorization, installation/repository eligibility, provisioning, and Remote-location integration; no history or Object transfer"
     exists: false
   - path: rust/src/security
     purpose: OS Keychain root-key integration
   - path: rust/src/sync
-    purpose: Debounced background sync scheduler
+    purpose: "BND-10 Remote synchronization coordination; BND-20 history/ref transfer is distinct from BND-14 authorization/location"
+  - path: rust/benches
+    purpose: "Planned managed PRD meters and BURL-O004-owned coordinator package"
+    exists: false
+  - path: rust/benches/prd-meters-coordinator/Cargo.toml
+    purpose: "Planned locked coordinator manifest owned by BURL-O004; becomes trusted control only after reviewed merge and trust-anchor rotation"
+    exists: false
+  - path: rust/benches/prd-meters-coordinator/Cargo.lock
+    purpose: "Planned coordinator dependency lockfile and immutable preparation input owned by BURL-O004"
+    exists: false
+  - path: rust/benches/prd-meters-coordinator/src/main.rs
+    purpose: "Planned coordinator source owned by BURL-O004; reads fixed /inputs role artifacts and writes only /output/nightly-prd-meters.json"
+    exists: false
   - path: rust/src/update
     purpose: "Planned: compatible release-metadata checks"
     exists: false
@@ -607,7 +619,7 @@ commit_convention: Conventional Commits
 
 ## Provisional research boundary
 
-TechSpec v2.0.1-provisional (translated from reviewed v1.8.7-provisional) permits research code only under `.constitution/prototypes/`. The existing Epic G M0 production exceptions remain unchanged. `BURL-M015` and `BURL-M003` may write production code only for their reproducibility and validation bootstrap. Every other production ticket remains blocked by its own decision evidence and a matching Stage 3 and Stage 4 adaptation. Except for these contract-scoped exceptions, production directories (`lib/`, `rust/`, `linux/`, and `macos/`) are read-only inputs to this research wave.
+TechSpec v2.1.0 (translated from reviewed v1.8.7-provisional) permits research code only under `.constitution/prototypes/`. The existing Epic G M0 production exceptions remain unchanged. `BURL-M015` and `BURL-M003` may write production code only for their reproducibility and validation bootstrap. Every other production ticket remains blocked by its own decision evidence and a matching Stage 3 and Stage 4 adaptation. Except for these contract-scoped exceptions, production directories (`lib/`, `rust/`, `linux/`, and `macos/`) are read-only inputs to this research wave.
 
 The five exact prototype roots and verification commands are machine-readable in `contracts/provisional-spikes.toml`. Its allowlist is exhaustive: each Spike may write only its named prototype root and report path. Every unlisted repository path is read-only. Framework bookkeeping may update the owning active Task after the Spike process exits, but that isn't part of the Spike's write authority.
 
@@ -639,18 +651,31 @@ From a clean detached checkout at `TRUST_ANCHOR_SHA`, run the merged pipeline ag
 
 Normal tickets never run a launcher or workflow from the tested source. Run `./scripts/managed-evidence.sh` from a clean detached checkout of the immutable anchor. The client resolves `refs/heads/master` as `WORKFLOW_SIGNER_SHA`. Before dispatch and during collection, it verifies that every trusted control file at that SHA is byte-for-byte and mode-for-mode identical to `TRUST_ANCHOR_SHA`. It rejects a changed launcher, workflow, evidence schema, or raw CI contract.
 
-The client also resolves `SOURCE_REF`, `TESTED_SOURCE_SHA`, and `BASE_SHA` from `origin`. It requires `BASE_SHA` to be an ancestor of `TESTED_SOURCE_SHA`. The exact Git diff from base to tested source can change only paths in the selected Spike's `write_allowlist`. The check covers additions, deletions, renames, copies, mode changes, symlinks, and submodules. The client repeats this allowlist check during collection. A candidate can't define expected identity or change validation controls.
+The client also resolves `SOURCE_REF`, `TESTED_SOURCE_SHA`, and `BASE_SHA` from `origin`. It requires `BASE_SHA` to be an ancestor of `TESTED_SOURCE_SHA`. For a managed Spike, it selects `write_allowlist` from that Spike's trusted raw-contract record. For a managed non-Spike, it selects the exact ordered array from `ci_bootstrap.non_spike_source_write_allowlists.tickets` in the trust-anchor contract. It never reads the selection from candidate input, the tested-source checkout, live Task data, an evidence path, or expected identity. The exact Git diff from base to tested source can change only paths in that selection. The check covers additions, deletions, renames, copies, mode changes, symlinks, and submodules. The client repeats this allowlist check during collection. A candidate can't define expected identity or change validation controls.
+
+The managed non-Spike source-write allowlists are immutable and ordered. Their later evidence-only directories aren't source changes and are deliberately excluded:
+
+| Ticket | `expectedIdentity.sourceWriteAllowlist` |
+| :--- | :--- |
+| `BURL-G011` | `lib/src/design/**`, `lib/src/screens/workspace.dart`, `lib/src/components/**`, `lib/l10n/**`, `test/goldens/**`, `test/**`, `integration_test/**`, `scripts/visual-regression.sh` |
+| `BURL-P002` | `rust/src/workspace/**`, `rust/src/api/**`, `rust/Cargo.toml`, `rust/Cargo.lock`, `test/**` |
+| `BURL-O004` | `rust/benches/**`, `integration_test/**`, `scripts/**`, `.github/workflows/**` |
+| `BURL-O011` | `integration_test/**`, `scripts/**`, `.github/workflows/**` |
+| `BURL-O012` | `integration_test/**`, `scripts/**`, `.github/workflows/**` |
+| `BURL-O013` | `integration_test/**`, `scripts/**`, `.github/workflows/**` |
+
+`run` copies the trusted array into canonical `expectedIdentity.sourceWriteAllowlist` and validates it before dispatch. `collect` reconstructs the same trusted array and requires exact element-for-element and order equality in expected and captured identity. Absence, omission, addition, substitution, duplication, or reordering is rejected. Contract fixtures exercise every mismatch and prove that these six tickets remain non-Spikes; no synthetic Spike record supplies their identity.
 
 The one repository-owned entry point is `./scripts/managed-evidence.sh`. `BURL-M003` implements it as a narrow client, not as a general workflow framework. It uses GitHub REST API version `2026-03-10` and the fixed `.github/workflows/ci.yml` file. `GH_TOKEN` must never appear in an argument, log, report, or artifact. The command has exactly two forms:
 
-- `./scripts/managed-evidence.sh run --ticket TICKET_ID --trust-anchor-sha TRUST_ANCHOR_SHA --source-ref SOURCE_REF --tested-source-sha TESTED_SOURCE_SHA --base-sha BASE_SHA --output REPORT_JSON` verifies the anchor and source guards. For a managed Spike, it also builds and identifies the locked coordinator before reading `GH_TOKEN`. It then creates canonical expected identity with a fresh run identity of `managed:` plus 32 lowercase hexadecimal digits. The launcher derives the artifact nonce as those exact 32 digits and dispatches the caller on `master`. It requires the dispatch response's exact workflow run ID, waits up to 7,200 seconds for attempt 1, and collects that run. It accepts `BURL-M003` only for the post-merge self-validation where the anchor, signer, tested source, and `master` tip are equal. Other tickets require the merged CI completion record. The observer invocation is `--ticket BURL-P002` with output `.constitution/evidence/BURL-P002/managed-evidence.json`.
-- `./scripts/managed-evidence.sh collect --ticket TICKET_ID --trust-anchor-sha TRUST_ANCHOR_SHA --source-ref SOURCE_REF --tested-source-sha TESTED_SOURCE_SHA --base-sha BASE_SHA --run-identity RUN_IDENTITY --run-id RUN_ID --attempt RUN_ATTEMPT --output REPORT_JSON` resumes one dispatched run. It reconstructs the exact expected identity and verifies the returned run, attempt, event, signer, tested-source input, expected-identity bytes, and both guards before it accepts evidence.
+- `./scripts/managed-evidence.sh run --ticket TICKET_ID --trust-anchor-sha TRUST_ANCHOR_SHA --source-ref SOURCE_REF --tested-source-sha TESTED_SOURCE_SHA --base-sha BASE_SHA --output REPORT_JSON` verifies the anchor and source guards. For a managed Spike or BURL-O004, it also builds and identifies the locked coordinator before reading `GH_TOKEN`. It constructs `sourceWriteAllowlist` from the trust-anchor contract, not candidate input, then creates canonical expected identity with a fresh run identity of `managed:` plus 32 lowercase hexadecimal digits. The launcher derives the artifact nonce as those exact 32 digits and dispatches the caller on `master`. It requires the dispatch response's exact workflow run ID, waits up to 7,200 seconds for attempt 1, and collects that run. It accepts `BURL-M003` only for the post-merge self-validation where the anchor, signer, tested source, and `master` tip are equal. Other tickets require the merged CI completion record. The observer invocation is `--ticket BURL-P002` with output `.constitution/evidence/BURL-P002/managed-evidence.json`.
+- `./scripts/managed-evidence.sh collect --ticket TICKET_ID --trust-anchor-sha TRUST_ANCHOR_SHA --source-ref SOURCE_REF --tested-source-sha TESTED_SOURCE_SHA --base-sha BASE_SHA --run-identity RUN_IDENTITY --run-id RUN_ID --attempt RUN_ATTEMPT --output REPORT_JSON` resumes one dispatched run. It reconstructs the exact expected identity, including the trusted ordered `sourceWriteAllowlist`, and verifies the returned run, attempt, event, signer, tested-source input, expected-identity bytes, and both guards before it accepts evidence. For BURL-O004 it also completes coordinator preparation before authentication.
 
 `TRUST_ANCHOR_WORKTREE` is the clean detached checkout whose `HEAD` equals `TRUST_ANCHOR_SHA`. `EVIDENCE_WORKTREE` is the separate checkout that will receive the declared evidence-only commit. `SOURCE_REF` is the full pushed `refs/heads/...` reference. `TESTED_SOURCE_SHA`, `BASE_SHA`, and `TRUST_ANCHOR_SHA` are full 40-hex commit SHAs. `BASE_SHA` is the reviewed ticket base: the merged tranche base for the first milestone or the reviewed preceding milestone in the same tranche. `RUN_IDENTITY` is the `managed:` prefix plus the launcher's 32-hex nonce. `ARTIFACT_NONCE` is exactly that lowercase hexadecimal suffix, never an independent input. Semantic validation requires `RUN_IDENTITY` to equal `managed:` plus `ARTIFACT_NONCE`. `RUN_ID` and `RUN_ATTEMPT` identify the dispatched workflow attempt. `REPORT_JSON` is an absolute path under `EVIDENCE_WORKTREE` that matches a declared evidence path. `OUTPUT_DIR` is its parent directory. The launcher rejects output inside the anchor checkout or outside the declared evidence worktree.
 
 GitHub requires a `workflow_dispatch` workflow to exist on the default branch. The REST endpoint accepts a branch or tag as `ref`, not a commit SHA. Therefore the launcher dispatches `master` and verifies its exact signer SHA against the anchor before and after the run. The API version returns `200 OK` with the workflow run ID and URLs. The launcher never discovers a run by recency or branch order.
 
-Before dispatch, the launcher creates canonical `expected-identity.json` bytes. The identity separates `trustAnchorSha`, `workflowSignerSha`, `testedSourceSha`, `baseSha`, `runIdentity`, and its bijectively derived `artifactNonce`. It binds the exact source write allowlist and the selected ticket's complete `requiredEvidenceClasses` mapping. The launcher passes the base64 bytes and their SHA-256 digest as dispatch inputs and retains its local bytes. The trusted caller's static `expected` job decodes and validates those bytes, uploads the expected-identity artifact, and exports its artifact ID and bare action digest. Each role-calling job needs `expected` and passes those outputs as trusted reusable-workflow inputs. The workflow doesn't reconstruct candidate-supplied identity.
+Before dispatch, the launcher creates canonical `expected-identity.json` bytes. The identity separates `trustAnchorSha`, `workflowSignerSha`, `testedSourceSha`, `baseSha`, `runIdentity`, and its bijectively derived `artifactNonce`. It binds the exact source write allowlist selected from the trust-anchor raw contract and the selected ticket's complete `requiredEvidenceClasses` mapping. The launcher passes the base64 bytes and their SHA-256 digest as dispatch inputs and retains its local bytes. The trusted caller's static `expected` job decodes and validates those bytes, uploads the expected-identity artifact, and exports its artifact ID and bare action digest. Each role-calling job needs `expected` and passes those outputs as trusted reusable-workflow inputs. The workflow doesn't reconstruct candidate-supplied identity. Each role copies and captures the same array; collection rejects absence or any value/order mismatch before accepting a role.
 
 The trusted caller and its three static local reusable workflows run from `WORKFLOW_SIGNER_SHA` on `master`. Each role checks out `TESTED_SOURCE_SHA` into a separate data directory with `persist-credentials: false`. It removes checkout authentication before candidate execution. It never loads a workflow, action, launcher, or configuration from the tested checkout. Artifact names use only fixed lowercase prefixes, the fixed role, and `ARTIFACT_NONCE`: expected, candidate, sealed, and sealing-receipt artifacts each have one declared template. This alphabet excludes the pinned upload action's forbidden characters. Collection rejects a run/nonce mismatch, a forbidden character, or any missing, duplicate, extra, or substituted reserved name.
 
@@ -658,11 +683,11 @@ The client writes one aggregate conforming to `contracts/ci-evidence.schema.json
 
 Exit status `0` means the report is `accepted` and the managed-Spike result is valid. Exit status `1` means the report is schema-valid but `rejected`. Exit status `2` means arguments, the trust-anchor checkout, dispatch, permissions, interruption, or output failure prevented a schema-valid report. After the service returns a run ID, service, timeout, bundle, guard, staging, coordinator, and result failures produce a rejected report and exit `1`. `run` needs Actions write permission for dispatch plus read permissions for collection. `collect` needs Actions, attestations, and contents read permission.
 
-Managed-Spike collection uses two execution phases. The clean trust-anchor client controls both phases; candidate branches can't replace the client or its coordinator-step contract.
+Managed-Spike and BURL-O004 coordinator collection uses two execution phases. The clean trust-anchor client controls both phases; candidate branches can't replace the client or its coordinator-step contract.
 
 Before acquiring or using GitHub authentication, the preparation phase performs these steps:
 
-1. Resolve the ticket's exact coordinator manifest, lockfile, source tree, build command, and binary path from `contracts/provisional-spikes.toml` at the trusted contract hash.
+1. Resolve the ticket's exact coordinator manifest, lockfile, ordered source inventory, source tree, build command, and binary path from `contracts/provisional-spikes.toml` at the trusted contract hash. For BURL-O004, the planned files are `rust/benches/prd-meters-coordinator/Cargo.toml`, `Cargo.lock`, and `src/main.rs`. BURL-O004 owns these absent files. Its managed run is blocked until their reviewed merge rotates and self-validates the trust anchor.
 2. Start with `env -i`, owned empty `HOME`, XDG, Cargo, GitHub CLI, and Git configuration directories, and no inherited file descriptor above standard error.
 3. Fetch only locked Cargo dependencies without GitHub, Git, SSH-agent, package-registry, or cloud credentials. This dependency-fetch step doesn't run a build script.
 4. Run the declared `cargo build --locked --offline --release` command inside Bubblewrap `0.11.2` with network disabled, source and dependency inputs read-only, and only the build target writable. Candidate build scripts therefore receive no credential, user configuration, repository metadata outside the declared source, or network.
@@ -672,7 +697,9 @@ Only after preparation succeeds may the authenticated phase obtain `GH_TOKEN` an
 
 Before coordinator execution, the client closes authentication clients, unsets `GH_TOKEN`, `GITHUB_TOKEN`, Actions OIDC variables, `SSH_AUTH_SOCK`, `GIT_ASKPASS`, package-registry tokens, and common cloud credential variables, and discards every temporary authentication file. The trusted launcher enumerates its open descriptors and closes every descriptor above standard error that isn't in its empty execution allowlist. It verifies closure before it executes Bubblewrap. Bubblewrap supplies namespace, network, and filesystem isolation only. Failure to close a descriptor or establish any namespace or mount rejects the aggregate.
 
-The coordinator sandbox mounts the validated executable and its minimal runtime closure read-only at `/coordinator`, verified role inputs read-only at `/inputs`, and the trusted contract plus schemas read-only at `/contract`. Only `/output` is writable. The sandbox has an owned empty `/home/coordinator`, empty XDG and GitHub CLI configuration directories, and a temporary directory. It doesn't mount the repository, `.git`, the host home, credential stores, sockets, or host configuration. `PATH` contains only the pinned shell and core utilities. Locale is `C.UTF-8`. Git prompts and system, global, and command-supplied credential helpers are disabled even though Git isn't in the execution closure. The only task variables are `COORDINATOR_BIN=/coordinator/bin`, `INPUT_ROOT=/inputs`, `OUTPUT_ROOT=/output`, and `CONTRACT_ROOT=/contract`.
+The coordinator sandbox mounts the validated executable and its minimal runtime closure read-only at `/coordinator`, verified role inputs read-only at `/inputs`, and the trusted contract plus schemas read-only at `/contract`. Only `/output` is writable. The sandbox has an owned empty `/home/coordinator`, empty XDG and GitHub CLI configuration directories, and a temporary directory. It doesn't mount the repository, `.git`, the tested-source checkout, the host home, credential stores, sockets, or host configuration. `PATH` contains only the pinned shell and core utilities. Locale is `C.UTF-8`. Git prompts and system, global, and command-supplied credential helpers are disabled even though Git isn't in the execution closure. The only task variables are `COORDINATOR_BIN=/coordinator/bin`, `INPUT_ROOT=/inputs`, `OUTPUT_ROOT=/output`, and `CONTRACT_ROOT=/contract`.
+
+BURL-O004 stages exactly `/inputs/roles/linux-x86_64/nightly-prd-meters-linux.json` and `/inputs/roles/macos-26-arm64/nightly-prd-meters-macos.json`; macOS 15 remains common-functional evidence and supplies no meter input. Its single coordinator step runs the prepared `/coordinator/bin` from `/output`, passes only those two fixed absolute input paths, and names `/output/nightly-prd-meters.json` as the sole output. The prepared executable must not resolve or invoke `scripts/aggregate-prd-meters.sh` or any other repository-relative tested-source script. After schema validation, the client atomically publishes those exact result bytes at `.constitution/evidence/BURL-O004/nightly-prd-meters.json` and removes both owned staging and preparation roots. Any extra, missing, writable, substituted, environment-selected, or manually supplied input; any second output or invocation; any repository mount; or any cleanup failure rejects the aggregate.
 
 Credential-isolation fixtures inject unique canaries into GitHub, Git, SSH-agent, package-registry, and cloud environment variables and standard configuration paths. The parent also opens a non-`CLOEXEC` descriptor on unique canary bytes. A probe coordinator dumps its environment, checks standard paths, attempts to locate the GitHub CLI and Git, enumerates inherited descriptors, and attempts a network connection. No canary, credential path, client, extra descriptor, or network route may be visible. The same sandbox must run a representative coordinator successfully and produce a valid result from read-only inputs. The aggregate records the executable and closure identities plus every isolation check.
 
@@ -707,6 +734,9 @@ The raw contract defines the following required evidence profiles. Environment c
 | `BURL-G011` | Common functional, Linux platform regression | Common functional, authoritative macOS visual | Common functional |
 | `BURL-P002` | Common functional, performance | Common functional, performance | Common functional |
 | `BURL-O004` | Common functional, performance | Common functional, performance | Common functional |
+| `BURL-O011` | Common functional, performance, Linux platform regression | Common functional | Common functional |
+| `BURL-O012` | Common functional, performance, Linux platform regression | Common functional | Common functional |
+| `BURL-O013` | Common functional | Common functional, performance, authoritative macOS visual | Common functional |
 
 Each signer is a reusable workflow with exactly two role jobs, `candidate` and `seal`, on the same fixed hosted label. `seal` needs the successful `candidate` job and runs on a fresh environment. The trusted caller uses the static same-repository form `./.github/workflows/WORKFLOW_FILE`; expressions and ref suffixes are forbidden in `jobs.<job_id>.uses`. GitHub resolves each local workflow from `WORKFLOW_SIGNER_SHA`, which is the dispatched `master` commit. The expected identity records `job_workflow_ref` on `refs/heads/master` and `job_workflow_sha`. Aggregation requires the static role path and requires `job_workflow_sha` to equal `workflowSignerSha`. It separately requires the complete tested checkout and role manifest to name `testedSourceSha`; those SHAs don't need to match. The trust-surface comparison binds the signer commit to `trustAnchorSha`.
 
@@ -795,6 +825,11 @@ The repository follows the default `flutter_rust_bridge` template structure to m
 ├── rust/                    # Rust Core Engine source code
 │   └── src/frb_generated.rs # Auto-generated FRB Rust bridge; changes with Dart bindings
 │   ├── Cargo.toml
+│   ├── benches/             # Planned managed PRD meters
+│   │   └── prd-meters-coordinator/ # Planned BURL-O004 locked coordinator package
+│   │       ├── Cargo.toml   # Coordinator manifest; planned trusted control
+│   │       ├── Cargo.lock   # Coordinator dependency lock
+│   │       └── src/main.rs  # Fixed /inputs to /output/nightly-prd-meters.json aggregation
 │   ├── tests/               # Rust integration tests
 │   ├── src/
 │   │   ├── api/             # FFI interface exposed to Dart (thin #[frb] wrappers)
@@ -824,10 +859,10 @@ The repository follows the default `flutter_rust_bridge` template structure to m
 │   │   │                      reserved-filename rules), `links` (target
 │   │   │                      resolution and serialization)
 │   │   ├── export/          # Planned: stable-revision copy/archive Export
-│   │   ├── object_store/    # Planned: S3-compatible transfer and validation
-│   │   ├── provider/        # Planned: private GitHub App/provider integration
+│   │   ├── object_store/    # Planned: BND-11 transfer/verification to BND-21 Object Store
+│   │   ├── provider/        # Planned: BND-14 GitHub authorization/location only
 │   │   ├── security/        # OS Keychain root-key integration
-│   │   ├── sync/            # Debounced background sync scheduler
+│   │   ├── sync/            # BND-10 coordinator and BND-20 history/ref transfer
 │   │   ├── update/          # Planned: compatible release-metadata checks
 │   │   ├── workspace/       # `bootstrap` (init/open, Git repo adoption),
 │   │   │                      `lifecycle` (note & directory create/rename/
@@ -843,7 +878,9 @@ The repository follows the default `flutter_rust_bridge` template structure to m
 └── flutter_rust_bridge.yaml # FRB configuration
 ```
 
-The directories marked **Planned** are the physical homes for the forward boundaries already accepted by Architecture v2.0.1. They remain absent until their owning implementation ticket begins. A Spike never creates them. Final Stage 3 may refine files inside a planned directory after evidence, but moving responsibility to a different boundary requires Architecture review and a Tasks adaptation.
+The directories marked **Planned** are the physical homes for the forward boundaries accepted by Architecture v2.1.0. They remain absent until their owning implementation ticket begins. A Spike never creates them. `rust/benches/prd-meters-coordinator/` is specifically owned by active non-Spike ticket BURL-O004; after its reviewed merge, the managed-validation trust anchor must rotate before that package can be prepared as trusted control. Final Stage 3 may refine files inside a planned directory after evidence, but moving responsibility to a different boundary requires Architecture review and a Tasks adaptation.
+
+The external physical seams remain distinct. `rust/src/provider/` implements `BND-14` authorization, eligible private-Remote selection or provisioning, and location only. `rust/src/sync/` implements `BND-10` coordination and `BND-20` authenticated history transfer and ref inventory. `rust/src/object_store/` implements `BND-11` transfer, privacy verification, hydration, and migration against `BND-21`. Provider code must not store or reconcile history. Remote code must not transfer Object bytes. Object Store code must not derive authority from Provider responses.
 
 `android/` and `ios/` are absent by design: mobile targets are deferred per
 `tasks/critical-path.md`, and no mobile toolchain is provisioned. `ANDROID_HOME`
