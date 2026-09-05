@@ -52,12 +52,12 @@ verification_commands:
     exists: false
     owner: BURL-M003
   - name: test
-    label: quoted by BURL-K005
+    label: quoted by BURL-N006
     command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && dart analyze && ./scripts/verify-second-device-join.sh --private-remote \"$BURLMD_TEST_PRIVATE_REMOTE_URL\" --object-endpoint \"$BURLMD_TEST_S3_ENDPOINT\" --output target/runbooks/clone-k005.json && git diff --check"
     exists: false
     owner: BURL-M003
   - name: test
-    label: "quoted by BURL-H006, BURL-J001, BURL-J002, BURL-J003, BURL-J004, BURL-J005, BURL-K006, BURL-L004, BURL-L008"
+    label: "quoted by BURL-H006, BURL-J001, BURL-J002, BURL-J003, BURL-J004, BURL-J005, BURL-N007, BURL-L004, BURL-L008"
     command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && dart analyze && git diff --check"
     exists: false
     owner: BURL-M003
@@ -72,7 +72,7 @@ verification_commands:
     exists: false
     owner: BURL-M003
   - name: test
-    label: quoted by BURL-I010
+    label: quoted by BURL-N005
     command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh asset-i010 && git diff --check"
     exists: false
     owner: BURL-M003
@@ -97,7 +97,7 @@ verification_commands:
     exists: false
     owner: BURL-M003
   - name: test
-    label: quoted by BURL-I012
+    label: quoted by BURL-N003
     command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh detach-i012 && git diff --check"
     exists: false
     owner: BURL-M003
@@ -142,7 +142,7 @@ verification_commands:
     exists: false
     owner: BURL-M003
   - name: test
-    label: quoted by BURL-I011
+    label: quoted by BURL-N002
     command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh migrate-i011 && git diff --check"
     exists: false
     owner: BURL-M003
@@ -187,12 +187,12 @@ verification_commands:
     exists: false
     owner: BURL-M003
   - name: test
-    label: quoted by BURL-L009
+    label: quoted by BURL-N010
     command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh state-l009 && git diff --check"
     exists: false
     owner: BURL-M003
   - name: test
-    label: quoted by BURL-L005
+    label: quoted by BURL-N001
     command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh sug-l005 && git diff --check"
     exists: false
     owner: BURL-M003
@@ -207,7 +207,7 @@ verification_commands:
     exists: false
     owner: BURL-M003
   - name: test
-    label: quoted by BURL-I013
+    label: quoted by BURL-N004
     command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh unlink-i013 && git diff --check"
     exists: false
     owner: BURL-M003
@@ -251,7 +251,7 @@ verification_commands:
     exists: false
     owner: BURL-M004
   - name: test
-    label: quoted by BURL-K008
+    label: quoted by BURL-N009; temporary current owner BURL-K008
     command: "cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && ./scripts/run-private-github-canary.sh --private-remote \"$BURLMD_TEST_PRIVATE_REMOTE_URL\" --object-endpoint \"$BURLMD_TEST_S3_ENDPOINT\" --cleanup always --output .constitution/reports/canary-k008.json && ./scripts/verify-device-authorization-runbook.sh --require-human-approval --output .constitution/reports/device-auth-k008.json && git diff --check"
     exists: false
     owner: BURL-K008
@@ -264,7 +264,7 @@ verification_commands:
     command: "cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && ./scripts/smoke-shot.sh consui-j007 && git diff --check"
     exists: true
   - name: test
-    label: quoted by BURL-L012
+    label: quoted by BURL-N011
     command: "cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && ./scripts/smoke-shot.sh integ-l012 && git diff --check"
     exists: true
   - name: test
@@ -280,7 +280,7 @@ verification_commands:
     command: "cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && ./scripts/smoke-shot.sh port-j006 && git diff --check"
     exists: true
   - name: test
-    label: quoted by BURL-K007
+    label: quoted by BURL-N008
     command: "cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && ./scripts/smoke-shot.sh remote-k007 && git diff --check"
     exists: true
   - name: test

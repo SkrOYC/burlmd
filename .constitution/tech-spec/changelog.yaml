@@ -1,4 +1,15 @@
 entries:
+  - version: v2.0.4
+    date: 2026-09-04
+    changed:
+      - "Bridge the eleven planned lifecycle, Remote, synchronization, and verification identities to BURL-N001 through BURL-N011 without editing Tasks: BURL-L005→BURL-N001, BURL-I011→BURL-N002, BURL-I012→BURL-N003, BURL-I013→BURL-N004, BURL-I010→BURL-N005, BURL-K005→BURL-N006, BURL-K006→BURL-N007, BURL-K007→BURL-N008, BURL-K008→BURL-N009, BURL-L009→BURL-N010, and BURL-L012→BURL-N011."
+      - "Retained byte-identical current Task command strings and their stable semantic artifact names, including migrate-i011, clone-k005.json, and state-l009; this patch changes planned-ticket labels rather than implementation artifact identities."
+    deprecated:
+      - "BURL-N009 retains BURL-K008 as its explicitly labeled temporary current owner because Tasks has not yet created BURL-N009. Remove that owner qualifier after the Stage 4 migration; no duplicate N command aliases are required because every current Task command remains byte-identical to its canonical N-labeled record."
+    by: patch-lane
+    upstream:
+      prd: v2.0.1
+      architecture: v2.0.2
   - version: v2.0.3
     date: 2026-09-04
     changed:
