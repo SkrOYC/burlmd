@@ -1,4 +1,11 @@
 entries:
+  - version: v2.0.5
+    date: 2026-09-05
+    fixed:
+      - "Removed downstream work allocation from job and constraint assumptions while preserving each requirement, certainty, and missing product outcome or evidence."
+      - "Restored concise domain-only glossary definitions by moving structured-migration commentary out of Writer, Suggestion, Diagnostics Export, and Version."
+      - "Preserved the migration's synonym rationale: repository usage established that Author, Merge, Diff, Telemetry, Revision, and Snapshot aren't domain synonyms to ban. Backup isn't a Version synonym but remains disallowed as a synonym for Bundle Archive."
+    by: patch-lane
   - version: v2.0.4
     date: 2026-09-05
     fixed:

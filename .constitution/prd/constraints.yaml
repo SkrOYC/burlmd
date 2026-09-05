@@ -75,7 +75,7 @@ constraints:
     stretch: "50,000 Notes."
     fail: "1,000 Notes. Below the Fail point, any missed meter is a defect rather than a scaling story."
     certainty: assumed
-    assumption: "Deterministic corpus generation has not been published yet; Technical Implementation owes the generator and NFC-37 reference-class setup specification this meter depends on."
+    assumption: "No published deterministic corpus generator or NFC-37 reference-class setup exists for this meter."
   - id: NFC-08
     legacy_id: Image Import Size
     class: performance
@@ -108,7 +108,7 @@ constraints:
     stretch: Within 15 seconds.
     fail: Beyond 15 minutes while the connection is healthy.
     certainty: assumed
-    assumption: "No synchronization capability is delivered; the meter describes intended behavior that Epics K and L still have to build."
+    assumption: "No delivered synchronization capability or end-to-end timed-push evidence demonstrates this meter."
   - id: NFC-11
     legacy_id: Remote Change Freshness
     class: performance
@@ -119,7 +119,7 @@ constraints:
     stretch: Within 15 seconds while connected.
     fail: "Beyond 15 minutes while connected, or beyond 1 hour after connectivity returns."
     certainty: assumed
-    assumption: "No synchronization capability is delivered; the meter describes intended behavior that Epics K and L still have to build."
+    assumption: "No delivered synchronization capability or end-to-end incoming-change evidence demonstrates this meter."
   - id: NFC-12
     legacy_id: Local-First Mandate
     class: reliability
@@ -169,7 +169,7 @@ constraints:
     goal: "Every input state remains recoverable, stale tentative outcomes are rejected, and reconciliation resumes or recomputes from the authoritative history tip."
     fail: "Any local or incoming state is lost, a stale outcome is applied, or recovery finalizes against a history tip different from its recorded input."
     certainty: assumed
-    assumption: "The reconciliation record and recovery behavior are defined downstream, but Epics K and L haven't delivered or measured them."
+    assumption: "No delivered reconciliation recovery or interruption evidence demonstrates preservation, stale-outcome rejection, and valid resumption."
   - id: NFC-17
     legacy_id: Object Availability
     class: reliability
@@ -239,7 +239,7 @@ constraints:
     goal: "Only bytes that match their content identity can complete an Object operation, and failed verification preserves known-good state."
     fail: "Any operation accepts mismatched bytes, exposes corrupt content, destroys a verified copy, or records an identity that doesn't match the bytes."
     certainty: assumed
-    assumption: "The Object model and verification boundaries are specified, but the Asset and Object Store capabilities in Epics I and K aren't delivered or measured."
+    assumption: "No delivered Asset and Object Store evidence measures content-identity verification across every Object operation."
   - id: NFC-24
     legacy_id: Protected History
     class: reliability
@@ -319,7 +319,7 @@ constraints:
     goal: "No workflow-modification authority is requested; workflow-bearing history is refused before publication, local use remains available, and clean-Workspace Consolidation is offered."
     fail: "burlmd requests workflow-modification authority, publishes reachable workflow content, blocks local use, or proceeds without the required refusal and Consolidation path."
     certainty: assumed
-    assumption: "The Provider permission and prepublication boundary are specified in Epic K, but no delivered Remote path proves the complete invariant."
+    assumption: "No delivered Remote evidence proves the Provider-permission and prepublication invariant across every reachable local publication ref."
   - id: NFC-32
     legacy_id: Private Object Store Boundary
     class: security
