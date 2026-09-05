@@ -56,7 +56,15 @@ Stage 4 commit `8d04d47` applied the rulings above. This note updates their arti
 - OD-09 now names both current epic artifacts. Its release/quality ticket references use the Stage 4 mappings `BURL-M004` → `BURL-O004`, `BURL-M005` → `BURL-O005`, `BURL-M006` → `BURL-O006`, `BURL-M007` → `BURL-O007`, `BURL-M008` → `BURL-O008`, `BURL-M010` → `BURL-O010`, `BURL-M014` → `BURL-O014`, and `BURL-M016` → `BURL-O016`. Dependencies formerly named `BURL-I010` and `BURL-L012` are now `BURL-N005` and `BURL-N011`.
 - OD-10's downstream lifecycle tickets are `BURL-N002`, `BURL-N003`, and `BURL-N004`, replacing `BURL-I011`, `BURL-I012`, and `BURL-I013`. Their directly affected completion gate is `BURL-N005`, replacing `BURL-I010`. The ruling remains that Epic I is upstream and this EPIC-N cut follows `BURL-L010`.
 
-The live register now uses only these current identifiers. References earlier in this record remain as historical descriptions of the graph presented when the rulings were made; this dated note supersedes them for execution and validation.
+At this post-replan checkpoint, the live register used only these identifiers. References earlier in this record remain as historical descriptions of the graph presented when the rulings were made; this dated note superseded them for execution and validation at that checkpoint.
+
+## Epic P post-replan reference maintenance — 2026-09-05
+
+Stage 4 commit `b83757c` subsequently moved Workspace repair and live-observation work from Epic H to the new Epic P. OD-09's live release-quality dependency now uses canonical `BURL-P005`.
+
+For audit history, the complete Stage 4 mapping was historical `BURL-H008` → canonical `BURL-P001`, historical `BURL-H009` → canonical `BURL-P002`, historical `BURL-H010` → canonical `BURL-P003`, historical `BURL-H011` → canonical `BURL-P004`, and historical `BURL-H012` → canonical `BURL-P005`. These H identifiers record the superseded graph and are not live execution references.
+
+The live register and this audit trail now use `BURL-P005` wherever OD-09 identifies the current dependency. This maintenance changes no decision outcome, status, or ruling.
 
 ## OD-10 decision-record integrity — 2026-09-05
 

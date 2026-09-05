@@ -194,7 +194,7 @@ decisions:
       date: 2026-08-25
       in: reports/2026-08-25-interview-tasks.md
   - id: OD-09
-    question: "Should the quality-and-release plan be split between the existing EPIC-M CI bootstrap and downstream EPIC-O quality releases so that the release gates can depend on the product epics without making the epic graph cyclic? The pre-replan omitted dependencies, expressed with the current ticket identifiers, were: BURL-O004 ← BURL-G011, BURL-H012, BURL-N005, BURL-N011; BURL-O016 ← BURL-I001, BURL-G010; BURL-O005 ← BURL-G003, BURL-H006; BURL-O006 ← BURL-J006, BURL-J007, BURL-N011, BURL-G011; BURL-O007 ← BURL-J006, BURL-J007, BURL-N011; BURL-O008 ← BURL-J006, BURL-J007, BURL-N011; BURL-O010 ← BURL-G002; BURL-O014 ← BURL-K009."
+    question: "Should the quality-and-release plan be split between the existing EPIC-M CI bootstrap and downstream EPIC-O quality releases so that the release gates can depend on the product epics without making the epic graph cyclic? The pre-replan omitted dependencies, expressed with the current ticket identifiers, were: BURL-O004 ← BURL-G011, BURL-P005, BURL-N005, BURL-N011; BURL-O016 ← BURL-I001, BURL-G010; BURL-O005 ← BURL-G003, BURL-H006; BURL-O006 ← BURL-J006, BURL-J007, BURL-N011, BURL-G011; BURL-O007 ← BURL-J006, BURL-J007, BURL-N011; BURL-O008 ← BURL-J006, BURL-J007, BURL-N011; BURL-O010 ← BURL-G002; BURL-O014 ← BURL-K009."
     blocks: [EPIC-M, EPIC-O]
     options:
       - name: Split Epic M into a CI bootstrap epic and a release-gate epic
