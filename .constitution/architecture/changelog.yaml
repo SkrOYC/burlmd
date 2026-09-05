@@ -1,4 +1,12 @@
 entries:
+  - version: v2.1.1
+    date: 2026-09-05
+    fixed:
+      - "Clarified the reverse Remote Sync Coordinator edge as synchronization status and reconciliation outcomes returning to Core Coordination."
+      - "Clarified the reverse Object Transfer Coordinator edge as verification, hydration, migration, and recovery outcomes returning to Core Coordination."
+    upstream:
+      prd: v2.0.5
+    by: patch-lane
   - version: v2.1.0
     date: 2026-09-05
     added:
