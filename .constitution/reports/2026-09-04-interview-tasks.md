@@ -45,3 +45,15 @@ Stage 4 must preserve the moved tickets' existing upstream prerequisites, scope,
 ## Stage 4 handoff
 
 Run a Tasks Evolution replan that applies both cuts together. Preserve the authorized named-tranche sequence. Keep M as the `BURL-M015` and `BURL-M003` bootstrap. Add the lifecycle-reconciliation cut after L and the release-and-quality cut after its product prerequisites. Migrate identifiers and register references atomically, then render and validate the graph. Until that pass creates the replacement artifacts, OD-07 and OD-08 keep their M references.
+
+## Post-replan reference maintenance — 2026-09-05
+
+Stage 4 commit `8d04d47` applied the rulings above. This note updates their artifact references only; it does not change either delegated ruling or the historical pre-replan evidence recorded above.
+
+- The former combined `EPIC-M-quality-releases.yaml` is now the existing `EPIC-M-ci-bootstrap.yaml`, containing stable bootstrap tickets `BURL-M015` and `BURL-M003`, plus the downstream `EPIC-O-quality-releases.yaml`.
+- OD-07 now blocks `BURL-O016`, which replaces `BURL-M016`.
+- OD-08 now blocks `BURL-O006` and `BURL-O011`; its closure spike is `SPK-BURL-O001`, owned by `BURL-O001`. These replace `BURL-M006`, `BURL-M011`, `SPK-BURL-M001`, and `BURL-M001` respectively.
+- OD-09 now names both current epic artifacts. Its release/quality ticket references use the Stage 4 mappings `BURL-M004` → `BURL-O004`, `BURL-M005` → `BURL-O005`, `BURL-M006` → `BURL-O006`, `BURL-M007` → `BURL-O007`, `BURL-M008` → `BURL-O008`, `BURL-M010` → `BURL-O010`, `BURL-M014` → `BURL-O014`, and `BURL-M016` → `BURL-O016`. Dependencies formerly named `BURL-I010` and `BURL-L012` are now `BURL-N005` and `BURL-N011`.
+- OD-10's downstream lifecycle tickets are `BURL-N002`, `BURL-N003`, and `BURL-N004`, replacing `BURL-I011`, `BURL-I012`, and `BURL-I013`. Their directly affected completion gate is `BURL-N005`, replacing `BURL-I010`. The ruling remains that Epic I is upstream and this EPIC-N cut follows `BURL-L010`.
+
+The live register now uses only these current identifiers. References earlier in this record remain as historical descriptions of the graph presented when the rulings were made; this dated note supersedes them for execution and validation.
