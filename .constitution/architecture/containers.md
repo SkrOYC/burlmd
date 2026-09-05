@@ -88,7 +88,7 @@ This boundary can own ephemeral selection and focus. Durable preferences and per
 - **Logical type:** Application coordinator and authority boundary.
 - **Responsibility:** Serializes commands against authoritative model state, enforces authority and conformance, and coordinates local and external state machines.
 - **Inputs and outputs:** Receives Writer actions, guest-change proposals, synchronization results, and Object results. Emits authoritative state and durable obligations.
-- **Depends on:** Canonical Note Model, Workspace Model, Workspace Persistence, Derived Index, Application State, Secure Storage, Workspace Observer, Remote Sync Coordinator, Object Transfer Coordinator, and Release Update Coordinator.
+- **Depends on:** Canonical Note Model, Workspace Model, Workspace Persistence, Local Asset Store, Derived Index, Application State, Secure Storage, Workspace Observer, Remote Sync Coordinator, Object Transfer Coordinator, and Release Update Coordinator.
 
 ## Canonical Note Model
 
@@ -185,10 +185,10 @@ Device preferences never enter Workspace content. Session and navigation state r
 ## Provider, Remote, and Object Store
 
 - **Boundary kind:** External service and storage boundaries.
-- **Logical type:** Optional user-controlled synchronization services.
+- **Logical type:** Optional Writer-controlled synchronization services.
 - **Responsibility:** The Provider authorizes and locates a private Remote. The Remote stores Workspace history. The Object Store stores immutable Object bytes under the Writer's control.
 - **Inputs and outputs:** Accept authenticated repository or Object operations and return explicit authorization, privacy, integrity, and availability outcomes.
-- **Depends on:** External network availability and user-controlled accounts.
+- **Depends on:** External network availability and Writer-controlled accounts.
 
 ## Release Pipeline
 

@@ -1,4 +1,14 @@
 entries:
+  - version: v2.0.3
+    date: 2026-09-05
+    fixed:
+      - "Restored Core Coordination's Local Asset Store dependency and edge for Object copy, verification, deduplication, and availability outcomes."
+      - "Aligned both Workspace Observer event edges and three one-way state or data edges with the retained container and flow directions."
+      - "Replaced noncanonical Writer ownership wording with Writer-controlled wording on Architecture domain surfaces."
+      - "Removed the duplicated migration-date sentence from the historical v0.0.1 entry."
+    upstream:
+      prd: v2.0.2
+    by: patch-lane
   - version: v2.0.2
     date: 2026-09-04
     fixed: ["Reconciled all 19 structured boundary records with the retained container contracts.", "Separated directional inputs and outputs and restored omitted logical dependencies.", "Preserved product scope and the fresh-seal authority ruling.", "Populated boundary traceability for the Workspace bootstrap, background synchronization, and Object Store lifecycle flows.", "Removed the duplicated v2.0.0 migration-date note."]
@@ -95,4 +105,4 @@ entries:
     date: 2026-09-03
     added: ["History before migration; the markdown changelog is in git"]
     by: migrate
-    changed: ["Migration date retained for v0.0.1: no master commit introducing this version string was found.", "Migration date retained for v0.0.1: no master commit introducing this version string was found."]
+    changed: ["Migration date retained for v0.0.1: no master commit introducing this version string was found."]
