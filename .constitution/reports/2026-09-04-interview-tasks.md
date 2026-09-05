@@ -57,3 +57,11 @@ Stage 4 commit `8d04d47` applied the rulings above. This note updates their arti
 - OD-10's downstream lifecycle tickets are `BURL-N002`, `BURL-N003`, and `BURL-N004`, replacing `BURL-I011`, `BURL-I012`, and `BURL-I013`. Their directly affected completion gate is `BURL-N005`, replacing `BURL-I010`. The ruling remains that Epic I is upstream and this EPIC-N cut follows `BURL-L010`.
 
 The live register now uses only these current identifiers. References earlier in this record remain as historical descriptions of the graph presented when the rulings were made; this dated note supersedes them for execution and validation.
+
+## OD-10 decision-record integrity — 2026-09-05
+
+At the time of the interview, OD-10's original register recommendation was *Epic L depends on Epic I, and the three Object Store lifecycle tickets move to Epic L*. The evidence and ruling above retain that recommendation's authority direction and rationale: Epic I remains upstream, and lifecycle work follows `BURL-L010`. This note preserves that historical recommendation rather than retroactively claiming the later refinement was one of the original three options.
+
+The ruling itself already refined direct placement in Epic L to a downstream lifecycle-reconciliation epic. Restoring all historical prerequisites showed why that refinement was necessary: second-device join consumed replacement-store migration, and full-local detach consumed full-local preparation. Leaving those downstream operations in Epic K while moving only their lifecycle prerequisites to Epic L would require Epic K to depend on Epic L, but Epic L already depended on Epic K. That K↔L cycle made direct placement in Epic L impossible in a validator-compliant graph.
+
+Stage 4 therefore implemented the final delegated recommendation as *Keep Epic I upstream and create downstream Epic N after Epic L*. Epic N carries the coupled downstream work from the former Epics I, K, and L, preserving the acyclic Epic I → Epic K → Epic L → Epic N order. The live register now includes that implemented outcome as a fourth option and uses its exact name for both `recommendation` and `ruling.chosen`.
