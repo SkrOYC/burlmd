@@ -25,7 +25,7 @@ Release validation is separate from evidence aggregation because execution, seal
 ## Accepted trade-offs
 
 - The installed application carries local parsing, indexing, history, monitoring, and synchronization responsibilities, which increases artifact size and internal complexity.
-- Local Asset Store and Object Store coordination adds durable state and recovery work, but preserves offline access and user-controlled storage.
+- Local Asset Store and Object Store coordination adds durable state and recovery work, but preserves offline access and Writer-controlled storage.
 - A lowest-common-denominator Workspace path model rejects some host-valid names to preserve identity across systems.
 - Structural and Asset Decisions can pause Workspace synchronization. Local editing and history remain available during the pause.
 - Owned validation environments and integrity-checked evidence handoffs add pipeline latency and retained artifacts, but make reference results reproducible and attributable.
