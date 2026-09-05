@@ -18,7 +18,7 @@ entries:
     upstream:
       prd: v2.0.1
       architecture: v2.0.2
-      tech-spec: v2.0.4
+      tech-spec: v2.0.5
     by: stage
   - version: v3.0.1
     date: 2026-09-04
