@@ -225,44 +225,15 @@ tickets:
         - .github/workflows/**
         - .constitution/evidence/BURL-O004/**
     verification:
-      command: TRUST_ANCHOR_WORKTREE/scripts/managed-evidence.sh run --ticket
-        BURL-O004 --trust-anchor-sha TRUST_ANCHOR_SHA --source-ref SOURCE_REF
-        --tested-source-sha TESTED_SOURCE_SHA --base-sha BASE_SHA --output
-        EVIDENCE_WORKTREE/.constitution/evidence/BURL-O004/managed-evidence.json
-        && TRUST_ANCHOR_WORKTREE/scripts/aggregate-prd-meters.sh --require-run
-        linux-reference=EVIDENCE_WORKTREE/.constitution/evidence/BURL-O004/managed-evidence-coordinator/roles/linux-x86_64/nightly-prd-meters-linux.json
-        --require-run
-        macos-reference=EVIDENCE_WORKTREE/.constitution/evidence/BURL-O004/managed-evidence-coordinator/roles/macos-26-arm64/nightly-prd-meters-macos.json
-        --require-same-corpus-hash --require-same-meter-definition-version
-        --output
-        EVIDENCE_WORKTREE/.constitution/evidence/BURL-O004/nightly-prd-meters.json
-        && git -C EVIDENCE_WORKTREE diff --check
+      command: "TRUST_ANCHOR_WORKTREE/scripts/managed-evidence.sh run --ticket BURL-O004 --trust-anchor-sha TRUST_ANCHOR_SHA --source-ref SOURCE_REF --tested-source-sha TESTED_SOURCE_SHA --base-sha BASE_SHA --output EVIDENCE_WORKTREE/.constitution/evidence/BURL-O004/managed-evidence.json && git -C EVIDENCE_WORKTREE diff --check"
       expected: "deterministic corpus generation succeeds on both managed performance
         roles, macOS 15 functional compatibility passes, and aggregation emits
         one authenticated machine-readable nonblocking result for every meter.
         A later evidence-only pull request contains managed-evidence.json,
         nightly-prd-meters.json, and manifest.yaml with the byte count and
-        SHA-256 digest for each artifact.
-        Original verification detail: `ubuntu-24.04`: `cargo test
-        --manifest-path rust/Cargo.toml && flutter test && dart analyze &&
-        ./scripts/bench-prd-meters.sh --all --run-id linux-reference
-        --expected-host-profile github-ubuntu-24_04-x86_64 --corpus-size 10000
-        --output .constitution/reports/nightly-prd-meters-linux.json && git diff
-        --check`; Apple Silicon `macos-26`: `cargo test --manifest-path
-        rust/Cargo.toml && flutter test && dart analyze &&
-        ./scripts/bench-prd-meters.sh --all --run-id macos-reference
-        --expected-host-profile github-macos-26-arm64 --corpus-size 10000
-        --output .constitution/reports/nightly-prd-meters-macos.json && git diff
-        --check`; Apple Silicon `macos-15` functional compatibility: `cargo test
-        --manifest-path rust/Cargo.toml && flutter test && dart analyze && git
-        diff --check`; coordinator: `./scripts/aggregate-prd-meters.sh
-        --require-run
-        linux-reference=.constitution/reports/nightly-prd-meters-linux.json
-        --require-run
-        macos-reference=.constitution/reports/nightly-prd-meters-macos.json
-        --require-same-corpus-hash --require-same-meter-definition-version
-        --output .constitution/reports/nightly-prd-meters.json && git diff
-        --check`. Validate all role and aggregate evidence through `BURL-M003`."
+        SHA-256 digest for each artifact. The managed run owns the single
+        coordinator execution and durable nightly-prd-meters.json output.
+        Validate all role and aggregate evidence through `BURL-M003`."
     stop_conditions:
       - STOP if a meter uses a different corpus/profile/definition than PRD
         constraints or changes a threshold outside Product Requirements
@@ -294,10 +265,10 @@ tickets:
         and environment identity, run, profile, corpus hash, meter-definition
         version, samples, percentile or threshold, exact command, and Goal or
         Fail disposition for every scalar PRD meter. macOS 15 records common
-        functional compatibility only. Aggregation verifies expected identity,
-        GitHub-hosted role signer, bundle integrity, exact evidence classes,
-        corpus, and meter definitions. The nightly job is nonblocking during
-        `0.x` but produces a durable regression report; release gates consume
+        functional compatibility only. The managed aggregation verifies expected
+        identity, GitHub-hosted role signer, bundle integrity, exact evidence
+        classes, corpus, and meter definitions. The nightly job is nonblocking
+        during `0.x` but produces a durable regression report; release gates consume
         the same definitions. A later evidence-only pull request changes only
         `.constitution/evidence/BURL-O004/` and contains managed-evidence.json,
         nightly-prd-meters.json, and manifest.yaml with the byte count and

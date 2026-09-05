@@ -1,4 +1,22 @@
 entries:
+  - version: v3.1.3
+    date: 2026-09-05
+    changed:
+      - Aligned BURL-O004's verification command with TechSpec v2.0.10 so one
+        managed-evidence.sh run owns authenticated staging, coordinator execution,
+        and durable nightly-prd-meters.json output before git diff --check.
+      - Removed the obsolete external double-aggregation detail from BURL-O004's
+        expected output while preserving its performance evidence classes, manifest
+        handoff, and NFC thresholds.
+      - Regenerated critical-path.md from the unchanged epic graph.
+    fixed:
+      - Corrected BURL-O004's bounded verification path to avoid invoking
+        aggregate-prd-meters.sh a second time after managed-evidence.sh run.
+    upstream:
+      prd: v2.0.2
+      architecture: v2.0.4
+      tech-spec: v2.0.10
+    by: patch-lane
   - version: v3.1.2
     date: 2026-09-05
     changed:
