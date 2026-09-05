@@ -1,4 +1,12 @@
 entries:
+  - version: v2.0.17
+    date: 2026-09-05
+    fixed:
+      - "Removed BURL-A001's temporary Stage 4 macOS-launch compatibility alias after the completed Task migrated to the canonical verification command. The canonical command remains unchanged; no raw contract or schema changed."
+    by: patch-lane
+    upstream:
+      prd: v2.0.4
+      architecture: v2.0.5
   - version: v2.0.16
     date: 2026-09-05
     fixed:
