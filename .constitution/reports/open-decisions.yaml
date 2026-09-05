@@ -14,15 +14,16 @@ decisions:
         cons: ["Migration-authored placeholder: the source register records the option name but no analysis."]
     recommendation: document standards now and retrofit later
     closure: ruling
-    ruler: "The user, or Stage 4 at the next wave-planning pass"
-    waiting_on: "A decision on whether Epic G's diff budget can absorb the retrofit"
-    status: open
+    ruler: "The user, recorded in the 2026-08-25 Tasks interview"
+    status: closed
     asked:
       date: 2026-08-21
       in: reports/2026-08-21-interview-realign.md
-    interim:
-      assumption: "Migration-authored pros and cons were removed; the source register records only these options."
-      applied_by: []
+    ruling:
+      ref: reports/2026-08-25-interview-tasks.md
+      date: 2026-08-25
+      summary: "The selected outcome remains document standards now and retrofit later. The retained Tasks interview records that PR #11 completed the later retrofit by delivering the theme, localization, and Semantics foundations, so Stage 4 plans only remaining behavior and no retrofit work blocks EPIC-G."
+      chosen: document standards now and retrofit later
   - id: OD-02
     question: "What condition reopens screen-reader certification, which the Realign interview deferred to the keyboard-and-Semantics baseline without naming a trigger?"
     blocks: [".constitution/prd/out-of-scope/screen-reader-certification.md"]
