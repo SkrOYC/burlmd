@@ -384,11 +384,11 @@ edges:
   - from: BND-10
     to: BND-02
     protocol: in-process
-    note: "asynchronous synchronization intent and result: asynchronous synchronization intent and result"
+    note: "Returns synchronization status and reconciliation outcomes to Core Coordination"
   - from: BND-11
     to: BND-02
     protocol: in-process
-    note: "asynchronous Object obligation and result: asynchronous Object obligation and result"
+    note: "Returns Object verification, hydration, migration, and recovery outcomes to Core Coordination"
   - from: BND-15
     to: BND-17
     protocol: file-handoff
