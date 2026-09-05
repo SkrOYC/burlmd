@@ -1,4 +1,15 @@
 entries:
+  - version: v3.2.3
+    date: 2026-09-05
+    fixed:
+      - "Corrected the completed Epic A deviation record to name integration_test/ and test_driver/ as distinct paths instead of a malformed combined path, preserving the existing existence-checked formatting and stray-Dart guard meaning."
+      - "Revalidated the Tasks directory against PRD v2.0.5, Architecture v2.1.1, and TechSpec v2.1.1; the active 10-epic, 80-ticket, 564-point graph remains unchanged."
+      - "Regenerated critical-path.md from the active epic graph."
+    upstream:
+      prd: v2.0.5
+      architecture: v2.1.1
+      tech-spec: v2.1.1
+    by: patch-lane
   - version: v3.2.2
     date: 2026-09-05
     changed:
