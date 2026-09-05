@@ -15,12 +15,13 @@ jobs:
     actor: Writer
     statement: "Open the application and write the first Note with no account, no network connection, and no setup step, with the previous session's Workspace context back in place"
     priority: P0
-    certainty: settled
+    certainty: assumed
     evidence:
       kind: repository
       ref: rust/src/workspace/bootstrap.rs
       date: 2026-09-03
-      note: "Local Workspace bootstrap without an account is delivered; session restoration across restarts is still planned in Epic G."
+      note: "This path delivers local Workspace bootstrap without an account or network connection. It doesn't restore cross-restart Workspace context."
+    assumption: "Local account-free bootstrap is delivered. CAP-025 remains assumed because burlmd doesn't reopen the last Workspace or restore its open Notes, active Note, navigation, search, and synchronization presentation after restart."
   - id: JOB-03
     legacy_id: Organize and connect
     actor: Writer
@@ -73,4 +74,4 @@ jobs:
     statement: "Install a tested 0.x prerelease on a supported desktop without building from source, and be told when a compatible update exists"
     priority: P0
     certainty: assumed
-    assumption: "No published release artifacts exist; packaging, the release-blocking matrix, and update notification are planned work in Epic M."
+    assumption: "This job remains assumed until published release artifacts pass the release-blocking matrix and compatible-update notification is available."

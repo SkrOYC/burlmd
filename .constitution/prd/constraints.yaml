@@ -339,7 +339,7 @@ constraints:
     goal: "No automatic reporting request occurs; local diagnostics and Diagnostics Exports exclude Note and Asset content, credentials, signed locations, and content-derived data, and sharing requires an explicit Writer action."
     fail: "Any automatic off-device report occurs, prohibited data enters diagnostics or an Export, or burlmd shares an Export without the Writer's action."
     certainty: assumed
-    assumption: "CAP-045 defines Writer-controlled diagnostics, but the diagnostics surface and its network and canary checks are planned in Epic M."
+    assumption: "This constraint remains assumed until Writer-controlled diagnostics pass the network and canary checks."
   - id: NFC-34
     legacy_id: Feature Parity
     class: compatibility
@@ -349,7 +349,7 @@ constraints:
     goal: "Every required matrix cell passes on every supported system for the exact release artifact."
     fail: "Any supported system skips or fails a required cell, receives a weaker capability matrix, or is accepted from a launch-only check."
     certainty: assumed
-    assumption: "CAP-076 defines parity, but installable release artifacts and the authenticated cross-system matrix are planned in Epic M."
+    assumption: "This constraint remains assumed until an installable release artifact passes the authenticated cross-system matrix."
   - id: NFC-35
     legacy_id: Version Policy
     class: compatibility
@@ -369,7 +369,7 @@ constraints:
     goal: "A successful migration exposes one complete new state; every failure restores the complete earlier state, and Note bytes remain identical unless a separate explicit operation changes them."
     fail: "A migration lacks a backup, exposes partial state, can't restore earlier state, or rewrites Note content without an explicit product operation."
     certainty: assumed
-    assumption: "CAP-078 defines migration safety, but the migration framework and failure-injection matrix are planned in Epic M."
+    assumption: "This constraint remains assumed until application-state migrations pass the failure-injection matrix."
 deferred:
   - class: cost
     risk: "No cost meter exists because nothing in the architecture runs on infrastructure this project operates: content lives on the Writer's device, their Remote, and their Object Store. If a project-operated component ever appears, this gap hides its running cost until someone pays it."
