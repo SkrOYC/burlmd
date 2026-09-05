@@ -240,11 +240,6 @@ verification_commands:
     command: "TRUST_ANCHOR_WORKTREE/scripts/managed-evidence.sh run --ticket BURL-O004 --trust-anchor-sha TRUST_ANCHOR_SHA --source-ref SOURCE_REF --tested-source-sha TESTED_SOURCE_SHA --base-sha BASE_SHA --output EVIDENCE_WORKTREE/.constitution/evidence/BURL-O004/managed-evidence.json && git -C EVIDENCE_WORKTREE diff --check"
     exists: false
     owner: BURL-O004
-  - name: probe
-    label: temporary Stage 4 compatibility alias for the active BURL-O004 Task command; do not use for acceptance
-    command: "TRUST_ANCHOR_WORKTREE/scripts/managed-evidence.sh run --ticket BURL-O004 --trust-anchor-sha TRUST_ANCHOR_SHA --source-ref SOURCE_REF --tested-source-sha TESTED_SOURCE_SHA --base-sha BASE_SHA --output EVIDENCE_WORKTREE/.constitution/evidence/BURL-O004/managed-evidence.json && TRUST_ANCHOR_WORKTREE/scripts/aggregate-prd-meters.sh --require-run linux-reference=EVIDENCE_WORKTREE/.constitution/evidence/BURL-O004/managed-evidence-coordinator/roles/linux-x86_64/nightly-prd-meters-linux.json --require-run macos-reference=EVIDENCE_WORKTREE/.constitution/evidence/BURL-O004/managed-evidence-coordinator/roles/macos-26-arm64/nightly-prd-meters-macos.json --require-same-corpus-hash --require-same-meter-definition-version --output EVIDENCE_WORKTREE/.constitution/evidence/BURL-O004/nightly-prd-meters.json && git -C EVIDENCE_WORKTREE diff --check"
-    exists: false
-    owner: BURL-O004
   - name: test
     label: canonical BURL verification for BURL-N009
     command: "cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && ./scripts/run-private-github-canary.sh --private-remote \"$BURLMD_TEST_PRIVATE_REMOTE_URL\" --object-endpoint \"$BURLMD_TEST_S3_ENDPOINT\" --cleanup always --output .constitution/evidence/BURL-N009/canary-n009.json && ./scripts/verify-device-authorization-runbook.sh --require-human-approval --output .constitution/evidence/BURL-N009/device-auth-n009.json && git diff --check"

@@ -1,4 +1,12 @@
 entries:
+  - version: v2.0.11
+    date: 2026-09-05
+    changed:
+      - "Removed the final explicitly labeled temporary Stage 4 compatibility alias for BURL-O004 after Tasks adopted the canonical single-run managed-evidence command. The canonical command and every lower-level managed role/profile command remain byte-for-byte unchanged."
+    by: patch-lane
+    upstream:
+      prd: v2.0.2
+      architecture: v2.0.4
   - version: v2.0.10
     date: 2026-09-05
     changed:
