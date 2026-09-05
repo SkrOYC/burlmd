@@ -48,6 +48,9 @@ tickets:
         `chore/epic-m-ci-foundation` from merged `master`.
       - STOP if the fix can hide a real ordering failure, rely on wall-clock
         coincidence, or weaken the authoritative-success state comparison.
+      - STOP if work would weaken authoritative-success semantics or remove
+        timestamp assertions without a deterministic replacement; don't expand
+        this ticket.
     description: Replace the one-second last_modified race in the existing
       structural-draft authoritative-success regression with deterministic
       clock/state evidence while preserving the production invariant and exact
@@ -188,6 +191,9 @@ tickets:
       - STOP if the Flutter Rust Bridge generator, Rust crate, or Dart package
         differs from the provisionally authorized `2.12.0` triple. Use that
         triple only for bootstrap and require revalidation after final Stage 3.
+      - STOP if work would include live product or canary credentials,
+        repository-content pushes, release publication, or Writer desktop
+        state; don't expand this ticket.
     description: >
       Add one trusted workflow_dispatch caller and three distinct two-job
       reusable role workflows referenced through static local paths. Each role's

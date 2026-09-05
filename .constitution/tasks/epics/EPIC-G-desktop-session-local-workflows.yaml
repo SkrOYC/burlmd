@@ -74,6 +74,7 @@ tickets:
         - scripts/visual-regression.sh
       out:
         - linux/**
+        - macos/**
     verification:
       command: flutter test && dart analyze && ./scripts/visual-regression.sh
         shell-g001 --baseline test/goldens/shell-g001-linux.png
@@ -134,6 +135,8 @@ tickets:
     stop_conditions:
       - STOP if persistence requires storing appearance or update choices in the
         Workspace; keep them device-global.
+      - STOP if work would include Workspace Notes and Git history because
+        preferences never enter Workspace content; don't expand this ticket.
     description: Persist theme, font scale, prose measure, focus mode, and
       update-notification choices through the Platform application-state seam
       defined by device-preferences.schema.json, with atomic replacement for
@@ -191,6 +194,8 @@ tickets:
     stop_conditions:
       - STOP if a snapshot can become authoritative Note/session state or
         contain Note content or secrets.
+      - STOP if work would include Note bodies, credentials, or device-global
+        preferences; don't expand this ticket.
       - STOP if Core restores a snapshot with empty, invalid, or duplicate
         identities; a mismatched Workspace ID; or an active Note outside the
         open-Note list.
@@ -242,6 +247,8 @@ tickets:
     stop_conditions:
       - STOP if Flutter invents or restores a writable Note session that Core
         doesn't own.
+      - STOP if work would include the canonical AST or path implementation
+        owned by Epic H; don't expand this ticket.
     description: Bind every tab to a Core Note session, restore available tabs and
       the active Note, skip missing Notes with one report, and apply the
       following-then-preceding selection rule after an active close
@@ -289,6 +296,8 @@ tickets:
       - STOP if any tab button, middle click, shortcut, Close Others, Close All,
         Workspace switch, or orderly shutdown removes a tab before Core returns
         its terminal close outcome.
+      - STOP if work would include Remote shutdown synchronization owned by Epic
+        L; don't expand this ticket.
     description: Route all close entry points through one serialized coordinator.
       Continue after clean success. For a retired-session warning, remove the
       warned tab and continue only a single Note-to-Note replacement with no
@@ -328,6 +337,8 @@ tickets:
       expected: exit 0 with startup, picker, switch, and cancellation flows passing
     stop_conditions:
       - STOP if switching bypasses BURL-G005 or permits two active Workspaces.
+      - STOP if work would include preflight validation or repair rules owned by
+        Epic H; don't expand this ticket.
     description: Reopen the last Workspace at startup, expose Open Workspace, run
       adoption preflight, restore its session snapshot, and keep the previous
       Workspace active when close or adoption fails
@@ -366,6 +377,8 @@ tickets:
     stop_conditions:
       - STOP if the UI reimplements title matching, Link resolution, or backlink
         queries.
+      - STOP if work would include search or index algorithms already owned by
+        Core; don't expand this ticket.
     description: Add a keyboard title-jump surface over the existing Core path and a
       backlinks surface for the open Note, preserving authoritative tab/session
       selection
@@ -413,6 +426,8 @@ tickets:
       - STOP if the final AST contract after BURL-H001 changes operation
         identity or inverse requirements; reconcile this ticket before
         implementation.
+      - STOP if work would include lifecycle or synchronization operations,
+        which aren't undo entries; don't expand this ticket.
     description: Implement the bounded Core command stack across splice, structural,
       range, and replace-all edits, with redo invalidation, tier-1 durability,
       and platform keyboard actions
@@ -448,6 +463,8 @@ tickets:
     stop_conditions:
       - STOP if Flutter computes source ranges or replace-all dispatches a
         sequence of independently visible mutations.
+      - STOP if work would include Workspace-wide search; don't expand this
+        ticket.
     description: Find matches through the canonical Note model, navigate them in the
       editor, replace one, and replace all as one durable undoable operation
     acceptance:
@@ -483,6 +500,8 @@ tickets:
     stop_conditions:
       - STOP if restore silently discards an unwritten draft or depends on a
         full diff viewer.
+      - STOP if work would include a full historical diff viewer; don't expand
+        this ticket.
     description: List session-granularity Note versions, show timestamps/messages,
       confirm destructive restore, create a new current history state, and
       request referenced Object hydration without rewriting earlier history
@@ -555,6 +574,8 @@ tickets:
       - STOP if any pointer action lacks keyboard reachability, Writer-facing
         string bypasses localization, or state shown by the shell isn't
         authoritative.
+      - STOP if work would include Assets, Remote sync, or release surfaces owned
+        by later epics; don't expand this ticket.
       - STOP if the final aggregate is rejected, Linux capture can observe the
         Writer's desktop, macOS 26 geometry isn't verified, or macOS 15 creates
         or updates a visual baseline.

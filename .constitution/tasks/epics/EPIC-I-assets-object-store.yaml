@@ -93,6 +93,8 @@ tickets:
         except the coordinator output is writable.
       - STOP when the 8-point Spike budget is exhausted and leave thresholds
         unresolved when full meters aren't established.
+      - STOP if work touches any repository path outside this ticket's scope or
+        changes production or active specifications; don't expand this ticket.
     description: Compare the accepted S3 client candidates and measure content
       identity, immutable manifests, image limits, hydration, reachability,
       retention, and repository health
@@ -154,6 +156,8 @@ tickets:
         enters the Git manifest.
       - STOP if commit safety depends on a writable, readable, present, or
         trustworthy `.gitignore` file.
+      - STOP if work would include Remote transfer or mutable device state owned
+        by later tickets; don't expand this ticket.
     description: Add the accepted content identity, canonical assets/objects/
       payload path, immutable textual manifest, atomic imported-byte adoption,
       deduplication, and local verification state. Enforce a Core commit-path
@@ -204,6 +208,8 @@ tickets:
     stop_conditions:
       - STOP if import references the source file in place, bypasses the
         accepted size/pixel limits, or lets Flutter invent Object identity.
+      - STOP if work would include Object Store transfer; don't expand this
+        ticket.
     description: Import images from file selection, clipboard, and drag/drop into
       the Local Asset Store, splice a standard bundle-absolute Markdown
       reference, and render verified bytes inline with accessible fallbacks
@@ -258,6 +264,8 @@ tickets:
         or credentials leave Platform secure storage.
       - STOP synchronized publication after any failed or stale privacy
         revalidation; local work remains available.
+      - STOP if work would include bucket-policy mutation, cloud-account
+        provisioning, or a burlmd-operated bucket; don't expand this ticket.
     description: Collect endpoint, region, bucket, prefix, and narrowly scoped
       credentials; store secrets securely; validate authenticated
       list/read/write/delete with disposable Objects; reject anonymously
@@ -315,6 +323,8 @@ tickets:
         transfers block local Note editing.
       - STOP publication if BURL-I004 privacy evidence is missing, failed, or
         older than 15 minutes.
+      - STOP if work would include Git history publication owned by Epic L;
+        don't expand this ticket.
     description: Upload content-addressed Objects, verify remote bytes, prioritize
       active hydration on another device, retain offline Note work, and persist
       resumable transfer state outside the manifest
@@ -352,6 +362,8 @@ tickets:
     stop_conditions:
       - STOP if recovery discards a verified copy, silently removes a reference,
         or resumes affected sync before verification.
+      - STOP if work would include Remote reconciliation Asset Decisions owned
+        by Epic L; don't expand this ticket.
     description: Detect missing/corrupt bytes, preserve verified copies, pause
       affected synchronization, and expose only valid Retry, Repair from local,
       Choose replacement, or Remove reference actions
@@ -399,6 +411,8 @@ tickets:
     stop_conditions:
       - STOP if age overrides reachability, cache eviction lacks a verified
         remote copy, or any path can delete an authoritative Object Store byte.
+      - STOP if work would include pruning Git history; don't expand this
+        ticket.
     description: Derive Object reachability from canonical AST references across
       every Protected State, evict only verified inactive local cache copies
       after the CAP-058 30-day inactivity window, and prohibit authoritative
@@ -439,6 +453,8 @@ tickets:
     stop_conditions:
       - STOP if old credentials are removed before the replacement authenticates
         and verifies existing Objects.
+      - STOP if work would include replacement Object Store migration or
+        full-local detach; don't expand this ticket.
     description: Preflight replacement Object Store credentials, atomically publish
       the verified credential reference, remove the superseded secret from local
       Secure Storage only after success, instruct the Writer to revoke it at the
@@ -478,6 +494,8 @@ tickets:
     stop_conditions:
       - STOP if preflight changes bytes or migration guesses among
         missing/ambiguous references.
+      - STOP if work would include silent or destructive cleanup of unreferenced
+        files; don't expand this ticket.
     description: Inventory guest Asset references, report
       missing/ambiguous/oversized/nonconforming inputs, preview canonical
       migration, adopt referenced bytes atomically, and leave unreferenced files
