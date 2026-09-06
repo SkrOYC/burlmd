@@ -66,6 +66,8 @@ survive. The release contract must not make that claim.
    transport artifact. The canonical bytes bind the exact stage and producer
    receipt name, service ID, action digest, REST digest, `createdAt`, `expiresAt`,
    producing seal check-run ID, subject, signer, run, attempt, and attestation.
+   Its static workflow outputs must equal the complete
+   `consumer_trusted_inputs` interface.
 7. Give the macOS 15 candidate job exact trusted stage, producing-receipt, and
    producer-lineage artifact inputs. Its trusted wrapper downloads all three by
    immutable artifact ID with `digest-mismatch: error`. Before candidate
@@ -73,7 +75,8 @@ survive. The release contract must not make that claim.
    binding offline. It hashes and validates the canonical lineage bytes, then
    requires the signed producer receipt to remain unexpired. It then removes
    credentials and exposes only the verified producer members as read-only
-   inputs. The candidate remains credential-free.
+   inputs. Its static trusted inputs must equal the complete
+   `consumer_trusted_inputs` interface. The candidate remains credential-free.
 8. Require the macOS 15 seal to compare the candidate-carried parsed lineage,
    lineage SHA-256, lineage transport receipt, and consumer binding with the
    trusted wrapper record. It preserves them in its sealing receipt. Final
