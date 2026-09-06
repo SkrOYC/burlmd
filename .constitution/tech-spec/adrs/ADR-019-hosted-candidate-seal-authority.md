@@ -70,20 +70,29 @@ survive. The release contract must not make that claim.
    transport artifact. The seal attests that artifact. The canonical bytes bind
    the exact stage and producer receipt name, service ID, action digest, REST
    digest, `createdAt`, `expiresAt`, producing seal check-run ID, subject,
-   signer, run, attempt, and attestation. Its static workflow outputs must equal
-   the complete `consumer_trusted_inputs` interface.
+   signer, run, attempt, and attestation. Static workflow-shape fixtures pin the
+   exact ordered 26 producer-output declarations, consumer string-input
+   declarations, and observable trusted caller mappings. For each canonical
+   hyphenated consumer input, the fixture also pins its uppercase environment
+   variable and its matching position in the validator's ordered 26-field
+   inventory.
 7. Give the macOS 15 candidate job exact trusted stage, producing-receipt, and
-   producer-lineage artifact inputs. Its trusted wrapper downloads all three by
-   immutable artifact ID with `digest-mismatch: error`. Before candidate
-   execution, the trusted workflow wrapper runs all three offline
-   `gh attestation verify` commands for the stage, producer receipt, and
-   producer-lineage artifacts. It gives their result files and the complete
-   `consumer_trusted_inputs` interface to the trusted
-   `scripts/prepare-compatibility-stage-consumer.sh` helper. The helper consumes
-   and validates those results, hashes and validates the canonical lineage bytes,
-   requires the signed producer receipt to remain unexpired, removes credentials,
-   and exposes only the verified producer members as read-only inputs. The
-   candidate remains credential-free.
+   producer-lineage artifact inputs. Before caller mapping, the macOS 26 output
+   boundary explicitly ticket-gates and conditionally normalizes the three
+   producer sealing aliases to empty strings for every ticket other than
+   `BURL-O001`. It does not rely on omitted reusable-workflow input defaults.
+   Before any compatibility artifact acquisition or consumer processing, the
+   macOS 15 trusted wrapper invokes
+   `scripts/validate-compatibility-stage-interface.sh` with the fixed 26-field
+   mapping. For `BURL-O001`, accepted values are all nonempty and proceed to all
+   three immutable-ID downloads, offline verification, and the consumer helper.
+   For every other ticket, accepted values are all empty. The wrapper skips only
+   compatibility acquisition, offline verification, and consumer processing, then
+   continues the ordinary candidate path. The consumer helper validates the
+   result files, hashes and validates canonical lineage bytes, requires the
+   signed producer receipt to remain unexpired, removes credentials, and exposes
+   only verified producer members as read-only inputs. The candidate remains
+   credential-free.
 8. Require the macOS 15 seal to compare the candidate-carried parsed lineage,
    lineage SHA-256, lineage transport receipt, and consumer binding with the
    trusted wrapper record. The binding's `downloadedStageArtifactId` must equal
@@ -123,7 +132,7 @@ survive. The release contract must not make that claim.
   authentication and executes only the identified binary against fixed
   read-only `/inputs`, with `/output/nightly-prd-meters.json` as its sole
   writable result and no repository mount.
-- The four compatibility-stage helpers are immutable members of
+- The five compatibility-stage helpers are immutable members of
   `ci_bootstrap.trust_anchor.trusted_control_paths`. The client requires their
   bytes and object modes to equal the trust anchor before dispatch and during
   collection. Any change requires reviewed trust-anchor rotation and

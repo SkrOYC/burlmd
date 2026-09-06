@@ -1,4 +1,17 @@
 entries:
+  - version: v2.1.5
+    date: 2026-09-06
+    fixed:
+      - "Added scripts/validate-compatibility-stage-interface.sh to ci_bootstrap.trust_anchor.trusted_control_paths. The macOS 26 output boundary explicitly ticket-gates and conditionally normalizes producer-sealing-check-run-id, producer-sealing-receipt-artifact-id, and producer-sealing-receipt-upload-action-digest to empty strings for every ticket other than BURL-O001 before caller mapping."
+      - "Separated static workflow-shape fixtures from runtime validation. Duplicate-aware source fixtures pin every canonical hyphenated consumer input through its uppercase environment variable into the matching ordered 26-field validator inventory, rejecting swapped, missing, extra, duplicated, or reordered mappings where source structure is observable. The runtime validator does not claim to observe YAML key shape or arbitrary value provenance. Downstream attestation, identity, digest, lineage, and freshness checks validate consumed values. Reconciled the five-control version 33 inventory without changing raw contract version 33 or evidence schema versions 15 and 17."
+      - "Required static and behavioral fixtures to prove the producer-boundary branch. Accepted nonempty BURL-O001 values proceed to all three downloads, offline verification, and consumer processing. Accepted all-empty values for every other ticket skip only those compatibility steps, then continue the ordinary candidate path."
+      - "Recorded that the BURL-M003 and BURL-O001 Stage 4 Tasks artifacts are downstream-stale. A separate planning-engineering-execution adaptation must revise them before implementation; this Stage 3 pass does not edit .constitution/tasks or claim that Task scope is unchanged."
+    security:
+      - "Required byte-for-byte and mode-for-mode trust-anchor equality for all five compatibility-stage helpers before dispatch and during collection. Any change requires the normal reviewed trust-anchor rotation and evidence-only completion."
+    by: patch-lane
+    upstream:
+      prd: v2.0.5
+      architecture: v2.1.2
   - version: v2.1.4
     date: 2026-09-06
     fixed:
