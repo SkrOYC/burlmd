@@ -242,10 +242,12 @@ tickets:
       attempt completes, managed-evidence.sh resolves that locator through the
       job API and constructs aggregate origin.sealingJob only for a completed
       successful provenance-bound match. For BURL-O001, the macOS 26 seal owns
-      the authenticated compatibility stage. The macOS 15 wrapper verifies that
-      exact stage and producer receipt before credential-free candidate
-      execution, and the macOS 15 seal and final aggregate preserve the complete
-      lineage. Implement the collect and run forms, the non-mutating
+      the authenticated compatibility stage. The macOS 15 wrapper downloads the
+      exact stage, producer receipt, and canonical producer-lineage artifact by
+      immutable ID and verifies all three seal-exported attestation bundles
+      offline before credential-free candidate execution. The macOS 15 seal and
+      final aggregate preserve the complete lineage. Implement the collect and
+      run forms, the non-mutating
       generated-binding checker, and the managed-evidence isolation fixture. Add
       Linux-only Bubblewrap 0.11.2 and GitHub CLI 2.96.0 through the locked Nix
       environment. Reproduce the specified behavior without importing the Epic
@@ -395,10 +397,11 @@ tickets:
         stage name, service artifact ID, both digest forms, lifetime, manifest,
         attestation facts, producing seal locator, signer, source, run, attempt,
         and roles. A separate staging job is forbidden. The macOS 15 trusted
-        wrapper downloads the exact stage and producer receipt by immutable ID.
-        It verifies both seal-exported attestation bundles offline with a fresh
-        trusted root. It then removes credentials and exposes only the two
-        verified producer members read-only. The macOS 15 manifest and seal
+        wrapper downloads the exact stage, producer receipt, and canonical
+        `compatibility-stage-producer-lineage.json` artifact by immutable ID.
+        It verifies all three seal-exported attestation bundles offline with a
+        fresh trusted root. It then removes credentials and exposes only the
+        two verified producer members read-only. The macOS 15 manifest and seal
         preserve the parsed `producerLineage`, the exact SHA-256 of the
         immutable RFC 8785 `compatibility-stage-producer-lineage.json` bytes,
         its transport identity and attestation, and `consumerBinding`. The

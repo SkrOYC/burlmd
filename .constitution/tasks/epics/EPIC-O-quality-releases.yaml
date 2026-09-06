@@ -110,10 +110,10 @@ tickets:
         manifest digest, attestation bundle digest, subject digest, signer,
         source, run, attempt, role, and producing sealing check-run locator.
       - STOP if the macOS 15 wrapper doesn't download the exact stage, producer
-        receipt, and lineage artifact by immutable service ID; rejects a
+        receipt, and lineage artifact by immutable service ID; doesn't reject a
         compatibility-stage digest mismatch, expired stage, or stale producer
-        receipt; or verifies all three seal-exported attestations offline before
-        credential removal and read-only member exposure.
+        receipt; or doesn't verify all three seal-exported attestations offline
+        before credential removal and read-only member exposure.
       - STOP if the macOS 15 manifest, receipt, and seal don't agree with final
         aggregation on the parsed macOS 26 `producerLineage`, the exact SHA-256
         of the immutable RFC 8785 `compatibility-stage-producer-lineage.json`
