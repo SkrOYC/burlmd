@@ -1,4 +1,13 @@
 entries:
+  - version: v3.2.7
+    date: 2026-09-06
+    fixed:
+      - "Aligned the current Tasks metadata with merged TechSpec v2.1.6 after restoring Tasks v3.2.6's upstream.tech-spec pointer to v2.1.5. BURL-M003 and BURL-O001 planning is unchanged. The Stage 3 routing gate is satisfied. No ticket, graph, estimate, or critical-path change occurs. Upstream PRD v2.0.5 and Architecture v2.1.2 remain."
+    upstream:
+      prd: v2.0.5
+      architecture: v2.1.2
+      tech-spec: v2.1.6
+    by: patch-lane
   - version: v3.2.6
     date: 2026-09-06
     fixed:
