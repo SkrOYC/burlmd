@@ -224,6 +224,28 @@ tickets:
         consumer processing, then continues the ordinary candidate path.
 
 
+        Fixtures require three distinct offline attestation verifications. The
+        stage-manifest verification is pinned to the stage manifest and stage
+        bundle and writes `stage-verification.json`. The producer-receipt
+        verification is pinned to the producer sealing receipt and receipt
+        bundle and writes `receipt-verification.json`. The producer-lineage
+        verification is pinned to the producer-lineage artifact and lineage
+        bundle and writes `lineage-verification.json`. Fixtures accept
+        `consumerBinding.downloadedStageArtifactId` only when it equals
+        `producerLineage.stageArtifact.artifactId` in the macOS 15 manifest,
+        its sealing receipt, and the final aggregate. At each surface, fixtures
+        reject a mismatch.
+
+        After the three distinct offline attestation commands write
+        `stage-verification.json`, `receipt-verification.json`, and
+        `lineage-verification.json`, the trusted
+        `scripts/prepare-compatibility-stage-consumer.sh` helper must consume
+        and validate all three result files together with all 26 runtime values
+        before it removes credentials or exposes only the two verified producer
+        members read-only. Fixtures must fail if the helper ignores, swaps, or
+        does not validate any result file or runtime value.
+
+
         The macOS 26 `seal` job validates exactly
         `handoff/outbox/macos-current-construction.tar.zst` and
         `handoff/outbox/macos-current-construction.sha256`. It creates

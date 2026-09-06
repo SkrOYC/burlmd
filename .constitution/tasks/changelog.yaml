@@ -1,4 +1,15 @@
 entries:
+  - version: v3.2.6
+    date: 2026-09-06
+    fixed:
+      - "Required BURL-M003 and BURL-O001 fixtures to accept consumerBinding.downloadedStageArtifactId only when it equals producerLineage.stageArtifact.artifactId in the macOS 15 manifest, its sealing receipt, and the final aggregate. Fixtures reject a mismatch at each surface."
+      - "Resolved the deferred offline-attestation acceptance gap. Three distinct offline attestation commands write stage-verification.json, receipt-verification.json, and lineage-verification.json. Before credential removal or read-only exposure, the trusted consumer helper must consume and validate all three result files together with all 26 runtime values. Fixtures fail if the helper ignores, swaps, or does not validate any result file or runtime value."
+      - "Regenerated critical-path.md from the unchanged 10-epic, 80-ticket, 564-point graph. Completed Epics A through F have no actuals blocks, so diff-lines-per-point and review-rounds-per-point calibration remains unavailable; both affected estimates remain 8."
+    upstream:
+      prd: v2.0.5
+      architecture: v2.1.2
+      tech-spec: v2.1.5
+    by: patch-lane
   - version: v3.2.5
     date: 2026-09-06
     fixed:
