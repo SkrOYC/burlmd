@@ -1,4 +1,15 @@
 entries:
+  - version: v2.1.4
+    date: 2026-09-06
+    fixed:
+      - "Added scripts/prepare-compatibility-stage.sh, scripts/record-compatibility-stage-rest.sh, scripts/write-compatibility-stage-lineage.sh, and scripts/prepare-compatibility-stage-consumer.sh to ci_bootstrap.trust_anchor.trusted_control_paths. The trust-anchor guard now protects every production helper that creates, REST-binds, records lineage for, or exposes the BURL-O001 compatibility stage."
+      - "Reconciled the helper layout, sidecar settlement conditions, ADRs, guidelines, forward contract, and live TechSpec labels with the complete version 33 trusted-control inventory. Raw contract version 33 and evidence schema versions 15 and 17 remain unchanged."
+    security:
+      - "Required byte-for-byte and mode-for-mode trust-anchor equality for all four compatibility-stage seal and consumer helpers before dispatch and during collection. Any change requires the normal reviewed trust-anchor rotation and evidence-only completion."
+    by: patch-lane
+    upstream:
+      prd: v2.0.5
+      architecture: v2.1.2
   - version: v2.1.3
     date: 2026-09-06
     fixed:

@@ -60,23 +60,28 @@ survive. The release contract must not make that claim.
    sealed bundle and separate receipt. Only the seal attestation can establish
    `runner_environment: github-hosted`.
 6. For `BURL-O001`, make the macOS 26 `seal` job validate the declared producer
-   members and create the compatibility stage. The same job uploads and attests
-   the stage and its sealing receipt. After the receipt REST object exists, it
-   creates and attests the immutable `compatibility-stage-producer-lineage.json`
-   transport artifact. The canonical bytes bind the exact stage and producer
-   receipt name, service ID, action digest, REST digest, `createdAt`, `expiresAt`,
-   producing seal check-run ID, subject, signer, run, attempt, and attestation.
-   Its static workflow outputs must equal the complete
-   `consumer_trusted_inputs` interface.
+   members and create the compatibility stage through the trusted
+   `scripts/prepare-compatibility-stage.sh` helper. The same job uploads and
+   attests the stage and its sealing receipt. The trusted
+   `scripts/record-compatibility-stage-rest.sh` helper binds the uploaded stage
+   to its REST identity, digest, lifetime, and attestation. After the receipt
+   REST object exists, the trusted `scripts/write-compatibility-stage-lineage.sh`
+   helper creates the immutable `compatibility-stage-producer-lineage.json`
+   transport artifact. The seal attests that artifact. The canonical bytes bind
+   the exact stage and producer receipt name, service ID, action digest, REST
+   digest, `createdAt`, `expiresAt`, producing seal check-run ID, subject,
+   signer, run, attempt, and attestation. Its static workflow outputs must equal
+   the complete `consumer_trusted_inputs` interface.
 7. Give the macOS 15 candidate job exact trusted stage, producing-receipt, and
    producer-lineage artifact inputs. Its trusted wrapper downloads all three by
    immutable artifact ID with `digest-mismatch: error`. Before candidate
-   execution, the wrapper verifies the seal-exported attestation bundles and
-   binding offline. It hashes and validates the canonical lineage bytes, then
-   requires the signed producer receipt to remain unexpired. It then removes
-   credentials and exposes only the verified producer members as read-only
-   inputs. Its static trusted inputs must equal the complete
-   `consumer_trusted_inputs` interface. The candidate remains credential-free.
+   execution, the trusted `scripts/prepare-compatibility-stage-consumer.sh`
+   helper verifies the seal-exported attestation bundles and binding offline.
+   It hashes and validates the canonical lineage bytes, then requires the signed
+   producer receipt to remain unexpired. It removes credentials and exposes only
+   the verified producer members as read-only inputs. Its static trusted inputs
+   must equal the complete `consumer_trusted_inputs` interface. The candidate
+   remains credential-free.
 8. Require the macOS 15 seal to compare the candidate-carried parsed lineage,
    lineage SHA-256, lineage transport receipt, and consumer binding with the
    trusted wrapper record. The binding's `downloadedStageArtifactId` must equal
@@ -116,6 +121,11 @@ survive. The release contract must not make that claim.
   authentication and executes only the identified binary against fixed
   read-only `/inputs`, with `/output/nightly-prd-meters.json` as its sole
   writable result and no repository mount.
+- The four compatibility-stage helpers are immutable members of
+  `ci_bootstrap.trust_anchor.trusted_control_paths`. The client requires their
+  bytes and object modes to equal the trust anchor before dispatch and during
+  collection. Any change requires reviewed trust-anchor rotation and
+  evidence-only completion.
 
 ## Verification anchors
 
