@@ -75,13 +75,15 @@ survive. The release contract must not make that claim.
 7. Give the macOS 15 candidate job exact trusted stage, producing-receipt, and
    producer-lineage artifact inputs. Its trusted wrapper downloads all three by
    immutable artifact ID with `digest-mismatch: error`. Before candidate
-   execution, the trusted `scripts/prepare-compatibility-stage-consumer.sh`
-   helper verifies the seal-exported attestation bundles and binding offline.
-   It hashes and validates the canonical lineage bytes, then requires the signed
-   producer receipt to remain unexpired. It removes credentials and exposes only
-   the verified producer members as read-only inputs. Its static trusted inputs
-   must equal the complete `consumer_trusted_inputs` interface. The candidate
-   remains credential-free.
+   execution, the trusted workflow wrapper runs all three offline
+   `gh attestation verify` commands for the stage, producer receipt, and
+   producer-lineage artifacts. It gives their result files and the complete
+   `consumer_trusted_inputs` interface to the trusted
+   `scripts/prepare-compatibility-stage-consumer.sh` helper. The helper consumes
+   and validates those results, hashes and validates the canonical lineage bytes,
+   requires the signed producer receipt to remain unexpired, removes credentials,
+   and exposes only the verified producer members as read-only inputs. The
+   candidate remains credential-free.
 8. Require the macOS 15 seal to compare the candidate-carried parsed lineage,
    lineage SHA-256, lineage transport receipt, and consumer binding with the
    trusted wrapper record. The binding's `downloadedStageArtifactId` must equal
