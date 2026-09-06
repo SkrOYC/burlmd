@@ -212,16 +212,16 @@
       }
     },
     "compatibilityStageConsumerBinding": {
-      "$comment": "The trusted macOS 15 wrapper creates this record after ID-addressed download and offline verification. The macOS 15 seal reconstructs and compares it without trusting candidate bytes.",
+      "$comment": "The trusted macOS 15 wrapper creates this record after ID-addressed download and offline verification. downloadedStageArtifactId names only the stage artifact, even though the wrapper downloads three artifacts. Semantic validation requires it to equal producerLineage.stageArtifact.artifactId. The macOS 15 seal reconstructs and compares it without trusting candidate bytes.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["producerLineageSha256", "producerLineageArtifact", "producerSealingReceiptSha256", "producerSealingReceiptArtifact", "downloadedArtifactId", "downloadActionSha", "digestMismatchBehavior", "stageAttestationVerifiedOffline", "stageAttestationVerificationResultSha256", "producerReceiptAttestationVerifiedOffline", "producerReceiptAttestationVerificationResultSha256", "producerLineageAttestationVerifiedOffline", "producerLineageAttestationVerificationResultSha256", "trustedRootSha256", "credentialsRemoved", "membersReadOnly", "consumerRole", "workflowRunId", "runAttempt", "consumerCandidateCheckRunId", "verifiedAt"],
+      "required": ["producerLineageSha256", "producerLineageArtifact", "producerSealingReceiptSha256", "producerSealingReceiptArtifact", "downloadedStageArtifactId", "downloadActionSha", "digestMismatchBehavior", "stageAttestationVerifiedOffline", "stageAttestationVerificationResultSha256", "producerReceiptAttestationVerifiedOffline", "producerReceiptAttestationVerificationResultSha256", "producerLineageAttestationVerifiedOffline", "producerLineageAttestationVerificationResultSha256", "trustedRootSha256", "credentialsRemoved", "membersReadOnly", "consumerRole", "workflowRunId", "runAttempt", "consumerCandidateCheckRunId", "verifiedAt"],
       "properties": {
         "producerLineageSha256": { "$ref": "#/$defs/sha256" },
         "producerLineageArtifact": { "$ref": "#/$defs/producerLineageArtifactReceipt" },
         "producerSealingReceiptSha256": { "$ref": "#/$defs/sha256" },
         "producerSealingReceiptArtifact": { "$ref": "#/$defs/producerSealingReceiptArtifactReceipt" },
-        "downloadedArtifactId": { "type": "integer", "minimum": 1 },
+        "downloadedStageArtifactId": { "type": "integer", "minimum": 1 },
         "downloadActionSha": { "const": "3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c" },
         "digestMismatchBehavior": { "const": "error" },
         "stageAttestationVerifiedOffline": { "const": true },
@@ -241,7 +241,7 @@
       }
     },
     "compatibilityStageConsumption": {
-      "$comment": "Semantic validation requires producerLineageSha256 to hash the exact RFC 8785 lineage artifact bytes, producerLineageArtifact to describe the artifact that transported them, and consumerBinding's lineage fields to equal these values. It also requires the signed producer receipt expiresAt to be later than consumerBinding.verifiedAt.",
+      "$comment": "Semantic validation requires producerLineageSha256 to hash the exact RFC 8785 lineage artifact bytes, producerLineageArtifact to describe the artifact that transported them, consumerBinding's lineage fields to equal these values, and consumerBinding.downloadedStageArtifactId to equal producerLineage.stageArtifact.artifactId. It also requires the signed producer receipt expiresAt to be later than consumerBinding.verifiedAt.",
       "type": "object",
       "additionalProperties": false,
       "required": ["producerLineage", "producerLineageSha256", "producerLineageArtifact", "consumerBinding"],
