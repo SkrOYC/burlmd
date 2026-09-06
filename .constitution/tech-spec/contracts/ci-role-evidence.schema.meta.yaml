@@ -3,4 +3,5 @@ surface: json
 flows: [flow-release]
 boundaries: [BND-16, BND-17]
 certainty: assumed
-assumption: "Migrated; not yet exercised by a contract test."
+assumption: "Schema version 15 and sealing receipt version 2 define candidate guard and compatibility-stage records that implementation tests have not exercised."
+settles_when: "Role, receipt, and BURL-O001 producer-to-consumer fixtures validate accepted and rejected version 15 documents."

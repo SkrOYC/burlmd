@@ -1,4 +1,21 @@
 entries:
+  - version: v2.1.2
+    date: 2026-09-06
+    changed:
+      - "Separated candidate placement, topology, label, and completion observations from authenticated origin. They remain noncryptographic fail-closed runtime guards, while hostedOriginVerified now refers only to fresh sealing jobs with verified signer, source, run, attempt, check-run, and runner_environment provenance."
+      - "Moved the BURL-O001 compatibility stage into the macOS 26 seal. The stage binds its exact name, service artifact ID, bare upload digest, canonical REST digest, lifetime, producer members, producing seal locator, and attestation facts through macOS 15 and final aggregation."
+      - "Required macOS 15 to download the exact stage and producer receipt by immutable artifact ID with digest-mismatch:error, verify seal-exported bundles offline with a fresh trusted root, remove credentials, expose only verified read-only members, and preserve the producer lineage into its seal."
+      - "Advanced provisional-spikes.toml from version 32 to 33, ci-role-evidence from 14 to 15, its embedded sealing receipt from 1 to 2, and ci-evidence from 16 to 17. Spike-result remains version 20 because its result shape does not change."
+      - "Added GitHub CLI 2.96.0 as the thirty-fifth bill-of-materials record. The pinned devenv.lock Nixpkgs revision supplies the offline attestation verification and trusted-root interfaces."
+    fixed:
+      - "Removed the separate staging authority and candidate-derived runnerEnvironment assertion from the contract. Added typed stage rejection outcomes and fixtures for missing, duplicate, substituted, expired, digest-mismatched, unattested, wrong-signer, wrong-run, wrong-role, wrong-seal, unexpected, and consumer-unbound stages."
+      - "Added the canonical OD-11 BURL-M003 verification command while retaining the previous command as an explicitly labeled temporary Stage 4 compatibility record until Tasks adapts."
+    security:
+      - "Preserved contents:read-only candidate jobs with no OIDC or attestation authority. Only fresh non-executing seal provenance can authenticate hosted origin."
+    by: stage
+    upstream:
+      prd: v2.0.5
+      architecture: v2.1.2
   - version: v2.1.1
     date: 2026-09-05
     changed:

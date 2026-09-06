@@ -246,3 +246,28 @@ decisions:
       date: 2026-09-04
       summary: "Under the user's delegated authority, adopted the downstream EPIC-N refinement: Epic I remains upstream, Epic L retains BURL-L010, and EPIC-N carries BURL-N002, BURL-N003, BURL-N004, and their BURL-N005 completion gate after Epic L. Direct placement in Epic L cannot preserve the downstream K obligations because second-device join and detach consume the lifecycle work while Epic L already depends on Epic K; adding the reverse Epic K → Epic L dependency would recreate the K↔L cycle. The EPIC-N cut preserves the acyclic Epic I → Epic K → Epic L → Epic N order."
       chosen: "Keep Epic I upstream and create downstream Epic N after Epic L"
+  - id: OD-11
+    question: "How should managed evidence establish candidate placement, authenticated hosted origin, and the BURL-O001 macOS 26-to-macOS 15 handoff while candidate jobs remain credential-free and receive no OIDC or attestation authority?"
+    blocks: [BURL-M003, BURL-O001, ADR-0019, BND-16, BND-17]
+    options:
+      - name: Split candidate placement from seal provenance and make the macOS 26 seal own the authenticated stage
+        pros: ["Preserves the least-privilege candidate boundary while making only the fresh non-executing seal cryptographically authoritative.", "Binds the exact BURL-O001 stage artifact, digest, producing seal locator, and attestation through macOS 15 and final evidence without adding another authority job."]
+        cons: ["Candidate GitHub-hosted placement remains a trusted-workflow and runtime guard rather than cryptographic proof.", "Requires coordinated Architecture, TechSpec, Tasks, schema, workflow, fixture, and PR #15 changes."]
+      - name: Grant candidate jobs OIDC and attestation authority
+        pros: ["Could attach a cryptographic GitHub-hosted runner claim directly to each candidate job.", "Avoids distinguishing candidate placement evidence from sealing provenance in the final schema."]
+        cons: ["Gives the environment that executes candidate-controlled code a signing capability and violates the accepted credential-free candidate design.", "Collapses the fresh-seal authority boundary that limits a malicious or surviving candidate process."]
+      - name: Keep REST-label candidate authentication and the separate name-only staging job
+        pros: ["Requires the smallest immediate change to PR #15.", "Retains the current workflow topology and aggregate schema shape."]
+        cons: ["A self-hosted runner can omit default labels and use a hosted-looking custom label, so the candidate origin claim isn't cryptographically supported.", "The macOS 15 consumer and final evidence still don't bind the stage artifact ID, digest, producer seal locator, and attestation end to end."]
+    recommendation: Split candidate placement from seal provenance and make the macOS 26 seal own the authenticated stage
+    closure: ruling
+    ruler: "The user, under delegated authority recorded in the 2026-09-05 Realign interview"
+    status: closed
+    asked:
+      date: 2026-09-05
+      in: reports/2026-09-05-interview-realign.md
+    ruling:
+      ref: reports/2026-09-05-interview-realign.md
+      date: 2026-09-05
+      summary: "Preserve candidate jobs as credential-free with no OIDC or attestation authority; treat their fixed GitHub-hosted placement as a trusted-workflow and runtime guard, not cryptographic proof; retain the fresh seal as the sole attested hosted-origin authority; and make the macOS 26 seal create and attest the BURL-O001 stage whose exact artifact ID, digest, producing seal locator, and attestation remain bound through macOS 15 and final evidence."
+      chosen: Split candidate placement from seal provenance and make the macOS 26 seal own the authenticated stage

@@ -88,10 +88,10 @@ tickets:
         required role bundle is missing, incomplete, stale, mismatched, corrupt,
         self-hosted, unauthenticated, or rejected.
       - STOP if post-completion API observation doesn't resolve the receipt
-        locator to one completed successful sealing job on the fixed hosted
-        label, or if an expected, candidate, or sealed artifact name or
-        normalized digest is invalid, missing, duplicate, extra, or inconsistent
-        with the run nonce.
+        locator to one completed successful sealing job with matching attested
+        hosted-origin provenance, or if an expected, candidate, sealed, receipt,
+        or compatibility-stage artifact name or normalized digest is invalid,
+        missing, duplicate, extra, or inconsistent with the run nonce.
       - STOP if the launcher isn't the clean trust-anchor copy, a trusted
         control file differs at the signer SHA, or the base-to-source diff
         leaves the packaging write allowlist.
@@ -99,6 +99,21 @@ tickets:
         environment-selected source, the machine result is missing or invalid,
         or the evidence commit omits the machine result, accepted managed
         report, or executor-authored Spike report.
+      - STOP if the macOS 26 `seal` job doesn't create the canonical
+        BURL-O001 stage after validating exactly the declared archive and
+        checksum members, or if another staging job or authority creates it.
+      - STOP if the macOS 26 receipt doesn't bind the exact stage artifact name,
+        service ID, bare upload digest, canonical REST digest, lifetime,
+        manifest digest, attestation bundle digest, subject digest, signer,
+        source, run, attempt, role, and producing sealing check-run locator.
+      - STOP if the macOS 15 wrapper doesn't download the exact stage and
+        producer receipt by immutable service ID, reject a digest mismatch and
+        an expired stage, or verify both seal-exported attestations offline
+        before credential removal and read-only member exposure.
+      - STOP if the macOS 15 manifest and receipt don't preserve the macOS 26
+        `producerLineage` byte-for-byte with the trusted `consumerBinding`, or
+        if final aggregation doesn't verify that unchanged lineage against both
+        receipts, both seal origins, and non-expired stage REST state.
       - STOP if a candidate command can observe a credential canary or OIDC or
         attestation capability; if the trusted upload wrapper lacks its
         job-scoped artifact runtime authority; if valid immutable untrusted
@@ -120,51 +135,97 @@ tickets:
     description: Build and install the representative harness as AppImage, tagged
       Nix Flake package, and unsigned Apple Silicon archive across the required
       Linux and macOS matrix. Authenticate managed role evidence through
-      BURL-M003. Prove the checksum and provenance-metadata layout inside the
-      prototype; release-candidate attestations remain production workflow work
-      owned by BURL-O009 and BURL-O014
+      BURL-M003. The macOS 26 seal creates and attests the exact compatibility
+      stage that the macOS 15 wrapper verifies before credential-free candidate
+      execution. Preserve its producer lineage and consumer binding through the
+      macOS 15 seal and final aggregate. Prove the checksum and
+      provenance-metadata layout inside the prototype; release-candidate
+      attestations remain production workflow work owned by BURL-O009 and
+      BURL-O014
     acceptance:
       mode: hitl_sil
-      evidence: "Unique hashed and logged runs verify installed Git and runtime,
-        secure storage, file selection, native loading, secret injection, update
+      evidence: >
+        Unique hashed and logged runs verify installed Git and runtime, secure
+        storage, file selection, native loading, secret injection, update
         selection, host chrome, repeatability, and every named Linux candidate.
-        The Linux role provides `packaging-runtime`; macOS 26 provides
-        `packaging-runtime` and `repeatable-construction`; macOS 15 provides
+        The Linux role provides `packaging-runtime`. macOS 26 provides
+        `packaging-runtime` and `repeatable-construction`. macOS 15 provides
         `packaging-runtime-compatibility`. This Spike doesn't claim performance,
         Linux platform-regression, or authoritative macOS visual evidence.
+
+
         Candidate commands produce an untrusted bundle containing the manifest
-        plus every named result, log, raw measurement, and handoff without
-        token, artifact-runtime, OIDC, or attestation access. After candidate
-        commands finish, the trusted workflow wrapper uses job-scoped artifact
-        runtime authority to upload that untrusted bundle. A fresh dependent
-        sealing job validates the immutable bundle and alone authenticates the
-        sealed artifact. Aggregation verifies the exact packaging evidence
-        profile, trust anchor, workflow signer, separate tested source, ticket
-        base, packaging allowlist, sealing provenance, bundle integrity, and
-        internal artifact hashes. Each named runtime check obtains guest
-        operating system, distribution, version, and architecture from inside
-        the installed probe environment; aggregation requires exact Ubuntu
-        22.04, 24.04, and 26.04 plus Debian 12 and 13 x86-64 evidence rather
-        than trusting run IDs or the outer Nix host. The versioned build script
-        runs `flutter clean`, enforces the committed dependency lock, normalizes
-        archive metadata from the source revision's epoch, and emits the actual
-        deterministic `.tar.gz` release artifact for each construction. macOS 26
-        constructs that archive twice from identical inputs; aggregation
-        requires byte-identical archive hashes. Extraction rejects path escape
-        and proves the archive preserves required modes, symlink targets,
-        extended attributes, and one application bundle. The first archive
-        travels in the authenticated macOS 26 sealed bundle. Only after
-        verifying and staging that bundle does the macOS 15 role extract and
-        probe the same bytes. Final aggregation stages all three sealed role
-        bundles under fixed role directories and requires both macOS probes to
-        name the same archive SHA-256. Nix out-links are only build sources: the
-        result tool copies their resolved bytes or closures into `artifacts/`
-        inside the Spike allowlist before size and SHA-256 recording. The
-        aggregate records the prebuilt result-tool identity and proves no
-        network, credential, writable input, or host user state entered
-        coordinator execution. The CLI produces authoritative schema-valid
-        `results.json`; the executor authors its human interpretation and
-        commits both with the accepted managed report."
+        and every named result, log, raw measurement, and handoff. Candidate
+        commands receive no token, artifact-runtime, OIDC, or attestation
+        access. After candidate commands finish, the trusted workflow wrapper
+        uses job-scoped artifact runtime authority to upload that untrusted
+        bundle. Candidate placement, topology, labels, and completion remain
+        noncryptographic runtime guards. A fresh dependent sealing job validates
+        the immutable bundle. Only verified seal provenance authenticates hosted
+        origin. Aggregation verifies the exact packaging evidence profile, trust
+        anchor, workflow signer, separate tested source, ticket base, packaging
+        allowlist, sealing provenance, bundle integrity, and internal artifact
+        hashes.
+
+
+        Each named runtime check obtains the operating system, distribution,
+        version, and architecture from inside the installed probe environment.
+        Aggregation requires exact Ubuntu 22.04, 24.04, and 26.04 and Debian 12
+        and 13 x86-64 evidence. It doesn't trust run IDs or the outer Nix host.
+        The versioned build script runs `flutter clean`, enforces the committed
+        dependency lock, normalizes archive metadata from the source revision's
+        epoch, and emits the deterministic `.tar.gz` release artifact for each
+        construction. macOS 26 constructs that archive twice from identical
+        inputs. Aggregation requires byte-identical archive hashes. Extraction
+        rejects path escape and proves the archive preserves required modes,
+        symlink targets, extended attributes, and one application bundle.
+
+
+        The macOS 26 `seal` job validates exactly
+        `handoff/outbox/macos-current-construction.tar.zst` and
+        `handoff/outbox/macos-current-construction.sha256`. It creates
+        `compatibility-stage-manifest.json`, attests that manifest, copies the
+        seal-exported attestation bundle into the stage, and uploads
+        `managed-evidence-authenticated-stage-macos-26-arm64-for-macos-15-arm64-{artifact_nonce}`.
+        Role evidence validates against schema version `15`. Its version `2`
+        receipt binds the exact stage name, service-assigned artifact ID,
+        bare upload digest, canonical REST digest, creation and expiration
+        facts, manifest digest, attestation subject and bundle digests, macOS 26
+        workflow signer and source, run, attempt, producer and consumer roles,
+        and producing sealing check-run ID. The producing stage identity is
+        `macos-26-arm64:seal`. No separate staging authority is allowed.
+
+
+        The macOS 15 trusted wrapper downloads that exact stage and the macOS 26
+        receipt by immutable artifact IDs with `digest-mismatch: error`. It
+        verifies both seal-exported bundles offline against a fresh trusted root
+        and the exact macOS 26 signer, source, run, attempt, role, and seal
+        locator. The wrapper then removes every credential context. It exposes
+        only the two verified producer members read-only. The credential-free
+        macOS 15 candidate probes the same archive bytes. Its manifest carries
+        the macOS 26 `producerLineage` unchanged and adds the trusted
+        `consumerBinding`. The macOS 15 seal preserves both records in its
+        receipt.
+
+
+        Final aggregation validates against aggregate schema version `17`. It
+        verifies the non-expired stage REST object,
+        its service ID and both digest forms, both attestation chains, both seal
+        origins, both receipts, and the byte-identical lineage. Both macOS probes
+        must name the same archive SHA-256. A missing, duplicate, substituted,
+        expired, digest-mismatched, unattested, wrong-signer, wrong-run,
+        wrong-role, wrong-seal, unexpected, or consumer-unbound stage produces
+        its typed `compatibility-stage-*` rejection.
+
+
+        Nix out-links are build sources only. The result tool copies their
+        resolved bytes or closures into `artifacts/` inside the Spike allowlist
+        before size and SHA-256 recording. The aggregate records the prebuilt
+        result-tool identity. It proves that no network, credential, writable
+        input, or host user state entered coordinator execution. The CLI
+        produces authoritative schema-valid `results.json`. The executor authors
+        its human interpretation and commits both with the accepted managed
+        report.
     flows:
       - flow-release
     certainty: assumed

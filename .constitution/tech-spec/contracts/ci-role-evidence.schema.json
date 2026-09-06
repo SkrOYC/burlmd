@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": ["schemaVersion", "expectedIdentity", "expectedIdentitySha256", "roleEvidence"],
   "properties": {
-    "schemaVersion": { "const": 14 },
+    "schemaVersion": { "const": 15 },
     "expectedIdentity": { "$ref": "#/$defs/expectedIdentity" },
     "expectedIdentitySha256": { "$ref": "#/$defs/sha256" },
     "roleEvidence": { "$ref": "#/$defs/roleEvidence" }
@@ -43,13 +43,200 @@
         "artifactDigest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
       }
     },
-    "sealingReceipt": {
-      "$comment": "The seal job writes this receipt before it completes. Semantic validation compares every identity and artifact nonce with expectedIdentity, requires each REST digest to equal 'sha256:' plus the corresponding uploadActionDigest, and requires the artifact names to match the role and nonce. The receipt deliberately has no status, conclusion, or completion field. Post-completion aggregation owns those observations.",
+    "compatibilityStageArtifactReceipt": {
+      "$comment": "The macOS 26 seal queries the versioned REST artifact object after upload. Semantic validation requires artifactDigest to equal 'sha256:' plus uploadActionDigest, expired to be false, and expiresAt to be later than every consumer and aggregate verification time.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["schemaVersion", "expectedIdentitySha256", "repositoryId", "workflowRunId", "runAttempt", "sealingCheckRunId", "workflowPath", "workflowSignerSha", "workflowSignerRef", "trustAnchorSha", "testedSourceSha", "baseSha", "role", "artifactNonce", "runnerEnvironmentClaim", "expectedArtifact", "candidateArtifact", "sealedArtifact", "roleBundleSha256", "sealedBundleSha256"],
+      "required": ["artifactId", "artifactName", "repositoryId", "workflowRunId", "uploadActionDigest", "artifactDigest", "createdAt", "expiresAt", "expired"],
+      "properties": {
+        "artifactId": { "type": "integer", "minimum": 1 },
+        "artifactName": { "type": "string", "pattern": "^managed-evidence-authenticated-stage-macos-26-arm64-for-macos-15-arm64-[0-9a-f]{32}$" },
+        "repositoryId": { "type": "integer", "minimum": 1 },
+        "workflowRunId": { "type": "integer", "minimum": 1 },
+        "uploadActionDigest": { "$ref": "#/$defs/sha256" },
+        "artifactDigest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "createdAt": { "$ref": "#/$defs/rfc3339" },
+        "expiresAt": { "$ref": "#/$defs/rfc3339" },
+        "expired": { "const": false }
+      }
+    },
+    "producerSealingReceiptArtifactReceipt": {
+      "$comment": "The macOS 15 trusted wrapper records the exact macOS 26 receipt artifact that carried the attested stage binding. Semantic validation applies the same action-to-REST digest and freshness checks as the stage artifact.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifactId", "artifactName", "repositoryId", "workflowRunId", "uploadActionDigest", "artifactDigest", "createdAt", "expiresAt", "expired"],
+      "properties": {
+        "artifactId": { "type": "integer", "minimum": 1 },
+        "artifactName": { "type": "string", "pattern": "^managed-evidence-seal-receipt-macos-26-arm64-[0-9a-f]{32}$" },
+        "repositoryId": { "type": "integer", "minimum": 1 },
+        "workflowRunId": { "type": "integer", "minimum": 1 },
+        "uploadActionDigest": { "$ref": "#/$defs/sha256" },
+        "artifactDigest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "createdAt": { "$ref": "#/$defs/rfc3339" },
+        "expiresAt": { "$ref": "#/$defs/rfc3339" },
+        "expired": { "const": false }
+      }
+    },
+    "rfc3339": {
+      "$comment": "Semantic validators must reject impossible calendar dates and offsets; this pattern checks shape only.",
+      "type": "string",
+      "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-([0-2][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\\.[0-9]+)?(Z|[+-]([01][0-9]|2[0-3]):[0-5][0-9])$"
+    },
+    "compatibilityStageMember": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "bytes", "sha256"],
+      "properties": {
+        "name": { "enum": ["handoff/outbox/macos-current-construction.tar.zst", "handoff/outbox/macos-current-construction.sha256"] },
+        "bytes": { "type": "integer", "minimum": 1 },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "compatibilityStageManifest": {
+      "$comment": "The macOS 26 seal creates this manifest after validating the exact producer members. The attestation subject is these canonical manifest bytes. Semantic validation requires exactly one entry for each allowed member, verifies each byte count and digest, and rejects every extra, missing, duplicate, linked, or non-regular member.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "ticketIdentity", "expectedIdentitySha256", "repositoryId", "workflowRunId", "runAttempt", "trustAnchorSha", "workflowSignerSha", "testedSourceSha", "baseSha", "producerRole", "consumerRole", "producerSealingCheckRunId", "members"],
       "properties": {
         "schemaVersion": { "const": 1 },
+        "ticketIdentity": { "const": "BURL-O001" },
+        "expectedIdentitySha256": { "$ref": "#/$defs/sha256" },
+        "repositoryId": { "type": "integer", "minimum": 1 },
+        "workflowRunId": { "type": "integer", "minimum": 1 },
+        "runAttempt": { "type": "integer", "minimum": 1 },
+        "trustAnchorSha": { "$ref": "#/$defs/gitSha" },
+        "workflowSignerSha": { "$ref": "#/$defs/gitSha" },
+        "testedSourceSha": { "$ref": "#/$defs/gitSha" },
+        "baseSha": { "$ref": "#/$defs/gitSha" },
+        "producerRole": { "const": "macos-26-arm64" },
+        "consumerRole": { "const": "macos-15-arm64" },
+        "producerSealingCheckRunId": { "type": "integer", "minimum": 1 },
+        "members": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/compatibilityStageMember" },
+          "allOf": [
+            { "contains": { "type": "object", "properties": { "name": { "const": "handoff/outbox/macos-current-construction.tar.zst" } }, "required": ["name"] } },
+            { "contains": { "type": "object", "properties": { "name": { "const": "handoff/outbox/macos-current-construction.sha256" } }, "required": ["name"] } }
+          ]
+        }
+      }
+    },
+    "compatibilityStageAttestation": {
+      "$comment": "The actions/attest bundle is copied into the stage artifact. Consumers and aggregation verify these claims offline against a fresh trusted root and compare the parsed verification output with this descriptor.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bundleMember", "bundleSha256", "subjectName", "subjectDigest", "predicateType", "issuer", "repository", "repositoryId", "workflowPath", "jobWorkflowRef", "jobWorkflowSha", "sourceRepositoryDigest", "workflowRunId", "runAttempt", "checkRunId", "runnerEnvironment"],
+      "properties": {
+        "bundleMember": { "const": "compatibility-stage-attestation.sigstore.json" },
+        "bundleSha256": { "$ref": "#/$defs/sha256" },
+        "subjectName": { "const": "compatibility-stage-manifest.json" },
+        "subjectDigest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "predicateType": { "const": "https://slsa.dev/provenance/v1" },
+        "issuer": { "const": "https://token.actions.githubusercontent.com" },
+        "repository": { "const": "SkrOYC/burlmd" },
+        "repositoryId": { "type": "integer", "minimum": 1 },
+        "workflowPath": { "const": ".github/workflows/ci-role-macos-26-arm64.yml" },
+        "jobWorkflowRef": { "const": "SkrOYC/burlmd/.github/workflows/ci-role-macos-26-arm64.yml@refs/heads/master" },
+        "jobWorkflowSha": { "$ref": "#/$defs/gitSha" },
+        "sourceRepositoryDigest": { "$ref": "#/$defs/gitSha" },
+        "workflowRunId": { "type": "integer", "minimum": 1 },
+        "runAttempt": { "type": "integer", "minimum": 1 },
+        "checkRunId": { "type": "integer", "minimum": 1 },
+        "runnerEnvironment": { "const": "github-hosted" }
+      }
+    },
+    "compatibilityStageProducerLineage": {
+      "$comment": "This object is created by the macOS 26 seal and remains byte-for-byte identical in the macOS 15 candidate manifest, macOS 15 sealing receipt, and final aggregate. Semantic validation binds the manifest digest, attestation subject, signer, source, run, attempt, check-run locator, and service artifact observation.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stageArtifact", "stageManifest", "stageManifestSha256", "attestation"],
+      "properties": {
+        "stageArtifact": { "$ref": "#/$defs/compatibilityStageArtifactReceipt" },
+        "stageManifest": { "$ref": "#/$defs/compatibilityStageManifest" },
+        "stageManifestSha256": { "$ref": "#/$defs/sha256" },
+        "attestation": { "$ref": "#/$defs/compatibilityStageAttestation" }
+      }
+    },
+    "compatibilityStageConsumerBinding": {
+      "$comment": "The trusted macOS 15 wrapper creates this record after ID-addressed download and offline verification. The macOS 15 seal reconstructs and compares it without trusting candidate bytes.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["producerLineageSha256", "producerSealingReceiptSha256", "producerSealingReceiptArtifact", "downloadedArtifactId", "downloadActionSha", "digestMismatchBehavior", "stageAttestationVerifiedOffline", "stageAttestationVerificationResultSha256", "producerReceiptAttestationVerifiedOffline", "producerReceiptAttestationVerificationResultSha256", "trustedRootSha256", "credentialsRemoved", "membersReadOnly", "consumerRole", "workflowRunId", "runAttempt", "consumerCandidateCheckRunId", "verifiedAt"],
+      "properties": {
+        "producerLineageSha256": { "$ref": "#/$defs/sha256" },
+        "producerSealingReceiptSha256": { "$ref": "#/$defs/sha256" },
+        "producerSealingReceiptArtifact": { "$ref": "#/$defs/producerSealingReceiptArtifactReceipt" },
+        "downloadedArtifactId": { "type": "integer", "minimum": 1 },
+        "downloadActionSha": { "const": "3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c" },
+        "digestMismatchBehavior": { "const": "error" },
+        "stageAttestationVerifiedOffline": { "const": true },
+        "stageAttestationVerificationResultSha256": { "$ref": "#/$defs/sha256" },
+        "producerReceiptAttestationVerifiedOffline": { "const": true },
+        "producerReceiptAttestationVerificationResultSha256": { "$ref": "#/$defs/sha256" },
+        "trustedRootSha256": { "$ref": "#/$defs/sha256" },
+        "credentialsRemoved": { "const": true },
+        "membersReadOnly": { "const": true },
+        "consumerRole": { "const": "macos-15-arm64" },
+        "workflowRunId": { "type": "integer", "minimum": 1 },
+        "runAttempt": { "type": "integer", "minimum": 1 },
+        "consumerCandidateCheckRunId": { "type": "integer", "minimum": 1 },
+        "verifiedAt": { "$ref": "#/$defs/rfc3339" }
+      }
+    },
+    "compatibilityStageConsumption": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["producerLineage", "consumerBinding"],
+      "properties": {
+        "producerLineage": { "$ref": "#/$defs/compatibilityStageProducerLineage" },
+        "consumerBinding": { "$ref": "#/$defs/compatibilityStageConsumerBinding" }
+      }
+    },
+    "compatibilityStageSealingBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["producerLineage", "consumerBinding"],
+      "properties": {
+        "producerLineage": { "$ref": "#/$defs/compatibilityStageProducerLineage" },
+        "consumerBinding": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/compatibilityStageConsumerBinding" }] }
+      }
+    },
+    "roleGuard": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["workflowPath", "runnerLabel", "candidateJobId", "sealingJobId", "sealNeedsCandidate", "requiredCandidateStatus", "requiredCandidateConclusion"],
+      "properties": {
+        "workflowPath": { "type": "string", "minLength": 1 },
+        "runnerLabel": { "enum": ["ubuntu-24.04", "macos-26", "macos-15"] },
+        "candidateJobId": { "const": "candidate" },
+        "sealingJobId": { "const": "seal" },
+        "sealNeedsCandidate": { "const": true },
+        "requiredCandidateStatus": { "const": "completed" },
+        "requiredCandidateConclusion": { "const": "success" }
+      }
+    },
+    "requiredRoleGuards": {
+      "$comment": "These values are independent expected identity. Candidate API observations are compared with them as noncryptographic fail-closed guards and never as hosted-origin proof.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["linux-x86_64", "macos-26-arm64", "macos-15-arm64"],
+      "properties": {
+        "linux-x86_64": { "allOf": [{ "$ref": "#/$defs/roleGuard" }, { "type": "object", "properties": { "workflowPath": { "const": ".github/workflows/ci-role-linux-x86-64.yml" }, "runnerLabel": { "const": "ubuntu-24.04" } } }] },
+        "macos-26-arm64": { "allOf": [{ "$ref": "#/$defs/roleGuard" }, { "type": "object", "properties": { "workflowPath": { "const": ".github/workflows/ci-role-macos-26-arm64.yml" }, "runnerLabel": { "const": "macos-26" } } }] },
+        "macos-15-arm64": { "allOf": [{ "$ref": "#/$defs/roleGuard" }, { "type": "object", "properties": { "workflowPath": { "const": ".github/workflows/ci-role-macos-15-arm64.yml" }, "runnerLabel": { "const": "macos-15" } } }] }
+      }
+    },
+    "sealingReceipt": {
+      "$comment": "The seal job writes this receipt before it completes. Semantic validation compares every identity, ticket, and artifact nonce with expectedIdentity, requires each REST digest to equal 'sha256:' plus the corresponding uploadActionDigest, and requires artifact names to match the role and nonce. For BURL-O001, only the macOS 26 receipt carries the producer lineage, and only the macOS 15 receipt carries the same lineage plus its consumer binding. The receipt deliberately has no status, conclusion, or completion field. Post-completion aggregation owns those observations.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "ticketIdentity", "expectedIdentitySha256", "repositoryId", "workflowRunId", "runAttempt", "sealingCheckRunId", "workflowPath", "workflowSignerSha", "workflowSignerRef", "trustAnchorSha", "testedSourceSha", "baseSha", "role", "artifactNonce", "runnerEnvironmentClaim", "expectedArtifact", "candidateArtifact", "sealedArtifact", "roleBundleSha256", "sealedBundleSha256", "compatibilityStage"],
+      "properties": {
+        "schemaVersion": { "const": 2 },
+        "ticketIdentity": { "enum": ["BURL-M003", "BURL-H001", "BURL-H002", "BURL-I001", "BURL-L001", "BURL-O001", "BURL-G011", "BURL-P002", "BURL-O004", "BURL-O011", "BURL-O012", "BURL-O013"] },
         "expectedIdentitySha256": { "$ref": "#/$defs/sha256" },
         "repositoryId": { "type": "integer", "minimum": 1 },
         "workflowRunId": { "type": "integer", "minimum": 1 },
@@ -70,14 +257,36 @@
         "candidateArtifact": { "$ref": "#/$defs/artifactReceipt" },
         "sealedArtifact": { "$ref": "#/$defs/artifactReceipt" },
         "roleBundleSha256": { "$ref": "#/$defs/sha256" },
-        "sealedBundleSha256": { "$ref": "#/$defs/sha256" }
-      }
+        "sealedBundleSha256": { "$ref": "#/$defs/sha256" },
+        "compatibilityStage": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/compatibilityStageSealingBinding" }] }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "ticketIdentity": { "const": "BURL-O001" }, "role": { "const": "macos-26-arm64" } }, "required": ["ticketIdentity", "role"] },
+          "then": { "properties": { "compatibilityStage": { "allOf": [{ "$ref": "#/$defs/compatibilityStageSealingBinding" }, { "type": "object", "properties": { "consumerBinding": { "type": "null" } } }] } } }
+        },
+        {
+          "if": { "properties": { "ticketIdentity": { "const": "BURL-O001" }, "role": { "const": "macos-15-arm64" } }, "required": ["ticketIdentity", "role"] },
+          "then": { "properties": { "compatibilityStage": { "allOf": [{ "$ref": "#/$defs/compatibilityStageSealingBinding" }, { "type": "object", "properties": { "consumerBinding": { "$ref": "#/$defs/compatibilityStageConsumerBinding" } } }] } } }
+        },
+        {
+          "if": {
+            "not": {
+              "anyOf": [
+                { "properties": { "ticketIdentity": { "const": "BURL-O001" }, "role": { "const": "macos-26-arm64" } }, "required": ["ticketIdentity", "role"] },
+                { "properties": { "ticketIdentity": { "const": "BURL-O001" }, "role": { "const": "macos-15-arm64" } }, "required": ["ticketIdentity", "role"] }
+              ]
+            }
+          },
+          "then": { "properties": { "compatibilityStage": { "type": "null" } } }
+        }
+      ]
     },
     "expectedIdentity": {
       "$comment": "Semantic validation must require runIdentity to equal 'managed:' concatenated with artifactNonce. artifactNonce is derived, never independently chosen.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["ticketIdentity", "releaseIdentity", "trustAnchorSha", "testedSourceSha", "workflowSignerSha", "workflowSignerRef", "baseSha", "workflowEvent", "evidenceReportCommitPolicy", "sourceWriteAllowlist", "buildIdentity", "corpusIdentity", "runIdentity", "artifactNonce", "requiredRoleIdentities", "requiredRoleSigners", "requiredEvidenceClasses"],
+      "required": ["ticketIdentity", "releaseIdentity", "trustAnchorSha", "testedSourceSha", "workflowSignerSha", "workflowSignerRef", "baseSha", "workflowEvent", "evidenceReportCommitPolicy", "sourceWriteAllowlist", "buildIdentity", "corpusIdentity", "runIdentity", "artifactNonce", "requiredRoleIdentities", "requiredRoleSigners", "requiredRoleGuards", "requiredEvidenceClasses"],
       "properties": {
         "ticketIdentity": { "enum": ["BURL-M003", "BURL-H001", "BURL-H002", "BURL-I001", "BURL-L001", "BURL-O001", "BURL-G011", "BURL-P002", "BURL-O004", "BURL-O011", "BURL-O012", "BURL-O013"] },
         "releaseIdentity": { "type": "string", "minLength": 1 },
@@ -134,6 +343,7 @@
             }
           }
         },
+        "requiredRoleGuards": { "$ref": "#/$defs/requiredRoleGuards" },
         "requiredEvidenceClasses": {
           "$comment": "The launcher copies the exact profile for ticketIdentity from provisional-spikes.toml. Semantic validation requires each role manifest's evidenceClasses and gates keys to equal its assigned array exactly, with every gate true and no unassigned class.",
           "type": "object",
@@ -348,7 +558,7 @@
     "roleEvidence": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["role", "capturedIdentity", "environment", "viewport", "evidenceClasses", "gates", "toolchain", "internalArtifacts"],
+      "required": ["role", "capturedIdentity", "environment", "viewport", "evidenceClasses", "gates", "toolchain", "internalArtifacts", "compatibilityStage"],
       "properties": {
         "role": { "$ref": "#/$defs/role" },
         "capturedIdentity": { "$ref": "#/$defs/capturedIdentity" },
@@ -362,7 +572,8 @@
         },
         "gates": { "$ref": "#/$defs/gates" },
         "toolchain": { "type": "object", "minProperties": 1, "additionalProperties": { "type": "string", "minLength": 1 } },
-        "internalArtifacts": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/internalArtifact" } }
+        "internalArtifacts": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/internalArtifact" } },
+        "compatibilityStage": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/compatibilityStageConsumption" }] }
       },
       "allOf": [
         {
@@ -415,6 +626,17 @@
             } },
             "evidenceClasses": { "type": "array", "items": { "enum": ["common-functional", "managed-evidence-protocol", "managed-evidence-security", "static-analysis", "desktop-integration", "packaging-runtime-compatibility"] } }
           } }
+        },
+        {
+          "if": {
+            "properties": {
+              "role": { "const": "macos-15-arm64" },
+              "capturedIdentity": { "type": "object", "properties": { "ticketIdentity": { "const": "BURL-O001" } }, "required": ["ticketIdentity"] }
+            },
+            "required": ["role", "capturedIdentity"]
+          },
+          "then": { "properties": { "compatibilityStage": { "$ref": "#/$defs/compatibilityStageConsumption" } } },
+          "else": { "properties": { "compatibilityStage": { "type": "null" } } }
         }
       ]
     }
