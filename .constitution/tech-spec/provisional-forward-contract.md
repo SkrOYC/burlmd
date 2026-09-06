@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document prevents the research wave from becoming an accidental implementation wave. Structured PRD v2.0.5 and Architecture v2.1.1 are binding. The delivered v1.6.x physical contracts remain valid only for already-delivered behavior. Where they conflict with the forward constitution, the forward requirement is authoritative.
+This document prevents the research wave from becoming an accidental implementation wave. Structured PRD v2.0.5 and Architecture v2.1.2 are binding. The delivered v1.6.x physical contracts remain valid only for already-delivered behavior. Where they conflict with the forward constitution, the forward requirement is authoritative.
 
 ## Decision gates
 
@@ -16,7 +16,7 @@ This document prevents the research wave from becoming an accidental implementat
 | Atomic Export | Brownfield contract permits partial output | AST, path, and asset closure contracts first | Copy and `.okf` schemas, stable-revision lease, collision and atomic publication contracts |
 | Local assets and Object Store | No physical contract | SPK-BURL-I001 plus measured PRD/Architecture review | `BND-06` Local Asset Store model, `BND-11` transfer and verification contract, `BND-21` Object Store configuration and operation contract, identity and key format, hydration, and retention state machine; `BND-14` Provider and `BND-20` Remote don't own Object bytes |
 | Private GitHub connection | Superseded OAuth redirect and marker-based merge | ADR-017 plus SPK-BURL-L001 | `BND-14` Provider device authorization, repository selection and provisioning, and eligible `BND-20` Remote location; `BND-20` authenticated history and ref contract; typed `BND-10` analysis and decision schemas; credential adapter; no Object transfer or storage responsibility |
-| Releases and updates | Development builds plus committed Epic G headless capture | SPK-BURL-O001 for package choices; BURL-M003 for managed validation bootstrap | Untrusted candidate bundles, fresh-job sealed role bundles, role-specific workflow signers, accepted or rejected authenticated aggregation, update metadata, installed-app release matrix |
+| Releases and updates | Development builds plus committed Epic G headless capture | SPK-BURL-O001 for package choices; BURL-M003 for managed validation bootstrap | Credential-free candidate bundles with noncryptographic runtime guards, fresh-seal provenance, a seal-owned authenticated BURL-O001 compatibility stage, accepted or rejected chain-verifying aggregation, update metadata, and the installed-app release matrix |
 | Platform chrome | PR #11 presentation prototype leaked into production | Settled product decision | Remove preference/state/rendering/copy/tests and regenerate visual evidence; no replacement window-frame abstraction |
 
 ## Contract-scoped production authorization
@@ -36,5 +36,6 @@ Spike Tasks may read production code and fixtures but may write only within thei
 - `export_workspace` describes partial, non-gating output; forward Export must be object-complete and atomic.
 - Git Suggestions assume marker-bearing content conflicts and don't cover Lifecycle or Asset Decisions.
 - No physical model exists for Workspace observation, S3-compatible object configuration, asset reachability, or release metadata.
+- PR #15 at `ee1a585e08a05ab07fffabf5b8968785dd2f42c6` treats candidate REST labels as hosted-origin proof and uses a separate name-addressed macOS staging job. The unmerged commit is implementation input only and must conform to ADR-019 and the version 33 raw contract.
 
 These are tracked inputs to final reconciliation, not defects for a research Task to patch piecemeal.

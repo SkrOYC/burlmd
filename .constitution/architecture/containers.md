@@ -26,7 +26,7 @@ flowchart LR
     ObjectStore[Object Store\nexternal storage]
     Update[Release Update Coordinator\nmodule]
     Release[Release Pipeline\npipeline boundary]
-    Validation[Isolated Validation Environment\ncandidate and fresh sealing environments]
+    Validation[Isolated Validation Environment\ncredential-free candidates and fresh sealing authority]
     Evidence[Evidence Aggregation\npipeline stage]
     Distribution[Release Distribution\nexternal boundary]
 
@@ -65,9 +65,9 @@ flowchart LR
     Persist -->|Asset references| LocalAssets
     Core -->|asynchronous update check| Update
     Update -->|release metadata request| Distribution
-    Release -->|file handoff: validation request and authoritative expected identity| Validation
-    Release -->|file handoff: authoritative expected identity| Evidence
-    Validation -->|file handoff: fresh-sealed evidence| Evidence
+    Release -->|file handoff: fixed placement guards and authoritative expected identity| Validation
+    Release -->|file handoff: authoritative identity and expected handoff lineage| Evidence
+    Validation -->|file handoff: fresh-sealed evidence and BURL-O001 lineage| Evidence
     Evidence -->|file handoff: expected-identity-matched evidence set| Release
     Release -->|file handoff: artifact, evidence, and provenance| Distribution
 ```
@@ -210,8 +210,8 @@ Device preferences never enter Workspace content. Session and navigation state r
 
 - **Boundary kind:** Pipeline boundary.
 - **Logical type:** Build, verification, and publication boundary.
-- **Responsibility:** Produces each supported artifact, assigns validation roles, establishes authoritative expected identity, requires complete accepted evidence, and publishes artifact integrity with authenticated provenance.
-- **Inputs and outputs:** Accepts a release identity and Platform matrix. From an immutable reviewed validation anchor, sends validation and aggregation the expected trust-anchor, validation-control signer, tested-source, base, release, build, corpus, run, required-role, and role-specific evidence-class identities. Emits verified artifacts, evidence, and metadata to Release Distribution.
+- **Responsibility:** Produces each supported artifact, defines candidate placement and completion guards, establishes authoritative expected identity, requires complete accepted evidence, and publishes artifact integrity. Only fresh non-executing sealing authenticates provenance.
+- **Inputs and outputs:** Accepts a release identity and Platform matrix. From an immutable reviewed validation anchor, it sends validation and aggregation the expected trust-anchor, validation-control signer, tested-source, base, release, build, corpus, run, required-role, and role-specific evidence-class identities. It also sends fixed candidate-placement and topology requirements plus terminal completion expectations. For BURL-O001, it directs the macOS 26 seal to produce the authenticated compatibility handoff. It defines the expected producer-to-consumer lineage and emits verified artifacts, evidence, and metadata to Release Distribution.
 - **Depends on:** Isolated Validation Environment, Evidence Aggregation, supported Platform environments, and Release Distribution.
 
 The pipeline assigns the following validation roles:
@@ -224,21 +224,25 @@ The pipeline assigns the following validation roles:
 
 - **Boundary kind:** Execution boundary.
 - **Logical type:** Pipeline-owned paired validation environments.
-- **Responsibility:** Runs one assigned validation role in a candidate environment isolated from the Writer's device, then seals its untrusted file handoff in a separate fresh authority environment that never executes candidate bytes.
-- **Inputs and outputs:** Candidate commands accept an artifact, run identity, required role, and authoritative expected source, execution, base, release, build, and corpus identities without provenance authority. A trusted wrapper may upload one complete untrusted handoff containing the role manifest and every named evidence file. The strict-containment role proves candidate-process teardown before the wrapper uploads the handoff; other hosted roles record bounded cleanup without claiming arbitrary-process containment. The fresh sealing environment validates handoff identity and integrity before it alone authenticates immutable provenance.
+- **Responsibility:** Runs each credential-free candidate role at a placement fixed by trusted workflow. It records placement and completion as runtime guards, not cryptographic hosted-origin proof. It then seals the untrusted file handoff in a separate fresh authority environment that never executes candidate bytes. Within this boundary, the macOS 26 seal owns the authenticated BURL-O001 compatibility handoff.
+- **Inputs and outputs:** Candidate commands accept an artifact, run identity, required role, and authoritative expected source, execution, base, release, build, corpus, placement, topology, and completion identities. They receive no credential or provenance authority. A trusted wrapper can upload one complete untrusted handoff containing the role manifest and every named evidence file. The strict-containment role proves candidate-process teardown before upload. Other hosted roles record bounded cleanup without claiming arbitrary-process containment. Each fresh sealing environment validates handoff identity and integrity before it authenticates immutable provenance. Fresh-seal provenance alone cryptographically authenticates the sealing environment's hosted origin.
 - **Depends on:** Release Pipeline.
 
 A candidate survivor can corrupt or deny its untrusted upload. That outcome fails the role, but the survivor can't enter the fresh sealing environment, cause candidate bytes to execute there, or gain its provenance authority.
+
+For BURL-O001, the macOS 26 seal validates the producer members and creates the authenticated compatibility stage. It binds the stage's exact identifier and integrity digest to the producing seal locator and provenance. The trusted macOS 15 wrapper acquires that exact stage and verifies its producer-seal binding. It removes the acquisition credential context and exposes verified members read-only to the candidate. The credential-free macOS 15 candidate carries the lineage into its untrusted output. The macOS 15 seal validates that lineage against the trusted wrapper record before carrying it forward.
 
 ## Evidence aggregation
 
 - **Boundary kind:** Pipeline stage.
 - **Logical type:** Evidence integrity and acceptance boundary.
-- **Responsibility:** Verifies that accepted provenance came only from a completed fresh sealing environment, checks the trust-anchor relationship and write boundary, and compares captured handoff identity and integrity with authoritative expected identity before isolated aggregation.
-- **Inputs and outputs:** Accepts expected trust-anchor, validation-control signer, tested-source, base, release, build, corpus, run, and required-role identities from Release Pipeline. Accepts one fresh-sealed bundle per role and the pipeline-owned candidate and sealing environment records. Credentialed acquisition produces verified read-only inputs. A separate credential-free, non-networked coordinator produces machine results through one writable output boundary. Returns an accepted complete set or explicit unmanaged, candidate-controlled, out-of-boundary, untrusted, missing, duplicated, mismatched, stale, corrupt, unsealed, credential-exposed, or isolation-failed outcomes.
+- **Responsibility:** Treats candidate placement and completion as trusted-workflow and runtime guards. It verifies each fresh sealing environment's hosted origin only through completed provenance. It also checks the trust-anchor relationship and write boundary and verifies uninterrupted BURL-O001 producer-seal-to-consumer lineage before isolated aggregation.
+- **Inputs and outputs:** Accepts authoritative expected identity from Release Pipeline, one fresh-sealed bundle per role, and pipeline-owned candidate and sealing environment records. Candidate placement, topology, labels, and completion remain noncryptographic observations. For BURL-O001, it also accepts the stage identifier, integrity digest, producing macOS 26 seal locator, provenance, and macOS 15 consumer binding. Credentialed acquisition produces verified read-only inputs. A separate credential-free, non-networked coordinator produces machine results through one writable output boundary. The boundary returns an accepted complete set or an explicit rejection.
 - **Depends on:** Isolated Validation Environment and Release Pipeline.
 
 Each validation request names the evidence classes that each role must provide. Acceptance requires that exact profile: neither a missing assigned class nor an extra unassigned class is valid. macOS 15 evidence can't satisfy performance, Linux platform-regression, or authoritative visual evidence. Linux platform-regression evidence can't satisfy the macOS 26 authoritative product visual role. Evidence from the Writer's active device is invalid even when the captured output appears correct.
+
+Aggregation rejects candidate placement or completion guard failures without presenting those guards as cryptographic origin. It also rejects unmanaged, candidate-controlled, out-of-boundary, untrusted, missing, duplicated, mismatched, stale, corrupt, or unsealed evidence. For BURL-O001, it rejects any absent, substituted, expired, integrity-mismatched, unauthenticated, wrong-producer, wrong-role, wrong-run, wrong-seal, or consumer-unbound stage. Exposed credentials or failed isolation also reject the evidence set.
 
 ## Release Update Coordinator
 

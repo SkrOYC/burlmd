@@ -159,39 +159,39 @@ boundaries:
     name: Release Pipeline
     kind: pipeline-stage
     type: "Build, verification, and publication boundary"
-    responsibility: "Produces each supported artifact, assigns validation roles, establishes authoritative expected identity, requires complete accepted evidence, and publishes artifact integrity with authenticated provenance"
+    responsibility: "Produces each supported artifact, defines candidate placement and completion guards, establishes authoritative expected identity, requires complete accepted evidence, and publishes artifact integrity with provenance authenticated only by fresh non-executing sealing"
     inputs: [Accepts a release identity and Platform matrix.]
-    outputs: ["Sends validation and aggregation the expected trust-anchor, validation-control signer, tested-source, base, release, build, corpus, run, required-role, and role-specific evidence-class identities.", "Emits verified artifacts, evidence, and metadata to Release Distribution."]
+    outputs: ["Sends validation and aggregation the expected trust-anchor, validation-control signer, tested-source, base, release, build, corpus, run, required-role, and role-specific evidence-class identities.", "Sends fixed candidate-placement and topology requirements plus terminal completion expectations.", "For BURL-O001, directs the macOS 26 sealing role to produce the authenticated compatibility handoff and defines the expected producer-to-consumer lineage.", "Emits verified artifacts, evidence, and metadata to Release Distribution."]
     depends_on: [BND-16, BND-17, BND-19, Supported Platform build environments]
     certainty: assumed
-    assumption: "The reviewed release design defines this boundary, but its implementation remains unmerged and no published release has exercised it end to end."
+    assumption: "The 2026-09-05 Realign ruling defines the release authority split, but its implementation remains unmerged and no published release has exercised it end to end."
   - id: BND-16
     legacy_id: Isolated validation environment
     name: Isolated validation environment
     kind: other
     type: Pipeline-owned paired validation environments
-    responsibility: "Runs one assigned validation role in a candidate environment isolated from the Writer's device, then seals its untrusted file handoff in a separate fresh authority environment that never executes candidate bytes"
-    inputs: ["Accepts an artifact, run identity, required role, and authoritative expected source, execution, base, release, build, and corpus identities from Release Pipeline. The input grants candidate commands no provenance authority."]
-    outputs: ["Emits one complete untrusted handoff containing the role manifest and every named evidence file through a trusted wrapper.", "The strict-containment role emits candidate-process teardown proof; other hosted roles emit bounded-cleanup records without claiming arbitrary-process containment.", "The fresh sealing environment emits authenticated immutable provenance only after validating handoff identity and integrity."]
+    responsibility: "Runs each credential-free candidate role at a placement fixed by trusted workflow, records placement and completion as noncryptographic runtime guards, seals its untrusted handoff in a separate fresh authority environment that never executes candidate bytes, and owns the authenticated BURL-O001 compatibility handoff within the macOS 26 seal"
+    inputs: ["Accepts an artifact, run identity, required role, and authoritative expected source, execution, base, release, build, corpus, placement, topology, and completion identities from Release Pipeline. Candidate commands receive no credentials or provenance authority.", "For BURL-O001, the trusted macOS 15 wrapper accepts the exact authenticated stage from the macOS 26 seal, verifies it before candidate execution, and exposes its members read-only after removing the acquisition credential context."]
+    outputs: ["Emits one complete untrusted handoff containing the role manifest and every named evidence file through a trusted wrapper, with placement and completion observations that don't prove candidate hosted origin.", "The strict-containment role emits candidate-process teardown proof; other hosted roles emit bounded-cleanup records without claiming arbitrary-process containment.", "Each fresh sealing environment emits authenticated immutable provenance only after validating handoff identity and integrity; this provenance alone cryptographically authenticates the sealing environment's hosted origin.", "For BURL-O001, the macOS 26 seal emits an authenticated compatibility stage bound to its exact identifier, integrity digest, producing seal locator, and provenance. The macOS 15 seal validates and carries the unchanged producer-to-consumer lineage."]
     depends_on: [BND-15]
     trust_boundary: true
     certainty: settled
     evidence:
       kind: ruling
-      ref: "2026-09-04 user ruling: fresh-seal authority"
-      date: 2026-09-04
-      note: "The user ruled that fresh sealing is the sole provenance authority, candidate output is untrusted, strict containment is role-specific, and hosted survivors cannot cross into sealing authority."
+      ref: reports/2026-09-05-interview-realign.md
+      date: 2026-09-05
+      note: "The ruling preserves fresh sealing as the sole provenance and hosted-origin authority, classifies candidate placement and completion as runtime guards, and assigns the authenticated BURL-O001 handoff to the macOS 26 seal."
   - id: BND-17
     legacy_id: Evidence aggregation
     name: Evidence aggregation
     kind: pipeline-stage
     type: Evidence integrity and acceptance boundary
-    responsibility: "Verifies that accepted provenance came only from a completed fresh sealing environment, checks the trust-anchor relationship and write boundary, and compares captured handoff identity and integrity with authoritative expected identity before isolated aggregation"
-    inputs: ["Accepts expected trust-anchor, validation-control signer, tested-source, base, release, build, corpus, run, and required-role identities from Release Pipeline.", "Accepts one fresh-sealed bundle per role and the pipeline-owned candidate and sealing environment records.", "Receives verified read-only inputs produced by credentialed acquisition."]
-    outputs: ["Returns an accepted complete evidence set.", "Returns explicit rejection outcomes for unmanaged, candidate-controlled, out-of-boundary, untrusted, missing, duplicated, mismatched, stale, corrupt, or unsealed evidence.", "Returns explicit rejection outcomes for exposed credentials or failed isolation."]
+    responsibility: "Treats candidate placement and completion as trusted-workflow and runtime guards, verifies each fresh sealing environment's hosted origin only through completed provenance, checks the trust-anchor relationship and write boundary, and verifies uninterrupted BURL-O001 producer-seal-to-consumer lineage before isolated aggregation"
+    inputs: ["Accepts expected trust-anchor, validation-control signer, tested-source, base, release, build, corpus, run, required-role, and role-specific evidence-class identities from Release Pipeline.", "Accepts expected candidate-placement and topology requirements plus terminal completion expectations.", "Accepts one fresh-sealed bundle per role, the pipeline-owned candidate and sealing environment records, and noncryptographic candidate placement and completion observations.", "For BURL-O001, accepts the authenticated stage identifier, integrity digest, producing macOS 26 seal locator, provenance, and macOS 15 consumer binding.", "Receives verified read-only inputs produced by credentialed acquisition."]
+    outputs: ["Returns an accepted complete evidence set that distinguishes candidate runtime guards from authenticated seal origin.", "Returns explicit rejection outcomes for unmanaged, candidate-controlled, out-of-boundary, untrusted, missing, duplicated, mismatched, stale, corrupt, or unsealed evidence.", "For BURL-O001, returns explicit rejection outcomes for any absent, duplicated, substituted, expired, integrity-mismatched, unauthenticated, wrong-producer, wrong-role, wrong-run, wrong-seal, or consumer-unbound stage.", "Returns explicit rejection outcomes for exposed credentials or failed isolation."]
     depends_on: [BND-16, BND-15]
     certainty: assumed
-    assumption: "The reviewed acceptance design defines this boundary, but its implementation remains unmerged and no complete release evidence set has exercised it."
+    assumption: "The 2026-09-05 Realign ruling defines this acceptance boundary, but its implementation remains unmerged and no complete release evidence set has exercised it."
   - id: BND-18
     legacy_id: Release Update Coordinator
     name: Release Update Coordinator
@@ -364,11 +364,11 @@ edges:
   - from: BND-15
     to: BND-16
     protocol: file-handoff
-    note: "Validation request and authoritative expected identity handed to the candidate side of a pipeline-owned role"
+    note: "Validation request, fixed candidate placement and topology, completion expectations, and authoritative expected identity handed to a pipeline-owned role"
   - from: BND-16
     to: BND-17
     protocol: file-handoff
-    note: "Fresh-sealed evidence handoff whose provenance, manifest, byte counts, and integrity identifiers are verified before aggregation"
+    note: "Fresh-sealed evidence with noncryptographic candidate guard observations; BURL-O001 also carries the authenticated macOS 26 stage and unchanged macOS 15 consumer lineage"
   - from: BND-17
     to: BND-15
     protocol: file-handoff
@@ -392,7 +392,7 @@ edges:
   - from: BND-15
     to: BND-17
     protocol: file-handoff
-    note: "Authoritative expected identity delivered independently of candidate output"
+    note: "Authoritative expected identity and expected BURL-O001 producer-to-consumer lineage delivered independently of candidate output"
   - from: BND-14
     to: BND-20
     protocol: request-response

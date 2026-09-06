@@ -289,6 +289,14 @@ bill_of_materials:
     radar: assess
     certainty: assumed
     assumption: "BURL-M003 adds pkgs.bubblewrap to devenv.nix; the pinned devenv.lock nixpkgs revision resolves 0.11.2, but nothing in the repository uses it yet."
+  - name: GitHub CLI
+    role: tooling
+    version: "2.96.0"
+    ecosystem: nix
+    justification: "Performs seal-attestation policy checks and BURL-O001 offline verification; the pinned interface includes attestation verify bundle, custom-trusted-root, signer, source, and self-hosted constraints"
+    radar: adopt
+    certainty: assumed
+    assumption: "BURL-M003 adds pkgs.gh to devenv.nix; the devenv.lock nixpkgs revision resolves 2.96.0, but authoritative master does not declare that package."
   - name: actions/checkout
     role: infrastructure
     version: fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
@@ -309,7 +317,7 @@ bill_of_materials:
     role: infrastructure
     version: 043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
     ecosystem: other
-    justification: "Publishes unique immutable expected, candidate, sealed, and sealing-receipt artifacts; its digest output is bare lowercase 64-hex"
+    justification: "Publishes unique immutable expected, candidate, sealed, sealing-receipt, and seal-owned BURL-O001 stage artifacts; its outputs include the service artifact ID and bare SHA-256 digest"
     radar: adopt
     certainty: assumed
     assumption: "SHA resolved from the official repository on 2026-08-31; no workflow in this repository references it until BURL-M003 lands .github/workflows/ci.yml."
@@ -317,7 +325,7 @@ bill_of_materials:
     role: infrastructure
     version: 3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
     ecosystem: other
-    justification: "Retrieves evidence for aggregation"
+    justification: "Retrieves evidence and the BURL-O001 stage; the pinned interface accepts immutable artifact-ids and digest-mismatch error handling"
     radar: adopt
     certainty: assumed
     assumption: "SHA resolved from the official repository on 2026-08-31; no workflow in this repository references it until BURL-M003 lands .github/workflows/ci.yml."
@@ -325,7 +333,7 @@ bill_of_materials:
     role: infrastructure
     version: 1e69f48acb82d1966a394da916b4c1698aa569d6
     ecosystem: other
-    justification: "Authenticates per-role evidence origin and release provenance"
+    justification: "Authenticates per-role seal origin and release provenance; the pinned interface exports bundle-path for offline BURL-O001 verification"
     radar: adopt
     certainty: assumed
     assumption: "SHA resolved from the official repository on 2026-08-31; no workflow in this repository references it until BURL-M003 lands .github/workflows/ci.yml."

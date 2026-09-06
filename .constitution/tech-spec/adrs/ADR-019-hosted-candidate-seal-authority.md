@@ -1,24 +1,30 @@
 ---
 id: ADR-0019
 status: accepted
-date: 2026-09-04
+date: 2026-09-05
 certainty: settled
 evidence:
   kind: ruling
-  ref: "2026-09-04 user ruling: fresh-seal authority"
-  date: 2026-09-04
-  note: "The user accepted platform-specific cleanup obligations and made the fresh non-executing seal environment the sole provenance authority."
+  ref: reports/2026-09-05-interview-realign.md
+  date: 2026-09-05
+  note: "OD-11 preserves the fresh non-executing seal as the sole hosted-origin authority, limits candidate placement to runtime guards, and assigns the BURL-O001 compatibility stage to the macOS 26 seal."
 ---
 # ADR-019: Hosted candidate and seal authority
 
 **Status:** Accepted
-**Decision owner:** `BURL-M003`
+**Implementation owners:** `BURL-M003` and `BURL-O001`
 
 ## Context
 
 Managed validation runs candidate code on standard GitHub-hosted Linux and
 macOS environments. Candidate output can support a release decision only after
 a separate sealing job validates and attests it.
+
+The GitHub REST API for workflow jobs exposes runner labels and completion
+state. It doesn't expose a cryptographically authenticated runner-environment
+field. A self-hosted runner can omit default labels and use a custom label.
+Candidate job placement, topology, labels, and completion are therefore useful
+fail-closed guards, but they don't prove GitHub-hosted origin.
 
 Linux can establish the required candidate-process boundary with Bubblewrap
 `0.11.2`. A trusted launcher starts candidate commands through `env -i` in a
@@ -48,11 +54,27 @@ survive. The release contract must not make that claim.
    workflow wrapper receives short-lived artifact-upload authority after
    candidate commands finish.
 5. Make the fresh `seal` job the sole provenance authority. It never executes
-   candidate bytes. It validates the expected identity, candidate job and
-   hosted label, reserved artifact inventory and IDs, normalized REST digests,
-   safe archive shape, schemas, and every declared member hash before it
-   attests the sealed bundle and separate receipt.
-6. Keep strict credential removal and rejection of reserved artifact name
+   candidate bytes. It validates the expected identity, candidate runtime
+   guards, reserved artifact inventory and IDs, canonical REST digests, safe
+   archive shape, schemas, and every declared member hash. It then attests the
+   sealed bundle and separate receipt. Only the seal attestation can establish
+   `runner_environment: github-hosted`.
+6. For `BURL-O001`, make the macOS 26 `seal` job validate the declared producer
+   members and create the compatibility stage. The same job uploads and attests
+   the stage. Its receipt binds the exact stage name, service artifact ID, bare
+   upload-action digest, canonical REST digest, producing seal check-run ID,
+   subject, signer, run, attempt, and attestation bundle.
+7. Give the macOS 15 candidate job the exact trusted stage and producing-receipt
+   inputs. Its trusted wrapper downloads both by immutable artifact ID with
+   `digest-mismatch: error`. Before candidate execution, the wrapper verifies
+   the seal-exported attestation bundles and binding offline. It then removes
+   credentials and exposes only the verified producer members as read-only
+   inputs. The candidate remains credential-free.
+8. Require the macOS 15 seal to compare the candidate-carried producer lineage
+   with the trusted wrapper record. It preserves the producer lineage unchanged
+   and adds the consumer binding to its sealing receipt. Final aggregation
+   verifies the complete producer-seal-to-consumer chain.
+9. Keep strict credential removal and rejection of reserved artifact-name
    collisions on all roles.
 
 ## Consequences
@@ -63,15 +85,21 @@ survive. The release contract must not make that claim.
   untrusted upload. The outcome is untrusted-output corruption or a fail-closed
   upload denial, not an authenticated candidate result.
 - Accepted evidence authenticates reviewed workflow execution and sealed
-  provenance. It does not establish lifecycle containment for arbitrary
-  malicious macOS candidate code or make candidate output trustworthy by
-  itself.
+  provenance from the fresh seal. It does not authenticate candidate hosted
+  origin, establish lifecycle containment for arbitrary malicious macOS
+  candidate code, or make candidate output trustworthy by itself.
+- Candidate placement, topology, label, and completion mismatches reject the
+  role. Passing those guards doesn't change their noncryptographic status.
+- `BURL-O001` rejects a missing, duplicate, substituted, expired,
+  digest-mismatched, unattested, wrong-signer, wrong-run, wrong-role,
+  wrong-seal, unexpected, or consumer-unbound stage.
 - Reviewed source and test contracts remain required. Provenance validation
   doesn't replace source review or test review.
-- The role and aggregate JSON schemas are versions `14` and `16`. They
-  record identity, job, artifact, and provenance facts; they don't encode a
-  platform-independent process-termination assertion. The raw contract and
-  executable PR #15 fixtures own this platform-specific execution policy.
+- The role and aggregate JSON schemas are versions `15` and `17`. The embedded
+  sealing receipt is version `2`. The raw contract is version `33`. These
+  contracts separate candidate runtime guards from attested seal origin and
+  bind the compatibility-stage lineage without encoding a platform-independent
+  process-termination assertion.
 - Managed non-Spike source-write authority is an immutable ordered mapping in
   the trust-anchor raw contract. Candidate input can't select, widen, reorder,
   or omit it. BURL-O004 additionally prepares its locked coordinator before
@@ -81,6 +109,13 @@ survive. The release contract must not make that claim.
 
 ## Verification anchors
 
-- <https://docs.github.com/en/actions/reference/runners/github-hosted-runners>
-- <https://docs.github.com/en/actions/reference/security/secure-use>
+- [REST API endpoints for workflow jobs](https://docs.github.com/en/rest/actions/workflow-jobs?apiVersion=2026-03-10)
+- [REST API endpoints for GitHub Actions artifacts](https://docs.github.com/en/rest/actions/artifacts?apiVersion=2026-03-10)
+- [OpenID Connect reference](https://docs.github.com/en/actions/reference/security/oidc#oidc-token-claims)
+- [Verifying attestations offline](https://docs.github.com/en/actions/how-tos/secure-your-work/use-artifact-attestations/verify-attestations-offline)
+- [GitHub CLI `attestation verify` reference](https://cli.github.com/manual/gh_attestation_verify)
+- [GitHub CLI `attestation trusted-root` reference](https://cli.github.com/manual/gh_attestation_trusted-root)
+- [`actions/upload-artifact` interface at the pinned commit](https://github.com/actions/upload-artifact/blob/043fb46d1a93c77aae656e7c1c64a875d1fc6a0a/action.yml)
+- [`actions/download-artifact` interface at the pinned commit](https://github.com/actions/download-artifact/blob/3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c/action.yml)
+- [`actions/attest` interface at the pinned commit](https://github.com/actions/attest/blob/1e69f48acb82d1966a394da916b4c1698aa569d6/action.yml)
 - <https://github.com/containers/bubblewrap>

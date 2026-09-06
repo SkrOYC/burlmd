@@ -4,9 +4,9 @@
   "title": "burlmd managed CI aggregate evidence",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "expectedIdentity", "expectedIdentitySha256", "expectedIdentityArtifact", "generatedAt", "mode", "status", "roleEvidence", "coordinatorExecution", "aggregationChecks", "rejectionReasons"],
+  "required": ["schemaVersion", "expectedIdentity", "expectedIdentitySha256", "expectedIdentityArtifact", "generatedAt", "mode", "status", "roleEvidence", "compatibilityStage", "coordinatorExecution", "aggregationChecks", "rejectionReasons"],
   "properties": {
-    "schemaVersion": { "const": 16 },
+    "schemaVersion": { "const": 17 },
     "expectedIdentity": { "$ref": "ci-role-evidence.schema.json#/$defs/expectedIdentity" },
     "expectedIdentitySha256": { "$ref": "#/$defs/sha256" },
     "expectedIdentityArtifact": {
@@ -17,11 +17,12 @@
     "mode": { "const": "trusted-anchor-local" },
     "status": { "enum": ["accepted", "rejected"] },
     "roleEvidence": { "type": "array", "maxItems": 3, "items": { "$ref": "#/$defs/enrichedRoleEvidence" } },
+    "compatibilityStage": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/compatibilityStageAggregate" }] },
     "coordinatorExecution": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/coordinatorExecution" }] },
     "aggregationChecks": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["rolesComplete", "identityCompared", "trustAnchorVerified", "trustedSurfacesUnchanged", "sourceAllowlistVerified", "evidenceProfileVerified", "roleResultsPassed", "originAuthenticated", "hostedOriginVerified", "jobTopologyVerified", "artifactNamesVerified", "artifactIntegrityVerified", "bundleContentsVerified", "filesystemEvidenceVerified", "imageVersionsCompatible"],
+      "required": ["rolesComplete", "identityCompared", "trustAnchorVerified", "trustedSurfacesUnchanged", "sourceAllowlistVerified", "evidenceProfileVerified", "roleResultsPassed", "candidatePlacementVerified", "candidateTopologyVerified", "candidateLabelsVerified", "candidateCompletionVerified", "sealOriginsAuthenticated", "hostedOriginVerified", "compatibilityStageVerified", "artifactNamesVerified", "artifactIntegrityVerified", "bundleContentsVerified", "filesystemEvidenceVerified", "imageVersionsCompatible"],
       "properties": {
         "rolesComplete": { "type": "boolean" },
         "identityCompared": { "type": "boolean" },
@@ -30,9 +31,13 @@
         "sourceAllowlistVerified": { "type": "boolean" },
         "evidenceProfileVerified": { "type": "boolean" },
         "roleResultsPassed": { "type": "boolean" },
-        "originAuthenticated": { "type": "boolean" },
-        "hostedOriginVerified": { "type": "boolean" },
-        "jobTopologyVerified": { "type": "boolean" },
+        "candidatePlacementVerified": { "$comment": "True means the static trusted workflow and observed job match the expected candidate placement. This guard is not cryptographic hosted-origin proof.", "type": "boolean" },
+        "candidateTopologyVerified": { "$comment": "True means the static candidate-to-seal topology matches expected identity. This guard is not cryptographic hosted-origin proof.", "type": "boolean" },
+        "candidateLabelsVerified": { "$comment": "True means REST labels match expected identity. Labels are noncryptographic and can be customized on self-hosted runners.", "type": "boolean" },
+        "candidateCompletionVerified": { "$comment": "True means the exact candidate job reached completed success. Completion is a runtime guard, not cryptographic hosted-origin proof.", "type": "boolean" },
+        "sealOriginsAuthenticated": { "$comment": "True means every sealing job has verified attestation provenance bound to its signer, source, run, attempt, check-run ID, and runner_environment claim.", "type": "boolean" },
+        "hostedOriginVerified": { "$comment": "This value refers only to fresh sealing-job origin authenticated by verified attestation provenance. It never describes candidate hosted origin.", "type": "boolean" },
+        "compatibilityStageVerified": { "oneOf": [{ "type": "null" }, { "type": "boolean" }] },
         "artifactNamesVerified": { "type": "boolean" },
         "artifactIntegrityVerified": { "type": "boolean" },
         "bundleContentsVerified": { "type": "boolean" },
@@ -72,9 +77,12 @@
             "sourceAllowlistVerified": { "const": true },
             "evidenceProfileVerified": { "const": true },
             "roleResultsPassed": { "const": true },
-            "originAuthenticated": { "const": true },
+            "candidatePlacementVerified": { "const": true },
+            "candidateTopologyVerified": { "const": true },
+            "candidateLabelsVerified": { "const": true },
+            "candidateCompletionVerified": { "const": true },
+            "sealOriginsAuthenticated": { "const": true },
             "hostedOriginVerified": { "const": true },
-            "jobTopologyVerified": { "const": true },
             "artifactNamesVerified": { "const": true },
             "artifactIntegrityVerified": { "const": true },
             "bundleContentsVerified": { "const": true },
@@ -84,6 +92,21 @@
           "rejectionReasons": { "type": "array", "maxItems": 0 }
         },
         "allOf": [
+          {
+            "if": { "properties": { "expectedIdentity": { "type": "object", "properties": { "ticketIdentity": { "const": "BURL-O001" } }, "required": ["ticketIdentity"] } }, "required": ["expectedIdentity"] },
+            "then": {
+              "properties": {
+                "compatibilityStage": { "$ref": "#/$defs/compatibilityStageAggregate" },
+                "aggregationChecks": { "type": "object", "properties": { "compatibilityStageVerified": { "const": true } } }
+              }
+            },
+            "else": {
+              "properties": {
+                "compatibilityStage": { "type": "null" },
+                "aggregationChecks": { "type": "object", "properties": { "compatibilityStageVerified": { "type": "null" } } }
+              }
+            }
+          },
           {
             "if": { "properties": { "expectedIdentity": { "type": "object", "properties": { "ticketIdentity": { "enum": ["BURL-M003", "BURL-G011", "BURL-P002", "BURL-O011", "BURL-O012", "BURL-O013"] } } } } },
             "then": { "properties": { "coordinatorExecution": { "type": "null" } } },
@@ -129,19 +152,40 @@
         "builderId": { "type": "string", "pattern": "^https://github\\.com/SkrOYC/burlmd/\\.github/workflows/.+@refs/heads/master$" }
       }
     },
-    "jobObservation": {
-      "$comment": "The coordinator constructs this observation after the job API reports status completed. checkRunId comes from the API check_run_url. Accepted evidence requires conclusion success. For seal, runnerEnvironment is also bound by signed OIDC provenance and the pre-completion receipt locator.",
+    "candidatePlacementObservation": {
+      "$comment": "The coordinator constructs this noncryptographic runtime-guard observation from trusted workflow source and the versioned job API. REST labels, placement, topology, and completion fail closed but do not prove GitHub-hosted origin. This object deliberately has no runnerEnvironment field.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["jobId", "checkRunId", "workflowJobKey", "runnerLabels", "runnerEnvironment", "status", "conclusion"],
+      "required": ["jobId", "checkRunId", "workflowJobKey", "workflowPath", "expectedRunnerLabel", "runnerLabels", "placementFixedByTrustedWorkflow", "topologyVerified", "labelVerified", "status", "conclusion", "completionVerified"],
       "properties": {
         "jobId": { "type": "integer", "minimum": 1 },
         "checkRunId": { "type": "integer", "minimum": 1 },
-        "workflowJobKey": { "enum": ["candidate", "seal"] },
+        "workflowJobKey": { "const": "candidate" },
+        "workflowPath": { "enum": [".github/workflows/ci-role-linux-x86-64.yml", ".github/workflows/ci-role-macos-26-arm64.yml", ".github/workflows/ci-role-macos-15-arm64.yml"] },
+        "expectedRunnerLabel": { "enum": ["ubuntu-24.04", "macos-26", "macos-15"] },
+        "runnerLabels": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+        "placementFixedByTrustedWorkflow": { "const": true },
+        "topologyVerified": { "const": true },
+        "labelVerified": { "const": true },
+        "status": { "const": "completed" },
+        "conclusion": { "const": "success" },
+        "completionVerified": { "const": true }
+      }
+    },
+    "sealingJobOrigin": {
+      "$comment": "The coordinator resolves this job through the pre-completion receipt locator after the attempt completes. Verified attestation provenance binds runnerEnvironment, signer, source, run, attempt, and check-run ID. This is the only job-origin object that can authenticate GitHub-hosted origin.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["jobId", "checkRunId", "workflowJobKey", "runnerLabels", "runnerEnvironment", "status", "conclusion", "hostedOriginVerified"],
+      "properties": {
+        "jobId": { "type": "integer", "minimum": 1 },
+        "checkRunId": { "type": "integer", "minimum": 1 },
+        "workflowJobKey": { "const": "seal" },
         "runnerLabels": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
         "runnerEnvironment": { "const": "github-hosted" },
         "status": { "const": "completed" },
-        "conclusion": { "const": "success" }
+        "conclusion": { "const": "success" },
+        "hostedOriginVerified": { "const": true }
       }
     },
     "artifactObservation": {
@@ -161,10 +205,10 @@
       }
     },
     "origin": {
-      "$comment": "The attested sealing receipt is a separate artifact written before seal completes. It supplies the sealing check-run locator and immutable identity, candidate and sealed artifact, and bundle facts, but no final job state. After the workflow attempt completes, the coordinator resolves exactly one job API object through sealingCheckRunId and constructs sealingJob. Semantic validation requires sealingJob.checkRunId to equal sealingCheckRunId, distinct candidate and sealing job IDs, canonical digest equality, exact role-specific names derived from expectedIdentity.artifactNonce, one artifact per reserved name, and no other candidate, sealed, expected, or receipt artifact for that nonce.",
+      "$comment": "The candidatePlacement record is noncryptographic fail-closed corroboration. The attested sealing receipt supplies the sealing check-run locator and immutable facts, but no final job state. After the workflow attempt completes, the coordinator resolves exactly one job API object through sealingCheckRunId and constructs sealingJob from REST and verified provenance. Semantic validation requires sealingJob.checkRunId to equal sealingCheckRunId, distinct candidate and sealing job IDs, canonical digest equality, exact role-specific names derived from expectedIdentity.artifactNonce, one artifact per reserved name, and no other candidate, sealed, expected, or receipt artifact for that nonce.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["repositoryId", "workflowRunId", "runAttempt", "trustAnchorSha", "testedSourceSha", "workflowSignerSha", "workflowSignerRef", "baseSha", "candidateJob", "sealingCheckRunId", "sealingJob", "signerWorkflow", "candidateArtifact", "sealedArtifact", "sealingReceiptSha256", "attestationIssuer", "sealedAttestationSubjectDigest", "sealedAttestationBundleSha256", "sealedAttestationVerified", "sealingReceiptAttestationSubjectDigest", "sealingReceiptAttestationBundleSha256", "sealingReceiptAttestationVerified", "roleBundleSha256", "sealedBundleSha256", "restApiVersion", "verifiedAt"],
+      "required": ["repositoryId", "workflowRunId", "runAttempt", "trustAnchorSha", "testedSourceSha", "workflowSignerSha", "workflowSignerRef", "baseSha", "candidatePlacement", "sealingCheckRunId", "sealingJob", "signerWorkflow", "candidateArtifact", "sealedArtifact", "sealingReceiptSha256", "attestationIssuer", "sealedAttestationSubjectDigest", "sealedAttestationBundleSha256", "sealedAttestationVerified", "sealingReceiptAttestationSubjectDigest", "sealingReceiptAttestationBundleSha256", "sealingReceiptAttestationVerified", "roleBundleSha256", "sealedBundleSha256", "restApiVersion", "verifiedAt"],
       "properties": {
         "repositoryId": { "type": "integer", "minimum": 1 },
         "workflowRunId": { "type": "integer", "minimum": 1 },
@@ -174,9 +218,9 @@
         "workflowSignerSha": { "$ref": "#/$defs/gitSha" },
         "workflowSignerRef": { "const": "refs/heads/master" },
         "baseSha": { "$ref": "#/$defs/gitSha" },
-        "candidateJob": { "$ref": "#/$defs/jobObservation" },
+        "candidatePlacement": { "$ref": "#/$defs/candidatePlacementObservation" },
         "sealingCheckRunId": { "type": "integer", "minimum": 1 },
-        "sealingJob": { "$ref": "#/$defs/jobObservation" },
+        "sealingJob": { "$ref": "#/$defs/sealingJobOrigin" },
         "signerWorkflow": { "$ref": "#/$defs/signerWorkflow" },
         "candidateArtifact": { "$ref": "#/$defs/artifactObservation" },
         "sealedArtifact": { "$ref": "#/$defs/artifactObservation" },
@@ -219,7 +263,7 @@
               "jobWorkflowRef": { "const": "SkrOYC/burlmd/.github/workflows/ci-role-linux-x86-64.yml@refs/heads/master" },
               "builderId": { "const": "https://github.com/SkrOYC/burlmd/.github/workflows/ci-role-linux-x86-64.yml@refs/heads/master" }
             } },
-            "candidateJob": { "type": "object", "properties": { "workflowJobKey": { "const": "candidate" }, "runnerLabels": { "type": "array", "contains": { "const": "ubuntu-24.04" }, "not": { "contains": { "const": "self-hosted" } } } } },
+            "candidatePlacement": { "type": "object", "properties": { "workflowJobKey": { "const": "candidate" }, "workflowPath": { "const": ".github/workflows/ci-role-linux-x86-64.yml" }, "expectedRunnerLabel": { "const": "ubuntu-24.04" }, "runnerLabels": { "type": "array", "contains": { "const": "ubuntu-24.04" }, "not": { "contains": { "const": "self-hosted" } } } } },
             "sealingJob": { "type": "object", "properties": { "workflowJobKey": { "const": "seal" }, "runnerLabels": { "type": "array", "contains": { "const": "ubuntu-24.04" }, "not": { "contains": { "const": "self-hosted" } } } } },
             "candidateArtifact": { "type": "object", "properties": { "artifactName": { "type": "string", "pattern": "^managed-evidence-candidate-linux-x86_64-[0-9a-f]{32}$" } } },
             "sealedArtifact": { "type": "object", "properties": { "artifactName": { "type": "string", "pattern": "^managed-evidence-sealed-linux-x86_64-[0-9a-f]{32}$" } } }
@@ -233,7 +277,7 @@
               "jobWorkflowRef": { "const": "SkrOYC/burlmd/.github/workflows/ci-role-macos-26-arm64.yml@refs/heads/master" },
               "builderId": { "const": "https://github.com/SkrOYC/burlmd/.github/workflows/ci-role-macos-26-arm64.yml@refs/heads/master" }
             } },
-            "candidateJob": { "type": "object", "properties": { "workflowJobKey": { "const": "candidate" }, "runnerLabels": { "type": "array", "contains": { "const": "macos-26" }, "not": { "contains": { "const": "self-hosted" } } } } },
+            "candidatePlacement": { "type": "object", "properties": { "workflowJobKey": { "const": "candidate" }, "workflowPath": { "const": ".github/workflows/ci-role-macos-26-arm64.yml" }, "expectedRunnerLabel": { "const": "macos-26" }, "runnerLabels": { "type": "array", "contains": { "const": "macos-26" }, "not": { "contains": { "const": "self-hosted" } } } } },
             "sealingJob": { "type": "object", "properties": { "workflowJobKey": { "const": "seal" }, "runnerLabels": { "type": "array", "contains": { "const": "macos-26" }, "not": { "contains": { "const": "self-hosted" } } } } },
             "candidateArtifact": { "type": "object", "properties": { "artifactName": { "type": "string", "pattern": "^managed-evidence-candidate-macos-26-arm64-[0-9a-f]{32}$" } } },
             "sealedArtifact": { "type": "object", "properties": { "artifactName": { "type": "string", "pattern": "^managed-evidence-sealed-macos-26-arm64-[0-9a-f]{32}$" } } }
@@ -247,13 +291,27 @@
               "jobWorkflowRef": { "const": "SkrOYC/burlmd/.github/workflows/ci-role-macos-15-arm64.yml@refs/heads/master" },
               "builderId": { "const": "https://github.com/SkrOYC/burlmd/.github/workflows/ci-role-macos-15-arm64.yml@refs/heads/master" }
             } },
-            "candidateJob": { "type": "object", "properties": { "workflowJobKey": { "const": "candidate" }, "runnerLabels": { "type": "array", "contains": { "const": "macos-15" }, "not": { "contains": { "const": "self-hosted" } } } } },
+            "candidatePlacement": { "type": "object", "properties": { "workflowJobKey": { "const": "candidate" }, "workflowPath": { "const": ".github/workflows/ci-role-macos-15-arm64.yml" }, "expectedRunnerLabel": { "const": "macos-15" }, "runnerLabels": { "type": "array", "contains": { "const": "macos-15" }, "not": { "contains": { "const": "self-hosted" } } } } },
             "sealingJob": { "type": "object", "properties": { "workflowJobKey": { "const": "seal" }, "runnerLabels": { "type": "array", "contains": { "const": "macos-15" }, "not": { "contains": { "const": "self-hosted" } } } } },
             "candidateArtifact": { "type": "object", "properties": { "artifactName": { "type": "string", "pattern": "^managed-evidence-candidate-macos-15-arm64-[0-9a-f]{32}$" } } },
             "sealedArtifact": { "type": "object", "properties": { "artifactName": { "type": "string", "pattern": "^managed-evidence-sealed-macos-15-arm64-[0-9a-f]{32}$" } } }
           } } } }
         }
       ]
+    },
+    "compatibilityStageAggregate": {
+      "$comment": "BURL-O001 aggregation reconstructs this record from the macOS 26 sealing receipt, the unchanged lineage in the macOS 15 candidate manifest and sealing receipt, both completed seal origins, and current REST artifact observations. Semantic validation requires byte-identical producerLineage values, exact consumerBinding hashes, fresh non-expired artifact state, and successful offline attestation verification. No other ticket can carry this object.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["producerLineage", "consumerBinding", "producerSealingReceiptSha256", "consumerSealingReceiptSha256", "lineageSha256", "verifiedAt"],
+      "properties": {
+        "producerLineage": { "$ref": "ci-role-evidence.schema.json#/$defs/compatibilityStageProducerLineage" },
+        "consumerBinding": { "$ref": "ci-role-evidence.schema.json#/$defs/compatibilityStageConsumerBinding" },
+        "producerSealingReceiptSha256": { "$ref": "#/$defs/sha256" },
+        "consumerSealingReceiptSha256": { "$ref": "#/$defs/sha256" },
+        "lineageSha256": { "$ref": "#/$defs/sha256" },
+        "verifiedAt": { "$ref": "#/$defs/rfc3339" }
+      }
     },
     "coordinatorExecution": {
       "type": "object",
@@ -284,7 +342,7 @@
       "additionalProperties": false,
       "required": ["code", "detail"],
       "properties": {
-        "code": { "enum": ["expected-identity-invalid", "evidence-profile-mismatch", "artifact-name-invalid", "artifact-name-collision", "artifact-digest-mismatch", "trust-anchor-mismatch", "candidate-control-surface-changed", "source-allowlist-violation", "candidate-job-failed", "sealing-job-in-progress", "sealing-job-failed", "sealing-job-missing", "sealing-job-mismatch", "job-topology-mismatch", "role-manifest-invalid", "role-bundle-invalid", "missing-role", "duplicate-role", "unexpected-role", "role-gate-failed", "identity-mismatch", "stale-evidence", "workflow-signer-mismatch", "runner-label-mismatch", "runner-environment-mismatch", "untrusted-origin", "attestation-unavailable", "artifact-api-mismatch", "artifact-corrupt", "filesystem-evidence-mismatch", "mixed-image-version", "coordinator-identity-mismatch", "coordinator-isolation-failed", "coordinator-credential-exposure", "aggregation-error"] },
+        "code": { "enum": ["expected-identity-invalid", "evidence-profile-mismatch", "artifact-name-invalid", "artifact-name-collision", "artifact-digest-mismatch", "trust-anchor-mismatch", "candidate-control-surface-changed", "source-allowlist-violation", "candidate-placement-mismatch", "candidate-topology-mismatch", "candidate-label-mismatch", "candidate-completion-mismatch", "sealing-job-in-progress", "sealing-job-failed", "sealing-job-missing", "sealing-job-mismatch", "sealing-runner-environment-mismatch", "role-manifest-invalid", "role-bundle-invalid", "missing-role", "duplicate-role", "unexpected-role", "role-gate-failed", "identity-mismatch", "stale-evidence", "workflow-signer-mismatch", "untrusted-origin", "attestation-unavailable", "artifact-api-mismatch", "artifact-corrupt", "filesystem-evidence-mismatch", "mixed-image-version", "compatibility-stage-missing", "compatibility-stage-duplicate", "compatibility-stage-substituted", "compatibility-stage-expired", "compatibility-stage-digest-mismatch", "compatibility-stage-unattested", "compatibility-stage-wrong-signer", "compatibility-stage-wrong-run", "compatibility-stage-wrong-role", "compatibility-stage-wrong-seal", "compatibility-stage-consumer-unbound", "compatibility-stage-unexpected", "coordinator-identity-mismatch", "coordinator-isolation-failed", "coordinator-credential-exposure", "aggregation-error"] },
         "role": { "$ref": "#/$defs/role" },
         "jobId": { "type": "integer", "minimum": 1 },
         "jobStatus": { "enum": ["queued", "in_progress", "completed"] },
