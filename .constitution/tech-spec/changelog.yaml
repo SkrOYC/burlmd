@@ -1,4 +1,13 @@
 entries:
+  - version: v2.1.6
+    date: 2026-09-06
+    fixed:
+      - "Closed the BURL-M003 and BURL-O001 downstream Tasks routing gate after Tasks v3.2.6 adopted the complete compatibility interface: the ordered 26-field mapping, both macOS 26 output-boundary normalizations, three distinct offline-verification result consumptions, and downloadedStageArtifactId equality acceptance with mismatch rejection. Marked ci_bootstrap.stage4_tasks_adaptation satisfied without changing raw contract version 33 or evidence schema versions 15 and 17."
+      - "Routed only the Tasks v3.2.6 changelog upstream.tech-spec pointer, which remains v2.1.5, to a later Stage 4 metadata-only alignment with TechSpec v2.1.6. This Stage 3 patch doesn't edit .constitution/tasks or imply a Task graph change."
+    by: patch-lane
+    upstream:
+      prd: v2.0.5
+      architecture: v2.1.2
   - version: v2.1.5
     date: 2026-09-06
     fixed:
