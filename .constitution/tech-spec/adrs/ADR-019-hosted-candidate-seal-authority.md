@@ -79,8 +79,10 @@ survive. The release contract must not make that claim.
    `consumer_trusted_inputs` interface. The candidate remains credential-free.
 8. Require the macOS 15 seal to compare the candidate-carried parsed lineage,
    lineage SHA-256, lineage transport receipt, and consumer binding with the
-   trusted wrapper record. It preserves them in its sealing receipt. Final
-   aggregation verifies the complete producer-seal-to-consumer chain.
+   trusted wrapper record. The binding's `downloadedStageArtifactId` must equal
+   `producerLineage.stageArtifact.artifactId`. It preserves them in its sealing
+   receipt. Final aggregation verifies the complete producer-seal-to-consumer
+   chain.
 9. Keep strict credential removal and rejection of reserved artifact-name
    collisions on all roles.
 
