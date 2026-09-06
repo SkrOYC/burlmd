@@ -3,5 +3,5 @@ surface: cli
 flows: [flow-release]
 boundaries: [BND-15, BND-16, BND-17]
 certainty: assumed
-assumption: "Raw contract version 33 defines the OD-11 authority split and BURL-O001 stage lineage, but implementation tests have not exercised it."
-settles_when: "BURL-M003 and BURL-O001 contract fixtures exercise version 33, including every candidate guard and compatibility-stage rejection path."
+assumption: "Raw contract version 33 defines the OD-11 authority split and the attested canonical BURL-O001 producer-lineage transport, but implementation tests have not exercised it."
+settles_when: "BURL-M003 and BURL-O001 contract fixtures exercise version 33, including every candidate guard, producer-receipt freshness check, canonical-lineage byte check, and compatibility-stage rejection path."

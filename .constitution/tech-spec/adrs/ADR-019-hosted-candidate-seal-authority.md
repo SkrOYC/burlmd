@@ -61,19 +61,23 @@ survive. The release contract must not make that claim.
    `runner_environment: github-hosted`.
 6. For `BURL-O001`, make the macOS 26 `seal` job validate the declared producer
    members and create the compatibility stage. The same job uploads and attests
-   the stage. Its receipt binds the exact stage name, service artifact ID, bare
-   upload-action digest, canonical REST digest, producing seal check-run ID,
-   subject, signer, run, attempt, and attestation bundle.
-7. Give the macOS 15 candidate job the exact trusted stage and producing-receipt
-   inputs. Its trusted wrapper downloads both by immutable artifact ID with
-   `digest-mismatch: error`. Before candidate execution, the wrapper verifies
-   the seal-exported attestation bundles and binding offline. It then removes
+   the stage and its sealing receipt. After the receipt REST object exists, it
+   creates and attests the immutable `compatibility-stage-producer-lineage.json`
+   transport artifact. The canonical bytes bind the exact stage and producer
+   receipt name, service ID, action digest, REST digest, `createdAt`, `expiresAt`,
+   producing seal check-run ID, subject, signer, run, attempt, and attestation.
+7. Give the macOS 15 candidate job exact trusted stage, producing-receipt, and
+   producer-lineage artifact inputs. Its trusted wrapper downloads all three by
+   immutable artifact ID with `digest-mismatch: error`. Before candidate
+   execution, the wrapper verifies the seal-exported attestation bundles and
+   binding offline. It hashes and validates the canonical lineage bytes, then
+   requires the signed producer receipt to remain unexpired. It then removes
    credentials and exposes only the verified producer members as read-only
    inputs. The candidate remains credential-free.
-8. Require the macOS 15 seal to compare the candidate-carried producer lineage
-   with the trusted wrapper record. It preserves the producer lineage unchanged
-   and adds the consumer binding to its sealing receipt. Final aggregation
-   verifies the complete producer-seal-to-consumer chain.
+8. Require the macOS 15 seal to compare the candidate-carried parsed lineage,
+   lineage SHA-256, lineage transport receipt, and consumer binding with the
+   trusted wrapper record. It preserves them in its sealing receipt. Final
+   aggregation verifies the complete producer-seal-to-consumer chain.
 9. Keep strict credential removal and rejection of reserved artifact-name
    collisions on all roles.
 
@@ -92,14 +96,15 @@ survive. The release contract must not make that claim.
   role. Passing those guards doesn't change their noncryptographic status.
 - `BURL-O001` rejects a missing, duplicate, substituted, expired,
   digest-mismatched, unattested, wrong-signer, wrong-run, wrong-role,
-  wrong-seal, unexpected, or consumer-unbound stage.
+  wrong-seal, unexpected, stale-producer-receipt, noncanonical-lineage,
+  lineage-SHA-mismatch, or consumer-unbound stage.
 - Reviewed source and test contracts remain required. Provenance validation
   doesn't replace source review or test review.
 - The role and aggregate JSON schemas are versions `15` and `17`. The embedded
   sealing receipt is version `2`. The raw contract is version `33`. These
   contracts separate candidate runtime guards from attested seal origin and
-  bind the compatibility-stage lineage without encoding a platform-independent
-  process-termination assertion.
+  bind an immutable canonical compatibility-stage lineage without encoding a
+  platform-independent process-termination assertion.
 - Managed non-Spike source-write authority is an immutable ordered mapping in
   the trust-anchor raw contract. Candidate input can't select, widen, reorder,
   or omit it. BURL-O004 additionally prepares its locked coordinator before

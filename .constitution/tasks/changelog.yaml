@@ -2,15 +2,15 @@ entries:
   - version: v3.2.4
     date: 2026-09-06
     changed:
-      - "Aligned BURL-M003 with the canonical TechSpec v2.1.2 verification command and raw contract version 33. Acceptance now separates four noncryptographic candidate runtime guards from attestation-backed seal origin and requires every focused role, reconciliation, seal, and compatibility-stage fixture."
-      - "Required BURL-O001 to use the macOS 26 seal-owned compatibility stage. The ticket binds its exact artifact identity, service ID, upload and REST digests, producer seal locator, attestations, and unchanged macOS 15 consumer lineage through final aggregation."
+      - "Aligned BURL-M003 with the canonical TechSpec v2.1.2 verification command and raw contract version 33. Acceptance separates four noncryptographic candidate runtime guards from attestation-backed seal origin and requires the complete focused role, reconciliation, seal, and compatibility-stage fixture inventory."
+      - "Required BURL-O001 to use the macOS 26 seal-owned compatibility stage and post-receipt immutable RFC 8785 producer-lineage artifact. The tickets bind the artifact's exact bytes and SHA-256, transport identity and attestation, signed producer-receipt lifetime, parsed lineage, and consumer binding through macOS 15 and final aggregation."
       - "Preserved the BURL-M003 implementation and evidence pull-request bootstrap, the exact private-headless Linux and cold-checkout macOS verification, both 8-point estimates, all ticket IDs, and the 10-epic dependency topology."
       - "Regenerated critical-path.md from the unchanged 10-epic, 80-ticket, 564-point graph."
       - "Completed Epics A through F contain no actuals blocks, so observed diff-lines-per-point and review-rounds-per-point calibration remain unavailable. Unmerged PR #15 is implementation input, not completed calibration; it doesn't justify changing either affected estimate."
     fixed:
       - "Removed the remaining BURL-M003 acceptance claim that candidate REST labels authenticate hosted origin and replaced the post-run macOS archive handoff with the seal-owned pre-candidate BURL-O001 stage chain."
     security:
-      - "Required typed failures for every candidate guard, seal-origin, and compatibility-stage mismatch defined by TechSpec v2.1.2. Candidate jobs remain credential-free, and fresh non-executing seal provenance remains the sole hosted-origin authority."
+      - "Required typed failures for every candidate guard, seal-origin, and compatibility-stage mismatch defined by TechSpec v2.1.2, including stale producer receipt, noncanonical lineage, and lineage-SHA mismatch. `artifact-digest-mismatch` applies only to expected, candidate, sealed, and receipt artifacts; stage and lineage transport digest failures use `compatibility-stage-digest-mismatch`. Candidate jobs remain credential-free, and fresh non-executing seal provenance remains the sole hosted-origin authority."
     upstream:
       prd: v2.0.5
       architecture: v2.1.2

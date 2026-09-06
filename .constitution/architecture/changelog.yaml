@@ -5,9 +5,9 @@ entries:
       - "Classified candidate placement, topology, label, and completion checks as trusted-workflow and runtime guards that fail closed but don't cryptographically prove hosted origin."
       - "Made verified fresh-seal provenance the sole cryptographic evidence for the sealing environment's hosted origin and preserved credential-free candidate execution."
     changed:
-      - "Assigned the authenticated BURL-O001 producer-to-consumer handoff to the macOS 26 seal within BND-16. The macOS 15 wrapper verifies and exposes it without passing credentials to the candidate, and Evidence Aggregation verifies the uninterrupted lineage."
+      - "Assigned the authenticated cross-version compatibility producer-to-consumer handoff to the macOS 26 seal within BND-16. The macOS 15 wrapper verifies and exposes it without passing credentials to the candidate, and Evidence Aggregation verifies the uninterrupted lineage."
     security:
-      - "Required BURL-O001 stage identity, integrity, producing seal locator, provenance, and consumer binding to remain connected through final aggregation. Missing, substituted, stale, mismatched, unauthenticated, or consumer-unbound stages fail closed."
+      - "Required the cross-version compatibility stage's identity, integrity, producing seal locator, provenance, and consumer binding to remain connected through final aggregation. Missing, substituted, stale, mismatched, unauthenticated, or consumer-unbound stages fail closed."
     upstream:
       prd: v2.0.5
     by: stage

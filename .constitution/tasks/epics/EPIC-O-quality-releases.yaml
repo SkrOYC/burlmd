@@ -89,9 +89,12 @@ tickets:
         self-hosted, unauthenticated, or rejected.
       - STOP if post-completion API observation doesn't resolve the receipt
         locator to one completed successful sealing job with matching attested
-        hosted-origin provenance, or if an expected, candidate, sealed, receipt,
-        or compatibility-stage artifact name or normalized digest is invalid,
-        missing, duplicate, extra, or inconsistent with the run nonce.
+        hosted-origin provenance, or if an expected, candidate, sealed, or
+        receipt artifact name or normalized digest is invalid, missing,
+        duplicate, extra, or inconsistent with the run nonce. These generic
+        artifact digest failures must use `artifact-digest-mismatch`; stage and
+        lineage transport digest failures must use
+        `compatibility-stage-digest-mismatch`.
       - STOP if the launcher isn't the clean trust-anchor copy, a trusted
         control file differs at the signer SHA, or the base-to-source diff
         leaves the packaging write allowlist.
@@ -106,14 +109,17 @@ tickets:
         service ID, bare upload digest, canonical REST digest, lifetime,
         manifest digest, attestation bundle digest, subject digest, signer,
         source, run, attempt, role, and producing sealing check-run locator.
-      - STOP if the macOS 15 wrapper doesn't download the exact stage and
-        producer receipt by immutable service ID, reject a digest mismatch and
-        an expired stage, or verify both seal-exported attestations offline
-        before credential removal and read-only member exposure.
-      - STOP if the macOS 15 manifest and receipt don't preserve the macOS 26
-        `producerLineage` byte-for-byte with the trusted `consumerBinding`, or
-        if final aggregation doesn't verify that unchanged lineage against both
-        receipts, both seal origins, and non-expired stage REST state.
+      - STOP if the macOS 15 wrapper doesn't download the exact stage, producer
+        receipt, and lineage artifact by immutable service ID; rejects a
+        compatibility-stage digest mismatch, expired stage, or stale producer
+        receipt; or verifies all three seal-exported attestations offline before
+        credential removal and read-only member exposure.
+      - STOP if the macOS 15 manifest, receipt, and seal don't agree with final
+        aggregation on the parsed macOS 26 `producerLineage`, the exact SHA-256
+        of the immutable RFC 8785 `compatibility-stage-producer-lineage.json`
+        bytes, its transport identity and attestation, and the trusted
+        `consumerBinding`; or if the signed producer receipt `createdAt` and
+        `expiresAt` don't agree through every consumer and aggregate check.
       - STOP if a candidate command can observe a credential canary or OIDC or
         attestation capability; if the trusted upload wrapper lacks its
         job-scoped artifact runtime authority; if valid immutable untrusted
@@ -137,8 +143,9 @@ tickets:
       Linux and macOS matrix. Authenticate managed role evidence through
       BURL-M003. The macOS 26 seal creates and attests the exact compatibility
       stage that the macOS 15 wrapper verifies before credential-free candidate
-      execution. Preserve its producer lineage and consumer binding through the
-      macOS 15 seal and final aggregate. Prove the checksum and
+      execution. Preserve the parsed producer lineage, exact immutable
+      lineage-artifact SHA-256, transport identity and attestation, and consumer
+      binding through the macOS 15 seal and final aggregate. Prove the checksum and
       provenance-metadata layout inside the prototype; release-candidate
       attestations remain production workflow work owned by BURL-O009 and
       BURL-O014
@@ -196,26 +203,36 @@ tickets:
         `macos-26-arm64:seal`. No separate staging authority is allowed.
 
 
-        The macOS 15 trusted wrapper downloads that exact stage and the macOS 26
-        receipt by immutable artifact IDs with `digest-mismatch: error`. It
-        verifies both seal-exported bundles offline against a fresh trusted root
-        and the exact macOS 26 signer, source, run, attempt, role, and seal
-        locator. The wrapper then removes every credential context. It exposes
-        only the two verified producer members read-only. The credential-free
-        macOS 15 candidate probes the same archive bytes. Its manifest carries
-        the macOS 26 `producerLineage` unchanged and adds the trusted
-        `consumerBinding`. The macOS 15 seal preserves both records in its
-        receipt.
+        After the receipt upload and REST query, the macOS 26 seal creates,
+        attests, and uploads the immutable RFC 8785
+        `compatibility-stage-producer-lineage.json` artifact. Its exact bytes
+        hash to `producerLineageSha256`, and its signed parsed lineage records
+        the producer receipt ID, name, action digest, REST digest, `createdAt`,
+        `expiresAt`, and `expired:false` state. The macOS 15 trusted wrapper
+        downloads the exact stage, producer receipt, and lineage artifact by
+        immutable artifact IDs with `digest-mismatch: error`. It verifies all
+        three seal-exported bundles offline against a fresh trusted root and the
+        exact macOS 26 signer, source, run, attempt, role, and seal locator. It
+        rejects a signed producer receipt whose `expiresAt` is not later than
+        `verifiedAt`, then removes every credential context and exposes only the
+        two verified producer members read-only. The credential-free macOS 15
+        candidate probes the same archive bytes. Its manifest carries the parsed
+        `producerLineage`, exact `producerLineageSha256`, lineage transport
+        receipt, and trusted `consumerBinding`. The macOS 15 seal independently
+        reconstructs and preserves those records in its receipt.
 
 
         Final aggregation validates against aggregate schema version `17`. It
-        verifies the non-expired stage REST object,
-        its service ID and both digest forms, both attestation chains, both seal
-        origins, both receipts, and the byte-identical lineage. Both macOS probes
-        must name the same archive SHA-256. A missing, duplicate, substituted,
-        expired, digest-mismatched, unattested, wrong-signer, wrong-run,
-        wrong-role, wrong-seal, unexpected, or consumer-unbound stage produces
-        its typed `compatibility-stage-*` rejection.
+        verifies the non-expired stage and producer-receipt REST objects, their
+        service IDs and both digest forms, all three attestation chains, both
+        seal origins, both receipts, and agreement between the parsed lineage,
+        exact lineage-artifact SHA-256, lineage transport identity and
+        attestation, and `consumerBinding`. Both macOS probes must name the same
+        archive SHA-256. Missing, duplicate, substituted, expired,
+        digest-mismatched, unattested, wrong-signer, wrong-run, wrong-role,
+        wrong-seal, stale-producer-receipt, noncanonical-lineage,
+        lineage-SHA-mismatch, consumer-unbound, and unexpected stages produce
+        their matching typed `compatibility-stage-*` rejection.
 
 
         Nix out-links are build sources only. The result tool copies their

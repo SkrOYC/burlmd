@@ -182,17 +182,23 @@ tickets:
         a REST or aggregate digest isn't exactly `sha256:` plus that action
         output.
       - STOP if `artifactNonce` isn't the exact lowercase 32-hex suffix of
-        `runIdentity`, an artifact name contains a forbidden character, or an
-        expected, candidate, sealed, receipt, or required compatibility-stage
-        artifact is missing, duplicate, extra, pre-uploaded, or substituted.
-        Also STOP if any ticket other than BURL-O001 carries a compatibility
-        stage.
+        `runIdentity`; an artifact name contains a forbidden character; or an
+        expected, candidate, sealed, or receipt artifact is missing, duplicate,
+        extra, pre-uploaded, substituted, or digest-mismatched. Those artifact
+        digest failures must use `artifact-digest-mismatch`. A compatibility
+        stage or lineage transport artifact digest failure must use
+        `compatibility-stage-digest-mismatch`. Also STOP if any ticket other
+        than BURL-O001 carries a compatibility stage.
       - STOP if BURL-O001 uses a separate staging job; if the macOS 26 `seal`
         job doesn't create, attest, upload, and REST-validate the exact stage;
-        if the macOS 15 wrapper doesn't verify the exact stage and producer
-        receipt offline before credential removal and read-only exposure; or if
-        the macOS 15 seal and final aggregate don't preserve the complete
-        producer lineage and consumer binding.
+        if it doesn't create and attest the immutable RFC 8785
+        `compatibility-stage-producer-lineage.json` artifact after the signed
+        producer receipt has `createdAt` and `expiresAt`; if the macOS 15
+        wrapper doesn't verify the exact stage, producer receipt, and lineage
+        artifact offline before credential removal and read-only exposure; or if
+        its manifest, receipt, seal, and final aggregate don't agree on the
+        parsed lineage, exact lineage-artifact SHA-256, lineage transport
+        identity and attestation, and trusted `consumerBinding`.
       - STOP if `run` accepts a managed Spike without staging verified role
         contents, running its declared coordinator steps, and publishing a valid
         authoritative machine result.
@@ -259,7 +265,7 @@ tickets:
 
       Complete these steps in order:
         1. Implement `scripts/check-generated-bindings.sh` from the exact Stage 3 checker contract. Test clean, stale, generator-failure, added-file, removed-file, premodified-file, and interruption cases. Every case must leave `rust/src/frb_generated.rs` and `lib/src/rust/**` byte-identical to their precheck state.
-        2. Implement `scripts/assert-managed-evidence-isolation.sh` from the exact Stage 3 fixture contract. The trusted launcher must enumerate and close nonallowlisted descriptors; include a non-`CLOEXEC` descriptor canary. Pin Linux-only `pkgs.bubblewrap` and `pkgs.gh` from the locked Nixpkgs revision in `devenv.nix`. Require Bubblewrap `0.11.2` only for namespace, network, and filesystem isolation, and require GitHub CLI `2.96.0` for seal-attestation policy and offline BURL-O001 verification. Add contract fixtures for the two-job role topology, least-privilege permissions, run-to-artifact nonce derivation, forbidden artifact-name characters, and duplicate or pre-uploaded reserved names. Candidate-guard fixtures must accept placement, topology, labels, and completion only as four noncryptographic checks. They must produce `candidate-placement-mismatch`, `candidate-topology-mismatch`, `candidate-label-mismatch`, and `candidate-completion-mismatch` for the matching failures. They must reject candidate `runnerEnvironment` and any candidate-derived `hostedOriginVerified`. Linux fixtures must run `env -i` candidate code in a private Bubblewrap PID namespace and reject a surviving double-fork probe before upload. Hosted-macOS fixtures must distinguish candidate-command no-privilege execution from the trusted upload wrapper's job-scoped artifact runtime authority. They must prove fresh-job separation, seal-only authority, and no candidate-byte execution in seal. They model a surviving candidate process as untrusted-output corruption or fail-closed upload denial, and reject a universal macOS containment or zero-survivor assertion. Receipt fixtures must reject any final status, conclusion, or completion field. Seal-origin fixtures must accept exactly one completed successful seal with valid provenance. They must reject in-progress, failed, missing, duplicate, wrong-job, wrong-label, self-hosted, wrong-signer, wrong-source, wrong-run, wrong-attempt, and wrong-locator matches with the typed seal rejection. BURL-O001 fixtures must require the macOS 26 seal-owned stage and unchanged macOS 15 lineage through final aggregation. They must cover reserved inventory, artifact-name collision, substitution, wrong producer, wrong signer, wrong run or attempt, wrong role, wrong check-run locator, missing or invalid attestation bundles, action-to-REST digest mismatch, expiration, missing consumer binding, and a stage on any no-stage ticket. They must produce `compatibility-stage-missing`, `compatibility-stage-duplicate`, `compatibility-stage-substituted`, `compatibility-stage-expired`, `compatibility-stage-digest-mismatch`, `compatibility-stage-unattested`, `compatibility-stage-wrong-signer`, `compatibility-stage-wrong-run`, `compatibility-stage-wrong-role`, `compatibility-stage-wrong-seal`, `compatibility-stage-consumer-unbound`, and `compatibility-stage-unexpected` for the matching cases. Digest fixtures must prove bare action output to canonical REST conversion and reject prefix, case, or byte mismatch. Retain every token, configuration, descriptor, artifact-runtime, containment, cleanup, receipt, evidence-profile, viewport, nonce, artifact, bundle, trust-anchor, source-allowlist, filesystem, coordinator, and aggregation fixture from raw contract version 33. In a disposable checkout, run `cargo fmt --manifest-path rust/Cargo.toml -- --check && cargo clippy --workspace --all-targets --all-features --manifest-path rust/Cargo.toml -- -D warnings && cargo test --manifest-path rust/Cargo.toml && dart format --output=none --set-exit-if-changed lib test test_driver integration_test && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ! rg -n '\[DEBUG-' lib rust test scripts && actionlint && ./scripts/assert-ci-matrix.sh --workflow .github/workflows/ci.yml --require-runner ubuntu-24.04 --require-runner macos-26 --require-runner macos-15 --require-role-schema .constitution/tech-spec/contracts/ci-role-evidence.schema.json --require-aggregate-schema .constitution/tech-spec/contracts/ci-evidence.schema.json && ./scripts/assert-managed-evidence-isolation.sh --contract .constitution/tech-spec/contracts/provisional-spikes.toml --sandbox bubblewrap --expected-version 0.11.2 && ./scripts/test-managed-role-production-contract.sh && ./scripts/test-managed-evidence-reconciliation.sh && ./scripts/test-seal-validators.sh && git diff --check`.
+        2. Implement `scripts/assert-managed-evidence-isolation.sh` from the exact Stage 3 fixture contract. The trusted launcher must enumerate and close nonallowlisted descriptors; include a non-`CLOEXEC` descriptor canary. Pin Linux-only `pkgs.bubblewrap` and `pkgs.gh` from the locked Nixpkgs revision in `devenv.nix`. Require Bubblewrap `0.11.2` only for namespace, network, and filesystem isolation, and require GitHub CLI `2.96.0` for seal-attestation policy and offline BURL-O001 verification. Add contract fixtures for the two-job role topology, least-privilege permissions, run-to-artifact nonce derivation, forbidden artifact-name characters, and duplicate or pre-uploaded reserved names. Candidate-guard fixtures must accept placement, topology, labels, and completion only as four noncryptographic checks. They must produce `candidate-placement-mismatch`, `candidate-topology-mismatch`, `candidate-label-mismatch`, and `candidate-completion-mismatch` for the matching failures. They must reject candidate `runnerEnvironment` and any candidate-derived `hostedOriginVerified`. Linux fixtures must run `env -i` candidate code in a private Bubblewrap PID namespace and reject a surviving double-fork probe before upload. Hosted-macOS fixtures must distinguish candidate-command no-privilege execution from the trusted upload wrapper's job-scoped artifact runtime authority. They must prove fresh-job separation, seal-only authority, and no candidate-byte execution in seal. They model a surviving candidate process as untrusted-output corruption or fail-closed upload denial, and reject a universal macOS containment or zero-survivor assertion. Receipt fixtures must reject any final status, conclusion, or completion field. Seal-origin fixtures must accept exactly one completed successful seal with valid provenance. They must reject in-progress, failed, missing, duplicate, wrong-job, wrong-label, self-hosted, wrong-signer, wrong-source, wrong-run, wrong-attempt, and wrong-locator matches with the typed seal rejection. BURL-O001 fixtures must require the macOS 26 seal-owned stage; its post-receipt, attested RFC 8785 `compatibility-stage-producer-lineage.json` transport artifact; and agreement through the macOS 15 manifest, receipt, seal, and final aggregation on the parsed lineage, its exact artifact-byte SHA-256, transport identity and attestation, and `consumerBinding`. They must cover reserved inventory, artifact-name collision, substituted stage, substituted lineage, wrong producer, wrong signer, wrong run or attempt, wrong role, wrong check-run locator, missing or invalid attestation bundles, action-to-REST digest mismatch, expired stage, expired producer receipt, missing producer receipt lifetime, noncanonical lineage bytes, lineage SHA mismatch, missing consumer binding, and a stage on any no-stage ticket. They must produce `compatibility-stage-missing`, `compatibility-stage-duplicate`, `compatibility-stage-substituted`, `compatibility-stage-expired`, `compatibility-stage-digest-mismatch`, `compatibility-stage-unattested`, `compatibility-stage-wrong-signer`, `compatibility-stage-wrong-run`, `compatibility-stage-wrong-role`, `compatibility-stage-wrong-seal`, `compatibility-stage-stale-producer-receipt`, `compatibility-stage-noncanonical-lineage`, `compatibility-stage-lineage-sha-mismatch`, `compatibility-stage-consumer-unbound`, and `compatibility-stage-unexpected` for the matching cases. Digest fixtures must prove bare action output to canonical REST conversion. They must use `artifact-digest-mismatch` only for expected, candidate, sealed, and receipt artifacts. They must use `compatibility-stage-digest-mismatch` for stage or lineage transport digest failures. Retain every token, configuration, descriptor, artifact-runtime, containment, cleanup, receipt, evidence-profile, viewport, nonce, artifact, bundle, trust-anchor, source-allowlist, filesystem, coordinator, and aggregation fixture from raw contract version 33. In a disposable checkout, run `cargo fmt --manifest-path rust/Cargo.toml -- --check && cargo clippy --workspace --all-targets --all-features --manifest-path rust/Cargo.toml -- -D warnings && cargo test --manifest-path rust/Cargo.toml && dart format --output=none --set-exit-if-changed lib test test_driver integration_test && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ! rg -n '\[DEBUG-' lib rust test scripts && actionlint && ./scripts/assert-ci-matrix.sh --workflow .github/workflows/ci.yml --require-runner ubuntu-24.04 --require-runner macos-26 --require-runner macos-15 --require-role-schema .constitution/tech-spec/contracts/ci-role-evidence.schema.json --require-aggregate-schema .constitution/tech-spec/contracts/ci-evidence.schema.json && ./scripts/assert-managed-evidence-isolation.sh --contract .constitution/tech-spec/contracts/provisional-spikes.toml --sandbox bubblewrap --expected-version 0.11.2 && ./scripts/test-managed-role-production-contract.sh && ./scripts/test-managed-evidence-reconciliation.sh && ./scripts/test-seal-validators.sh && git diff --check`.
         3. Commit and independently review the `BURL-M003` milestone on `chore/epic-m-ci-foundation`. Open a ready implementation pull request, obtain independent pull-request review, and rebase-merge it into `master`. Record the resulting full `master` tip as `TRUST_ANCHOR_SHA`; don't treat the ticket as complete.
         4. Create a clean detached `TRUST_ANCHOR_WORKTREE` at `TRUST_ANCHOR_SHA` and create `EVIDENCE_WORKTREE` on `docs/epic-m-ci-evidence` from that merged `master`. Set `BASE_SHA` to the rebased, reviewed `BURL-M015` milestone at the trust anchor's first parent. Run `TRUST_ANCHOR_WORKTREE/scripts/managed-evidence.sh run --ticket BURL-M003 --trust-anchor-sha TRUST_ANCHOR_SHA --source-ref refs/heads/master --tested-source-sha TRUST_ANCHOR_SHA --base-sha BASE_SHA --output EVIDENCE_WORKTREE/.constitution/evidence/BURL-M003/managed-evidence.json && git -C EVIDENCE_WORKTREE diff --check`.
         5. In the minimally privileged Linux `candidate` job, the trusted workflow runs `./scripts/check-generated-bindings.sh && flutter test && dart analyze && flutter test integration_test -d linux -r github && ./scripts/assert-managed-evidence-isolation.sh --contract .constitution/tech-spec/contracts/provisional-spikes.toml --sandbox bubblewrap --expected-version 0.11.2` through `env -i` in its pipeline-owned private-headless Sway and Wayland environment and private Bubblewrap PID namespace. It rejects a surviving double-fork probe before upload. On both Apple Silicon macOS roles, a cold checkout runs `flutter test && dart analyze && flutter test integration_test -d macos -r github`, then performs bounded cleanup of known test processes without claiming universal containment. The dependent `seal` job validates and authenticates the untrusted bundle on a fresh environment with the same fixed role label and never executes candidate bytes.
@@ -324,18 +330,22 @@ tickets:
         and provenance bound to the signer, source, run, attempt, check-run ID,
         and `runner_environment=github-hosted`. Only this attestation-backed seal
         origin can set `hostedOriginVerified`. For every expected, candidate,
-        sealed, receipt, and compatibility-stage artifact, fixtures require the
-        REST `sha256:<hex>` digest to equal `sha256:` plus the pinned action's
-        bare lowercase 64-hex output. Prefix, case, and byte mismatches produce
-        `artifact-digest-mismatch`.
+        sealed, and receipt artifact, fixtures require the REST `sha256:<hex>`
+        digest to equal `sha256:` plus the pinned action's bare lowercase
+        64-hex output. Prefix, case, and byte mismatches produce
+        `artifact-digest-mismatch`. A stage or lineage transport artifact
+        digest failure produces `compatibility-stage-digest-mismatch`.
 
 
         Candidate-guard fixtures cover all four typed mismatch outcomes.
         Seal-origin fixtures cover in-progress, failed, missing, duplicate,
         wrong-job, wrong-label, self-hosted, wrong-signer, wrong-source,
         wrong-run, wrong-attempt, and wrong-locator outcomes. BURL-O001 fixtures
-        cover all 12 `compatibility-stage-*` rejection codes in raw contract
-        version `33`. Existing token, configuration, descriptor,
+        cover the complete raw-contract-version-33 compatibility-stage rejection
+        inventory: missing, duplicate, substituted, expired, digest mismatch,
+        unattested, wrong signer, wrong run, wrong role, wrong seal, stale
+        producer receipt, noncanonical lineage, lineage SHA mismatch,
+        consumer unbound, and unexpected. Existing token, configuration, descriptor,
         artifact-runtime, containment, cleanup, receipt, evidence-profile,
         viewport, nonce, artifact, bundle, trust-anchor, source-allowlist,
         filesystem, coordinator, and aggregation fixtures remain required.
@@ -389,9 +399,12 @@ tickets:
         It verifies both seal-exported attestation bundles offline with a fresh
         trusted root. It then removes credentials and exposes only the two
         verified producer members read-only. The macOS 15 manifest and seal
-        preserve `producerLineage` byte-for-byte and carry `consumerBinding`.
-        Final aggregation verifies the current stage, both receipts, both seal
-        origins, and the unchanged producer-to-consumer lineage.
+        preserve the parsed `producerLineage`, the exact SHA-256 of the
+        immutable RFC 8785 `compatibility-stage-producer-lineage.json` bytes,
+        its transport identity and attestation, and `consumerBinding`. The
+        macOS 15 seal independently reconstructs those trusted facts. Final
+        aggregation requires those values to agree with the signed lineage
+        artifact, both receipts, and both seal origins.
 
 
         The workflow never pushes repository content, publishes a release, or

@@ -4,7 +4,7 @@ capabilities: [CAP-075, CAP-076, CAP-077, CAP-078, CAP-079, CAP-080]
 boundaries: [BND-13, BND-15, BND-16, BND-17, BND-18, BND-19]
 view: dag
 certainty: assumed
-assumption: "The user settled candidate guards, fresh-seal authority, and the BURL-O001 handoff, but the complete release and upgrade path remains unexercised across all six capabilities."
+assumption: "The user settled candidate guards, fresh-seal authority, and the cross-version compatibility handoff, but the complete release and upgrade path remains unexercised across all six capabilities."
 ---
 # Release and upgrade flow
 
@@ -17,16 +17,16 @@ flowchart TD
     Expected[Authoritative expected identity\ntrust anchor, validation-control signer, tested source, base, release, build, corpus, run, roles, evidence classes, placement, topology, and completion]
     Linux[Credential-free strict-containment candidate\nassigned Linux x86-64 evidence classes]
     MacReference[Credential-free reference candidate\nassigned Apple Silicon macOS 26 evidence classes]
-    StageAcquire[Trusted macOS 15 stage verification\nacquire exact BURL-O001 stage, verify producer-seal binding, remove credentials, expose read-only]
+    StageAcquire[Trusted macOS 15 stage verification\nacquire exact cross-version compatibility stage, verify producer-seal binding, remove credentials, expose read-only]
     MacCompatibility[Credential-free compatibility candidate\nassigned macOS 15 evidence classes]
     Placement[Candidate placement and completion guards\nfixed workflow placement, topology, observed label, and terminal result\nnot cryptographic hosted-origin proof]
     LinuxSeal[Fresh Linux sealing environment\nvalidate handoff, execute no candidate bytes, authenticate provenance]
     MacReferenceSeal[Fresh macOS 26 sealing environment\nvalidate handoff, execute no candidate bytes, authenticate provenance]
     MacCompatibilitySeal[Fresh macOS 15 sealing environment\nvalidate handoff, execute no candidate bytes, authenticate provenance]
-    Stage[Authenticated BURL-O001 compatibility stage\nexact identifier and integrity digest bound to macOS 26 seal locator and provenance]
+    Stage[Authenticated cross-version compatibility stage\nexact identifier and integrity digest bound to macOS 26 seal locator and provenance]
     Observe[Post-completion observation\nrequire successful sealing environment]
     Integrity[Verify fresh-seal provenance and complete evidence handoff integrity]
-    Lineage[Verify BURL-O001 producer seal, stage, credential-free consumption, and unchanged consumer binding]
+    Lineage[Verify cross-version compatibility producer seal, stage, credential-free consumption, and unchanged consumer binding]
     Identity[Compare captured identity with authoritative expected identity]
     Complete[Require complete current evidence set]
     Report[Review evidence-only integration after tested source]
@@ -58,7 +58,7 @@ flowchart TD
     LinuxSeal -->|fresh-sealed bundle and pre-completion locator| Observe
     MacReferenceSeal -->|fresh-sealed bundle and pre-completion locator| Observe
     MacCompatibilitySeal -->|fresh-sealed bundle and pre-completion locator| Observe
-    MacReferenceSeal -->|BURL-O001 only: authenticated producer handoff| Stage
+    MacReferenceSeal -->|authenticated cross-version compatibility handoff| Stage
     Stage -->|trusted acquisition and offline verification| StageAcquire
     StageAcquire -->|verified read-only members with no credential context| MacCompatibility
     Observe -->|completed successful sealing handoff| Integrity
@@ -76,7 +76,7 @@ flowchart TD
     MacReferenceSeal -->|producer seal binding| Lineage
     Stage -->|stage identifier, integrity digest, locator, and provenance| Lineage
     MacCompatibilitySeal -->|consumer binding| Lineage
-    Lineage -->|uninterrupted BURL-O001 chain| Complete
+    Lineage -->|uninterrupted cross-version compatibility lineage| Complete
     Lineage -->|absent, substituted, stale, or mismatched chain| Rejected
     Identity -->|captured identity matches expected identity| Complete
     Identity -->|expected identity missing or captured identity mismatched or stale| Rejected
@@ -100,14 +100,14 @@ flowchart TD
 - Candidate commands are credential-free and receive no provenance authority. A trusted wrapper can upload the complete candidate bundle, but the file handoff remains untrusted. A candidate survivor can corrupt or deny that upload and fail the role. It can't enter a fresh sealing environment or gain its authority.
 - Trusted workflow fixes candidate placement and topology. Runtime observations confirm the expected label and terminal result. These guards don't cryptographically prove hosted origin. A failed guard rejects the role, but a passing guard can't substitute for seal provenance.
 - Each fresh sealing environment is the sole provenance and hosted-origin authority for its role. It never executes candidate bytes. It validates candidate-environment identity, exact inventory, and complete integrity before authenticating a sealed handoff. Fresh-seal provenance alone cryptographically authenticates the sealing environment's hosted origin. If that separation or validation can't be proved, evidence is rejected.
-- For BURL-O001, the macOS 26 seal validates the producer members and creates the authenticated compatibility stage. It binds the exact stage identifier and integrity digest to its seal locator and provenance.
+- For the cross-version compatibility handoff, the macOS 26 seal validates the producer members and creates the authenticated compatibility stage. It binds the exact stage identifier and integrity digest to its seal locator and provenance.
 - The trusted macOS 15 wrapper acquires that exact stage and verifies its producer-seal binding before candidate execution. It removes the acquisition credential context and exposes verified members read-only. The candidate receives no credential or provenance authority.
 - The macOS 15 seal validates the producer stage lineage against the trusted wrapper record and preserves it. Aggregation rejects any absent, duplicate, substituted, expired, integrity-mismatched, unauthenticated, wrong-producer, wrong-role, wrong-run, wrong-seal, or consumer-unbound stage.
 - A sealing environment can't attest its own final result before it finishes. Aggregation must observe one completed successful sealing environment independently; an in-progress, failed, missing, duplicate, substituted, or role-inconsistent handoff prevents evidence acceptance.
 - Validation bootstrap needs a reviewed implementation integration followed by a reviewed evidence-only integration. The validation capability remains incomplete between them.
 - Untrusted or unmanaged sealing provenance, an incomplete evidence handoff, or corrupt evidence fails verification before aggregation.
 - Candidate-controlled aggregation never shares the authenticated acquisition context. Missing coordinator identity, reachable credentials or user configuration, writable inputs, an extra writable filesystem boundary, or available network access rejects the run.
-- Aggregation compares captured identity with the expected identity supplied directly by Release Pipeline. Self-description alone is insufficient. For BURL-O001, aggregation also verifies the uninterrupted producer-seal-to-consumer lineage.
+- Aggregation compares captured identity with the expected identity supplied directly by Release Pipeline. Self-description alone is insufficient. For the cross-version compatibility handoff, aggregation also verifies the uninterrupted producer-seal-to-consumer lineage.
 - A captured identity that is mismatched or stale is rejected. Evidence from another run can't satisfy the current release gate.
 - The later evidence commit remains distinct from the tested source. A commit that changes anything except declared evidence can't represent that run.
 - Every role must pass exactly the evidence classes assigned by the current gate. An environment capability isn't required unless the gate assigns it. macOS 15 can't replace either performance role, Linux platform-regression evidence, or the macOS 26 authoritative product visual role.
