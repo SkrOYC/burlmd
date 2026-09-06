@@ -98,6 +98,17 @@ tickets:
       - STOP if the launcher isn't the clean trust-anchor copy, a trusted
         control file differs at the signer SHA, or the base-to-source diff
         leaves the packaging write allowlist.
+      - STOP if `scripts/validate-compatibility-stage-interface.sh` is not
+        trust-anchor-protected or if the macOS 15 wrapper invokes compatibility
+        acquisition, offline verification, or consumer processing before it
+        validates the ordered 26-field interface. STOP if either the macOS 26
+        `seal` job output boundary or the macOS 26 reusable-workflow output
+        boundary fails to ticket-gate and normalize
+        `producer-sealing-check-run-id`,
+        `producer-sealing-receipt-artifact-id`, and
+        `producer-sealing-receipt-upload-action-digest` to empty strings for
+        every non-O001 ticket before caller mapping. STOP if BURL-O001 accepts
+        an empty value or a non-O001 ticket accepts a nonempty value.
       - STOP if any cross-role archive comes from a manual or
         environment-selected source, the machine result is missing or invalid,
         or the evidence commit omits the machine result, accepted managed
@@ -112,8 +123,8 @@ tickets:
       - STOP if the macOS 15 wrapper doesn't download the exact stage, producer
         receipt, and lineage artifact by immutable service ID; doesn't reject a
         compatibility-stage digest mismatch, expired stage, or stale producer
-        receipt; or doesn't verify all three seal-exported attestations offline
-        before credential removal and read-only member exposure.
+        receipt; or doesn't run three offline attestation verifications before
+        credential removal and read-only member exposure.
       - STOP if the macOS 15 manifest, receipt, and seal don't agree with final
         aggregation on the parsed macOS 26 `producerLineage`, the exact SHA-256
         of the immutable RFC 8785 `compatibility-stage-producer-lineage.json`
@@ -142,11 +153,15 @@ tickets:
       Nix Flake package, and unsigned Apple Silicon archive across the required
       Linux and macOS matrix. Authenticate managed role evidence through
       BURL-M003. The macOS 26 seal creates and attests the exact compatibility
-      stage that the macOS 15 wrapper verifies before credential-free candidate
-      execution. Preserve the parsed producer lineage, exact immutable
-      lineage-artifact SHA-256, transport identity and attestation, and consumer
-      binding through the macOS 15 seal and final aggregate. Prove the checksum and
-      provenance-metadata layout inside the prototype; release-candidate
+      stage that the macOS 15 wrapper validates as a 26-field interface before
+      acquisition. After download, the wrapper verifies the stage through three
+      offline attestation verifications before credential-free candidate
+      execution. The validator accepts all 26 runtime values only when they are
+      nonempty for BURL-O001. Preserve the parsed producer lineage, exact
+      immutable lineage-artifact SHA-256, transport identity and attestation,
+      and consumer binding through the macOS 15 seal and final aggregate. Prove
+      the checksum and provenance-metadata
+      layout inside the prototype; release-candidate
       attestations remain production workflow work owned by BURL-O009 and
       BURL-O014
     acceptance:
@@ -188,6 +203,27 @@ tickets:
         symlink targets, extended attributes, and one application bundle.
 
 
+        The protected macOS 15 wrapper maps the exact ordered 26-key interface
+        that BURL-M003 statically proves: each canonical consumer input flows
+        through its declared uppercase environment variable into the matching
+        ordered validator field. It invokes
+        `scripts/validate-compatibility-stage-interface.sh` before any
+        compatibility artifact acquisition or consumer processing. BURL-O001
+        supplies 26 nonempty values. The accepted branch performs all three
+        immutable-ID downloads. After download, three offline attestation
+        verifications verify the stage before consumer processing and
+        credential-free candidate execution. Static fixtures prove that both
+        the macOS 26
+        `seal` job output boundary and the macOS 26 reusable-workflow output
+        boundary ticket-gate and normalize `producer-sealing-check-run-id`,
+        `producer-sealing-receipt-artifact-id`, and
+        `producer-sealing-receipt-upload-action-digest` to empty strings for
+        every non-O001 ticket before caller mapping.
+        Behavioral fixtures prove that every other ticket supplies 26 empty
+        values, skips only compatibility downloads, offline verification, and
+        consumer processing, then continues the ordinary candidate path.
+
+
         The macOS 26 `seal` job validates exactly
         `handoff/outbox/macos-current-construction.tar.zst` and
         `handoff/outbox/macos-current-construction.sha256`. It creates
@@ -210,8 +246,8 @@ tickets:
         the producer receipt ID, name, action digest, REST digest, `createdAt`,
         `expiresAt`, and `expired:false` state. The macOS 15 trusted wrapper
         downloads the exact stage, producer receipt, and lineage artifact by
-        immutable artifact IDs with `digest-mismatch: error`. It verifies all
-        three seal-exported bundles offline against a fresh trusted root and the
+        immutable artifact IDs with `digest-mismatch: error`. It runs three
+        offline attestation verifications against a fresh trusted root and the
         exact macOS 26 signer, source, run, attempt, role, and seal locator. It
         rejects a signed producer receipt whose `expiresAt` is not later than
         `verifiedAt`, then removes every credential context and exposes only the

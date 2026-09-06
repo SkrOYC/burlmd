@@ -1,4 +1,18 @@
 entries:
+  - version: v3.2.5
+    date: 2026-09-06
+    fixed:
+      - "Adapted BURL-M003 and BURL-O001 to TechSpec v2.1.5. BURL-M003 protects and invokes the compatibility-interface validator before acquisition, offline verification, or consumer processing, and fixtures pin the exact ordered 26-key source mapping from canonical input through uppercase environment variable to validator inventory."
+      - "Required both the macOS 26 seal-job output boundary and reusable-workflow output boundary to ticket-gate and normalize producer-sealing-check-run-id, producer-sealing-receipt-artifact-id, and producer-sealing-receipt-upload-action-digest to empty strings for every non-O001 ticket before caller mapping."
+      - "Required behavioral fixtures to accept all-nonempty BURL-O001 values and run all three immutable-ID downloads, three offline attestation verifications, and consumer processing, while accepting all-empty non-O001 values, skipping only those compatibility steps, and continuing the ordinary candidate path."
+      - "Regenerated critical-path.md from the unchanged 10-epic, 80-ticket, 564-point graph. Completed Epics A through F have no actuals blocks, so diff-lines-per-point and review-rounds-per-point calibration remains unavailable; both affected estimates remain 8."
+    security:
+      - "The validator is a trust-anchor-protected control. Static fixtures reject swapped, missing, extra, duplicated, and reordered source mappings where observable. Runtime validation does not claim source-shape or arbitrary-value provenance; downstream identity, attestation, digest, lineage, and freshness checks validate consumed values."
+    upstream:
+      prd: v2.0.5
+      architecture: v2.1.2
+      tech-spec: v2.1.5
+    by: patch-lane
   - version: v3.2.4
     date: 2026-09-06
     changed:
