@@ -149,6 +149,10 @@ tickets:
         pull-request review before its rebase merge; the launcher isn't running
         from the clean merged anchor; or `master` differs on any trusted control
         path.
+      - STOP if `scripts/validate-compatibility-stage-interface.sh` is not a
+        protected trusted control whose bytes and mode equal the trust anchor
+        before dispatch and during collection, or if its change bypasses the
+        reviewed trust-anchor rotation and evidence-only completion sequence.
       - STOP if the evidence pull request changes anything except
         `.constitution/evidence/BURL-M003/managed-evidence.json`,
         `.constitution/evidence/BURL-M003/completion.md`, and
@@ -199,6 +203,17 @@ tickets:
         its manifest, receipt, seal, and final aggregate don't agree on the
         parsed lineage, exact lineage-artifact SHA-256, lineage transport
         identity and attestation, and trusted `consumerBinding`.
+      - STOP if either the macOS 26 `seal` job output boundary or the macOS 26
+        reusable-workflow output boundary fails to ticket-gate and normalize
+        `producer-sealing-check-run-id`,
+        `producer-sealing-receipt-artifact-id`, and
+        `producer-sealing-receipt-upload-action-digest` to empty strings for
+        every non-O001 ticket before caller mapping. STOP if the macOS 15
+        trusted wrapper invokes acquisition, offline verification, or consumer
+        processing before it validates the ordered 26-field interface; if
+        BURL-O001 accepts an empty field; or if any other ticket accepts a
+        nonempty field or skips the ordinary candidate path after skipping
+        compatibility-only work.
       - STOP if `run` accepts a managed Spike without staging verified role
         contents, running its declared coordinator steps, and publishing a valid
         authoritative machine result.
@@ -242,11 +257,19 @@ tickets:
       attempt completes, managed-evidence.sh resolves that locator through the
       job API and constructs aggregate origin.sealingJob only for a completed
       successful provenance-bound match. For BURL-O001, the macOS 26 seal owns
-      the authenticated compatibility stage. The macOS 15 wrapper downloads the
-      exact stage, producer receipt, and canonical producer-lineage artifact by
-      immutable ID and verifies all three seal-exported attestation bundles
-      offline before credential-free candidate execution. The macOS 15 seal and
-      final aggregate preserve the complete lineage. Implement the collect and
+      the authenticated compatibility stage. Before acquisition, offline
+      verification, or consumer processing, the protected macOS 15 wrapper
+      validates the exact ordered 26-field interface. It accepts only
+      all-nonempty BURL-O001 values and only all-empty values for every other
+      ticket. Both the macOS 26 `seal` job output boundary and the macOS 26
+      reusable-workflow output boundary ticket-gate and normalize the three
+      producer-sealing aliases to empty strings for every other ticket before
+      caller mapping. After BURL-O001 validation succeeds, the macOS 15 wrapper
+      downloads the exact stage, producer receipt, and canonical producer-lineage
+      artifact by immutable ID. It verifies the stage through three offline
+      attestation verifications after download and before credential-free
+      candidate execution. The macOS 15 seal and final aggregate preserve the
+      complete lineage. Implement the collect and
       run forms, the non-mutating
       generated-binding checker, and the managed-evidence isolation fixture. Add
       Linux-only Bubblewrap 0.11.2 and GitHub CLI 2.96.0 through the locked Nix
@@ -356,6 +379,81 @@ tickets:
         and no rejection reason.
 
 
+        Static workflow-shape fixtures use duplicate-aware source inspection to
+        pin the ordered 26 producer outputs, 26 macOS 15 string inputs, and each
+        observable caller mapping. They also pin this ordered canonical-input,
+        uppercase-environment, validator-inventory mapping: `stage-artifact-name`
+        to `STAGE_ARTIFACT_NAME` to `stage-artifact-name`;
+        `stage-artifact-id` to `STAGE_ARTIFACT_ID` to `stage-artifact-id`;
+        `stage-upload-action-digest` to `STAGE_UPLOAD_ACTION_DIGEST` to
+        `stage-upload-action-digest`; `stage-rest-digest` to
+        `STAGE_REST_DIGEST` to `stage-rest-digest`; `stage-created-at` to
+        `STAGE_CREATED_AT` to `stage-created-at`; `stage-expires-at` to
+        `STAGE_EXPIRES_AT` to `stage-expires-at`; `stage-manifest-sha256` to
+        `STAGE_MANIFEST_SHA256` to `stage-manifest-sha256`;
+        `stage-attestation-subject-digest` to
+        `STAGE_ATTESTATION_SUBJECT_DIGEST` to
+        `stage-attestation-subject-digest`; `stage-attestation-bundle-sha256`
+        to `STAGE_ATTESTATION_BUNDLE_SHA256` to
+        `stage-attestation-bundle-sha256`; `producer-workflow-signer-sha` to
+        `PRODUCER_WORKFLOW_SIGNER_SHA` to `producer-workflow-signer-sha`;
+        `workflow-run-id` to `WORKFLOW_RUN_ID` to `workflow-run-id`;
+        `run-attempt` to `RUN_ATTEMPT` to `run-attempt`;
+        `producer-sealing-check-run-id` to `PRODUCER_SEALING_CHECK_RUN_ID` to
+        `producer-sealing-check-run-id`; `producer-sealing-receipt-artifact-id`
+        to `PRODUCER_SEALING_RECEIPT_ARTIFACT_ID` to
+        `producer-sealing-receipt-artifact-id`;
+        `producer-sealing-receipt-upload-action-digest` to
+        `PRODUCER_SEALING_RECEIPT_UPLOAD_ACTION_DIGEST` to
+        `producer-sealing-receipt-upload-action-digest`;
+        `producer-sealing-receipt-rest-digest` to
+        `PRODUCER_SEALING_RECEIPT_REST_DIGEST` to
+        `producer-sealing-receipt-rest-digest`;
+        `producer-sealing-receipt-created-at` to
+        `PRODUCER_SEALING_RECEIPT_CREATED_AT` to
+        `producer-sealing-receipt-created-at`;
+        `producer-sealing-receipt-expires-at` to
+        `PRODUCER_SEALING_RECEIPT_EXPIRES_AT` to
+        `producer-sealing-receipt-expires-at`; `producer-lineage-artifact-id`
+        to `PRODUCER_LINEAGE_ARTIFACT_ID` to `producer-lineage-artifact-id`;
+        `producer-lineage-upload-action-digest` to
+        `PRODUCER_LINEAGE_UPLOAD_ACTION_DIGEST` to
+        `producer-lineage-upload-action-digest`; `producer-lineage-rest-digest`
+        to `PRODUCER_LINEAGE_REST_DIGEST` to `producer-lineage-rest-digest`;
+        `producer-lineage-sha256` to `PRODUCER_LINEAGE_SHA256` to
+        `producer-lineage-sha256`; `producer-lineage-attestation-subject-digest`
+        to `PRODUCER_LINEAGE_ATTESTATION_SUBJECT_DIGEST` to
+        `producer-lineage-attestation-subject-digest`;
+        `producer-lineage-attestation-bundle-sha256` to
+        `PRODUCER_LINEAGE_ATTESTATION_BUNDLE_SHA256` to
+        `producer-lineage-attestation-bundle-sha256`; `producer-role` to
+        `PRODUCER_ROLE` to `producer-role`; and `consumer-role` to
+        `CONSUMER_ROLE` to `consumer-role`. These fixtures reject swapped,
+        missing, extra, duplicated, and reordered declarations, mappings, and
+        inventory fields where source structure is observable. They also prove
+        that both the macOS 26 `seal` job output boundary and the macOS 26
+        reusable-workflow output boundary ticket-gate and normalize
+        `producer-sealing-check-run-id`,
+        `producer-sealing-receipt-artifact-id`, and
+        `producer-sealing-receipt-upload-action-digest` to empty strings for
+        every non-O001 ticket before caller mapping.
+
+
+        Behavioral fixtures protect and invoke
+        `scripts/validate-compatibility-stage-interface.sh` before acquisition,
+        offline verification, or consumer processing. They accept exactly 26
+        nonempty BURL-O001 values and prove the wrapper performs all three
+        immutable-ID downloads. After download, three offline attestation
+        verifications verify the stage before consumer processing and
+        credential-free candidate execution. They accept exactly 26 empty
+        values for every non-O001 ticket, skip only those compatibility steps,
+        and prove the ordinary candidate path continues. Runtime fixtures don't
+        claim to
+        detect YAML declaration shape or arbitrary value
+        provenance; downstream identity, attestation, digest, lineage, and
+        freshness validation retains that responsibility.
+
+
         Linux static and integration fixtures prove `env -i` Bubblewrap `0.11.2`
         PID containment by rejecting a surviving double-fork probe before
         upload. Hosted-macOS fixtures distinguish candidate-command no-privilege
@@ -399,8 +497,8 @@ tickets:
         and roles. A separate staging job is forbidden. The macOS 15 trusted
         wrapper downloads the exact stage, producer receipt, and canonical
         `compatibility-stage-producer-lineage.json` artifact by immutable ID.
-        It verifies all three seal-exported attestation bundles offline with a
-        fresh trusted root. It then removes credentials and exposes only the
+        It runs three offline attestation verifications with a fresh trusted
+        root. It then removes credentials and exposes only the
         two verified producer members read-only. The macOS 15 manifest and seal
         preserve the parsed `producerLineage`, the exact SHA-256 of the
         immutable RFC 8785 `compatibility-stage-producer-lineage.json` bytes,
