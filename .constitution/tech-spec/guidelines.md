@@ -524,6 +524,18 @@ layout:
   - path: scripts/managed-evidence.sh
     purpose: Managed evidence client implemented by BURL-M003
     exists: false
+  - path: scripts/prepare-compatibility-stage.sh
+    purpose: "Trusted macOS 26 seal helper that validates the producer bundle and creates the exact two-member compatibility stage without executing candidate bytes"
+    exists: false
+  - path: scripts/record-compatibility-stage-rest.sh
+    purpose: "Trusted macOS 26 seal helper that binds the uploaded compatibility stage to its REST identity, digest, lifetime, and attestation"
+    exists: false
+  - path: scripts/write-compatibility-stage-lineage.sh
+    purpose: "Trusted macOS 26 seal helper that writes the canonical immutable stage and producer-receipt lineage bytes"
+    exists: false
+  - path: scripts/prepare-compatibility-stage-consumer.sh
+    purpose: "Trusted macOS 15 wrapper that validates producer lineage, removes credentials, and exposes only verified read-only producer members"
+    exists: false
   - path: test
     purpose: Dart widget tests
   - path: rust
@@ -619,7 +631,7 @@ commit_convention: Conventional Commits
 
 ## Provisional research boundary
 
-TechSpec v2.1.3 (translated from reviewed v1.8.7-provisional) permits research code only under `.constitution/prototypes/`. The existing Epic G M0 production exceptions remain unchanged. `BURL-M015` and `BURL-M003` may write production code only for their reproducibility and validation bootstrap. Every other production ticket remains blocked by its own decision evidence and a matching Stage 3 and Stage 4 adaptation. Except for these contract-scoped exceptions, production directories (`lib/`, `rust/`, `linux/`, and `macos/`) are read-only inputs to this research wave.
+TechSpec v2.1.4 (translated from reviewed v1.8.7-provisional) permits research code only under `.constitution/prototypes/`. The existing Epic G M0 production exceptions remain unchanged. `BURL-M015` and `BURL-M003` may write production code only for their reproducibility and validation bootstrap. Every other production ticket remains blocked by its own decision evidence and a matching Stage 3 and Stage 4 adaptation. Except for these contract-scoped exceptions, production directories (`lib/`, `rust/`, `linux/`, and `macos/`) are read-only inputs to this research wave.
 
 The five exact prototype roots and verification commands are machine-readable in `contracts/provisional-spikes.toml`. Its allowlist is exhaustive: each Spike may write only its named prototype root and report path. Every unlisted repository path is read-only. Framework bookkeeping may update the owning active Task after the Spike process exits, but that isn't part of the Spike's write authority.
 
@@ -649,7 +661,9 @@ The stale-binding diagnostic names both generated surfaces and instructs the dev
 
 From a clean detached checkout at `TRUST_ANCHOR_SHA`, run the merged pipeline against that same SHA. Put the accepted `.constitution/evidence/BURL-M003/managed-evidence.json`, `.constitution/evidence/BURL-M003/completion.md`, and digest-bearing `.constitution/evidence/BURL-M003/manifest.yaml` on `docs/epic-m-ci-evidence`. The manifest records the exact byte counts and SHA-256 digests of the other two files. That dedicated evidence pull request must contain no other change. `BURL-M003` satisfies no dependency until the evidence pull request receives review and merges. Any later change to a trusted workflow, launcher, evidence schema, or raw CI contract repeats this implementation-review, anchor, validation, and evidence-review sequence.
 
-Normal tickets never run a launcher or workflow from the tested source. Run `./scripts/managed-evidence.sh` from a clean detached checkout of the immutable anchor. The client resolves `refs/heads/master` as `WORKFLOW_SIGNER_SHA`. Before dispatch and during collection, it verifies that every trusted control file at that SHA is byte-for-byte and mode-for-mode identical to `TRUST_ANCHOR_SHA`. It rejects a changed launcher, workflow, evidence schema, or raw CI contract.
+Normal tickets never run a launcher or workflow from the tested source. Run `./scripts/managed-evidence.sh` from a clean detached checkout of the immutable anchor. The client resolves `refs/heads/master` as `WORKFLOW_SIGNER_SHA`. Before dispatch and during collection, it verifies that every trusted control file at that SHA is byte-for-byte and mode-for-mode identical to `TRUST_ANCHOR_SHA`. It rejects a changed launcher, workflow, helper, evidence schema, raw CI contract, or toolchain lock.
+
+The trusted helper inventory includes all four compatibility-stage controls: `scripts/prepare-compatibility-stage.sh`, `scripts/record-compatibility-stage-rest.sh`, `scripts/write-compatibility-stage-lineage.sh`, and `scripts/prepare-compatibility-stage-consumer.sh`. Candidate input and the tested-source checkout can't replace any of these helpers. A byte or mode change in any helper requires reviewed trust-anchor rotation and evidence-only completion before normal tickets run.
 
 The client also resolves `SOURCE_REF`, `TESTED_SOURCE_SHA`, and `BASE_SHA` from `origin`. It requires `BASE_SHA` to be an ancestor of `TESTED_SOURCE_SHA`. For a managed Spike, it selects `write_allowlist` from that Spike's trusted raw-contract record. For a managed non-Spike, it selects the exact ordered array from `ci_bootstrap.non_spike_source_write_allowlists.tickets` in the trust-anchor contract. It never reads the selection from candidate input, the tested-source checkout, live Task data, an evidence path, or expected identity. The exact Git diff from base to tested source can change only paths in that selection. The check covers additions, deletions, renames, copies, mode changes, symlinks, and submodules. The client repeats this allowlist check during collection. A candidate can't define expected identity or change validation controls.
 
@@ -719,20 +733,20 @@ After upload, `seal` queries the sealed artifact's REST object. The REST `digest
 
 The seal attests the receipt. It copies the pinned `actions/attest` `bundle-path` output to `ci-seal-receipt-attestation.sigstore.json`, then uploads both files in the receipt artifact. The separate receipt avoids a digest cycle. Verified receipt and sealed-bundle provenance is the sole cryptographic authority for seal hosted origin.
 
-For `BURL-O001`, the macOS 26 `seal` job also owns the complete compatibility stage. No separate staging job is allowed. After validating the producer bundle, it extracts exactly these members:
+For `BURL-O001`, the macOS 26 `seal` job also owns the complete compatibility stage. No separate staging job is allowed. The trusted `scripts/prepare-compatibility-stage.sh` helper validates the producer bundle without executing candidate bytes and extracts exactly these members:
 
 - `handoff/outbox/macos-current-construction.tar.zst`
 - `handoff/outbox/macos-current-construction.sha256`
 
 The seal writes `compatibility-stage-manifest.json` against `compatibilityStageManifest` in the role schema. The manifest binds the expected-identity hash, trust anchor, workflow signer, tested source, base, repository, producer and consumer roles, run, attempt, producing seal check-run ID, and both producer members.
 
-The seal attests the manifest and copies the action's `bundle-path` output to `compatibility-stage-attestation.sigstore.json`. It uploads those two files and the two producer members under `managed-evidence-authenticated-stage-macos-26-arm64-for-macos-15-arm64-{artifactNonce}`. The pinned upload action returns `artifact-id` and the bare `artifact-digest`. The seal queries that exact artifact through REST API version `2026-03-10`. It requires the canonical REST `digest` to equal `sha256:` plus the bare action digest. It records `created_at`, `expires_at`, and `expired: false`.
+The seal attests the manifest and copies the action's `bundle-path` output to `compatibility-stage-attestation.sigstore.json`. It uploads those two files and the two producer members under `managed-evidence-authenticated-stage-macos-26-arm64-for-macos-15-arm64-{artifactNonce}`. The pinned upload action returns `artifact-id` and the bare `artifact-digest`. The trusted `scripts/record-compatibility-stage-rest.sh` helper queries that exact artifact through REST API version `2026-03-10`. It requires the canonical REST `digest` to equal `sha256:` plus the bare action digest. It records `created_at`, `expires_at`, and `expired: false`.
 
-After the producer sealing receipt is uploaded and its REST object is available, the same seal queries that object and creates `compatibility-stage-producer-lineage.json`. This is the immutable lineage byte artifact. It uses UTF-8 JSON Canonicalization Scheme (RFC 8785) bytes, with no byte-order mark or trailing newline. The file contains the stage record and the producer receipt's ID, name, action digest, REST digest, `createdAt`, `expiresAt`, and `expired: false` state. The seal attests this file, copies the `bundle-path` to `compatibility-stage-producer-lineage-attestation.sigstore.json`, and uploads exactly those two files under `managed-evidence-producer-lineage-macos-26-arm64-for-macos-15-arm64-{artifactNonce}`. `producerLineageSha256` and aggregate `lineageSha256` are SHA-256 hashes of those exact lineage bytes, never hashes of a parsed or reserialized object.
+After the producer sealing receipt is uploaded and its REST object is available, the trusted `scripts/write-compatibility-stage-lineage.sh` helper queries the stage and receipt objects and creates `compatibility-stage-producer-lineage.json`. This is the immutable lineage byte artifact. It uses UTF-8 JSON Canonicalization Scheme (RFC 8785) bytes, with no byte-order mark or trailing newline. The file contains the stage record and the producer receipt's ID, name, action digest, REST digest, `createdAt`, `expiresAt`, and `expired: false` state. The seal attests this file, copies the `bundle-path` to `compatibility-stage-producer-lineage-attestation.sigstore.json`, and uploads exactly those two files under `managed-evidence-producer-lineage-macos-26-arm64-for-macos-15-arm64-{artifactNonce}`. `producerLineageSha256` and aggregate `lineageSha256` are SHA-256 hashes of those exact lineage bytes, never hashes of a parsed or reserialized object.
 
 The macOS 26 sealing receipt version `2` stores only the pre-receipt stage observation, because its own REST lifetime does not exist until after upload. The later signed lineage artifact binds the exact stage and producer-receipt names, service IDs, both digest forms, lifetimes, manifest, attestation bundle digest, subject, signer, source, run, attempt, and producing seal locator. The macOS 26 role exports these facts and the exact stage, producer-receipt, and lineage artifact identities to the macOS 15 role as trusted reusable-workflow inputs.
 
-The macOS 15 trusted wrapper receives the stage, producer-receipt, and producer-lineage artifact IDs, action digests, and REST observations from the macOS 26 seal's fixed trusted workflow edge. It downloads all three by immutable `artifact-ids`, sets `digest-mismatch: error` explicitly, and does not use `name`. During acquisition, it obtains a fresh `trusted_root.jsonl`. The wrapper verifies the stage-manifest, producer-receipt, and producer-lineage attestations with local `--bundle` files and `--custom-trusted-root`. It constrains the repository, signer workflow, signer digest, source digest, and self-hosted policy. The verification output must match the expected subject, workflow, source, run, attempt, role, and check-run facts. It hashes the exact lineage bytes, validates their RFC 8785 form, and requires their signed producer-receipt observation to match every received receipt value, including `createdAt` and `expiresAt`. It rejects the binding unless `expiresAt` is later than the wrapper's `verifiedAt`.
+The macOS 15 trusted wrapper receives the stage, producer-receipt, and producer-lineage artifact IDs, action digests, and REST observations from the macOS 26 seal's fixed trusted workflow edge. It downloads all three by immutable `artifact-ids`, sets `digest-mismatch: error` explicitly, and does not use `name`. During acquisition, it obtains a fresh `trusted_root.jsonl`. The trusted `scripts/prepare-compatibility-stage-consumer.sh` helper verifies the stage-manifest, producer-receipt, and producer-lineage attestations with local `--bundle` files and `--custom-trusted-root`. It constrains the repository, signer workflow, signer digest, source digest, and self-hosted policy. The verification output must match the expected subject, workflow, source, run, attempt, role, and check-run facts. The helper hashes the exact lineage bytes, validates their RFC 8785 form, and requires their signed producer-receipt observation to match every received receipt value, including `createdAt` and `expiresAt`. It rejects the binding unless `expiresAt` is later than the wrapper's `verifiedAt`.
 
 After verification, the wrapper records the lineage SHA-256, transport artifact receipt, and `downloadedStageArtifactId` in `consumerBinding`. `downloadedStageArtifactId` must equal `producerLineage.stageArtifact.artifactId`; it names the stage artifact, not the producer receipt or lineage artifact. The wrapper hashes its verification output and trusted root into `consumerBinding`. It then removes credentials, authentication descriptors, temporary credential files, and ambient configuration. Only the two verified producer members enter a fresh wrapper-owned read-only input root. Candidate commands can't access the stage manifest, attestation bundles, receipt, lineage artifact, trusted root, acquisition output, credentials, or writable producer bytes.
 
@@ -855,7 +869,11 @@ The repository follows the default `flutter_rust_bridge` template structure to m
 ├── scripts/                 # Repository-owned validation entry points
 │   ├── smoke-shot.sh        # Manual QA gate for every UI ticket (BURL-E001)
 │   ├── visual-regression.sh # Exact visual gate introduced by BURL-G001
-│   └── managed-evidence.sh  # Managed evidence client implemented by BURL-M003
+│   ├── managed-evidence.sh  # Managed evidence client implemented by BURL-M003
+│   ├── prepare-compatibility-stage.sh # macOS 26 stage assembly
+│   ├── record-compatibility-stage-rest.sh # macOS 26 REST binding
+│   ├── write-compatibility-stage-lineage.sh # macOS 26 lineage
+│   └── prepare-compatibility-stage-consumer.sh # macOS 15 read-only exposure
 ├── test/                    # Dart widget tests
 ├── rust/                    # Rust Core Engine source code
 │   └── src/frb_generated.rs # Auto-generated FRB Rust bridge; changes with Dart bindings
