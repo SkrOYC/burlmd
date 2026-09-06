@@ -3,5 +3,5 @@ surface: json
 flows: [flow-release]
 boundaries: [BND-16, BND-17]
 certainty: assumed
-assumption: "Schema version 15 and sealing receipt version 2 define candidate guard and compatibility-stage records that implementation tests have not exercised."
-settles_when: "Role, receipt, and BURL-O001 producer-to-consumer fixtures validate accepted and rejected version 15 documents."
+assumption: "Schema version 15 and sealing receipt version 2 define candidate guards plus the canonical BURL-O001 producer-lineage transport that implementation tests have not exercised."
+settles_when: "Role, receipt, and BURL-O001 producer-to-consumer fixtures validate accepted and rejected version 15 documents, including signed producer-receipt createdAt and expiresAt values and the exact lineage SHA-256."

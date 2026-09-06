@@ -3,5 +3,5 @@ surface: json
 flows: [flow-release]
 boundaries: [BND-15, BND-16, BND-17]
 certainty: assumed
-assumption: "Aggregate schema version 17 defines seal-only hosted origin and BURL-O001 lineage that implementation tests have not exercised."
-settles_when: "Final aggregation fixtures validate accepted version 17 evidence and every typed candidate-guard and compatibility-stage rejection."
+assumption: "Aggregate schema version 17 defines seal-only hosted origin and the attested canonical BURL-O001 lineage that implementation tests have not exercised."
+settles_when: "Final aggregation fixtures validate accepted version 17 evidence and every typed candidate-guard, producer-receipt freshness, canonical-lineage, and compatibility-stage rejection."

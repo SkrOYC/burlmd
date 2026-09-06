@@ -148,8 +148,8 @@
         "runnerEnvironment": { "const": "github-hosted" }
       }
     },
-    "compatibilityStageProducerLineage": {
-      "$comment": "This object is created by the macOS 26 seal and remains byte-for-byte identical in the macOS 15 candidate manifest, macOS 15 sealing receipt, and final aggregate. Semantic validation binds the manifest digest, attestation subject, signer, source, run, attempt, check-run locator, and service artifact observation.",
+    "compatibilityStageProducerStage": {
+      "$comment": "The macOS 26 sealing receipt records this pre-receipt stage observation. It is not producerLineage: the receipt REST observation does not exist until after this receipt is uploaded.",
       "type": "object",
       "additionalProperties": false,
       "required": ["stageArtifact", "stageManifest", "stageManifestSha256", "attestation"],
@@ -160,13 +160,65 @@
         "attestation": { "$ref": "#/$defs/compatibilityStageAttestation" }
       }
     },
+    "producerLineageArtifactReceipt": {
+      "$comment": "The immutable transport artifact contains the canonical producer-lineage bytes and their attestation bundle. It does not carry its own REST lifetime because that observation cannot be included in bytes created before this artifact upload. Exact ID download and offline attestation authenticate transport availability.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifactId", "artifactName", "uploadActionDigest", "artifactDigest", "attestation"],
+      "properties": {
+        "artifactId": { "type": "integer", "minimum": 1 },
+        "artifactName": { "type": "string", "pattern": "^managed-evidence-producer-lineage-macos-26-arm64-for-macos-15-arm64-[0-9a-f]{32}$" },
+        "uploadActionDigest": { "$ref": "#/$defs/sha256" },
+        "artifactDigest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "attestation": { "$ref": "#/$defs/producerLineageAttestation" }
+      }
+    },
+    "producerLineageAttestation": {
+      "$comment": "The macOS 26 seal copies the pinned actions/attest bundle for the canonical lineage bytes into the lineage transport artifact. Consumers and aggregation verify it offline with the same signer, source, run, attempt, check-run, and GitHub-hosted constraints as the stage attestation.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bundleMember", "bundleSha256", "subjectName", "subjectDigest", "predicateType", "issuer", "repository", "repositoryId", "workflowPath", "jobWorkflowRef", "jobWorkflowSha", "sourceRepositoryDigest", "workflowRunId", "runAttempt", "checkRunId", "runnerEnvironment"],
+      "properties": {
+        "bundleMember": { "const": "compatibility-stage-producer-lineage-attestation.sigstore.json" },
+        "bundleSha256": { "$ref": "#/$defs/sha256" },
+        "subjectName": { "const": "compatibility-stage-producer-lineage.json" },
+        "subjectDigest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "predicateType": { "const": "https://slsa.dev/provenance/v1" },
+        "issuer": { "const": "https://token.actions.githubusercontent.com" },
+        "repository": { "const": "SkrOYC/burlmd" },
+        "repositoryId": { "type": "integer", "minimum": 1 },
+        "workflowPath": { "const": ".github/workflows/ci-role-macos-26-arm64.yml" },
+        "jobWorkflowRef": { "const": "SkrOYC/burlmd/.github/workflows/ci-role-macos-26-arm64.yml@refs/heads/master" },
+        "jobWorkflowSha": { "$ref": "#/$defs/gitSha" },
+        "sourceRepositoryDigest": { "$ref": "#/$defs/gitSha" },
+        "workflowRunId": { "type": "integer", "minimum": 1 },
+        "runAttempt": { "type": "integer", "minimum": 1 },
+        "checkRunId": { "type": "integer", "minimum": 1 },
+        "runnerEnvironment": { "const": "github-hosted" }
+      }
+    },
+    "compatibilityStageProducerLineage": {
+      "$comment": "This is the parsed content of compatibility-stage-producer-lineage.json. That standalone immutable artifact is UTF-8 JSON Canonicalization Scheme (RFC 8785) bytes with no byte-order mark or trailing newline. producerLineageSha256 always hashes those exact bytes, not a serializer's in-memory object. The macOS 26 seal creates and attests it only after REST supplies the producer-receipt lifetime; the macOS 15 manifest, receipt, and aggregate preserve its parsed value and exact SHA-256.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lineageSchemaVersion", "stageArtifact", "stageManifest", "stageManifestSha256", "attestation", "producerSealingReceiptArtifact"],
+      "properties": {
+        "lineageSchemaVersion": { "const": 1 },
+        "stageArtifact": { "$ref": "#/$defs/compatibilityStageArtifactReceipt" },
+        "stageManifest": { "$ref": "#/$defs/compatibilityStageManifest" },
+        "stageManifestSha256": { "$ref": "#/$defs/sha256" },
+        "attestation": { "$ref": "#/$defs/compatibilityStageAttestation" },
+        "producerSealingReceiptArtifact": { "$ref": "#/$defs/producerSealingReceiptArtifactReceipt" }
+      }
+    },
     "compatibilityStageConsumerBinding": {
       "$comment": "The trusted macOS 15 wrapper creates this record after ID-addressed download and offline verification. The macOS 15 seal reconstructs and compares it without trusting candidate bytes.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["producerLineageSha256", "producerSealingReceiptSha256", "producerSealingReceiptArtifact", "downloadedArtifactId", "downloadActionSha", "digestMismatchBehavior", "stageAttestationVerifiedOffline", "stageAttestationVerificationResultSha256", "producerReceiptAttestationVerifiedOffline", "producerReceiptAttestationVerificationResultSha256", "trustedRootSha256", "credentialsRemoved", "membersReadOnly", "consumerRole", "workflowRunId", "runAttempt", "consumerCandidateCheckRunId", "verifiedAt"],
+      "required": ["producerLineageSha256", "producerLineageArtifact", "producerSealingReceiptSha256", "producerSealingReceiptArtifact", "downloadedArtifactId", "downloadActionSha", "digestMismatchBehavior", "stageAttestationVerifiedOffline", "stageAttestationVerificationResultSha256", "producerReceiptAttestationVerifiedOffline", "producerReceiptAttestationVerificationResultSha256", "producerLineageAttestationVerifiedOffline", "producerLineageAttestationVerificationResultSha256", "trustedRootSha256", "credentialsRemoved", "membersReadOnly", "consumerRole", "workflowRunId", "runAttempt", "consumerCandidateCheckRunId", "verifiedAt"],
       "properties": {
         "producerLineageSha256": { "$ref": "#/$defs/sha256" },
+        "producerLineageArtifact": { "$ref": "#/$defs/producerLineageArtifactReceipt" },
         "producerSealingReceiptSha256": { "$ref": "#/$defs/sha256" },
         "producerSealingReceiptArtifact": { "$ref": "#/$defs/producerSealingReceiptArtifactReceipt" },
         "downloadedArtifactId": { "type": "integer", "minimum": 1 },
@@ -176,6 +228,8 @@
         "stageAttestationVerificationResultSha256": { "$ref": "#/$defs/sha256" },
         "producerReceiptAttestationVerifiedOffline": { "const": true },
         "producerReceiptAttestationVerificationResultSha256": { "$ref": "#/$defs/sha256" },
+        "producerLineageAttestationVerifiedOffline": { "const": true },
+        "producerLineageAttestationVerificationResultSha256": { "$ref": "#/$defs/sha256" },
         "trustedRootSha256": { "$ref": "#/$defs/sha256" },
         "credentialsRemoved": { "const": true },
         "membersReadOnly": { "const": true },
@@ -187,22 +241,29 @@
       }
     },
     "compatibilityStageConsumption": {
+      "$comment": "Semantic validation requires producerLineageSha256 to hash the exact RFC 8785 lineage artifact bytes, producerLineageArtifact to describe the artifact that transported them, and consumerBinding's lineage fields to equal these values. It also requires the signed producer receipt expiresAt to be later than consumerBinding.verifiedAt.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["producerLineage", "consumerBinding"],
+      "required": ["producerLineage", "producerLineageSha256", "producerLineageArtifact", "consumerBinding"],
       "properties": {
         "producerLineage": { "$ref": "#/$defs/compatibilityStageProducerLineage" },
+        "producerLineageSha256": { "$ref": "#/$defs/sha256" },
+        "producerLineageArtifact": { "$ref": "#/$defs/producerLineageArtifactReceipt" },
         "consumerBinding": { "$ref": "#/$defs/compatibilityStageConsumerBinding" }
       }
     },
-    "compatibilityStageSealingBinding": {
+    "compatibilityStageProducerSealingBinding": {
+      "$comment": "The macOS 26 receipt can bind only the stage it created before the receipt upload. The later attested producer-lineage artifact binds this receipt's REST createdAt and expiresAt values without a temporal cycle.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["producerLineage", "consumerBinding"],
+      "required": ["producerStage"],
       "properties": {
-        "producerLineage": { "$ref": "#/$defs/compatibilityStageProducerLineage" },
-        "consumerBinding": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/compatibilityStageConsumerBinding" }] }
+        "producerStage": { "$ref": "#/$defs/compatibilityStageProducerStage" }
       }
+    },
+    "compatibilityStageSealingBinding": {
+      "$comment": "The macOS 15 receipt preserves the canonical producer-lineage artifact identity and the trusted consumer binding.",
+      "$ref": "#/$defs/compatibilityStageConsumption"
     },
     "roleGuard": {
       "type": "object",
@@ -230,7 +291,7 @@
       }
     },
     "sealingReceipt": {
-      "$comment": "The seal job writes this receipt before it completes. Semantic validation compares every identity, ticket, and artifact nonce with expectedIdentity, requires each REST digest to equal 'sha256:' plus the corresponding uploadActionDigest, and requires artifact names to match the role and nonce. For BURL-O001, only the macOS 26 receipt carries the producer lineage, and only the macOS 15 receipt carries the same lineage plus its consumer binding. The receipt deliberately has no status, conclusion, or completion field. Post-completion aggregation owns those observations.",
+      "$comment": "The seal job writes this receipt before it completes. Semantic validation compares every identity, ticket, and artifact nonce with expectedIdentity, requires each REST digest to equal 'sha256:' plus the corresponding uploadActionDigest, and requires artifact names to match the role and nonce. For BURL-O001, the macOS 26 receipt carries the pre-receipt stage observation; the later attested producer-lineage artifact binds that receipt's REST createdAt and expiresAt values. The macOS 15 receipt carries that canonical lineage and its consumer binding. The receipt deliberately has no status, conclusion, or completion field. Post-completion aggregation owns those observations.",
       "type": "object",
       "additionalProperties": false,
       "required": ["schemaVersion", "ticketIdentity", "expectedIdentitySha256", "repositoryId", "workflowRunId", "runAttempt", "sealingCheckRunId", "workflowPath", "workflowSignerSha", "workflowSignerRef", "trustAnchorSha", "testedSourceSha", "baseSha", "role", "artifactNonce", "runnerEnvironmentClaim", "expectedArtifact", "candidateArtifact", "sealedArtifact", "roleBundleSha256", "sealedBundleSha256", "compatibilityStage"],
@@ -258,16 +319,16 @@
         "sealedArtifact": { "$ref": "#/$defs/artifactReceipt" },
         "roleBundleSha256": { "$ref": "#/$defs/sha256" },
         "sealedBundleSha256": { "$ref": "#/$defs/sha256" },
-        "compatibilityStage": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/compatibilityStageSealingBinding" }] }
+        "compatibilityStage": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/compatibilityStageProducerSealingBinding" }, { "$ref": "#/$defs/compatibilityStageSealingBinding" }] }
       },
       "allOf": [
         {
           "if": { "properties": { "ticketIdentity": { "const": "BURL-O001" }, "role": { "const": "macos-26-arm64" } }, "required": ["ticketIdentity", "role"] },
-          "then": { "properties": { "compatibilityStage": { "allOf": [{ "$ref": "#/$defs/compatibilityStageSealingBinding" }, { "type": "object", "properties": { "consumerBinding": { "type": "null" } } }] } } }
+          "then": { "properties": { "compatibilityStage": { "$ref": "#/$defs/compatibilityStageProducerSealingBinding" } } }
         },
         {
           "if": { "properties": { "ticketIdentity": { "const": "BURL-O001" }, "role": { "const": "macos-15-arm64" } }, "required": ["ticketIdentity", "role"] },
-          "then": { "properties": { "compatibilityStage": { "allOf": [{ "$ref": "#/$defs/compatibilityStageSealingBinding" }, { "type": "object", "properties": { "consumerBinding": { "$ref": "#/$defs/compatibilityStageConsumerBinding" } } }] } } }
+          "then": { "properties": { "compatibilityStage": { "$ref": "#/$defs/compatibilityStageSealingBinding" } } }
         },
         {
           "if": {
