@@ -199,6 +199,18 @@ tickets:
       - STOP if a pinned upload action digest isn't bare lowercase 64-hex or if
         a REST or aggregate digest isn't exactly `sha256:` plus that action
         output.
+      - STOP if any reusable role workflow doesn't expose exactly
+        `sealing-receipt-artifact-id` and
+        `sealing-receipt-upload-action-digest`; if the caller's fresh
+        `receipt_digests` job doesn't map all six values directly through
+        `needs` into the version-1 transport written by
+        `scripts/write-receipt-digest-observation.sh`; or if collection doesn't
+        resolve the transport's immutable ID from the exact run inventory. STOP
+        if collection doesn't download the raw archive by ID and compare its
+        SHA-256 with the canonical REST digest before extraction or JSON
+        parsing. Corrupt or substituted bytes must produce `artifact-corrupt`.
+        A REST ID, run, repository, name, or expiration-state mismatch must
+        produce `artifact-api-mismatch`.
       - STOP if `artifactNonce` isn't the exact lowercase 32-hex suffix of
         `runIdentity`; an artifact name contains a forbidden character; or an
         expected, candidate, sealed, or receipt artifact is missing, duplicate,
@@ -267,6 +279,10 @@ tickets:
       uploads the sealed bundle before it writes a separate attested receipt.
       The receipt records job.check_run_id, immutable identities, and normalized
       expected, candidate, and sealed digest pairs, but no final job result.
+      Each reusable role workflow exposes exactly the receipt artifact ID and
+      bare upload digest. The caller's fresh `receipt_digests` job maps all six
+      values into the identity-bound version-1 transport through
+      `scripts/write-receipt-digest-observation.sh`.
       Verified seal provenance alone authenticates hosted origin. After the
       attempt completes, managed-evidence.sh resolves that locator through the
       job API and constructs aggregate origin.sealingJob only for a completed
@@ -361,9 +377,11 @@ tickets:
 
 
         Role documents validate against schema version `15`, and the aggregate
-        validates against schema version `17`. The sealing receipt validates
+        validates against schema version `19`. The raw managed-evidence
+        contract is version `35`. The sealing receipt validates
         against version `2` of the Stage 3 raw definition. It contains
-        `job.check_run_id` but no status, conclusion, or completion timestamp.
+        `job.check_run_id` but no status, conclusion, completion timestamp, or
+        observation of its own uploaded artifact.
         After the attempt completes, collection resolves
         exactly one seal job through that locator. It requires completed success
         and provenance bound to the signer, source, run, attempt, check-run ID,
@@ -374,13 +392,20 @@ tickets:
         64-hex output. Prefix, case, and byte mismatches produce
         `artifact-digest-mismatch`. A stage or lineage transport artifact
         digest failure produces `compatibility-stage-digest-mismatch`.
+        The receipt-digest transport uses immutable-ID REST lookup and an
+        ID-addressed raw download. Before extraction or JSON parsing, the
+        collector requires the raw archive SHA-256 to equal the canonical REST
+        digest. The aggregate retains `receiptDigestTransportArtifact` with the
+        immutable ID, exact name, REST digest, and computed raw-download hash.
+        Each `origin.sealingReceiptArtifact` retains the transported bare action
+        digest and the matching canonical REST digest.
 
 
         Candidate-guard fixtures cover all four typed mismatch outcomes.
         Seal-origin fixtures cover in-progress, failed, missing, duplicate,
         wrong-job, wrong-label, self-hosted, wrong-signer, wrong-source,
         wrong-run, wrong-attempt, and wrong-locator outcomes. BURL-O001 fixtures
-        cover the complete raw-contract-version-33 compatibility-stage rejection
+        cover the complete raw-contract-version-35 compatibility-stage rejection
         inventory: missing, duplicate, substituted, expired, digest mismatch,
         unattested, wrong signer, wrong run, wrong role, wrong seal, stale
         producer receipt, noncanonical lineage, lineage SHA mismatch,
@@ -390,7 +415,24 @@ tickets:
         filesystem, coordinator, and aggregation fixtures remain required.
         Aggregate `accepted` requires all three successful candidate guard sets,
         all three attestation-backed seal origins, every applicable stage check,
-        and no rejection reason.
+        a verified receipt-digest transport, and no rejection reason.
+
+
+        Static receipt-output fixtures require every reusable role workflow to
+        expose exactly `sealing-receipt-artifact-id` and
+        `sealing-receipt-upload-action-digest` from its receipt upload step.
+        They require the caller's fresh `receipt_digests` job to map all six
+        values through `needs` into one schema-valid version-1 transport. The
+        job invokes `scripts/write-receipt-digest-observation.sh`, downloads no
+        candidate bytes, and uploads exactly one identity-bound transport.
+        Collector fixtures resolve its immutable ID from the exact run
+        inventory, fetch that ID's canonical REST object, and download the raw
+        archive through the ID-addressed endpoint. They verify the raw archive
+        SHA-256 before extraction or JSON parsing. Corruption and substitution
+        fixtures reject with `artifact-corrupt`. REST identity or state
+        mismatches reject with `artifact-api-mismatch`. Accepted fixtures retain
+        `receiptDigestTransportArtifact` and every
+        `origin.sealingReceiptArtifact` digest pair.
 
 
         Static workflow-shape fixtures use duplicate-aware source inspection to
@@ -574,8 +616,8 @@ tickets:
         before publication and reject publication of an accepted report.
         Lifecycle fixtures cover recovery from failed, cancelled, timed-out, and
         rejected reports.
-        They require the exact 10-artifact ordinary inventory and the exact
-        12-artifact BURL-O001 inventory, with `overwrite: false` on every
+        They require the exact 11-artifact ordinary inventory and the exact
+        13-artifact BURL-O001 inventory, with `overwrite: false` on every
         upload. Each fixed artifact-name template has no variable component
         other than its 32-hex nonce; role names are literals in their declared
         templates. Static fixtures scan every member of the complete

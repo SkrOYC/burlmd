@@ -1,4 +1,19 @@
 entries:
+  - version: v3.2.10
+    date: 2026-09-07
+    fixed:
+      - "Adapted BURL-M003 and BURL-O001 to raw managed-evidence contract version 35 and aggregate schema version 19. Each reusable role workflow exposes exactly sealing-receipt-artifact-id and sealing-receipt-upload-action-digest. The caller's fresh receipt_digests job maps all six values into the version-1 transport through scripts/write-receipt-digest-observation.sh."
+      - "Required immutable-ID lookup and ID-addressed raw download for the receipt-digest transport. Collection compares the raw archive SHA-256 with the canonical REST digest before extraction or JSON parsing. Corruption or substitution rejects with artifact-corrupt, and a REST identity or state mismatch rejects with artifact-api-mismatch."
+      - "Required aggregate receiptDigestTransportArtifact retention and each origin.sealingReceiptArtifact to retain the transported bare action digest and matching canonical REST digest. Updated the exact inventories to 11 ordinary artifacts and 13 BURL-O001 artifacts."
+      - "Preserved ticket IDs, dependencies, effort, scope, graph topology, fresh-dispatch recovery, no-deletion checks, compatibility-stage behavior, and trust-anchor requirements. The validator's observed calibration remains 70% of open tickets at the 8-point ceiling. Completed Epics A through F have no actuals blocks, so diff-lines-per-point and review-rounds-per-point ratios remain unavailable; both affected estimates remain 8."
+      - "Regenerated critical-path.md from the unchanged 10-epic, 80-ticket, 564-point graph."
+    security:
+      - "The receipt-digest transport proves that downloaded bytes match the selected GitHub REST artifact object. It does not add independent provenance. Sealing receipts remain free of self-referential post-upload claims."
+    upstream:
+      prd: v2.0.5
+      architecture: v2.1.2
+      tech-spec: v2.1.9
+    by: patch-lane
   - version: v3.2.9
     date: 2026-09-06
     fixed:
