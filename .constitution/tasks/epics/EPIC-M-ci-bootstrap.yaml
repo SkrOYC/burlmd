@@ -153,6 +153,20 @@ tickets:
         protected trusted control whose bytes and mode equal the trust anchor
         before dispatch and during collection, or if its change bypasses the
         reviewed trust-anchor rotation and evidence-only completion sequence.
+      - STOP if recovery reuses a workflow run, uses a GitHub UI or API rerun,
+        or reuses its nonce. Every failed, cancelled, timed-out, or rejected
+        collection requires a new `workflow_dispatch` run, a different workflow
+        run ID, and a new 128-bit nonce from pinned coreutils
+        `od -An -N16 -tx1 /dev/urandom | tr -d ' \n'`. Fail closed unless that
+        command produces exactly 32 lowercase hexadecimal characters.
+      - STOP if the trusted caller or any reusable role workflow does not invoke
+        `scripts/validate-managed-workflow-inputs.sh` or require the literal
+        environment value `GITHUB_RUN_ATTEMPT=1` before candidate execution,
+        acquisition, upload, sealing, or attestation work. STOP if local
+        `collect` reads or depends on ambient `GITHUB_RUN_ATTEMPT`, accepts
+        anything other than literal `--attempt 1`, does not require REST
+        `run_attempt == 1` before acquisition and immediately before accepted
+        publication, or publishes after observed attempt drift.
       - STOP if the evidence pull request changes anything except
         `.constitution/evidence/BURL-M003/managed-evidence.json`,
         `.constitution/evidence/BURL-M003/completion.md`, and
@@ -528,6 +542,46 @@ tickets:
         macOS 15 seal independently reconstructs those trusted facts. Final
         aggregation requires those values to agree with the signed lineage
         artifact, both receipts, and both seal origins.
+
+
+        Every collection is one fresh `workflow_dispatch` run. The launcher
+        creates its 128-bit nonce only through pinned coreutils
+        `od -An -N16 -tx1 /dev/urandom | tr -d ' \n'`, accepts exactly 32
+        lowercase hexadecimal characters, and fails closed without a fallback.
+        A failed, cancelled, timed-out, or
+        rejected collection starts another `run` command with a new nonce and
+        workflow run ID; GitHub UI and API reruns, including job reruns, are
+        prohibited. Before candidate execution, acquisition, upload, sealing, or
+        attestation work, the trusted caller and every reusable role workflow
+        invoke `scripts/validate-managed-workflow-inputs.sh` and require the
+        literal environment value `GITHUB_RUN_ATTEMPT=1`. Local `collect` ignores
+        ambient `GITHUB_RUN_ATTEMPT`. It accepts only literal `--attempt 1`,
+        requires the exact workflow-run REST object's numeric `run_attempt == 1`
+        before acquisition, and re-fetches that object immediately before
+        atomically publishing an accepted report. An observed rerun or attempt
+        drift before publication rejects without an accepted report.
+
+
+        In-workflow environment fixtures prove that the trusted caller and every
+        reusable role workflow invoke
+        `scripts/validate-managed-workflow-inputs.sh` before relevant work. They
+        reject missing, malformed, zero, negative, `01`, `+1`, and
+        greater-than-one `GITHUB_RUN_ATTEMPT` values. Local CLI fixtures prove
+        that `collect` ignores ambient `GITHUB_RUN_ATTEMPT` and rejects every
+        spelling except literal `--attempt 1` before acquisition. REST and
+        attempt-drift fixtures reject a missing, malformed, nonnumeric, or
+        non-1 REST `run_attempt` before acquisition, then inject attempt drift
+        before publication and reject publication of an accepted report.
+        Lifecycle fixtures cover recovery from failed, cancelled, timed-out, and
+        rejected reports.
+        They require the exact 10-artifact ordinary inventory and the exact
+        12-artifact BURL-O001 inventory, with `overwrite: false` on every
+        upload. Each fixed artifact-name template has no variable component
+        other than its 32-hex nonce; role names are literals in their declared
+        templates. Static fixtures scan every member of the complete
+        `trusted_control_paths` inventory for artifact-deletion endpoints. A
+        recording fake API intercepts every executable API call site and proves
+        that none makes an artifact-deletion request.
 
 
         The workflow never pushes repository content, publishes a release, or
