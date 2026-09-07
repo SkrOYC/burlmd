@@ -325,7 +325,7 @@ bill_of_materials:
       ref: "https://github.com/cachix/install-nix-action/blob/13d8dd58da0234aa297dedd986986ccb8e7f3e24/install-nix.sh"
       version: "2.35.2"
       date: 2026-09-07
-      note: "The pinned action source selects Nix 2.35.2. A local exact-version prototype verified subset export, subset load, local queries, and an offline private output build."
+      note: "The pinned action source selects Nix 2.35.2. ADR-0020 records local exact-version observations for subset export, subset load, local queries, and one offline private output build. Those observations don't settle this system's closure-view or packaging behavior."
   - name: actions/upload-artifact
     role: infrastructure
     version: 043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
