@@ -1,4 +1,17 @@
 entries:
+  - version: v2.1.7
+    date: 2026-09-06
+    fixed:
+      - "Required every managed-evidence collection to use a fresh workflow_dispatch run and a new cryptographically random 128-bit nonce from PR #15's pinned /dev/urandom and coreutils od mechanism. It fails closed without a fallback unless it produces exactly 32 lowercase hexadecimal characters. Failure, cancellation, timeout, or rejection now requires another run command and a different workflow run ID; GitHub UI and API reruns are forbidden."
+      - "Separated attempt boundaries. In-workflow validators require literal GITHUB_RUN_ATTEMPT=1 before candidate, acquisition, upload, sealing, or attestation. Local collect requires literal --attempt 1 and REST .run_attempt == 1 before acquisition, then re-fetches the exact REST object and requires numeric .run_attempt == 1 immediately before atomically publishing an accepted report. It does not inspect GITHUB_RUN_ATTEMPT."
+      - "Required lifecycle fixtures to reject missing, malformed, zero, negative, noncanonical, and greater-than-one attempt values; inject attempt drift between initial acquisition and publication; require a fresh dispatch with a new nonce and workflow run ID after failed, cancelled, timed-out, or rejected reports; require the exact 10-artifact ordinary and 12-artifact BURL-O001 inventories; require overwrite:false on every upload; and use a recording fake API to prove every path in the complete trusted_control_paths inventory makes no artifact-deletion request."
+      - "Recorded that Tasks v3.2.6 historically adopted the compatibility interface, while the current Tasks v3.2.7 artifacts are downstream-stale for the fresh-dispatch-only lifecycle. A planning-engineering-execution pass must adapt those Tasks before implementation; this patch does not edit .constitution/tasks."
+    security:
+      - "Retained raw contract schema version 33 while changing its bytes for the lifecycle refinement. Only the ci-role-evidence, ci-evidence, and spike-result evidence schema files remain byte-identical at versions 15, 17, and 20; the embedded sealing receipt remains version 2."
+    by: patch-lane
+    upstream:
+      prd: v2.0.5
+      architecture: v2.1.2
   - version: v2.1.6
     date: 2026-09-06
     fixed:
