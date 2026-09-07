@@ -1,4 +1,16 @@
 entries:
+  - version: v3.2.8
+    date: 2026-09-06
+    fixed:
+      - "Adapted BURL-M003 and BURL-O001 to TechSpec v2.1.7's fresh-dispatch-only lifecycle. Recovery requires a new workflow_dispatch run, distinct workflow run ID, and a fresh 128-bit nonce from the pinned /dev/urandom and coreutils od command. The trusted caller and every reusable role workflow invoke scripts/validate-managed-workflow-inputs.sh and require literal GITHUB_RUN_ATTEMPT=1 before relevant work. Local collection ignores ambient GITHUB_RUN_ATTEMPT, accepts only literal --attempt 1, and requires REST run_attempt == 1 before acquisition and immediately before accepted publication. A rerun or attempt drift before publication rejects without an accepted report."
+      - "Required separate in-workflow environment, local CLI, and REST/attempt-drift fixtures. They reject invalid GITHUB_RUN_ATTEMPT values, nonliteral local attempts, and invalid REST run_attempt values; inject attempt drift; cover failed, cancelled, timed-out, and rejected recovery; require the exact 10-artifact ordinary and 12-artifact BURL-O001 inventories; require overwrite: false; and allow the nonce as the only variable artifact-name component."
+      - "Required a static artifact-deletion-endpoint scan across the complete trusted_control_paths inventory and a recording fake API that covers every executable API call site. The graph, ticket IDs, dependencies, scope, and 8-point estimates remain unchanged."
+      - "Regenerated critical-path.md from the unchanged 10-epic, 80-ticket, 564-point graph. Completed Epics A through F have no actuals blocks, so diff-lines-per-point and review-rounds-per-point calibration remains unavailable; both affected estimates remain 8."
+    upstream:
+      prd: v2.0.5
+      architecture: v2.1.2
+      tech-spec: v2.1.7
+    by: patch-lane
   - version: v3.2.7
     date: 2026-09-06
     fixed:
