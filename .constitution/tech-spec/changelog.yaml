@@ -5,6 +5,10 @@ entries:
       - "Made provisional-spikes settlement require both local version 36 closure-view fixtures and accepted managed BURL-M003 completion evidence from the standard ubuntu-24.04 runner. Local fixtures don't settle hosted capacity or feature availability."
       - "Reconciled the independent pinned-Nix 2.35.2 prototype measurements to 558 closure paths, 34,986 manifest bytes, and 75,552 bind-only argument bytes."
       - "Clarified that --disable-userns enters an internal nested user namespace. The no-nesting requirement prohibits a second Bubblewrap process, not Bubblewrap's namespace mechanism."
+      - "Required trusted per-member source verification through decoded mountinfo root, device, and read-only state plus matching file type, st_dev, and st_ino. A correctly typed placeholder or copied member cannot pass when its per-member --ro-bind is absent."
+      - "Added BURL-M003 runtime fixtures that require /nix/var, the Nix database, and the daemon socket to remain absent. Added a duplicate-aware source fixture that rejects broad /nix and /nix/store source binds. A fresh staging-shape check rejects copied private-store state even when valid member binds hide it."
+      - "Defined logs/burl-m003-linux-closure-view.log as the Linux role's internal closure-view record. It retains the exact manifest and SHA-256, source observations, complete-vector byte count, ARG_MAX, and start-space observation for fresh-seal validation and aggregate binding through unchanged schema fields."
+      - "Aligned live TechSpec markers with v2.1.11 while retaining raw contract schema version 36. Expanded Executable and Linkable Format (ELF) on first use, formatted `iproute2` as code, and removed ambiguous time-relative wording from changed live prose."
     by: patch-lane
     upstream:
       prd: v2.0.5
@@ -14,7 +18,7 @@ entries:
     fixed:
       - "Replaced the copied BURL-M003 Linux closure with an exact read-only Bubblewrap view. The launcher mounts each complete manifest member at its canonical /nix/store path and hides the host store root, Nix state, database, daemon socket, and unlisted paths."
       - "Made the BURL-M003 root inventory reproducible from the authoritative launcher groups. The inventory includes jq, Sway, swaymsg, the OpenSSL roots, and the Mesa runtime roots."
-      - "Preserved the existing single-invocation, no-network, private-PID, descriptor, teardown, and cleanup controls. Added --disable-userns and --assert-userns-disabled without starting a second Bubblewrap process."
+      - "Preserved the single-invocation, no-network, private-PID, descriptor, teardown, and cleanup controls. Added --disable-userns and --assert-userns-disabled without starting a second Bubblewrap process."
       - "Preserved the exact manifest, view, read-only, hidden-canary, loader, runtime, forbidden-client, and complete-vector ARG_MAX fixtures. Added only a fail-closed 4,000,000,000-byte BURL-M003 start-space guard."
       - "Advanced the raw contract from version 35 to 36. Role schema 15, aggregate schema 19, Spike-result schema 20, sealing receipt 2, receipt transport 1, and the 11-artifact and 13-artifact inventories remain unchanged."
       - "Kept ADR-0019 unchanged. ADR-0020 is assumed and applies only to BURL-M003; its local prototype facts don't count as hosted evidence."

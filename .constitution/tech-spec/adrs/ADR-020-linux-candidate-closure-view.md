@@ -19,7 +19,7 @@ exceeds the 14,000,000,000-byte standard `ubuntu-24.04` profile.
 
 `BURL-M003` needs an exact runtime closure but doesn't need Nix command
 authority. Mounting the complete realized closure read-only avoids the second
-physical copy while preserving the existing Linux containment boundary.
+physical copy while preserving the ADR-0019 Linux containment boundary.
 
 OD-11 and ADR-0019 define candidate and seal authority. They don't select this
 storage mechanism. This ADR changes no placement, credential, provenance,
@@ -34,25 +34,47 @@ mechanism and a conservative start-space guard. They don't constitute accepted
 1. Derive the exact `BURL-M003` closure manifest from the authoritative
    launcher's locked runtime roots. Expand the roots with `nix-store -qR`, sort
    them with `LC_ALL=C`, and write one canonical path per line.
-2. Create an owned store base with one correctly typed empty mount point for
-   each manifest member. Bind the base read-only at `/nix/store`, then bind each
-   manifest member read-only at its canonical path.
-3. Expose no host store root, Nix state, Nix database, daemon socket, or
-   unlisted store path. Require the visible store entries to equal the manifest
-   before candidate execution.
-4. Preserve the existing `env -i`, private process identifier (PID) namespace,
+2. Immediately before namespace entry, the trusted launcher records each host
+   member's file type, device, inode, containing-mount device, and computed
+   mount root. It exposes the path-sorted snapshot read-only at
+   `/contract/locked-nix-closure.sources`. Create a fresh owned staging root
+   whose only child is the store base. The base contains exactly one
+   source-distinct, empty mount point of the correct type for each member. Bind
+   the base read-only at `/nix/store`, then bind each member read-only at its
+   canonical path.
+3. Before the first candidate command, a trusted namespace preflight verifies
+   each member against that host snapshot. The decoded `/proc/self/mountinfo`
+   data must contain exactly one mount at the member path. Its root,
+   `major:minor` device, and `ro` mount option must match the source snapshot.
+   The member's `st_dev`, `st_ino`, and file type must also match. A placeholder
+   without its member `--ro-bind` therefore fails even when its name and type
+   are correct.
+4. Expose no host store root, Nix state, Nix database, daemon socket, or
+   unlisted store path. Require the visible store entries to equal the manifest.
+   Require `/nix/var`, `/nix/var/nix/db`,
+   `/nix/var/nix/db/db.sqlite`, and
+   `/nix/var/nix/daemon-socket/socket` to return `ENOENT`.
+5. Preserve the `env -i`, private process identifier (PID) namespace,
    no-network, descriptor-closure, teardown-lock, and cleanup controls.
-5. Add `--disable-userns` and `--assert-userns-disabled` to the existing single
+6. Add `--disable-userns` and `--assert-userns-disabled` to the single
    Bubblewrap invocation. Candidate assertions consume the mounted manifest and
    don't start a second Bubblewrap process.
-6. Count the complete null-terminated environment and argument vector before
+7. Count the complete null-terminated environment and argument vector before
    `exec`. Include the Bubblewrap arguments, every closure bind, and the
    candidate command. Reject a total at or above half of `getconf ARG_MAX`.
-7. Immediately before namespace entry, require at least 4,000,000,000 available
+8. Immediately before namespace entry, require at least 4,000,000,000 available
    bytes on the workspace filesystem. If the observation fails or falls below
    the floor, fail the candidate before it produces accepted evidence.
-8. Treat the space check only as a start guard. Don't claim that it measures a
+9. Treat the space check only as a start guard. Don't claim that it measures a
    complete phase peak or proves capacity for another ticket.
+10. Retain the exact manifest and launch observations in
+    `logs/burl-m003-linux-closure-view.log`. The trusted launcher creates this
+    internal artifact outside candidate-writable paths. Its fixed-order header
+    records raw contract version `36`, manifest byte count and SHA-256, member
+    and placeholder counts, zero staging payload entries and bytes,
+    complete-vector byte count, `ARG_MAX`, start-available bytes, and one
+    source-identity row per member. The final length-delimited payload is the
+    exact manifest bytes.
 
 ## Exact closure roots
 
@@ -95,13 +117,30 @@ session. Internal links remain inside their mounted store object.
 The `BURL-M003` contract fixtures must preserve these checks:
 
 - The visible store entries equal the exact manifest.
+- Every member has exactly one decoded mountinfo record at its canonical path.
+  Its root, device, and read-only option match the trusted host snapshot. Its
+  file type, `st_dev`, and `st_ino` match the host source.
+- Omitting one member `--ro-bind` leaves a correctly typed placeholder and
+  preserves manifest-to-view name equality, but fails source-identity checks.
+- A fixture seeds copied member contents and private Nix state beneath otherwise
+  valid member binds. The pre-namespace staging-shape check must reject it, so
+  hidden copied state can't satisfy the closure-view contract.
+- `/nix/var`, `/nix/var/nix/db`, `/nix/var/nix/db/db.sqlite`, and
+  `/nix/var/nix/daemon-socket/socket` return `ENOENT`. The accepted runtime
+  fixture first requires those host paths to exist with directory, regular-file,
+  and socket types as applicable, so the namespace absence proof isn't vacuous.
+- A duplicate-aware source-shape fixture accepts exactly one owned-store-base
+  `--ro-bind` to `/nix/store` and one same-path `--ro-bind` per manifest member.
+  It rejects every other bind-family option whose source or destination is
+  `/nix` or a descendant. Rejected cases include broad `/nix`, `/nix/store`,
+  and `/nix/var` binds and every extra or missing closure-view bind.
 - An ambient host-store canary outside the manifest stays hidden.
 - Every mounted member and the owned store base reject writes.
-- Direct references, script interpreters, ELF loaders, and runtime search paths
-  resolve only within the manifest.
+- Direct references, script interpreters, Executable and Linkable Format (ELF)
+  loaders, and runtime search paths resolve only within the manifest.
 - The Flutter Rust Bridge generator, Cargo, `rustc`, the `rustup` shim, Dart,
-  CMake, Ninja, Clang, OpenSSL, `jq`, Sway, `swaymsg`, iproute2, and Bubblewrap
-  run from the view.
+  CMake, Ninja, Clang, OpenSSL, `jq`, Sway, `swaymsg`, `iproute2`, and
+  Bubblewrap run from the view.
 - Forbidden clients remain absent.
 - The complete null-terminated environment and argument vector stays below
   half of `ARG_MAX`.
@@ -110,8 +149,15 @@ The `BURL-M003` contract fixtures must preserve these checks:
 - `--disable-userns` enters an internal nested user namespace that prevents the
   candidate from creating further user namespaces. Candidate assertions don't
   start a second Bubblewrap process.
-- The existing no-network, private-PID, descriptor, teardown, and cleanup
+- The no-network, private-PID, descriptor, teardown, and cleanup
   fixtures continue to pass.
+- The trusted launcher creates exactly one
+  `logs/burl-m003-linux-closure-view.log` internal artifact. Fresh sealing
+  validates its fixed-order fields, source rows, exact manifest payload, byte
+  count, and SHA-256. The accepted role manifest retains its name, byte count,
+  and SHA-256 through `roleEvidence.internalArtifacts`. The aggregate embeds
+  that manifest and binds the unchanged role and sealed bundles through the
+  schema's `roleBundleSha256` and `sealedBundleSha256` fields.
 
 ## Local prototype facts
 
@@ -154,7 +200,7 @@ coordinator decision.
   host closure.
 - A missing closure dependency, excessive argument vector, unavailable start
   space, or failed isolation check produces no accepted evidence under the
-  existing evidence contract.
+  successful-only evidence contract.
 - ADR-0019 remains unchanged and continues to govern OD-11 authority.
 - Stage 4 must adapt only the `BURL-M003` closure implementation. It must add or
   retain an explicit `BURL-O001` stop and Stage 3 route without changing the
@@ -164,5 +210,7 @@ coordinator decision.
 
 - [Bubblewrap `0.11.2` command contract](https://github.com/containers/bubblewrap/blob/v0.11.2/bwrap.xml)
 - [Nix `2.35.2` requisite query](https://nix.dev/manual/nix/2.35/command-ref/nix-store/query.html)
+- [Linux `/proc/PID/mountinfo` format](https://www.kernel.org/doc/html/latest/filesystems/proc.html#proc-pid-mountinfo-information-about-mounts)
+- [Linux `stat` structure](https://man7.org/linux/man-pages/man3/stat.3type.html)
 - [Pinned Nix installer script](https://github.com/cachix/install-nix-action/blob/13d8dd58da0234aa297dedd986986ccb8e7f3e24/install-nix.sh)
 - [GitHub-hosted runners reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)
