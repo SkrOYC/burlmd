@@ -1,4 +1,20 @@
 entries:
+  - version: v2.1.13
+    date: 2026-09-07
+    fixed:
+      - "Made the frozen capacity authority independently validatable at fresh sealing. The version 36 closure-view log now retains canonical declaration rows for every identifier and session, including kind, parent, required UID and GID, mode, directory type, device, decoded mount identity, and permitted leaf. The header and every session bind the exact declaration-row digest."
+      - "Expanded golden and mutation coverage for a changed or same-device nested mount, wrong kind, parent, ownership, or mode, undeclared leaf, authority substitution, duplicate or omitted declaration, and ambiguous current-path resolution."
+      - "Moved Sway and swaymsg out of the candidate closure into a separate trusted-parent compositor manifest. The parent proves both executable identities and exposes only its exact live Wayland socket to each candidate session. Candidate PATH, exact-path, manifest, mount, and trace checks prove that both compositor commands remain absent."
+      - "Reproduced all three closures twice with pinned Nix 2.35.2. The candidate has 488 paths, a 30,717-byte manifest, SHA-256 `127043afe260d7756ee6cbda03e39a5bfceb4f7f79ae3a5be1595e447ce15e64`, 6,184,635,112 summed Nix archive (NAR) bytes, and 66,314 bind-only bytes. The compositor has 198 paths, a 12,024-byte manifest, SHA-256 `2989c9144aedb0861d16e440a309e4564679009f4785525033b2a8e1ecf97f3d`, 649,910,672 NAR bytes, and 26,028 bind-only bytes. The Bubblewrap closure remains eight paths, 480 manifest bytes, SHA-256 `398d11c9cd9249369cbb18d36661014eafef5ac18ff7adeb076c2c51ef0141fd`, 40,679,016 NAR bytes, and 1,040 bind-only bytes."
+      - "Expanded the Bubblewrap bill-of-materials justification to cover the exact seven BURL-M003 candidate sessions and coordinator isolation. The bill of materials remains at 37 records."
+      - "Documented the pinned install action's transitive Nix 2.35.2 version without adding a duplicate bill-of-materials record. The workflow must omit `install_url`, reject preinstalled Nix, and require matching observed `nix` and `nix-store` version output before closure queries."
+      - "Advanced the live TechSpec to v2.1.13 while retaining raw contract version 36. Role schema 15, aggregate schema 19, Spike-result schema 20, sealing receipt 2, receipt transport 1, evidence profiles, and the 11-artifact and 13-artifact inventories remain unchanged."
+    security:
+      - "This correction remains limited to BURL-M003. It preserves the seven-session inventory, descriptor handshake, stable and ephemeral root model, credential-free candidate, and fresh-seal authority. It doesn't authorize or solve BURL-O001 Linux packaging isolation or capacity."
+    by: patch-lane
+    upstream:
+      prd: v2.0.5
+      architecture: v2.1.2
   - version: v2.1.12
     date: 2026-09-07
     fixed:

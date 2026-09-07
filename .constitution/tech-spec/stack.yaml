@@ -285,7 +285,7 @@ bill_of_materials:
     role: infrastructure
     version: "0.11.2"
     ecosystem: nix
-    justification: "User, mount, process, network, and filesystem isolation for the managed-evidence coordinator; Linux only"
+    justification: "Provides Linux user, mount, process, network, and filesystem isolation for the managed-evidence coordinator and all seven BURL-M003 candidate sessions: generated bindings, Flutter tests, Dart analysis, Cargo metadata, two integration tests, and managed isolation"
     radar: assess
     certainty: assumed
     assumption: "BURL-M003 adds pkgs.bubblewrap to devenv.nix; the pinned devenv.lock nixpkgs revision resolves 0.11.2, but nothing in the repository uses it yet."
@@ -325,10 +325,10 @@ bill_of_materials:
     role: infrastructure
     version: 13d8dd58da0234aa297dedd986986ccb8e7f3e24
     ecosystem: other
-    justification: "Installs Nix before entering the repository closure"
+    justification: "Installs Nix 2.35.2 before entering the repository closure; the pinned action source fixes that transitive version, and the workflow forbids the install_url override and requires observed nix and nix-store version equality"
     radar: adopt
     certainty: assumed
-    assumption: "SHA resolved from the official repository on 2026-08-31; no workflow in this repository references it until BURL-M003 lands .github/workflows/ci.yml."
+    assumption: "SHA resolved from the official repository on 2026-08-31 and reverified on 2026-09-07. Its pinned install-nix.sh sets nix_version=2.35.2, while action.yml exposes install_url as an optional override. BURL-M003 must omit that input, reject preinstalled Nix, and require observed Nix 2.35.2 from both nix and nix-store. No workflow in this repository references the action until BURL-M003 lands .github/workflows/ci.yml."
   - name: actions/upload-artifact
     role: infrastructure
     version: 043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
