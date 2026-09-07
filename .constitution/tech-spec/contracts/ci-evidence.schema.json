@@ -239,9 +239,9 @@
           "minItems": 3,
           "maxItems": 3,
           "prefixItems": [
-            { "$ref": "#/$defs/receiptDigestTransportEntry", "properties": { "role": { "const": "linux-x86_64" }, "artifactName": { "type": "string", "pattern": "^managed-evidence-seal-receipt-linux-x86_64-[0-9a-f]{32}$" } } },
-            { "$ref": "#/$defs/receiptDigestTransportEntry", "properties": { "role": { "const": "macos-26-arm64" }, "artifactName": { "type": "string", "pattern": "^managed-evidence-seal-receipt-macos-26-arm64-[0-9a-f]{32}$" } } },
-            { "$ref": "#/$defs/receiptDigestTransportEntry", "properties": { "role": { "const": "macos-15-arm64" }, "artifactName": { "type": "string", "pattern": "^managed-evidence-seal-receipt-macos-15-arm64-[0-9a-f]{32}$" } } }
+            { "$ref": "#/$defs/receiptDigestTransportEntry", "type": "object", "properties": { "role": { "const": "linux-x86_64" }, "artifactName": { "type": "string", "pattern": "^managed-evidence-seal-receipt-linux-x86_64-[0-9a-f]{32}$" } } },
+            { "$ref": "#/$defs/receiptDigestTransportEntry", "type": "object", "properties": { "role": { "const": "macos-26-arm64" }, "artifactName": { "type": "string", "pattern": "^managed-evidence-seal-receipt-macos-26-arm64-[0-9a-f]{32}$" } } },
+            { "$ref": "#/$defs/receiptDigestTransportEntry", "type": "object", "properties": { "role": { "const": "macos-15-arm64" }, "artifactName": { "type": "string", "pattern": "^managed-evidence-seal-receipt-macos-15-arm64-[0-9a-f]{32}$" } } }
           ],
           "items": false
         }
