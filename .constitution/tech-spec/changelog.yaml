@@ -1,4 +1,27 @@
 entries:
+  - version: v2.1.11
+    date: 2026-09-07
+    added:
+      - "Added linux-capacity-record.schema.json version 1 and its sidecar. The schema fixes all 14 record fields, event and phase enums, RFC 3339 nanosecond UTC timestamps, filesystem identity, byte-count types, and three capacity thresholds."
+      - "Added four exact post-candidate phases for output copying, role-manifest writing, bundle compression, and upload-input finalization. An accepted transcript now contains one admission record and 14 adjacent precheck/postcheck pairs, for 29 records total."
+      - "Added util-linux 2.42 as the thirty-seventh bill-of-materials record. Its pinned flock and fallocate commands share one store root and provide teardown locking plus keep-size transcript preallocation."
+    changed:
+      - "Advanced provisional-spikes.toml from raw contract version 36 to 37. Role schema version 15, aggregate schema version 19, Spike-result schema version 20, sealing receipt version 2, and the 11-artifact and 13-artifact service inventories remain unchanged."
+      - "Made the capacity transcript wrapper-owned under a mode-0700 RUNNER_TEMP root that no candidate mount exposes. The wrapper preallocates its blocks, compares each append with independent parent state, and sends the transcript beside the role bundle for fresh-seal validation and attestation."
+      - "Separated initial admission from phase safety. Admission keeps the 10,000,000,000-byte allocation ceiling and 4,000,000,000-byte available-space floor. Every phase uses a separate assumed 1,000,000,000-byte available-space floor."
+      - "Required host-side prefetch of all locked Flake inputs, derivations, and requisites before network removal. The host exports the manifest database subset before namespace entry, and the root private context loads it with sandbox disabled and no build-users group."
+      - "Corrected the commit-9719259 reproduction inventory. It now distinguishes runtime-link tools from closure-root tools, includes jq, sway, and swaymsg, excludes the absent cmp root, and distinguishes bind-only bytes from the complete argument and environment vector."
+      - "Verified that pinned actions/upload-artifact v7.0.1 resolves @actions/artifact 6.2.0 and streams archive bytes through memory without creating a local ZIP file. Any pin or archive-mode change must repeat this check and add an upload phase if local archive allocation becomes possible."
+      - "Kept Linux disk-capacity evidence separate from the macOS packaging gates. BURL-O001 feasibility remains assumed until complete hosted evidence exists."
+    fixed:
+      - "Removed the unsupported insufficient-capacity result. Capacity, ordering, schema, state, or storage failure now fails the candidate job before upload, skips the successful-only seal, and produces no accepted aggregate or schema-valid Spike result."
+      - "Required fixtures to enforce every record field and semantic invariant, immediate phase adjacency, later-phase rejection before output changes, no later execution, candidate inaccessibility, finalization coverage, exact sealed members, and sealed-only aggregation."
+    security:
+      - "Added linux-capacity-record.schema.json to the trust-anchor control inventory, increasing it from 33 to 34 exact paths. Candidate-authored, duplicate, substituted, unsealed, state-mismatched, or malformed capacity bytes are never accepted."
+    upstream:
+      prd: v2.0.5
+      architecture: v2.1.2
+    by: patch-lane
   - version: v2.1.10
     date: 2026-09-07
     added:

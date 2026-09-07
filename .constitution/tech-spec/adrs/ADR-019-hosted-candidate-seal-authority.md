@@ -136,7 +136,7 @@ survive. The release contract must not make that claim.
 - Reviewed source and test contracts remain required. Provenance validation
   doesn't replace source review or test review.
 - The role and aggregate JSON schemas are versions `15` and `19`. The embedded
-  sealing receipt is version `2`. The raw contract is version `36`. These
+  sealing receipt is version `2`. The raw contract is version `37`. These
   contracts separate candidate runtime guards from attested seal origin and
   bind an immutable canonical compatibility-stage lineage. They also carry the
   post-upload receipt digest without making the receipt self-report it. The
