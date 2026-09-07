@@ -80,7 +80,8 @@ tickets:
       expected: exit 0 with .constitution/prototypes/packaging/results.json, accepted
         .constitution/prototypes/packaging/managed-evidence.json,
         executor-authored .constitution/spikes/SPK-BURL-O001.md, and an OD-08
-        recommendation
+        recommendation; the exact `receipt_digests` job contract and semantic
+        receipt-digest transport fixtures pass
     stop_conditions:
       - STOP if the harness uses ambient Git, omits installed-runtime probes, or
         infers one Platform result from another.
@@ -95,18 +96,30 @@ tickets:
         artifact digest failures must use `artifact-digest-mismatch`; stage and
         lineage transport digest failures must use
         `compatibility-stage-digest-mismatch`.
-      - STOP if any reusable role workflow doesn't expose exactly
+      - >
+        STOP if any reusable role workflow doesn't expose exactly
         `sealing-receipt-artifact-id` and
-        `sealing-receipt-upload-action-digest`; if the caller's fresh
-        `receipt_digests` job doesn't map all six values through `needs` into the
-        version-1 transport written by
-        `scripts/write-receipt-digest-observation.sh`; or if collection doesn't
-        resolve the transport's immutable ID from the exact run inventory. STOP
-        if collection doesn't download the raw archive by ID and compare its
+        `sealing-receipt-upload-action-digest`; or if the caller's fresh
+        `receipt_digests` job doesn't need exactly `expected`, `linux`,
+        `macos_26`, and `macos_15`. STOP if that job doesn't run on
+        `ubuntu-24.04` with only the `contents` permission set to `read`;
+        doesn't map all six values
+        directly through `needs` into the version-1 transport written by
+        `scripts/write-receipt-digest-observation.sh`; or doesn't upload the
+        exact `managed-evidence-receipt-digests-{artifact_nonce}` artifact
+        containing only `receipt-upload-digests.json`. The upload must set
+        `overwrite: false` and `if-no-files-found: error`.
+      - STOP if collection doesn't resolve the transport's immutable ID from
+        the exact run inventory, download the raw archive by ID, or compare its
         SHA-256 with the canonical REST digest before extraction or JSON
         parsing. Corrupt or substituted bytes must produce `artifact-corrupt`.
         A REST ID, run, repository, name, or expiration-state mismatch must
-        produce `artifact-api-mismatch`.
+        produce `artifact-api-mismatch`. STOP if the collector doesn't
+        semantically validate the extracted transport or doesn't match every
+        transported receipt artifact ID and name to one unique REST artifact
+        object. Fixtures must reject missing, extra, duplicate, malformed,
+        reordered, wrong-role, wrong-run, wrong-attempt, wrong-signer,
+        wrong-nonce, wrong-name, wrong-ID, and wrong-digest transport data.
       - STOP if the launcher isn't the clean trust-anchor copy, a trusted
         control file differs at the signer SHA, or the base-to-source diff
         leaves the packaging write allowlist.
@@ -175,7 +188,8 @@ tickets:
       - STOP if work touches any repository path outside this ticket's scope,
         packages production, or edits active specifications; don't expand this
         ticket.
-    description: Build and install the representative harness as AppImage, tagged
+    description: >
+      Build and install the representative harness as AppImage, tagged
       Nix Flake package, and unsigned Apple Silicon archive across the required
       Linux and macOS matrix. Authenticate managed role evidence through
       BURL-M003. The macOS 26 seal creates and attests the exact compatibility
@@ -187,8 +201,16 @@ tickets:
       immutable lineage-artifact SHA-256, transport identity and attestation,
       and consumer binding through the macOS 15 seal and final aggregate.
       Require each role to export its receipt artifact ID and bare upload digest.
-      Carry all six values through the caller's fresh `receipt_digests` job and
-      version-1 transport before local collection verifies the raw archive.
+      The caller's fresh `receipt_digests` job needs exactly `expected`,
+      `linux`, `macos_26`, and `macos_15`, runs on `ubuntu-24.04`, and has only
+      `contents: read`. Carry all six values through `needs` into the version-1
+      transport. Upload the exact
+      `managed-evidence-receipt-digests-{artifact_nonce}` artifact containing
+      only `receipt-upload-digests.json`, with `overwrite: false` and
+      `if-no-files-found: error`. Local collection verifies the raw archive,
+      semantically validates the extracted transport, and matches every
+      transported receipt artifact ID and name to one unique REST artifact
+      object.
       Prove the checksum and provenance-metadata layout inside the prototype;
       release-candidate attestations remain production workflow work owned by
       BURL-O009 and BURL-O014
@@ -221,10 +243,15 @@ tickets:
         Each reusable role workflow exposes exactly
         `sealing-receipt-artifact-id` and
         `sealing-receipt-upload-action-digest` from its receipt upload step. The
-        caller's fresh `receipt_digests` job maps all six values directly through
-        `needs` into `scripts/write-receipt-digest-observation.sh`. The helper
-        writes one identity-bound version-1 transport, and the job uploads it
-        with `overwrite: false`. It doesn't download or execute candidate bytes.
+        caller's fresh `receipt_digests` job needs exactly `expected`, `linux`,
+        `macos_26`, and `macos_15`, runs on `ubuntu-24.04`, and has only
+        `contents: read`. It maps all six values directly through `needs` into
+        `scripts/write-receipt-digest-observation.sh`. The helper writes one
+        identity-bound version-1 transport. The job uploads the exact
+        `managed-evidence-receipt-digests-{artifact_nonce}` artifact containing
+        only `receipt-upload-digests.json`, with `overwrite: false` and
+        `if-no-files-found: error`. It doesn't download or execute candidate
+        bytes.
 
 
         Each named runtime check obtains the operating system, distribution,
@@ -339,10 +366,16 @@ tickets:
         Final aggregation retains `receiptDigestTransportArtifact` with the
         immutable ID, exact name, REST digest, and computed raw-download hash.
         Each `origin.sealingReceiptArtifact` retains its transported bare action
-        digest and matching canonical REST digest. Fixtures that corrupt one
-        byte or substitute another artifact's valid archive reject with
-        `artifact-corrupt` before consumption. A REST ID, run, repository, name,
-        or expiration-state mismatch rejects with `artifact-api-mismatch`.
+        digest and matching canonical REST digest. After extraction, the
+        collector semantically validates the transport and matches every
+        transported receipt artifact ID and name to one unique REST artifact
+        object. Fixtures reject missing, extra, duplicate, malformed, reordered,
+        wrong-role, wrong-run, wrong-attempt, wrong-signer, wrong-nonce,
+        wrong-name, wrong-ID, and wrong-digest transport data. Fixtures that
+        corrupt one byte or substitute another artifact's valid archive reject
+        with `artifact-corrupt` before consumption. A REST ID, run, repository,
+        name, or expiration-state mismatch rejects with
+        `artifact-api-mismatch`.
 
 
         Nix out-links are build sources only. The result tool copies their
