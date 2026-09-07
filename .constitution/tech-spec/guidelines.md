@@ -524,6 +524,9 @@ layout:
   - path: scripts/managed-evidence.sh
     purpose: Managed evidence client implemented by BURL-M003
     exists: false
+  - path: scripts/write-receipt-digest-observation.sh
+    purpose: "Writes the trusted caller's identity-bound three-role receipt digest transport"
+    exists: false
   - path: scripts/prepare-compatibility-stage.sh
     purpose: "Trusted macOS 26 seal helper that validates the producer bundle and creates the exact two-member compatibility stage without executing candidate bytes"
     exists: false
