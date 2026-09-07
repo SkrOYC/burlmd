@@ -1,9 +1,24 @@
 entries:
+  - version: v2.1.12
+    date: 2026-09-07
+    fixed:
+      - "Pinned Diffutils 3.12 and Procps 4.0.6 as the thirty-sixth and thirty-seventh bill-of-materials records for BURL-M003. The exact candidate roots use `/nix/store/3c05s0vxy8wafaa7lkj4bfh69wa0ch10-diffutils-3.12/bin/cmp` and `/nix/store/ly5j6qg2q3vn899jd9dz0hx11gvjh9f1-procps-4.0.6/bin/ps`; ambient `/usr` and `/run/current-system` commands are rejected."
+      - "Recomputed both closures twice with pinned Nix 2.35.2. The candidate has 549 paths, a 34,418-byte manifest, SHA-256 `c82bb681b260902382f9a747d0f8588ab29bb1d8d56cec0f7b7c30fc368399d9`, 6,338,161,576 summed Nix archive (NAR) bytes, and 74,326 bind-only argument bytes. The parent remains eight paths, a 480-byte manifest, SHA-256 `398d11c9cd9249369cbb18d36661014eafef5ac18ff7adeb076c2c51ef0141fd`, 40,679,016 summed NAR bytes, and 1,040 bind-only argument bytes."
+      - "Defined the preflight handshake lifecycle. The preflight receives candidate standard streams on descriptors 0 through 2, the record write end on 3, and the acknowledgement read end on 4. The wrapper closes both handshake descriptors in order and proves only the unchanged standard streams remain before candidate exec."
+      - "Changed the golden preflight body from the false descriptor-set claim to the exact five-descriptor map. The canonical body is 689 bytes with SHA-256 `7c50024df422271e58772aa6215ed7714f5387555b39bacd72c4f308d3c8491c`; leak, direction, ordering, acknowledgement, end-of-file, and standard-stream fixtures fail before candidate execution."
+      - "Defined each integration session hash as SHA-256 over only the repository-relative path's exact UTF-8 bytes, with no byte-order mark, normalization, delimiter, NUL, carriage return, line feed, platform newline conversion, or other terminator."
+      - "Retained raw contract version 36 because these changes correct the same unmerged BURL-M003 closure-view record. Role schema 15, aggregate schema 19, Spike-result schema 20, sealing receipt 2, receipt transport 1, evidence-class profiles, role and aggregate shapes, and the 11-artifact and 13-artifact inventories remain unchanged."
+    security:
+      - "This patch remains limited to BURL-M003. It doesn't authorize or solve BURL-O001 Linux packaging isolation, capacity, evidence, or coordination."
+    by: patch-lane
+    upstream:
+      prd: v2.0.5
+      architecture: v2.1.2
   - version: v2.1.11
     date: 2026-09-07
     fixed:
       - "Made provisional-spikes settlement require both local version 36 closure-view fixtures and accepted managed BURL-M003 completion evidence from the standard ubuntu-24.04 runner. Local fixtures don't settle hosted capacity or feature availability."
-      - "Recomputed the candidate closure with pinned Nix 2.35.2 after separating Bubblewrap: 556 paths, 34,864 manifest bytes, 75,288 bind-only argument bytes, and candidate-manifest SHA-256 `6ae573c68c34a15335b44c52a797844e67d47cd0c1e1307e658f823407c50da3`. The separate eight-path trusted-parent tool-closure manifest and pinned executable have their own exact digests."
+      - "Recorded the candidate closure after separating Bubblewrap. TechSpec v2.1.12 replaces this measurement because `cmp` was absent from the root inventory and `ps` resolved through the ambient host profile."
       - "Clarified that `--disable-userns` enters an internal nested user namespace. The no-nesting requirement prohibits a second Bubblewrap process, not Bubblewrap's namespace mechanism."
       - "Required trusted per-member source verification through decoded mountinfo root, device, and read-only state plus matching file type, `st_dev`, and `st_ino`. A correctly typed placeholder or copied member cannot pass when its per-member `--ro-bind` is absent."
       - "Added BURL-M003 runtime fixtures that require `/nix/var`, the Nix database, and the daemon socket to remain absent. Added a duplicate-aware source fixture that rejects broad `/nix` and `/nix/store` source binds. A fresh staging-shape check rejects copied private-store state even when valid member binds hide it."

@@ -297,6 +297,22 @@ bill_of_materials:
     radar: adopt
     certainty: assumed
     assumption: "BURL-M003 adds pkgs.gh to devenv.nix; the devenv.lock nixpkgs revision resolves 2.96.0, but authoritative master does not declare that package."
+  - name: Diffutils
+    role: tooling
+    version: "3.12"
+    ecosystem: nix
+    justification: "Provides the locked `cmp` executable for byte-exact generated-binding and managed-evidence comparisons"
+    radar: adopt
+    certainty: assumed
+    assumption: "BURL-M003 adds `pkgs.diffutils` to `devenv.nix`; the pinned `devenv.lock` Nixpkgs revision resolves 3.12, but the package isn't declared directly."
+  - name: Procps
+    role: tooling
+    version: "4.0.6"
+    ecosystem: nix
+    justification: "Provides the locked `ps` executable for BURL-M003 process-environment and survivor fixtures on Linux"
+    radar: adopt
+    certainty: assumed
+    assumption: "BURL-M003 adds Linux-only `pkgs.procps` to `devenv.nix`; the pinned `devenv.lock` Nixpkgs revision resolves 4.0.6, while the undeclared command resolves through the ambient host profile."
   - name: actions/checkout
     role: infrastructure
     version: fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
