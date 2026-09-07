@@ -44,7 +44,7 @@ mechanism and a conservative start-space guard. They don't constitute accepted
    no-network, descriptor-closure, teardown-lock, and cleanup controls.
 5. Add `--disable-userns` and `--assert-userns-disabled` to the existing single
    Bubblewrap invocation. Candidate assertions consume the mounted manifest and
-   don't start a nested Bubblewrap namespace.
+   don't start a second Bubblewrap process.
 6. Count the complete null-terminated environment and argument vector before
    `exec`. Include the Bubblewrap arguments, every closure bind, and the
    candidate command. Reject a total at or above half of `getconf ARG_MAX`.
@@ -107,26 +107,32 @@ The `BURL-M003` contract fixtures must preserve these checks:
   half of `ARG_MAX`.
 - The exact 4,000,000,000-byte start-space boundary passes, and one byte below
   it fails before candidate execution.
-- `--disable-userns` and `--assert-userns-disabled` block nested user
-  namespaces without a nested Bubblewrap assertion.
+- `--disable-userns` enters an internal nested user namespace that prevents the
+  candidate from creating further user namespaces. Candidate assertions don't
+  start a second Bubblewrap process.
 - The existing no-network, private-PID, descriptor, teardown, and cleanup
   fixtures continue to pass.
 
 ## Local prototype facts
 
-The prototype used Bubblewrap `0.11.2` against PR #15 commit
-`9719259f1ecee819af96c98c2be210156f198343`. It derived 556 manifest paths,
-34,824 manifest bytes, and 75,208 bind-only argument bytes. The host closure
-used 5,627,330,560 allocated bytes. `ARG_MAX` was 2,097,152 bytes.
+An independent reproduction used pinned Nix `2.35.2` and Bubblewrap `0.11.2`
+against PR #15 commit `9719259f1ecee819af96c98c2be210156f198343`.
+It derived 558 manifest paths, 34,986 manifest bytes, and 75,552 bind-only
+argument bytes. The host closure used 5,627,330,560 allocated bytes. `ARG_MAX`
+was 2,097,152 bytes.
 
 The prototype found no top-level symbolic links. It hid an unlisted host path,
 rejected writes to a member and the store base, ran representative dynamic and
-script tools, exposed no forbidden PATH client, and blocked nested user
-namespaces.
+script tools, exposed no forbidden PATH client, and prevented the candidate
+from creating further user namespaces.
 
-The 75,208-byte value covers only bind triples. The prototype didn't retain the
+The 75,552-byte value covers only bind triples. The prototype didn't retain the
 complete environment and argument count. The complete-vector fixture therefore
 remains an assumed requirement until a managed `BURL-M003` run exercises it.
+
+These local results prove the closure-view mechanics. They don't establish
+hosted capacity or feature availability and can't settle ADR-0020 without
+accepted managed `BURL-M003` completion evidence from the standard runner.
 
 The documented 14,000,000,000-byte runner profile exceeds the measured host
 closure allocation by 8,372,669,440 bytes before checkout and cache use. The
