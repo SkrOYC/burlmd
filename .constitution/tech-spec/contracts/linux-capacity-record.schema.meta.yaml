@@ -1,0 +1,7 @@
+artifact: linux-capacity-record.schema.json
+surface: json
+flows: [flow-release]
+boundaries: [BND-16, BND-17]
+certainty: assumed
+assumption: "Schema version 1 defines the wrapper-owned BURL-O001 Linux capacity transcript. No managed runner or contract fixture has exercised its protected-path lifecycle, exact ordering, thresholds, or sealed aggregation path."
+settles_when: "BURL-M003 and BURL-O001 fixtures compile the schema and exercise every semantic invariant. Managed BURL-O001 evidence must authenticate the exact schema hash, seal the wrapper-owned transcript, and record all 29 ordered observations before this schema settles."
