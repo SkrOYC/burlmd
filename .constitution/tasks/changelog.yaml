@@ -1,4 +1,13 @@
 entries:
+  - version: v3.2.9
+    date: 2026-09-06
+    fixed:
+      - "Aligned the current Tasks metadata with merged TechSpec v2.1.8 after Tasks v3.2.8 completed the fresh-dispatch-only adaptation for BURL-M003 and BURL-O001. Preserved v3.2.8's historical upstream.tech-spec pointer at v2.1.7. BURL-M003 and BURL-O001 planning is unchanged. Ticket IDs, dependencies, scope, estimates, and the generated critical-path graph remain unchanged; this patch is metadata-only."
+    upstream:
+      prd: v2.0.5
+      architecture: v2.1.2
+      tech-spec: v2.1.8
+    by: patch-lane
   - version: v3.2.8
     date: 2026-09-06
     fixed:
