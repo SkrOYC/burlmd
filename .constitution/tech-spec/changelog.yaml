@@ -1,4 +1,14 @@
 entries:
+  - version: v2.1.8
+    date: 2026-09-06
+    fixed:
+      - "Marked ci_bootstrap.stage4_tasks_adaptation satisfied for BURL-M003 and BURL-O001 after Tasks v3.2.8 adapted both tickets to the fresh-dispatch-only lifecycle. Raw contract schema version 33, evidence schema versions 15, 17, and 20, and embedded sealing receipt version 2 remain unchanged."
+      - "Removed the completed Stage 4 adaptation condition from the live sidecar and forward-contract narrative while retaining the assumed contract certainty and all implementation fixture settlement conditions."
+      - "Routed only the Tasks v3.2.8 changelog upstream.tech-spec pointer, which remains v2.1.7, to a later Stage 4 metadata-only alignment with TechSpec v2.1.8. This Stage 3 patch does not edit .constitution/tasks or require a Task graph change."
+    by: patch-lane
+    upstream:
+      prd: v2.0.5
+      architecture: v2.1.2
   - version: v2.1.7
     date: 2026-09-06
     fixed:
