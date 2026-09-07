@@ -92,20 +92,33 @@ mechanism and a conservative start-space guard. They don't constitute accepted
    environment and argument vector. Include the Bubblewrap arguments, every
    closure bind, the `/usr/bin/env` symlink arguments, and the candidate
    command. Reject a total at or above half of `getconf ARG_MAX`.
-10. Before the first candidate command, enumerate every capacity-relevant
-    writable root used by `BURL-M003`. Include the source checkout, disposable
-    workspace, role output and results, dependency caches, build and generated
-    output, temporary storage, candidate home and configuration, closure
-    staging, per-session storage, and private Sway runtime. Also include every
-    host source of a writable bind and every writable environment path. Create
-    and canonicalize the complete set before the guard; no later step may add a
-    writable root.
-11. Group those roots by distinct `st_dev`. Immediately before every namespace
-    entry, compute available bytes once per distinct containing filesystem from
+10. Before the first candidate session, create and canonicalize every stable
+    writable parent used by `BURL-M003`. Freeze the complete capacity authority
+    set from those parents, not from session leaves. Include the source
+    checkout, disposable workspace, role output and results, dependency caches,
+    build and generated output, temporary storage, candidate home and
+    configuration, closure staging, session storage, private Sway runtime,
+    every writable-bind source, and every writable environment path. For each
+    capacity slot, freeze its stable identifier, kind, canonical parent,
+    `st_dev`, and decoded containing-mount ID, device, root, and mount point.
+    Also freeze whether the slot uses
+    the stable parent itself or one declared per-session staging, session, or
+    writable-bind leaf. No later step may add a parent, mount, device, capacity
+    slot, leaf declaration, or writable path outside this authority set.
+11. For each session, create its declared ephemeral leaves only under their
+    frozen stable parents. Walk and canonicalize each current leaf without
+    following symbolic links. Require strict containment, the parent's frozen
+    mount ID on every path component, and a leaf `st_dev` equal to the
+    parent's frozen `st_dev`. Add only the current leaf to that session's frame.
+    Immediately before namespace entry, revalidate every stable parent and
+    current leaf. Group the frozen parent devices by distinct `st_dev`, and
+    compute available bytes once per device from
     `statvfs.f_bavail * statvfs.f_frsize`. Require at least 4,000,000,000 bytes
-    on every device. If a root, device, or observation is missing, inconsistent,
-    unavailable, overflowed, or below the floor, fail before that session's
-    candidate command.
+    on every device. Reject a missing or changed authority, an undeclared leaf,
+    a symbolic-link escape, a nested mount, a device mismatch, or an unavailable,
+    inconsistent, overflowed, or smaller observation before the candidate
+    command. After each session, remove all of its ephemeral leaves. A later
+    session must not stat or include a removed leaf from an earlier session.
 12. Treat each space check only as a start guard. Don't claim that it measures
     a complete phase peak or proves capacity for another ticket.
 13. Retain the exact manifest and launch observations in
@@ -117,7 +130,8 @@ mechanism and a conservative start-space guard. They don't constitute accepted
     It also records the candidate-manifest identity and one source-identity row
     per member. Seven ordered session frames retain each invocation's manifest,
     source, namespace-flag, unique staging-root, and preflight digests. Each
-    frame also retains complete-vector, start-space, and cleanup observations.
+    frame also retains the stable-parent-to-current-path mapping,
+    complete-vector, start-space, and cleanup observations.
     Its literal `manifest-payload:` delimiter precedes the exact
     length-delimited candidate manifest bytes. The manifest's final line feed
     is the log's final byte.
@@ -146,7 +160,7 @@ mechanism and a conservative start-space guard. They don't constitute accepted
     paths by their UTF-8 bytes with `LC_ALL=C`. For each path, hash exactly its
     UTF-8 bytes without a byte-order mark, Unicode normalization, delimiter,
     NUL, carriage return, line feed, or other terminator. Append the lowercase
-    SHA-256 to `integration-`. Require a fresh staging root, preflight,
+    SHA-256 to `integration-`. Require fresh ephemeral leaves, a preflight,
     namespace, teardown, and cleanup for every ID. Don't start the next session
     before the preceding teardown lock is free and its staging root is absent.
 16. Keep Bubblewrap absent from the candidate manifest, mounts, and `PATH`.
@@ -252,11 +266,19 @@ The `BURL-M003` contract fixtures must preserve these checks:
   feed, a carriage return, another terminator, and platform newline conversion.
 - Every session's complete null-terminated environment and argument vector
   stays below half of `ARG_MAX`.
-- For every session, the complete capacity-root inventory maps every root to a
-  device and contains one observation per distinct `st_dev`. An omitted root or
-  device fails. The exact 4,000,000,000-byte boundary passes on every device; a
-  secondary device at 3,999,999,999 bytes fails even when the primary device
-  passes.
+- For every session, each capacity slot maps to a frozen stable parent and
+  device. Each ephemeral staging, session, or
+  writable-bind leaf is created only under its declared parent. Before the
+  guard, the launcher canonicalizes the current leaf without following links.
+  It rejects a symbolic-link escape, nested mount, or `st_dev` mismatch. The
+  session frame contains only that session's current leaves. The launcher
+  removes those leaves after the session and doesn't stat a removed earlier
+  leaf during a later session. Fixtures run this create, check, and remove
+  sequence for all seven sessions. They also reject an undeclared leaf, an
+  omitted stable parent or device, and any parent, mount, device, or writable
+  path outside the frozen authority set. The exact 4,000,000,000-byte boundary
+  passes on every device. A secondary stable device at 3,999,999,999 bytes
+  fails even when the primary device passes.
 - `--disable-userns` enters an internal nested user namespace that prevents the
   candidate from creating further user namespaces. Candidate assertions check
   the resulting property and don't start another Bubblewrap process.
@@ -273,8 +295,9 @@ The `BURL-M003` contract fixtures must preserve these checks:
 - The trusted launcher creates exactly one
   `logs/burl-m003-linux-closure-view.log` internal artifact. Fresh sealing
   validates its exact grammar, golden fixture, parent tool identity, session
-  order, session count, namespace flags, capacity rows, source rows, preflight
-  digests, cleanup results, manifest payload, byte count, and SHA-256. Mutation
+  order, session count, namespace flags, capacity authority rows, current-leaf
+  rows, source rows, preflight digests, cleanup results, manifest payload, byte
+  count, and SHA-256. Mutation
   fixtures reject noncanonical decimals or hexadecimal, invalid type or
   read-only tokens, bad escaping, reordering, an incorrect session ID or count,
   a missing session boundary, a changed digest or delimiter, payload-length
