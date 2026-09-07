@@ -99,7 +99,16 @@ survive. The release contract must not make that claim.
    `producerLineage.stageArtifact.artifactId`. It preserves them in its sealing
    receipt. Final aggregation verifies the complete producer-seal-to-consumer
    chain.
-9. Keep strict credential removal and rejection of reserved artifact-name
+9. Keep sealing receipt version `2` limited to facts available before its
+   upload. Each reusable role workflow must expose the receipt upload step's
+   artifact ID and bare digest as `sealing-receipt-artifact-id` and
+   `sealing-receipt-upload-action-digest`. A fresh caller `receipt_digests` job
+   must carry all six outputs in one identity-bound transport artifact. After
+   completion, the collector must compare each transported digest with the
+   matching canonical REST digest and retain both in
+   `origin.sealingReceiptArtifact`. The caller job doesn't execute or download
+   candidate bytes and isn't a hosted-origin authority.
+10. Keep strict credential removal and rejection of reserved artifact-name
    collisions on all roles.
 
 ## Consequences
@@ -121,11 +130,11 @@ survive. The release contract must not make that claim.
   lineage-SHA-mismatch, or consumer-unbound stage.
 - Reviewed source and test contracts remain required. Provenance validation
   doesn't replace source review or test review.
-- The role and aggregate JSON schemas are versions `15` and `17`. The embedded
-  sealing receipt is version `2`. The raw contract is version `33`. These
+- The role and aggregate JSON schemas are versions `15` and `18`. The embedded
+  sealing receipt is version `2`. The raw contract is version `34`. These
   contracts separate candidate runtime guards from attested seal origin and
-  bind an immutable canonical compatibility-stage lineage without encoding a
-  platform-independent process-termination assertion.
+  bind an immutable canonical compatibility-stage lineage. They also carry the
+  post-upload receipt digest without making the receipt self-report it.
 - Managed non-Spike source-write authority is an immutable ordered mapping in
   the trust-anchor raw contract. Candidate input can't select, widen, reorder,
   or omit it. BURL-O004 additionally prepares its locked coordinator before
@@ -137,6 +146,9 @@ survive. The release contract must not make that claim.
   bytes and object modes to equal the trust anchor before dispatch and during
   collection. Any change requires reviewed trust-anchor rotation and
   evidence-only completion.
+- `scripts/write-receipt-digest-observation.sh` is also an immutable member of
+  `ci_bootstrap.trust_anchor.trusted_control_paths`. It writes only the
+  three-role receipt digest transport from trusted caller outputs.
 
 ## Verification anchors
 
@@ -147,6 +159,7 @@ survive. The release contract must not make that claim.
 - [GitHub CLI `attestation verify` reference](https://cli.github.com/manual/gh_attestation_verify)
 - [GitHub CLI `attestation trusted-root` reference](https://cli.github.com/manual/gh_attestation_trusted-root)
 - [`actions/upload-artifact` interface at the pinned commit](https://github.com/actions/upload-artifact/blob/043fb46d1a93c77aae656e7c1c64a875d1fc6a0a/action.yml)
+- [Reusing workflows](https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows#using-outputs-from-a-reusable-workflow)
 - [`actions/download-artifact` interface at the pinned commit](https://github.com/actions/download-artifact/blob/3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c/action.yml)
 - [`actions/attest` interface at the pinned commit](https://github.com/actions/attest/blob/1e69f48acb82d1966a394da916b4c1698aa569d6/action.yml)
 - <https://github.com/containers/bubblewrap>

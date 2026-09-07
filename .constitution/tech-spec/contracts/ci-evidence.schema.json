@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": ["schemaVersion", "expectedIdentity", "expectedIdentitySha256", "expectedIdentityArtifact", "generatedAt", "mode", "status", "roleEvidence", "compatibilityStage", "coordinatorExecution", "aggregationChecks", "rejectionReasons"],
   "properties": {
-    "schemaVersion": { "const": 17 },
+    "schemaVersion": { "const": 18 },
     "expectedIdentity": { "$ref": "ci-role-evidence.schema.json#/$defs/expectedIdentity" },
     "expectedIdentitySha256": { "$ref": "#/$defs/sha256" },
     "expectedIdentityArtifact": {
@@ -39,7 +39,7 @@
         "hostedOriginVerified": { "$comment": "This value refers only to fresh sealing-job origin authenticated by verified attestation provenance. It never describes candidate hosted origin.", "type": "boolean" },
         "compatibilityStageVerified": { "oneOf": [{ "type": "null" }, { "type": "boolean" }] },
         "artifactNamesVerified": { "type": "boolean" },
-        "artifactIntegrityVerified": { "type": "boolean" },
+        "artifactIntegrityVerified": { "$comment": "True requires an action-to-REST digest match for every receipt artifact as well as every expected, candidate, sealed, compatibility-stage, and producer-lineage artifact.", "type": "boolean" },
         "bundleContentsVerified": { "type": "boolean" },
         "filesystemEvidenceVerified": { "$comment": "The aggregator must require every enriched role manifest to carry a non-empty observed environment.filesystem string, compare the exact candidate/sealed/aggregated manifest value, and reject a missing, empty, or changed value.", "type": "boolean" },
         "imageVersionsCompatible": { "type": "boolean" }
@@ -198,17 +198,54 @@
         "artifactName": {
           "$comment": "The aggregator also requires this exact name to use the expected role and artifactNonce. The restricted alphabet excludes every character rejected by the pinned upload action.",
           "type": "string",
-          "pattern": "^managed-evidence-(expected-[0-9a-f]{32}|(candidate|sealed)-(linux-x86_64|macos-26-arm64|macos-15-arm64)-[0-9a-f]{32})$"
+          "pattern": "^managed-evidence-(expected-[0-9a-f]{32}|(candidate|sealed|seal-receipt)-(linux-x86_64|macos-26-arm64|macos-15-arm64)-[0-9a-f]{32})$"
         },
         "uploadActionDigest": { "$ref": "#/$defs/sha256" },
         "artifactDigest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+      }
+    },
+    "receiptDigestTransport": {
+      "$comment": "The trusted caller creates this post-role transport from the three reusable-workflow outputs. Semantic validation requires exactly one receipt per role, exact role-and-nonce artifact names, and equality between every transported artifact ID and the corresponding REST artifact object. The collector combines each bare uploadActionDigest with that REST object's canonical digest in origin.sealingReceiptArtifact.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "expectedIdentitySha256", "repositoryId", "workflowRunId", "runAttempt", "workflowSignerSha", "artifactNonce", "receipts"],
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "expectedIdentitySha256": { "$ref": "#/$defs/sha256" },
+        "repositoryId": { "type": "integer", "minimum": 1 },
+        "workflowRunId": { "type": "integer", "minimum": 1 },
+        "runAttempt": { "const": 1 },
+        "workflowSignerSha": { "$ref": "#/$defs/gitSha" },
+        "artifactNonce": { "type": "string", "pattern": "^[0-9a-f]{32}$" },
+        "receipts": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "prefixItems": [
+            { "$ref": "#/$defs/receiptDigestTransportEntry", "properties": { "role": { "const": "linux-x86_64" }, "artifactName": { "type": "string", "pattern": "^managed-evidence-seal-receipt-linux-x86_64-[0-9a-f]{32}$" } } },
+            { "$ref": "#/$defs/receiptDigestTransportEntry", "properties": { "role": { "const": "macos-26-arm64" }, "artifactName": { "type": "string", "pattern": "^managed-evidence-seal-receipt-macos-26-arm64-[0-9a-f]{32}$" } } },
+            { "$ref": "#/$defs/receiptDigestTransportEntry", "properties": { "role": { "const": "macos-15-arm64" }, "artifactName": { "type": "string", "pattern": "^managed-evidence-seal-receipt-macos-15-arm64-[0-9a-f]{32}$" } } }
+          ],
+          "items": false
+        }
+      }
+    },
+    "receiptDigestTransportEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "artifactId", "artifactName", "uploadActionDigest"],
+      "properties": {
+        "role": { "$ref": "#/$defs/role" },
+        "artifactId": { "type": "integer", "minimum": 1 },
+        "artifactName": { "type": "string", "pattern": "^managed-evidence-seal-receipt-(linux-x86_64|macos-26-arm64|macos-15-arm64)-[0-9a-f]{32}$" },
+        "uploadActionDigest": { "$ref": "#/$defs/sha256" }
       }
     },
     "origin": {
       "$comment": "The candidatePlacement record is noncryptographic fail-closed corroboration. The attested sealing receipt supplies the sealing check-run locator and immutable facts, but no final job state. After the workflow attempt completes, the coordinator resolves exactly one job API object through sealingCheckRunId and constructs sealingJob from REST and verified provenance. Semantic validation requires sealingJob.checkRunId to equal sealingCheckRunId, distinct candidate and sealing job IDs, canonical digest equality, exact role-specific names derived from expectedIdentity.artifactNonce, one artifact per reserved name, and no other candidate, sealed, expected, or receipt artifact for that nonce.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["repositoryId", "workflowRunId", "runAttempt", "trustAnchorSha", "testedSourceSha", "workflowSignerSha", "workflowSignerRef", "baseSha", "candidatePlacement", "sealingCheckRunId", "sealingJob", "signerWorkflow", "candidateArtifact", "sealedArtifact", "sealingReceiptSha256", "attestationIssuer", "sealedAttestationSubjectDigest", "sealedAttestationBundleSha256", "sealedAttestationVerified", "sealingReceiptAttestationSubjectDigest", "sealingReceiptAttestationBundleSha256", "sealingReceiptAttestationVerified", "roleBundleSha256", "sealedBundleSha256", "restApiVersion", "verifiedAt"],
+      "required": ["repositoryId", "workflowRunId", "runAttempt", "trustAnchorSha", "testedSourceSha", "workflowSignerSha", "workflowSignerRef", "baseSha", "candidatePlacement", "sealingCheckRunId", "sealingJob", "signerWorkflow", "candidateArtifact", "sealedArtifact", "sealingReceiptArtifact", "sealingReceiptSha256", "attestationIssuer", "sealedAttestationSubjectDigest", "sealedAttestationBundleSha256", "sealedAttestationVerified", "sealingReceiptAttestationSubjectDigest", "sealingReceiptAttestationBundleSha256", "sealingReceiptAttestationVerified", "roleBundleSha256", "sealedBundleSha256", "restApiVersion", "verifiedAt"],
       "properties": {
         "repositoryId": { "type": "integer", "minimum": 1 },
         "workflowRunId": { "type": "integer", "minimum": 1 },
@@ -224,6 +261,10 @@
         "signerWorkflow": { "$ref": "#/$defs/signerWorkflow" },
         "candidateArtifact": { "$ref": "#/$defs/artifactObservation" },
         "sealedArtifact": { "$ref": "#/$defs/artifactObservation" },
+        "sealingReceiptArtifact": {
+          "$comment": "The collector takes artifactId, artifactName, and uploadActionDigest from the trusted caller's receipt digest transport. It takes artifactDigest from the matching REST artifact object and requires canonical action-to-REST equality.",
+          "$ref": "#/$defs/artifactObservation"
+        },
         "sealingReceiptSha256": { "$ref": "#/$defs/sha256" },
         "attestationIssuer": { "const": "https://token.actions.githubusercontent.com" },
         "sealedAttestationSubjectDigest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
@@ -266,7 +307,8 @@
             "candidatePlacement": { "type": "object", "properties": { "workflowJobKey": { "const": "candidate" }, "workflowPath": { "const": ".github/workflows/ci-role-linux-x86-64.yml" }, "expectedRunnerLabel": { "const": "ubuntu-24.04" }, "runnerLabels": { "type": "array", "contains": { "const": "ubuntu-24.04" }, "not": { "contains": { "const": "self-hosted" } } } } },
             "sealingJob": { "type": "object", "properties": { "workflowJobKey": { "const": "seal" }, "runnerLabels": { "type": "array", "contains": { "const": "ubuntu-24.04" }, "not": { "contains": { "const": "self-hosted" } } } } },
             "candidateArtifact": { "type": "object", "properties": { "artifactName": { "type": "string", "pattern": "^managed-evidence-candidate-linux-x86_64-[0-9a-f]{32}$" } } },
-            "sealedArtifact": { "type": "object", "properties": { "artifactName": { "type": "string", "pattern": "^managed-evidence-sealed-linux-x86_64-[0-9a-f]{32}$" } } }
+            "sealedArtifact": { "type": "object", "properties": { "artifactName": { "type": "string", "pattern": "^managed-evidence-sealed-linux-x86_64-[0-9a-f]{32}$" } } },
+            "sealingReceiptArtifact": { "type": "object", "properties": { "artifactName": { "type": "string", "pattern": "^managed-evidence-seal-receipt-linux-x86_64-[0-9a-f]{32}$" } } }
           } } } }
         },
         {
@@ -280,7 +322,8 @@
             "candidatePlacement": { "type": "object", "properties": { "workflowJobKey": { "const": "candidate" }, "workflowPath": { "const": ".github/workflows/ci-role-macos-26-arm64.yml" }, "expectedRunnerLabel": { "const": "macos-26" }, "runnerLabels": { "type": "array", "contains": { "const": "macos-26" }, "not": { "contains": { "const": "self-hosted" } } } } },
             "sealingJob": { "type": "object", "properties": { "workflowJobKey": { "const": "seal" }, "runnerLabels": { "type": "array", "contains": { "const": "macos-26" }, "not": { "contains": { "const": "self-hosted" } } } } },
             "candidateArtifact": { "type": "object", "properties": { "artifactName": { "type": "string", "pattern": "^managed-evidence-candidate-macos-26-arm64-[0-9a-f]{32}$" } } },
-            "sealedArtifact": { "type": "object", "properties": { "artifactName": { "type": "string", "pattern": "^managed-evidence-sealed-macos-26-arm64-[0-9a-f]{32}$" } } }
+            "sealedArtifact": { "type": "object", "properties": { "artifactName": { "type": "string", "pattern": "^managed-evidence-sealed-macos-26-arm64-[0-9a-f]{32}$" } } },
+            "sealingReceiptArtifact": { "type": "object", "properties": { "artifactName": { "type": "string", "pattern": "^managed-evidence-seal-receipt-macos-26-arm64-[0-9a-f]{32}$" } } }
           } } } }
         },
         {
@@ -294,7 +337,8 @@
             "candidatePlacement": { "type": "object", "properties": { "workflowJobKey": { "const": "candidate" }, "workflowPath": { "const": ".github/workflows/ci-role-macos-15-arm64.yml" }, "expectedRunnerLabel": { "const": "macos-15" }, "runnerLabels": { "type": "array", "contains": { "const": "macos-15" }, "not": { "contains": { "const": "self-hosted" } } } } },
             "sealingJob": { "type": "object", "properties": { "workflowJobKey": { "const": "seal" }, "runnerLabels": { "type": "array", "contains": { "const": "macos-15" }, "not": { "contains": { "const": "self-hosted" } } } } },
             "candidateArtifact": { "type": "object", "properties": { "artifactName": { "type": "string", "pattern": "^managed-evidence-candidate-macos-15-arm64-[0-9a-f]{32}$" } } },
-            "sealedArtifact": { "type": "object", "properties": { "artifactName": { "type": "string", "pattern": "^managed-evidence-sealed-macos-15-arm64-[0-9a-f]{32}$" } } }
+            "sealedArtifact": { "type": "object", "properties": { "artifactName": { "type": "string", "pattern": "^managed-evidence-sealed-macos-15-arm64-[0-9a-f]{32}$" } } },
+            "sealingReceiptArtifact": { "type": "object", "properties": { "artifactName": { "type": "string", "pattern": "^managed-evidence-seal-receipt-macos-15-arm64-[0-9a-f]{32}$" } } }
           } } } }
         }
       ]
