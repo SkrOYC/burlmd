@@ -104,10 +104,15 @@ survive. The release contract must not make that claim.
    artifact ID and bare digest as `sealing-receipt-artifact-id` and
    `sealing-receipt-upload-action-digest`. A fresh caller `receipt_digests` job
    must carry all six outputs in one identity-bound transport artifact. After
-   completion, the collector must compare each transported digest with the
-   matching canonical REST digest and retain both in
-   `origin.sealingReceiptArtifact`. The caller job doesn't execute or download
-   candidate bytes and isn't a hosted-origin authority.
+   completion, the collector must resolve the transport's immutable ID from the
+   exact run inventory. It must download the raw archive by ID and compare its
+   SHA-256 with the canonical REST digest before extraction. The aggregate must
+   retain this check in `receiptDigestTransportArtifact`. The collector then
+   compares each transported receipt digest with the matching REST digest and
+   retains both in `origin.sealingReceiptArtifact`. The caller job doesn't
+   execute or download candidate bytes and isn't a hosted-origin authority.
+   Transport verification detects corrupt or substituted downloaded bytes. It
+   doesn't provide provenance independent of GitHub's artifact service.
 10. Keep strict credential removal and rejection of reserved artifact-name
    collisions on all roles.
 
@@ -130,11 +135,13 @@ survive. The release contract must not make that claim.
   lineage-SHA-mismatch, or consumer-unbound stage.
 - Reviewed source and test contracts remain required. Provenance validation
   doesn't replace source review or test review.
-- The role and aggregate JSON schemas are versions `15` and `18`. The embedded
-  sealing receipt is version `2`. The raw contract is version `34`. These
+- The role and aggregate JSON schemas are versions `15` and `19`. The embedded
+  sealing receipt is version `2`. The raw contract is version `35`. These
   contracts separate candidate runtime guards from attested seal origin and
   bind an immutable canonical compatibility-stage lineage. They also carry the
-  post-upload receipt digest without making the receipt self-report it.
+  post-upload receipt digest without making the receipt self-report it. The
+  aggregate also retains the receipt-digest transport's REST digest and raw
+  download hash.
 - Managed non-Spike source-write authority is an immutable ordered mapping in
   the trust-anchor raw contract. Candidate input can't select, widen, reorder,
   or omit it. BURL-O004 additionally prepares its locked coordinator before
@@ -149,6 +156,9 @@ survive. The release contract must not make that claim.
 - `scripts/write-receipt-digest-observation.sh` is also an immutable member of
   `ci_bootstrap.trust_anchor.trusted_control_paths`. It writes only the
   three-role receipt digest transport from trusted caller outputs.
+- The collector acquires that transport by immutable artifact ID. It verifies
+  the raw archive against the selected artifact's REST digest before reading
+  the JSON member.
 
 ## Verification anchors
 

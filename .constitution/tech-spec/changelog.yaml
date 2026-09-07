@@ -2,13 +2,17 @@ entries:
   - version: v2.1.9
     date: 2026-09-07
     fixed:
-      - "Added the missing post-upload receipt integrity path. Every reusable role workflow exposes sealing-receipt-artifact-id and sealing-receipt-upload-action-digest; the trusted caller's fresh receipt_digests job writes one identity-bound three-role transport; and local collect compares every transported bare digest with the matching canonical REST digest."
-      - "Advanced provisional-spikes.toml from raw contract version 33 to 34 and ci-evidence from aggregate schema version 17 to 18. The role schema remains version 15, and the embedded sealing receipt remains version 2 because it records only facts available before its own upload."
-      - "Added origin.sealingReceiptArtifact to retained aggregate evidence, added the receiptDigestTransport schema definition, added scripts/write-receipt-digest-observation.sh to the trusted-control inventory and planned layout, and changed the exact artifact inventories from 10 and 12 to 11 and 13."
-      - "Verified the pinned actions/upload-artifact commit's artifact-id and bare SHA-256 artifact-digest outputs, GitHub REST API version 2026-03-10's sha256:<hex> artifact digest, and GitHub's reusable-workflow output chain against the primary sources linked from ADR-019."
-      - "Marked BURL-M003 and BURL-O001 for Stage 4 adaptation before implementation. The adaptation must update acceptance evidence for the receipt output transport, aggregate field, schema versions, helper, and artifact counts; it does not change product scope or the epic graph."
+      - "Added the missing post-upload receipt integrity path. Every reusable role workflow exposes sealing-receipt-artifact-id and sealing-receipt-upload-action-digest. The trusted caller's fresh receipt_digests job writes one identity-bound three-role transport."
+      - "Required local collection to resolve the transport's immutable artifact ID from the exact run inventory. Collection downloads the raw archive by ID and compares its SHA-256 with the canonical REST digest before extraction or JSON parsing."
+      - "Added receiptDigestTransportArtifact to retain the transport ID, exact name, REST digest, and computed raw-download hash. Added origin.sealingReceiptArtifact to retain both digest forms for every sealing receipt."
+      - "Advanced provisional-spikes.toml from raw contract version 33 to 35 and ci-evidence from aggregate schema version 17 to 19. The role schema remains version 15. The embedded sealing receipt remains version 2 because it records only facts available before its own upload."
+      - "Added the receiptDigestTransport schema definition and scripts/write-receipt-digest-observation.sh trusted control. Changed the exact artifact inventories from 10 and 12 to 11 and 13."
+      - "Added fixtures that corrupt the downloaded transport bytes or substitute another artifact's valid archive. Both cases reject before extraction or JSON parsing."
+      - "Verified the pinned actions/upload-artifact artifact ID and digest outputs. Verified GitHub REST API version 2026-03-10 artifact lookup, canonical digest, and ID-addressed archive download semantics."
+      - "Marked BURL-M003 and BURL-O001 for Stage 4 adaptation before implementation. The adaptation covers transport acquisition, aggregate fields, schema versions, the helper, fixtures, and artifact counts. It doesn't change product scope or the epic graph."
     security:
       - "Kept sealing receipts free of self-referential post-upload claims. The fresh caller transport carries only trusted workflow outputs and never downloads or executes candidate bytes."
+      - "Limited the transport check to service-to-download integrity. It detects corrupt or substituted downloaded bytes but doesn't claim provenance independent of GitHub's artifact service."
     by: patch-lane
     upstream:
       prd: v2.0.5
