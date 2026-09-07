@@ -95,6 +95,18 @@ tickets:
         artifact digest failures must use `artifact-digest-mismatch`; stage and
         lineage transport digest failures must use
         `compatibility-stage-digest-mismatch`.
+      - STOP if any reusable role workflow doesn't expose exactly
+        `sealing-receipt-artifact-id` and
+        `sealing-receipt-upload-action-digest`; if the caller's fresh
+        `receipt_digests` job doesn't map all six values through `needs` into the
+        version-1 transport written by
+        `scripts/write-receipt-digest-observation.sh`; or if collection doesn't
+        resolve the transport's immutable ID from the exact run inventory. STOP
+        if collection doesn't download the raw archive by ID and compare its
+        SHA-256 with the canonical REST digest before extraction or JSON
+        parsing. Corrupt or substituted bytes must produce `artifact-corrupt`.
+        A REST ID, run, repository, name, or expiration-state mismatch must
+        produce `artifact-api-mismatch`.
       - STOP if the launcher isn't the clean trust-anchor copy, a trusted
         control file differs at the signer SHA, or the base-to-source diff
         leaves the packaging write allowlist.
@@ -173,11 +185,13 @@ tickets:
       execution. The validator accepts all 26 runtime values only when they are
       nonempty for BURL-O001. Preserve the parsed producer lineage, exact
       immutable lineage-artifact SHA-256, transport identity and attestation,
-      and consumer binding through the macOS 15 seal and final aggregate. Prove
-      the checksum and provenance-metadata
-      layout inside the prototype; release-candidate
-      attestations remain production workflow work owned by BURL-O009 and
-      BURL-O014
+      and consumer binding through the macOS 15 seal and final aggregate.
+      Require each role to export its receipt artifact ID and bare upload digest.
+      Carry all six values through the caller's fresh `receipt_digests` job and
+      version-1 transport before local collection verifies the raw archive.
+      Prove the checksum and provenance-metadata layout inside the prototype;
+      release-candidate attestations remain production workflow work owned by
+      BURL-O009 and BURL-O014
     acceptance:
       mode: hitl_sil
       evidence: >
@@ -202,6 +216,15 @@ tickets:
         anchor, workflow signer, separate tested source, ticket base, packaging
         allowlist, sealing provenance, bundle integrity, and internal artifact
         hashes.
+
+
+        Each reusable role workflow exposes exactly
+        `sealing-receipt-artifact-id` and
+        `sealing-receipt-upload-action-digest` from its receipt upload step. The
+        caller's fresh `receipt_digests` job maps all six values directly through
+        `needs` into `scripts/write-receipt-digest-observation.sh`. The helper
+        writes one identity-bound version-1 transport, and the job uploads it
+        with `overwrite: false`. It doesn't download or execute candidate bytes.
 
 
         Each named runtime check obtains the operating system, distribution,
@@ -294,7 +317,8 @@ tickets:
         reconstructs and preserves those records in its receipt.
 
 
-        Final aggregation validates against aggregate schema version `17`. It
+        Final aggregation validates against aggregate schema version `19` and
+        the raw managed-evidence contract at version `35`. It
         verifies the non-expired stage and producer-receipt REST objects, their
         service IDs and both digest forms, all three attestation chains, both
         seal origins, both receipts, and agreement between the parsed lineage,
@@ -305,6 +329,20 @@ tickets:
         wrong-seal, stale-producer-receipt, noncanonical-lineage,
         lineage-SHA-mismatch, consumer-unbound, and unexpected stages produce
         their matching typed `compatibility-stage-*` rejection.
+
+
+        Local collection enumerates the exact run and resolves the unique
+        receipt-digest transport name to its immutable artifact ID. It fetches
+        that ID's canonical REST object and downloads the raw archive through
+        the ID-addressed endpoint. Before extraction or JSON parsing, it
+        requires the raw archive SHA-256 to equal the canonical REST digest.
+        Final aggregation retains `receiptDigestTransportArtifact` with the
+        immutable ID, exact name, REST digest, and computed raw-download hash.
+        Each `origin.sealingReceiptArtifact` retains its transported bare action
+        digest and matching canonical REST digest. Fixtures that corrupt one
+        byte or substitute another artifact's valid archive reject with
+        `artifact-corrupt` before consumption. A REST ID, run, repository, name,
+        or expiration-state mismatch rejects with `artifact-api-mismatch`.
 
 
         Nix out-links are build sources only. The result tool copies their
@@ -348,8 +386,8 @@ tickets:
         before publication and reject publication of an accepted report.
         Lifecycle fixtures cover recovery from failed, cancelled, timed-out, and
         rejected reports.
-        They require the exact 10-artifact ordinary inventory and the exact
-        12-artifact BURL-O001 inventory, with `overwrite: false` on every
+        They require the exact 11-artifact ordinary inventory and the exact
+        13-artifact BURL-O001 inventory, with `overwrite: false` on every
         upload. Each fixed artifact-name template has no variable component
         other than its 32-hex nonce; role names are literals in their declared
         templates. Static fixtures scan every member of the complete
