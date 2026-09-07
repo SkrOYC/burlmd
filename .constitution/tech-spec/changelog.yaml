@@ -1,4 +1,20 @@
 entries:
+  - version: v2.1.14
+    date: 2026-09-07
+    fixed:
+      - "Bound every BURL-M003 Linux session to a canonical NUL-delimited complete Bubblewrap argv. Each session frame retains its byte count and SHA-256, and fresh sealing reconstructs the exact vector from trusted contract data plus retained authority and current paths. Duplicate-aware fixtures reject every added, omitted, reordered, duplicated, or substituted argument, including extra capabilities and host-root alias binds."
+      - "Moved Sway and swaymsg out of the trusted parent. The parent launches only Bubblewrap. Only the two integration sessions mount the exact unwrapped compositor closure and start Sway as an untrusted candidate sibling under the trusted in-namespace supervisor."
+      - "Defined the exact Sway 1.12 environment, launch arguments, 55-byte reviewed configuration, headless wlroots backend, pixman renderer, Xwayland disablement, and /candidate/xdg/runtime/wayland-1 socket. Base sessions expose no compositor member, process, socket, or Wayland variable."
+      - "Required the integration supervisor to terminate candidates and Sway on every outcome, wait for Sway, verify that its PID is absent, and complete a cleanup frame-and-acknowledgement exchange before namespace exit. Fixtures cover early Sway failure, hostile candidate exit and descendants, timeout, socket disruption, interruption, graceful reap, and forced reap."
+      - "Reproduced the base, unwrapped compositor, integration, and Bubblewrap closures twice with pinned Nix 2.35.2. The base remains 488 paths, 30,717 manifest bytes, SHA-256 `127043afe260d7756ee6cbda03e39a5bfceb4f7f79ae3a5be1595e447ce15e64`, 6,184,635,112 NAR bytes, and 66,314 bind bytes. The integration closure has 547 paths, 34,315 manifest bytes, SHA-256 `353e927fb857fe8f8fc213da4ac53e0a12147ead779e2e29289c6a3034415896`, 6,338,147,240 NAR bytes, and 74,100 bind bytes."
+      - "Advanced the raw contract to version 37 and its closure log to format v2. Role schema 15, aggregate schema 19, Spike-result schema 20, sealing receipt 2, receipt transport 1, evidence profiles, and the exact 11-artifact and 13-artifact inventories remain unchanged."
+      - "Routed only BURL-M003 adaptation to Stage 4 within its existing paths. BURL-O001 retains its explicit stop and later Stage 3 packaging-isolation and capacity decision."
+    security:
+      - "Candidate code, Sway, swaymsg, display traffic, sockets, and candidate artifacts remain untrusted. Only fresh sealing authenticates the retained evidence."
+    by: patch-lane
+    upstream:
+      prd: v2.0.5
+      architecture: v2.1.2
   - version: v2.1.13
     date: 2026-09-07
     fixed:
