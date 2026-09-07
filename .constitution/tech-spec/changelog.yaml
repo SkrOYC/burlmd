@@ -1,47 +1,20 @@
 entries:
-  - version: v2.1.11
-    date: 2026-09-07
-    added:
-      - "Added linux-capacity-record.schema.json version 1 and its sidecar. The schema fixes all 14 record fields, event and phase enums, RFC 3339 nanosecond UTC timestamps, filesystem identity, byte-count types, and three capacity thresholds."
-      - "Added four exact post-candidate phases for output copying, role-manifest writing, bundle compression, and upload-input finalization. An accepted transcript now contains one admission record and 14 adjacent precheck/postcheck pairs, for 29 records total."
-      - "Added util-linux 2.42 as the thirty-seventh bill-of-materials record. Its pinned flock and fallocate commands share one store root and provide teardown locking plus keep-size transcript preallocation."
-    changed:
-      - "Advanced provisional-spikes.toml from raw contract version 36 to 37. Role schema version 15, aggregate schema version 19, Spike-result schema version 20, sealing receipt version 2, and the 11-artifact and 13-artifact service inventories remain unchanged."
-      - "Made the capacity transcript wrapper-owned under a mode-0700 RUNNER_TEMP root that no candidate mount exposes. The wrapper preallocates its blocks, compares each append with independent parent state, and sends the transcript beside the role bundle for fresh-seal validation and attestation."
-      - "Separated initial admission from phase safety. Admission keeps the 10,000,000,000-byte allocation ceiling and 4,000,000,000-byte available-space floor. Every phase uses a separate assumed 1,000,000,000-byte available-space floor."
-      - "Required host-side prefetch of all locked Flake inputs, derivations, and requisites before network removal. The host exports the manifest database subset before namespace entry, and the root private context loads it with sandbox disabled and no build-users group."
-      - "Corrected the commit-9719259 reproduction inventory. It now distinguishes runtime-link tools from closure-root tools, includes jq, sway, and swaymsg, excludes the absent cmp root, and distinguishes bind-only bytes from the complete argument and environment vector."
-      - "Verified that pinned actions/upload-artifact v7.0.1 resolves @actions/artifact 6.2.0 and streams archive bytes through memory without creating a local ZIP file. Any pin or archive-mode change must repeat this check and add an upload phase if local archive allocation becomes possible."
-      - "Kept Linux disk-capacity evidence separate from the macOS packaging gates. BURL-O001 feasibility remains assumed until complete hosted evidence exists."
-    fixed:
-      - "Removed the unsupported insufficient-capacity result. Capacity, ordering, schema, state, or storage failure now fails the candidate job before upload, skips the successful-only seal, and produces no accepted aggregate or schema-valid Spike result."
-      - "Required fixtures to enforce every record field and semantic invariant, immediate phase adjacency, later-phase rejection before output changes, no later execution, candidate inaccessibility, finalization coverage, exact sealed members, and sealed-only aggregation."
-    security:
-      - "Added linux-capacity-record.schema.json to the trust-anchor control inventory, increasing it from 33 to 34 exact paths. Candidate-authored, duplicate, substituted, unsealed, state-mismatched, or malformed capacity bytes are never accepted."
-    upstream:
-      prd: v2.0.5
-      architecture: v2.1.2
-    by: patch-lane
   - version: v2.1.10
     date: 2026-09-07
-    added:
-      - "Added assumed ADR-0020 for the Linux closure view, sparse BURL-O001 Nix state, and fail-closed capacity guard. ADR-0019 remains the settled OD-11 authority decision and doesn't claim that OD-11 selected the Linux storage mechanism."
-    changed:
-      - "Replaced the Linux candidate's copied closure store with an exact Bubblewrap view. The trusted launcher exposes each enumerated host closure path read-only at its canonical /nix/store location and exposes no host store root, host Nix state, or daemon socket."
-      - "Limited writable Nix state to BURL-O001. Its trusted launcher imports metadata for only the closure manifest into a sparse private store, while all other Linux profiles use the manifest and executable checks without a Nix database."
-      - "Advanced provisional-spikes.toml from raw contract version 35 to 36 and added Nix 2.35.2 as the thirty-sixth bill-of-materials record. Role schema version 15, aggregate schema version 19, spike-result schema version 20, sealing receipt version 2, receipt transport version 1, the 33-path trusted-control inventory, and all role evidence profiles remain unchanged."
     fixed:
-      - "Removed the 5,600,000,000-byte Nix Archive threshold as a capacity proxy. The Linux gate caps conservative prebuild allocation at 10,000,000,000 bytes and requires at least 4,000,000,000 bytes of headroom against the standard 14,000,000,000-byte ubuntu-24.04 profile."
-      - "Added closure-manifest, hidden-store-canary, read-only bind, loader and runtime search path, ARG_MAX, top-level symbolic-link, nested-user-namespace, sparse-database, private-output, cleanup, and allocated-capacity fixture contracts. A recording harness must invoke a fresh capacity precheck before every named Linux packaging phase and reject an injected later-phase low-space condition before output changes."
-      - "Recorded the local closure-view, ARG_MAX, sparse-store, and allocated-byte reproduction procedure in ADR-0020. The local 9,910,620,160-byte prebuild observation doesn't prove that the unrun AppImage, Flake, distribution, or macOS archive flow fits the remaining 4,089,379,840 bytes."
-      - "Kept ubuntu-24.04 only as an assumed, fail-closed BURL-O001 research runner. Managed packaging must record before-and-after capacity for every named Linux build phase or stop with an insufficient-capacity result."
-      - "Marked BURL-M003 and BURL-O001 for a Stage 4 patch from Tasks v3.2.10 before implementation continues. Ticket IDs, dependencies, estimates, artifact inventories, and the epic graph don't change."
+      - "Replaced the copied BURL-M003 Linux closure with an exact read-only Bubblewrap view. The launcher mounts each complete manifest member at its canonical /nix/store path and hides the host store root, Nix state, database, daemon socket, and unlisted paths."
+      - "Made the BURL-M003 root inventory reproducible from the authoritative launcher groups. The inventory includes jq, Sway, swaymsg, the OpenSSL roots, and the Mesa runtime roots."
+      - "Preserved the existing single-invocation, no-network, private-PID, descriptor, teardown, and cleanup controls. Added --disable-userns and --assert-userns-disabled without nested Bubblewrap assertions."
+      - "Preserved the exact manifest, view, read-only, hidden-canary, loader, runtime, forbidden-client, and complete-vector ARG_MAX fixtures. Added only a fail-closed 4,000,000,000-byte BURL-M003 start-space guard."
+      - "Advanced the raw contract from version 35 to 36. Role schema 15, aggregate schema 19, Spike-result schema 20, sealing receipt 2, receipt transport 1, and the 11-artifact and 13-artifact inventories remain unchanged."
+      - "Kept ADR-0019 unchanged. ADR-0020 is assumed and applies only to BURL-M003; its local prototype facts don't count as hosted evidence."
+      - "Required Stage 4 to adapt only the BURL-M003 closure implementation and to add or retain a BURL-O001 stop condition that routes Linux Nix packaging isolation and capacity to a later Stage 3 decision. The epic graph doesn't change."
     security:
-      - "Preserved the credential-free candidate, no-network, no-ambient-tool, private-PID, teardown-lock, and fresh-seal boundaries. Candidate code can read only manifest-listed host store paths and can't write host closure bytes."
+      - "This patch doesn't authorize or solve BURL-O001 Nix packaging isolation or capacity. It makes no BURL-O001 runner, storage, evidence, or coordinator decision."
+    by: patch-lane
     upstream:
       prd: v2.0.5
       architecture: v2.1.2
-    by: patch-lane
   - version: v2.1.9
     date: 2026-09-07
     fixed:

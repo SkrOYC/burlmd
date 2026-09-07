@@ -3,5 +3,4 @@ surface: json
 flows: [flow-release]
 boundaries: [BND-17]
 certainty: assumed
-assumption: "Schema version 20 isn't exercised by a contract test. Raw contract version 37 keeps it byte-identical. BURL-O001 maps the validated sealed Linux capacity transcript into its existing generic measurements only after all 29 records pass."
-settles_when: "Spike-result fixtures validate version 20 and reject a BURL-O001 result whose capacity measurements don't derive from the exact authenticated sealed transcript."
+assumption: "Migrated; not yet exercised by a contract test."
