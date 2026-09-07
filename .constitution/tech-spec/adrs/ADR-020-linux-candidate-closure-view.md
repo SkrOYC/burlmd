@@ -3,7 +3,7 @@ id: ADR-0020
 status: accepted
 date: 2026-09-07
 certainty: assumed
-assumption: "An exact read-only Bubblewrap view of the locked BURL-M003 runtime closure preserves Linux isolation and fits the standard ubuntu-24.04 runner. Local prototypes exercised the mechanism, but no managed BURL-M003 run has exercised it."
+assumption: "An exact read-only view of the locked BURL-M003 candidate closure, with Bubblewrap kept in a separate trusted-parent tool closure, preserves Linux isolation and fits the standard ubuntu-24.04 runner. Local prototypes exercised the mechanism, but no managed BURL-M003 run has exercised it."
 ---
 # ADR-020: Linux candidate closure view
 
@@ -31,20 +31,23 @@ mechanism and a conservative start-space guard. They don't constitute accepted
 
 ## Decision
 
-1. Derive the exact `BURL-M003` closure manifest from the authoritative
-   launcher's locked runtime roots. Expand the roots with `nix-store -qR`, sort
-   them with `LC_ALL=C`, and write one canonical path per line.
-2. Immediately before namespace entry, the trusted launcher records each host
-   member's file type, device, inode, containing-mount device, and computed
-   mount root. It exposes the path-sorted snapshot read-only at
+1. Derive the exact `BURL-M003` candidate-closure manifest from the
+   authoritative launcher's locked runtime roots. Expand the roots with pinned
+   Nix `2.35.2` and `nix-store -qR`. Sort them with `LC_ALL=C`, and write one
+   canonical path per line. Exclude Bubblewrap and any member that only its
+   trusted-parent tool closure reaches.
+2. Immediately before every namespace entry, the trusted launcher records each
+   host member's file type, device, inode, containing-mount device, and
+   computed mount root. It exposes the path-sorted snapshot read-only at
    `/contract/locked-nix-closure.sources`. Create a fresh owned staging root
    whose only child is the store base. The base contains exactly one
    source-distinct, empty mount point of the correct type for each member. Bind
    the base read-only at `/nix/store`, then bind each member read-only at its
    canonical path.
-3. Before the first candidate command, a trusted namespace preflight verifies
-   each member against that host snapshot. The decoded `/proc/self/mountinfo`
-   data must contain exactly one mount at the member path. Its root,
+3. Before every session's candidate command, a trusted namespace preflight
+   verifies each member against that host snapshot. The decoded
+   `/proc/self/mountinfo` data must contain exactly one mount at the member path.
+   Its root,
    `major:minor` device, and `ro` mount option must match the source snapshot.
    The member's `st_dev`, `st_ino`, and file type must also match. A placeholder
    without its member `--ro-bind` therefore fails even when its name and type
@@ -55,20 +58,27 @@ mechanism and a conservative start-space guard. They don't constitute accepted
    `/nix/var/nix/db/db.sqlite`, and
    `/nix/var/nix/daemon-socket/socket` to return `ENOENT`.
 5. Preserve the `env -i`, private process identifier (PID) namespace,
-   no-network, descriptor-closure, teardown-lock, and cleanup controls.
-6. In the trusted parent, resolve `bwrap` to
-   `locked_bubblewrap_store_member/bin/bwrap`. Raw contract version `36` pins
-   that x86-64 Linux member to
-   `/nix/store/g7svy17fhkg2cq3q4lfzzc0mmsl3d8hq-bubblewrap-0.11.2`. Require
-   the store member in the manifest. Run that exact path with only `--version`,
-   and require the exact output
-   `bubblewrap 0.11.2`, one final line feed, empty standard error, and status
-   zero. Use the same path for the candidate invocation. The in-namespace
-   preflight and candidate must not execute another Bubblewrap process.
-7. Add `--disable-userns` and `--assert-userns-disabled` to the one candidate
-   Bubblewrap invocation. Bubblewrap enters its internal nested user namespace.
-   Candidate assertions check only the resulting namespace, mount, process,
-   descriptor, and network properties.
+   no-network, descriptor-closure, teardown-lock, and cleanup controls for
+   every candidate session.
+6. Keep Bubblewrap in a separate trusted-parent-only tool closure. Raw contract
+   version `36` pins its x86-64 Linux store member to
+   `/nix/store/g7svy17fhkg2cq3q4lfzzc0mmsl3d8hq-bubblewrap-0.11.2`. The
+   sorted eight-path tool-closure manifest is 480 bytes and has SHA-256
+   `398d11c9cd9249369cbb18d36661014eafef5ac18ff7adeb076c2c51ef0141fd`.
+   The exact `bin/bwrap` executable has SHA-256
+   `c500b527e18f7e32634ac497b78a0150ceb31ae70fa8afef3fbbe79fd1d9f726`.
+   Require those identities before the first session and revalidate both
+   digests before every later session. Run the executable with only
+   `--version`, and require the exact output `bubblewrap 0.11.2` plus one final
+   line feed, empty standard error, and status zero.
+7. Invoke that trusted-parent executable once per candidate session. Each
+   invocation includes `--unshare-all`, `--unshare-user`, `--uid 0`, `--gid 0`,
+   `--unshare-net`, `--disable-userns`, `--assert-userns-disabled`,
+   `--cap-add CAP_NET_ADMIN`, `--die-with-parent`, and `--new-session`.
+   Bubblewrap enters its internal nested user namespace. Candidate assertions
+   check only the resulting namespace, mount, process, descriptor, and network
+   properties. The in-namespace preflight and candidate don't execute another
+   Bubblewrap process.
 8. Resolve `command -v env` to its absolute store command path and require its
    store member in the manifest. The command path may be an internal member
    symlink. Require `readlink -f` to resolve to a regular executable in the same
@@ -76,10 +86,10 @@ mechanism and a conservative start-space guard. They don't constitute accepted
    `--symlink <env-command-path> /usr/bin/env`. The target is in the already
    mounted same-path, read-only manifest member. Don't bind a store source at
    `/usr/bin/env` or expose host `/usr`.
-9. Count the complete null-terminated environment and argument vector before
-   `exec`. Include the Bubblewrap arguments, every closure bind, the
-   `/usr/bin/env` symlink arguments, and the candidate command. Reject a total
-   at or above half of `getconf ARG_MAX`.
+9. Before each `exec`, count that session's complete null-terminated
+   environment and argument vector. Include the Bubblewrap arguments, every
+   closure bind, the `/usr/bin/env` symlink arguments, and the candidate
+   command. Reject a total at or above half of `getconf ARG_MAX`.
 10. Before the first candidate command, enumerate every capacity-relevant
     writable root used by `BURL-M003`. Include the source checkout, disposable
     workspace, role output and results, dependency caches, build and generated
@@ -88,28 +98,47 @@ mechanism and a conservative start-space guard. They don't constitute accepted
     host source of a writable bind and every writable environment path. Create
     and canonicalize the complete set before the guard; no later step may add a
     writable root.
-11. Group those roots by distinct `st_dev`. Immediately before namespace entry,
-    compute available bytes once per distinct containing filesystem from
+11. Group those roots by distinct `st_dev`. Immediately before every namespace
+    entry, compute available bytes once per distinct containing filesystem from
     `statvfs.f_bavail * statvfs.f_frsize`. Require at least 4,000,000,000 bytes
     on every device. If a root, device, or observation is missing, inconsistent,
-    unavailable, overflowed, or below the floor, fail before candidate commands.
-12. Treat the space check only as a start guard. Don't claim that it measures a
-   complete phase peak or proves capacity for another ticket.
+    unavailable, overflowed, or below the floor, fail before that session's
+    candidate command.
+12. Treat each space check only as a start guard. Don't claim that it measures
+    a complete phase peak or proves capacity for another ticket.
 13. Retain the exact manifest and launch observations in
     `logs/burl-m003-linux-closure-view.log`. The trusted launcher creates this
     internal artifact outside candidate-writable paths. Its byte grammar is the
     raw contract's `closure_view_log_policy`, and the raw contract contains its
     canonical golden fixture. The log records raw contract version `36`, the
-    exact Bubblewrap path and version, manifest identity, staging observations,
-    complete-vector size, `ARG_MAX`, every root-to-device mapping, each distinct
-    filesystem's available bytes, and one source-identity row per member. Its
-    literal `manifest-payload:` delimiter precedes the exact length-delimited
-    manifest bytes. The manifest's final line feed is the log's final byte.
-14. Frame the trusted in-namespace preflight record as the ASCII line
+    exact Bubblewrap path, version, executable digest, and tool-closure digest.
+    It also records the candidate-manifest identity and one source-identity row
+    per member. Seven ordered session frames retain each invocation's manifest,
+    source, namespace-flag, unique staging-root, and preflight digests. Each
+    frame also retains complete-vector, start-space, and cleanup observations.
+    Its literal `manifest-payload:` delimiter precedes the exact
+    length-delimited candidate manifest bytes. The manifest's final line feed
+    is the log's final byte.
+14. For every session, frame the trusted in-namespace preflight record as the
+    ASCII line
     `preflight-bytes=<canonical-decimal>`, followed by exactly that many body
     bytes and end of file on a parent-owned pipe. The parent validates the
-    complete record before it acknowledges candidate start. Candidate commands
-    inherit neither preflight pipe descriptor.
+    complete record before it acknowledges candidate start. It records the body
+    length and SHA-256 in that session's log frame. Candidate commands inherit
+    neither preflight pipe descriptor.
+15. Use these seven session IDs in this exact order:
+    `generated-bindings`, `flutter-test`, `dart-analyze`, `cargo-metadata`,
+    `integration-378c340b182c219c9b1067d7918e48a70ed42307453d3b69402a1b075786b58d`,
+    `integration-2aa91e4e2d4b0febdfc223ef1bae763bf139e2fc6f81409a05bf19c5c9139e9d`,
+    and `managed-isolation`. The two integration IDs append the SHA-256 of the
+    path-sorted PR #15 integration-test paths. Require a fresh staging root,
+    preflight, namespace, teardown, and cleanup for every ID. Don't start the
+    next session before the preceding teardown lock is free and its staging root
+    is absent.
+16. Keep Bubblewrap absent from the candidate manifest, mounts, and `PATH`.
+    Inside every session, require `command -v bwrap` to fail. Require an
+    exact-path probe of the trusted-parent executable to return `ENOENT`, and a
+    command-name invocation to return status `127`.
 
 ## Exact closure roots
 
@@ -138,10 +167,10 @@ env flutter dart flutter_rust_bridge_codegen cargo cargo-expand rustc rustup
 cmake ninja pkg-config clang openssl jq ip
 ```
 
-The trusted Linux runtime group is:
+The candidate's trusted Linux runtime group is:
 
 ```text
-bwrap sway swaymsg
+sway swaymsg
 ```
 
 Resolve `cargo-expand` from `BURLMD_CARGO_EXPAND`. Resolve the OpenSSL
@@ -150,8 +179,9 @@ Mesa roots from `BURLMD_MESA_DRI_PATH` and `BURLMD_MESA_EGL_VENDOR_PATH`.
 
 Reject an empty manifest, a duplicate or noncanonical path, a missing member,
 a top-level symbolic link, or a direct Nix reference outside the manifest.
-Record the manifest SHA-256 and verify the same bytes before each candidate
-session. Internal links remain inside their mounted store object.
+Reject the Bubblewrap store member and any member that only its parent tool
+closure reaches. Record the manifest SHA-256 and verify the same bytes before
+each candidate session. Internal links remain inside their mounted store object.
 
 ## Fixtures
 
@@ -187,58 +217,75 @@ The `BURL-M003` contract fixtures must preserve these checks:
 - The Flutter Rust Bridge generator, Cargo, `rustc`, the `rustup` shim, Dart,
   CMake, Ninja, Clang, OpenSSL, `jq`, Sway, `swaymsg`, `iproute2`, and
   their runtime dependencies run from the view.
-- The trusted parent proves the exact locked Bubblewrap path and version, then
-  uses that path for the sole candidate Bubblewrap invocation. The preflight
-  and candidate traces contain no other Bubblewrap execution.
+- The trusted parent proves the exact locked Bubblewrap path, version,
+  executable digest, and separate tool-closure digest. It uses that path for
+  each of the seven candidate-session invocations. The candidate manifest and
+  `PATH` omit Bubblewrap, exact-path and command-name probes fail, and the
+  preflight and candidate traces contain no other Bubblewrap execution.
 - Forbidden clients remain absent.
-- The complete null-terminated environment and argument vector stays below
-  half of `ARG_MAX`.
-- The complete capacity-root inventory maps every root to a device and contains
-  one observation per distinct `st_dev`. An omitted root or device fails. The
-  exact 4,000,000,000-byte boundary passes on every device; a secondary device
-  at 3,999,999,999 bytes fails even when the primary device passes.
+- Every session's complete null-terminated environment and argument vector
+  stays below half of `ARG_MAX`.
+- For every session, the complete capacity-root inventory maps every root to a
+  device and contains one observation per distinct `st_dev`. An omitted root or
+  device fails. The exact 4,000,000,000-byte boundary passes on every device; a
+  secondary device at 3,999,999,999 bytes fails even when the primary device
+  passes.
 - `--disable-userns` enters an internal nested user namespace that prevents the
   candidate from creating further user namespaces. Candidate assertions check
   the resulting property and don't start another Bubblewrap process.
-- The no-network, private-PID, descriptor, teardown, and cleanup
-  fixtures continue to pass.
+- Every session gets one fresh namespace, staging root, preflight, and cleanup.
+  The no-network, private-PID, descriptor, teardown, survivor-rejection, and
+  cleanup fixtures continue to pass. Nested and candidate-started Bubblewrap
+  remain forbidden.
 - The trusted launcher creates exactly one
   `logs/burl-m003-linux-closure-view.log` internal artifact. Fresh sealing
-  validates its exact grammar, golden fixture, Bubblewrap identity, capacity
-  rows, source rows, manifest payload, byte count, and SHA-256. Mutation
+  validates its exact grammar, golden fixture, parent tool identity, session
+  order, session count, namespace flags, capacity rows, source rows, preflight
+  digests, cleanup results, manifest payload, byte count, and SHA-256. Mutation
   fixtures reject noncanonical decimals or hexadecimal, invalid type or
-  read-only tokens, bad escaping, reordering, incorrect counts, a changed
-  delimiter, payload-length drift, a missing final line feed, and trailing
-  data. The accepted role manifest retains the log's name, byte count, and
-  SHA-256 through `roleEvidence.internalArtifacts`. The aggregate embeds that
-  manifest and binds the unchanged role and sealed bundles through the schema's
+  read-only tokens, bad escaping, reordering, an incorrect session ID or count,
+  a missing session boundary, a changed digest or delimiter, payload-length
+  drift, a missing final line feed, and trailing data. The accepted role
+  manifest retains the log's name, byte count, and SHA-256 through
+  `roleEvidence.internalArtifacts`. The aggregate embeds that manifest and
+  binds the unchanged role and sealed bundles through the schema's
   `roleBundleSha256` and `sealedBundleSha256` fields.
 
 ## Local prototype facts
 
-An independent reproduction used pinned Nix `2.35.2` and Bubblewrap `0.11.2`
-against PR #15 commit `9719259f1ecee819af96c98c2be210156f198343`.
-It derived 558 manifest paths, 34,986 manifest bytes, and 75,552 bind-only
-argument bytes. The host closure used 5,627,330,560 allocated bytes. `ARG_MAX`
-was 2,097,152 bytes.
+An independent reproduction used pinned Nix `2.35.2` against PR #15 commit
+`9719259f1ecee819af96c98c2be210156f198343`. After separating Bubblewrap, it
+derived 556 candidate-manifest paths, 34,864 manifest bytes, and 75,288
+bind-only argument bytes. The candidate manifest's SHA-256 is
+`6ae573c68c34a15335b44c52a797844e67d47cd0c1e1307e658f823407c50da3`.
+The summed NAR sizes are 6,382,120,656 bytes. `ARG_MAX` was 2,097,152 bytes.
+
+The separate trusted-parent Bubblewrap closure contains eight paths. Its
+480-byte manifest has SHA-256
+`398d11c9cd9249369cbb18d36661014eafef5ac18ff7adeb076c2c51ef0141fd`,
+and its summed NAR sizes are 40,679,016 bytes. The candidate closure removes the
+Bubblewrap store member and its otherwise unreferenced `libcap` member. The
+pinned executable has SHA-256
+`c500b527e18f7e32634ac497b78a0150ceb31ae70fa8afef3fbbe79fd1d9f726`.
 
 The prototype found no top-level symbolic links. It hid an unlisted host path,
-rejected writes to a member and the store base, ran representative dynamic and
-script tools, exposed no forbidden PATH client, and prevented the candidate
+rejected writes to a member and the store base, and ran representative dynamic
+and script tools. Candidate-manifest inspection found no Bubblewrap member. The
+prototype also exposed no forbidden `PATH` client and prevented the candidate
 from creating further user namespaces.
 
-The 75,552-byte value covers only bind triples. The prototype didn't retain the
-complete environment and argument count. The complete-vector fixture therefore
-remains an assumed requirement until a managed `BURL-M003` run exercises it.
+The 75,288-byte value covers only bind triples. The prototype didn't retain any
+session's complete environment and argument count. The per-session
+complete-vector fixture therefore remains assumed until a managed `BURL-M003`
+run exercises it.
 
 These local results prove the closure-view mechanics. They don't establish
 hosted capacity or feature availability and can't settle ADR-0020 without
 accepted managed `BURL-M003` completion evidence from the standard runner.
 
-The documented 14,000,000,000-byte runner profile exceeds the measured host
-closure allocation by 8,372,669,440 bytes before checkout and cache use. The
-4,000,000,000-byte start guard leaves margin within that local observation. It
-doesn't establish a complete run peak.
+The 4,000,000,000-byte per-session start guard remains an assumed admission
+floor. The reproducible NAR-size sum isn't a host-allocation or peak-usage
+measurement, so this ADR makes no exact runner-headroom claim.
 
 ## Scope boundary
 
@@ -250,18 +297,23 @@ coordinator decision.
 
 ## Consequences
 
-- `BURL-M003` avoids a second physical copy of its locked runtime closure.
+- `BURL-M003` avoids a second physical copy of its locked candidate runtime
+  closure.
+- Bubblewrap remains a trusted-parent tool and doesn't enter the candidate
+  closure or `PATH`.
 - Candidate code can read only manifest-listed store paths and can't change the
   host closure.
 - A missing closure dependency, excessive argument vector, unavailable start
-  space, or failed isolation check produces no accepted evidence under the
-  successful-only evidence contract.
+  space, session mismatch, incomplete teardown, or failed isolation check
+  produces no accepted evidence under the successful-only evidence contract.
 - ADR-0019's OD-11 authority remains unchanged; its live raw-contract reference
   is version `36`.
-- Stage 4 must adapt only the `BURL-M003` closure implementation, trusted-parent
-  identity proof, log grammar, and per-device start guard. It must add or retain
-  an explicit `BURL-O001` stop and Stage 3 route without changing the epic
-  graph.
+- Within `BURL-M003`'s existing `scripts/**` scope, Stage 4 may adapt the
+  per-session lifecycle and retained proof. It must preserve one namespace per
+  session, no nested or candidate Bubblewrap, no network, private PID ownership,
+  descriptor closure, teardown, and exact closure-view identity. It must add or
+  retain an explicit `BURL-O001` stop and Stage 3 route without changing the
+  epic graph.
 
 ## Verification anchors
 
