@@ -285,7 +285,7 @@ bill_of_materials:
     role: infrastructure
     version: "0.11.2"
     ecosystem: nix
-    justification: "Provides Linux user, mount, process, network, and filesystem isolation for the managed-evidence coordinator and all seven BURL-M003 candidate sessions: generated bindings, Flutter tests, Dart analysis, Cargo metadata, two integration tests, and managed isolation"
+    justification: "Provides Linux user, mount, process, network, and filesystem isolation for the managed-evidence coordinator and all seven BURL-M003 candidate sessions, including the authority-backed read-only `/contract` mount"
     radar: assess
     certainty: assumed
     assumption: "BURL-M003 adds pkgs.bubblewrap to devenv.nix; the pinned devenv.lock nixpkgs revision resolves 0.11.2, but nothing in the repository uses it yet."
@@ -293,10 +293,10 @@ bill_of_materials:
     role: infrastructure
     version: "1.12"
     ecosystem: nix
-    justification: "Supplies the unwrapped headless Wayland compositor and swaymsg readiness client only inside the two BURL-M003 integration-session Bubblewrap views; the pinned closure includes wlroots 0.20.1, Wayland 1.25.0, and pixman 0.46.4"
+    justification: "Supplies the unwrapped headless Wayland compositor and swaymsg readiness client only inside the two BURL-M003 integration-session Bubblewrap views; the reviewed configuration disables `swaybg` and Xwayland and uses the pinned wlroots 0.20.1, Wayland 1.25.0, and pixman 0.46.4 closure"
     radar: assess
     certainty: assumed
-    assumption: "Raw contract version 37 pins the exact unwrapped Sway and swaymsg store member, executable digests, environment, arguments, and reviewed configuration. No accepted managed BURL-M003 run has exercised that in-namespace supervisor contract."
+    assumption: "Raw contract version 37 pins the exact unwrapped Sway and swaymsg store member, executable digests, environment, arguments, 72-byte configuration, and the requirement that `swaybg` doesn't start. No accepted managed BURL-M003 run has exercised that in-namespace supervisor contract."
   - name: GitHub CLI
     role: tooling
     version: "2.96.0"

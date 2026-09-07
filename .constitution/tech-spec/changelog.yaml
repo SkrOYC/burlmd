@@ -1,4 +1,19 @@
 entries:
+  - version: v2.1.15
+    date: 2026-09-07
+    fixed:
+      - "Added the missing authority-backed read-only `/contract` mount to every BURL-M003 Bubblewrap session. The per-session leaf contains only the exact mode-0444 `locked-nix-closure.sources` file and resolves from retained frozen authority and current-path rows. Complete-argv and fresh-seal mutations reject missing, writable, substituted, linked, duplicated, reordered, or extra contract mounts and content."
+      - "Added the exact `swaybg_command -` directive from Sway 1.12. The reviewed configuration is 72 bytes with SHA-256 `dfb19c5d5cd33e3e2ba7570511cee6c96222a94f1a717886bbbaa7d91dd1ab8a`. Integration supervision and cleanup now reject any `swaybg` process or output."
+      - "Made the pinned Coreutils 9.11 `env -i --` executable the final candidate environment boundary. Base entry receives 33 resolved contract assignments; integration entry receives 37. Fixtures reject inherited or variant `PWD`, `SHLVL`, `_`, and canary values while recording variables that pinned script interpreters create after entry."
+      - "Recomputed the representative NUL-delimited complete-argv golden after the `/contract` mount. It is 533 bytes with SHA-256 `31df65a44206be9976b25562dab9fcf675dc4500a268c54171e79c60253fa1e4`. Updated the closure-log golden configuration hash and the related mount, environment, compositor, cleanup, and fresh-seal assertions."
+      - "Corrected the PR-facing bill-of-materials count to 38 records after Sway, Diffutils, and Procps."
+      - "Retained raw contract version 37, closure-log format v2, evidence schemas, artifact inventories, session IDs, and the BURL-O001 Stage 3 stop. Stage 4 still adapts only BURL-M003 within its existing paths."
+    security:
+      - "The candidate sees one exact read-only contract file and no inherited supervisor environment at direct entry. Sway starts no background helper. Candidate, compositor, and output bytes remain untrusted until fresh sealing validates the retained proof."
+    by: patch-lane
+    upstream:
+      prd: v2.0.5
+      architecture: v2.1.2
   - version: v2.1.14
     date: 2026-09-07
     fixed:
@@ -22,7 +37,7 @@ entries:
       - "Expanded golden and mutation coverage for a changed or same-device nested mount, wrong kind, parent, ownership, or mode, undeclared leaf, authority substitution, duplicate or omitted declaration, and ambiguous current-path resolution."
       - "Moved Sway and swaymsg out of the candidate closure into a separate trusted-parent compositor manifest. The parent proves both executable identities and exposes only its exact live Wayland socket to each candidate session. Candidate PATH, exact-path, manifest, mount, and trace checks prove that both compositor commands remain absent."
       - "Reproduced all three closures twice with pinned Nix 2.35.2. The candidate has 488 paths, a 30,717-byte manifest, SHA-256 `127043afe260d7756ee6cbda03e39a5bfceb4f7f79ae3a5be1595e447ce15e64`, 6,184,635,112 summed Nix archive (NAR) bytes, and 66,314 bind-only bytes. The compositor has 198 paths, a 12,024-byte manifest, SHA-256 `2989c9144aedb0861d16e440a309e4564679009f4785525033b2a8e1ecf97f3d`, 649,910,672 NAR bytes, and 26,028 bind-only bytes. The Bubblewrap closure remains eight paths, 480 manifest bytes, SHA-256 `398d11c9cd9249369cbb18d36661014eafef5ac18ff7adeb076c2c51ef0141fd`, 40,679,016 NAR bytes, and 1,040 bind-only bytes."
-      - "Expanded the Bubblewrap bill-of-materials justification to cover the exact seven BURL-M003 candidate sessions and coordinator isolation. The bill of materials remains at 37 records."
+      - "Expanded the Bubblewrap bill-of-materials justification to cover the exact seven BURL-M003 candidate sessions and coordinator isolation. With the separately documented Sway record, the live bill of materials contains 38 records."
       - "Documented the pinned install action's transitive Nix 2.35.2 version without adding a duplicate bill-of-materials record. The workflow must omit `install_url`, reject preinstalled Nix, and require matching observed `nix` and `nix-store` version output before closure queries."
       - "Advanced the live TechSpec to v2.1.13 while retaining raw contract version 36. Role schema 15, aggregate schema 19, Spike-result schema 20, sealing receipt 2, receipt transport 1, evidence profiles, and the 11-artifact and 13-artifact inventories remain unchanged."
     security:
