@@ -1,10 +1,20 @@
 entries:
+  - version: v2.1.11
+    date: 2026-09-07
+    fixed:
+      - "Made provisional-spikes settlement require both local version 36 closure-view fixtures and accepted managed BURL-M003 completion evidence from the standard ubuntu-24.04 runner. Local fixtures don't settle hosted capacity or feature availability."
+      - "Reconciled the independent pinned-Nix 2.35.2 prototype measurements to 558 closure paths, 34,986 manifest bytes, and 75,552 bind-only argument bytes."
+      - "Clarified that --disable-userns enters an internal nested user namespace. The no-nesting requirement prohibits a second Bubblewrap process, not Bubblewrap's namespace mechanism."
+    by: patch-lane
+    upstream:
+      prd: v2.0.5
+      architecture: v2.1.2
   - version: v2.1.10
     date: 2026-09-07
     fixed:
       - "Replaced the copied BURL-M003 Linux closure with an exact read-only Bubblewrap view. The launcher mounts each complete manifest member at its canonical /nix/store path and hides the host store root, Nix state, database, daemon socket, and unlisted paths."
       - "Made the BURL-M003 root inventory reproducible from the authoritative launcher groups. The inventory includes jq, Sway, swaymsg, the OpenSSL roots, and the Mesa runtime roots."
-      - "Preserved the existing single-invocation, no-network, private-PID, descriptor, teardown, and cleanup controls. Added --disable-userns and --assert-userns-disabled without nested Bubblewrap assertions."
+      - "Preserved the existing single-invocation, no-network, private-PID, descriptor, teardown, and cleanup controls. Added --disable-userns and --assert-userns-disabled without starting a second Bubblewrap process."
       - "Preserved the exact manifest, view, read-only, hidden-canary, loader, runtime, forbidden-client, and complete-vector ARG_MAX fixtures. Added only a fail-closed 4,000,000,000-byte BURL-M003 start-space guard."
       - "Advanced the raw contract from version 35 to 36. Role schema 15, aggregate schema 19, Spike-result schema 20, sealing receipt 2, receipt transport 1, and the 11-artifact and 13-artifact inventories remain unchanged."
       - "Kept ADR-0019 unchanged. ADR-0020 is assumed and applies only to BURL-M003; its local prototype facts don't count as hosted evidence."

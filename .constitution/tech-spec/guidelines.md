@@ -739,7 +739,7 @@ For `BURL-M003`, ADR-020 replaces the copied private closure with an exact read-
 
 The launcher creates an owned store base with one correctly typed empty mount point for each manifest member. Bubblewrap mounts the base read-only at `/nix/store`, then mounts each manifest member read-only at its canonical path. The namespace exposes no host store root, Nix state, Nix database, daemon socket, or unlisted store path. The visible entries must equal the manifest. Loader, runtime, hidden-canary, read-only, and forbidden-client fixtures must pass before candidate acceptance.
 
-The launcher adds `--disable-userns` and `--assert-userns-disabled` to the existing Bubblewrap invocation. Candidate assertions consume the mounted manifest and don't start nested Bubblewrap. The no-network, private-PID, descriptor, teardown, and cleanup controls remain unchanged.
+The launcher adds `--disable-userns` and `--assert-userns-disabled` to the existing Bubblewrap invocation. Bubblewrap enters an internal nested user namespace to prevent the candidate from creating further user namespaces. Candidate assertions consume the mounted manifest and don't start a second Bubblewrap process. The no-network, private-PID, descriptor, teardown, and cleanup controls remain unchanged.
 
 Before `exec`, count the complete null-terminated `env -i` environment, Bubblewrap arguments, closure binds, and candidate command. Reject a value at or above half of `getconf ARG_MAX`. Immediately before namespace entry, require at least 4,000,000,000 available bytes on the workspace filesystem. This check is a start guard only. It isn't a phase-peak or packaging-capacity claim.
 
