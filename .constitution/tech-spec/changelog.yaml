@@ -8,6 +8,11 @@ entries:
       - "Required trusted per-member source verification through decoded mountinfo root, device, and read-only state plus matching file type, st_dev, and st_ino. A correctly typed placeholder or copied member cannot pass when its per-member --ro-bind is absent."
       - "Added BURL-M003 runtime fixtures that require /nix/var, the Nix database, and the daemon socket to remain absent. Added a duplicate-aware source fixture that rejects broad /nix and /nix/store source binds. A fresh staging-shape check rejects copied private-store state even when valid member binds hide it."
       - "Defined logs/burl-m003-linux-closure-view.log as the Linux role's internal closure-view record. It retains the exact manifest and SHA-256, source observations, complete-vector byte count, ARG_MAX, and start-space observation for fresh-seal validation and aggregate binding through unchanged schema fields."
+      - "Made the closure-view log byte-compatible. Raw contract version 36 now fixes its decimal and SHA-256 forms, file-type and read-only tokens, escaping, field and row order, literal manifest delimiter, payload and final-line-feed rules, length-prefixed trusted-preflight record, and canonical golden fixture."
+      - "Replaced the incompatible /usr/bin/env store bind with one Bubblewrap --symlink to the already mounted canonical env member. Added a #!/usr/bin/env bash fixture while retaining rejection of broad store and /usr binds."
+      - "Moved exact Bubblewrap 0.11.2 path and version proof to the trusted parent. The parent uses that same locked store path for the sole candidate Bubblewrap invocation; preflight and candidate fixtures assert resulting isolation properties without executing Bubblewrap again."
+      - "Expanded the 4,000,000,000-byte start guard to every capacity-relevant BURL-M003 writable root, grouped by distinct st_dev. Fixtures reject an omitted root or device and a low-space secondary filesystem without making a phase-peak claim."
+      - "Updated ADR-0019's live raw-contract reference from version 35 to 36 without changing its settled OD-11 authority, candidate permissions, fresh-seal authority, or BURL-O001 compatibility-stage scope."
       - "Aligned live TechSpec markers with v2.1.11 while retaining raw contract schema version 36. Expanded Executable and Linkable Format (ELF) on first use, formatted `iproute2` as code, and removed ambiguous time-relative wording from changed live prose."
     by: patch-lane
     upstream:
@@ -21,7 +26,7 @@ entries:
       - "Preserved the single-invocation, no-network, private-PID, descriptor, teardown, and cleanup controls. Added --disable-userns and --assert-userns-disabled without starting a second Bubblewrap process."
       - "Preserved the exact manifest, view, read-only, hidden-canary, loader, runtime, forbidden-client, and complete-vector ARG_MAX fixtures. Added only a fail-closed 4,000,000,000-byte BURL-M003 start-space guard."
       - "Advanced the raw contract from version 35 to 36. Role schema 15, aggregate schema 19, Spike-result schema 20, sealing receipt 2, receipt transport 1, and the 11-artifact and 13-artifact inventories remain unchanged."
-      - "Kept ADR-0019 unchanged. ADR-0020 is assumed and applies only to BURL-M003; its local prototype facts don't count as hosted evidence."
+      - "At TechSpec v2.1.10, kept ADR-0019 unchanged. TechSpec v2.1.11 later corrects its live raw-contract reference to version 36. ADR-0020 is assumed and applies only to BURL-M003; its local prototype facts don't count as hosted evidence."
       - "Required Stage 4 to adapt only the BURL-M003 closure implementation and to add or retain a BURL-O001 stop condition that routes Linux Nix packaging isolation and capacity to a later Stage 3 decision. The epic graph doesn't change."
     security:
       - "This patch doesn't authorize or solve BURL-O001 Nix packaging isolation or capacity. It makes no BURL-O001 runner, storage, evidence, or coordinator decision."
