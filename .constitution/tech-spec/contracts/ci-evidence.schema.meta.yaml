@@ -3,5 +3,5 @@ surface: json
 flows: [flow-release]
 boundaries: [BND-15, BND-16, BND-17]
 certainty: assumed
-assumption: "Aggregate schema version 17 defines seal-only hosted origin and the attested canonical BURL-O001 lineage that implementation tests have not exercised."
-settles_when: "Final aggregation fixtures validate accepted version 17 evidence, downloadedStageArtifactId equality with producerLineage.stageArtifact.artifactId, and every typed candidate-guard, producer-receipt freshness, canonical-lineage, and compatibility-stage rejection."
+assumption: "Aggregate schema version 18 defines seal-only hosted origin, the attested canonical BURL-O001 lineage, and a receipt artifact observation whose upload-action and REST digests implementation tests have not exercised."
+settles_when: "Final aggregation fixtures validate accepted version 18 evidence, require each sealingReceiptArtifact REST digest to equal sha256: plus the trusted caller transport's uploadActionDigest, validate downloadedStageArtifactId equality with producerLineage.stageArtifact.artifactId, and exercise every typed candidate-guard, producer-receipt freshness, canonical-lineage, and compatibility-stage rejection."

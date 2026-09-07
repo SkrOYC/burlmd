@@ -317,10 +317,10 @@ bill_of_materials:
     role: infrastructure
     version: 043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
     ecosystem: other
-    justification: "Publishes unique immutable expected, candidate, sealed, sealing-receipt, and seal-owned BURL-O001 stage artifacts; its outputs include the service artifact ID and bare SHA-256 digest"
+    justification: "Publishes unique immutable expected, candidate, sealed, sealing-receipt, caller receipt-digest, and seal-owned BURL-O001 stage artifacts; its outputs include the service artifact ID and bare SHA-256 digest carried through the trusted caller for receipt verification"
     radar: adopt
     certainty: assumed
-    assumption: "SHA resolved from the official repository on 2026-08-31; no workflow in this repository references it until BURL-M003 lands .github/workflows/ci.yml."
+    assumption: "SHA resolved from the official repository on 2026-08-31 and reverified on 2026-09-07 as the v7 tag. The pinned action.yml exposes artifact-id and a bare SHA-256 artifact-digest. No workflow in this repository references it until BURL-M003 lands .github/workflows/ci.yml."
   - name: actions/download-artifact
     role: infrastructure
     version: 3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
