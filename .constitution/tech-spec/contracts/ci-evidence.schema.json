@@ -4,14 +4,18 @@
   "title": "burlmd managed CI aggregate evidence",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "expectedIdentity", "expectedIdentitySha256", "expectedIdentityArtifact", "generatedAt", "mode", "status", "roleEvidence", "compatibilityStage", "coordinatorExecution", "aggregationChecks", "rejectionReasons"],
+  "required": ["schemaVersion", "expectedIdentity", "expectedIdentitySha256", "expectedIdentityArtifact", "receiptDigestTransportArtifact", "generatedAt", "mode", "status", "roleEvidence", "compatibilityStage", "coordinatorExecution", "aggregationChecks", "rejectionReasons"],
   "properties": {
-    "schemaVersion": { "const": 18 },
+    "schemaVersion": { "const": 19 },
     "expectedIdentity": { "$ref": "ci-role-evidence.schema.json#/$defs/expectedIdentity" },
     "expectedIdentitySha256": { "$ref": "#/$defs/sha256" },
     "expectedIdentityArtifact": {
       "$comment": "Semantic validation requires the accepted artifact name to equal managed-evidence-expected- plus expectedIdentity.artifactNonce. Rejected reports may use null when this artifact is missing.",
       "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/artifactObservation" }]
+    },
+    "receiptDigestTransportArtifact": {
+      "$comment": "The collector enumerates the exact run to obtain the transport artifact ID, fetches that ID's REST object, and downloads the raw archive by ID. It hashes the downloaded bytes before extraction or JSON parsing. Rejected reports may use null when acquisition or verification fails.",
+      "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/downloadedArtifactObservation" }]
     },
     "generatedAt": { "$ref": "#/$defs/rfc3339" },
     "mode": { "const": "trusted-anchor-local" },
@@ -39,7 +43,7 @@
         "hostedOriginVerified": { "$comment": "This value refers only to fresh sealing-job origin authenticated by verified attestation provenance. It never describes candidate hosted origin.", "type": "boolean" },
         "compatibilityStageVerified": { "oneOf": [{ "type": "null" }, { "type": "boolean" }] },
         "artifactNamesVerified": { "type": "boolean" },
-        "artifactIntegrityVerified": { "$comment": "True requires an action-to-REST digest match for every receipt artifact as well as every expected, candidate, sealed, compatibility-stage, and producer-lineage artifact.", "type": "boolean" },
+        "artifactIntegrityVerified": { "$comment": "True requires every expected, candidate, sealed, receipt, compatibility-stage, and producer-lineage artifact to pass its action-to-REST digest check. It also requires the raw receipt-digest transport download to match that artifact's canonical REST digest before extraction.", "type": "boolean" },
         "bundleContentsVerified": { "type": "boolean" },
         "filesystemEvidenceVerified": { "$comment": "The aggregator must require every enriched role manifest to carry a non-empty observed environment.filesystem string, compare the exact candidate/sealed/aggregated manifest value, and reject a missing, empty, or changed value.", "type": "boolean" },
         "imageVersionsCompatible": { "type": "boolean" }
@@ -69,6 +73,7 @@
               { "type": "object", "properties": { "artifactName": { "type": "string", "pattern": "^managed-evidence-expected-[0-9a-f]{32}$" } } }
             ]
           },
+          "receiptDigestTransportArtifact": { "$ref": "#/$defs/downloadedArtifactObservation" },
           "aggregationChecks": { "type": "object", "properties": {
             "rolesComplete": { "const": true },
             "identityCompared": { "const": true },
@@ -202,6 +207,18 @@
         },
         "uploadActionDigest": { "$ref": "#/$defs/sha256" },
         "artifactDigest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+      }
+    },
+    "downloadedArtifactObservation": {
+      "$comment": "The collector hashes the raw ID-addressed archive bytes before extraction. Semantic validation must require artifactDigest to equal 'sha256:' concatenated with downloadedArtifactSha256. This service-to-download comparison detects transfer corruption or substitution; it is not an independent provenance claim.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifactId", "artifactName", "artifactDigest", "downloadedArtifactSha256"],
+      "properties": {
+        "artifactId": { "type": "integer", "minimum": 1 },
+        "artifactName": { "type": "string", "pattern": "^managed-evidence-receipt-digests-[0-9a-f]{32}$" },
+        "artifactDigest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "downloadedArtifactSha256": { "$ref": "#/$defs/sha256" }
       }
     },
     "receiptDigestTransport": {
