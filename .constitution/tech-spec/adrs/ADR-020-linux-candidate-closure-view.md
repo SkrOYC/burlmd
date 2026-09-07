@@ -3,7 +3,7 @@ id: ADR-0020
 status: accepted
 date: 2026-09-07
 certainty: assumed
-assumption: "An exact read-only view of the locked BURL-M003 candidate closure, with Bubblewrap kept in a separate trusted-parent tool closure, preserves Linux isolation and fits the standard ubuntu-24.04 runner. Local prototypes exercised the mechanism, but no managed BURL-M003 run has exercised it."
+assumption: "An exact read-only view of the locked BURL-M003 candidate closure, with Bubblewrap and the Sway compositor kept in separate trusted-parent closures, preserves Linux isolation and fits the standard ubuntu-24.04 runner. Local prototypes exercised the mechanism, but no managed BURL-M003 run has exercised it."
 ---
 # ADR-020: Linux candidate closure view
 
@@ -36,8 +36,8 @@ mechanism and a conservative start-space guard. They don't constitute accepted
    Nix `2.35.2` and `nix-store -qR`. Sort them with `LC_ALL=C`, and write one
    canonical path per line. Require `cmp` from locked Diffutils `3.12` and `ps`
    from locked Procps `4.0.6`. Reject any root-resolution result under ambient
-   `/usr`, `/run/current-system`, or another non-store path. Exclude Bubblewrap
-   and any member that only its trusted-parent tool closure reaches.
+   `/usr`, `/run/current-system`, or another non-store path. Exclude Bubblewrap,
+   Sway, `swaymsg`, and any member that only a trusted-parent closure reaches.
 2. Immediately before every namespace entry, the trusted launcher records each
    host member's file type, device, inode, containing-mount device, and
    computed mount root. It exposes the path-sorted snapshot read-only at
@@ -81,6 +81,12 @@ mechanism and a conservative start-space guard. They don't constitute accepted
    check only the resulting namespace, mount, process, descriptor, and network
    properties. The in-namespace preflight and candidate don't execute another
    Bubblewrap process.
+   Keep Sway and `swaymsg` in a second exact trusted-parent closure. The parent
+   starts and owns Sway, configures it with the pinned `swaymsg`, and validates
+   both executable identities and the closure manifest. Candidate sessions
+   receive only the exact live Wayland socket. They receive no compositor
+   runtime directory, Sway IPC socket, executable, store member, or `PATH`
+   entry.
 8. Resolve `command -v env` to its absolute store command path and require its
    store member in the manifest. The command path may be an internal member
    symlink. Require `readlink -f` to resolve to a regular executable in the same
@@ -100,11 +106,12 @@ mechanism and a conservative start-space guard. They don't constitute accepted
     configuration, closure staging, session storage, private Sway runtime,
     every writable-bind source, and every writable environment path. For each
     capacity slot, freeze its stable identifier, kind, canonical parent,
+    required UID, GID, exact mode, no-follow directory type,
     `st_dev`, and decoded containing-mount ID, device, root, and mount point.
-    Also freeze whether the slot uses
-    the stable parent itself or one declared per-session staging, session, or
-    writable-bind leaf. No later step may add a parent, mount, device, capacity
-    slot, leaf declaration, or writable path outside this authority set.
+    Also freeze whether each session uses the stable parent itself or one exact
+    declared staging, session, or writable-bind leaf. No later step may add a
+    parent, mount, device, capacity slot, leaf declaration, or writable path
+    outside this authority set.
 11. For each session, create its declared ephemeral leaves only under their
     frozen stable parents. Walk and canonicalize each current leaf without
     following symbolic links. Require strict containment, the parent's frozen
@@ -126,9 +133,14 @@ mechanism and a conservative start-space guard. They don't constitute accepted
     internal artifact outside candidate-writable paths. Its byte grammar is the
     raw contract's `closure_view_log_policy`, and the raw contract contains its
     canonical golden fixture. The log records raw contract version `36`, the
-    exact Bubblewrap path, version, executable digest, and tool-closure digest.
+    exact Bubblewrap identity and separate tool-closure digest. It records the
+    exact Sway and `swaymsg` identities and separate compositor-closure digest.
     It also records the candidate-manifest identity and one source-identity row
-    per member. Seven ordered session frames retain each invocation's manifest,
+    per member. Before the session frames, canonical capacity-authority rows
+    retain every frozen identifier, kind, parent, ownership and mode
+    requirement, device, decoded mount identity, and permitted leaf. The header
+    and every session row bind the exact declaration-row digest. Seven ordered
+    session frames retain each invocation's manifest,
     source, namespace-flag, unique staging-root, and preflight digests. Each
     frame also retains the stable-parent-to-current-path mapping,
     complete-vector, start-space, and cleanup observations.
@@ -163,10 +175,10 @@ mechanism and a conservative start-space guard. They don't constitute accepted
     SHA-256 to `integration-`. Require fresh ephemeral leaves, a preflight,
     namespace, teardown, and cleanup for every ID. Don't start the next session
     before the preceding teardown lock is free and its staging root is absent.
-16. Keep Bubblewrap absent from the candidate manifest, mounts, and `PATH`.
-    Inside every session, require `command -v bwrap` to fail. Require an
-    exact-path probe of the trusted-parent executable to return `ENOENT`, and a
-    command-name invocation to return status `127`.
+16. Keep Bubblewrap, Sway, and `swaymsg` absent from the candidate manifest,
+    mounts, and `PATH`. Inside every session, require `command -v` to fail for
+    all three commands. Require each exact parent executable path to return
+    `ENOENT` and each command-name invocation to return status `127`.
 
 ## Exact closure roots
 
@@ -195,12 +207,6 @@ env flutter dart flutter_rust_bridge_codegen cargo cargo-expand rustc rustup
 cmake ninja pkg-config clang openssl jq ip
 ```
 
-The candidate's trusted Linux runtime group is:
-
-```text
-sway swaymsg
-```
-
 Resolve `cargo-expand` from `BURLMD_CARGO_EXPAND`. Resolve the OpenSSL
 `pcfiledir`, `includedir`, and `libdir` values through `pkg-config`. Resolve the
 Mesa roots from `BURLMD_MESA_DRI_PATH` and `BURLMD_MESA_EGL_VENDOR_PATH`.
@@ -214,9 +220,16 @@ Mesa roots from `BURLMD_MESA_DRI_PATH` and `BURLMD_MESA_EGL_VENDOR_PATH`.
 
 Reject an empty manifest, a duplicate or noncanonical path, a missing member,
 a top-level symbolic link, or a direct Nix reference outside the manifest.
-Reject the Bubblewrap store member and any member that only its parent tool
-closure reaches. Record the manifest SHA-256 and verify the same bytes before
-each candidate session. Internal links remain inside their mounted store object.
+Reject the Bubblewrap, Sway, and `swaymsg` store members and any member that
+only a parent closure reaches. Record the manifest SHA-256 and verify the same
+bytes before each candidate session. Internal links remain inside their mounted
+store object.
+
+Derive the trusted-parent compositor manifest separately from the exact
+`sway` and `swaymsg` executables. The manifest is the sorted unique union of
+their requisite closures. It must not be combined with the Bubblewrap tool
+manifest. Raw contract version `36` pins both executable paths, version output,
+executable digests, and all compositor closure measurements.
 
 ## Fixtures
 
@@ -250,13 +263,19 @@ The `BURL-M003` contract fixtures must preserve these checks:
 - A script whose first line is exactly `#!/usr/bin/env bash` runs through the
   canonical store-backed `env` symlink.
 - The Flutter Rust Bridge generator, Cargo, `rustc`, the `rustup` shim, Dart,
-  CMake, Ninja, Clang, OpenSSL, `jq`, Sway, `swaymsg`, `iproute2`, and
+  CMake, Ninja, Clang, OpenSSL, `jq`, `iproute2`, a Flutter Wayland client, and
   their runtime dependencies run from the view.
 - The trusted parent proves the exact locked Bubblewrap path, version,
   executable digest, and separate tool-closure digest. It uses that path for
   each of the seven candidate-session invocations. The candidate manifest and
   `PATH` omit Bubblewrap, exact-path and command-name probes fail, and the
   preflight and candidate traces contain no other Bubblewrap execution.
+- The trusted parent separately proves the exact locked Sway and `swaymsg`
+  paths, versions, executable digests, and compositor-closure digest. It starts
+  and owns Sway and uses only that `swaymsg` executable. Candidate sessions see
+  only the exact Wayland socket. Candidate manifests and `PATH` omit Sway and
+  `swaymsg`; exact-path and command-name probes fail; and candidate traces
+  contain no compositor command execution.
 - Forbidden clients remain absent.
 - `cmp` and `ps` resolve to the exact locked paths. A path under `/usr`,
   `/run/current-system`, or another non-store root fails before candidate
@@ -279,6 +298,14 @@ The `BURL-M003` contract fixtures must preserve these checks:
   path outside the frozen authority set. The exact 4,000,000,000-byte boundary
   passes on every device. A secondary stable device at 3,999,999,999 bytes
   fails even when the primary device passes.
+- The log retains one canonical authority declaration for every stable
+  identifier and session. Each declaration includes the kind, canonical stable
+  parent, required UID, required GID, exact mode, no-follow directory type, `st_dev`,
+  decoded mount ID, major:minor, root, mount point, and permitted leaf. Its
+  digest appears in the header and every session row. Mutations reject a
+  changed or same-device nested mount, wrong kind, parent, ownership, or mode,
+  undeclared leaf, authority substitution, duplicate, omission, or ambiguous
+  session-row resolution.
 - `--disable-userns` enters an internal nested user namespace that prevents the
   candidate from creating further user namespaces. Candidate assertions check
   the resulting property and don't start another Bubblewrap process.
@@ -294,8 +321,8 @@ The `BURL-M003` contract fixtures must preserve these checks:
   forbidden.
 - The trusted launcher creates exactly one
   `logs/burl-m003-linux-closure-view.log` internal artifact. Fresh sealing
-  validates its exact grammar, golden fixture, parent tool identity, session
-  order, session count, namespace flags, capacity authority rows, current-leaf
+  validates its exact grammar, golden fixture, both parent closure identities,
+  session order, session count, namespace flags, capacity authority rows, current-leaf
   rows, source rows, preflight digests, cleanup results, manifest payload, byte
   count, and SHA-256. Mutation
   fixtures reject noncanonical decimals or hexadecimal, invalid type or
@@ -310,12 +337,12 @@ The `BURL-M003` contract fixtures must preserve these checks:
 ## Local prototype facts
 
 Two independent reproductions used pinned Nix `2.35.2` against PR #15 commit
-`9719259f1ecee819af96c98c2be210156f198343`. After separating Bubblewrap and
-resolving the two command roots from the locked Nixpkgs revision, each run
-derived 549 candidate-manifest paths, 34,418 manifest bytes, and 74,326
-bind-only argument bytes. The candidate manifest's SHA-256 is
-`c82bb681b260902382f9a747d0f8588ab29bb1d8d56cec0f7b7c30fc368399d9`.
-The summed Nix archive (NAR) sizes are 6,338,161,576 bytes. `ARG_MAX` was
+`9719259f1ecee819af96c98c2be210156f198343`. After separating Bubblewrap,
+Sway, and `swaymsg` and resolving the two command roots from the locked Nixpkgs
+revision, each run derived 488 candidate-manifest paths, 30,717 manifest bytes,
+and 66,314 bind-only argument bytes. The candidate manifest's SHA-256 is
+`127043afe260d7756ee6cbda03e39a5bfceb4f7f79ae3a5be1595e447ce15e64`.
+The summed Nix archive (NAR) sizes are 6,184,635,112 bytes. `ARG_MAX` was
 2,097,152 bytes.
 
 The separate trusted-parent Bubblewrap closure contains eight paths. Its
@@ -326,13 +353,25 @@ its bind-only arguments use 1,040 bytes, and its summed NAR sizes are
 its otherwise unreferenced `libcap` member. The pinned executable has SHA-256
 `c500b527e18f7e32634ac497b78a0150ceb31ae70fa8afef3fbbe79fd1d9f726`.
 
+The separate trusted-parent compositor closure contains 198 paths. Its
+12,024-byte manifest has SHA-256
+`2989c9144aedb0861d16e440a309e4564679009f4785525033b2a8e1ecf97f3d`,
+its bind-only comparison metric is 26,028 bytes, and its summed NAR sizes are
+649,910,672 bytes. Sway resolves to
+`/nix/store/930f893w41qjd8wmaf6x4fwa7g8rbddk-sway-1.12/bin/sway`, with executable
+SHA-256 `26311d4353d67fe7ff4155e7026ddb84c2e120241475f86b44d6beaeffc080ef`.
+`swaymsg` resolves to
+`/nix/store/b8fqdxmnygnqv5p29fhw85d3lcgsi4qn-sway-unwrapped-1.12/bin/swaymsg`,
+with executable SHA-256
+`cfefe762ed1ed9463eeddad3b1e624f98fe15996bde77953f303a2a110d1270c`.
+
 The prototype found no top-level symbolic links. It hid an unlisted host path,
 rejected writes to a member and the store base, and ran representative dynamic
-and script tools. Candidate-manifest inspection found no Bubblewrap member. The
-prototype also exposed no forbidden `PATH` client and prevented the candidate
-from creating further user namespaces.
+and script tools. Candidate-manifest inspection found no Bubblewrap, Sway, or
+`swaymsg` member. The prototype also exposed no forbidden `PATH` client and
+prevented the candidate from creating further user namespaces.
 
-The 74,326-byte value covers only bind triples. The prototype didn't retain any
+The 66,314-byte value covers only bind triples. The prototype didn't retain any
 session's complete environment and argument count. The per-session
 complete-vector fixture therefore remains assumed until a managed `BURL-M003`
 run exercises it.
@@ -359,6 +398,8 @@ coordinator decision.
   closure.
 - Bubblewrap remains a trusted-parent tool and doesn't enter the candidate
   closure or `PATH`.
+- Sway and `swaymsg` remain trusted-parent compositor infrastructure. The
+  candidate receives only the exact parent-owned Wayland socket.
 - Candidate code can read only manifest-listed store paths and can't change the
   host closure.
 - A missing closure dependency, excessive argument vector, unavailable start
