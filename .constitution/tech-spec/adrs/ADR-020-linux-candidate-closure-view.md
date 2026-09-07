@@ -111,7 +111,8 @@ byte count and SHA-256 equality.
 A flag-subsequence digest, byte count, set comparison, successful parse, or
 successful execution can't replace this commitment. Duplicate-aware fixtures
 reject every extra, omitted, reordered, duplicated, or substituted argument.
-The mutations include extra capabilities and host-root alias binds.
+The mutations include extra capabilities, contract-mount changes, and host-root
+alias binds.
 
 ### Preserve the closure view
 
@@ -123,6 +124,19 @@ The complete argv binds the owned store base read-only at `/nix/store`, then
 binds every selected manifest member read-only at its canonical path. The view
 hides host `/`, `/usr`, `/nix`, `/nix/store`, `/nix/var`, the Nix database, the
 daemon socket, Bubblewrap, and unlisted store members.
+
+The preflight reads its selected source identities from
+`/contract/locked-nix-closure.sources`. The launcher creates one per-session
+contract leaf under the frozen `session-contract-root` parent. Its retained
+authority and current-path row is the only source for the bind. The leaf
+contains only the mode-0444 regular file `locked-nix-closure.sources`. Its bytes
+and SHA-256 match the selected source-identity rows.
+
+The complete argv creates `/contract`, then mounts that leaf read-only after
+the session-root bind and before the prepared-root bind. Fixtures reject a
+missing, writable, linked, substituted, duplicated, incorrectly named, or extra
+entry. They also reject another `/contract` mount, a changed source or
+destination, and an authority row that doesn't resolve uniquely.
 
 The trusted in-namespace preflight validates the selected manifest against
 decoded mount information, device, inode, type, and read-only state. It also
@@ -167,14 +181,17 @@ It starts Sway with exactly:
 The reviewed configuration is exactly:
 
 ```text
+swaybg_command -
 xwayland disable
 output HEADLESS-1 mode 1920x1080@60Hz
 ```
 
-The 55-byte file has SHA-256
-`f7f1e175adf11bc9ba7e3df30b4ed7d716503c02d63eac34e1c209ac9e0ae12e`.
-It contains no `include`, `exec`, `exec_always`, or shell expansion. Sway gets
-no ambient configuration.
+The 72-byte file has SHA-256
+`dfb19c5d5cd33e3e2ba7570511cee6c96222a94f1a717886bbbaa7d91dd1ab8a`.
+The first directive is the supported Sway 1.12 form for disabling the default
+`swaybg` helper. The file contains no `include`, `exec`, `exec_always`, or shell
+expansion. Sway gets no ambient configuration. The supervisor rejects any
+`swaybg` process or output.
 
 Sway `1.12` tries `wayland-1` through `wayland-32` in order. The supervisor
 starts from an empty mode-0700 runtime directory and accepts only
@@ -189,6 +206,35 @@ and `--raw` for readiness. The parent never opens or parses Wayland or Sway IPC
 traffic. Candidate output, Sway, `swaymsg`, sockets, and compositor output are
 untrusted. Only fresh sealing of retained artifacts is authoritative.
 
+### Clear the candidate environment at final launch
+
+Bubblewrap passes the fixed and derived variables from the raw contract to the Bash
+supervisor. While Bash 5.3p9 runs, it creates exported `PWD`, `SHLVL`, and `_`
+values. The supervisor must not pass those additions to the candidate.
+
+Immediately before candidate execution, the supervisor invokes this exact GNU
+`env` executable as the final environment boundary:
+
+```text
+/nix/store/sr26flm2nkfa12dkrwj2630kqsfakky4-coreutils-9.11/bin/env
+```
+
+For a base session, the supervisor replaces itself with `env -i --`, followed
+by the 33 resolved fixed and derived assignments in contract order. The exact
+candidate command follows those assignments. For an integration session, the
+new candidate process group appends the four integration assignments. It
+therefore passes 37 entries before the candidate command. The supervisor rejects
+duplicate keys, unresolved placeholders, and any extra, missing, reordered, or
+changed assignment.
+
+This boundary passes only the declared environment to the candidate executable.
+A pinned script interpreter can add its own `PWD`, `SHLVL`, or `_` after entry.
+Those interpreter-local values aren't inherited launch authority and aren't
+claimed to be absent from later child processes. Fixtures probe both boundaries.
+They inject hostile inherited values and reject any leak or variant at direct
+candidate entry. They also record the variables that each pinned interpreter
+adds after entry.
+
 ### Clean up before namespace exit
 
 The supervisor monitors the candidate, Sway, `wayland-1`, its lock, and the
@@ -199,7 +245,8 @@ disruption, interruption, or timeout, it performs these steps:
 2. Send `SIGTERM` to Sway and wait for it.
 3. Send `SIGKILL` only after the bounded graceful wait expires, then wait
    again.
-4. Require `kill(pid, 0)` to return `ESRCH` and `/proc/PID` to be absent.
+4. Require `kill(pid, 0)` to return `ESRCH`, `/proc/PID` to be absent, and no
+   `swaybg` process to remain.
 5. Securely create and fsync the canonical cleanup frame after no hostile
    process remains.
 6. Wait while the parent validates and fsyncs the matching retained session
@@ -213,7 +260,8 @@ unexpected supervisor signal, or failed reap rejects the session.
 
 Fixtures cover early Sway failure, hostile candidate exit and descendants,
 timeout, socket disruption, handled interruption, successful graceful reap,
-the `SIGKILL` fallback, and cleanup-frame precreation.
+the `SIGKILL` fallback, cleanup-frame precreation, and injected `swaybg` process
+and output canaries.
 
 ### Retain capacity and evidence authority
 
@@ -247,8 +295,17 @@ early Sway failure, socket disruption, timeout, and a hostile candidate that
 exited with status 42 after starting a descendant. Every case removed the
 candidate descendants, waited for Sway, and verified that its PID was absent.
 
-The argv prototype reproduced the 460-byte golden digest. It rejected extra,
-omitted, reordered, duplicated, substituted, and host-alias mutations.
+The argv prototype reproduced the 533-byte golden digest,
+`31df65a44206be9976b25562dab9fcf675dc4500a268c54171e79c60253fa1e4`.
+It includes the ordered `/contract` directory and read-only bind. The prototype
+rejected extra, omitted, reordered, duplicated, substituted, contract-mount,
+and host-alias mutations.
+
+The revised 72-byte Sway configuration passed Sway 1.12 validation and a
+headless launch. The launch created the expected IPC socket and no `swaybg`
+process. A Bubblewrap 0.11.2 and Bash 5.3p9 probe injected hostile `PWD`,
+`SHLVL`, `_`, and canary values. The final GNU `env -i` boundary exposed only
+the declared candidate environment.
 
 These local results don't establish hosted capacity or feature availability.
 They can't settle ADR-0020 without accepted managed `BURL-M003` completion
@@ -279,6 +336,7 @@ coordinator decision.
 - [Bubblewrap `0.11.2` command contract](https://github.com/containers/bubblewrap/blob/v0.11.2/bwrap.xml)
 - [Bubblewrap `0.11.2` implementation](https://github.com/containers/bubblewrap/blob/v0.11.2/bubblewrap.c)
 - [Sway `1.12` command and environment contract](https://github.com/swaywm/sway/blob/1.12/sway/sway.1.scd)
+- [Sway `1.12` configuration contract](https://github.com/swaywm/sway/blob/1.12/sway/sway.5.scd)
 - [Sway `1.12` fixed Wayland socket selection](https://github.com/swaywm/sway/blob/1.12/sway/server.c)
 - [Sway `1.12` IPC client](https://github.com/swaywm/sway/blob/1.12/swaymsg/swaymsg.1.scd)
 - [wlroots `0.20.1` environment variables](https://gitlab.freedesktop.org/wlroots/wlroots/-/blob/0.20.1/docs/env_vars.md)
