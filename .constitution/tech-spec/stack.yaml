@@ -309,10 +309,23 @@ bill_of_materials:
     role: infrastructure
     version: 13d8dd58da0234aa297dedd986986ccb8e7f3e24
     ecosystem: other
-    justification: "Installs Nix before entering the repository closure"
+    justification: "Installs Nix 2.35.2 before entering the repository closure; the pinned action source fixes that version and supplies the database subset interface required by raw contract version 36"
     radar: adopt
     certainty: assumed
-    assumption: "SHA resolved from the official repository on 2026-08-31; no workflow in this repository references it until BURL-M003 lands .github/workflows/ci.yml."
+    assumption: "SHA resolved from the official repository on 2026-08-31. The pinned install-nix.sh selects Nix 2.35.2. No workflow in this repository references it until BURL-M003 lands .github/workflows/ci.yml."
+  - name: Nix
+    role: tooling
+    version: "2.35.2"
+    ecosystem: other
+    justification: "Provides locked closure queries and the database subset export and load interface for the Linux candidate closure view"
+    radar: adopt
+    certainty: settled
+    evidence:
+      kind: external
+      ref: "https://github.com/cachix/install-nix-action/blob/13d8dd58da0234aa297dedd986986ccb8e7f3e24/install-nix.sh"
+      version: "2.35.2"
+      date: 2026-09-07
+      note: "The pinned action source selects Nix 2.35.2. A local exact-version prototype verified subset export, subset load, local queries, and an offline private output build."
   - name: actions/upload-artifact
     role: infrastructure
     version: 043fb46d1a93c77aae656e7c1c64a875d1fc6a0a

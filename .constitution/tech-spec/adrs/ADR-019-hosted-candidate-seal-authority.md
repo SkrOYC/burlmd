@@ -115,6 +115,15 @@ survive. The release contract must not make that claim.
    doesn't provide provenance independent of GitHub's artifact service.
 10. Keep strict credential removal and rejection of reserved artifact-name
    collisions on all roles.
+11. On Linux, expose the locked Nix closure as an exact read-only Bubblewrap
+   view. The trusted launcher creates an empty `/nix/store` and bind-mounts
+   each manifest member at its canonical path. It doesn't mount the host store
+   root, host database, or daemon socket. Profiles without Nix command
+   authority need no database. `BURL-O001` imports metadata for only the
+   manifest closure into sparse private state and writes only private build
+   outputs. Every Linux namespace disables further user namespaces. The
+   launcher also enforces the allocated-capacity and `ARG_MAX` limits in the
+   raw contract.
 
 ## Consequences
 
@@ -136,7 +145,7 @@ survive. The release contract must not make that claim.
 - Reviewed source and test contracts remain required. Provenance validation
   doesn't replace source review or test review.
 - The role and aggregate JSON schemas are versions `15` and `19`. The embedded
-  sealing receipt is version `2`. The raw contract is version `35`. These
+  sealing receipt is version `2`. The raw contract is version `36`. These
   contracts separate candidate runtime guards from attested seal origin and
   bind an immutable canonical compatibility-stage lineage. They also carry the
   post-upload receipt digest without making the receipt self-report it. The
@@ -159,6 +168,11 @@ survive. The release contract must not make that claim.
 - The collector acquires that transport by immutable artifact ID. It verifies
   the raw archive against the selected artifact's REST digest before reading
   the JSON member.
+- Linux candidates no longer allocate a second copy of the locked closure. A
+  candidate can read only the manifest paths and can write only private roots.
+  `BURL-O001` keeps isolated Nix state because its package checks create store
+  outputs. The standard `ubuntu-24.04` role therefore remains viable without a
+  larger runner.
 
 ## Verification anchors
 
@@ -172,4 +186,8 @@ survive. The release contract must not make that claim.
 - [Reusing workflows](https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows#using-outputs-from-a-reusable-workflow)
 - [`actions/download-artifact` interface at the pinned commit](https://github.com/actions/download-artifact/blob/3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c/action.yml)
 - [`actions/attest` interface at the pinned commit](https://github.com/actions/attest/blob/1e69f48acb82d1966a394da916b4c1698aa569d6/action.yml)
-- <https://github.com/containers/bubblewrap>
+- [Bubblewrap `0.11.2` command contract](https://github.com/containers/bubblewrap/blob/v0.11.2/bwrap.xml)
+- [Nix `2.35.2` local store](https://nix.dev/manual/nix/2.35/store/types/local-store.html)
+- [Nix `2.35.2` database subset export](https://nix.dev/manual/nix/2.35/command-ref/nix-store/dump-db.html)
+- [Pinned Nix installer script](https://github.com/cachix/install-nix-action/blob/13d8dd58da0234aa297dedd986986ccb8e7f3e24/install-nix.sh)
+- [GitHub-hosted runners reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)
