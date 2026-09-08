@@ -1,4 +1,17 @@
 entries:
+  - version: v2.1.19
+    date: 2026-09-08
+    fixed:
+      - "Replaced the incompatible default BSD `flock` teardown check with pinned util-linux 2.42 `flock --fcntl --exclusive --timeout 5 --conflict-exit-code 73` on the parent's retained original `O_RDWR` descriptor. The OFD write lock conflicts with Bubblewrap 0.11.2's POSIX read lock and fails closed on timeout or any nonzero result."
+      - "Made teardown verification independent of the writable `/candidate/session/namespace-teardown.lock` pathname. The trusted parent creates and opens the original inode before launch, closes that descriptor in the Bubblewrap branch, compares its device and inode after the outer process exits, and never reopens the candidate-replaceable path for proof."
+      - "Expanded the version 2 closure-log golden from 21-field to 25-field session rows with lock device, inode, stable-identity, and acquisition values. Added compact live-reaper, double-fork, replacement-path, premature-verification, final-release, descriptor-leak, and cleanup fixtures. The complete Bubblewrap argv, closure, preflight, environment, descriptor-role, and authority goldens remain unchanged."
+      - "Retained raw contract version 38 because this is another correction to the same unmerged BURL-M003 implementation contract. TechSpec advanced to v2.1.19. The 41-record bill of materials, evidence schemas, artifact inventories, session IDs, and BURL-O001 stop remain unchanged."
+    security:
+      - "A candidate can replace the writable lock pathname only to deny the session. It can't redirect verification away from Bubblewrap's original lock inode or cause upload while a namespace reaper remains alive."
+    by: patch-lane
+    upstream:
+      prd: v2.0.5
+      architecture: v2.1.2
   - version: v2.1.18
     date: 2026-09-08
     fixed:
