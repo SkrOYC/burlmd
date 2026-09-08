@@ -25,7 +25,7 @@ scope:
 estimated_diff_lines: 1650
 tickets:
   - id: BURL-M015
-    title: Stabilize the authoritative-success timestamp regression test
+    title: Stabilize the two persistence regression fixtures
     type: Chore
     effort: 3
     depends_on: []
@@ -37,34 +37,55 @@ tickets:
     verification:
       command: cargo test --manifest-path rust/Cargo.toml
         a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success
+        && cargo test --manifest-path rust/Cargo.toml
+        an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries
         && ./scripts/repeat-test.sh --count 100 -- cargo test --manifest-path
         rust/Cargo.toml
         a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success
+        && ./scripts/repeat-test.sh --count 100 -- cargo test --manifest-path
+        rust/Cargo.toml
+        an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries
         && git diff --check
-      expected: the targeted regression passes once normally and 100 consecutive
-        isolated repetitions with deterministic timestamp evidence
+      expected: each named fixture passes one ordinary run and 100 consecutive
+        isolated repetitions with 0 failures and no skipped assertions. Both
+        fixtures preserve complete NoteState equality and settle deterministically
     stop_conditions:
       - STOP if this ticket isn't running as the first reviewed milestone on
         `chore/epic-m-ci-foundation` from merged `master`.
-      - STOP if the fix can hide a real ordering failure, rely on wall-clock
-        coincidence, or weaken the authoritative-success state comparison.
-      - STOP if work would weaken authoritative-success semantics or remove
-        timestamp assertions without a deterministic replacement; don't expand
-        this ticket.
-    description: Replace the one-second last_modified race in the existing
-      structural-draft authoritative-success regression with deterministic
-      clock/state evidence while preserving the production invariant and exact
-      state comparison
+      - STOP if work expands beyond
+        `a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success`
+        and
+        `an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries`;
+        this two-test boundary is exhaustive.
+      - STOP if fixed sleeps or wall-clock coincidence replace observation of
+        deterministic settlement; bounded predicate polling remains permitted.
+      - STOP if work skips an assertion, weakens complete NoteState equality,
+        hides an ordering failure, or changes production semantics; don't
+        improvise.
+    description: Make exactly the two named persistence regression fixtures
+      deterministic. Preserve authoritative-success settlement in
+      `a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success`
+      and complete NoteState equality for both draft-refusal paths in
+      `an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries`
+      without changing production semantics
     acceptance:
       mode: stat_threshold
       constraints:
         - NFC-14
-      evidence: "Metric: targeted-test failures. Dataset: 100 consecutive isolated
-        repetitions after one ordinary run. Threshold: 0 failures and no skipped
-        assertion. Command: the exact verification command above. The assertion
-        still distinguishes authoritative success from rollback/failure without
-        depending on wall-clock second boundaries. The milestone receives one
-        full review before `BURL-M003` begins."
+      evidence: "Metric: targeted-test failures. Dataset: exactly
+        `a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success`
+        and
+        `an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries`,
+        each with one ordinary run followed by 100 consecutive isolated
+        repetitions. Threshold: 0 failures and no skipped assertions in every
+        run. Command: the exact verification command above. The first fixture
+        returns the complete authoritative NoteState after deterministic
+        settlement. The second fixture preserves complete NoteState equality for
+        both longer and shorter draft-refusal paths and observes timer quiescence
+        between them. Neither fixture substitutes fixed sleeps or wall-clock
+        coincidence for observed settlement, and neither changes production
+        semantics. The milestone receives one full review before `BURL-M003`
+        begins."
     flows:
       - flow-edit-note
     certainty: assumed

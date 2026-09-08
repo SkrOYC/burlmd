@@ -293,7 +293,7 @@ verification_commands:
     exists: true
   - name: test
     label: quoted by BURL-M015
-    command: "cargo test --manifest-path rust/Cargo.toml a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success && ./scripts/repeat-test.sh --count 100 -- cargo test --manifest-path rust/Cargo.toml a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success && git diff --check"
+    command: "cargo test --manifest-path rust/Cargo.toml a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success && cargo test --manifest-path rust/Cargo.toml an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries && ./scripts/repeat-test.sh --count 100 -- cargo test --manifest-path rust/Cargo.toml a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success && ./scripts/repeat-test.sh --count 100 -- cargo test --manifest-path rust/Cargo.toml an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries && git diff --check"
     exists: false
     owner: BURL-M015
   - name: test
@@ -643,7 +643,7 @@ commit_convention: Conventional Commits
 
 ## Provisional research boundary
 
-TechSpec v2.1.25 (translated from reviewed v1.8.7-provisional) permits research code only under `.constitution/prototypes/`. The Epic G M0 production exceptions remain unchanged. `BURL-M015` and `BURL-M003` may write production code only for their reproducibility and validation bootstrap. Tasks v3.2.11 completed the Stage 4 adaptation of the `BURL-M003` Tasks record to raw contract version `38`. It maintains the separate `BURL-O001` Stage 3 stop without authorizing implementation. Every other production ticket remains blocked by its own decision evidence and matching Stage 3 and Stage 4 adaptation. Except for these contract-scoped exceptions, production directories (`lib/`, `rust/`, `linux/`, and `macos/`) are read-only inputs to this research wave.
+TechSpec v2.1.26 (translated from reviewed v1.8.7-provisional) permits research code only under `.constitution/prototypes/`. The Epic G M0 production exceptions remain unchanged. `BURL-M015` and `BURL-M003` may write production code only for their reproducibility and validation bootstrap. Tasks v3.2.11 completed the Stage 4 adaptation of the `BURL-M003` Tasks record to raw contract version `38`. It maintains the separate `BURL-O001` Stage 3 stop without authorizing implementation. Every other production ticket remains blocked by its own decision evidence and matching Stage 3 and Stage 4 adaptation. Except for these contract-scoped exceptions, production directories (`lib/`, `rust/`, `linux/`, and `macos/`) are read-only inputs to this research wave.
 
 The five exact prototype roots and verification commands are machine-readable in `contracts/provisional-spikes.toml`. Its allowlist is exhaustive: each Spike may write only its named prototype root and report path. Every unlisted repository path is read-only. Framework bookkeeping may update the owning active Task after the Spike process exits, but that isn't part of the Spike's write authority.
 
@@ -1143,6 +1143,8 @@ For any malformed current-version snapshot, Core quarantines and preserves the o
 - No closure passed to `with_connection` may perform file I/O.
 - No lock that a keystroke can contend for may span an `fsync`.
 - Tier 2 writes must use the per-Note tier 2 write lock for the full OCC check, file write, and revision re-record sequence.
+
+`BURL-M015` must make both named persistence regression fixtures deterministic. In `an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries`, the fixture must observe tier 2 timer quiescence after the longer retry's draft row clears and before it captures `state_before_shorter`. Quiescence requires `timer.running` to be false and `timer.deadline` to be `None`. The fixture must retain its full `NoteState` comparisons for both refusal paths. It must not substitute sleeps or wall-clock coincidence, and it must not weaken production behavior.
 
 ## Terminology introduced at this layer
 
