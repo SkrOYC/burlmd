@@ -345,6 +345,14 @@ bill_of_materials:
     radar: adopt
     certainty: assumed
     assumption: "Raw contract version 38 pins the Coreutils store member and exact `env` path. The pinned `devenv.lock` Nixpkgs revision resolves 9.11, but no accepted managed BURL-M003 run has exercised that final entry boundary."
+  - name: util-linux
+    role: tooling
+    version: "2.42"
+    ecosystem: nix
+    justification: "Provides the exact `flock` executable for the BURL-M003 post-session teardown verifier"
+    radar: adopt
+    certainty: assumed
+    assumption: "Raw contract version 38 already pins the util-linux store member, `flock` path, version output, executable SHA-256, and command. The pinned `devenv.lock` Nixpkgs revision resolves 2.42, but no accepted managed BURL-M003 run has exercised that verifier."
   - name: actions/checkout
     role: infrastructure
     version: fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09

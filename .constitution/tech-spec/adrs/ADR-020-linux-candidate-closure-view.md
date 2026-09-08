@@ -32,19 +32,27 @@ evidence schemas, service artifacts, session IDs, or `BURL-O001` scope.
 
 ## Decision
 
-### Keep one trusted parent tool
+### Keep one candidate-session launcher
 
-The trusted parent keeps only Bubblewrap `0.11.2`. Its executable is:
+The trusted parent keeps Bubblewrap `0.11.2` in its separate tool closure. Its
+executable is:
 
 ```text
 /nix/store/g7svy17fhkg2cq3q4lfzzc0mmsl3d8hq-bubblewrap-0.11.2/bin/bwrap
 ```
 
 The parent validates its exact version output, executable SHA-256, and
-eight-member closure before every session. It calls `execve` directly with an
-empty process environment and launches that executable once per session. It
-launches no Sway, `swaymsg`, candidate helper, `env` process, or display proxy.
+eight-member closure before every session. For the candidate namespace and
+session payload, it calls `execve` directly with an empty process environment
+and launches only that executable, once per session. It doesn't directly launch
+Sway, `swaymsg`, a candidate helper, an `env` process, or a display proxy.
 Bubblewrap doesn't enter either session closure or `PATH`.
+
+This candidate-session boundary doesn't remove the exact trusted-parent
+executions defined elsewhere in this contract. The parent performs the existing
+preparation and version and identity checks. After the session, it runs the
+pinned util-linux `flock` verifier. This distinction doesn't define a general
+parent-process allowlist.
 
 The parent writes its Bubblewrap, compositor, base, and integration manifests
 to these exact paths below the canonical `RUNNER_TEMP` root:
@@ -446,21 +454,35 @@ disruption, interruption, or timeout, it performs these steps:
    again.
 4. Require `kill(pid, 0)` to return `ESRCH`, `/proc/PID` to be absent, and no
    `swaybg` process to remain.
-5. Securely create and fsync the canonical cleanup frame after no hostile
-   process remains.
-6. Wait while the parent validates and fsyncs the matching retained session
-   frame, then accept the parent's exact `K` acknowledgement.
-7. Remove the cleanup handshake files and exit the namespace.
+5. Close supervisor log descriptors 3 through 6 and require that no descriptor
+   above 2 remains.
+6. Open `/candidate/session` as temporary descriptor 3 with `O_RDONLY`,
+   `O_DIRECTORY`, `O_NOFOLLOW`, and `O_CLOEXEC`. Require its `st_dev`, `st_ino`,
+   UID, and GID to match the session-root identity recorded before candidate
+   execution.
+7. Use `openat` on descriptor 3 to securely create and fsync the canonical
+   cleanup frame after no hostile process remains. Close the frame descriptor
+   before the parent reads the file.
+8. Wait while the parent validates the cleanup frame, then accept the parent's
+   exact `K` acknowledgement.
+9. Remove the cleanup handshake files through descriptor 3, close descriptor
+   3, require that only descriptors 0 through 2 remain, and exit the namespace.
 
 The cleanup frame records the session ID, result class, Sway PID, termination
 path, wait status, `sway-reaped=true`, and `cleanup-complete=true`. A malformed
-record, precreated link, wrong inode, missing fsync, missing acknowledgement,
-unexpected supervisor signal, or failed reap rejects the session.
+record, precreated link, wrong frame inode, changed session-root identity,
+missing fsync, missing acknowledgement, unexpected supervisor signal, or failed
+reap rejects the session. The supervisor opens descriptor 3 only after it reaps
+the candidate and Sway, so the descriptor never reaches candidate execution.
 
 Fixtures cover early Sway failure, hostile candidate exit and descendants,
 timeout, socket disruption, handled interruption, successful graceful reap,
 the `SIGKILL` fallback, cleanup-frame precreation, and injected `swaybg` process
-and output canaries.
+and output canaries. The cleanup-phase fixture also rejects an open log
+descriptor, early descriptor-3 reuse, a session-root device, inode, UID, or GID
+mismatch, an unrelated descriptor, or descriptor 3 remaining after the
+handshake. The preflight, supervisor-log, and final-candidate descriptor goldens
+don't change.
 
 ### Retain capacity and evidence authority
 
@@ -539,7 +561,9 @@ coordinator decision.
 
 ## Consequences
 
-- Bubblewrap remains the only parent-launched session process.
+- Bubblewrap remains the sole candidate namespace and session-payload launch.
+- The trusted parent retains the exact preparation, identity checks, and
+  post-session `flock` verifier without gaining a general process allowlist.
 - Base sessions have no compositor surface.
 - Integration sessions treat Sway as untrusted code inside their existing
   containment boundary.
@@ -557,6 +581,7 @@ coordinator decision.
 
 - [Bubblewrap `0.11.2` command contract](https://github.com/containers/bubblewrap/blob/v0.11.2/bwrap.xml)
 - [Bubblewrap `0.11.2` implementation](https://github.com/containers/bubblewrap/blob/v0.11.2/bubblewrap.c)
+- [util-linux `2.42` `flock` implementation](https://github.com/util-linux/util-linux/blob/v2.42/sys-utils/flock.c)
 - [Ubuntu 24.04 unprivileged user-namespace restrictions](https://documentation.ubuntu.com/release-notes/24.04/#unprivileged-user-namespace-restrictions)
 - [GitHub Actions Ubuntu 24.04 runner inventory](https://github.com/actions/runner-images/blob/511e65ce908f72f78db9bb4052d642a8728681cb/images/ubuntu/Ubuntu2404-Readme.md)
 - [Sway `1.12` command and environment contract](https://github.com/swaywm/sway/blob/1.12/sway/sway.1.scd)
