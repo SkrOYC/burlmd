@@ -1,4 +1,14 @@
 entries:
+  - version: v2.1.24
+    date: 2026-09-08
+    changed:
+      - "Acknowledged Tasks v3.2.11's completed Stage 4 adaptation of BURL-M003 to raw contract version 38 and ADR-020 by marking ci_bootstrap.stage4_tasks_adaptation satisfied. The acknowledgement changes no runtime policy or API."
+      - "Retained raw contract version 38, role schema version 15, aggregate schema version 19, spike-result schema version 20, sealing receipt version 2, receipt transport version 1, the 42-record bill of materials, evidence schemas, artifact inventories, session IDs, and the separate BURL-O001 Stage 3 stop."
+      - "Tasks v3.2.11 truthfully records TechSpec v2.1.23 as its authoring baseline. VER-003 requires that historical version to exist, not that Tasks point to the latest TechSpec version, so this acknowledgement leaves Tasks unchanged."
+    by: patch-lane
+    upstream:
+      prd: v2.0.5
+      architecture: v2.1.2
   - version: v2.1.23
     date: 2026-09-08
     fixed:
