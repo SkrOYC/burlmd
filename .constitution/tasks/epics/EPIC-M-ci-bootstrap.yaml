@@ -409,7 +409,7 @@ tickets:
            writable, extra, or substituted bind; unresolved authority; a
            base-session compositor surface; inherited environment or
            descriptor state; swapped logs; early teardown proof; pathname
-           substitution; surviving namespace reaping; integration cleanup before
+           substitution; incomplete namespace-PID-1 reaping; integration cleanup before
            both candidate and Sway direct-child waits; a native-isolation
            prerequisite or candidate-path host-policy mutation or fallback; and
            any bundle creation or upload after a prerequisite or cleanup failure.
