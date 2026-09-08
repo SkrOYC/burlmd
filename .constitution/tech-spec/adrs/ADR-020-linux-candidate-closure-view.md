@@ -132,9 +132,9 @@ manifest payload, and retained authority/current-path rows. It requires exact
 byte count and SHA-256 equality.
 
 The serializer golden uses an explicitly synthetic `/work` source map and a
-reduced two-member manifest. It covers every argument category and produces
-253 arguments, 5,554 bytes, and SHA-256
-`dbed8cb348fa19fdd9304931dd9a2b8c6e68870516cff2cf94dc202a129f96e1`.
+reduced two-member manifest. It covers every argument category, including the
+exact Bash source launch, and produces 256 arguments, 5,589 bytes, and SHA-256
+`ba3ea8bbdebcbcb92f03abe8a47f0dd74d22f86d573c094ee77decc2485ae04a`.
 These values aren't a production integration argv. Separate fixtures construct
 all seven vectors from the complete 488-member or 547-member manifests.
 Production launch and fresh sealing use the actual canonical host paths and
@@ -443,26 +443,30 @@ They inject hostile inherited values and reject any leak or variant at direct
 candidate entry. They also record the variables that each pinned interpreter
 adds after entry.
 
-### Close the Bash script descriptor before preflight
+### Source the supervisor before closing descriptor 255
 
-The `scripts/supervise-linux-session.sh` file defines all constants and helper
-functions before one complete `main` function. The final top-level command is
-exactly `main "$@"`, with no later script text to evaluate. Pinned Bash 5.3p9
-therefore parses the complete function before it calls `main`.
+The `scripts/supervise-linux-session.sh` file starts with `set -euo pipefail`
+and defines all constants and helper functions and one complete `main`
+function. It has no top-level `main "$@"` call. Pinned Bash 5.3p9 is launched
+only as `-c 'source "$1"; shift; main "$@"' _`, followed by the trusted script
+path and the existing supervisor arguments. Source reaches end of file before
+`main` runs.
 
 At the start of `main`, after argument parsing but before the first exact
-preflight descriptor inventory, the Bash builtin `exec 255<&-` closes the
-script descriptor. The inventory requires descriptor 255 to be absent and
+preflight descriptor inventory, the Bash builtin `exec 255<&-` defensively
+closes descriptor 255. The inventory requires descriptor 255 to be absent and
 preserves descriptors 0 through 4. Base branches end with the final candidate
 `exec`. Integration and error branches exit from `main`. The function never
-returns to top-level script reading, and this structure doesn't rely on
-`CLOEXEC`.
+returns to script text, and this structure doesn't rely on `CLOEXEC`.
 
-A pinned Bash fixture checks descriptor 255 before the close and requires only
-descriptors 0 through 2 afterward in its reduced inventory. It compares the
-standard streams before and after the close. One branch exits directly, and one
-branch performs a final `exec`; both preserve meaningful standard output and
-standard error.
+A pinned Bash fixture rejects direct-file and changed-argv launches. It proves
+that source reaches end of file before `main`, preserves `BASH_SOURCE`, and
+requires only descriptors 0 through 2 in its reduced post-close inventory. It
+compares the standard streams before and after the close. One branch exits
+directly, and one branch performs a final `exec`; both preserve meaningful
+standard output and standard error. Source parse, read, and
+main-defined-then-source-runtime-error fixtures must exit without invoking
+`main`.
 
 ### Clean up before namespace exit
 
@@ -552,12 +556,12 @@ exited with status 42 after starting a descendant. The supervisor waited for
 its direct children, the namespace PID 1 reaped the adopted descendant, and the
 outer teardown lock proved namespace exit.
 
-The complete reduced serializer golden contains 253 arguments and 5,554 bytes.
+The complete reduced serializer golden contains 256 arguments and 5,589 bytes.
 Its SHA-256 is
-`dbed8cb348fa19fdd9304931dd9a2b8c6e68870516cff2cf94dc202a129f96e1`.
+`ba3ea8bbdebcbcb92f03abe8a47f0dd74d22f86d573c094ee77decc2485ae04a`.
 The full-vector fixture constructed all seven vectors from the actual
 488-member and 547-member manifests. Depending on the session command, the
-synthetic-path vectors contain 1,699-1,888 arguments and 100,952-113,583
+synthetic-path vectors contain 1,702-1,891 arguments and 100,987-113,618
 bytes. All seven reconstructions resolved every authority identifier. These
 deterministic fixture hashes don't replace runtime hashes over the actual
 canonical paths.
