@@ -36,19 +36,25 @@ tickets:
         - scripts/repeat-test.sh
     verification:
       command: cargo test --manifest-path rust/Cargo.toml
-        a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success
+        workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success
+        -- --exact
         && cargo test --manifest-path rust/Cargo.toml
-        an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries
+        workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries
+        -- --exact
         && ./scripts/repeat-test.sh --count 100 -- cargo test --manifest-path
         rust/Cargo.toml
-        a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success
+        workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success
+        -- --exact
         && ./scripts/repeat-test.sh --count 100 -- cargo test --manifest-path
         rust/Cargo.toml
-        an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries
+        workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries
+        -- --exact
         && git diff --check
       expected: each named fixture passes one ordinary run and 100 consecutive
-        isolated repetitions with 0 failures and no skipped assertions. Both
-        fixtures preserve complete NoteState equality and settle deterministically
+        isolated repetitions with 0 failures and no skipped assertions. Each
+        Cargo invocation selects exactly one fully qualified test. Both fixtures
+        preserve complete NoteState equality at the required observation points,
+        and their post-publication timers become quiescent deterministically
     stop_conditions:
       - STOP if this ticket isn't running as the first reviewed milestone on
         `chore/epic-m-ci-foundation` from merged `master`.
@@ -63,11 +69,16 @@ tickets:
         hides an ordering failure, or changes production semantics; don't
         improvise.
     description: Make exactly the two named persistence regression fixtures
-      deterministic. Preserve authoritative-success settlement in
+      deterministic. Preserve authoritative-success behavior in
       `a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success`
-      and complete NoteState equality for both draft-refusal paths in
+      by comparing the complete returned and live NoteState values while tier 2
+      session settlement is deliberately paused. After releasing the pause,
+      observe the timestamp advance and final timer quiescence. Preserve complete
+      NoteState equality for both draft-refusal paths in
       `an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries`
-      without changing production semantics
+      and observe timer quiescence after the longer retry's draft row clears and
+      before capturing `state_before_shorter`, without changing production
+      semantics
     acceptance:
       mode: stat_threshold
       constraints:
@@ -78,14 +89,19 @@ tickets:
         `an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries`,
         each with one ordinary run followed by 100 consecutive isolated
         repetitions. Threshold: 0 failures and no skipped assertions in every
-        run. Command: the exact verification command above. The first fixture
-        returns the complete authoritative NoteState after deterministic
-        settlement. The second fixture preserves complete NoteState equality for
-        both longer and shorter draft-refusal paths and observes timer quiescence
-        between them. Neither fixture substitutes fixed sleeps or wall-clock
-        coincidence for observed settlement, and neither changes production
-        semantics. The milestone receives one full review before `BURL-M003`
-        begins."
+        run. Each Cargo invocation uses the fully qualified test name followed by
+        `-- --exact`. Command: the exact verification command above. While tier 2
+        session settlement is deliberately paused, the first fixture returns
+        authoritative success and compares the complete returned NoteState with
+        the live session state. It then releases the pause, observes the metadata
+        timestamp advance, and observes final timer quiescence. The second
+        fixture preserves complete NoteState equality for both longer and shorter
+        draft-refusal paths. It observes timer quiescence after the longer retry's
+        draft row clears and before capturing `state_before_shorter`. Both
+        fixtures use bounded predicate polling for settlement observations.
+        Neither fixture substitutes fixed sleeps or wall-clock coincidence for
+        observed settlement, skips an assertion, or changes production semantics.
+        The milestone receives one full review before `BURL-M003` begins."
     flows:
       - flow-edit-note
     certainty: assumed

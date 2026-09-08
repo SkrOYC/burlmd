@@ -2,8 +2,9 @@ entries:
   - version: v3.2.12
     date: 2026-09-08
     fixed:
-      - "Expanded BURL-M015 to exactly two named persistence regression fixtures. Each fixture must pass one ordinary run and 100 consecutive isolated repetitions with 0 failures and no skipped assertions."
-      - "Required complete `NoteState` equality, deterministic authoritative-success settlement, and timer quiescence between the longer and shorter draft-refusal phases. Fixed sleeps and wall-clock coincidence cannot substitute for observing settlement, and the work cannot change production semantics."
+      - "Expanded BURL-M015 to exactly two named persistence regression fixtures. Each fixture must pass one ordinary run and 100 consecutive isolated repetitions with 0 failures and no skipped assertions. Every Cargo invocation uses the fully qualified `workspace::persist::tests::...` name followed by `-- --exact`, so substring-matched tests cannot count toward acceptance."
+      - "Required the first fixture to compare the complete returned and live `NoteState` values while tier 2 session settlement is deliberately paused. After releasing the pause, it must observe the metadata timestamp advance and final timer quiescence without changing authoritative-success behavior."
+      - "Required the second fixture to preserve complete `NoteState` equality for both refusal paths and observe timer quiescence after the longer retry's draft row clears and before capturing `state_before_shorter`. Bounded predicate polling remains permitted, but fixed sleeps and wall-clock coincidence cannot substitute for observing settlement. Production semantics remain unchanged."
       - "Kept BURL-M015 at 3 points with its existing paths and preserved BURL-M003's dependency on it. No BURL-M016 or other ticket was added. The 11-point Epic M and the 10-epic, 564-point graph remain unchanged."
       - "Completed Epics A through F have no actuals blocks, so diff-lines-per-point and review-rounds-per-point calibration remains unavailable. Validation still reports 70% of open tickets at the 8-point ceiling; this bounded 3-point refinement doesn't justify re-estimation."
     upstream:
