@@ -1,4 +1,17 @@
 entries:
+  - version: v2.1.25
+    date: 2026-09-08
+    fixed:
+      - "Corrected the BURL-M003 trusted supervisor launch. Pinned Bash 5.3p9 now uses the exact `-c 'source \"$1\"; shift; main \"$@\"' _ TRUSTED_SUPERVISOR_PATH` shape, so the trusted script reaches end of file before `main` and its defensive descriptor-255 close."
+      - "Regenerated the reduced serializer golden to 256 arguments, 5,589 bytes, and SHA-256 `ba3ea8bbdebcbcb92f03abe8a47f0dd74d22f86d573c094ee77decc2485ae04a`; regenerated all seven full-vector records and all seven synthetic closure-log argv fields from the exact 488-member and 547-member locked manifests."
+      - "Required source-launch fixture coverage for direct-file and changed-argv rejection, source parse and read failure, and a main-defined-then-source-runtime failure. The measured probes exit without invoking `main`."
+      - "Retained raw contract version 38, closure-log format version 2, package pins, namespace and capability policy, descriptor roles, cleanup and lock protocol, evidence schemas, profiles, artifact inventories, session IDs, and Tasks v3.2.11 without a Task or graph change."
+    security:
+      - "The first supervisor inventory now follows source-to-EOF and still requires exactly descriptors 0 through 4 without relying on close-on-exec."
+    by: patch-lane
+    upstream:
+      prd: v2.0.5
+      architecture: v2.1.2
   - version: v2.1.24
     date: 2026-09-08
     changed:
