@@ -1,4 +1,20 @@
 entries:
+  - version: v2.1.18
+    date: 2026-09-08
+    fixed:
+      - "Removed the stale `userns-disabled=true` preflight assertion that contradicted raw contract version 38. The synthetic base and integration preflight bodies are 626 and 886 bytes with SHA-256 values `3e94e0e21b39baffe00f7c0898217cd82efdf18bef7df28f7e8aa1e8ec50191a` and `d062b02dd1e6549645ea41ff6b8ff8a8117ae23db4fec3a8f6fa60f97d3a9b0a`. Mutation coverage rejects the removed field."
+      - "Moved the parent-generated Bubblewrap, compositor, base, and integration manifests from namespace-only `/contract` paths to four exact host-relative names below canonical `RUNNER_TEMP/burlmd-m003`. The `/contract` mount contains only the per-session `locked-nix-closure.sources` snapshot."
+      - "Expanded the existing closure-log golden to every authority needed by argument construction: 22 dynamic sources and one staging source for each of seven sessions, plus two integration runtime sources. Its 163 authority rows and 163 current-path rows hash to `a84bfa98dbb926d0c4e03228d4291ae0586a770fe8ba9a64984d4f6e390152c6`. All seven full vectors reconstruct with zero unresolved authority identifiers."
+      - "Defined retained tab-separated paths as literal UTF-8 and fail closed on NUL, tab, LF, CR, or backslash at ingestion and parsing. Added mutations for malformed path encoding, a wrong host-versus-namespace manifest source, and an omitted authority."
+      - "Separated Stage 4 implementation adaptation (`affected_tickets = [BURL-M003]`) from stop-condition maintenance (`maintained_stop_tickets = [BURL-O001]`). This preserves the BURL-O001 Stage 3 stop without authorizing its implementation."
+      - "Added GNU Bash 5.3p9 and GNU Coreutils 9.11 as directly pinned runtime records. The bill of materials contains 41 records. No tool version or closure measurement changed."
+      - "Limited AppArmor restoration claims to success, catchable exits, and handled signals with verification before bundle creation or upload. `SIGKILL`, abrupt runner loss, and host failure produce no accepted upload; ephemeral-runner disposal remains the residual limit."
+    security:
+      - "Fresh sealing rejects stale namespace assertions, unresolved mount authorities, unsupported retained-path bytes, and any parent manifest written through `/contract`. Candidate, compositor, and output remain untrusted."
+    by: patch-lane
+    upstream:
+      prd: v2.0.5
+      architecture: v2.1.2
   - version: v2.1.17
     date: 2026-09-07
     fixed:

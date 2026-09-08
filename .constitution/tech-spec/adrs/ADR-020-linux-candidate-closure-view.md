@@ -46,6 +46,20 @@ empty process environment and launches that executable once per session. It
 launches no Sway, `swaymsg`, candidate helper, `env` process, or display proxy.
 Bubblewrap doesn't enter either session closure or `PATH`.
 
+The parent writes its Bubblewrap, compositor, base, and integration manifests
+to these exact paths below the canonical `RUNNER_TEMP` root:
+
+```text
+burlmd-m003/trusted-parent-bubblewrap.manifest
+burlmd-m003/unwrapped-compositor-closure.manifest
+burlmd-m003/base-session-closure.manifest
+burlmd-m003/integration-session-closure.manifest
+```
+
+These are host-relative paths, not namespace destinations. The `/contract`
+namespace mount contains only the declared per-session source-identity
+snapshot.
+
 ### Use two session closures
 
 Five base sessions use the exact base manifest:
@@ -116,7 +130,9 @@ reduced two-member manifest. It covers every argument category and produces
 These values aren't a production integration argv. Separate fixtures construct
 all seven vectors from the complete 488-member or 547-member manifests.
 Production launch and fresh sealing use the actual canonical host paths and
-hash those runtime bytes.
+hash those runtime bytes. Each reconstruction resolves all 22 dynamic mount
+sources, plus the integration runtime source when applicable. Any unresolved
+authority identifier rejects the vector.
 
 A flag-subsequence digest, byte count, set comparison, successful parse, or
 successful execution can't replace this commitment. Duplicate-aware fixtures
@@ -146,6 +162,12 @@ reconstruction contains the resolved absolute path. A production `/work`
 alias, unresolved environment value, escape, link, or mount substitution
 rejects the role. `/work` appears only in the explicitly synthetic golden
 fixtures.
+
+Retained tab-separated path fields use literal UTF-8 bytes. At path ingestion
+and log parsing, reject NUL, tab, LF, CR, and backslash bytes before
+canonicalization, hashing, lookup, or argv construction. Spaces and other valid
+UTF-8 bytes remain literal. This rule avoids an escape grammar that the runner
+paths don't need.
 
 ### Preserve the closure view
 
@@ -183,6 +205,10 @@ handshake starts with these exact descriptor roles:
 - After acknowledgement, the in-namespace process closes descriptors 3 and 4
   and reverifies the unchanged identity and access mode of descriptors 0, 1,
   and 2.
+
+The preflight records the private PID and network namespace properties. It
+doesn't contain `userns-disabled=true`; raw contract version `38` makes no such
+claim, and the parser rejects that stale field.
 
 After the loopback check succeeds, the branches enforce different descriptor
 rules. A base session requires
@@ -240,8 +266,8 @@ runner-image commit `511e65ce908f72f78db9bb4052d642a8728681cb`
 documents image `20260831.293.1`, Ubuntu `24.04.4`, and kernel
 `6.17.0-1022-azure`. Its inventory lists sudo and host iproute2, but it doesn't
 document Bubblewrap, AppArmor profile state, or the live sysctl value. It also
-can't establish whether a profile covers the Nix-store Bubblewrap path. The
-After trusted Nix and tool preparation, the wrapper runs the exact pinned
+can't establish whether a profile covers the Nix-store Bubblewrap path. After
+trusted Nix and tool preparation, the wrapper runs the exact pinned
 Bubblewrap and loopback probe. It does this before tested-source dependency
 execution or any candidate process.
 
@@ -259,8 +285,8 @@ the wrapper may continue only when all these conditions hold:
   `1`.
 - `/usr/bin/sudo` and `/usr/sbin/sysctl` are root-owned, non-writable regular
   executables, and noninteractive sudo is available.
-- An unconditional exit-and-signal restoration handler is installed before
-  the first write.
+- `EXIT`, `HUP`, `INT`, `QUIT`, and `TERM` restoration handlers are installed
+  before the first write.
 
 The wrapper then runs exactly:
 
@@ -269,10 +295,15 @@ The wrapper then runs exactly:
 ```
 
 It requires the proc value to equal `0` and reruns the same pinned probe. Any
-failed condition, write, value check, or second probe rejects the role. On
-every exit path, the handler writes the saved value, requires the proc value
-to equal it, and records restoration. The wrapper must complete restoration
-before bundle creation or upload. Restoration failure blocks upload.
+failed condition, write, value check, or second probe rejects the role. After
+all sessions, and on every catchable earlier exit or handled signal, the handler
+writes the saved value. It requires the proc value to match and records the
+result. The wrapper must prove restoration before bundle creation or upload.
+Restoration failure blocks upload.
+
+`SIGKILL`, abrupt runner loss, and host failure can't run the handler. Those
+paths produce no upload. The ephemeral hosted runner boundary is the residual
+limit on the temporary host-wide change.
 
 Candidate code receives no sudo executable, host sysctl mount, host sysctl
 descriptor, or workflow step with policy authority. This conditional global
@@ -435,10 +466,13 @@ and output canaries.
 
 Preserve the frozen stable-parent authority, current-leaf mapping, per-device
 4,000,000,000-byte start guard, source identities, staging checks, teardown
-lock, and exact seven-session order. The authority declaration set includes
-two `xdg-runtime` rows, one for each integration session. Its golden count is
-16, and its SHA-256 is
-`84c452be4629b446fbba93e15c771dab5f79c499d1d620968e1736ce583def52`.
+lock, and exact seven-session order. Each session has one authority row for its
+staging leaf and each of the 22 dynamic mount sources. Each integration session
+adds one `xdg-runtime` row. The synthetic golden therefore has 163 authority
+rows and 163 current-path rows. The authority rows have SHA-256
+`a84bfa98dbb926d0c4e03228d4291ae0586a770fe8ba9a64984d4f6e390152c6`.
+Production derives its count from its retained inventory instead of copying the
+synthetic count.
 
 The version 2 closure-view log retains both manifest payloads, every complete
 argv digest, every authority/current-path mapping, and integration cleanup
@@ -472,8 +506,9 @@ Its SHA-256 is
 The full-vector fixture constructed all seven vectors from the actual
 488-member and 547-member manifests. Depending on the session command, the
 synthetic-path vectors contain 1,699-1,888 arguments and 100,952-113,583
-bytes. These deterministic fixture hashes don't replace runtime hashes over
-the actual canonical paths.
+bytes. All seven reconstructions resolved every authority identifier. These
+deterministic fixture hashes don't replace runtime hashes over the actual
+canonical paths.
 
 A pinned Bubblewrap `0.11.2` probe exposed mode `0700` from the writable source
 bind. The same probe exposed mode `0755` from `--dir`, which is the rejected
@@ -514,8 +549,9 @@ coordinator decision.
   the kernel surface only until the trusted wrapper restores the saved value.
 - Missing dependencies, invalid cleanup, excessive argv size, or failed
   isolation produce no accepted evidence.
-- Stage 4 may adapt only `BURL-M003` within its existing paths. It must retain
-  the explicit `BURL-O001` stop and Stage 3 route.
+- Stage 4 adapts only `BURL-M003` within its existing paths. `BURL-O001` appears
+  only in the maintained-stop list, which preserves its explicit stop and Stage
+  3 route without authorizing implementation.
 
 ## Verification anchors
 
