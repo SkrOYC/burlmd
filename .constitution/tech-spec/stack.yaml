@@ -368,7 +368,7 @@ bill_of_materials:
     justification: "Installs Nix 2.35.2 before entering the repository closure; the pinned action source fixes that transitive version, and the workflow forbids the install_url override and requires observed nix and nix-store version equality"
     radar: adopt
     certainty: assumed
-    assumption: "SHA resolved from the official repository on 2026-08-31 and reverified on 2026-09-07. Its pinned install-nix.sh sets nix_version=2.35.2, while action.yml exposes install_url as an optional override. BURL-M003 must omit that input, reject preinstalled Nix, and require observed Nix 2.35.2 from both nix and nix-store. No workflow in this repository references the action until BURL-M003 lands .github/workflows/ci.yml."
+    assumption: "SHA resolved from the official repository on 2026-08-31 and reverified on 2026-09-08. Its action.yml sets enable_kvm to true by default, and the pinned install-nix.sh attempts KVM setup when INPUT_ENABLE_KVM is true. Every trusted call site must set the literal enable_kvm: false. Its pinned install-nix.sh sets nix_version=2.35.2, while action.yml exposes install_url as an optional override. BURL-M003 must omit that input, reject preinstalled Nix, and require observed Nix 2.35.2 from both nix and nix-store. Static fixtures must reject a missing, true, expression-derived, environment-derived, wrapper-derived, or nonliteral enable_kvm value. No workflow in this repository references the action until BURL-M003 lands .github/workflows/ci.yml."
   - name: actions/upload-artifact
     role: infrastructure
     version: 043fb46d1a93c77aae656e7c1c64a875d1fc6a0a

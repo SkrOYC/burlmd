@@ -1,4 +1,16 @@
 entries:
+  - version: v2.1.23
+    date: 2026-09-08
+    fixed:
+      - "Returned ADR-0019 to OD-11's authority ruling. ADR-0020 remains the assumed contract for Linux teardown mechanics, including the retained-descriptor and OFD-lock requirements."
+      - "Required the literal `enable_kvm: false` at every trusted cachix/install-nix-action call site. The pinned action manifest defaults this input to true. Static fixtures reject a missing, true, derived, or nonliteral value."
+      - "Retained raw contract version 38, the 42-record bill of materials, closure and runtime measurements, evidence schemas, artifact inventories, session IDs, and the BURL-O001 stop. TechSpec advanced to v2.1.23."
+    security:
+      - "Trusted workflows cannot rely on cachix/install-nix-action's default KVM setup."
+    by: patch-lane
+    upstream:
+      prd: v2.0.5
+      architecture: v2.1.2
   - version: v2.1.22
     date: 2026-09-08
     fixed:
