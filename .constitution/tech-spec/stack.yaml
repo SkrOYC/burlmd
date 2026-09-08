@@ -285,10 +285,10 @@ bill_of_materials:
     role: infrastructure
     version: "0.11.2"
     ecosystem: nix
-    justification: "Provides Linux user, mount, process, network, and filesystem isolation for the managed-evidence coordinator and all seven BURL-M003 candidate sessions, including the authority-backed read-only `/contract` mount and the two integration-only writable `xdg-runtime` binds"
+    justification: "Provides the outer Linux user, mount, process, network, and filesystem isolation for the managed-evidence coordinator and all seven BURL-M003 candidate sessions, including the authority-backed read-only `/contract` mount and the two integration-only writable `xdg-runtime` binds"
     radar: assess
     certainty: assumed
-    assumption: "BURL-M003 adds pkgs.bubblewrap to devenv.nix; the pinned devenv.lock nixpkgs revision resolves 0.11.2, but nothing in the repository uses it yet."
+    assumption: "BURL-M003 adds pkgs.bubblewrap to devenv.nix; the pinned devenv.lock nixpkgs revision resolves 0.11.2, but no accepted managed run has established whether the Nix-store executable needs the raw contract's temporary Ubuntu 24.04 AppArmor sysctl precondition."
   - name: Sway
     role: infrastructure
     version: "1.12"
@@ -296,7 +296,7 @@ bill_of_materials:
     justification: "Supplies the unwrapped headless Wayland compositor and swaymsg readiness client only inside the two BURL-M003 integration-session Bubblewrap views; the reviewed configuration disables `swaybg` and Xwayland and uses the pinned wlroots 0.20.1, Wayland 1.25.0, and pixman 0.46.4 closure"
     radar: assess
     certainty: assumed
-    assumption: "Raw contract version 37 pins the exact unwrapped Sway and swaymsg store member, executable digests, environment, arguments, 72-byte configuration, integration-only authority-backed mode-0700 runtime binds, and the requirement that `swaybg` doesn't start. No accepted managed BURL-M003 run has exercised that in-namespace supervisor contract."
+    assumption: "Raw contract version 38 pins the exact unwrapped Sway and swaymsg store member, executable digests, environment, arguments, Git-tracked mode-0644 72-byte configuration, integration-only authority-backed mode-0700 runtime binds, and the requirement that `swaybg` doesn't start. No accepted managed BURL-M003 run has exercised that in-namespace supervisor contract."
   - name: GitHub CLI
     role: tooling
     version: "2.96.0"
@@ -321,6 +321,14 @@ bill_of_materials:
     radar: adopt
     certainty: assumed
     assumption: "BURL-M003 adds Linux-only `pkgs.procps` to `devenv.nix`; the pinned `devenv.lock` Nixpkgs revision resolves 4.0.6, while the undeclared command resolves through the ambient host profile."
+  - name: iproute2
+    role: tooling
+    version: "7.0.0"
+    ecosystem: nix
+    justification: "Provides the exact `ip` executable that the trusted in-namespace supervisor uses to raise and verify loopback before candidate or Sway startup"
+    radar: adopt
+    certainty: assumed
+    assumption: "BURL-M003 adds Linux-only `pkgs.iproute2` to `devenv.nix`; the pinned `devenv.lock` Nixpkgs revision resolves 7.0.0 and the measured base closure contains its exact store member, but no accepted managed run has exercised the hosted loopback and AppArmor probe."
   - name: actions/checkout
     role: infrastructure
     version: fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09

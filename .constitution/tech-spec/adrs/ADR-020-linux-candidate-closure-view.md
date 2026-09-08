@@ -3,7 +3,7 @@ id: ADR-0020
 status: accepted
 date: 2026-09-07
 certainty: assumed
-assumption: "Two exact read-only BURL-M003 session closures, complete Bubblewrap argv commitments, authority-backed integration runtime binds, and in-namespace Sway supervision preserve the Linux isolation boundary within the standard ubuntu-24.04 runner. Local measurements and a supervisor prototype exercised the mechanism, but no accepted managed run has settled it."
+assumption: "Two exact read-only BURL-M003 session closures, full Bubblewrap argv commitments, trusted loopback setup, branch-specific descriptor closure, authority-backed integration runtime binds, and in-namespace Sway supervision preserve the Linux isolation boundary within the standard ubuntu-24.04 runner. Local measurements and probes exercised the mechanism, but no accepted managed run has settled hosted AppArmor behavior or the complete design."
 ---
 # ADR-020: Linux candidate closure view
 
@@ -99,21 +99,53 @@ The encoded vector includes all of these values in their binding order:
 - The trusted preflight and supervisor executable and arguments.
 - The exact session command and all its arguments.
 
-Raw contract version `37` defines the complete ordered construction. Dynamic
+Raw contract version `38` defines the complete ordered construction. Dynamic
 sources come only from the retained capacity-authority and current-path rows.
 The launcher hashes the complete NUL-delimited bytes and executes the same
 in-memory vector without shell reparsing.
 
 Each session frame retains the complete-vector byte count and SHA-256. Fresh
-sealing reconstructs the vector from raw contract version `37`, the selected
+sealing reconstructs the vector from raw contract version `38`, the selected
 manifest payload, and retained authority/current-path rows. It requires exact
 byte count and SHA-256 equality.
+
+The serializer golden uses an explicitly synthetic `/work` source map and a
+reduced two-member manifest. It covers every argument category and produces
+253 arguments, 5,554 bytes, and SHA-256
+`dbed8cb348fa19fdd9304931dd9a2b8c6e68870516cff2cf94dc202a129f96e1`.
+These values aren't a production integration argv. Separate fixtures construct
+all seven vectors from the complete 488-member or 547-member manifests.
+Production launch and fresh sealing use the actual canonical host paths and
+hash those runtime bytes.
 
 A flag-subsequence digest, byte count, set comparison, successful parse, or
 successful execution can't replace this commitment. Duplicate-aware fixtures
 reject every extra, omitted, reordered, duplicated, or substituted argument.
 The mutations include extra capabilities, contract-mount changes, and host-root
 alias binds.
+
+### Derive trusted host paths
+
+The trusted wrapper requires `RUNNER_TEMP` and its role-output argument to be
+nonempty absolute paths. It resolves both existing directories with
+`realpath -e`, rejects symbolic-link final components, and freezes their
+ownership, mode, device, and containing-mount identity.
+
+The wrapper creates staging, contract, and integration-runtime parents only at
+these relative paths below the canonical `RUNNER_TEMP` root:
+
+```text
+burlmd-m003/staging
+burlmd-m003/contracts
+burlmd-m003/xdg-runtime
+```
+
+Logs and role artifacts stay below the separately canonical role-output root.
+Every production authority row, current-path row, dynamic bind source, and argv
+reconstruction contains the resolved absolute path. A production `/work`
+alias, unresolved environment value, escape, link, or mount substitution
+rejects the role. `/work` appears only in the explicitly synthetic golden
+fixtures.
 
 ### Preserve the closure view
 
@@ -140,15 +172,112 @@ entry. They also reject another `/contract` mount, a changed source or
 destination, and an authority row that doesn't resolve uniquely.
 
 The trusted in-namespace preflight validates the selected manifest against
-decoded mount information, device, inode, type, and read-only state. It also
-preserves the existing descriptor handshake:
+decoded mount information, device, inode, type, and read-only state. The
+handshake starts with these exact descriptor roles:
 
 - Descriptors 0 through 2 are the final candidate streams.
 - Descriptor 3 is the preflight-record write end.
 - Descriptor 4 is the acknowledgement read end.
 - The parent validates the complete framed record and end of file before it
   sends ASCII `G` and closes its end.
-- The candidate receives only descriptors 0 through 2.
+- After acknowledgement, the in-namespace process closes descriptors 3 and 4
+  and reverifies the unchanged identity and access mode of descriptors 0, 1,
+  and 2.
+
+After the loopback check succeeds, the branches enforce different descriptor
+rules. A base session requires
+that no descriptor above 2 remains and immediately execs the candidate through
+the final Coreutils `env` boundary. An integration supervisor may open only
+these descriptors:
+
+- Descriptor 3 writes Sway standard output.
+- Descriptor 4 writes Sway standard error.
+- Descriptor 5 writes readiness standard output.
+- Descriptor 6 writes readiness standard error.
+
+Each descriptor targets its exact no-follow regular log file with the declared
+inode and access mode. The Sway and readiness children remap only their pair to
+standard output and standard error, then close descriptors 3 through 6. The
+forked candidate child closes every descriptor above 2. Immediately before its
+final Coreutils `env` exec, it requires only descriptors 0 through 2 and
+reverifies all three against the launcher's record. Fixtures reject leaks,
+swapped logs, substituted targets, wrong access modes, and changed standard
+streams in both branches.
+
+### Raise loopback inside the outer namespace
+
+The 12-argument namespace vector is 126 NUL-delimited bytes with SHA-256
+`4f2e4c3c029ddbbc81e36ec2cbc199f3340e9c3ed2aaac5fdb37f36b8c94cd34`.
+It contains no user-namespace-disabling option because that mechanism prevents
+the retained `CAP_NET_ADMIN` from raising loopback under Bubblewrap `0.11.2`.
+
+Immediately after the descriptor handshake, the trusted supervisor runs the
+pinned iproute2 `7.0.0` command:
+
+```text
+/nix/store/qbsvh4fw7lrmkqk870w4sc21kqylph42-iproute2-7.0.0/bin/ip link set dev lo up
+```
+
+It then runs `ip -o link show up dev lo`. The command must return one nonempty
+line whose interface flags include `UP`. This happens before any candidate,
+Sway, or `swaymsg` process starts. A candidate fixture still performs a
+loopback bind, listen, connect, and byte exchange. No other interface, route,
+or external network access is allowed.
+
+Each session still uses one parent-launched Bubblewrap process. The outer
+Bubblewrap namespaces remain the mount, network, PID, user, and process-session
+containment authority. Bubblewrap is absent from the candidate closure and
+`PATH`. Candidate-created nested user namespaces aren't claimed to be
+impossible and aren't a containment control.
+
+### Probe hosted AppArmor policy
+
+Ubuntu 24.04 restricts unprivileged user namespaces through AppArmor. Its
+default unconfined profile permits namespace creation but denies capabilities
+inside that namespace. That behavior can block the `CAP_NET_ADMIN` loopback
+step. GitHub
+runner-image commit `511e65ce908f72f78db9bb4052d642a8728681cb`
+documents image `20260831.293.1`, Ubuntu `24.04.4`, and kernel
+`6.17.0-1022-azure`. Its inventory lists sudo and host iproute2, but it doesn't
+document Bubblewrap, AppArmor profile state, or the live sysctl value. It also
+can't establish whether a profile covers the Nix-store Bubblewrap path. The
+After trusted Nix and tool preparation, the wrapper runs the exact pinned
+Bubblewrap and loopback probe. It does this before tested-source dependency
+execution or any candidate process.
+
+The probe mounts only the sorted requisite union for Bash 5.3p9 and iproute2
+7.0.0. The union has 33 members, 1,985 manifest bytes, SHA-256
+`8417a87e4610c15b6237f416532defaaee9c93a06f2b605c6abaeaa8278df8b2`,
+97,009,672 NAR bytes, and 4,300 same-path bind bytes.
+
+If the probe succeeds, the wrapper doesn't change host policy. If it fails,
+the wrapper may continue only when all these conditions hold:
+
+- The runner-placement guards identify the fixed GitHub-hosted
+  `ubuntu-24.04` job.
+- `/proc/sys/kernel/apparmor_restrict_unprivileged_userns` contains exactly
+  `1`.
+- `/usr/bin/sudo` and `/usr/sbin/sysctl` are root-owned, non-writable regular
+  executables, and noninteractive sudo is available.
+- An unconditional exit-and-signal restoration handler is installed before
+  the first write.
+
+The wrapper then runs exactly:
+
+```text
+/usr/bin/sudo --non-interactive -- /usr/sbin/sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+```
+
+It requires the proc value to equal `0` and reruns the same pinned probe. Any
+failed condition, write, value check, or second probe rejects the role. On
+every exit path, the handler writes the saved value, requires the proc value
+to equal it, and records restoration. The wrapper must complete restoration
+before bundle creation or upload. Restoration failure blocks upload.
+
+Candidate code receives no sudo executable, host sysctl mount, host sysctl
+descriptor, or workflow step with policy authority. This conditional global
+change still enlarges the hosted kernel attack surface while it is active.
+Only an accepted hosted run can establish whether the current runner needs it.
 
 ### Mount the integration runtime from frozen authority
 
@@ -157,8 +286,9 @@ Only the four integration assignments add that variable. Therefore, only the
 two integration sessions receive a runtime leaf.
 
 Before each integration invocation, the launcher creates one distinct leaf
-under the frozen `/work/xdg-runtime` parent. The `xdg-runtime` authority row and
-the matching current-path row supply the exact bind source. The complete argv
+under the frozen canonical `RUNNER_TEMP/burlmd-m003/xdg-runtime` parent. The
+`xdg-runtime` authority row and the matching current-path row supply the exact
+bind source. The complete argv
 uses `--bind` to mount that source at `/candidate/xdg/runtime`. It doesn't use
 `--dir` or `--ro-bind` for that destination.
 
@@ -213,7 +343,8 @@ It starts Sway with exactly:
 /trusted/scripts/managed-sway.conf
 ```
 
-The reviewed configuration is exactly:
+The reviewed `scripts/managed-sway.conf` file is Git-tracked as a normal
+mode-`0644` regular file. Its exact contents are:
 
 ```text
 swaybg_command -
@@ -223,6 +354,8 @@ output HEADLESS-1 mode 1920x1080@60Hz
 
 The 72-byte file has SHA-256
 `dfb19c5d5cd33e3e2ba7570511cee6c96222a94f1a717886bbbaa7d91dd1ab8a`.
+The launcher verifies those bytes and mounts the file read-only. A read-only
+bind doesn't change the visible `0644` permission bits.
 The first directive is the supported Sway 1.12 form for disabling the default
 `swaybg` helper. The file contains no `include`, `exec`, `exec_always`, or shell
 expansion. Sway gets no ambient configuration. The supervisor rejects any
@@ -333,16 +466,24 @@ early Sway failure, socket disruption, timeout, and a hostile candidate that
 exited with status 42 after starting a descendant. Every case removed the
 candidate descendants, waited for Sway, and verified that its PID was absent.
 
-The argv prototype reproduced the 783-byte integration golden digest,
-`a4e021dfad7430fda7a0143646a7f8971d9a703930b8a9279d8da5575b4e4ad4`.
-It includes the ordered `/contract` directory, read-only contract bind, and
-writable runtime bind. The prototype rejected extra, omitted, reordered,
-duplicated, substituted, contract-mount, runtime-mount, and host-alias
-mutations.
+The complete reduced serializer golden contains 253 arguments and 5,554 bytes.
+Its SHA-256 is
+`dbed8cb348fa19fdd9304931dd9a2b8c6e68870516cff2cf94dc202a129f96e1`.
+The full-vector fixture constructed all seven vectors from the actual
+488-member and 547-member manifests. Depending on the session command, the
+synthetic-path vectors contain 1,699-1,888 arguments and 100,952-113,583
+bytes. These deterministic fixture hashes don't replace runtime hashes over
+the actual canonical paths.
 
 A pinned Bubblewrap `0.11.2` probe exposed mode `0700` from the writable source
 bind. The same probe exposed mode `0755` from `--dir`, which is the rejected
 fallback.
+
+The revised namespace probe raised `lo` and observed it as `UP`. Adding the
+removed user-namespace-disabling pair made the same pinned `ip` command fail
+with `RTNETLINK ... Operation not permitted`. The local host has no
+`kernel.apparmor_restrict_unprivileged_userns` proc entry, so it couldn't test
+the hosted conditional override or restoration path.
 
 The revised 72-byte Sway configuration passed Sway 1.12 validation and a
 headless launch. The launch created the expected IPC socket and no `swaybg`
@@ -369,6 +510,8 @@ coordinator decision.
   containment boundary.
 - The complete argv commitment detects extra authority that counts or partial
   flag digests miss.
+- The temporary AppArmor precondition, if the hosted runner needs it, enlarges
+  the kernel surface only until the trusted wrapper restores the saved value.
 - Missing dependencies, invalid cleanup, excessive argv size, or failed
   isolation produce no accepted evidence.
 - Stage 4 may adapt only `BURL-M003` within its existing paths. It must retain
@@ -378,6 +521,8 @@ coordinator decision.
 
 - [Bubblewrap `0.11.2` command contract](https://github.com/containers/bubblewrap/blob/v0.11.2/bwrap.xml)
 - [Bubblewrap `0.11.2` implementation](https://github.com/containers/bubblewrap/blob/v0.11.2/bubblewrap.c)
+- [Ubuntu 24.04 unprivileged user-namespace restrictions](https://documentation.ubuntu.com/release-notes/24.04/#unprivileged-user-namespace-restrictions)
+- [GitHub Actions Ubuntu 24.04 runner inventory](https://github.com/actions/runner-images/blob/511e65ce908f72f78db9bb4052d642a8728681cb/images/ubuntu/Ubuntu2404-Readme.md)
 - [Sway `1.12` command and environment contract](https://github.com/swaywm/sway/blob/1.12/sway/sway.1.scd)
 - [Sway `1.12` configuration contract](https://github.com/swaywm/sway/blob/1.12/sway/sway.5.scd)
 - [Sway `1.12` fixed Wayland socket selection](https://github.com/swaywm/sway/blob/1.12/sway/server.c)
