@@ -280,8 +280,9 @@ pinned iproute2 `7.0.0` command:
 It then runs `ip -o link show up dev lo`. The command must return one nonempty
 line whose interface flags include `UP`. This happens before any candidate,
 Sway, or `swaymsg` process starts. A candidate fixture still performs a
-loopback bind, listen, connect, and byte exchange. No other interface, route,
-or external network access is allowed.
+loopback bind, listen, connect, and byte exchange. The outer, unshared network
+namespace has no host interfaces, routes, external network, or host network
+descriptors. Untrusted code can alter its own private network configuration.
 
 Each session still uses one parent-launched Bubblewrap process. The outer
 Bubblewrap namespaces remain the mount, network, PID, user, and process-session
