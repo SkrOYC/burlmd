@@ -83,6 +83,11 @@ tickets:
         recommendation; the exact `receipt_digests` job contract and semantic
         receipt-digest transport fixtures pass
     stop_conditions:
+      - STOP before BURL-O001 implementation until a later Stage 3 decision
+        defines approved Linux Nix packaging execution, isolation, and capacity.
+        ADR-0020 and raw contract version `38` authorize only BURL-M003's Linux
+        closure view; don't reuse its runner, storage, start guard, evidence, or
+        coordinator decisions for this Spike.
       - STOP if the harness uses ambient Git, omits installed-runtime probes, or
         infers one Platform result from another.
       - STOP if the `BURL-M003` evidence pull request isn't merged or any
