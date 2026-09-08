@@ -589,8 +589,8 @@ the declared candidate environment.
 The locked GCC wrapper at
 `/nix/store/xcnqqnhw9hb4j5rjgds2yjryi8qki5f3-gcc-wrapper-15.2.0/bin/gcc`
 has SHA-256 `92f5252a485bcb6d319c28b399fce8323a69cda560263284e0a7a82e5f1dee9a`.
-It reads `NIX_LDFLAGS_x86_64_unknown_linux_gnu` at its lines 193, 201, and
-207. With the locked OpenSSL library directory, the generic-only isolated link
+It reads `NIX_LDFLAGS_x86_64_unknown_linux_gnu` at its lines 193 and 207.
+With the locked OpenSSL library directory, the generic-only isolated link
 exits `1` with `cannot find -lcrypto`; the target-specific replacement exits
 `0`. This local interface measurement doesn't establish hosted acceptance or
 Darwin behavior.
