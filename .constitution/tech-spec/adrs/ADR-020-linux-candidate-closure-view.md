@@ -3,7 +3,7 @@ id: ADR-0020
 status: accepted
 date: 2026-09-07
 certainty: assumed
-assumption: "Two exact read-only BURL-M003 session closures, full Bubblewrap argv commitments, trusted loopback setup, branch-specific descriptor closure, authority-backed integration runtime binds, and in-namespace Sway supervision preserve the Linux isolation boundary within the standard ubuntu-24.04 runner. Local measurements and probes exercised the mechanism, but no accepted managed run has settled hosted AppArmor behavior or the complete design."
+assumption: "Two exact read-only BURL-M003 session closures, full Bubblewrap argv commitments, trusted loopback setup, branch-specific descriptor closure, authority-backed integration runtime binds, and in-namespace Sway supervision preserve the Linux isolation boundary when the standard ubuntu-24.04 runner permits the exact pinned Bubblewrap probe. Local measurements exercised the mechanism, but only an accepted managed run can settle hosted availability and the complete design."
 ---
 # ADR-020: Linux candidate closure view
 
@@ -150,9 +150,29 @@ alias binds.
 
 ### Derive trusted host paths
 
-The trusted wrapper requires `RUNNER_TEMP` and its role-output argument to be
-nonempty absolute paths. It resolves both existing directories with
-`realpath -e`, rejects symbolic-link final components, and freezes their
+PR #15 commit `9719259f1ecee819af96c98c2be210156f198343` uses the
+pinned `actions/checkout` action twice. It checks out the workflow signer at
+the job workspace root and `tested_source_sha` at its `tested-source` child.
+Both invocations set `persist-credentials: false`. The role command passes
+that child and the candidate output child as explicit arguments.
+
+The wrapper derives `trusted-control-root` from the canonical path of the
+running `scripts/run-managed-role.sh` file. It requires that file to be at the
+expected path below the derived repository root. It derives
+`tested-source-root` from the explicit tested-source argument. With system
+and global Git configuration disabled and `core.hooksPath=/dev/null`, it
+requires the local roots' commits to equal `workflowSignerSha` and
+`testedSourceSha`. These checks run before dependency execution, the hosted
+probe, or candidate launch.
+
+Both checkout roots must be distinct, existing canonical directories without
+a symbolic-link final component. The existing `trusted-control-root` and
+`tested-source-root` authority and current-path rows retain them. Neither
+root derives from `RUNNER_TEMP` or the role-output root.
+
+The trusted wrapper separately requires `RUNNER_TEMP` and its role-output
+argument to be nonempty absolute paths. It resolves both existing directories
+with `realpath -e`, rejects symbolic-link final components, and freezes their
 ownership, mode, device, and containing-mount identity.
 
 The wrapper creates staging, contract, and integration-runtime parents only at
@@ -176,6 +196,11 @@ and log parsing, reject NUL, tab, LF, CR, and backslash bytes before
 canonicalization, hashing, lookup, or argv construction. Spaces and other valid
 UTF-8 bytes remain literal. This rule avoids an escape grammar that the runner
 paths don't need.
+
+Fresh sealing validates the retained row grammar, root-role separation,
+internal path relations, source identities, and complete argv reconstruction.
+It can't recover the departed candidate host's checkout paths. Therefore, it
+doesn't claim independent cryptographic knowledge of those host paths.
 
 ### Preserve the closure view
 
@@ -264,59 +289,34 @@ containment authority. Bubblewrap is absent from the candidate closure and
 `PATH`. Candidate-created nested user namespaces aren't claimed to be
 impossible and aren't a containment control.
 
-### Probe hosted AppArmor policy
+### Probe the hosted prerequisite
 
-Ubuntu 24.04 restricts unprivileged user namespaces through AppArmor. Its
-default unconfined profile permits namespace creation but denies capabilities
-inside that namespace. That behavior can block the `CAP_NET_ADMIN` loopback
-step. GitHub
-runner-image commit `511e65ce908f72f78db9bb4052d642a8728681cb`
-documents image `20260831.293.1`, Ubuntu `24.04.4`, and kernel
-`6.17.0-1022-azure`. Its inventory lists sudo and host iproute2, but it doesn't
-document Bubblewrap, AppArmor profile state, or the live sysctl value. It also
-can't establish whether a profile covers the Nix-store Bubblewrap path. After
-trusted Nix and tool preparation, the wrapper runs the exact pinned
-Bubblewrap and loopback probe. It does this before tested-source dependency
-execution or any candidate process.
+Ubuntu 24.04 restricts unprivileged user namespaces through AppArmor. That
+policy can block the `CAP_NET_ADMIN` loopback step. GitHub runner-image commit
+`511e65ce908f72f78db9bb4052d642a8728681cb` documents image
+`20260831.293.1`, Ubuntu `24.04.4`, and kernel `6.17.0-1022-azure`.
+Its inventory doesn't document the live AppArmor policy that applies to the
+Nix-store Bubblewrap path. After trusted Nix and tool preparation, the wrapper
+runs the exact pinned Bubblewrap and loopback probe. It does this before
+tested-source dependency execution or any candidate process.
 
 The probe mounts only the sorted requisite union for Bash 5.3p9 and iproute2
 7.0.0. The union has 33 members, 1,985 manifest bytes, SHA-256
 `8417a87e4610c15b6237f416532defaaee9c93a06f2b605c6abaeaa8278df8b2`,
 97,009,672 NAR bytes, and 4,300 same-path bind bytes.
 
-If the probe succeeds, the wrapper doesn't change host policy. If it fails,
-the wrapper may continue only when all these conditions hold:
+Status zero is a prerequisite for the hosted role. A nonzero status, signal,
+timeout, namespace failure, loopback failure, or malformed result stops the
+role before dependency or candidate execution. The failed run produces no
+accepted evidence.
 
-- The runner-placement guards identify the fixed GitHub-hosted
-  `ubuntu-24.04` job.
-- `/proc/sys/kernel/apparmor_restrict_unprivileged_userns` contains exactly
-  `1`.
-- `/usr/bin/sudo` and `/usr/sbin/sysctl` are root-owned, non-writable regular
-  executables, and noninteractive sudo is available.
-- `EXIT`, `HUP`, `INT`, `QUIT`, and `TERM` restoration handlers are installed
-  before the first write.
-
-The wrapper then runs exactly:
-
-```text
-/usr/bin/sudo --non-interactive -- /usr/sbin/sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-```
-
-It requires the proc value to equal `0` and reruns the same pinned probe. Any
-failed condition, write, value check, or second probe rejects the role. After
-all sessions, and on every catchable earlier exit or handled signal, the handler
-writes the saved value. It requires the proc value to match and records the
-result. The wrapper must prove restoration before bundle creation or upload.
-Restoration failure blocks upload.
-
-`SIGKILL`, abrupt runner loss, and host failure can't run the handler. Those
-paths produce no upload. The ephemeral hosted runner boundary is the residual
-limit on the temporary host-wide change.
-
-Candidate code receives no sudo executable, host sysctl mount, host sysctl
-descriptor, or workflow step with policy authority. This conditional global
-change still enlarges the hosted kernel attack surface while it is active.
-Only an accepted hosted run can establish whether the current runner needs it.
+The wrapper has no privileged fallback. It doesn't write a sysctl, install or
+replace an AppArmor profile, change another host security policy, add
+host-origin authentication, or add restoration machinery. The existing
+nine-field log row records `override=not-applied`,
+`second-probe=not-applicable`, `final-AppArmor-value=not-applicable`, and
+`restoration=not-applicable`. Only a real run of the exact pinned probe on the
+hosted job establishes availability for that run.
 
 ### Mount the integration runtime from frozen authority
 
@@ -347,11 +347,11 @@ namespace user mapping. A Bubblewrap-created fallback directory has mode
 `0755` and rejects the invocation. A missing, read-only, wrong-source,
 wrong-destination, substituted, or reused bind also rejects the invocation.
 
-After the supervisor reaps Sway and the candidate, it removes all runtime
-socket and lock entries. The launcher removes the leaf and proves that the path
-is absent before it creates the next session leaf. Base sessions have no
-runtime authority row, current path, bind, destination, socket, or Wayland
-variable.
+After the supervisor waits for its direct Sway and candidate children, it
+removes all runtime socket and lock entries. The launcher removes the leaf and
+proves that the path is absent before it creates the next session leaf. Base
+sessions have no runtime authority row, current path, bind, destination,
+socket, or Wayland variable.
 
 ### Start Sway only inside integration sessions
 
@@ -442,14 +442,35 @@ They inject hostile inherited values and reject any leak or variant at direct
 candidate entry. They also record the variables that each pinned interpreter
 adds after entry.
 
+### Close the Bash script descriptor before preflight
+
+The `scripts/supervise-linux-session.sh` file defines all constants and helper
+functions before one complete `main` function. The final top-level command is
+exactly `main "$@"`, with no later script text to evaluate. Pinned Bash 5.3p9
+therefore parses the complete function before it calls `main`.
+
+At the start of `main`, after argument parsing but before the first exact
+preflight descriptor inventory, the Bash builtin `exec 255<&-` closes the
+script descriptor. The inventory requires descriptor 255 to be absent and
+preserves descriptors 0 through 4. Base branches end with the final candidate
+`exec`. Integration and error branches exit from `main`. The function never
+returns to top-level script reading, and this structure doesn't rely on
+`CLOEXEC`.
+
+A pinned Bash fixture checks descriptor 255 before the close and requires only
+descriptors 0 through 2 afterward in its reduced inventory. It compares the
+standard streams before and after the close. One branch exits directly, and one
+branch performs a final `exec`; both preserve meaningful standard output and
+standard error.
+
 ### Clean up before namespace exit
 
 The supervisor monitors the candidate, Sway, `wayland-1`, its lock, and the
 session timeout. On success, candidate failure, early Sway failure, socket
 disruption, interruption, or timeout, it performs these steps:
 
-1. Stop and reap the candidate process group and all descendants.
-2. Send `SIGTERM` to Sway and wait for it.
+1. Signal the candidate process group and wait for the direct candidate child.
+2. Send `SIGTERM` to Sway and wait for the direct Sway child.
 3. Send `SIGKILL` only after the bounded graceful wait expires, then wait
    again.
 4. Require `kill(pid, 0)` to return `ESRCH`, `/proc/PID` to be absent, and no
@@ -460,9 +481,9 @@ disruption, interruption, or timeout, it performs these steps:
    `O_DIRECTORY`, `O_NOFOLLOW`, and `O_CLOEXEC`. Require its `st_dev`, `st_ino`,
    UID, and GID to match the session-root identity recorded before candidate
    execution.
-7. Use `openat` on descriptor 3 to securely create and fsync the canonical
-   cleanup frame after no hostile process remains. Close the frame descriptor
-   before the parent reads the file.
+7. Use `openat` on descriptor 3 to create and fsync the canonical cleanup
+   frame after both direct children exit. Close the frame descriptor before the
+   parent reads the file.
 8. Wait while the parent validates the cleanup frame, then accept the parent's
    exact `K` acknowledgement.
 9. Remove the cleanup handshake files through descriptor 3, close descriptor
@@ -472,8 +493,15 @@ The cleanup frame records the session ID, result class, Sway PID, termination
 path, wait status, `sway-reaped=true`, and `cleanup-complete=true`. A malformed
 record, precreated link, wrong frame inode, changed session-root identity,
 missing fsync, missing acknowledgement, unexpected supervisor signal, or failed
-reap rejects the session. The supervisor opens descriptor 3 only after it reaps
-the candidate and Sway, so the descriptor never reaches candidate execution.
+direct-child wait rejects the session. The supervisor opens descriptor 3 only
+after both direct children exit, so the descriptor never reaches candidate
+execution.
+
+The supervisor doesn't wait for processes that aren't its children.
+Bubblewrap's namespace PID 1 owns and reaps adopted descendants. After the outer
+Bubblewrap process exits, the parent's successful OFD-lock acquisition on the
+retained original descriptor proves that namespace PID 1 has exited. The parent
+records the session only after that teardown proof.
 
 Fixtures cover early Sway failure, hostile candidate exit and descendants,
 timeout, socket disruption, handled interruption, successful graceful reap,
@@ -519,8 +547,9 @@ triples. Every production session must measure and hash its complete argv.
 A local prototype started the exact unwrapped Sway and `swaymsg` executables
 with the exact environment, arguments, and configuration. It covered success,
 early Sway failure, socket disruption, timeout, and a hostile candidate that
-exited with status 42 after starting a descendant. Every case removed the
-candidate descendants, waited for Sway, and verified that its PID was absent.
+exited with status 42 after starting a descendant. The supervisor waited for
+its direct children, the namespace PID 1 reaped the adopted descendant, and the
+outer teardown lock proved namespace exit.
 
 The complete reduced serializer golden contains 253 arguments and 5,554 bytes.
 Its SHA-256 is
@@ -538,9 +567,8 @@ fallback.
 
 The revised namespace probe raised `lo` and observed it as `UP`. Adding the
 removed user-namespace-disabling pair made the same pinned `ip` command fail
-with `RTNETLINK ... Operation not permitted`. The local host has no
-`kernel.apparmor_restrict_unprivileged_userns` proc entry, so it couldn't test
-the hosted conditional override or restoration path.
+with `RTNETLINK ... Operation not permitted`. This local success validates the
+probe mechanics but doesn't establish hosted availability.
 
 The revised 72-byte Sway configuration passed Sway 1.12 validation and a
 headless launch. The launch created the expected IPC socket and no `swaybg`
@@ -569,8 +597,8 @@ coordinator decision.
   containment boundary.
 - The complete argv commitment detects extra authority that counts or partial
   flag digests miss.
-- The temporary AppArmor precondition, if the hosted runner needs it, enlarges
-  the kernel surface only until the trusted wrapper restores the saved value.
+- A hosted runner that can't pass the exact pinned Bubblewrap and loopback probe
+  blocks BURL-M003. There is no host-policy fallback.
 - Missing dependencies, invalid cleanup, excessive argv size, or failed
   isolation produce no accepted evidence.
 - Stage 4 adapts only `BURL-M003` within its existing paths. `BURL-O001` appears

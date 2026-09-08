@@ -1,4 +1,18 @@
 entries:
+  - version: v2.1.21
+    date: 2026-09-08
+    fixed:
+      - "Removed authority to change hosted AppArmor, sysctl, or other host security policy. The exact pinned Bubblewrap and loopback probe must succeed before dependency or candidate execution; any failure blocks the hosted role and yields no accepted evidence."
+      - "Specified the pinned Bash 5.3p9 supervisor structure and fixture that close script descriptor 255 before the first exact preflight inventory, preserve standard streams, and terminate through direct exit or final exec without another script read."
+      - "Derived the trusted-control and tested-source roots from PR #15's immutable launcher path and explicit credential-free checkout argument. Local commit checks validate both before launch; fresh sealing validates retained path structure and consistency without claiming independent host-path authentication."
+      - "Added the four source-identity fields to the explicit ordered closure-log header and both planned Linux supervisor files to the guidelines layout. Clarified that the supervisor waits for direct children, namespace PID 1 reaps adopted descendants, and the retained outer lock proves teardown."
+      - "Retained raw contract version 38, the 42-record bill of materials, closure and Sway measurements, evidence schemas, artifact inventories, session IDs, and the BURL-O001 stop. TechSpec advanced to v2.1.21."
+    security:
+      - "Hosted execution can remain blocked if the runner policy denies the exact pinned probe. This contract grants no privileged fallback or host-policy mutation."
+    by: patch-lane
+    upstream:
+      prd: v2.0.5
+      architecture: v2.1.2
   - version: v2.1.20
     date: 2026-09-08
     fixed:
