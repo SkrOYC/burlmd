@@ -407,11 +407,12 @@ tickets:
            both candidate and Sway direct-child waits; a native-isolation
            prerequisite or candidate-path host-policy mutation or fallback; and
            any bundle creation or upload after a prerequisite or cleanup failure.
-        5. Retain `ci_bootstrap.fixture_policy`,
-           `candidate_guard_fixture_policy`,
-           `compatibility_stage_fixture_policy`, and
-           `compatibility_stage_consumer_binding_fixture_policy` for the
-           receipt, compatibility, evidence-profile, and typed rejection
+        5. Retain the role-execution fixture policies
+           `ci_bootstrap.role_execution.fixture_policy`,
+           `ci_bootstrap.role_execution.candidate_guard_fixture_policy`,
+           `ci_bootstrap.role_execution.compatibility_stage_fixture_policy`, and
+           `ci_bootstrap.role_execution.compatibility_stage_consumer_binding_fixture_policy`
+           for the receipt, compatibility, evidence-profile, and typed rejection
            behavior already accepted. Validate role schema version `15`,
            aggregate schema version `19`, sealing receipt version `2`, and
            receipt transport version `1`. Protect the exact 35-path
@@ -523,8 +524,9 @@ tickets:
         inventory: missing, duplicate, substituted, expired, digest mismatch,
         unattested, wrong signer, wrong run, wrong role, wrong seal, stale
         producer receipt, noncanonical lineage, lineage SHA mismatch,
-        consumer unbound, and unexpected. The complete fixture inventory in
-        `ci_bootstrap.fixture_policy` remains required, including token,
+        consumer unbound, and unexpected. The complete role-execution fixture
+        inventory in `ci_bootstrap.role_execution.fixture_policy` remains
+        required, including token,
         configuration, artifact-runtime, receipt, evidence-profile, viewport,
         nonce, artifact, bundle, trust-anchor, source-allowlist, filesystem,
         coordinator, and aggregation coverage. Raw contract version `38` adds
