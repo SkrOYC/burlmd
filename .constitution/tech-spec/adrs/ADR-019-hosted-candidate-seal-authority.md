@@ -41,16 +41,7 @@ survive. The release contract must not make that claim.
 1. Treat every candidate artifact as untrusted on every platform.
 2. Keep Linux candidate containment as a required evidence claim. The trusted
    launcher uses `env -i` and Bubblewrap `0.11.2` with a private PID namespace.
-   Before launch, the parent creates the teardown lock, opens it read-write, and
-   retains the original file description. The Bubblewrap branch closes that
-   descriptor before `execve`. After the outer process exits, the parent
-   verifies the original device and inode. It then runs util-linux `2.42`
-   `flock --fcntl --exclusive` with a bounded timeout on that retained
-   descriptor. This open file description write lock conflicts with
-   Bubblewrap's POSIX read lock. Any failed or timed-out acquisition rejects
-   the session before cleanup, another session, bundle creation, or upload.
-   Candidate pathname replacement doesn't change the descriptor being checked,
-   so no separate read-only mount is required.
+   ADR-0020 defines the assumed teardown mechanism and its raw contract.
 3. On hosted macOS, run bounded cleanup only. The launcher must remove its
    credentials and configuration, terminate and reap known test processes, and
    record cleanup failure. It must not claim universal containment, zero
@@ -126,9 +117,8 @@ survive. The release contract must not make that claim.
 
 ## Consequences
 
-- Linux teardown evidence binds the original lock inode, not a candidate-writable
-  pathname. A live namespace reaper blocks the parent OFD write lock. A
-  replacement pathname can cause denial but can't produce premature acceptance.
+- ADR-0020 defines the assumed Linux teardown mechanism. Its raw contract
+  rejects a failed teardown proof before it accepts or uploads a session.
 - A surviving hosted-macOS candidate process cannot obtain signing authority or
   execute in the fresh sealing environment.
 - On hosted macOS, a surviving candidate process can interfere with the later
@@ -183,6 +173,3 @@ survive. The release contract must not make that claim.
 - [Reusing workflows](https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows#using-outputs-from-a-reusable-workflow)
 - [`actions/download-artifact` interface at the pinned commit](https://github.com/actions/download-artifact/blob/3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c/action.yml)
 - [`actions/attest` interface at the pinned commit](https://github.com/actions/attest/blob/1e69f48acb82d1966a394da916b4c1698aa569d6/action.yml)
-- [Bubblewrap `0.11.2` lock implementation](https://github.com/containers/bubblewrap/blob/v0.11.2/bubblewrap.c)
-- [util-linux `2.42` `flock --fcntl` implementation](https://github.com/util-linux/util-linux/blob/v2.42/sys-utils/flock.c)
-- [Linux `fcntl` locking semantics](https://man7.org/linux/man-pages/man2/fcntl_locking.2.html)
