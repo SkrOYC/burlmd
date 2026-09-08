@@ -1,4 +1,17 @@
 entries:
+  - version: v2.1.20
+    date: 2026-09-08
+    fixed:
+      - "Clarified that Bubblewrap is the sole candidate namespace and session-payload launch. The trusted parent retains the exact preparation, identity checks, and post-session util-linux `flock` execution already required by raw contract version 38; this correction adds no general parent-process allowlist."
+      - "Required the integration supervisor to close log descriptors 3 through 6 after reaping the candidate and Sway, then open the verified session-root directory as temporary descriptor 3 with directory and no-follow flags. Cleanup uses that descriptor only after its device, inode, UID, and GID match the identity recorded before candidate execution, and closes it after the frame-and-acknowledgement handshake."
+      - "Documented the already pinned util-linux 2.42 verifier as a bill-of-materials record. The bill of materials contains 42 records; no package, executable, closure, or implementation dependency changed."
+      - "Retained raw contract version 38, the preflight and candidate descriptor-role goldens, closure measurements, Sway behavior, evidence schemas, artifact inventories, session IDs, and the BURL-O001 stop. TechSpec advanced to v2.1.20."
+    security:
+      - "The phase-specific cleanup descriptor cannot reach candidate execution, and cleanup refuses a replaced session-root directory before creating `cleanup.frame`."
+    by: patch-lane
+    upstream:
+      prd: v2.0.5
+      architecture: v2.1.2
   - version: v2.1.19
     date: 2026-09-08
     fixed:
