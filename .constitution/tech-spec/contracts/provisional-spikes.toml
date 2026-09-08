@@ -1,5 +1,5 @@
 schema_version = 38
-stage = "tech-spec-v2.1.25-provisional"
+stage = "tech-spec-v2.1.26-provisional"
 production_implementation_authorized = false
 # The Epic G entries preserve the M0 exception. BURL-M015 and BURL-M003 may
 # implement only the reproducibility and managed-validation bootstrap. Every

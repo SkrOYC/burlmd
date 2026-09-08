@@ -4,7 +4,7 @@ entries:
     fixed:
       - "Expanded the BURL-M015 verification command to run both named persistence regression fixtures. Each fixture gets one normal run and 100 isolated repetitions through `scripts/repeat-test.sh`."
       - "Required deterministic timer quiescence before `state_before_shorter` in the longer-and-shorter retry fixture. The fixture retains full `NoteState` equality and doesn't depend on sleeps, wall-clock coincidence, or weaker production behavior."
-      - "Retained BURL-M015 as the owner with `exists: false`. Raw contract version 38, API and evidence schemas, package pins, allowlists, production exceptions, and every historical changelog entry remain unchanged."
+      - "Updated the four live TechSpec metadata markers to v2.1.26. BURL-M015 remains the owner with `exists: false`. Raw contract version 38, API and evidence schemas, package pins, allowlists, production exceptions, and historical changelog entries remain unchanged."
     by: patch-lane
     upstream:
       prd: v2.0.5

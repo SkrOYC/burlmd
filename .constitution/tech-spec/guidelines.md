@@ -293,7 +293,7 @@ verification_commands:
     exists: true
   - name: test
     label: quoted by BURL-M015
-    command: "cargo test --manifest-path rust/Cargo.toml a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success && cargo test --manifest-path rust/Cargo.toml an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries && ./scripts/repeat-test.sh --count 100 -- cargo test --manifest-path rust/Cargo.toml a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success && ./scripts/repeat-test.sh --count 100 -- cargo test --manifest-path rust/Cargo.toml an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries && git diff --check"
+    command: "cargo test --manifest-path rust/Cargo.toml workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success -- --exact && cargo test --manifest-path rust/Cargo.toml workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries -- --exact && ./scripts/repeat-test.sh --count 100 -- cargo test --manifest-path rust/Cargo.toml workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success -- --exact && ./scripts/repeat-test.sh --count 100 -- cargo test --manifest-path rust/Cargo.toml workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries -- --exact && git diff --check"
     exists: false
     owner: BURL-M015
   - name: test
