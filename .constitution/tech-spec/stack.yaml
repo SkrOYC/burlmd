@@ -288,7 +288,7 @@ bill_of_materials:
     justification: "Provides the outer Linux user, mount, process, network, and filesystem isolation for the managed-evidence coordinator and all seven BURL-M003 candidate sessions, including the authority-backed read-only `/contract` mount and the two integration-only writable `xdg-runtime` binds"
     radar: assess
     certainty: assumed
-    assumption: "BURL-M003 adds pkgs.bubblewrap to devenv.nix; the pinned devenv.lock nixpkgs revision resolves 0.11.2, but no accepted managed run has established whether the Nix-store executable needs the raw contract's temporary Ubuntu 24.04 AppArmor sysctl precondition."
+    assumption: "BURL-M003 adds pkgs.bubblewrap to devenv.nix; the pinned devenv.lock nixpkgs revision resolves 0.11.2, but no accepted managed run has established whether the exact pinned Bubblewrap and loopback prerequisite probe succeeds on the hosted Ubuntu 24.04 runner. Probe failure blocks hosted execution without a privileged fallback."
   - name: Sway
     role: infrastructure
     version: "1.12"
@@ -328,12 +328,12 @@ bill_of_materials:
     justification: "Provides the exact `ip` executable that the trusted in-namespace supervisor uses to raise and verify loopback before candidate or Sway startup"
     radar: adopt
     certainty: assumed
-    assumption: "BURL-M003 adds Linux-only `pkgs.iproute2` to `devenv.nix`; the pinned `devenv.lock` Nixpkgs revision resolves 7.0.0 and the measured base closure contains its exact store member, but no accepted managed run has exercised the hosted loopback and AppArmor probe."
+    assumption: "BURL-M003 adds Linux-only `pkgs.iproute2` to `devenv.nix`; the pinned `devenv.lock` Nixpkgs revision resolves 7.0.0 and the measured base closure contains its exact store member, but no accepted managed run has exercised the hosted Bubblewrap and loopback prerequisite probe."
   - name: GNU Bash
     role: runtime
     version: "5.3p9"
     ecosystem: nix
-    justification: "Runs the exact BURL-M003 supervisor, AppArmor probe, and Bash-based candidate commands from the locked Linux closure"
+    justification: "Runs the exact BURL-M003 supervisor, hosted Bubblewrap and loopback prerequisite probe, and Bash-based candidate commands from the locked Linux closure"
     radar: adopt
     certainty: assumed
     assumption: "Raw contract version 38 pins both Bash store members used by the supervisor and script interpreters. The pinned `devenv.lock` Nixpkgs revision resolves 5.3p9, but no accepted managed BURL-M003 run has exercised those exact entry paths."
