@@ -85,8 +85,9 @@ tickets:
     stop_conditions:
       - STOP before BURL-O001 implementation until a later Stage 3 decision
         defines approved Linux Nix packaging execution, isolation, and capacity.
-        ADR-0020 and raw contract version `38` apply only to BURL-M003's Linux
-        closure view. BURL-M003 also remains blocked until Stage 3 acknowledges
+        ADR-0020 and raw contract version `38`'s Linux closure-view additions
+        apply only to BURL-M003. They don't alter BURL-O001's compatibility
+        requirements. BURL-M003 also remains blocked until Stage 3 acknowledges
         its Tasks adaptation. Don't reuse its runner, storage, start guard,
         evidence, or coordinator decisions for this Spike.
       - STOP if the harness uses ambient Git, omits installed-runtime probes, or
