@@ -133,8 +133,8 @@ byte count and SHA-256 equality.
 
 The serializer golden uses an explicitly synthetic `/work` source map and a
 reduced two-member manifest. It covers every argument category, including the
-exact Bash source launch, and produces 256 arguments, 5,589 bytes, and SHA-256
-`ba3ea8bbdebcbcb92f03abe8a47f0dd74d22f86d573c094ee77decc2485ae04a`.
+exact Bash source launch, and produces 256 arguments, 5,614 bytes, and SHA-256
+`cb4b1e128d3f6bd2d4ba6b51854f82ec998bb09a21e294dfa2100fce1b1c7976`.
 These values aren't a production integration argv. Separate fixtures construct
 all seven vectors from the complete 488-member or 547-member manifests.
 Production launch and fresh sealing use the actual canonical host paths and
@@ -432,8 +432,13 @@ by the 33 resolved fixed and derived assignments in contract order. The exact
 candidate command follows those assignments. For an integration session, the
 new candidate process group appends the four integration assignments. It
 therefore passes 37 entries before the candidate command. The supervisor rejects
-duplicate keys, unresolved placeholders, and any extra, missing, reordered, or
-changed assignment.
+duplicate keys, unresolved placeholders, generic `NIX_LDFLAGS`, and any extra,
+missing, reordered, or changed assignment.
+
+The OpenSSL library entry is exactly
+`NIX_LDFLAGS_x86_64_unknown_linux_gnu=-LLOCKED_OPENSSL_LIBDIR` before
+resolution. The locked GCC wrapper reads that target-specific key. A direct
+candidate-entry fixture requires it and rejects the generic key.
 
 This boundary passes only the declared environment to the candidate executable.
 A pinned script interpreter can add its own `PWD`, `SHLVL`, or `_` after entry.
@@ -556,12 +561,12 @@ exited with status 42 after starting a descendant. The supervisor waited for
 its direct children, the namespace PID 1 reaped the adopted descendant, and the
 outer teardown lock proved namespace exit.
 
-The complete reduced serializer golden contains 256 arguments and 5,589 bytes.
+The complete reduced serializer golden contains 256 arguments and 5,614 bytes.
 Its SHA-256 is
-`ba3ea8bbdebcbcb92f03abe8a47f0dd74d22f86d573c094ee77decc2485ae04a`.
+`cb4b1e128d3f6bd2d4ba6b51854f82ec998bb09a21e294dfa2100fce1b1c7976`.
 The full-vector fixture constructed all seven vectors from the actual
 488-member and 547-member manifests. Depending on the session command, the
-synthetic-path vectors contain 1,702-1,891 arguments and 100,987-113,618
+synthetic-path vectors contain 1,702-1,891 arguments and 101,012-113,643
 bytes. All seven reconstructions resolved every authority identifier. These
 deterministic fixture hashes don't replace runtime hashes over the actual
 canonical paths.
@@ -580,6 +585,15 @@ headless launch. The launch created the expected IPC socket and no `swaybg`
 process. A Bubblewrap 0.11.2 and Bash 5.3p9 probe injected hostile `PWD`,
 `SHLVL`, `_`, and canary values. The final GNU `env -i` boundary exposed only
 the declared candidate environment.
+
+The locked GCC wrapper at
+`/nix/store/xcnqqnhw9hb4j5rjgds2yjryi8qki5f3-gcc-wrapper-15.2.0/bin/gcc`
+has SHA-256 `92f5252a485bcb6d319c28b399fce8323a69cda560263284e0a7a82e5f1dee9a`.
+It reads `NIX_LDFLAGS_x86_64_unknown_linux_gnu` at its lines 193, 201, and
+207. With the locked OpenSSL library directory, the generic-only isolated link
+exits `1` with `cannot find -lcrypto`; the target-specific replacement exits
+`0`. This local interface measurement doesn't establish hosted acceptance or
+Darwin behavior.
 
 These local results don't establish hosted capacity or feature availability.
 They can't settle ADR-0020 without accepted managed `BURL-M003` completion
@@ -624,4 +638,5 @@ coordinator decision.
 - [wlroots `0.20.1` environment variables](https://gitlab.freedesktop.org/wlroots/wlroots/-/blob/0.20.1/docs/env_vars.md)
 - [Wayland `1.25.0` display connection semantics](https://wayland.freedesktop.org/docs/html/apb.html#Client-classwl__display)
 - [Nix `2.35.2` requisite query](https://nix.dev/manual/nix/2.35/command-ref/nix-store/query.html)
+- [Locked nixpkgs GCC wrapper source](https://github.com/NixOS/nixpkgs/blob/f205b5574fd0cb7da5b702a2da51507b7f4fdd1b/pkgs/build-support/cc-wrapper/cc-wrapper.sh)
 - [Linux `/proc/PID/mountinfo` format](https://www.kernel.org/doc/html/latest/filesystems/proc.html#proc-pid-mountinfo-information-about-mounts)

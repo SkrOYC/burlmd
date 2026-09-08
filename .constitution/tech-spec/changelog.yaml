@@ -1,4 +1,16 @@
 entries:
+  - version: v2.1.27
+    date: 2026-09-08
+    fixed:
+      - "Replaced BURL-M003's derived OpenSSL linker entry `NIX_LDFLAGS` with `NIX_LDFLAGS_x86_64_unknown_linux_gnu`. The local locked GCC wrapper reads the target-specific entry. A generic-only isolated link exits 1 with `cannot find -lcrypto`; the target-specific replacement exits 0."
+      - "Recomputed the 33-entry base and 37-entry integration environment goldens, the reduced serializer golden, seven full production-manifest vectors, and seven reduced-manifest synthetic-log argv fields. Closure manifests, authority rows, preflight bodies, grammar, field order, and all unrelated values remain unchanged."
+      - "Retained raw contract version 38, closure-log format version 2, role schema version 15, aggregate schema version 19, the 42-record bill of materials, seven sessions, 35 trusted control paths, and the BURL-O001 stop. Tasks remains v3.2.12 with its historical v2.1.26 upstream pointer; no Task or graph change occurs."
+    security:
+      - "Candidate-entry fixtures require the target-specific linker key and reject generic `NIX_LDFLAGS`. The correction adds no package, wrapper, mount, capability, host-policy change, or Darwin behavior."
+    by: patch-lane
+    upstream:
+      prd: v2.0.5
+      architecture: v2.1.2
   - version: v2.1.26
     date: 2026-09-08
     fixed:
