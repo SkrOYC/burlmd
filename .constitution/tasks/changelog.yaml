@@ -2,7 +2,8 @@ entries:
   - version: v3.2.11
     date: 2026-09-08
     changed:
-      - "Adapted only BURL-M003 through ci_bootstrap.stage4_tasks_adaptation to ADR-0020 and raw contract version 38. Acceptance names the exact closure, session, argv, authority, environment, descriptor, compositor, loopback, teardown, cleanup, log, and mutation records without copying the raw protocol into Tasks."
+      - "Prepared only BURL-M003's Tasks artifacts for the ci_bootstrap.stage4_tasks_adaptation acknowledgement against ADR-0020 and raw contract version 38. Acceptance names the exact closure, session, argv, authority, environment, descriptor, compositor, loopback, teardown, cleanup, log, and mutation records without copying the raw protocol into Tasks."
+      - "Kept BURL-M003 implementation blocked. After this patch merges, Stage 3 must change ci_bootstrap.stage4_tasks_adaptation.status from required to satisfied. The Stage 3 acknowledgement must merge before implementation begins."
       - "Required the two exact read-only Linux closure views, seven ordered Bubblewrap sessions, 42-record bill of materials, 35-path trusted_control_paths inventory, literal enable_kvm: false, and the fail-closed hosted prerequisite. The native-isolation prerequisite and candidate path allow no host-policy mutation or fallback. Added positive and negative acceptance for every changed behavior."
       - "Preserved role schema version 15, aggregate schema version 19, sealing receipt version 2, receipt transport version 1, the exact 11-artifact ordinary inventory, and the exact 13-artifact BURL-O001 inventory. Existing receipt, compatibility, evidence-profile, and typed-rejection acceptance remains required."
       - "Maintained BURL-O001's explicit stop pending a later Stage 3 decision defining approved Linux Nix packaging execution, isolation, and capacity. This patch doesn't authorize BURL-O001 or any Epic G, H, or O implementation."

@@ -132,6 +132,12 @@ tickets:
       - STOP if `BURL-M015` isn't committed, validated, and independently
         reviewed in `chore/epic-m-ci-foundation` or the branch wasn't created
         from merged `master`.
+      - >
+        STOP before BURL-M003 implementation until this Tasks patch merges and
+        a later Stage 3 patch changes
+        `ci_bootstrap.stage4_tasks_adaptation.status` from `required` to
+        `satisfied`. The Stage 3 acknowledgement must merge before
+        implementation begins.
       - STOP if implementation imports or cherry-picks from the unmerged Epic G
         branch. Implement the accepted CI and headless contracts from merged
         `master`; later surgical replay must preserve this merged foundation.
