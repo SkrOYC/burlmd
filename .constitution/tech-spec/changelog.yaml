@@ -1,4 +1,18 @@
 entries:
+  - version: v2.1.16
+    date: 2026-09-07
+    fixed:
+      - "Replaced Bubblewrap's mode-0755 `--dir /candidate/xdg/runtime` creation with an exact writable bind from the matching frozen and retained `xdg-runtime` authority. Only the two integration sessions receive distinct mode-0700 runtime leaves because only their four appended environment assignments include `XDG_RUNTIME_DIR`; the five base sessions receive no runtime destination, socket, or Wayland variable."
+      - "Required each integration runtime leaf to have canonical ownership, mode 0700, empty initial contents, unchanged mount and device identity, and no symbolic-link component. Teardown removes its sockets, lock, and leaf and proves the path absent before the next session."
+      - "Added static and fresh-seal mutations for an omitted or read-only runtime bind, wrong source or destination, mode-0755 directory fallback, substituted or reused leaf, and precreated socket or other content. Complete-argv reconstruction resolves the source only from the matching authority declaration and current-path row."
+      - "Recomputed the representative integration complete-argv golden to 783 bytes with SHA-256 `a4e021dfad7430fda7a0143646a7f8971d9a703930b8a9279d8da5575b4e4ad4`. The capacity-authority log golden has 16 rows with SHA-256 `84c452be4629b446fbba93e15c771dab5f79c499d1d620968e1736ce583def52`."
+      - "Retained raw contract version 37, closure-log format v2, the 38-record bill of materials, role schema 15, aggregate schema 19, Spike-result schema 20, sealing receipt 2, receipt transport 1, evidence profiles, artifact inventories, session IDs, and the BURL-O001 Stage 3 stop."
+    security:
+      - "Integration compositor sockets remain inside a distinct authority-backed runtime leaf in the existing untrusted Bubblewrap namespace. Candidate, Sway, `swaymsg`, sockets, and output remain untrusted until fresh sealing validates the retained evidence."
+    by: patch-lane
+    upstream:
+      prd: v2.0.5
+      architecture: v2.1.2
   - version: v2.1.15
     date: 2026-09-07
     fixed:

@@ -3,7 +3,7 @@ id: ADR-0020
 status: accepted
 date: 2026-09-07
 certainty: assumed
-assumption: "Two exact read-only BURL-M003 session closures, complete Bubblewrap argv commitments, and in-namespace Sway supervision preserve the Linux isolation boundary within the standard ubuntu-24.04 runner. Local measurements and a supervisor prototype exercised the mechanism, but no accepted managed run has settled it."
+assumption: "Two exact read-only BURL-M003 session closures, complete Bubblewrap argv commitments, authority-backed integration runtime binds, and in-namespace Sway supervision preserve the Linux isolation boundary within the standard ubuntu-24.04 runner. Local measurements and a supervisor prototype exercised the mechanism, but no accepted managed run has settled it."
 ---
 # ADR-020: Linux candidate closure view
 
@@ -78,7 +78,8 @@ which would add an unnecessary process and environment boundary.
 
 Base sessions must not mount a compositor-only member. They must not expose
 `WAYLAND_DISPLAY`, `SWAYSOCK`, `DISPLAY`, or a `WLR_*` variable. They must not
-create a Wayland or Sway IPC socket or run a compositor process.
+create `/candidate/xdg/runtime`, create a Wayland or Sway IPC socket, or run a
+compositor process.
 
 ### Bind the complete Bubblewrap argv
 
@@ -149,6 +150,40 @@ preserves the existing descriptor handshake:
   sends ASCII `G` and closes its end.
 - The candidate receives only descriptors 0 through 2.
 
+### Mount the integration runtime from frozen authority
+
+The fixed and derived candidate environment has no `XDG_RUNTIME_DIR` entry.
+Only the four integration assignments add that variable. Therefore, only the
+two integration sessions receive a runtime leaf.
+
+Before each integration invocation, the launcher creates one distinct leaf
+under the frozen `/work/xdg-runtime` parent. The `xdg-runtime` authority row and
+the matching current-path row supply the exact bind source. The complete argv
+uses `--bind` to mount that source at `/candidate/xdg/runtime`. It doesn't use
+`--dir` or `--ro-bind` for that destination.
+
+Before the bind, the launcher verifies these properties:
+
+- The current path resolves from the matching session ordinal, session ID, and
+  frozen `xdg-runtime` declaration.
+- The leaf has the frozen required UID and GID, mode `0700`, and directory type.
+- No path component is a symbolic link or nested mount.
+- The containing mount identity is unchanged, and the leaf device matches the
+  frozen parent device.
+- The leaf is empty. A precreated socket, lock, file, directory, or other entry
+  rejects the session.
+
+The writable bind exposes the source leaf's mode and ownership through the
+namespace user mapping. A Bubblewrap-created fallback directory has mode
+`0755` and rejects the invocation. A missing, read-only, wrong-source,
+wrong-destination, substituted, or reused bind also rejects the invocation.
+
+After the supervisor reaps Sway and the candidate, it removes all runtime
+socket and lock entries. The launcher removes the leaf and proves that the path
+is absent before it creates the next session leaf. Base sessions have no
+runtime authority row, current path, bind, destination, socket, or Wayland
+variable.
+
 ### Start Sway only inside integration sessions
 
 The trusted supervisor starts Sway and the candidate as untrusted siblings in
@@ -194,7 +229,7 @@ expansion. Sway gets no ambient configuration. The supervisor rejects any
 `swaybg` process or output.
 
 Sway `1.12` tries `wayland-1` through `wayland-32` in order. The supervisor
-starts from an empty mode-0700 runtime directory and accepts only
+starts from the empty, authority-backed mode-0700 runtime leaf and accepts only
 `/candidate/xdg/runtime/wayland-1`. The socket's lock file and the exact
 `sway-ipc.sock` are the only other permitted runtime entries. The candidate
 receives `WAYLAND_DISPLAY=wayland-1` and
@@ -267,7 +302,10 @@ and output canaries.
 
 Preserve the frozen stable-parent authority, current-leaf mapping, per-device
 4,000,000,000-byte start guard, source identities, staging checks, teardown
-lock, and exact seven-session order.
+lock, and exact seven-session order. The authority declaration set includes
+two `xdg-runtime` rows, one for each integration session. Its golden count is
+16, and its SHA-256 is
+`84c452be4629b446fbba93e15c771dab5f79c499d1d620968e1736ce583def52`.
 
 The version 2 closure-view log retains both manifest payloads, every complete
 argv digest, every authority/current-path mapping, and integration cleanup
@@ -295,11 +333,16 @@ early Sway failure, socket disruption, timeout, and a hostile candidate that
 exited with status 42 after starting a descendant. Every case removed the
 candidate descendants, waited for Sway, and verified that its PID was absent.
 
-The argv prototype reproduced the 533-byte golden digest,
-`31df65a44206be9976b25562dab9fcf675dc4500a268c54171e79c60253fa1e4`.
-It includes the ordered `/contract` directory and read-only bind. The prototype
-rejected extra, omitted, reordered, duplicated, substituted, contract-mount,
-and host-alias mutations.
+The argv prototype reproduced the 783-byte integration golden digest,
+`a4e021dfad7430fda7a0143646a7f8971d9a703930b8a9279d8da5575b4e4ad4`.
+It includes the ordered `/contract` directory, read-only contract bind, and
+writable runtime bind. The prototype rejected extra, omitted, reordered,
+duplicated, substituted, contract-mount, runtime-mount, and host-alias
+mutations.
+
+A pinned Bubblewrap `0.11.2` probe exposed mode `0700` from the writable source
+bind. The same probe exposed mode `0755` from `--dir`, which is the rejected
+fallback.
 
 The revised 72-byte Sway configuration passed Sway 1.12 validation and a
 headless launch. The launch created the expected IPC socket and no `swaybg`
