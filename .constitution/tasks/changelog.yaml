@@ -1,4 +1,19 @@
 entries:
+  - version: v3.2.11
+    date: 2026-09-08
+    changed:
+      - "Adapted only BURL-M003 through ci_bootstrap.stage4_tasks_adaptation to ADR-0020 and raw contract version 38. Acceptance names the exact closure, session, argv, authority, environment, descriptor, compositor, loopback, teardown, cleanup, log, and mutation records without copying the raw protocol into Tasks."
+      - "Required the two exact read-only Linux closure views, seven ordered Bubblewrap sessions, 42-record bill of materials, 35-path trusted_control_paths inventory, literal enable_kvm: false, and the fail-closed hosted prerequisite. The native-isolation prerequisite and candidate path allow no host-policy mutation or fallback. Added positive and negative acceptance for every changed behavior."
+      - "Preserved role schema version 15, aggregate schema version 19, sealing receipt version 2, receipt transport version 1, the exact 11-artifact ordinary inventory, and the exact 13-artifact BURL-O001 inventory. Existing receipt, compatibility, evidence-profile, and typed-rejection acceptance remains required."
+      - "Maintained BURL-O001's explicit stop pending a later Stage 3 decision defining approved Linux Nix packaging execution, isolation, and capacity. This patch doesn't authorize BURL-O001 or any Epic G, H, or O implementation."
+      - "Preserved all ticket IDs, dependencies, effort, scope, owned paths, and the 10-epic, 80-ticket, 564-point graph. Completed Epics A through F have no actuals blocks, so diff-lines-per-point and review-rounds-per-point calibration remains unavailable. The validator's 70% ceiling-share observation leaves BURL-M003 and stop-only BURL-O001 at 8 points and doesn't justify re-estimating another ticket."
+    security:
+      - "A hosted Bubblewrap or loopback prerequisite failure blocks candidate execution, bundle creation, and upload. The native-isolation prerequisite and candidate path cannot modify AppArmor, sysctl, or another host policy, or use a privileged fallback. Trusted Nix installation uses the pinned action interface with literal enable_kvm: false."
+    upstream:
+      prd: v2.0.5
+      architecture: v2.1.2
+      tech-spec: v2.1.23
+    by: patch-lane
   - version: v3.2.10
     date: 2026-09-07
     fixed:

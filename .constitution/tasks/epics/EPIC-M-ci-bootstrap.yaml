@@ -121,7 +121,9 @@ tickets:
         provenance; the exact `receipt_digests` job contract, semantic
         receipt-digest transport validation, and every typed negative fixture
         pass; the seal-owned BURL-O001 stage chain passes; Linux also finishes
-        generated-binding and managed-isolation classes; no role claims
+        generated-binding and managed-isolation classes, including raw contract
+        version `38` closure-view checks across all seven ordered sessions; no
+        role claims
         performance or visual evidence;
         the dedicated evidence pull request contains only
         .constitution/evidence/BURL-M003/managed-evidence.json, completion.md,
@@ -139,6 +141,11 @@ tickets:
       - STOP if any third-party action isn't pinned to the full Stage 3 commit
         SHA or a role uses ambient repository toolchains instead of repository
         locks.
+      - >
+        STOP if any trusted `cachix/install-nix-action` call site omits the
+        literal `enable_kvm: false`, derives the value, supplies an
+        `install_url`, accepts preinstalled Nix, or fails the exact Nix `2.35.2`
+        checks in `ci_bootstrap.actions.install_nix_interface`.
       - STOP if private/internal attestation isn't available; emit
         `attestation-unavailable` and reject the aggregate without a hash-only
         fallback.
@@ -189,10 +196,18 @@ tickets:
       - STOP if a fresh seal's hosted origin isn't authenticated by attestation
         provenance bound to the exact signer, source, run, attempt, check-run
         ID, and `runner_environment=github-hosted` claim.
-      - STOP if Linux candidate code does not run through `env -i` in Bubblewrap
-        `0.11.2` with a private PID namespace, its teardown lock cannot reject a
-        surviving double-fork probe, or the implementation treats hosted macOS
-        bounded cleanup as a universal containment or zero-survivor proof.
+      - STOP if Linux copies a private Nix store, exposes a broad host root or
+        Nix state, or deviates from the two read-only views, seven ordered
+        `sessions`, and complete vectors in
+        `ci_bootstrap.linux_candidate_closure_view`. STOP if Bubblewrap is not
+        the sole candidate namespace and session-payload launch, or if the
+        trusted parent gains an undeclared general process allowlist.
+      - STOP if the Linux launcher doesn't retain the original teardown-lock
+        descriptor, reopens the candidate-controlled pathname as proof, or
+        accepts before the outer process ends and
+        `teardown_lock_verifier_argv` acquires the required
+        open-file-description lock after namespace PID 1 releases it and before
+        cleanup.
       - STOP if a sealing receipt claims final job state, lacks
         `job.check_run_id`, or is stored inside the sealed bundle that it
         hashes. Only the post-completion coordinator may construct
@@ -264,9 +279,14 @@ tickets:
         unlocked input, or doesn't record and revalidate the executable and
         closure identity.
       - STOP if Bubblewrap `0.11.2` isn't provided by the locked Linux
-        environment, its namespace or network probe fails, the coordinator sees
-        any credential canary or forbidden client, an input is writable, or
-        anything except its output is writable. There is no
+        environment or the exact pinned Bubblewrap and loopback prerequisite
+        fails. The role must stop before candidate dependency execution, bundle
+        creation, or upload. The native-isolation prerequisite and candidate
+        path must not invoke `sudo`, write a sysctl, install or replace an
+        AppArmor profile, mutate another host policy, add a second probe or
+        restoration path, or use a privileged fallback. STOP if the
+        coordinator sees any credential canary or forbidden client, an input is
+        writable, or anything except its output is writable. There is no
         credential-clearing-only fallback.
       - STOP if the bootstrap profile claims performance, Linux
         platform-regression, or authoritative macOS visual evidence. Those
@@ -282,8 +302,9 @@ tickets:
       reusable role workflows referenced through static local paths. Each role's
       candidate job has only contents read permission, checks out the separate
       tested SHA as data, and runs candidate commands without artifact or
-      signing credentials. Linux uses env -i and Bubblewrap 0.11.2 private PID
-      containment. Hosted macOS performs bounded cleanup only. Every candidate
+      signing credentials. Linux runs the raw-contract-version-38 seven-session
+      plan through two exact read-only Bubblewrap views. Hosted macOS performs
+      bounded cleanup only. Every candidate
       bundle is untrusted. After candidate commands finish, the trusted workflow
       wrapper uses only its job-scoped artifact runtime authority to upload the
       handoff. Its dependent seal job starts on a fresh environment, never
@@ -322,8 +343,12 @@ tickets:
       candidate execution. The macOS 15 seal and final aggregate preserve the
       complete lineage. Implement the collect and
       run forms, the non-mutating
-      generated-binding checker, and the managed-evidence isolation fixture. Add
-      Linux-only Bubblewrap 0.11.2 and GitHub CLI 2.96.0 through the locked Nix
+      generated-binding checker, the managed-evidence isolation fixture,
+      `scripts/supervise-linux-session.sh`, and the mode-0644
+      `scripts/managed-sway.conf` file. Add the exact Linux tools declared by the
+      42-record bill of materials, including Bubblewrap `0.11.2`, GitHub CLI
+      `2.96.0`, Diffutils `3.12`, Procps `4.0.6`, iproute2 `7.0.0`, Bash `5.3p9`,
+      Coreutils `9.11`, and util-linux `2.42`, through the locked Nix
       environment. Reproduce the specified behavior without importing the Epic
       G branch. Pin
       actions/checkout to fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09,
@@ -341,12 +366,72 @@ tickets:
 
       Complete these steps in order:
         1. Implement `scripts/check-generated-bindings.sh` from the exact Stage 3 checker contract. Test clean, stale, generator-failure, added-file, removed-file, premodified-file, and interruption cases. Every case must leave `rust/src/frb_generated.rs` and `lib/src/rust/**` byte-identical to their precheck state.
-        2. Implement `scripts/assert-managed-evidence-isolation.sh` from the exact Stage 3 fixture contract. The trusted launcher must enumerate and close nonallowlisted descriptors; include a non-`CLOEXEC` descriptor canary. Pin Linux-only `pkgs.bubblewrap` and `pkgs.gh` from the locked Nixpkgs revision in `devenv.nix`. Require Bubblewrap `0.11.2` only for namespace, network, and filesystem isolation, and require GitHub CLI `2.96.0` for seal-attestation policy and offline BURL-O001 verification. Add contract fixtures for the two-job role topology, least-privilege permissions, run-to-artifact nonce derivation, forbidden artifact-name characters, and duplicate or pre-uploaded reserved names. Candidate-guard fixtures must accept placement, topology, labels, and completion only as four noncryptographic checks. They must produce `candidate-placement-mismatch`, `candidate-topology-mismatch`, `candidate-label-mismatch`, and `candidate-completion-mismatch` for the matching failures. They must reject candidate `runnerEnvironment` and any candidate-derived `hostedOriginVerified`. Linux fixtures must run `env -i` candidate code in a private Bubblewrap PID namespace and reject a surviving double-fork probe before upload. Hosted-macOS fixtures must distinguish candidate-command no-privilege execution from the trusted upload wrapper's job-scoped artifact runtime authority. They must prove fresh-job separation, seal-only authority, and no candidate-byte execution in seal. They model a surviving candidate process as untrusted-output corruption or fail-closed upload denial, and reject a universal macOS containment or zero-survivor assertion. Receipt fixtures must reject any final status, conclusion, or completion field. Seal-origin fixtures must accept exactly one completed successful seal with valid provenance. They must reject in-progress, failed, missing, duplicate, wrong-job, wrong-label, self-hosted, wrong-signer, wrong-source, wrong-run, wrong-attempt, and wrong-locator matches with the typed seal rejection. BURL-O001 fixtures must require the macOS 26 seal-owned stage; its post-receipt, attested RFC 8785 `compatibility-stage-producer-lineage.json` transport artifact; and agreement through the macOS 15 manifest, receipt, seal, and final aggregation on the parsed lineage, its exact artifact-byte SHA-256, transport identity and attestation, and `consumerBinding`. They must cover reserved inventory, artifact-name collision, substituted stage, substituted lineage, wrong producer, wrong signer, wrong run or attempt, wrong role, wrong check-run locator, missing or invalid attestation bundles, action-to-REST digest mismatch, expired stage, expired producer receipt, missing producer receipt lifetime, noncanonical lineage bytes, lineage SHA mismatch, missing consumer binding, and a stage on any no-stage ticket. They must produce `compatibility-stage-missing`, `compatibility-stage-duplicate`, `compatibility-stage-substituted`, `compatibility-stage-expired`, `compatibility-stage-digest-mismatch`, `compatibility-stage-unattested`, `compatibility-stage-wrong-signer`, `compatibility-stage-wrong-run`, `compatibility-stage-wrong-role`, `compatibility-stage-wrong-seal`, `compatibility-stage-stale-producer-receipt`, `compatibility-stage-noncanonical-lineage`, `compatibility-stage-lineage-sha-mismatch`, `compatibility-stage-consumer-unbound`, and `compatibility-stage-unexpected` for the matching cases. Digest fixtures must prove bare action output to canonical REST conversion. They must use `artifact-digest-mismatch` only for expected, candidate, sealed, and receipt artifacts. They must use `compatibility-stage-digest-mismatch` for stage or lineage transport digest failures. Retain every token, configuration, descriptor, artifact-runtime, containment, cleanup, receipt, evidence-profile, viewport, nonce, artifact, bundle, trust-anchor, source-allowlist, filesystem, coordinator, and aggregation fixture from raw contract version 35. Validate the aggregate against schema version 19 and protect the exact 33-path `trusted_control_paths` inventory. In a disposable checkout, run `cargo fmt --manifest-path rust/Cargo.toml -- --check && cargo clippy --workspace --all-targets --all-features --manifest-path rust/Cargo.toml -- -D warnings && cargo test --manifest-path rust/Cargo.toml && dart format --output=none --set-exit-if-changed lib test test_driver integration_test && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ! rg -n '\[DEBUG-' lib rust test scripts && actionlint && ./scripts/assert-ci-matrix.sh --workflow .github/workflows/ci.yml --require-runner ubuntu-24.04 --require-runner macos-26 --require-runner macos-15 --require-role-schema .constitution/tech-spec/contracts/ci-role-evidence.schema.json --require-aggregate-schema .constitution/tech-spec/contracts/ci-evidence.schema.json && ./scripts/assert-managed-evidence-isolation.sh --contract .constitution/tech-spec/contracts/provisional-spikes.toml --sandbox bubblewrap --expected-version 0.11.2 && ./scripts/test-managed-role-production-contract.sh && ./scripts/test-managed-evidence-reconciliation.sh && ./scripts/test-seal-validators.sh && git diff --check`.
-        3. Require every reusable role workflow to expose exactly `sealing-receipt-artifact-id` and `sealing-receipt-upload-action-digest` from its receipt upload. Pin `receipt_digests` to exactly `needs: [expected, linux, macos_26, macos_15]`, `runs-on: ubuntu-24.04`, and `permissions: contents: read`. Pass all six outputs directly through `needs` to `scripts/write-receipt-digest-observation.sh`. Upload only its schema-valid version-1 `receipt-upload-digests.json` as `managed-evidence-receipt-digests-{artifact_nonce}`, with `overwrite: false` and `if-no-files-found: error`. Require the exact 11-artifact ordinary inventory and 13-artifact BURL-O001 inventory. Make the collector resolve the transport's immutable ID from the exact run inventory, fetch that ID's REST object, and download the raw archive through the ID-addressed endpoint. Before extraction or JSON parsing, require the raw archive SHA-256 to equal the canonical REST digest. Corruption or substitution must produce `artifact-corrupt`; a REST ID, run, repository, name, or expiration-state mismatch must produce `artifact-api-mismatch`. Retain the immutable ID, exact name, REST digest, and computed raw-download hash in `receiptDigestTransportArtifact`. Semantically validate the extracted transport and match every transported receipt artifact ID and name to one unique REST artifact object. For each receipt, require the REST digest to equal `sha256:` plus the transported bare action digest, retain both in `origin.sealingReceiptArtifact`, and produce `artifact-digest-mismatch` on mismatch. Add fixtures that reject missing, extra, duplicate, malformed, reordered, wrong-role, wrong-run, wrong-attempt, wrong-signer, wrong-nonce, wrong-name, wrong-ID, and wrong-digest transport data.
-        4. Commit and independently review the `BURL-M003` milestone on `chore/epic-m-ci-foundation`. Open a ready implementation pull request, obtain independent pull-request review, and rebase-merge it into `master`. Record the resulting full `master` tip as `TRUST_ANCHOR_SHA`; don't treat the ticket as complete.
-        5. Create a clean detached `TRUST_ANCHOR_WORKTREE` at `TRUST_ANCHOR_SHA` and create `EVIDENCE_WORKTREE` on `docs/epic-m-ci-evidence` from that merged `master`. Set `BASE_SHA` to the rebased, reviewed `BURL-M015` milestone at the trust anchor's first parent. Run `TRUST_ANCHOR_WORKTREE/scripts/managed-evidence.sh run --ticket BURL-M003 --trust-anchor-sha TRUST_ANCHOR_SHA --source-ref refs/heads/master --tested-source-sha TRUST_ANCHOR_SHA --base-sha BASE_SHA --output EVIDENCE_WORKTREE/.constitution/evidence/BURL-M003/managed-evidence.json && git -C EVIDENCE_WORKTREE diff --check`.
-        6. In the minimally privileged Linux `candidate` job, the trusted workflow runs `./scripts/check-generated-bindings.sh && flutter test && dart analyze && flutter test integration_test -d linux -r github && ./scripts/assert-managed-evidence-isolation.sh --contract .constitution/tech-spec/contracts/provisional-spikes.toml --sandbox bubblewrap --expected-version 0.11.2` through `env -i` in its pipeline-owned private-headless Sway and Wayland environment and private Bubblewrap PID namespace. It rejects a surviving double-fork probe before upload. On both Apple Silicon macOS roles, a cold checkout runs `flutter test && dart analyze && flutter test integration_test -d macos -r github`, then performs bounded cleanup of known test processes without claiming universal containment. The dependent `seal` job validates and authenticates the untrusted bundle on a fresh environment with the same fixed role label and never executes candidate bytes.
-        7. In `EVIDENCE_WORKTREE`, add `.constitution/evidence/BURL-M003/completion.md` with the anchor SHA, workflow signer SHA, tested-source SHA, run identity, accepted report digest, implementation pull request, and review evidence. Add `.constitution/evidence/BURL-M003/manifest.yaml` with the exact byte counts and SHA-256 digests of `managed-evidence.json` and `completion.md`. Commit exactly those three evidence files. Open, independently review, and merge the ready evidence pull request. Only this merge completes `BURL-M003`.
+        2. Implement `scripts/assert-managed-evidence-isolation.sh`,
+           `scripts/supervise-linux-session.sh`, `scripts/managed-sway.conf`,
+           the managed-role launcher, and the fresh-seal parser against
+           `ci_bootstrap.linux_trusted_parent_bubblewrap`,
+           `ci_bootstrap.linux_integration_session_compositor`, and
+           `ci_bootstrap.linux_candidate_closure_view`. Pin the declared
+           Diffutils, Procps, iproute2, Bash, Coreutils, util-linux,
+           Bubblewrap, and GitHub CLI records through `devenv.nix` and
+           `devenv.lock`. Every trusted Nix installer call must satisfy
+           `ci_bootstrap.actions.install_nix_interface`, including literal
+           `enable_kvm: false`.
+        3. Make positive Linux fixtures reproduce `session_ids`, `sessions`,
+           `closure_root_policy`, `session_contract_mount_policy`,
+           `complete_argv_policy`, `full_vector_fixture_records`,
+           `trusted_host_root_policy`, `capacity_root_policy`,
+           `candidate_environment_policy`, `supervisor_script_policy`,
+           `descriptor_policy`, `supervisor_cleanup_policy`,
+           `teardown_lock_policy`, `loopback_policy`, `apparmor_probe_policy`,
+           `source_log_policy`, and `closure_view_log_policy`. The fixtures
+           must cover five base sessions and two integration sessions, the
+           complete 488-member or 547-member read-only view, all runtime
+           argv bytes, canonical checkout and host roots, the read-only
+           `/contract` leaf, the direct Coreutils `env -i` boundary, the
+           explicit Bash descriptor-255 close, phase-specific descriptor
+           inventories, in-namespace headless Sway, distinct runtime leaves,
+           integration candidate and Sway direct-child waits, namespace-PID-1
+           adopted-descendant reaping, retained-inode OFD lock acquisition,
+           cleanup, and fresh-seal reconstruction.
+        4. Make negative Linux fixtures apply `complete_argv_fixture_policy`,
+           `candidate_environment_fixture_policy`,
+           `supervisor_script_fixture_policy`, `descriptor_fixture_policy`,
+           `teardown_lock_fixture_policy`, `apparmor_fixture_policy`, and the
+           mount, source, authority, runtime-leaf, preflight, log, and cleanup
+           rejection policies. Reject a private-store copy; a broad, missing,
+           writable, extra, or substituted bind; unresolved authority; a
+           base-session compositor surface; inherited environment or
+           descriptor state; swapped logs; early teardown proof; pathname
+           substitution; surviving namespace reaping; integration cleanup before
+           both candidate and Sway direct-child waits; a native-isolation
+           prerequisite or candidate-path host-policy mutation or fallback; and
+           any bundle creation or upload after a prerequisite or cleanup failure.
+        5. Retain `ci_bootstrap.fixture_policy`,
+           `candidate_guard_fixture_policy`,
+           `compatibility_stage_fixture_policy`, and
+           `compatibility_stage_consumer_binding_fixture_policy` for the
+           receipt, compatibility, evidence-profile, and typed rejection
+           behavior already accepted. Validate role schema version `15`,
+           aggregate schema version `19`, sealing receipt version `2`, and
+           receipt transport version `1`. Protect the exact 35-path
+           `trusted_control_paths` inventory. Require the exact 11-artifact
+           ordinary inventory and 13-artifact BURL-O001 inventory.
+        6. Require every reusable role workflow to expose exactly `sealing-receipt-artifact-id` and `sealing-receipt-upload-action-digest` from its receipt upload. Pin `receipt_digests` to exactly `needs: [expected, linux, macos_26, macos_15]`, `runs-on: ubuntu-24.04`, and `permissions: contents: read`. Pass all six outputs directly through `needs` to `scripts/write-receipt-digest-observation.sh`. Upload only its schema-valid version-1 `receipt-upload-digests.json` as `managed-evidence-receipt-digests-{artifact_nonce}`, with `overwrite: false` and `if-no-files-found: error`. Require the exact 11-artifact ordinary inventory and 13-artifact BURL-O001 inventory. Make the collector resolve the transport's immutable ID from the exact run inventory, fetch that ID's REST object, and download the raw archive through the ID-addressed endpoint. Before extraction or JSON parsing, require the raw archive SHA-256 to equal the canonical REST digest. Corruption or substitution must produce `artifact-corrupt`; a REST ID, run, repository, name, or expiration-state mismatch must produce `artifact-api-mismatch`. Retain the immutable ID, exact name, REST digest, and computed raw-download hash in `receiptDigestTransportArtifact`. Semantically validate the extracted transport and match every transported receipt artifact ID and name to one unique REST artifact object. For each receipt, require the REST digest to equal `sha256:` plus the transported bare action digest, retain both in `origin.sealingReceiptArtifact`, and produce `artifact-digest-mismatch` on mismatch. Add fixtures that reject missing, extra, duplicate, malformed, reordered, wrong-role, wrong-run, wrong-attempt, wrong-signer, wrong-nonce, wrong-name, wrong-ID, and wrong-digest transport data.
+        7. Commit and independently review the `BURL-M003` milestone on `chore/epic-m-ci-foundation`. Open a ready implementation pull request, obtain independent pull-request review, and rebase-merge it into `master`. Record the resulting full `master` tip as `TRUST_ANCHOR_SHA`; don't treat the ticket as complete.
+        8. Create a clean detached `TRUST_ANCHOR_WORKTREE` at `TRUST_ANCHOR_SHA` and create `EVIDENCE_WORKTREE` on `docs/epic-m-ci-evidence` from that merged `master`. Set `BASE_SHA` to the rebased, reviewed `BURL-M015` milestone at the trust anchor's first parent. Run `TRUST_ANCHOR_WORKTREE/scripts/managed-evidence.sh run --ticket BURL-M003 --trust-anchor-sha TRUST_ANCHOR_SHA --source-ref refs/heads/master --tested-source-sha TRUST_ANCHOR_SHA --base-sha BASE_SHA --output EVIDENCE_WORKTREE/.constitution/evidence/BURL-M003/managed-evidence.json && git -C EVIDENCE_WORKTREE diff --check`.
+        9. In the minimally privileged Linux `candidate` job, run the exact
+           seven `ci_bootstrap.linux_candidate_closure_view.sessions` in
+           order. Each session uses one Bubblewrap invocation and the exact
+           base or integration view, command, environment, descriptor
+           branch, loopback setup, and cleanup protocol. On both Apple
+           Silicon macOS roles, a cold checkout runs `flutter test && dart
+           analyze && flutter test integration_test -d macos -r github`,
+           then performs bounded cleanup of known test processes without
+           claiming universal containment. Each dependent `seal` job
+           validates and authenticates the untrusted bundle in a fresh
+           environment and never executes candidate bytes.
+        10. In `EVIDENCE_WORKTREE`, add `.constitution/evidence/BURL-M003/completion.md` with the anchor SHA, workflow signer SHA, tested-source SHA, run identity, accepted report digest, implementation pull request, and review evidence. Add `.constitution/evidence/BURL-M003/manifest.yaml` with the exact byte counts and SHA-256 digests of `managed-evidence.json` and `completion.md`. Commit exactly those three evidence files. Open, independently review, and merge the ready evidence pull request. Only this merge completes `BURL-M003`.
     acceptance:
       mode: contract_test
       evidence: >
@@ -358,15 +443,18 @@ tickets:
         `managed-evidence-protocol`, `managed-evidence-security`,
         `static-analysis`, and `desktop-integration`. Each role runs the
         complete Flutter unit suite, analyzer, and desktop integration gate.
-        Linux runs the exact private-headless integration sequence from the
-        ordered implementation steps. Both macOS roles run the exact cold-checkout
-        integration sequence from those steps. The evidence records every
+        Linux runs the exact five base and two integration sessions from
+        `ci_bootstrap.linux_candidate_closure_view.sessions`. Only the two
+        integration sessions start headless Sway inside their Bubblewrap
+        namespace. Both macOS roles run the exact cold-checkout integration
+        sequence from the ordered implementation steps. The evidence records every
         integration-test file and result and rejects an empty, skipped, or
         partially discovered suite. The bootstrap profile doesn't include
         `performance`, `linux-platform-regression`, or
-        `macos-authoritative-visual`. The Linux environment owns display,
-        compositor, input, process, state directory, and application PID for
-        functional integration without reading the Writer's desktop. Later
+        `macos-authoritative-visual`. Each integration session owns its distinct
+        runtime leaf, display, compositor, process group, and application PID
+        without reading the Writer's desktop. Base sessions have no compositor
+        process, runtime leaf, socket, or Wayland environment. Later
         benchmark, shell, and release tickets own the performance and visual gates.
 
 
@@ -400,8 +488,12 @@ tickets:
 
         Role documents validate against schema version `15`, and the aggregate
         validates against schema version `19`. The raw managed-evidence
-        contract is version `35`. The sealing receipt validates
-        against version `2` of the Stage 3 raw definition. It contains
+        contract is version `38`. The sealing receipt validates against version
+        `2`, and the receipt transport validates against version `1`. The exact
+        service inventory remains 11 ordinary artifacts or 13 BURL-O001
+        artifacts. The 42-record bill of materials and exact 35-path
+        `ci_bootstrap.trust_anchor.trusted_control_paths` inventory are binding.
+        The sealing receipt contains
         `job.check_run_id` but no status, conclusion, completion timestamp, or
         observation of its own uploaded artifact.
         After the attempt completes, collection resolves
@@ -427,14 +519,17 @@ tickets:
         Seal-origin fixtures cover in-progress, failed, missing, duplicate,
         wrong-job, wrong-label, self-hosted, wrong-signer, wrong-source,
         wrong-run, wrong-attempt, and wrong-locator outcomes. BURL-O001 fixtures
-        cover the complete raw-contract-version-35 compatibility-stage rejection
+        cover raw contract version `38`'s complete compatibility-stage rejection
         inventory: missing, duplicate, substituted, expired, digest mismatch,
         unattested, wrong signer, wrong run, wrong role, wrong seal, stale
         producer receipt, noncanonical lineage, lineage SHA mismatch,
-        consumer unbound, and unexpected. Existing token, configuration, descriptor,
-        artifact-runtime, containment, cleanup, receipt, evidence-profile,
-        viewport, nonce, artifact, bundle, trust-anchor, source-allowlist,
-        filesystem, coordinator, and aggregation fixtures remain required.
+        consumer unbound, and unexpected. The complete fixture inventory in
+        `ci_bootstrap.fixture_policy` remains required, including token,
+        configuration, artifact-runtime, receipt, evidence-profile, viewport,
+        nonce, artifact, bundle, trust-anchor, source-allowlist, filesystem,
+        coordinator, and aggregation coverage. Raw contract version `38` adds
+        its exact closure, environment, descriptor, teardown, host-prerequisite,
+        compositor, authority, log, and cleanup fixtures to that inventory.
         Aggregate `accepted` requires all three successful candidate guard sets,
         all three attestation-backed seal origins, every applicable stage check,
         a verified receipt-digest transport, and no rejection reason.
@@ -564,9 +659,99 @@ tickets:
         does not validate any result file or runtime value.
 
 
-        Linux static and integration fixtures prove `env -i` Bubblewrap `0.11.2`
-        PID containment by rejecting a surviving double-fork probe before
-        upload. Hosted-macOS fixtures distinguish candidate-command no-privilege
+        Positive Linux fixtures reproduce the exact values and policies in
+        `ci_bootstrap.linux_trusted_parent_bubblewrap`,
+        `ci_bootstrap.linux_integration_session_compositor`, and
+        `ci_bootstrap.linux_candidate_closure_view`. They require five
+        488-member base views and two 547-member integration views, with no
+        copied private store. They reconstruct every `complete_argv_policy`
+        vector from the retained authority and current-path rows with no
+        unresolved source. They verify the exact read-only `/contract` leaf,
+        manifest and source identity, hidden Nix state, and argument budget.
+
+
+        `trusted_host_root_policy` derives the trusted-control root from the
+        immutable launcher path and the tested-source root from the explicit
+        credential-free checkout argument. It validates both commits locally.
+        It canonicalizes `RUNNER_TEMP` and the role-output argument as separate
+        authorities. Parent manifests resolve only below the declared
+        `RUNNER_TEMP` root, while logs and role artifacts resolve below the
+        role-output root. Their paths must equal
+        `tool_closure_manifest_host_relative_path`,
+        `closure_manifest_host_relative_path`,
+        `base_manifest_host_relative_path`, and
+        `integration_manifest_host_relative_path`. Fresh sealing validates the
+        retained path structure and consistency without claiming independent
+        authentication of departed host paths. Fixtures reject a production
+        `/work` alias, an unresolved
+        value, a linked or escaping path, a wrong root, or a parent manifest
+        sourced through `/contract`.
+
+
+        The final direct candidate boundary satisfies
+        `candidate_environment_policy`: base sessions receive 33 ordered
+        assignments, and integration sessions receive 37. The Bash supervisor
+        satisfies `supervisor_script_policy` by closing descriptor 255 before
+        preflight. The base, integration-supervisor, candidate, and cleanup
+        phases satisfy `descriptor_policy`, `descriptor_fixture_policy`, and
+        `supervisor_cleanup_policy`. The two integration sessions alone receive
+        distinct mode-0700 runtime leaves and in-namespace Sway. The
+        configuration prevents `swaybg`, disables Xwayland, and retains exact
+        `wayland-1` behavior.
+
+
+        `loopback_policy` raises and verifies `lo` inside the outer network
+        namespace after the descriptor handshake and before candidate, Sway, or
+        `swaymsg` startup. The outer namespace exposes no host interface, route,
+        external network, or host-network descriptor. Untrusted code may alter
+        only its private network configuration.
+
+
+        Teardown fixtures satisfy `teardown_lock_policy` and
+        `teardown_lock_fixture_policy`. The trusted parent retains the original
+        descriptor and proves stable device and inode identity. The pinned
+        `teardown_lock_verifier_argv` must conflict while the namespace reaper
+        lives. After the outer process ends, it must acquire only after genuine
+        reaper release and before cleanup. Cleanup follows the integration
+        candidate and Sway direct-child waits and uses the verified temporary
+        descriptor 3. The parent accepts and records the session only after
+        cleanup, then permits upload.
+        Fresh sealing validates the complete version 2 closure log and golden,
+        including every authority, source, argv, environment, descriptor,
+        runtime, cleanup, and retained-lock field. It requires the four source
+        identity header fields, the literal canonical staging-leaf path plus
+        one LF for `staging-root-sha256`, every 25-field session row, and one
+        host-policy row after all seven sessions. Both retained manifest
+        payloads must follow in the declared order.
+
+
+        Negative fixtures reject every mutation required by
+        `complete_argv_fixture_policy`, `candidate_environment_fixture_policy`,
+        `supervisor_script_fixture_policy`, `descriptor_fixture_policy`,
+        `teardown_lock_fixture_policy`, and `apparmor_fixture_policy`. They also
+        reject private-store content, broad or writable mounts, a changed
+        source identity, a missing or writable `/contract`, a base compositor
+        surface, an inherited variable or descriptor, swapped logs, early lock
+        acquisition, a replaced-path proof, incomplete reaping or cleanup, and
+        a mismatched closure log or golden. The exact pinned prerequisite must
+        succeed before dependencies or candidate code run. Every failure blocks
+        candidate execution, bundle creation, and upload. The native-isolation
+        prerequisite and candidate path must not use `sudo`, mutate AppArmor,
+        sysctl, or another host policy, add a second probe or restoration path,
+        or use a privileged fallback. A local probe validates mechanics only.
+        Accepted hosted BURL-M003 evidence must prove hosted availability for
+        that run.
+
+
+        Static workflow fixtures require literal `enable_kvm: false` at every
+        trusted `cachix/install-nix-action` call site. They reject an omitted,
+        true, expression-derived, environment-derived, wrapper-derived, or
+        nonliteral value. They also retain the `install_url`, preinstalled Nix,
+        and exact Nix `2.35.2` checks from
+        `ci_bootstrap.actions.install_nix_interface`.
+
+
+        Hosted-macOS fixtures distinguish candidate-command no-privilege
         execution from the trusted wrapper's later artifact runtime authority.
         They prove fresh-job separation, sole seal OIDC and attestation
         authority, safe validation, and no candidate-byte execution in seal. A
