@@ -24,8 +24,8 @@ valid_jobs() {
       labels:[$label]
     };
     {jobs:[
-      job(1; "linux / candidate"; "ubuntu-24.04"),
-      job(2; "linux / seal"; "ubuntu-24.04"),
+      job(1; "linux / candidate"; "ubuntu-22.04"),
+      job(2; "linux / seal"; "ubuntu-22.04"),
       job(3; "macos_26 / candidate"; "macos-26"),
       job(4; "macos_26 / seal"; "macos-26"),
       job(5; "macos_15 / candidate"; "macos-15"),

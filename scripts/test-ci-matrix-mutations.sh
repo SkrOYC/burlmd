@@ -12,16 +12,25 @@ fixture() {
 }
 assert_rejected() {
   local label=$1
-  if (cd "$tmp/repo" && ./scripts/assert-ci-matrix.sh --workflow .github/workflows/ci.yml --require-runner ubuntu-24.04 --require-runner macos-26 --require-runner macos-15 --require-role-schema .constitution/tech-spec/contracts/ci-role-evidence.schema.json --require-aggregate-schema .constitution/tech-spec/contracts/ci-evidence.schema.json --skip-fixtures) >/dev/null 2>&1; then
+  if (cd "$tmp/repo" && ./scripts/assert-ci-matrix.sh --workflow .github/workflows/ci.yml --require-runner ubuntu-22.04 --require-runner macos-26 --require-runner macos-15 --require-role-schema .constitution/tech-spec/contracts/ci-role-evidence.schema.json --require-aggregate-schema .constitution/tech-spec/contracts/ci-evidence.schema.json --skip-fixtures) >/dev/null 2>&1; then
     echo "matrix accepted mutation: $label" >&2; exit 1
   fi
 }
 mutate() { local label=$1 expression=$2 file=${3:-$tmp/repo/.github/workflows/ci-role-linux-x86-64.yml}; rm -rf "$tmp/repo"; fixture; if [[ $file == all ]]; then perl -0pi -e "$expression" "$tmp/repo"/.github/workflows/*.yml; else perl -0pi -e "$expression" "$file"; fi; assert_rejected "$label"; }
+fixture
+if ! (cd "$tmp/repo" && ./scripts/assert-ci-matrix.sh --workflow .github/workflows/ci.yml --require-runner ubuntu-22.04 --require-runner macos-26 --require-runner macos-15 --require-role-schema .constitution/tech-spec/contracts/ci-role-evidence.schema.json --require-aggregate-schema .constitution/tech-spec/contracts/ci-evidence.schema.json --skip-fixtures) >/dev/null 2>&1; then
+  echo 'clean matrix fixture was rejected' >&2
+  exit 1
+fi
 mutate bad-action 's/fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09/0000000000000000000000000000000000000000/g' all
+mutate expected-control-runner 's/(^  expected:\n    runs-on: )ubuntu-24\.04/$1ubuntu-22.04/m' "$tmp/repo/.github/workflows/ci.yml"
+mutate receipt-control-runner 's/(^  receipt_digests:\n    needs:.*\n    runs-on: )ubuntu-24\.04/$1ubuntu-22.04/m' "$tmp/repo/.github/workflows/ci.yml"
+mutate linux-candidate-runner 's/(^  candidate:\n    runs-on: )ubuntu-22\.04/$1ubuntu-24.04/m'
+mutate linux-seal-runner 's/(^  seal:\n    needs: candidate\n    runs-on: )ubuntu-22\.04/$1ubuntu-24.04/m'
 mutate candidate-write 's/permissions: \{contents: read\}/permissions: {contents: write}/'
 mutate trusted-checkout-credentials 's/persist-credentials: false/persist-credentials: true/g' all
 mutate always 's/needs: candidate/needs: candidate\n    if: always()/'
-mutate extra-job 's/^  seal:/  unexpected:\n    runs-on: ubuntu-24.04\n  seal:/m'
+mutate extra-job 's/^  seal:/  unexpected:\n    runs-on: ubuntu-22.04\n  seal:/m'
 mutate direct-input-shell 's#run: \./scripts/ci-devenv\.sh \./scripts/run-managed-role\.sh#run: echo "\${{ inputs.artifact_nonce }}" && ./scripts/ci-devenv.sh ./scripts/run-managed-role.sh#'
 mutate missing-input-validation 's#\./scripts/validate-managed-workflow-inputs\.sh#./scripts/not-the-validator.sh#' "$tmp/repo/.github/workflows/ci.yml"
 mutate caller-owned-macos-stage 's/^  macos_15:/  stage_macos_26_for_15:\n    runs-on: macos-26\n  macos_15:/m' "$tmp/repo/.github/workflows/ci.yml"

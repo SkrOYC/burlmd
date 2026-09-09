@@ -61,7 +61,7 @@ awk '/validate_candidate_tool_profile/,/prepare_candidate_dependencies/' "$runne
 rg -Fq 'No sudo/sysctl/AppArmor fallback' "$runner"
 ! rg -Fq -- '--disable-userns' "$runner"
 
-# Regression: raw-38 is a ticket-scoped closure-view/controller path. Its
+# Regression: raw-39 is a ticket-scoped closure-view/controller path. Its
 # M003-only functions must not materialize, mount, or expose the predecessor
 # private store even though that backend remains live for later tickets.
 m003_view_scope=$(awk '
@@ -95,7 +95,7 @@ printf '%s\n' "$m003_launcher_scope" | rg -Fq 'bwrap_args+=(--ro-bind "$closure_
 printf '%s\n' "$cleanup_scope" | rg -Fq 'if [[ $ticket != BURL-M003 ]]; then'
 
 # Regression: non-M003 Linux tickets keep the predecessor private-store
-# backend. They must not select the raw-38 manifests or their exact-488 guard.
+# backend. They must not select the raw-39 manifests or their exact-488 guard.
 legacy_store_scope=$(awk '
   /^prepare_linux_candidate_private_store\(\)/ { active = 1 }
   /^prepare_linux_candidate_closure_views\(\)/ { active = 0 }
@@ -160,7 +160,7 @@ locked_closure_probe=$root/scripts/test-managed-role-locked-closure.sh
 rg -Fq 'base-session-closure.manifest' "$locked_closure_probe"
 
 # The Linux parent, rather than the candidate or an external Sway process,
-# owns the complete seven-session raw-38 vector, both handshake pipes, the
+# owns the complete seven-session raw-39 vector, both handshake pipes, the
 # retained original teardown descriptor, and the version-2 closure log.
 rg -Fq 'm003_run_session()' "$runner"
 rg -Fq 'm003_prepare_closure_log()' "$runner"
@@ -394,7 +394,7 @@ cat >"$tmp/bin/taplo" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 case ${!#} in
-  ci_bootstrap.ci_role_evidence_schema_version) printf '15\n' ;;
+  ci_bootstrap.ci_role_evidence_schema_version) printf '16\n' ;;
   'ci_bootstrap.ticket_evidence_profiles."BURL-H001"."macos-26-arm64"') printf '%s\n' '["common-functional","performance","ast-measurement"]' ;;
   reference_profiles.github-macos-26-arm64) printf '%s\n' '{"runner_label":"macos-26","os":"macos","architecture":"aarch64","os_major":26,"cpu_model_contains":"Apple M1","logical_cpu_count":3,"memory_bytes":7000000000,"storage_bytes":14000000000,"logical_viewport_width":1920,"logical_viewport_height":1080,"logical_viewport_refresh_hz":60}' ;;
   'spikes[*]') printf '%s\n' '[{"id":"SPK-BURL-H001","path":"fixture","create_commands":[{"workdir":".","command":"cargo init --bin fixture"}],"verification_steps":[{"run_role":"macos-26-performance","workdir":"fixture","command":"cargo test --locked --manifest-path Cargo.toml --all-targets; mkdir -p runs handoff/outbox && printf run > runs/ast.json && printf handoff > handoff/outbox/ast.tar.zst && printf hash > handoff/outbox/ast.sha256 && true --output runs/ast.json --handoff-bundle handoff/outbox/ast.tar.zst --handoff-sha256 handoff/outbox/ast.sha256"},{"run_role":"macos-26-performance","workdir":"fixture","command":"setsid bash -ceu '\''while :; do sleep 1; done'\'' & true"}]}]' ;;

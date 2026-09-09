@@ -46,7 +46,7 @@ base_env() {
   export GITHUB_REPOSITORY=SkrOYC/burlmd GITHUB_RUN_ID=99 GITHUB_RUN_ATTEMPT=1
   export GH_TOKEN=fixture-token GH_BIN="$tmp/bin/gh"
   export FAKE_JOB FAKE_EXPECTED FAKE_CANDIDATE FAKE_SEALED FAKE_RECEIPT
-  FAKE_JOB=$(job '["ubuntu-24.04"]')
+  FAKE_JOB=$(job '["ubuntu-22.04"]')
   FAKE_EXPECTED=$(artifact "managed-evidence-expected-$nonce")
   FAKE_CANDIDATE=$(artifact "managed-evidence-candidate-linux-x86_64-$nonce")
   FAKE_SEALED=$(artifact "managed-evidence-sealed-linux-x86_64-$nonce")
@@ -74,8 +74,8 @@ assert_rejected() {
 base_env
 precheck
 finalcheck
-base_env; FAKE_JOB=$(job '["ubuntu-24.04"]' failure); assert_rejected wrong-job
-base_env; FAKE_JOB=$(job '["self-hosted","ubuntu-24.04"]'); assert_rejected self-hosted-label
+base_env; FAKE_JOB=$(job '["ubuntu-22.04"]' failure); assert_rejected wrong-job
+base_env; FAKE_JOB=$(job '["self-hosted","ubuntu-22.04"]'); assert_rejected self-hosted-label
 base_env; FAKE_JOB=$(job '["macos-26"]'); assert_rejected wrong-label
 base_env; FAKE_CANDIDATE=$(jq --arg bad "sha256:${digest%?}0" '.digest = $bad' <<<"$FAKE_CANDIDATE"); assert_rejected wrong-artifact-digest
 

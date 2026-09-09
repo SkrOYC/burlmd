@@ -17,6 +17,9 @@ done
 [[ -n $workflow && -f $workflow && -f $role_schema && -f $aggregate_schema ]] || exit 2
 for runner in "${runners[@]}"; do rg -Fq "runs-on: $runner" .github/workflows || { echo "missing required runner: $runner" >&2; exit 1; }; done
 
+expected_block=$(sed -n '/^  expected:/,/^  linux:/p' "$workflow")
+grep -Fxc '    runs-on: ubuntu-24.04' <<<"$expected_block" | grep -Fxq 1 || { echo 'expected control job runner mismatch' >&2; exit 1; }
+
 # The pinned action exits successfully when Nix is already on PATH. Each direct
 # action site therefore rejects an ambient executable and proves the action's
 # transitive 2.35.2 installation before any ordinary workflow step can run.
@@ -84,7 +87,15 @@ for nix_workflow in "${nix_workflows[@]}"; do
     [[ $preinstall_step_count -eq 2 && $postinstall_step_count -eq 2 ]] || { echo "$nix_workflow must run Nix checks immediately around each installer" >&2; exit 1; }
     sed -n "${install_line},$((install_line + 1))p" "$nix_workflow" | grep -Fxq '        with: {enable_kvm: false}' || { echo "$nix_workflow must set literal enable_kvm false" >&2; exit 1; }
     preinstall_step=$(sed -n "${preinstall_line},$((install_line - 1))p" "$nix_workflow")
-    postinstall_step=$(sed -n "${postinstall_line},\$p" "$nix_workflow" | awk 'NR == 1 { print; next } /^      - / { exit } { print }')
+    # Read the workflow directly. A sed producer can receive SIGPIPE when awk
+    # stops at the next step, making this exact assertion fail intermittently
+    # with status 141 under pipefail.
+    postinstall_step=$(awk -v start="$postinstall_line" '
+      NR < start { next }
+      NR == start { print; next }
+      /^      - / { exit }
+      { print }
+    ' "$nix_workflow")
     for guard_step in "$preinstall_step" "$postinstall_step"; do
       if grep -Eq '^[[:space:]]+(if|continue-on-error):' <<<"$guard_step"; then
         echo "$nix_workflow must run every Nix installer guard unconditionally and fail closed" >&2
@@ -165,6 +176,13 @@ for role in linux-x86-64 macos-26-arm64 macos-15-arm64; do
   [[ $validation_count -gt 0 && $validation_count == "$attempt_binding_count" ]] || { echo "$file must bind the literal GitHub run attempt into every validator" >&2; exit 1; }
   candidate_block=$(sed -n '/^  candidate:/,/^  seal:/p' "$file")
   seal_block=$(sed -n '/^  seal:/,$p' "$file")
+  case $role in
+    linux-x86-64) expected_role_runner=ubuntu-22.04;;
+    macos-26-arm64) expected_role_runner=macos-26;;
+    macos-15-arm64) expected_role_runner=macos-15;;
+  esac
+  [[ $(grep -Fxc "    runs-on: $expected_role_runner" <<<"$candidate_block") -eq 1 ]] || { echo "$file candidate runner mismatch" >&2; exit 1; }
+  [[ $(grep -Fxc "    runs-on: $expected_role_runner" <<<"$seal_block") -eq 1 ]] || { echo "$file seal runner mismatch" >&2; exit 1; }
   [[ $(grep -Fxc '    timeout-minutes: 120' <<<"$candidate_block") -eq 1 ]] || { echo "$file candidate timeout must be the literal 120-minute budget" >&2; exit 1; }
   if grep -Eq '^[[:space:]]+continue-on-error:' <<<"$candidate_block"; then
     echo "$file candidate must not soften failures with continue-on-error" >&2
@@ -355,6 +373,7 @@ if [[ $run_fixtures == true ]]; then
     scripts/test-ci-nix-installer-interface.sh \
     scripts/test-repeat-test.sh \
     scripts/test-managed-workflow-inputs.sh \
+    scripts/test-candidate-failure-diagnostic.sh \
     scripts/test-candidate-guards.sh \
     scripts/test-seal-validators.sh \
     scripts/test-managed-evidence-trusted-controls.sh \

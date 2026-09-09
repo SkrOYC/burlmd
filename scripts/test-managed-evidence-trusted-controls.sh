@@ -22,14 +22,14 @@ mapfile -t paths < <(
 )
 (( ${#paths[@]} > 0 ))
 [[ ${#paths[@]} == 35 ]] || { echo "trusted-control inventory must contain 35 paths, found ${#paths[@]}" >&2; exit 1; }
-for raw38_control in scripts/supervise-linux-session.sh scripts/managed-sway.conf; do
-  [[ $(printf '%s\n' "${paths[@]}" | rg -Fxc -- "$raw38_control") == 1 ]] || {
-    echo "raw-38 trusted-control addition is missing, duplicated, or substituted: $raw38_control" >&2
+for current_contract_control in scripts/supervise-linux-session.sh scripts/managed-sway.conf; do
+  [[ $(printf '%s\n' "${paths[@]}" | rg -Fxc -- "$current_contract_control") == 1 ]] || {
+    echo "raw-39 trusted-control addition is missing, duplicated, or substituted: $current_contract_control" >&2
     exit 1
   }
 done
-[[ $(stat -Lc '%a' -- "$root/scripts/supervise-linux-session.sh") == 755 ]] || { echo 'raw-38 supervisor mode must be 0755' >&2; exit 1; }
-[[ $(stat -Lc '%a' -- "$root/scripts/managed-sway.conf") == 644 ]] || { echo 'raw-38 Sway configuration mode must be 0644' >&2; exit 1; }
+[[ $(stat -Lc '%a' -- "$root/scripts/supervise-linux-session.sh") == 755 ]] || { echo 'raw-39 supervisor mode must be 0755' >&2; exit 1; }
+[[ $(stat -Lc '%a' -- "$root/scripts/managed-sway.conf") == 644 ]] || { echo 'raw-39 Sway configuration mode must be 0644' >&2; exit 1; }
 for path in "${paths[@]}"; do
   [[ -f $root/$path && ! -L $root/$path ]] || { echo "authoritative trusted control is not a regular file: $path" >&2; exit 1; }
   # Collection never deletes GitHub artifacts. Scan the complete authoritative
@@ -82,16 +82,16 @@ awk '/^read_trusted_control_paths\(\)/ {copy=1} /^workflow_guard\(\)/ {copy=0} c
     exit 1
   fi
 
-  # Raw-38 adds one executable controller and one non-executable config to the
-  # trusted inventory. Each must independently reject a mode-only mutation;
-  # the byte loop above already mutates every listed member including both.
+  # The trusted inventory includes an executable controller and a
+  # non-executable configuration file. Each must reject a mode-only mutation.
+  # The byte loop already mutates every listed member, including both files.
   for path in scripts/supervise-linux-session.sh scripts/managed-sway.conf; do
     git checkout -q --detach "$anchor"
     if [[ $path == scripts/supervise-linux-session.sh ]]; then chmod 644 "$path"; else chmod 755 "$path"; fi
     git add -- "$path"
-    git commit -qm "mutate raw-38 trusted control mode $path"
+    git commit -qm "mutate raw-39 trusted control mode $path"
     if trusted_controls_equivalent "$anchor" "$(git rev-parse HEAD)"; then
-      echo "raw-38 trusted control mode mutation was accepted: $path" >&2
+      echo "raw-39 trusted control mode mutation was accepted: $path" >&2
       exit 1
     fi
   done
@@ -99,11 +99,47 @@ awk '/^read_trusted_control_paths\(\)/ {copy=1} /^workflow_guard\(\)/ {copy=0} c
 
 source_guard=$(sed -n '/^source_guard()/,/^completion_guard()/p' "$root/scripts/managed-evidence.sh")
 grep -Fq 'trusted_controls_equivalent "$anchor" "$workflow_signer" "$tested"' <<<"$source_guard"
-# Bootstrap identity is deliberately stricter than a normal ancestor range.
-# Model the reviewed M015 base followed by every BURL-M003 commit and prove
-# the final trust anchor accepts that whole range but rejects an older base.
+# Bootstrap identity is stricter than a normal ancestor range. Pin the first
+# recovery to PR #37's independently recorded final documentation tip.
+recorded_recovery_base=f0e2e432b5b8d975f261923849d4309b39f94a9d
+production_recovery_base=$(awk -F= '$1 == "readonly BURL_M003_REVIEWED_BASE_SHA" {print $2; exit}' "$root/scripts/managed-evidence.sh")
+[[ $production_recovery_base == "$recorded_recovery_base" ]] || {
+  echo 'the production first-recovery base differs from the reviewed PR #37 closure' >&2
+  exit 1
+}
+git -C "$root" merge-base --is-ancestor 6d30b7445b0108a6a5dd963cd2aa2ae5f5090485 "$recorded_recovery_base"
+git -C "$root" merge-base --is-ancestor f72659cef4487317c9e984e01f775a358f814a41 "$recorded_recovery_base"
+[[ $(git -C "$root" rev-parse f72659cef4487317c9e984e01f775a358f814a41^) == 6d30b7445b0108a6a5dd963cd2aa2ae5f5090485 ]]
 identity_functions=$tmp/m003-identity-functions.sh
 awk '/^burl_m003_identity_guard\(\)/,/^completion_guard\(\)/ { if ($0 !~ /^completion_guard\(\)/) print }' "$root/scripts/managed-evidence.sh" >"$identity_functions"
+real_lineage_repo=$tmp/real-lineage-repo
+caller_head_before=$(git -C "$root" rev-parse HEAD)
+git clone --shared --no-checkout --quiet "$root" "$real_lineage_repo"
+git -C "$real_lineage_repo" config user.email fixture@example.invalid
+git -C "$real_lineage_repo" config user.name fixture
+git -C "$real_lineage_repo" checkout -q --detach "$recorded_recovery_base"
+printf 'reviewed recovery fixture\n' >"$real_lineage_repo/recovery-fixture"
+git -C "$real_lineage_repo" add recovery-fixture
+git -C "$real_lineage_repo" commit -qm 'synthetic reviewed recovery anchor'
+reviewed_fixture_anchor=$(git -C "$real_lineage_repo" rev-parse HEAD)
+[[ $(git -C "$real_lineage_repo" rev-parse "$reviewed_fixture_anchor^") == "$recorded_recovery_base" ]]
+[[ $(git -C "$real_lineage_repo" rev-list --ancestry-path "$recorded_recovery_base..$reviewed_fixture_anchor" | wc -l | tr -d ' ') == 1 ]]
+printf 'later evidence fixture\n' >"$real_lineage_repo/later-evidence"
+git -C "$real_lineage_repo" add later-evidence
+git -C "$real_lineage_repo" commit -qm 'synthetic later caller state'
+later_fixture_head=$(git -C "$real_lineage_repo" rev-parse HEAD)
+[[ $later_fixture_head != "$reviewed_fixture_anchor" && $(git -C "$root" rev-parse HEAD) == "$caller_head_before" ]]
+(
+  anchor_root=$real_lineage_repo
+  anchor=$reviewed_fixture_anchor
+  tested=$reviewed_fixture_anchor
+  workflow_signer=$reviewed_fixture_anchor
+  base=$recorded_recovery_base
+  BURL_M003_REVIEWED_BASE_SHA=$recorded_recovery_base
+  source "$identity_functions"
+  [[ $(git -C "$anchor_root" rev-parse HEAD) == "$later_fixture_head" ]]
+  burl_m003_identity_guard
+)
 (
   cd "$repo"
   git checkout -q --detach "$anchor"
@@ -119,17 +155,87 @@ awk '/^burl_m003_identity_guard\(\)/,/^completion_guard\(\)/ { if ($0 !~ /^compl
   git add m003-one m003-two
   git commit -qm 'BURL-M003 reviewed trust-anchor tip'
   anchor=$(git rev-parse HEAD)
+  good_anchor=$anchor
+  good_base=$base
   tested=$anchor
   workflow_signer=$anchor
   anchor_root=$repo
+  BURL_M003_REVIEWED_BASE_SHA=$good_base
   source "$identity_functions"
+  # The fixture has synthetic commits, so emulate only the retained historical
+  # lineage facts while leaving the replacement-anchor topology to real Git.
+  fixture_lineage=valid
+  git() {
+    case "$*" in
+      "-C $repo merge-base --is-ancestor 6d30b7445b0108a6a5dd963cd2aa2ae5f5090485 $anchor") [[ $fixture_lineage != missing-m015 ]];;
+      "-C $repo merge-base --is-ancestor f72659cef4487317c9e984e01f775a358f814a41 $anchor") [[ $fixture_lineage != missing-original ]];;
+      "-C $repo rev-parse f72659cef4487317c9e984e01f775a358f814a41^")
+        if [[ $fixture_lineage == wrong-original-parent ]]; then printf '%040d\n' 9; else printf '%s\n' 6d30b7445b0108a6a5dd963cd2aa2ae5f5090485; fi
+        ;;
+      *) command git "$@";;
+    esac
+  }
+  assert_identity_rejected() {
+    local name=$1
+    if burl_m003_identity_guard; then
+      echo "BURL-M003 identity mutation was accepted: $name" >&2
+      exit 1
+    fi
+  }
   burl_m003_identity_guard
   [[ $(git rev-list --ancestry-path "$base..$anchor" | wc -l) == 1 ]]
+  fixture_lineage=missing-m015
+  assert_identity_rejected missing-m015
+  fixture_lineage=missing-original
+  assert_identity_rejected missing-original-anchor
+  fixture_lineage=wrong-original-parent
+  assert_identity_rejected wrong-original-parent
+  fixture_lineage=valid
   base=$pre_m015
-  if burl_m003_identity_guard; then
-    echo 'BURL-M003 accepted a non-parent base' >&2
-    exit 1
-  fi
+  assert_identity_rejected non-parent-base
+
+  # A caller-supplied first parent can't hide an unreviewed commit before the
+  # reviewed one-commit range. The private base pin remains unchanged.
+  command git checkout -q --detach "$good_base"
+  printf '\nhidden unreviewed change\n' >>scripts/managed-evidence.sh
+  command git add scripts/managed-evidence.sh
+  command git commit -qm 'unreviewed hidden base'
+  hidden_base=$(command git rev-parse HEAD)
+  printf 'reviewed-looking implementation\n' >m003-hidden-range
+  command git add m003-hidden-range
+  command git commit -qm 'one commit above hidden base'
+  anchor=$(command git rev-parse HEAD)
+  tested=$anchor workflow_signer=$anchor base=$hidden_base
+  assert_identity_rejected hidden-unreviewed-base
+
+  # The same otherwise-valid anchor fails when the private reviewed-base pin
+  # doesn't identify its actual first parent.
+  anchor=$good_anchor tested=$good_anchor workflow_signer=$good_anchor base=$good_base
+  BURL_M003_REVIEWED_BASE_SHA=$pre_m015
+  assert_identity_rejected wrong-private-base-pin
+  BURL_M003_REVIEWED_BASE_SHA=$good_base
+
+  # Two implementation commits above the selected base are never equivalent
+  # to the one reviewed replacement-anchor commit.
+  command git checkout -q --detach "$good_anchor"
+  printf 'second correction\n' >m003-three
+  command git add m003-three
+  command git commit -qm 'unreviewed second correction'
+  anchor=$(command git rev-parse HEAD)
+  tested=$anchor workflow_signer=$anchor base=$good_base
+  assert_identity_rejected multi-commit-range
+
+  # A merge anchor is forbidden even when its first parent is selected.
+  command git checkout -q --detach "$good_base"
+  printf 'side\n' >side
+  command git add side
+  command git commit -qm side
+  side=$(command git rev-parse HEAD)
+  command git checkout -q --detach "$good_anchor"
+  command git merge -q --no-ff "$side" -m 'merge anchor'
+  anchor=$(command git rev-parse HEAD)
+  tested=$anchor workflow_signer=$anchor base=$good_anchor
+  assert_identity_rejected merge-anchor
 )
 
 # Completion is a second, evidence-only authorization boundary. Exercise it in

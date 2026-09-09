@@ -13,7 +13,7 @@ rg -Fq 'prepare_linux_candidate_private_store()' "$runner"
 rg -Fq 'base-session-closure.manifest' "$runner"
 rg -Fq 'integration-session-closure.manifest' "$runner"
 rg -Fq 'bwrap_args+=(--ro-bind "$closure_path" "$closure_path")' "$runner"
-# The raw-38 fixture owns only M003's view/controller. The predecessor private
+# The raw-39 fixture owns only M003's view/controller. The predecessor private
 # store is separately selected for non-M003 tickets and must not weaken this
 # exact closure proof.
 m003_view_scope=$(awk '
@@ -110,7 +110,7 @@ while IFS= read -r member; do args+=(--ro-bind "$member" "$member"); done <"$bas
 # asserting its source text. The injected active-isolation assertion needs all
 # of these helpers, and each must resolve from the candidate-only directory.
 # In particular, rg's final target must already be a member of the locked base
-# view; adding a new closure root here would change the raw-38 inventory.
+# view; adding a new closure root here would change the raw-39 inventory.
 tool_path_fragment=$scratch/tool-path-functions.sh
 awk '
   /^candidate_profile_tools\(\)/ { capture = 1 }
@@ -131,6 +131,7 @@ source_root=$root
 candidate_workspace=$root
 candidate_root=$scratch/production-tool-path
 candidate_env=('PATH=untrusted')
+trusted_perl=$(readlink -f "$(command -v perl)")
 prepare_candidate_tool_path
 [[ ${candidate_env[0]} == "PATH=$candidate_tool_path" ]]
 active_isolation_tools=(bash sh env cat mkdir chmod awk rg sort readlink)
@@ -282,7 +283,7 @@ ln -s "$m003_sway_path" "$scratch/substituted-sway"
 ! m003_observe_exact_executable sway "$scratch/substituted-sway" "$m003_sway_path" 'sway version 1.12' "$m003_sway_sha" --version
 
 # The explicit tested checkout receives only empty destinations for mounts
-# already declared by raw-38. Their creation/removal must leave tracked bytes
+# already declared by raw-39. Their creation/removal must leave tracked bytes
 # and both lockfiles unchanged, and a tracked substitution must be detected.
 source_mountpoint_fragment=$scratch/source-mountpoint-functions.sh
 awk '/^m003_source_tracked_state_is_clean\(\)/ { capture = 1 } /^prepare_candidate_dependencies\(\)/ { capture = 0 } capture { print }' "$runner" >"$source_mountpoint_fragment"
@@ -528,7 +529,7 @@ if m003_perl_session_controller "$signal_session" "$signal_expected" base "$scra
 fi
 [[ -f $scratch/controller-signal.output && ! -L $scratch/controller-signal.output && ! -e $signal_session && ! -e $signal_stage && ! -e $signal_contract ]]
 
-# Run both real raw-38 supervisor branches through the production argv builder
+# Run both real raw-39 supervisor branches through the production argv builder
 # and the inline Perl controller. This is intentionally a full host-store view
 # rather than a command double: the parent validates the complete preflight,
 # descriptor handshake, retained lock, and base/integration cleanup paths.
@@ -536,7 +537,7 @@ m003_runtime_fragment=$scratch/m003-runtime-functions.sh
 awk '/^m003_fsync_file\(\)/ { capture = 1 } /^linux_m003_candidate_bwrap\(\)/ { capture = 0 } capture { print }' "$runner" >"$m003_runtime_fragment"
 # shellcheck source=/dev/null
 source "$m003_runtime_fragment"
-# This fixture isolates the raw-38 controller against the current dirty
+# This fixture isolates the raw-39 controller against the current dirty
 # development worktree; the cold role fixture separately exercises the real
 # authenticated-source tracked/lock check.
 m003_source_tracked_state_is_clean() { return 0; }
@@ -589,7 +590,7 @@ rm -f -- "$source_root/build/sentinel"
 rmdir -- "$source_root/build"
 source_root=$root
 # A pristine checkout has none of these ignored overlay destinations. Create
-# only missing empty leaves so the direct raw-38 Bubblewrap fixture doesn't
+# only missing empty leaves so the direct raw-39 Bubblewrap fixture doesn't
 # rely on an earlier Flutter setup, and leave pre-existing user directories.
 prepare_fixture_source_overlay_destinations
 printf '%s\n' integration_test/production_host_flow_test.dart integration_test/shell_flow_test.dart >"$output_root/results/integration-tests.txt"

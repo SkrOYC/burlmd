@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # The only in-namespace supervisor used by BURL-M003. Its argv is part of the
-# raw-38 Bubblewrap vector; this process never interprets candidate shell text.
+# raw-39 Bubblewrap vector; this process never interprets candidate shell text.
 set -euo pipefail
 
 readonly supervisor_timeout_seconds=7200
@@ -451,7 +451,7 @@ complete_cleanup_handshake() {
   frame=$(printf '%s\n' "session-id=$session_id" "supervisor-result=$supervisor_result" "sway-pid=${recorded_sway_pid:-0}" "termination-path=$termination_path" "wait-status=$candidate_status" 'sway-reaped=true' 'cleanup-complete=true')
   frame+=$'\n'
   perl -MFcntl=:DEFAULT -MIO::Handle -e '
-    use constant SYS_openat => 257;   # Linux x86_64 is the raw-38 platform.
+    use constant SYS_openat => 257;   # Linux x86_64 is the raw-39 platform.
     use constant SYS_unlinkat => 263;
     use constant O_CLOEXEC_LINUX => 02000000;
     my ($directory, $expected, $body) = @ARGV;
@@ -504,9 +504,9 @@ main() {
       *) fail 'unknown supervisor argument' ;;
     esac
   done
-  [[ $session_id =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ && $session_class =~ ^(base|integration)$ && $preflight_fd == 3 && $ack_fd == 4 && $timeout_seconds == "$supervisor_timeout_seconds" && $# -gt 0 ]] || fail 'invalid raw-38 supervisor invocation'
+  [[ $session_id =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ && $session_class =~ ^(base|integration)$ && $preflight_fd == 3 && $ack_fd == 4 && $timeout_seconds == "$supervisor_timeout_seconds" && $# -gt 0 ]] || fail 'invalid raw-39 supervisor invocation'
   # The source-to-EOF launcher has already closed Bash's source reader. This
-  # remains a defensive raw-38 close and must preserve the handshake FDs.
+  # remains a defensive raw-39 close and must preserve the handshake FDs.
   supervisor_pid=$BASHPID
   exec 255<&-
   [[ ! -e /proc/self/fd/255 ]] || fail 'Bash script descriptor survived close'

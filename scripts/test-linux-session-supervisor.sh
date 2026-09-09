@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Executable raw-38 fixture for the definitions-only in-namespace supervisor.
+# Executable raw-39 fixture for the definitions-only in-namespace supervisor.
 set -euo pipefail
 
 root=$(cd "$(dirname "$0")/.." && pwd -P)
@@ -107,7 +107,7 @@ if launch_source_fixture "$scratch/source-parse-error" /dev/null /dev/null false
   exit 1
 fi
 
-# Omitting shift forwards the source path to main and must fail its raw-38
+# Omitting shift forwards the source path to main and must fail its raw-39
 # argument parser. Direct-file vector rejection remains parent-controller work.
 if "$pinned_bash" -c 'source "$1"; main "$@"' _ "$supervisor" --session-id x --class base --preflight-fd 3 --ack-fd 4 --timeout-seconds 7200 -- /bin/true >/dev/null 2>&1; then
   echo 'changed source launcher unexpectedly accepted' >&2
