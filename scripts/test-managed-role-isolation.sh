@@ -111,7 +111,7 @@ cat >"$tmp/source/fixture-bin/taplo" <<'EOF'
 set -euo pipefail
 pattern=${!#}
 case $pattern in
-  ci_bootstrap.ci_role_evidence_schema_version) printf '15\n' ;;
+  ci_bootstrap.ci_role_evidence_schema_version) printf '16\n' ;;
   'ci_bootstrap.ticket_evidence_profiles."BURL-H001"."linux-x86_64"') printf '%s\n' '["common-functional"]' ;;
   'ci_bootstrap.ticket_evidence_profiles."BURL-M003"."linux-x86_64"') printf '%s\n' '["common-functional","managed-evidence-protocol","managed-evidence-security","managed-evidence-isolation","generated-binding-check","static-analysis","desktop-integration"]' ;;
   'ci_bootstrap.ticket_evidence_profiles."BURL-G011"."linux-x86_64"') printf '%s\n' '["common-functional","linux-platform-regression"]' ;;
@@ -122,13 +122,13 @@ case $pattern in
   ci_bootstrap.non_spike_source_write_allowlists.tickets.*) printf '%s\n' '["fixture/**"]' ;;
   'ci_bootstrap.non_spike_coordinators."BURL-O004".coordinator_artifact_status') printf '%s\n' '"future"' ;;
   'ci_bootstrap.non_spike_coordinators."BURL-O004".trust_anchor_rotation_required') printf '%s\n' true ;;
-  reference_profiles.github-ubuntu-24_04-x86_64)
+  reference_profiles.github-ubuntu-22_04-x86_64)
     case $(uname -m) in x86_64) observed_arch=x86_64;; arm64|aarch64) observed_arch=aarch64;; *) exit 64;; esac
     observed_cpus=$(getconf _NPROCESSORS_ONLN)
     observed_memory=$(awk '/MemTotal:/ {printf "%.0f", $2 * 1024}' /proc/meminfo)
     observed_storage=$(df -Pk . | awk 'NR==2 {printf "%.0f", $4 * 1024}')
     jq -cn --arg arch "$observed_arch" --argjson cpus "$observed_cpus" --argjson memory "$observed_memory" --argjson storage "$observed_storage" \
-      '{runner_label:"ubuntu-24.04",os:"linux",architecture:$arch,logical_cpu_count:$cpus,memory_bytes:$memory,storage_bytes:$storage,logical_viewport_width:1920,logical_viewport_height:1080,logical_viewport_refresh_hz:60}'
+      '{runner_label:"ubuntu-22.04",os:"linux",architecture:$arch,logical_cpu_count:$cpus,memory_bytes:$memory,storage_bytes:$storage,logical_viewport_width:1920,logical_viewport_height:1080,logical_viewport_refresh_hz:60}'
     ;;
   'spikes[*]') printf '%s\n' '[{"id":"SPK-BURL-H001","path":"fixture","write_allowlist":["fixture"],"create_commands":[{"workdir":".","command":"cargo init --bin fixture"}],"verification_steps":[{"run_role":"linux-fixture","workdir":"fixture","command":"cargo test --locked --manifest-path Cargo.toml --all-targets; flutter test ../integration_test/fixture_test.dart; mkdir -p artifacts; printf fixture > artifacts/fixture.txt; true --output artifacts/fixture.txt"}]}]' ;;
   *) printf 'unexpected taplo pattern: %s\n' "$pattern" >&2; exit 64 ;;
@@ -193,7 +193,7 @@ run_role_from() {
 run_role() { run_role_from "$root/scripts/run-managed-role.sh" "$@"; }
 
 cat >"$tmp/expected.json" <<'EOF'
-{"ticketIdentity":"BURL-H001","releaseIdentity":"fixture","trustAnchorSha":"1111111111111111111111111111111111111111","testedSourceSha":"2222222222222222222222222222222222222222","workflowSignerSha":"3333333333333333333333333333333333333333","workflowSignerRef":"refs/heads/master","baseSha":"4444444444444444444444444444444444444444","workflowEvent":"workflow_dispatch","evidenceReportCommitPolicy":"later-reviewed-evidence-pr-with-declared-evidence-only-diff","sourceWriteAllowlist":["fixture/**"],"buildIdentity":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","corpusIdentity":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","runIdentity":"managed:0123456789abcdef0123456789abcdef","artifactNonce":"0123456789abcdef0123456789abcdef","requiredRoleIdentities":["linux-x86_64","macos-26-arm64","macos-15-arm64"],"requiredRoleSigners":{"linux-x86_64":{"workflowPath":".github/workflows/ci-role-linux-x86-64.yml","jobWorkflowRef":"SkrOYC/burlmd/.github/workflows/ci-role-linux-x86-64.yml@refs/heads/master","jobWorkflowSha":"3333333333333333333333333333333333333333"},"macos-26-arm64":{"workflowPath":".github/workflows/ci-role-macos-26-arm64.yml","jobWorkflowRef":"SkrOYC/burlmd/.github/workflows/ci-role-macos-26-arm64.yml@refs/heads/master","jobWorkflowSha":"3333333333333333333333333333333333333333"},"macos-15-arm64":{"workflowPath":".github/workflows/ci-role-macos-15-arm64.yml","jobWorkflowRef":"SkrOYC/burlmd/.github/workflows/ci-role-macos-15-arm64.yml@refs/heads/master","jobWorkflowSha":"3333333333333333333333333333333333333333"}},"requiredRoleGuards":{"linux-x86_64":{"workflowPath":".github/workflows/ci-role-linux-x86-64.yml","runnerLabel":"ubuntu-24.04","candidateJobId":"candidate","sealingJobId":"seal","sealNeedsCandidate":true,"requiredCandidateStatus":"completed","requiredCandidateConclusion":"success"},"macos-26-arm64":{"workflowPath":".github/workflows/ci-role-macos-26-arm64.yml","runnerLabel":"macos-26","candidateJobId":"candidate","sealingJobId":"seal","sealNeedsCandidate":true,"requiredCandidateStatus":"completed","requiredCandidateConclusion":"success"},"macos-15-arm64":{"workflowPath":".github/workflows/ci-role-macos-15-arm64.yml","runnerLabel":"macos-15","candidateJobId":"candidate","sealingJobId":"seal","sealNeedsCandidate":true,"requiredCandidateStatus":"completed","requiredCandidateConclusion":"success"}},"requiredEvidenceClasses":{"linux-x86_64":["common-functional"],"macos-26-arm64":["common-functional"],"macos-15-arm64":["common-functional"]}}
+{"ticketIdentity":"BURL-H001","releaseIdentity":"fixture","trustAnchorSha":"1111111111111111111111111111111111111111","testedSourceSha":"2222222222222222222222222222222222222222","workflowSignerSha":"3333333333333333333333333333333333333333","workflowSignerRef":"refs/heads/master","baseSha":"4444444444444444444444444444444444444444","workflowEvent":"workflow_dispatch","evidenceReportCommitPolicy":"later-reviewed-evidence-pr-with-declared-evidence-only-diff","sourceWriteAllowlist":["fixture/**"],"buildIdentity":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","corpusIdentity":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","runIdentity":"managed:0123456789abcdef0123456789abcdef","artifactNonce":"0123456789abcdef0123456789abcdef","requiredRoleIdentities":["linux-x86_64","macos-26-arm64","macos-15-arm64"],"requiredRoleSigners":{"linux-x86_64":{"workflowPath":".github/workflows/ci-role-linux-x86-64.yml","jobWorkflowRef":"SkrOYC/burlmd/.github/workflows/ci-role-linux-x86-64.yml@refs/heads/master","jobWorkflowSha":"3333333333333333333333333333333333333333"},"macos-26-arm64":{"workflowPath":".github/workflows/ci-role-macos-26-arm64.yml","jobWorkflowRef":"SkrOYC/burlmd/.github/workflows/ci-role-macos-26-arm64.yml@refs/heads/master","jobWorkflowSha":"3333333333333333333333333333333333333333"},"macos-15-arm64":{"workflowPath":".github/workflows/ci-role-macos-15-arm64.yml","jobWorkflowRef":"SkrOYC/burlmd/.github/workflows/ci-role-macos-15-arm64.yml@refs/heads/master","jobWorkflowSha":"3333333333333333333333333333333333333333"}},"requiredRoleGuards":{"linux-x86_64":{"workflowPath":".github/workflows/ci-role-linux-x86-64.yml","runnerLabel":"ubuntu-22.04","candidateJobId":"candidate","sealingJobId":"seal","sealNeedsCandidate":true,"requiredCandidateStatus":"completed","requiredCandidateConclusion":"success"},"macos-26-arm64":{"workflowPath":".github/workflows/ci-role-macos-26-arm64.yml","runnerLabel":"macos-26","candidateJobId":"candidate","sealingJobId":"seal","sealNeedsCandidate":true,"requiredCandidateStatus":"completed","requiredCandidateConclusion":"success"},"macos-15-arm64":{"workflowPath":".github/workflows/ci-role-macos-15-arm64.yml","runnerLabel":"macos-15","candidateJobId":"candidate","sealingJobId":"seal","sealNeedsCandidate":true,"requiredCandidateStatus":"completed","requiredCandidateConclusion":"success"}},"requiredEvidenceClasses":{"linux-x86_64":["common-functional"],"macos-26-arm64":["common-functional"],"macos-15-arm64":["common-functional"]}}
 EOF
 fixture_source_sha=$(git -C "$tmp/source" rev-parse HEAD)
 fixture_signer_sha=$(git -C "$root" rev-parse HEAD)
@@ -299,7 +299,7 @@ set -e
   exit 1
 }
 jq -e --arg source "$fixture_source_sha" '
-  .schemaVersion == 15 and .expectedIdentity.testedSourceSha == $source and
+  .schemaVersion == 16 and .expectedIdentity.testedSourceSha == $source and
   .roleEvidence.environment.imageOS == "fixture-linux" and
   .roleEvidence.environment.imageVersion == "fixture-image" and
   (.roleEvidence.environment.osRelease | length > 0) and

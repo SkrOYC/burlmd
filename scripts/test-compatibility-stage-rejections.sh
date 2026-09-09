@@ -6,7 +6,7 @@ set -euo pipefail
 root=$(git rev-parse --show-toplevel)
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/burlmd-compatibility-stage.XXXXXX")
 trap '[[ ${BURLMD_KEEP_FIXTURE_TMP:-} == 1 ]] || rm -rf -- "$tmp"' EXIT HUP INT TERM
-jq -e '.properties.schemaVersion.const == 19 and (.properties.compatibilityStage.oneOf | length == 2)' "$root/.constitution/tech-spec/contracts/ci-evidence.schema.json" >/dev/null
+jq -e '.properties.schemaVersion.const == 20 and (.properties.compatibilityStage.oneOf | length == 2)' "$root/.constitution/tech-spec/contracts/ci-evidence.schema.json" >/dev/null
 
 collector_functions=$tmp/collector-functions.sh
 awk '/^is_operational_api_status\(\)/,/^}/' "$root/scripts/managed-evidence.sh" >"$collector_functions"

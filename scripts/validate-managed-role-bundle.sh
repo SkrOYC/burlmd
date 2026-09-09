@@ -149,7 +149,7 @@ validate_m003_closure_view() {
   # bubblewrap_process_environment is intentionally empty; its executable is
   # owned by the separate trusted-parent record rather than an environment.
   expected_header=(
-    'format=burlmd-linux-closure-view-v2' 'raw-contract-version=38'
+    'format=burlmd-linux-closure-view-v2' 'raw-contract-version=39'
     'bubblewrap-path=/nix/store/g7svy17fhkg2cq3q4lfzzc0mmsl3d8hq-bubblewrap-0.11.2/bin/bwrap'
     'bubblewrap-version=bubblewrap 0.11.2'
     'bubblewrap-sha256=c500b527e18f7e32634ac497b78a0150ceb31ae70fa8afef3fbbe79fd1d9f726'

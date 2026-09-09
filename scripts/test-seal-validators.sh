@@ -46,7 +46,7 @@ cat >"$tmp/bin/check-jsonschema" <<'EOF'
 set -euo pipefail
 [[ $1 == --schemafile && $2 == */.constitution/tech-spec/contracts/ci-role-evidence.schema.json && -f $2 && -f $3 ]] || exit 64
 jq -e '
-  .schemaVersion == 15
+  .schemaVersion == 16
   and (.expectedIdentity | type == "object")
   and (.roleEvidence | type == "object")
   and ((.roleEvidence | keys | sort) == ["capturedIdentity","compatibilityStage","environment","evidenceClasses","gates","internalArtifacts","role","toolchain","viewport"])
@@ -124,8 +124,8 @@ role=linux-x86_64
 role_schema_version=$(jq -er '.properties.schemaVersion.const | select(type == "number")' "$root/.constitution/tech-spec/contracts/ci-role-evidence.schema.json")
 expected="$tmp/expected-identity.json"
 jq -cn --arg sha "$sha" --arg nonce "$nonce" --arg role "$role" --arg hex "$hex" '
-  {ticketIdentity:"BURL-M003",releaseIdentity:"fixture",trustAnchorSha:$sha,testedSourceSha:$sha,workflowSignerSha:$sha,workflowSignerRef:"refs/heads/master",baseSha:$sha,workflowEvent:"workflow_dispatch",evidenceReportCommitPolicy:"later-reviewed-evidence-pr-with-declared-evidence-only-diff",sourceWriteAllowlist:["scripts/**"],buildIdentity:$hex,corpusIdentity:$hex,runIdentity:("managed:"+$nonce),artifactNonce:$nonce,requiredRoleIdentities:["linux-x86_64","macos-26-arm64","macos-15-arm64"],requiredRoleSigners:{"linux-x86_64":{workflowPath:".github/workflows/ci-role-linux-x86-64.yml",jobWorkflowRef:"SkrOYC/burlmd/.github/workflows/ci-role-linux-x86-64.yml@refs/heads/master",jobWorkflowSha:$sha},"macos-26-arm64":{workflowPath:".github/workflows/ci-role-macos-26-arm64.yml",jobWorkflowRef:"SkrOYC/burlmd/.github/workflows/ci-role-macos-26-arm64.yml@refs/heads/master",jobWorkflowSha:$sha},"macos-15-arm64":{workflowPath:".github/workflows/ci-role-macos-15-arm64.yml",jobWorkflowRef:"SkrOYC/burlmd/.github/workflows/ci-role-macos-15-arm64.yml@refs/heads/master",jobWorkflowSha:$sha}},requiredRoleGuards:{"linux-x86_64":{workflowPath:".github/workflows/ci-role-linux-x86-64.yml",runnerLabel:"ubuntu-24.04",candidateJobId:"candidate",sealingJobId:"seal",sealNeedsCandidate:true,requiredCandidateStatus:"completed",requiredCandidateConclusion:"success"},"macos-26-arm64":{workflowPath:".github/workflows/ci-role-macos-26-arm64.yml",runnerLabel:"macos-26",candidateJobId:"candidate",sealingJobId:"seal",sealNeedsCandidate:true,requiredCandidateStatus:"completed",requiredCandidateConclusion:"success"},"macos-15-arm64":{workflowPath:".github/workflows/ci-role-macos-15-arm64.yml",runnerLabel:"macos-15",candidateJobId:"candidate",sealingJobId:"seal",sealNeedsCandidate:true,requiredCandidateStatus:"completed",requiredCandidateConclusion:"success"}},requiredEvidenceClasses:{"linux-x86_64":["common-functional","managed-evidence-protocol","managed-evidence-security","managed-evidence-isolation","generated-binding-check","static-analysis","desktop-integration"],"macos-26-arm64":["common-functional","managed-evidence-protocol","managed-evidence-security","static-analysis","desktop-integration"],"macos-15-arm64":["common-functional","managed-evidence-protocol","managed-evidence-security","static-analysis","desktop-integration"]}}' >"$expected"
-m003_raw="$tmp/m003-raw38.json"
+  {ticketIdentity:"BURL-M003",releaseIdentity:"fixture",trustAnchorSha:$sha,testedSourceSha:$sha,workflowSignerSha:$sha,workflowSignerRef:"refs/heads/master",baseSha:$sha,workflowEvent:"workflow_dispatch",evidenceReportCommitPolicy:"later-reviewed-evidence-pr-with-declared-evidence-only-diff",sourceWriteAllowlist:["scripts/**"],buildIdentity:$hex,corpusIdentity:$hex,runIdentity:("managed:"+$nonce),artifactNonce:$nonce,requiredRoleIdentities:["linux-x86_64","macos-26-arm64","macos-15-arm64"],requiredRoleSigners:{"linux-x86_64":{workflowPath:".github/workflows/ci-role-linux-x86-64.yml",jobWorkflowRef:"SkrOYC/burlmd/.github/workflows/ci-role-linux-x86-64.yml@refs/heads/master",jobWorkflowSha:$sha},"macos-26-arm64":{workflowPath:".github/workflows/ci-role-macos-26-arm64.yml",jobWorkflowRef:"SkrOYC/burlmd/.github/workflows/ci-role-macos-26-arm64.yml@refs/heads/master",jobWorkflowSha:$sha},"macos-15-arm64":{workflowPath:".github/workflows/ci-role-macos-15-arm64.yml",jobWorkflowRef:"SkrOYC/burlmd/.github/workflows/ci-role-macos-15-arm64.yml@refs/heads/master",jobWorkflowSha:$sha}},requiredRoleGuards:{"linux-x86_64":{workflowPath:".github/workflows/ci-role-linux-x86-64.yml",runnerLabel:"ubuntu-22.04",candidateJobId:"candidate",sealingJobId:"seal",sealNeedsCandidate:true,requiredCandidateStatus:"completed",requiredCandidateConclusion:"success"},"macos-26-arm64":{workflowPath:".github/workflows/ci-role-macos-26-arm64.yml",runnerLabel:"macos-26",candidateJobId:"candidate",sealingJobId:"seal",sealNeedsCandidate:true,requiredCandidateStatus:"completed",requiredCandidateConclusion:"success"},"macos-15-arm64":{workflowPath:".github/workflows/ci-role-macos-15-arm64.yml",runnerLabel:"macos-15",candidateJobId:"candidate",sealingJobId:"seal",sealNeedsCandidate:true,requiredCandidateStatus:"completed",requiredCandidateConclusion:"success"}},requiredEvidenceClasses:{"linux-x86_64":["common-functional","managed-evidence-protocol","managed-evidence-security","managed-evidence-isolation","generated-binding-check","static-analysis","desktop-integration"],"macos-26-arm64":["common-functional","managed-evidence-protocol","managed-evidence-security","static-analysis","desktop-integration"],"macos-15-arm64":["common-functional","managed-evidence-protocol","managed-evidence-security","static-analysis","desktop-integration"]}}' >"$expected"
+m003_raw="$tmp/m003-current-contract.json"
 "$real_taplo" get --file-path "$root/.constitution/tech-spec/contracts/provisional-spikes.toml" --output-format json ci_bootstrap.linux_candidate_closure_view >"$m003_raw"
 source="$tmp/role-source"; mkdir -p "$source/results" "$source/logs"
 printf fixture >"$source/results/result.json"
@@ -136,7 +136,7 @@ jq -jr '.closure_view_log_golden_fixture' "$m003_raw" >"$source/logs/burl-m003-l
 closure_log_bytes=$(wc -c <"$source/logs/burl-m003-linux-closure-view.log")
 closure_log_sha=$(sha256sum "$source/logs/burl-m003-linux-closure-view.log" | awk '{print $1}')
 jq -cn --slurpfile expected "$expected" --arg expected_sha "$expected_sha" --arg role "$role" --arg result_sha "$result_sha" --argjson result_bytes "$result_bytes" --arg closure_log_sha "$closure_log_sha" --argjson closure_log_bytes "$closure_log_bytes" --argjson version "$role_schema_version" '
-  {schemaVersion:$version,expectedIdentity:$expected[0],expectedIdentitySha256:$expected_sha,roleEvidence:{role:$role,capturedIdentity:($expected[0] | {ticketIdentity,releaseIdentity,trustAnchorSha,testedSourceSha,workflowSignerSha,workflowSignerRef,baseSha,workflowEvent,sourceWriteAllowlist,buildIdentity,corpusIdentity,runIdentity,artifactNonce} + {roleIdentity:$role}),environment:{runnerLabel:"ubuntu-24.04",imageOS:"fixture-linux",imageVersion:"fixture-image",osRelease:"fixture-release",architecture:"x86_64",cpuModel:"fixture-cpu",logicalCpuCount:4,documentedMemoryBytes:16000000000,documentedStorageBytes:14000000000,observedMemoryBytes:16000000000,observedStorageAvailableBytes:14000000000,filesystem:"fixturefs"},viewport:{width:1920,height:1080,refreshHz:60,verified:false},evidenceClasses:$expected[0].requiredEvidenceClasses[$role],gates:($expected[0].requiredEvidenceClasses[$role] | map({(.):true}) | add),toolchain:{flutter:"fixture",dart:"fixture"},internalArtifacts:[{name:"results/result.json",bytes:$result_bytes,sha256:$result_sha},{name:"logs/burl-m003-linux-closure-view.log",bytes:$closure_log_bytes,sha256:$closure_log_sha}],compatibilityStage:null}}' >"$source/ci-role-evidence.json"
+  {schemaVersion:$version,expectedIdentity:$expected[0],expectedIdentitySha256:$expected_sha,roleEvidence:{role:$role,capturedIdentity:($expected[0] | {ticketIdentity,releaseIdentity,trustAnchorSha,testedSourceSha,workflowSignerSha,workflowSignerRef,baseSha,workflowEvent,sourceWriteAllowlist,buildIdentity,corpusIdentity,runIdentity,artifactNonce} + {roleIdentity:$role}),environment:{runnerLabel:"ubuntu-22.04",imageOS:"fixture-linux",imageVersion:"fixture-image",osRelease:"fixture-release",architecture:"x86_64",cpuModel:"fixture-cpu",logicalCpuCount:4,documentedMemoryBytes:16000000000,documentedStorageBytes:14000000000,observedMemoryBytes:16000000000,observedStorageAvailableBytes:14000000000,filesystem:"fixturefs"},viewport:{width:1920,height:1080,refreshHz:60,verified:false},evidenceClasses:$expected[0].requiredEvidenceClasses[$role],gates:($expected[0].requiredEvidenceClasses[$role] | map({(.):true}) | add),toolchain:{flutter:"fixture",dart:"fixture"},internalArtifacts:[{name:"results/result.json",bytes:$result_bytes,sha256:$result_sha},{name:"logs/burl-m003-linux-closure-view.log",bytes:$closure_log_bytes,sha256:$closure_log_sha}],compatibilityStage:null}}' >"$source/ci-role-evidence.json"
 archive() {
   local output=$1
   shift
@@ -173,7 +173,7 @@ validate_contract_ticket_bundle() {
   manifest="$ticket_root/ci-role-evidence.json"
   jq -cn --slurpfile identity "$ticket_expected" --arg digest "$ticket_sha" --arg role linux-x86_64 --argjson members "$members_json" --argjson version "$role_schema_version" '
     {schemaVersion:$version,expectedIdentity:$identity[0],expectedIdentitySha256:$digest,
-     roleEvidence:{role:$role,capturedIdentity:($identity[0] | {ticketIdentity,releaseIdentity,trustAnchorSha,testedSourceSha,workflowSignerSha,workflowSignerRef,baseSha,workflowEvent,sourceWriteAllowlist,buildIdentity,corpusIdentity,runIdentity,artifactNonce} + {roleIdentity:$role}),environment:{runnerLabel:"ubuntu-24.04",imageOS:"fixture-linux",imageVersion:"fixture-image",osRelease:"fixture-release",architecture:"x86_64",cpuModel:"fixture-cpu",logicalCpuCount:4,documentedMemoryBytes:16000000000,documentedStorageBytes:14000000000,observedMemoryBytes:16000000000,observedStorageAvailableBytes:14000000000,filesystem:"fixturefs"},viewport:{width:1920,height:1080,refreshHz:60,verified:true},evidenceClasses:$identity[0].requiredEvidenceClasses[$role],gates:($identity[0].requiredEvidenceClasses[$role] | map({(.):true}) | add),toolchain:{flutter:"fixture",dart:"fixture"},internalArtifacts:$members,compatibilityStage:null}}' >"$manifest"
+     roleEvidence:{role:$role,capturedIdentity:($identity[0] | {ticketIdentity,releaseIdentity,trustAnchorSha,testedSourceSha,workflowSignerSha,workflowSignerRef,baseSha,workflowEvent,sourceWriteAllowlist,buildIdentity,corpusIdentity,runIdentity,artifactNonce} + {roleIdentity:$role}),environment:{runnerLabel:"ubuntu-22.04",imageOS:"fixture-linux",imageVersion:"fixture-image",osRelease:"fixture-release",architecture:"x86_64",cpuModel:"fixture-cpu",logicalCpuCount:4,documentedMemoryBytes:16000000000,documentedStorageBytes:14000000000,observedMemoryBytes:16000000000,observedStorageAvailableBytes:14000000000,filesystem:"fixturefs"},viewport:{width:1920,height:1080,refreshHz:60,verified:true},evidenceClasses:$identity[0].requiredEvidenceClasses[$role],gates:($identity[0].requiredEvidenceClasses[$role] | map({(.):true}) | add),toolchain:{flutter:"fixture",dart:"fixture"},internalArtifacts:$members,compatibilityStage:null}}' >"$manifest"
   bundle="$tmp/contract-ticket-$ticket.tar.zst"
   (cd "$ticket_root" && tar --zstd --sort=name --mtime='@0' --owner=0 --group=0 --numeric-owner -cf "$bundle" ci-role-evidence.json "$@")
   "$root/scripts/validate-managed-role-bundle.sh" --expected "$ticket_expected" --role linux-x86_64 --nonce "$nonce" --bundle "$bundle"
@@ -187,17 +187,14 @@ assert_rejected() {
 }
 valid_bundle="$tmp/valid-role.tar.zst"
 archive "$valid_bundle" ci-role-evidence.json results/result.json logs/burl-m003-linux-closure-view.log
-assert_rejected reduced-raw38-golden "$valid_bundle"
+assert_rejected reduced-current-contract-golden "$valid_bundle"
 
-# The exact v38 golden is pinned as a byte sequence.  These mutations update
-# the manifest hash too, so rejection demonstrates fresh-seal parsing rather
-# than only the ordinary artifact-inventory check.
-golden_log="$tmp/raw38-golden.log"
-jq -jr '.closure_view_log_golden_fixture' "$m003_raw" >"$golden_log"
-cmp -s "$golden_log" "$source/logs/burl-m003-linux-closure-view.log"
-raw38_manifest="$tmp/raw38-original-manifest.json"
-cp "$source/ci-role-evidence.json" "$raw38_manifest"
-refresh_raw38_log_digests() {
+# The contract's compact serializer golden isn't a production fixture. Keep
+# its rejection separate from the accepted full-production mutation coverage.
+reduced_golden_log="$tmp/raw39-reduced-golden.log"
+jq -jr '.closure_view_log_golden_fixture' "$m003_raw" >"$reduced_golden_log"
+cmp -s "$reduced_golden_log" "$source/logs/burl-m003-linux-closure-view.log"
+refresh_current_contract_log_bindings() {
   local log=$1 base_count base_sha integration_count integration_sha authority_count authority_sha
   base_count=$(awk -F$'\t' '$1 == "base-source" { count++ } END { print count + 0 }' "$log")
   base_sha=$(awk -F$'\t' '$1 == "base-source" { print }' "$log" | sha256sum | awk '{print $1}')
@@ -218,30 +215,10 @@ refresh_raw38_log_digests() {
   ' "$log" >"$log.next"
   mv "$log.next" "$log"
 }
-assert_raw38_rejected() {
-  local name=$1 expression=$2 bundle bytes hash
-  sed "$expression" "$golden_log" >"$source/logs/burl-m003-linux-closure-view.log"
-  refresh_raw38_log_digests "$source/logs/burl-m003-linux-closure-view.log"
-  bytes=$(wc -c <"$source/logs/burl-m003-linux-closure-view.log")
-  hash=$(sha256sum "$source/logs/burl-m003-linux-closure-view.log" | awk '{print $1}')
-  jq --arg hash "$hash" --argjson bytes "$bytes" '.roleEvidence.internalArtifacts |= map(if .name == "logs/burl-m003-linux-closure-view.log" then .sha256 = $hash | .bytes = $bytes else . end)' "$raw38_manifest" >"$source/ci-role-evidence.json"
-  bundle="$tmp/raw38-$name.tar.zst"
-  archive "$bundle" ci-role-evidence.json results/result.json logs/burl-m003-linux-closure-view.log
-  assert_rejected "raw38-$name" "$bundle"
-  cp "$raw38_manifest" "$source/ci-role-evidence.json"
-}
-assert_raw38_rejected raw-version 's/^raw-contract-version=38$/raw-contract-version=37/'
-assert_raw38_rejected base-payload 's#coreutils-9\.7$#coreutils-9.8#'
-assert_raw38_rejected authority '0,/candidate-home/{s/candidate-home/candidate-home-mutated/}'
-assert_raw38_rejected source-membership '0,/base-source\t\/nix\/store\/11111111111111111111111111111111-coreutils-9\.7/{s/coreutils-9\.7/coreutils-9.8/}'
-assert_raw38_rejected capacity-floor 's/\t5000000000$/\t3999999999/'
-assert_raw38_rejected argv-digest '0,/2ee7de5e88503f504271834164eaea7b3686477955c8246293aa046aa17cfd31/{s/2ee7de5e88503f504271834164eaea7b3686477955c8246293aa046aa17cfd31/0000000000000000000000000000000000000000000000000000000000000000/}'
-assert_raw38_rejected session-loopback '0,/\ttrue\ttrue\tcompositor-not-applicable/{s/\ttrue\ttrue\tcompositor-not-applicable/\ttrue\tfalse\tcompositor-not-applicable/}'
-assert_raw38_rejected host-policy 's/\tnot-applied\t/\tapplied\t/'
-cp "$golden_log" "$source/logs/burl-m003-linux-closure-view.log"
+cp "$reduced_golden_log" "$source/logs/burl-m003-linux-closure-view.log"
 
 # This is deliberately distinct from the compact /work serializer golden above.
-# Build the exact raw-v38 production manifests through the locked Nix 2.35.2
+# Build the exact raw-39 production manifests through the locked Nix 2.35.2
 # query, then place their retained authorities below deterministic host-shaped
 # paths.  The fresh seal sees no test mode: it parses this ordinary role bundle
 # and reconstructs every actual full argv from the raw contract and log.
@@ -257,9 +234,9 @@ m003_build_full_manifests() {
   closure_tools=(bash sh mkdir mktemp chmod install cp mv rm cmp awk sed grep rg sort sha256sum wc find tar zstd flock getconf df ps sleep setsid perl readlink uname tr head env flutter dart flutter_rust_bridge_codegen cargo cargo-expand rustc rustup cmake ninja pkg-config clang openssl jq ip)
   closure_roots=()
   for tool in "${closure_tools[@]}"; do
-    # Current devenv can expose a newer Procps while raw-v38's production
-    # closure deliberately pins 4.0.6. The exact queried root is the contract,
-    # never a test-only count override.
+    # The devenv environment can expose a later Procps version. Raw 39 pins
+    # production to 4.0.6. The queried root is contract authority, not a
+    # test-only count override.
     if [[ $tool == ps ]]; then
       tool_path=/nix/store/ly5j6qg2q3vn899jd9dz0hx11gvjh9f1-procps-4.0.6/bin/ps
     else
@@ -449,7 +426,7 @@ m003_write_production_log() {
   m003_authority_sha=$(sha256sum "$m003_authorities" | awk '{print $1}')
   {
     printf '%s\n' \
-      'format=burlmd-linux-closure-view-v2' 'raw-contract-version=38' \
+      'format=burlmd-linux-closure-view-v2' 'raw-contract-version=39' \
       'bubblewrap-path=/nix/store/g7svy17fhkg2cq3q4lfzzc0mmsl3d8hq-bubblewrap-0.11.2/bin/bwrap' \
       'bubblewrap-version=bubblewrap 0.11.2' \
       'bubblewrap-sha256=c500b527e18f7e32634ac497b78a0150ceb31ae70fa8afef3fbbe79fd1d9f726' \
@@ -492,7 +469,7 @@ m003_write_production_log() {
     printf 'session-capacity-filesystem\t%s\t%s\t2049\t5000000000\n' "$ordinal" "$session_id" >>"$log"
   done
   {
-    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' host-policy ubuntu-24.04-fixture 6.8.0-fixture not-present success not-applied not-applicable not-applicable not-applicable
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' host-policy ubuntu-22.04-fixture 6.8.0-fixture not-present success not-applied not-applicable not-applicable not-applicable
     printf '%s\n' 'base-manifest-payload:'
     cat "$m003_base_manifest"
     printf '%s\n' 'integration-manifest-payload:'
@@ -516,7 +493,7 @@ m003_production_log_sha=$(sha256sum "$m003_production_log" | awk '{print $1}')
 m003_production_log_bytes=$(wc -c <"$m003_production_log")
 jq -cn --slurpfile identity "$expected" --arg digest "$expected_sha" --arg role "$role" --arg result_sha "$m003_production_result_sha" --argjson result_bytes "$m003_production_result_bytes" --arg log_sha "$m003_production_log_sha" --argjson log_bytes "$m003_production_log_bytes" --argjson version "$role_schema_version" '
   {schemaVersion:$version,expectedIdentity:$identity[0],expectedIdentitySha256:$digest,
-   roleEvidence:{role:$role,capturedIdentity:($identity[0] | {ticketIdentity,releaseIdentity,trustAnchorSha,testedSourceSha,workflowSignerSha,workflowSignerRef,baseSha,workflowEvent,sourceWriteAllowlist,buildIdentity,corpusIdentity,runIdentity,artifactNonce} + {roleIdentity:$role}),environment:{runnerLabel:"ubuntu-24.04",imageOS:"fixture-linux",imageVersion:"fixture-image",osRelease:"fixture-release",architecture:"x86_64",cpuModel:"fixture-cpu",logicalCpuCount:4,documentedMemoryBytes:16000000000,documentedStorageBytes:14000000000,observedMemoryBytes:16000000000,observedStorageAvailableBytes:14000000000,filesystem:"fixturefs"},viewport:{width:1920,height:1080,refreshHz:60,verified:false},evidenceClasses:$identity[0].requiredEvidenceClasses[$role],gates:($identity[0].requiredEvidenceClasses[$role] | map({(.):true}) | add),toolchain:{flutter:"fixture",dart:"fixture"},internalArtifacts:[{name:"results/result.json",bytes:$result_bytes,sha256:$result_sha},{name:"logs/burl-m003-linux-closure-view.log",bytes:$log_bytes,sha256:$log_sha}],compatibilityStage:null}}' >"$m003_production_source/ci-role-evidence.json"
+   roleEvidence:{role:$role,capturedIdentity:($identity[0] | {ticketIdentity,releaseIdentity,trustAnchorSha,testedSourceSha,workflowSignerSha,workflowSignerRef,baseSha,workflowEvent,sourceWriteAllowlist,buildIdentity,corpusIdentity,runIdentity,artifactNonce} + {roleIdentity:$role}),environment:{runnerLabel:"ubuntu-22.04",imageOS:"fixture-linux",imageVersion:"fixture-image",osRelease:"fixture-release",architecture:"x86_64",cpuModel:"fixture-cpu",logicalCpuCount:4,documentedMemoryBytes:16000000000,documentedStorageBytes:14000000000,observedMemoryBytes:16000000000,observedStorageAvailableBytes:14000000000,filesystem:"fixturefs"},viewport:{width:1920,height:1080,refreshHz:60,verified:false},evidenceClasses:$identity[0].requiredEvidenceClasses[$role],gates:($identity[0].requiredEvidenceClasses[$role] | map({(.):true}) | add),toolchain:{flutter:"fixture",dart:"fixture"},internalArtifacts:[{name:"results/result.json",bytes:$result_bytes,sha256:$result_sha},{name:"logs/burl-m003-linux-closure-view.log",bytes:$log_bytes,sha256:$log_sha}],compatibilityStage:null}}' >"$m003_production_source/ci-role-evidence.json"
 m003_production_bundle="$tmp/m003-production-role.tar.zst"
 (cd "$m003_production_source" && tar --zstd --sort=name --mtime='@0' --owner=0 --group=0 --numeric-owner -cf "$m003_production_bundle" ci-role-evidence.json results/result.json logs/burl-m003-linux-closure-view.log)
 # This acceptance is intentionally after the separate reduced-golden rejection:
@@ -530,12 +507,26 @@ m003_refresh_manifest() {
   mv "$tmp/m003-production-manifest.next" "$m003_production_source/ci-role-evidence.json"
 }
 m003_assert_rejected() {
-  local name=$1 expression=$2 log bundle mutated
+  local name=$1 expression=$2 log bundle mutated restored
   log=$m003_production_source/logs/burl-m003-linux-closure-view.log
   mutated="$tmp/m003-production-$name.log"
   sed "$expression" "$m003_production_golden_log" >"$mutated"
+  if cmp -s "$m003_production_golden_log" "$mutated"; then
+    echo "production closure mutation didn't change bytes: $name" >&2
+    exit 1
+  fi
+  if [[ $name == raw-version-38 ]]; then
+    [[ $(rg -c '^raw-contract-version=39$' "$m003_production_golden_log") == 1 ]]
+    [[ $(rg -c '^raw-contract-version=38$' "$mutated") == 1 ]]
+    restored="$tmp/m003-production-$name-restored.log"
+    sed 's/^raw-contract-version=38$/raw-contract-version=39/' "$mutated" >"$restored"
+    cmp -s "$m003_production_golden_log" "$restored" || {
+      echo 'the raw-version negative changed more than the targeted version bytes' >&2
+      exit 1
+    }
+  fi
   cp "$mutated" "$log"
-  refresh_raw38_log_digests "$log"
+  refresh_current_contract_log_bindings "$log"
   m003_refresh_manifest "$log"
   bundle="$tmp/m003-production-$name.tar.zst"
   (cd "$m003_production_source" && tar --zstd --sort=name --mtime='@0' --owner=0 --group=0 --numeric-owner -cf "$bundle" ci-role-evidence.json results/result.json logs/burl-m003-linux-closure-view.log)
@@ -546,7 +537,12 @@ m003_assert_rejected() {
   cp "$m003_production_golden_log" "$log"
   m003_refresh_manifest "$log"
 }
+m003_assert_rejected raw-version-38 's/^raw-contract-version=39$/raw-contract-version=38/'
+# Recheck the unchanged production archive after the isolated version failure.
+validate_role_bundle "$m003_production_bundle"
+m003_assert_rejected base-payload '0,/^\/nix\/store\/sr26flm2nkfa12dkrwj2630kqsfakky4-coreutils-9\.11$/{s//\/nix\/store\/sr26flm2nkfa12dkrwj2630kqsfakky4-coreutils-9.11-mutated/}'
 m003_assert_rejected source-class '0,/^base-source\t/{s/^base-source\t/integration-source\t/}'
+m003_assert_rejected source-membership '0,/^base-source\t\/nix\/store\/sr26flm2nkfa12dkrwj2630kqsfakky4-coreutils-9\.11\t/{s/coreutils-9\.11/coreutils-9.11-mutated/}'
 m003_assert_rejected argv-digest '0,/^session\t1\t/{s/\t[0-9a-f]\{64\}\t488\t0\t0/\t0000000000000000000000000000000000000000000000000000000000000000\t488\t0\t0/}'
 m003_assert_rejected capacity-floor 's/\t5000000000$/\t3999999999/'
 m003_assert_rejected capacity-device '0,/^session-capacity-root\t1\tgenerated-bindings\tcandidate-home\t/{s/\t2049$/\t2050/}'

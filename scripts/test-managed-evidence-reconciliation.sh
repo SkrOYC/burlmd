@@ -14,11 +14,17 @@ functions=$tmp/reconciliation-functions.sh
   awk '/^role_label\(\)/ { print; exit }' "$root/scripts/managed-evidence.sh"
   awk '/^spike_id_for_ticket\(\)/ {copy=1} /^spike_field\(\)/ {copy=0} copy {print}' "$root/scripts/managed-evidence.sh"
   awk '/^spike_commands\(\)/ {copy=1} /^validate_spike_result\(\)/ {copy=0} copy {print}' "$root/scripts/managed-evidence.sh"
+  awk '/^validate_spike_result\(\)/,/^rfc3339_calendar_valid\(\)/ { if ($0 !~ /^rfc3339_calendar_valid\(\)/) print }' "$root/scripts/managed-evidence.sh"
+  awk '/^validate_schema\(\)/,/^derive_receipt_digest_transport_schema\(\)/ { if ($0 !~ /^derive_receipt_digest_transport_schema\(\)/) print }' "$root/scripts/managed-evidence.sh"
   awk '/^rfc3339_calendar_valid\(\)/ {copy=1} /^run_spike_coordinator\(\)/ {copy=0} copy {print}' "$root/scripts/managed-evidence.sh"
 } >"$functions"
 source "$functions"
 
 CONTRACT=$root/.constitution/tech-spec/contracts/provisional-spikes.toml
+RESULT_SCHEMA=$root/.constitution/tech-spec/contracts/spike-result.schema.json
+RESULT_SCHEMA_VERSION=$(jq -er '.properties.schemaVersion.const | select(type == "number")' "$RESULT_SCHEMA")
+CONTRACT_RESULT_SCHEMA_VERSION=$(awk -F ' = ' '$1 == "result_schema_version" {print $2; exit}' "$CONTRACT")
+[[ $RESULT_SCHEMA_VERSION == 21 && $CONTRACT_RESULT_SCHEMA_VERSION == "$RESULT_SCHEMA_VERSION" ]]
 tested=0123456789012345678901234567890123456789
 hex=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
@@ -62,18 +68,18 @@ make_result() {
   candidates=$(spike_toml_list "$spike_id" candidates)
   gates=$(spike_toml_list "$spike_id" required_gates)
   result=$tmp/$ticket-results.json
-  jq -cn --arg spike "$spike_id" --arg tested "$tested" --arg hash "$hex" --argjson required_roles "$required_roles" --argjson candidates "$candidates" --argjson gates "$gates" --slurpfile expected "$expected" --argjson manifests "$roles" '
+  jq -cn --arg spike "$spike_id" --arg tested "$tested" --arg hash "$hex" --argjson schema_version "$RESULT_SCHEMA_VERSION" --argjson required_roles "$required_roles" --argjson candidates "$candidates" --argjson gates "$gates" --slurpfile expected "$expected" --argjson manifests "$roles" '
     def authenticated_role($role):
       if $role == "linux-x86_64" or ($role | startswith("linux-")) then "linux-x86_64"
       elif $role == "macos-26-arm64" or ($role | startswith("macos-26-")) or ($role | startswith("macos-current-")) or ($role | startswith("macos-repeat-")) or ($role | startswith("macos-default-")) then "macos-26-arm64"
       else "macos-15-arm64" end;
     def runner_label($role):
-      if $role == "linux-x86_64" then "ubuntu-24.04"
+      if $role == "linux-x86_64" then "ubuntu-22.04"
       elif $role == "macos-26-arm64" then "macos-26"
       else "macos-15" end;
     def image($role): $manifests[] | select(.manifest.roleEvidence.role == $role) | .manifest.roleEvidence.environment;
     {
-      schemaVersion: 20,
+      schemaVersion: $schema_version,
       spikeId: $spike,
       generatedAt: "2026-09-01T00:00:00Z",
       corpus: ["fixture"],
@@ -85,10 +91,11 @@ make_result() {
         | .value as $result_role
         | authenticated_role($result_role) as $role
         | image($role) as $image
+        | $expected[0].requiredEvidenceClasses[$role] as $classes
         | {
             id: ("fixture-run-" + ($index | tostring)),
             role: $result_role,
-            claimedEvidenceClasses: $expected[0].requiredEvidenceClasses[$role],
+            claimedEvidenceClasses: $classes,
             inputContext: {
               repositoryRevision: $tested,
               repositoryTreeSha256: $hash,
@@ -99,7 +106,27 @@ make_result() {
               probeBinarySha256: $hash,
               corpusManifestSha256: $hash
             },
-            host: {profile: {runnerLabel: runner_label($role), imageOS: $image.imageOS, imageVersion: $image.imageVersion}},
+            host: {
+              hostFingerprint: $hash,
+              os: "fixture-os",
+              osVersion: "fixture-os-version",
+              architecture: "fixture-architecture",
+              filesystem: "fixture-filesystem",
+              profile: {
+                runnerLabel: runner_label($role),
+                imageOS: $image.imageOS,
+                imageVersion: $image.imageVersion,
+                cpuModel: "fixture-cpu",
+                logicalCpuCount: 4,
+                memoryBytes: 16000000000,
+                storageBytes: 14000000000,
+                logicalViewportWidth: 1920,
+                logicalViewportHeight: 1080,
+                logicalViewportRefreshHz: 60,
+                logicalViewportVerified: ($classes | any(. == "performance" or . == "linux-platform-regression" or . == "macos-authoritative-visual")),
+                capabilities: ["common-functional"]
+              }
+            },
             toolchain: {fixture: "1"},
             commandResults: [{command: "fixture", exitCode: 0, stdout: "", stderr: ""}],
             measurements: [{candidate: "fixture", name: "fixture", value: 1, unit: "count", samples: 1}],
@@ -110,6 +137,10 @@ make_result() {
       unresolved: []
     }
   ' >"$result"
+  validate_spike_result "$result" "$spike_id" || {
+    printf 'generated fixture does not satisfy Spike-result schema version %s: %s\n' "$RESULT_SCHEMA_VERSION" "$ticket" >&2
+    exit 1
+  }
 }
 
 assert_accepted() {
@@ -160,6 +191,18 @@ for ticket in BURL-H001 BURL-H002 BURL-I001 BURL-L001 BURL-O001; do
     assert_accepted "$bad_image"
   fi
 done
+
+# The production schema validator rejects the preceding Spike-result version.
+ticket=BURL-H001
+make_expected "$ticket"
+make_roles
+make_result "$ticket"
+preceding_version_result=$tmp/preceding-version-result.json
+jq '.schemaVersion = 20' "$result" >"$preceding_version_result"
+if validate_spike_result "$preceding_version_result" "$spike_id" >/dev/null 2>&1; then
+  echo 'the Spike-result validator accepted schema version 20' >&2
+  exit 1
+fi
 
 # Exercise both captured image fields on a performance aggregation.
 ticket=BURL-H001

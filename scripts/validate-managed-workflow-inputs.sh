@@ -78,7 +78,7 @@ role_guard_for() {
   candidate_block=$(sed -n '/^  candidate:/,/^  seal:/p' "$workflow") || return 1
   seal_block=$(sed -n '/^  seal:/,$p' "$workflow") || return 1
   label=$(awk '/^[[:space:]]*runs-on:[[:space:]]*/ {sub(/^[^:]*:[[:space:]]*/, ""); sub(/[[:space:]]+#.*/, ""); print; exit}' <<<"$candidate_block")
-  [[ $label =~ ^(ubuntu-24\.04|macos-26|macos-15)$ ]] || return 1
+  [[ $label =~ ^(ubuntu-22\.04|macos-26|macos-15)$ ]] || return 1
   rg -qx '    needs: candidate' <<<"$seal_block" || return 1
   jq -cn --arg path "$path" --arg label "$label" '{workflowPath:$path,runnerLabel:$label,candidateJobId:"candidate",sealingJobId:"seal",sealNeedsCandidate:true,requiredCandidateStatus:"completed",requiredCandidateConclusion:"success"}'
 }

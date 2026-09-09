@@ -10,6 +10,11 @@ readonly API_TRANSIENT=75
 readonly API_PERMISSION=76
 readonly API_FAILURE=77
 readonly POLL_TRANSIENT_RETRIES=5
+# PR #37's independently reviewed post-merge closure records this exact final
+# documentation tip as the only base authorized for the first raw-39 recovery.
+# A later same-contract correction rotates this private pin, in that correction's
+# reviewed implementation commit, to the independently verified prior anchor.
+readonly BURL_M003_REVIEWED_BASE_SHA=f0e2e432b5b8d975f261923849d4309b39f94a9d
 die() { printf 'managed-evidence: %s\n' "$*" >&2; exit 2; }
 sha256_file() { sha256sum "$1" | awk '{print $1}'; }
 
@@ -159,7 +164,7 @@ non_spike_allowlist() {
 }
 is_spike_ticket() { [[ -n $(spike_for "$1") ]]; }
 workflow_path() { case "$1" in linux-x86_64) printf .github/workflows/ci-role-linux-x86-64.yml;; macos-26-arm64) printf .github/workflows/ci-role-macos-26-arm64.yml;; macos-15-arm64) printf .github/workflows/ci-role-macos-15-arm64.yml;; esac; }
-role_label() { case "$1" in linux-x86_64) printf ubuntu-24.04;; macos-26-arm64) printf macos-26;; macos-15-arm64) printf macos-15;; esac; }
+role_label() { case "$1" in linux-x86_64) printf ubuntu-22.04;; macos-26-arm64) printf macos-26;; macos-15-arm64) printf macos-15;; esac; }
 spike_for() { case "$1" in BURL-H001) printf BURL-H001;; BURL-H002) printf BURL-H002;; BURL-I001) printf BURL-I001;; BURL-L001) printf BURL-L001;; BURL-O001) printf BURL-O001;; esac; }
 declared_report_path() {
   if [[ $ticket == BURL-M003 ]]; then printf '.constitution/evidence/BURL-M003/managed-evidence.json'; return; fi
@@ -279,11 +284,17 @@ source_guard() {
 }
 burl_m003_identity_guard() {
   # The bootstrap may authenticate only the reviewed BURL-M003 range.  Its
-  # base is not an arbitrary ancestor: it is the reviewed BURL-M015 tip that
-  # immediately precedes the final trust anchor.
+  # base is not an arbitrary ancestor: it is the replacement anchor's sole
+  # first parent, followed by exactly one reviewed implementation commit.
   [[ $anchor == "$tested" && $anchor == "$workflow_signer" ]] || return 1
+  [[ $base == "$BURL_M003_REVIEWED_BASE_SHA" ]] || return 1
   [[ $(git -C "$anchor_root" rev-parse "$anchor^{commit}") == "$anchor" ]] || return 1
   [[ $(git -C "$anchor_root" rev-parse "$anchor^") == "$base" ]] || return 1
+  ! git -C "$anchor_root" rev-parse --verify --quiet "$anchor^2" >/dev/null || return 1
+  [[ $(git -C "$anchor_root" rev-list --ancestry-path "$base..$anchor" | wc -l | tr -d ' ') == 1 ]] || return 1
+  git -C "$anchor_root" merge-base --is-ancestor 6d30b7445b0108a6a5dd963cd2aa2ae5f5090485 "$anchor" || return 1
+  git -C "$anchor_root" merge-base --is-ancestor f72659cef4487317c9e984e01f775a358f814a41 "$anchor" || return 1
+  [[ $(git -C "$anchor_root" rev-parse f72659cef4487317c9e984e01f775a358f814a41^) == 6d30b7445b0108a6a5dd963cd2aa2ae5f5090485 ]]
 }
 completion_field() {
   local record=$1 name=$2
@@ -703,7 +714,7 @@ validate_spike_result() {
     def classes: type == "array" and length > 0 and (unique | length) == length and all(.[]; evidence_class);
     def profile:
       exact_keys(["runnerLabel", "imageOS", "imageVersion", "cpuModel", "logicalCpuCount", "memoryBytes", "storageBytes", "logicalViewportWidth", "logicalViewportHeight", "logicalViewportRefreshHz", "logicalViewportVerified", "capabilities"])
-      and (.runnerLabel == "ubuntu-24.04" or .runnerLabel == "macos-26" or .runnerLabel == "macos-15")
+      and (.runnerLabel == "ubuntu-22.04" or .runnerLabel == "macos-26" or .runnerLabel == "macos-15")
       and (.imageOS, .imageVersion, .cpuModel | nonempty_string)
       and (.logicalCpuCount, .memoryBytes, .storageBytes | type == "number" and floor == . and . >= 1)
       and .logicalViewportWidth == 1920 and .logicalViewportHeight == 1080 and .logicalViewportRefreshHz == 60
@@ -960,14 +971,67 @@ workflow_run_is_fresh_dispatch() {
   ' <<<"$response" >/dev/null
 }
 
+managed_observation_now_microseconds() {
+  # Pinned Bash 5.3 obtains this value from the system monotonic clock on the
+  # Linux collector. Do not fall back to a wall clock: an unavailable or
+  # malformed required monotonic reading fails the observation closed.
+  local epoch_before=${EPOCHSECONDS-} seconds=${BASH_MONOSECONDS-} epoch_after=${EPOCHSECONDS-}
+  [[ $seconds =~ ^[0-9]+$ && ${#seconds} -le 12 ]] || return 1
+  [[ $epoch_before =~ ^[0-9]+$ && $epoch_after =~ ^[0-9]+$ ]] || return 1
+  # Bash documents EPOCHSECONDS as its fallback when the system has no
+  # monotonic clock. Reject that fallback before constructing the deadline.
+  [[ $seconds != "$epoch_before" && $seconds != "$epoch_after" ]] || return 1
+  printf '%s\n' "$((10#$seconds * 1000000))"
+}
+
+managed_observation_duration() {
+  local microseconds=$1
+  # The transfer timeout in curl is millisecond-based. Reject a smaller remainder
+  # instead of risking conversion to its unlimited zero value.
+  ((microseconds >= 1000)) || return 1
+  printf '%d.%06d' "$((microseconds / 1000000))" "$((microseconds % 1000000))"
+}
+
+managed_observation_advance() {
+  local observed
+  observed=$(managed_observation_now_microseconds) || return 1
+  [[ $observed =~ ^[0-9]+$ ]] || return 1
+  # Equal readings are normal at the one-second resolution of BASH_MONOSECONDS.
+  # A backwards reading is not normal and fails closed.
+  ((observed >= observation_last)) || return 1
+  observation_last=$observed
+  now=$observed
+}
+
 wait_for_run() {
-  local started=$SECONDS response status conclusion failures=0 result
-  while ((SECONDS - started < 7200)); do
-    if response=$(api "$API_BASE/repos/$REPOSITORY/actions/runs/$run_id"); then result=0; else result=$?; fi
+  local started deadline now observation_last remaining request_timeout sleep_budget sleep_duration
+  local observation_budget=21600000000 observation_resolution=1000000
+  local response status conclusion failures=0 result
+  started=$(managed_observation_now_microseconds) || return "$API_FAILURE"
+  observation_last=$started
+  # BASH_MONOSECONDS advances in integral seconds. Reserve one full clock tick
+  # so a reading equal to the computed deadline cannot represent a real time
+  # up to almost one second beyond the contract's 21,600-second maximum.
+  deadline=$((started + observation_budget - observation_resolution))
+  while :; do
+    managed_observation_advance || return "$API_FAILURE"
+    remaining=$((deadline - now))
+    ((remaining > 0)) || return 4
+    request_timeout=$(managed_observation_duration "$remaining") || return 4
+    if response=$(api --max-time "$request_timeout" "$API_BASE/repos/$REPOSITORY/actions/runs/$run_id"); then result=0; else result=$?; fi
+    managed_observation_advance || return "$API_FAILURE"
+    ((now <= deadline)) || return 4
     if ((result != 0)); then
       if ((result == API_TRANSIENT && failures < POLL_TRANSIENT_RETRIES)); then
         failures=$((failures + 1))
-        sleep "$failures"
+        managed_observation_advance || return "$API_FAILURE"
+        ((now <= deadline)) || return 4
+        remaining=$((deadline - now))
+        ((remaining > 0)) || return 4
+        sleep_budget=$((failures * 1000000))
+        ((sleep_budget <= remaining)) || sleep_budget=$remaining
+        sleep_duration=$(managed_observation_duration "$sleep_budget") || return 4
+        sleep "$sleep_duration"
         continue
       fi
       return "$result"
@@ -976,10 +1040,19 @@ wait_for_run() {
     status=$(jq -r '.status // empty' <<<"$response") || return "$API_FAILURE"
     conclusion=$(jq -r '.conclusion // empty' <<<"$response") || return "$API_FAILURE"
     workflow_run_is_fresh_dispatch "$response" || return 2
+    # JSON parsing and identity validation consume the same observation budget.
+    # Refresh at the decision boundary so neither a terminal success nor the
+    # next poll sleep uses the stale post-transfer remainder.
+    managed_observation_advance || return "$API_FAILURE"
+    ((now <= deadline)) || return 4
     [[ $status == completed ]] && { [[ $conclusion == success ]] && return 0 || return 3; }
-    sleep 5
+    remaining=$((deadline - now))
+    ((remaining > 0)) || return 4
+    sleep_budget=5000000
+    ((sleep_budget <= remaining)) || sleep_budget=$remaining
+    sleep_duration=$(managed_observation_duration "$sleep_budget") || return 4
+    sleep "$sleep_duration"
   done
-  return 4
 }
 
 filesystem_evidence_verified() {
@@ -1200,7 +1273,7 @@ role_guard_for() {
   candidate_block=$(sed -n '/^  candidate:/,/^  seal:/p' "$workflow") || return 1
   seal_block=$(sed -n '/^  seal:/,$p' "$workflow") || return 1
   label=$(awk '/^[[:space:]]*runs-on:[[:space:]]*/ {sub(/^[^:]*:[[:space:]]*/, ""); sub(/[[:space:]]+#.*/, ""); print; exit}' <<<"$candidate_block")
-  [[ $label =~ ^(ubuntu-24\.04|macos-26|macos-15)$ ]] || return 1
+  [[ $label =~ ^(ubuntu-22\.04|macos-26|macos-15)$ ]] || return 1
   needs_candidate=false
   rg -qx '    needs: candidate' <<<"$seal_block" && needs_candidate=true
   jq -cn --arg path "$path" --arg label "$label" --argjson needs_candidate "$needs_candidate" '{workflowPath:$path,runnerLabel:$label,candidateJobId:"candidate",sealingJobId:"seal",sealNeedsCandidate:$needs_candidate,requiredCandidateStatus:"completed",requiredCandidateConclusion:"success"}'
@@ -1747,7 +1820,7 @@ case "$outcome" in
   0) ;;
   2) rejected untrusted-origin 'workflow API run attempt did not match'; exit 1;;
   3) rejected sealing-job-failed 'workflow attempt completed unsuccessfully'; exit 1;;
-  4) rejected sealing-job-in-progress 'workflow attempt exceeded 7200 seconds'; exit 1;;
+  4) rejected sealing-job-in-progress 'workflow attempt exceeded 21600 seconds'; exit 1;;
   *) operational_api_failure "$outcome" 'workflow run polling' || die 'workflow run polling failed operationally';;
 esac
 

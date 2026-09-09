@@ -160,20 +160,20 @@ chmod +x "$receipt_fixture_root/launcher/validate-sealing-receipt.sh"
   inventory=$receipt_fixture_root/inventory.json; jobs=$receipt_fixture_root/jobs.json
   printf '%s\n' '{"artifacts":[]}' >"$inventory"
   expected=$receipt_fixture_root/expected.json
-  jq -cn '{requiredRoleGuards:{"linux-x86_64":{runnerLabel:"ubuntu-24.04"},"macos-26-arm64":{runnerLabel:"macos-26"},"macos-15-arm64":{runnerLabel:"macos-15"}}}' >"$expected"
+  jq -cn '{requiredRoleGuards:{"linux-x86_64":{runnerLabel:"ubuntu-22.04"},"macos-26-arm64":{runnerLabel:"macos-26"},"macos-15-arm64":{runnerLabel:"macos-15"}}}' >"$expected"
   seal_jobs() {
     case ${fixture_seal:-valid} in
       missing) printf '%s\n' '{"jobs":[]}' ;;
-      duplicate) jq -cn '[range(2) | {id:(. + 2),name:"seal",labels:["ubuntu-24.04"],run_id:1,status:"completed",conclusion:"success",check_run_url:("https://api.github.com/check-runs/" + ((. + 2) | tostring))}] | {jobs:.}' ;;
+      duplicate) jq -cn '[range(2) | {id:(. + 2),name:"seal",labels:["ubuntu-22.04"],run_id:1,status:"completed",conclusion:"success",check_run_url:("https://api.github.com/check-runs/" + ((. + 2) | tostring))}] | {jobs:.}' ;;
       wrong-label) jq -cn '{jobs:[{id:2,name:"seal",labels:["macos-26"],run_id:1,status:"completed",conclusion:"success",check_run_url:"https://api.github.com/check-runs/2"}]}' ;;
-      self-hosted) jq -cn '{jobs:[{id:2,name:"seal",labels:["ubuntu-24.04","self-hosted"],run_id:1,status:"completed",conclusion:"success",check_run_url:"https://api.github.com/check-runs/2"}]}' ;;
-      in-progress) jq -cn '{jobs:[{id:2,name:"seal",labels:["ubuntu-24.04"],run_id:1,status:"in_progress",conclusion:null,check_run_url:"https://api.github.com/check-runs/2"}]}' ;;
-      failed) jq -cn '{jobs:[{id:2,name:"seal",labels:["ubuntu-24.04"],run_id:1,status:"completed",conclusion:"failure",check_run_url:"https://api.github.com/check-runs/2"}]}' ;;
-      wrong-run) jq -cn '{jobs:[{id:2,name:"seal",labels:["ubuntu-24.04"],run_id:99,status:"completed",conclusion:"success",check_run_url:"https://api.github.com/check-runs/2"}]}' ;;
-      bad-check-locator) jq -cn '{jobs:[{id:2,name:"seal",labels:["ubuntu-24.04"],run_id:1,status:"completed",conclusion:"success",check_run_url:"https://api.github.com/check-runs/invalid"}]}' ;;
-      bad-job-id) jq -cn '{jobs:[{id:0,name:"seal",labels:["ubuntu-24.04"],run_id:1,status:"completed",conclusion:"success",check_run_url:"https://api.github.com/check-runs/2"}]}' ;;
-      multi-role) jq -cn '{jobs:[{id:2,name:"linux / seal",labels:["ubuntu-24.04"],run_id:1,status:"completed",conclusion:"success",check_run_url:"https://api.github.com/check-runs/2"},{id:12,name:"macos_26 / seal",labels:["macos-26"],run_id:1,status:"completed",conclusion:"success",check_run_url:"https://api.github.com/check-runs/12"},{id:22,name:"macos_15 / seal",labels:["macos-15"],run_id:1,status:"completed",conclusion:"success",check_run_url:"https://api.github.com/check-runs/22"}]}' ;;
-      *) jq -cn '{jobs:[{id:2,name:"seal",labels:["ubuntu-24.04"],run_id:1,status:"completed",conclusion:"success",check_run_url:"https://api.github.com/check-runs/2"}]}' ;;
+      self-hosted) jq -cn '{jobs:[{id:2,name:"seal",labels:["ubuntu-22.04","self-hosted"],run_id:1,status:"completed",conclusion:"success",check_run_url:"https://api.github.com/check-runs/2"}]}' ;;
+      in-progress) jq -cn '{jobs:[{id:2,name:"seal",labels:["ubuntu-22.04"],run_id:1,status:"in_progress",conclusion:null,check_run_url:"https://api.github.com/check-runs/2"}]}' ;;
+      failed) jq -cn '{jobs:[{id:2,name:"seal",labels:["ubuntu-22.04"],run_id:1,status:"completed",conclusion:"failure",check_run_url:"https://api.github.com/check-runs/2"}]}' ;;
+      wrong-run) jq -cn '{jobs:[{id:2,name:"seal",labels:["ubuntu-22.04"],run_id:99,status:"completed",conclusion:"success",check_run_url:"https://api.github.com/check-runs/2"}]}' ;;
+      bad-check-locator) jq -cn '{jobs:[{id:2,name:"seal",labels:["ubuntu-22.04"],run_id:1,status:"completed",conclusion:"success",check_run_url:"https://api.github.com/check-runs/invalid"}]}' ;;
+      bad-job-id) jq -cn '{jobs:[{id:0,name:"seal",labels:["ubuntu-22.04"],run_id:1,status:"completed",conclusion:"success",check_run_url:"https://api.github.com/check-runs/2"}]}' ;;
+      multi-role) jq -cn '{jobs:[{id:2,name:"linux / seal",labels:["ubuntu-22.04"],run_id:1,status:"completed",conclusion:"success",check_run_url:"https://api.github.com/check-runs/2"},{id:12,name:"macos_26 / seal",labels:["macos-26"],run_id:1,status:"completed",conclusion:"success",check_run_url:"https://api.github.com/check-runs/12"},{id:22,name:"macos_15 / seal",labels:["macos-15"],run_id:1,status:"completed",conclusion:"success",check_run_url:"https://api.github.com/check-runs/22"}]}' ;;
+      *) jq -cn '{jobs:[{id:2,name:"seal",labels:["ubuntu-22.04"],run_id:1,status:"completed",conclusion:"success",check_run_url:"https://api.github.com/check-runs/2"}]}' ;;
     esac
   }
   seal_jobs >"$jobs"
@@ -454,6 +454,7 @@ recording_api 'GET /actions/runs/1'
 wait_functions="$tmp/wait-functions.sh"
 {
   cat "$fresh_run_function"
+  awk '/^managed_observation_now_microseconds\(\)/,/^wait_for_run\(\)/' "$root/scripts/managed-evidence.sh" | sed '$d'
   awk '/^wait_for_run\(\)/,/^}/' "$root/scripts/managed-evidence.sh"
 } >"$wait_functions"
 (
@@ -461,6 +462,20 @@ wait_functions="$tmp/wait-functions.sh"
   API_TRANSIENT=75; API_PERMISSION=76; API_FAILURE=77; POLL_TRANSIENT_RETRIES=2
   API_BASE=https://fixture.invalid; REPOSITORY=fixture; run_id=1; attempt=1
   workflow_signer=0123456789012345678901234567890123456789
+  observation_source=$(awk '/^managed_observation_now_microseconds\(\)/,/^managed_observation_duration\(\)/ { if ($0 !~ /^managed_observation_duration\(\)/) print }' "$root/scripts/managed-evidence.sh")
+  rg -Fq 'BASH_MONOSECONDS' <<<"$observation_source"
+  if rg -Fq 'EPOCHREALTIME' <<<"$observation_source"; then
+    echo 'the production observer uses the wall clock' >&2
+    exit 1
+  fi
+  [[ $(( $(managed_observation_now_microseconds) % 1000000 )) == 0 ]]
+  [[ $(managed_observation_duration 1000) == 0.001000 ]]
+  if managed_observation_duration 999 >/dev/null; then
+    echo 'the observer accepted a submillisecond curl timeout' >&2
+    exit 1
+  fi
+  bash -ceu 'source "$1"; unset BASH_MONOSECONDS; ! managed_observation_now_microseconds' -- "$wait_functions"
+  bash -ceu 'source "$1"; unset BASH_MONOSECONDS; BASH_MONOSECONDS=$EPOCHSECONDS; ! managed_observation_now_microseconds' -- "$wait_functions"
   poll_counter="$tmp/poll-counter"
   printf '0\n' >"$poll_counter"
   api() {
@@ -479,7 +494,168 @@ wait_functions="$tmp/wait-functions.sh"
   api() { return "$API_PERMISSION"; }
   set +e; wait_for_run; status=$?; set -e
   [[ $status == "$API_PERMISSION" ]]
+
+  # Equal monotonic readings are normal at the pinned clock's resolution.
+  # They don't reset or extend the fixed deadline.
+  managed_observation_now_microseconds() { printf '1000000\n'; }
+  api() {
+    printf '%s\n' '{"event":"workflow_dispatch","head_branch":"master","head_sha":"0123456789012345678901234567890123456789","run_attempt":1,"path":".github/workflows/ci.yml","status":"completed","conclusion":"success"}'
+  }
+  wait_for_run
+
+  equal_clock="$tmp/equal-monotonic-clock"
+  equal_api_calls="$tmp/equal-api-calls"
+  equal_sleep_values="$tmp/equal-sleep-values"
+  printf '0\n' >"$equal_clock"; : >"$equal_api_calls"; : >"$equal_sleep_values"
+  managed_observation_now_microseconds() { printf '%s\n' "$(<"$equal_clock")"; }
+  api() {
+    printf x >>"$equal_api_calls"
+    printf '%s\n' '{"event":"workflow_dispatch","head_branch":"master","head_sha":"0123456789012345678901234567890123456789","run_attempt":1,"path":".github/workflows/ci.yml","status":"in_progress","conclusion":null}'
+  }
+  sleep() {
+    local current next
+    current=$(<"$equal_clock")
+    if [[ $current == 0 ]]; then next=21599000000; else next=21600000001; fi
+    printf '%s\n' "$next" >>"$equal_sleep_values"
+    printf '%s\n' "$next" >"$equal_clock"
+  }
+  set +e; wait_for_run; status=$?; set -e
+  [[ $status == 4 && $(wc -c <"$equal_api_calls" | tr -d ' ') == 1 ]]
+  [[ $(<"$equal_sleep_values") == 21599000000 ]]
+
+  # An unexpected backwards elapsed-time reading fails closed after one
+  # request. A wall-clock rollback can't affect this monotonic comparison.
+  rollback_clock_calls="$tmp/rollback-clock-calls"
+  rollback_api_calls="$tmp/rollback-api-calls"
+  : >"$rollback_api_calls"; printf '0\n' >"$rollback_clock_calls"
+  managed_observation_now_microseconds() {
+    calls=$(<"$rollback_clock_calls"); calls=$((calls + 1)); printf '%s\n' "$calls" >"$rollback_clock_calls"
+    if ((calls < 3)); then printf '1000000\n'; else printf '999999\n'; fi
+  }
+  api() {
+    printf x >>"$rollback_api_calls"
+    printf '%s\n' '{"event":"workflow_dispatch","head_branch":"master","head_sha":"0123456789012345678901234567890123456789","run_attempt":1,"path":".github/workflows/ci.yml","status":"completed","conclusion":"success"}'
+  }
+  set +e; wait_for_run; status=$?; set -e
+  [[ $status == "$API_FAILURE" && $(wc -c <"$rollback_api_calls" | tr -d ' ') == 1 ]]
+
+  # Restore the production clock before later fixtures replace it.
+  source "$wait_functions"
+
+  # The local observer may accept a completion first seen after the historical
+  # 7,200-second mark.  The request and every sleep share one microsecond clock
+  # deadline, so a poll begun near the edge cannot add an unbounded transfer or
+  # a fixed five-second overshoot.
+  observer_counter="$tmp/observer-counter"
+  printf '0\n' >"$observer_counter"
+  api() {
+    observer_calls=$(<"$observer_counter")
+    observer_calls=$((observer_calls + 1))
+    printf '%s\n' "$observer_calls" >"$observer_counter"
+    if ((observer_calls == 1)); then
+      printf '%s\n' '{"event":"workflow_dispatch","head_branch":"master","head_sha":"0123456789012345678901234567890123456789","run_attempt":1,"path":".github/workflows/ci.yml","status":"in_progress","conclusion":null}'
+    else
+      printf '%s\n' '{"event":"workflow_dispatch","head_branch":"master","head_sha":"0123456789012345678901234567890123456789","run_attempt":1,"path":".github/workflows/ci.yml","status":"completed","conclusion":"success"}'
+    fi
+  }
+  observation_clock="$tmp/observation-clock"
+  printf '0\n' >"$observation_clock"
+  managed_observation_now_microseconds() { printf '%s\n' "$(<"$observation_clock")"; }
+  sleep() { printf '%s\n' 7201000000 >"$observation_clock"; }
+  wait_for_run
+  [[ $(<"$observer_counter") == 2 ]]
+
+  # Completion returned after the deadline is late evidence even when that
+  # request started before the deadline.
+  api() {
+    printf '21599000001\n' >"$observation_clock"
+    printf '%s\n' '{"event":"workflow_dispatch","head_branch":"master","head_sha":"0123456789012345678901234567890123456789","run_attempt":1,"path":".github/workflows/ci.yml","status":"completed","conclusion":"success"}'
+  }
+  printf '0\n' >"$observation_clock"
+  set +e; wait_for_run; status=$?; set -e
+  [[ $status == 4 ]]
+
+  # A clock that expires between deadline construction and the first poll must
+  # not invoke the API.  The file counter persists across command substitutions.
+  clock_calls="$tmp/expired-clock-calls"
+  api_calls="$tmp/expired-api-calls"
+  printf '0\n' >"$clock_calls"; : >"$api_calls"
+  managed_observation_now_microseconds() {
+    calls=$(<"$clock_calls"); calls=$((calls + 1)); printf '%s\n' "$calls" >"$clock_calls"
+    if ((calls == 1)); then printf '0\n'; else printf '21599000001\n'; fi
+  }
+  api() { printf called >>"$api_calls"; return 0; }
+  set +e; wait_for_run; status=$?; set -e
+  [[ $status == 4 && ! -s $api_calls ]]
+
+  # A transient response just before the edge keeps the retry count but caps
+  # its first retry sleep to the remaining half-second.
+  printf '0\n' >"$observation_clock"
+  managed_observation_now_microseconds() { printf '%s\n' "$(<"$observation_clock")"; }
+  retry_calls="$tmp/retry-boundary-calls"; retry_sleep="$tmp/retry-boundary-sleep"
+  : >"$retry_calls"; : >"$retry_sleep"
+  api() { printf x >>"$retry_calls"; printf '21598500000\n' >"$observation_clock"; return "$API_TRANSIENT"; }
+  sleep() { printf '%s\n' "$1" >"$retry_sleep"; printf '21599000000\n' >"$observation_clock"; }
+  set +e; wait_for_run; status=$?; set -e
+  [[ $status == 4 && $(wc -c <"$retry_calls" | tr -d ' ') == 1 && $(<"$retry_sleep") == 0.500000 ]]
+
+  # A normal poll observed one millisecond before the deadline makes one
+  # capped request. It doesn't start a submillisecond sleep afterward.
+  printf '0\n' >"$observation_clock"
+  edge_calls="$tmp/edge-calls"; edge_sleep="$tmp/edge-sleep"; edge_clock_calls="$tmp/edge-clock-calls"
+  : >"$edge_calls"; : >"$edge_sleep"; printf '0\n' >"$edge_clock_calls"
+  managed_observation_now_microseconds() {
+    calls=$(<"$edge_clock_calls"); calls=$((calls + 1)); printf '%s\n' "$calls" >"$edge_clock_calls"
+    case $calls in
+      1) printf '0\n' ;;
+      2) printf '21598999000\n' ;;
+      *) printf '%s\n' "$(<"$observation_clock")" ;;
+    esac
+  }
+  api() {
+    printf '%s\n' "$*" >"$edge_calls"
+    printf '21598999000\n' >"$observation_clock"
+    printf '%s\n' '{"event":"workflow_dispatch","head_branch":"master","head_sha":"0123456789012345678901234567890123456789","run_attempt":1,"path":".github/workflows/ci.yml","status":"in_progress","conclusion":null}'
+  }
+  workflow_run_is_fresh_dispatch() { printf '21598999500\n' >"$observation_clock"; }
+  sleep() { printf '%s\n' "$1" >"$edge_sleep"; printf '21603000000\n' >"$observation_clock"; }
+  set +e; wait_for_run; status=$?; set -e
+  [[ $status == 4 && $(wc -l <"$edge_calls" | tr -d ' ') == 1 && ! -s $edge_sleep ]]
+  rg -q '^--max-time 0\.001000 https://fixture\.invalid/repos/fixture/actions/runs/1$' "$edge_calls"
+
+  # A success that was inside the budget when curl returned is still too late
+  # when response parsing and identity validation finish after the deadline.
+  printf '0\n' >"$observation_clock"
+  managed_observation_now_microseconds() { printf '%s\n' "$(<"$observation_clock")"; }
+  api() {
+    printf '21598999000\n' >"$observation_clock"
+    printf '%s\n' '{"event":"workflow_dispatch","head_branch":"master","head_sha":"0123456789012345678901234567890123456789","run_attempt":1,"path":".github/workflows/ci.yml","status":"completed","conclusion":"success"}'
+  }
+  workflow_run_is_fresh_dispatch() { printf '21599000001\n' >"$observation_clock"; }
+  set +e; wait_for_run; status=$?; set -e
+  [[ $status == 4 ]]
+
+  # Restore the production identity predicate for the remaining request-cap
+  # scenario; only the controlled parsing probes above replace it.
+  source "$fresh_run_function"
+
+  # Every poll carries a positive curl transfer cap derived from the same
+  # deadline.  This is the stalled-request proof without a six-hour wait.
+  printf '0\n' >"$observation_clock"
+  managed_observation_now_microseconds() { printf '%s\n' "$(<"$observation_clock")"; }
+  request_args="$tmp/poll-request-args"
+  api() {
+    printf '%s\n' "$*" >"$request_args"
+    printf '21599000000\n' >"$observation_clock"
+    return "$API_TRANSIENT"
+  }
+  set +e; wait_for_run; status=$?; set -e
+  [[ $status == 4 ]]
+  rg -q '^--max-time 21599\.000000 https://fixture\.invalid/repos/fixture/actions/runs/1$' "$request_args"
 )
+rg -Fq 'api --max-time "$request_timeout"' "$root/scripts/managed-evidence.sh"
+rg -Fq -- '--timeout-seconds 7200 --)' "$root/scripts/run-managed-role.sh"
+rg -Fq 'for ((pass = 0; pass < 72000; pass++)); do' "$root/scripts/run-managed-role.sh"
 rg -Fq 'operational_api_failure "$outcome"' "$root/scripts/managed-evidence.sh"
 rg -Fq 'run artifact enumeration' "$root/scripts/managed-evidence.sh"
 rg -Fq 'role $role evidence acquisition' "$root/scripts/managed-evidence.sh"
@@ -603,7 +779,7 @@ jq -cn '
       "macos-15-arm64":{workflowPath:".github/workflows/ci-role-macos-15-arm64.yml",jobWorkflowRef:"SkrOYC/burlmd/.github/workflows/ci-role-macos-15-arm64.yml@refs/heads/master",jobWorkflowSha:"1111111111111111111111111111111111111111"}
     },
     requiredRoleGuards:{
-      "linux-x86_64":{workflowPath:".github/workflows/ci-role-linux-x86-64.yml",runnerLabel:"ubuntu-24.04",candidateJobId:"candidate",sealingJobId:"seal",sealNeedsCandidate:true,requiredCandidateStatus:"completed",requiredCandidateConclusion:"success"},
+      "linux-x86_64":{workflowPath:".github/workflows/ci-role-linux-x86-64.yml",runnerLabel:"ubuntu-22.04",candidateJobId:"candidate",sealingJobId:"seal",sealNeedsCandidate:true,requiredCandidateStatus:"completed",requiredCandidateConclusion:"success"},
       "macos-26-arm64":{workflowPath:".github/workflows/ci-role-macos-26-arm64.yml",runnerLabel:"macos-26",candidateJobId:"candidate",sealingJobId:"seal",sealNeedsCandidate:true,requiredCandidateStatus:"completed",requiredCandidateConclusion:"success"},
       "macos-15-arm64":{workflowPath:".github/workflows/ci-role-macos-15-arm64.yml",runnerLabel:"macos-15",candidateJobId:"candidate",sealingJobId:"seal",sealNeedsCandidate:true,requiredCandidateStatus:"completed",requiredCandidateConclusion:"success"}
     },
@@ -624,7 +800,7 @@ jq -cn '
   anchor_root="$publication_root/anchor"
   output="$evidence_root/.constitution/evidence/BURL-M003/managed-evidence.json"
   AGGREGATE_SCHEMA="$root/.constitution/tech-spec/contracts/ci-evidence.schema.json"
-  AGGREGATE_SCHEMA_VERSION=19
+  AGGREGATE_SCHEMA_VERSION=20
   anchor=1111111111111111111111111111111111111111
   workflow_signer=$anchor
   tested=$anchor
@@ -634,7 +810,7 @@ jq -cn '
   fixture_hash=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
   roles=$(jq -cn --slurpfile expected "$expected" --arg digest "$expected_digest" --arg hash "$fixture_hash" '
     def environment($role):
-      if $role == "linux-x86_64" then {runnerLabel:"ubuntu-24.04",imageOS:"ubuntu",imageVersion:"fixture-linux",osRelease:"fixture",architecture:"x86_64",cpuModel:"fixture",logicalCpuCount:4,documentedMemoryBytes:16000000000,documentedStorageBytes:14000000000,observedMemoryBytes:1,observedStorageAvailableBytes:1,filesystem:"fixture-linux"}
+      if $role == "linux-x86_64" then {runnerLabel:"ubuntu-22.04",imageOS:"ubuntu",imageVersion:"fixture-linux",osRelease:"fixture",architecture:"x86_64",cpuModel:"fixture",logicalCpuCount:4,documentedMemoryBytes:16000000000,documentedStorageBytes:14000000000,observedMemoryBytes:1,observedStorageAvailableBytes:1,filesystem:"fixture-linux"}
       elif $role == "macos-26-arm64" then {runnerLabel:"macos-26",imageOS:"macos",imageVersion:"fixture-macos-26",osRelease:"fixture",architecture:"aarch64",cpuModel:"fixture",logicalCpuCount:3,documentedMemoryBytes:7000000000,documentedStorageBytes:14000000000,observedMemoryBytes:1,observedStorageAvailableBytes:1,filesystem:"fixture-macos-26"}
       else {runnerLabel:"macos-15",imageOS:"macos",imageVersion:"fixture-macos-15",osRelease:"fixture",architecture:"aarch64",cpuModel:"fixture",logicalCpuCount:3,documentedMemoryBytes:7000000000,documentedStorageBytes:14000000000,observedMemoryBytes:1,observedStorageAvailableBytes:1,filesystem:"fixture-macos-15"}
       end;
@@ -645,8 +821,8 @@ jq -cn '
     $expected[0] as $identity
     | $identity.requiredRoleIdentities
     | to_entries
-    | map(.key as $index | .value as $role | (if $role == "linux-x86_64" then "ubuntu-24.04" elif $role == "macos-26-arm64" then "macos-26" else "macos-15" end) as $label | (workflow($role)) as $workflow | {
-        manifest:{schemaVersion:15,expectedIdentity:$identity,expectedIdentitySha256:$digest,roleEvidence:{role:$role,capturedIdentity:($identity | {ticketIdentity,releaseIdentity,trustAnchorSha,testedSourceSha,workflowSignerSha,workflowSignerRef,baseSha,workflowEvent,sourceWriteAllowlist,buildIdentity,corpusIdentity,runIdentity,artifactNonce} + {roleIdentity:$role}),environment:environment($role),viewport:{width:1920,height:1080,refreshHz:60,verified:false},evidenceClasses:$identity.requiredEvidenceClasses[$role],gates:($identity.requiredEvidenceClasses[$role] | reduce .[] as $class ({}; .[$class] = true)),toolchain:{fixture:"1"},internalArtifacts:[{name:"fixture.txt",bytes:0,sha256:$hash}],compatibilityStage:null}},
+    | map(.key as $index | .value as $role | (if $role == "linux-x86_64" then "ubuntu-22.04" elif $role == "macos-26-arm64" then "macos-26" else "macos-15" end) as $label | (workflow($role)) as $workflow | {
+        manifest:{schemaVersion:16,expectedIdentity:$identity,expectedIdentitySha256:$digest,roleEvidence:{role:$role,capturedIdentity:($identity | {ticketIdentity,releaseIdentity,trustAnchorSha,testedSourceSha,workflowSignerSha,workflowSignerRef,baseSha,workflowEvent,sourceWriteAllowlist,buildIdentity,corpusIdentity,runIdentity,artifactNonce} + {roleIdentity:$role}),environment:environment($role),viewport:{width:1920,height:1080,refreshHz:60,verified:false},evidenceClasses:$identity.requiredEvidenceClasses[$role],gates:($identity.requiredEvidenceClasses[$role] | reduce .[] as $class ({}; .[$class] = true)),toolchain:{fixture:"1"},internalArtifacts:[{name:"fixture.txt",bytes:0,sha256:$hash}],compatibilityStage:null}},
         manifestSha256:$hash,
         origin:{repositoryId:1,workflowRunId:1,runAttempt:1,trustAnchorSha:$identity.trustAnchorSha,testedSourceSha:$identity.testedSourceSha,workflowSignerSha:$identity.workflowSignerSha,workflowSignerRef:"refs/heads/master",baseSha:$identity.baseSha,candidatePlacement:candidate(($index * 10) + 1; $label; $workflow),sealingCheckRunId:(($index * 10) + 2),sealingJob:seal(($index * 10) + 2; $label),signerWorkflow:{workflowPath:$workflow,jobWorkflowRef:("SkrOYC/burlmd/" + $workflow + "@refs/heads/master"),jobWorkflowSha:$identity.workflowSignerSha,builderId:("https://github.com/SkrOYC/burlmd/" + $workflow + "@refs/heads/master")},candidateArtifact:artifact(($index * 10) + 3; ("managed-evidence-candidate-" + $role + "-" + $identity.artifactNonce)),sealedArtifact:artifact(($index * 10) + 4; ("managed-evidence-sealed-" + $role + "-" + $identity.artifactNonce)),sealingReceiptArtifact:artifact(($index * 10) + 5; ("managed-evidence-seal-receipt-" + $role + "-" + $identity.artifactNonce)),sealingReceiptSha256:$hash,attestationIssuer:"https://token.actions.githubusercontent.com",sealedAttestationSubjectDigest:("sha256:" + $hash),sealedAttestationBundleSha256:$hash,sealedAttestationVerified:true,sealingReceiptAttestationSubjectDigest:("sha256:" + $hash),sealingReceiptAttestationBundleSha256:$hash,sealingReceiptAttestationVerified:true,roleBundleSha256:$hash,sealedBundleSha256:$hash,restApiVersion:"2026-03-10",verifiedAt:"2026-09-05T00:00:00Z"}
       })

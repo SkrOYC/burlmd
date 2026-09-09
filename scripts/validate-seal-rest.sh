@@ -38,7 +38,7 @@ if [[ $phase == sealed ]]; then
 fi
 
 workflow_path=".github/workflows/ci-role-${role//_/-}.yml"
-runner_label=$([[ $role == linux-x86_64 ]] && printf ubuntu-24.04 || printf '%s' "${role%-arm64}")
+runner_label=$([[ $role == linux-x86_64 ]] && printf ubuntu-22.04 || printf '%s' "${role%-arm64}")
 signer_sha=$(jq -er --arg nonce "$nonce" --arg role "$role" --arg path "$workflow_path" '
   . as $identity |
   if type == "object" and .artifactNonce == $nonce and .runIdentity == ("managed:" + $nonce) and
