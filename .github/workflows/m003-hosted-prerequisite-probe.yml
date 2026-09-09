@@ -1,0 +1,114 @@
+# Diagnostic-only temporary candidate. GitHub announced Ubuntu 22 deprecation
+# on 2026-09-17 and retirement on 2027-04-17 (actions/runner-images#14254).
+name: M003 hosted prerequisite probe (diagnostic only)
+
+on:
+  push:
+    branches: [chore/epic-m-hosted-prerequisite-probe]
+
+permissions: {}
+
+jobs:
+  hosted-prerequisite-probe:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - name: Reject preinstalled Nix
+        shell: bash
+        run: |
+          if command -v nix >/dev/null 2>&1; then
+            echo 'Nix must not be present before installation' >&2
+            exit 1
+          fi
+      - uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24
+        with: {enable_kvm: false}
+      - name: Measure hosted native-isolation prerequisite (diagnostic only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          export LC_ALL=C
+
+          echo '[diagnostic-only] This run measures a hosted prerequisite only; it is not BURL-M003 acceptance evidence and does not run candidate code.'
+          printf '[diagnostic-only] image OS: %s\n' "${ImageOS:-unknown}"
+          printf '[diagnostic-only] image version: %s\n' "${ImageVersion:-unknown}"
+          printf '[diagnostic-only] kernel: %s\n' "$(uname -r)"
+          printf '[diagnostic-only] architecture: %s\n' "$(uname -m)"
+          if [[ -r /sys/module/apparmor/parameters/enabled ]]; then
+            printf '[diagnostic-only] initial AppArmor flag (read-only): %s\n' "$(< /sys/module/apparmor/parameters/enabled)"
+          else
+            echo '[diagnostic-only] initial AppArmor flag (read-only): unavailable'
+          fi
+          if [[ -r /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]]; then
+            printf '[diagnostic-only] initial AppArmor unprivileged-userns restriction (read-only): %s\n' "$(< /proc/sys/kernel/apparmor_restrict_unprivileged_userns)"
+          else
+            echo '[diagnostic-only] initial AppArmor unprivileged-userns restriction (read-only): unavailable'
+          fi
+
+          nix_profile=/nix/var/nix/profiles/default
+          nix_path=$(command -v nix)
+          nix_store_path=$(command -v nix-store)
+          [[ $nix_path == "$nix_profile/bin/nix" ]] || { echo 'nix must resolve through the action-installed Nix profile' >&2; exit 1; }
+          [[ $nix_store_path == "$nix_profile/bin/nix-store" ]] || { echo 'nix-store must resolve through the action-installed Nix profile' >&2; exit 1; }
+          nix_version=$(nix --version 2>&1)
+          nix_store_version=$(nix-store --version 2>&1)
+          [[ $nix_version == 'nix (Nix) 2.35.2' ]] || { echo 'nix version must equal 2.35.2' >&2; exit 1; }
+          [[ $nix_store_version == 'nix-store (Nix) 2.35.2' ]] || { echo 'nix-store version must equal 2.35.2' >&2; exit 1; }
+          nix_real_path=$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$nix_path")
+          nix_store_real_path=$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$nix_store_path")
+          [[ ${nix_real_path%/*} == "${nix_store_real_path%/*}" ]] || { echo 'nix and nix-store must resolve through one installed Nix profile' >&2; exit 1; }
+
+          # Keep Nix's existing signed cache.nixos.org configuration intact.
+          # No Nix option, substituter, key, trust, fallback, or build override
+          # is supplied here; unavailable roots must make this diagnostic fail.
+          nix show-config | grep -Fx 'substituters = https://cache.nixos.org/' >/dev/null
+          nix show-config | grep -Fx 'trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=' >/dev/null
+          nix show-config | grep -Fx 'require-sigs = true' >/dev/null
+          nix-store --realise \
+            /nix/store/g7svy17fhkg2cq3q4lfzzc0mmsl3d8hq-bubblewrap-0.11.2 \
+            /nix/store/0641h8qfqaxnwrsw2nzrz6i1wbzyx92l-bash-interactive-5.3p9 \
+            /nix/store/qbsvh4fw7lrmkqk870w4sc21kqylph42-iproute2-7.0.0
+
+          nix_executable=$(command -v nix)
+          nix_store_executable=$(command -v nix-store)
+          bwrap_root=/nix/store/g7svy17fhkg2cq3q4lfzzc0mmsl3d8hq-bubblewrap-0.11.2
+          [[ -x $bwrap_root/bin/bwrap && $("$bwrap_root/bin/bwrap" --version) == 'bubblewrap 0.11.2' && $(sha256sum "$bwrap_root/bin/bwrap" | awk '{print $1}') == c500b527e18f7e32634ac497b78a0150ceb31ae70fa8afef3fbbe79fd1d9f726 ]] || {
+            echo 'trusted Bubblewrap does not match the raw-38 identity' >&2; exit 1;
+          }
+          "$nix_store_executable" -qR "$bwrap_root" | LC_ALL=C sort -u > trusted-parent-bubblewrap.manifest
+          [[ $(wc -l < trusted-parent-bubblewrap.manifest | tr -d ' ') == 8 && $(wc -c < trusted-parent-bubblewrap.manifest | tr -d ' ') == 480 && $(sha256sum trusted-parent-bubblewrap.manifest | awk '{print $1}') == 398d11c9cd9249369cbb18d36661014eafef5ac18ff7adeb076c2c51ef0141fd && $("$nix_executable" path-info --json $(< trusted-parent-bubblewrap.manifest) | jq -er '[.[] | .narSize] | add') == 40679016 ]] || {
+            echo 'trusted Bubblewrap closure differs from the raw-38 inventory' >&2; exit 1;
+          }
+
+          ticket=BURL-M003
+          role=linux-x86_64
+          run_linux_native_isolation_prerequisite() {
+            local probe_shell probe_ip probe_bwrap member probe_nar_bytes probe_bind_bytes nix_executable nix_store_executable
+            local -a probe_members=() probe_args=()
+            [[ $ticket == BURL-M003 && $role == linux-x86_64 ]] || return 0
+            nix_executable=$(command -v nix) || return 2
+            nix_store_executable=$(command -v nix-store) || return 2
+            [[ -x $nix_executable && -x $nix_store_executable && $($nix_executable --version) == 'nix (Nix) 2.35.2' && $($nix_store_executable --version) == 'nix-store (Nix) 2.35.2' ]] || return 2
+            probe_shell=/nix/store/0641h8qfqaxnwrsw2nzrz6i1wbzyx92l-bash-interactive-5.3p9/bin/bash
+            probe_ip=/nix/store/qbsvh4fw7lrmkqk870w4sc21kqylph42-iproute2-7.0.0/bin/ip
+            probe_bwrap=/nix/store/g7svy17fhkg2cq3q4lfzzc0mmsl3d8hq-bubblewrap-0.11.2/bin/bwrap
+            [[ -x $probe_shell && -x $probe_ip && -x $probe_bwrap ]] || return 2
+            mapfile -t probe_members < <({ "$nix_store_executable" -qR "${probe_shell%/bin/bash}"; "$nix_store_executable" -qR "${probe_ip%/bin/ip}"; } | LC_ALL=C sort -u)
+            [[ ${#probe_members[@]} == 33 ]] || return 2
+            [[ $(printf '%s\n' "${probe_members[@]}" | wc -c | tr -d ' ') == 1985 ]] || return 2
+            [[ $(printf '%s\n' "${probe_members[@]}" | sha256sum | awk '{print $1}') == 8417a87e4610c15b6237f416532defaaee9c93a06f2b605c6abaeaa8278df8b2 ]] || return 2
+            probe_nar_bytes=$("$nix_executable" path-info --json "${probe_members[@]}" | jq -er '[.[] | .narSize] | add') || return 2
+            probe_bind_bytes=$(for member in "${probe_members[@]}"; do printf '%s\0%s\0%s\0' --ro-bind "$member" "$member"; done | wc -c | tr -d ' ')
+            [[ $probe_nar_bytes == 97009672 && $probe_bind_bytes == 4300 ]] || return 2
+            probe_args=(--unshare-all --unshare-user --uid 0 --gid 0 --unshare-net --cap-add CAP_NET_ADMIN --die-with-parent --new-session --clearenv --proc /proc --dev /dev --dir /nix --dir /nix/store)
+            for member in "${probe_members[@]}"; do probe_args+=(--ro-bind "$member" "$member"); done
+            # No sudo/sysctl/AppArmor fallback or restoration path exists: this one
+            # native namespace/loopback probe is the fail-closed hosted prerequisite.
+            "$probe_bwrap" "${probe_args[@]}" -- "$probe_shell" -c 'set -euo pipefail; "$1" link set dev lo up; line=$("$1" -o link show up dev lo); [[ -n $line && $line == *'"'"'<LOOPBACK,UP,'"'"'* ]]' _ "$probe_ip"
+          }
+
+          set +e
+          run_linux_native_isolation_prerequisite
+          probe_status=$?
+          set -e
+          printf '[diagnostic-only] hosted native-isolation prerequisite status: %s\n' "$probe_status"
+          exit "$probe_status"
