@@ -1,4 +1,15 @@
 entries:
+  - version: v2.1.29
+    date: 2026-09-09
+    changed:
+      - "Acknowledged the completed Stage 4 adaptation in Tasks v3.2.13 at commit 46bc8ee96b5d2d58d27ac33991c720d2eee76511. It adapts BURL-M003 to the measured ubuntu-22.04 hosted recovery, raw contract version 39, role schema version 16, aggregate schema version 20, Spike-result schema version 21, the strict one-commit first-parent recovery sequence, bounded failure-only macOS diagnostics, and the 21,600-second managed-client observation limit. It changes only the hosted Linux label or profile restatements for BURL-G011, BURL-P002, and BURL-O012. For maintained-stop ticket BURL-O001, it corrects the hosted role, aggregate, raw-contract, and separate Spike-result references without authorizing implementation."
+      - "Marked ci_bootstrap.stage4_tasks_adaptation satisfied while retaining affected_tickets BURL-M003, BURL-G011, BURL-P002, and BURL-O012 and maintained_stop_tickets BURL-O001. Removed only the temporary ubuntu-24.04 verification entry labeled transition command quoted by BURL-M003 in Tasks v3.2.12. The canonical raw-39 ubuntu-22.04 command remains byte-for-byte unchanged."
+      - "Retained raw contract version 39, role schema version 16, aggregate schema version 20, Spike-result schema version 21, sealing receipt version 2, receipt transport version 1, all behavioral fields, the 42-record bill of materials, the 35-path trusted-control inventory, all accepted artifact inventories, and the ubuntu-24.04 expected and receipt-digest control jobs. This acknowledgement changes no job or session limit, retry, topology, permission, cache trust, package, application code, evidence inventory, first-parent recovery check, or supported packaging distribution target."
+      - "Kept implementation blocked until the entire reviewed documentation pull request merges. Diagnostic run 34365475868 proves only prerequisite availability. Complete Epic M, including the reviewed BURL-M003 recovery implementation, fresh accepted managed run, exact three-file evidence pull request, epic closeout, and reconciliation. Then pause before Epic H or Epic G implementation. BURL-O001 remains unauthorized pending its separate Stage 3 packaging-isolation and capacity decision."
+    by: patch-lane
+    upstream:
+      prd: v2.0.5
+      architecture: v2.1.2
   - version: v2.1.28
     date: 2026-09-09
     changed:
