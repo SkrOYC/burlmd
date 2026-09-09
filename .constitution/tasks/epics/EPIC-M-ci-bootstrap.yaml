@@ -362,17 +362,21 @@ tickets:
       - >
         STOP if a failed BURL-M003 macOS candidate gate or integration
         invocation loses its original nonzero status or skips bounded cleanup.
-        At most one failure-only diagnostic block can select its source from a
-        fixed trusted
-        gate-to-path mapping under the canonical role-output root, open it
+        At most one failure-only diagnostic block can select its source from the
+        authoritative `ci_bootstrap.role_execution.candidate_failure_diagnostic_gate_log_map`
+        under the canonical role-output root, open it
         read-only with no-follow and nonblocking flags, and require `fstat` to
         identify a regular file. It can snapshot only the final 65,536 bytes
         into a fixed-size wrapper-owned regular file. The diagnostic records
         the fixed gate ID, original exit status, observed source size,
         retained-tail size, and retained-tail SHA-256, but no complete-log
-        digest.
-        Never scan or hash the complete source log. Every base64 output line
-        must have the fixed validated prefix. Never
+        digest. A source at or below 65,536 bytes can fit wholly in the one
+        bounded snapshot; no additional or unbounded full-file pass is allowed.
+        Hash only the snapshot and make no complete-log integrity claim. Every
+        base64 output line must have the exact
+        `ci_bootstrap.role_execution.candidate_failure_diagnostic_output_prefix`
+        (the 24-byte ASCII `burlmd-m003-diagnostic: ` literal, including its
+        trailing U+0020 space). Never
         emit raw candidate bytes, interpret workflow or shell commands, write
         diagnostic data to `GITHUB_OUTPUT`, `GITHUB_ENV`, or a job summary, or
         accept or upload a diagnostic artifact. A link, FIFO, socket, device,
@@ -860,18 +864,38 @@ tickets:
         path. `candidate_exec` enables `errexit` before returning a child's
         nonzero status. `run_ci_gate` retains that status and reaches diagnostic
         recording. The unconditional top-level `candidate_phase` call exits
-        before a later gate runs. Fixtures reject `if`, `!`, `&&`, or `||`
-        contexts that disable `errexit` throughout the function. Oversized,
-        sparse, growing, linked, FIFO, directory, and available special-file
-        inputs prove no unbounded or blocking read. Regular-file fixtures
-        include lines that begin with `::error::`, `::warning::`, and other
-        workflow-command forms. A completed diagnostic binds the fixed gate ID,
-        original exit status, observed source size, and the retained tail's byte
-        count and SHA-256 without a complete-log digest. It emits validated
-        base64 with a fixed trusted prefix, never raw candidate output. An
-        unavailable or changing source can suppress
-        the diagnostic without changing cleanup or the original failure. No
-        diagnostic becomes accepted evidence or an uploaded artifact.
+        before a later gate runs. The authoritative exhaustive ordered map is:
+
+          ```text
+          candidate_failure_diagnostic_gate_log_map = [
+            { gate_id = "flutter-test", relative_source_log = "results/role-step-flutter-test.log" },
+            { gate_id = "dart-analyze", relative_source_log = "results/role-step-dart-analyze.log" },
+            { gate_id = "cargo-metadata", relative_source_log = "results/role-step-cargo-metadata.log" },
+            { gate_id = "integration-378c340b182c219c9b1067d7918e48a70ed42307453d3b69402a1b075786b58d", relative_source_log = "results/integration-378c340b182c219c9b1067d7918e48a70ed42307453d3b69402a1b075786b58d.log" },
+            { gate_id = "integration-2aa91e4e2d4b0febdfc223ef1bae763bf139e2fc6f81409a05bf19c5c9139e9d", relative_source_log = "results/integration-2aa91e4e2d4b0febdfc223ef1bae763bf139e2fc6f81409a05bf19c5c9139e9d.log" },
+          ]
+          ```
+
+        The exact 24-byte ASCII prefix is `burlmd-m003-diagnostic: `,
+        including its trailing U+0020 space. Fixtures require exact ordered
+        equality with this map and reject every missing, extra, duplicate,
+        substituted, or reordered entry, unknown ID or path, either Linux
+        `results/role-step-integration-SHA.log` substitution, and every prefix
+        mutation, including a missing, extra, or substituted trailing space.
+        They cover `if`, `!`, `&&`, or `||` contexts that disable `errexit`
+        throughout the function; oversized, sparse, growing, linked, FIFO,
+        directory, and available special-file inputs prove no unbounded or
+        blocking read. A regular source at or below 65,536 bytes can fit wholly
+        in the one bounded snapshot. No additional or unbounded full-file pass
+        is allowed. Hash only the snapshot and make no complete-log integrity
+        claim. Regular-file fixtures include lines beginning with `::error::`,
+        `::warning::`, and other workflow-command forms. A completed diagnostic
+        binds the fixed gate ID, original exit status, observed source size,
+        retained-tail byte count, and snapshot SHA-256. It emits validated
+        base64 with the exact prefix, never raw candidate output. An unavailable
+        or changing source can suppress the diagnostic without changing cleanup
+        or the original failure. No diagnostic becomes accepted evidence or an
+        uploaded artifact.
 
 
         Static workflow fixtures require literal `enable_kvm: false` at every
