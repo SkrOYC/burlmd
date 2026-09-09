@@ -3,7 +3,7 @@ id: ADR-0020
 status: accepted
 date: 2026-09-07
 certainty: assumed
-assumption: "Two exact read-only BURL-M003 session closures, full Bubblewrap argv commitments, trusted loopback setup, branch-specific descriptor closure, authority-backed integration runtime binds, and in-namespace Sway supervision preserve the Linux isolation boundary when the standard ubuntu-24.04 runner permits the exact pinned Bubblewrap probe. Local measurements exercised the mechanism, but only an accepted managed run can settle hosted availability and the complete design."
+assumption: "Two exact read-only BURL-M003 session closures, full Bubblewrap argv commitments, trusted loopback setup, branch-specific descriptor closure, authority-backed integration runtime binds, and in-namespace Sway supervision preserve the Linux isolation boundary on the standard ubuntu-22.04 runner. Diagnostic run 34365475868 passed the exact prerequisite on one hosted image, but only an accepted managed run can settle the complete role and design."
 ---
 # ADR-020: Linux candidate closure view
 
@@ -15,7 +15,8 @@ assumption: "Two exact read-only BURL-M003 session closures, full Bubblewrap arg
 PR #15 commit `9719259f1ecee819af96c98c2be210156f198343`
 copies the Linux candidate closure into a private Nix store. Its measured
 prebuild allocation is 15,382,421,504 bytes. This exceeds the
-14,000,000,000-byte standard `ubuntu-24.04` profile.
+14,000,000,000-byte standard `ubuntu-24.04` profile used by that implementation.
+The replacement `ubuntu-22.04` profile retains the same documented allocation.
 
 `BURL-M003` needs exact runtime members, but it doesn't need Nix command
 authority. An exact read-only view avoids the second copy and preserves
@@ -121,13 +122,13 @@ The encoded vector includes all of these values in their binding order:
 - The trusted preflight and supervisor executable and arguments.
 - The exact session command and all its arguments.
 
-Raw contract version `38` defines the complete ordered construction. Dynamic
+Raw contract version `39` defines the complete ordered construction. Dynamic
 sources come only from the retained capacity-authority and current-path rows.
 The launcher hashes the complete NUL-delimited bytes and executes the same
 in-memory vector without shell reparsing.
 
 Each session frame retains the complete-vector byte count and SHA-256. Fresh
-sealing reconstructs the vector from raw contract version `38`, the selected
+sealing reconstructs the vector from raw contract version `39`, the selected
 manifest payload, and retained authority/current-path rows. It requires exact
 byte count and SHA-256 equality.
 
@@ -240,7 +241,7 @@ handshake starts with these exact descriptor roles:
   and 2.
 
 The preflight records the private PID and network namespace properties. It
-doesn't contain `userns-disabled=true`; raw contract version `38` makes no such
+doesn't contain `userns-disabled=true`; raw contract version `39` makes no such
 claim, and the parser rejects that stale field.
 
 After the loopback check succeeds, the branches enforce different descriptor
@@ -292,14 +293,21 @@ impossible and aren't a containment control.
 
 ### Probe the hosted prerequisite
 
-Ubuntu 24.04 restricts unprivileged user namespaces through AppArmor. That
-policy can block the `CAP_NET_ADMIN` loopback step. GitHub runner-image commit
-`511e65ce908f72f78db9bb4052d642a8728681cb` documents image
-`20260831.293.1`, Ubuntu `24.04.4`, and kernel `6.17.0-1022-azure`.
-Its inventory doesn't document the live AppArmor policy that applies to the
-Nix-store Bubblewrap path. After trusted Nix and tool preparation, the wrapper
-runs the exact pinned Bubblewrap and loopback probe. It does this before
-tested-source dependency execution or any candidate process.
+The `ubuntu-24.04` role in GitHub Actions run `34313264792` failed the exact
+loopback prerequisite with `Failed RTM_NEWADDR: Operation not permitted`.
+Diagnostic commit `3186d199e9c7dcabdd46c41858b64b431d67f098` copied the
+prerequisite without application code. Run `34365475868`, attempt 1, completed
+job `102512946432` successfully on the `ubuntu-22.04` label. The job observed
+image `20260831.284.1`, kernel `6.8.0-1064-azure`, x86-64 architecture,
+AppArmor enabled, and `apparmor_restrict_unprivileged_userns=0`.
+
+The 47,153-byte diagnostic log has SHA-256
+`d36287e191b7b2b0b132d8437e0a4cb54b5d85051af688c58a5dcfbd56ff7912`.
+The diagnostic produced no artifact or provenance and ran no application code.
+It establishes prerequisite availability only on that observed image. It
+doesn't settle the complete role, profile resources, or BURL-M003 acceptance.
+After trusted Nix and tool preparation, every managed BURL-M003 Linux run
+repeats the exact pinned probe before tested-source dependency execution.
 
 The probe mounts only the sorted requisite union for Bash 5.3p9 and iproute2
 7.0.0. The union has 33 members, 1,985 manifest bytes, SHA-256
@@ -318,6 +326,12 @@ nine-field log row records `override=not-applied`,
 `second-probe=not-applicable`, `final-AppArmor-value=not-applicable`, and
 `restoration=not-applicable`. Only a real run of the exact pinned probe on the
 hosted job establishes availability for that run.
+
+GitHub starts `ubuntu-22.04` deprecation on 2026-09-17 and retires the image on
+2027-04-17. This label is a temporary measured bridge. Queue delays and
+brownout failures can occur during deprecation. If the label becomes
+unavailable, the workflow fails closed until Stage 3 selects and measures a
+replacement.
 
 ### Mount the integration runtime from frozen authority
 
@@ -537,8 +551,9 @@ synthetic count.
 The version 2 closure-view log retains both manifest payloads, every complete
 argv digest, every authority/current-path mapping, and integration cleanup
 results. Fresh sealing validates the complete log before it authenticates the
-bundle. The unchanged role and aggregate schemas bind the log through existing
-role-bundle and sealed-bundle digests.
+bundle. The unchanged digest binding uses role schema version `16` and
+aggregate schema version `20` through existing role-bundle and sealed-bundle
+digests.
 
 ## Reproduced measurements
 
@@ -575,10 +590,14 @@ A pinned Bubblewrap `0.11.2` probe exposed mode `0700` from the writable source
 bind. The same probe exposed mode `0755` from `--dir`, which is the rejected
 fallback.
 
-The revised namespace probe raised `lo` and observed it as `UP`. Adding the
+The local namespace probe raised `lo` and observed it as `UP`. Adding the
 removed user-namespace-disabling pair made the same pinned `ip` command fail
 with `RTNETLINK ... Operation not permitted`. This local success validates the
 probe mechanics but doesn't establish hosted availability.
+
+Diagnostic run `34365475868` passed the same pinned prerequisite on one hosted
+Ubuntu 22 image. This observation doesn't establish hosted capacity, the full
+seven-session role, or another image.
 
 The revised 72-byte Sway configuration passed Sway 1.12 validation and a
 headless launch. The launch created the expected IPC socket and no `swaybg`
@@ -595,9 +614,9 @@ exits `1` with `cannot find -lcrypto`; the target-specific replacement exits
 `0`. This local interface measurement doesn't establish hosted acceptance or
 Darwin behavior.
 
-These local results don't establish hosted capacity or feature availability.
-They can't settle ADR-0020 without accepted managed `BURL-M003` completion
-evidence.
+The local and diagnostic results don't establish complete hosted capacity or
+feature availability. They can't settle ADR-0020 without accepted managed
+`BURL-M003` completion evidence.
 
 ## Scope boundary
 
@@ -618,19 +637,22 @@ coordinator decision.
   flag digests miss.
 - A hosted runner that can't pass the exact pinned Bubblewrap and loopback probe
   blocks BURL-M003. There is no host-policy fallback.
+- The `ubuntu-22.04` bridge can stop scheduling or experience brownouts before
+  retirement. Another label requires a measured Stage 3 replacement.
 - Missing dependencies, invalid cleanup, excessive argv size, or failed
   isolation produce no accepted evidence.
-- Stage 4 adapts only `BURL-M003` within its existing paths. `BURL-O001` appears
-  only in the maintained-stop list, which preserves its explicit stop and Stage
-  3 route without authorizing implementation.
+- Stage 4 must adapt BURL-M003 and the downstream Tasks that restate the hosted
+  Linux label or profile. `BURL-O001` remains in the maintained-stop list,
+  which preserves its explicit Stage 3 route without authorizing implementation.
 
 ## Verification anchors
 
 - [Bubblewrap `0.11.2` command contract](https://github.com/containers/bubblewrap/blob/v0.11.2/bwrap.xml)
 - [Bubblewrap `0.11.2` implementation](https://github.com/containers/bubblewrap/blob/v0.11.2/bubblewrap.c)
 - [util-linux `2.42` `flock` implementation](https://github.com/util-linux/util-linux/blob/v2.42/sys-utils/flock.c)
-- [Ubuntu 24.04 unprivileged user-namespace restrictions](https://documentation.ubuntu.com/release-notes/24.04/#unprivileged-user-namespace-restrictions)
-- [GitHub Actions Ubuntu 24.04 runner inventory](https://github.com/actions/runner-images/blob/511e65ce908f72f78db9bb4052d642a8728681cb/images/ubuntu/Ubuntu2404-Readme.md)
+- [GitHub Actions Ubuntu 22.04 image 20260831.284](https://github.com/actions/runner-images/blob/3c11ad0893a6f0c2e328736b2f3af073f64a1403/images/ubuntu/Ubuntu2204-Readme.md)
+- [GitHub Actions Ubuntu 22 retirement notice](https://github.com/actions/runner-images/issues/14254)
+- [BURL-M003 Ubuntu 22 prerequisite run](https://github.com/SkrOYC/burlmd/actions/runs/34365475868)
 - [Sway `1.12` command and environment contract](https://github.com/swaywm/sway/blob/1.12/sway/sway.1.scd)
 - [Sway `1.12` configuration contract](https://github.com/swaywm/sway/blob/1.12/sway/sway.5.scd)
 - [Sway `1.12` fixed Wayland socket selection](https://github.com/swaywm/sway/blob/1.12/sway/server.c)

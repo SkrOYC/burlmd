@@ -136,8 +136,8 @@ survive. The release contract must not make that claim.
   lineage-SHA-mismatch, or consumer-unbound stage.
 - Reviewed source and test contracts remain required. Provenance validation
   doesn't replace source review or test review.
-- The role and aggregate JSON schemas are versions `15` and `19`. The embedded
-  sealing receipt is version `2`. The live raw contract is version `38`. These
+- The role and aggregate JSON schemas are versions `16` and `20`. The embedded
+  sealing receipt is version `2`. The live raw contract is version `39`. These
   contracts separate candidate runtime guards from attested seal origin and
   bind an immutable canonical compatibility-stage lineage. They also carry the
   post-upload receipt digest without making the receipt self-report it. The

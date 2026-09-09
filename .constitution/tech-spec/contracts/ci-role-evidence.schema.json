@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": ["schemaVersion", "expectedIdentity", "expectedIdentitySha256", "roleEvidence"],
   "properties": {
-    "schemaVersion": { "const": 15 },
+    "schemaVersion": { "const": 16 },
     "expectedIdentity": { "$ref": "#/$defs/expectedIdentity" },
     "expectedIdentitySha256": { "$ref": "#/$defs/sha256" },
     "roleEvidence": { "$ref": "#/$defs/roleEvidence" }
@@ -271,7 +271,7 @@
       "required": ["workflowPath", "runnerLabel", "candidateJobId", "sealingJobId", "sealNeedsCandidate", "requiredCandidateStatus", "requiredCandidateConclusion"],
       "properties": {
         "workflowPath": { "type": "string", "minLength": 1 },
-        "runnerLabel": { "enum": ["ubuntu-24.04", "macos-26", "macos-15"] },
+        "runnerLabel": { "enum": ["ubuntu-22.04", "macos-26", "macos-15"] },
         "candidateJobId": { "const": "candidate" },
         "sealingJobId": { "const": "seal" },
         "sealNeedsCandidate": { "const": true },
@@ -285,7 +285,7 @@
       "additionalProperties": false,
       "required": ["linux-x86_64", "macos-26-arm64", "macos-15-arm64"],
       "properties": {
-        "linux-x86_64": { "allOf": [{ "$ref": "#/$defs/roleGuard" }, { "type": "object", "properties": { "workflowPath": { "const": ".github/workflows/ci-role-linux-x86-64.yml" }, "runnerLabel": { "const": "ubuntu-24.04" } } }] },
+        "linux-x86_64": { "allOf": [{ "$ref": "#/$defs/roleGuard" }, { "type": "object", "properties": { "workflowPath": { "const": ".github/workflows/ci-role-linux-x86-64.yml" }, "runnerLabel": { "const": "ubuntu-22.04" } } }] },
         "macos-26-arm64": { "allOf": [{ "$ref": "#/$defs/roleGuard" }, { "type": "object", "properties": { "workflowPath": { "const": ".github/workflows/ci-role-macos-26-arm64.yml" }, "runnerLabel": { "const": "macos-26" } } }] },
         "macos-15-arm64": { "allOf": [{ "$ref": "#/$defs/roleGuard" }, { "type": "object", "properties": { "workflowPath": { "const": ".github/workflows/ci-role-macos-15-arm64.yml" }, "runnerLabel": { "const": "macos-15" } } }] }
       }
@@ -568,7 +568,7 @@
       "additionalProperties": false,
       "required": ["runnerLabel", "imageOS", "imageVersion", "osRelease", "architecture", "cpuModel", "logicalCpuCount", "documentedMemoryBytes", "documentedStorageBytes", "observedMemoryBytes", "observedStorageAvailableBytes", "filesystem"],
       "properties": {
-        "runnerLabel": { "enum": ["ubuntu-24.04", "macos-26", "macos-15"] },
+        "runnerLabel": { "enum": ["ubuntu-22.04", "macos-26", "macos-15"] },
         "imageOS": { "type": "string", "minLength": 1 },
         "imageVersion": { "type": "string", "minLength": 1 },
         "osRelease": { "type": "string", "minLength": 1 },
@@ -663,7 +663,7 @@
           "then": { "properties": {
             "capturedIdentity": { "type": "object", "properties": { "roleIdentity": { "const": "linux-x86_64" } } },
             "environment": { "type": "object", "properties": {
-              "runnerLabel": { "const": "ubuntu-24.04" }, "architecture": { "const": "x86_64" }, "logicalCpuCount": { "const": 4 }, "documentedMemoryBytes": { "const": 16000000000 }, "documentedStorageBytes": { "const": 14000000000 }
+              "runnerLabel": { "const": "ubuntu-22.04" }, "architecture": { "const": "x86_64" }, "logicalCpuCount": { "const": 4 }, "documentedMemoryBytes": { "const": 16000000000 }, "documentedStorageBytes": { "const": 14000000000 }
             } },
             "evidenceClasses": { "type": "array", "not": { "contains": { "enum": ["macos-authoritative-visual", "packaging-runtime-compatibility"] } } }
           } }

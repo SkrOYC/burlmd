@@ -3,4 +3,4 @@ surface: json
 flows: [flow-release]
 boundaries: [BND-17]
 certainty: assumed
-assumption: "Migrated; not yet exercised by a contract test."
+assumption: "Schema version 21 replaces only the managed Linux runner label with ubuntu-22.04. The diagnostic prerequisite run produced no Spike result, and no contract test or accepted managed Spike has exercised this version."
