@@ -85,7 +85,7 @@ tickets:
     stop_conditions:
       - STOP before BURL-O001 implementation until a later Stage 3 decision
         defines approved Linux Nix packaging execution, isolation, and capacity.
-        ADR-0020 and raw contract version `38`'s Linux closure-view additions
+        ADR-0020 and raw contract version `39`'s Linux closure-view additions
         apply only to BURL-M003. They don't alter BURL-O001's compatibility
         requirements. BURL-M003 also remains blocked until Stage 3 acknowledges
         its Tasks adaptation. Don't reuse its runner, storage, start guard,
@@ -323,7 +323,7 @@ tickets:
         `compatibility-stage-manifest.json`, attests that manifest, copies the
         seal-exported attestation bundle into the stage, and uploads
         `managed-evidence-authenticated-stage-macos-26-arm64-for-macos-15-arm64-{artifact_nonce}`.
-        Role evidence validates against schema version `15`. Its version `2`
+        Role evidence validates against schema version `16`. Its version `2`
         receipt binds the exact stage name, service-assigned artifact ID,
         bare upload digest, canonical REST digest, creation and expiration
         facts, manifest digest, attestation subject and bundle digests, macOS 26
@@ -351,9 +351,10 @@ tickets:
         reconstructs and preserves those records in its receipt.
 
 
-        Final aggregation validates against aggregate schema version `19` and
-        the raw managed-evidence contract at version `35`. It
-        verifies the non-expired stage and producer-receipt REST objects, their
+        Final aggregation validates against aggregate schema version `20` and
+        the raw managed-evidence contract at version `39`. The separate managed
+        Spike result validates against Spike-result schema `21`. Final
+        aggregation verifies the non-expired stage and producer-receipt REST objects, their
         service IDs and both digest forms, all three attestation chains, both
         seal origins, both receipts, and agreement between the parsed lineage,
         exact lineage-artifact SHA-256, lineage transport identity and
@@ -960,7 +961,8 @@ tickets:
       - STOP release on any missing P0 capability, privacy/content leak, failed
         recovery path, closure mismatch, or PRD Fail threshold.
       - STOP if the required non-authoritative exact private-headless Linux
-        platform regression isn't recorded on managed `ubuntu-24.04`, if it
+        platform regression isn't recorded on managed `ubuntu-22.04` with
+        profile `github-ubuntu-22_04-x86_64`, if it
         substitutes for the macOS 26 authoritative product visual baseline, or
         if the authenticated role or aggregate schema validation fails.
       - STOP if work would include AppImage verification or installed macOS
@@ -984,7 +986,8 @@ tickets:
         the candidate revision and closure. The managed Linux evidence records
         the complete common functional and performance matrix, plus the exact
         non-authoritative private-headless Linux platform regression on managed
-        `ubuntu-24.04`. That regression preserves NFC-34 parity and never
+        `ubuntu-22.04` with profile `github-ubuntu-22_04-x86_64`. That regression
+        preserves NFC-34 parity and never
         substitutes for the macOS 26 authoritative product visual baseline.
         The evidence records the same P0, privacy, meter, integration,
         environment, expected-identity, signer, and artifact-integrity outcomes

@@ -138,7 +138,7 @@ tickets:
         integration_test && ./scripts/check-generated-bindings.sh && flutter
         test && dart analyze && ! rg -n '\[DEBUG-' lib rust test scripts &&
         actionlint && ./scripts/assert-ci-matrix.sh --workflow
-        .github/workflows/ci.yml --require-runner ubuntu-24.04 --require-runner
+        .github/workflows/ci.yml --require-runner ubuntu-22.04 --require-runner
         macos-26 --require-runner macos-15 --require-role-schema
         .constitution/tech-spec/contracts/ci-role-evidence.schema.json
         --require-aggregate-schema
@@ -159,22 +159,30 @@ tickets:
         receipt-digest transport validation, and every typed negative fixture
         pass; the seal-owned BURL-O001 stage chain passes; Linux also finishes
         generated-binding and managed-isolation classes, including raw contract
-        version `38` closure-view checks across all seven ordered sessions; no
+        version `39` closure-view checks across all seven ordered sessions; no
         role claims
         performance or visual evidence;
         the dedicated evidence pull request contains only
         .constitution/evidence/BURL-M003/managed-evidence.json, completion.md,
         and manifest.yaml and merges after independent review
     stop_conditions:
-      - STOP if `BURL-M015` isn't committed, validated, and independently
-        reviewed in `chore/epic-m-ci-foundation` or the branch wasn't created
-        from merged `master`.
       - >
-        STOP before BURL-M003 implementation until this Tasks patch merges and
-        a later Stage 3 patch changes
+        STOP if the recovery base doesn't retain reviewed BURL-M015 commit
+        `6d30b7445b0108a6a5dd963cd2aa2ae5f5090485` and original PR #15
+        BURL-M003 anchor `f72659cef4487317c9e984e01f775a358f814a41`,
+        whose first parent is that BURL-M015 commit. The first recovery branch
+        must be `fix/epic-m-hosted-runner-recovery` from the merged TechSpec and
+        Tasks recovery-documentation tip.
+      - >
+        STOP before BURL-M003 implementation until the entire reviewed
+        recovery-documentation pull request merges. That pull request must
+        contain this separately validated and independently reviewed Stage 4
+        commit and a later separately validated and independently reviewed
+        Stage 3 acknowledgement that cites this exact Tasks commit and version
+        and changes
         `ci_bootstrap.stage4_tasks_adaptation.status` from `required` to
-        `satisfied`. The Stage 3 acknowledgement must merge before
-        implementation begins.
+        `satisfied`. The initial Stage 3 contract commit doesn't need to merge
+        separately from that documentation pull request.
       - STOP if implementation imports or cherry-picks from the unmerged Epic G
         branch. Implement the accepted CI and headless contracts from merged
         `master`; later surgical replay must preserve this merged foundation.
@@ -211,6 +219,15 @@ tickets:
         run ID, and a new 128-bit nonce from pinned coreutils
         `od -An -N16 -tx1 /dev/urandom | tr -d ' \n'`. Fail closed unless that
         command produces exactly 32 lowercase hexadecimal characters.
+      - >
+        STOP if the first raw-version-39 recovery doesn't use the merged
+        recovery-documentation tip as `BASE_SHA`, or if a later same-contract
+        correction doesn't use the immediately preceding reviewed `master` tip
+        as `BASE_SHA`. In every case, require `BASE_SHA` to be the replacement
+        anchor's first parent and require `BASE_SHA..TRUST_ANCHOR_SHA` to contain
+        exactly one separately reviewed implementation commit within the
+        unchanged bootstrap allowlist. Don't accept an arbitrary ancestor or a
+        multi-commit correction range.
       - STOP if the trusted caller or any reusable role workflow does not invoke
         `scripts/validate-managed-workflow-inputs.sh` or require the literal
         environment value `GITHUB_RUN_ATTEMPT=1` before candidate execution,
@@ -225,6 +242,9 @@ tickets:
         `.constitution/evidence/BURL-M003/manifest.yaml`, lacks independent
         review, or hasn't merged. `BURL-M003` remains incomplete until that
         merge.
+      - STOP after the reviewed three-file evidence pull request completes
+        `BURL-M003`. Pause before Epic H implementation or Epic G replay until
+        the user explicitly resumes that work.
       - STOP if a role bundle omits any manifest-named result, log, raw
         measurement, or handoff, or if any bundled byte fails its size or
         SHA-256 check.
@@ -334,6 +354,30 @@ tickets:
       - STOP if the bootstrap profile claims performance, Linux
         platform-regression, or authoritative macOS visual evidence. Those
         obligations belong to later benchmark, shell, and release gates.
+      - >
+        STOP if the managed client observes a workflow for more than 21,600
+        seconds, or if this observation bound changes a role-job or
+        candidate-session timeout, retry rule, topology, permission, or cache
+        trust. Runtime optimization remains deferred.
+      - >
+        STOP if a failed BURL-M003 macOS candidate gate or integration
+        invocation loses its original nonzero status or skips bounded cleanup.
+        At most one failure-only diagnostic block can select its source from a
+        fixed trusted
+        gate-to-path mapping under the canonical role-output root, open it
+        read-only with no-follow and nonblocking flags, and require `fstat` to
+        identify a regular file. It can snapshot only the final 65,536 bytes
+        into a fixed-size wrapper-owned regular file. The diagnostic records
+        the fixed gate ID, original exit status, observed source size,
+        retained-tail size, and retained-tail SHA-256, but no complete-log
+        digest.
+        Never scan or hash the complete source log. Every base64 output line
+        must have the fixed validated prefix. Never
+        emit raw candidate bytes, interpret workflow or shell commands, write
+        diagnostic data to `GITHUB_OUTPUT`, `GITHUB_ENV`, or a job summary, or
+        accept or upload a diagnostic artifact. A link, FIFO, socket, device,
+        directory, unavailable file, or changing file must not block cleanup or
+        replace the original status.
       - STOP if the Flutter Rust Bridge generator, Rust crate, or Dart package
         differs from the provisionally authorized `2.12.0` triple. Use that
         triple only for bootstrap and require revalidation after final Stage 3.
@@ -345,9 +389,10 @@ tickets:
       reusable role workflows referenced through static local paths. Each role's
       candidate job has only contents read permission, checks out the separate
       tested SHA as data, and runs candidate commands without artifact or
-      signing credentials. Linux runs the raw-contract-version-38 seven-session
+      signing credentials. Linux runs the raw-contract-version-39 seven-session
       plan through two exact read-only Bubblewrap views. Hosted macOS performs
-      bounded cleanup only. Every candidate
+      bounded cleanup and can emit only the bounded failure diagnostic defined
+      by `ci_bootstrap.role_execution`. Every candidate
       bundle is untrusted. After candidate commands finish, the trusted workflow
       wrapper uses only its job-scoped artifact runtime authority to upload the
       handoff. Its dependent seal job starts on a fresh environment, never
@@ -456,14 +501,33 @@ tickets:
            `ci_bootstrap.role_execution.compatibility_stage_fixture_policy`, and
            `ci_bootstrap.role_execution.compatibility_stage_consumer_binding_fixture_policy`
            for the receipt, compatibility, evidence-profile, and typed rejection
-           behavior already accepted. Validate role schema version `15`,
-           aggregate schema version `19`, sealing receipt version `2`, and
-           receipt transport version `1`. Protect the exact 35-path
+           behavior already accepted. Validate role schema version `16`,
+           aggregate schema version `20`, Spike-result schema version `21`,
+           sealing receipt version `2`, and receipt transport version `1`.
+           Protect the exact 35-path
            `trusted_control_paths` inventory. Require the exact 11-artifact
            ordinary inventory and 13-artifact BURL-O001 inventory.
         6. Require every reusable role workflow to expose exactly `sealing-receipt-artifact-id` and `sealing-receipt-upload-action-digest` from its receipt upload. Pin `receipt_digests` to exactly `needs: [expected, linux, macos_26, macos_15]`, `runs-on: ubuntu-24.04`, and `permissions: contents: read`. Pass all six outputs directly through `needs` to `scripts/write-receipt-digest-observation.sh`. Upload only its schema-valid version-1 `receipt-upload-digests.json` as `managed-evidence-receipt-digests-{artifact_nonce}`, with `overwrite: false` and `if-no-files-found: error`. Require the exact 11-artifact ordinary inventory and 13-artifact BURL-O001 inventory. Make the collector resolve the transport's immutable ID from the exact run inventory, fetch that ID's REST object, and download the raw archive through the ID-addressed endpoint. Before extraction or JSON parsing, require the raw archive SHA-256 to equal the canonical REST digest. Corruption or substitution must produce `artifact-corrupt`; a REST ID, run, repository, name, or expiration-state mismatch must produce `artifact-api-mismatch`. Retain the immutable ID, exact name, REST digest, and computed raw-download hash in `receiptDigestTransportArtifact`. Semantically validate the extracted transport and match every transported receipt artifact ID and name to one unique REST artifact object. For each receipt, require the REST digest to equal `sha256:` plus the transported bare action digest, retain both in `origin.sealingReceiptArtifact`, and produce `artifact-digest-mismatch` on mismatch. Add fixtures that reject missing, extra, duplicate, malformed, reordered, wrong-role, wrong-run, wrong-attempt, wrong-signer, wrong-nonce, wrong-name, wrong-ID, and wrong-digest transport data.
-        7. Commit and independently review the `BURL-M003` milestone on `chore/epic-m-ci-foundation`. Open a ready implementation pull request, obtain independent pull-request review, and rebase-merge it into `master`. Record the resulting full `master` tip as `TRUST_ANCHOR_SHA`; don't treat the ticket as complete.
-        8. Create a clean detached `TRUST_ANCHOR_WORKTREE` at `TRUST_ANCHOR_SHA` and create `EVIDENCE_WORKTREE` on `docs/epic-m-ci-evidence` from that merged `master`. Set `BASE_SHA` to the rebased, reviewed `BURL-M015` milestone at the trust anchor's first parent. Run `TRUST_ANCHOR_WORKTREE/scripts/managed-evidence.sh run --ticket BURL-M003 --trust-anchor-sha TRUST_ANCHOR_SHA --source-ref refs/heads/master --tested-source-sha TRUST_ANCHOR_SHA --base-sha BASE_SHA --output EVIDENCE_WORKTREE/.constitution/evidence/BURL-M003/managed-evidence.json && git -C EVIDENCE_WORKTREE diff --check`.
+        7. After the complete reviewed recovery-documentation pull request
+           merges, create `fix/epic-m-hosted-runner-recovery` from that exact
+           `master` tip. Commit the recovery as exactly one implementation
+           commit, validate it, independently review the milestone and pull
+           request, and rebase-merge it into `master`. Record the resulting full
+           `master` tip as `TRUST_ANCHOR_SHA`; don't treat the ticket as
+           complete. If a later run fails under the same raw-version-39
+           contract, make each correction one separately reviewed commit from
+           the immediately preceding reviewed `master` tip.
+        8. Create a clean detached `TRUST_ANCHOR_WORKTREE` at
+           `TRUST_ANCHOR_SHA` and create `EVIDENCE_WORKTREE` on
+           `docs/epic-m-ci-evidence` from that merged `master`. For the first
+           recovery, set `BASE_SHA` to the merged TechSpec and Tasks
+           recovery-documentation tip. For a later same-contract correction,
+           set it to the immediately preceding reviewed `master` tip. Require
+           `BASE_SHA` to be the anchor's first parent and require the base range
+           to contain exactly one reviewed implementation commit. Require
+           `TRUST_ANCHOR_SHA`, `TESTED_SOURCE_SHA`, `WORKFLOW_SIGNER_SHA`, and
+           `refs/heads/master` to resolve to the same commit. Run
+           `TRUST_ANCHOR_WORKTREE/scripts/managed-evidence.sh run --ticket BURL-M003 --trust-anchor-sha TRUST_ANCHOR_SHA --source-ref refs/heads/master --tested-source-sha TRUST_ANCHOR_SHA --base-sha BASE_SHA --output EVIDENCE_WORKTREE/.constitution/evidence/BURL-M003/managed-evidence.json && git -C EVIDENCE_WORKTREE diff --check`.
         9. In the minimally privileged Linux `candidate` job, run the exact
            seven `ci_bootstrap.linux_candidate_closure_view.sessions` in
            order. Each session uses one Bubblewrap invocation and the exact
@@ -472,14 +536,17 @@ tickets:
            Silicon macOS roles, a cold checkout runs `flutter test && dart
            analyze && flutter test integration_test -d macos -r github`,
            then performs bounded cleanup of known test processes without
-           claiming universal containment. Each dependent `seal` job
+           claiming universal containment. On failure, the trusted wrapper can
+           emit only the bounded, fixed-prefix base64 tail diagnostic and must
+           preserve the original status and cleanup. Each dependent `seal` job
            validates and authenticates the untrusted bundle in a fresh
            environment and never executes candidate bytes.
         10. In `EVIDENCE_WORKTREE`, add `.constitution/evidence/BURL-M003/completion.md` with the anchor SHA, workflow signer SHA, tested-source SHA, run identity, accepted report digest, implementation pull request, and review evidence. Add `.constitution/evidence/BURL-M003/manifest.yaml` with the exact byte counts and SHA-256 digests of `managed-evidence.json` and `completion.md`. Commit exactly those three evidence files. Open, independently review, and merge the ready evidence pull request. Only this merge completes `BURL-M003`.
     acceptance:
       mode: contract_test
       evidence: >
-        The `ubuntu-24.04` role provides `common-functional`,
+        The `ubuntu-22.04` role with profile
+        `github-ubuntu-22_04-x86_64` provides `common-functional`,
         `managed-evidence-protocol`, `managed-evidence-security`,
         `managed-evidence-isolation`, `generated-binding-check`,
         `static-analysis`, and `desktop-integration`. The Apple Silicon
@@ -530,10 +597,11 @@ tickets:
         `runnerEnvironment` or contribute to `hostedOriginVerified`.
 
 
-        Role documents validate against schema version `15`, and the aggregate
-        validates against schema version `19`. The raw managed-evidence
-        contract is version `38`. The sealing receipt validates against version
-        `2`, and the receipt transport validates against version `1`. The exact
+        Role documents validate against schema version `16`, and the aggregate
+        validates against schema version `20`. Spike results validate against
+        schema version `21`. The raw managed-evidence contract is version `39`.
+        The sealing receipt validates against version `2`, and the receipt
+        transport validates against version `1`. The exact
         service inventory remains 11 ordinary artifacts or 13 BURL-O001
         artifacts. The 42-record bill of materials and exact 35-path
         `ci_bootstrap.trust_anchor.trusted_control_paths` inventory are binding.
@@ -563,7 +631,7 @@ tickets:
         Seal-origin fixtures cover in-progress, failed, missing, duplicate,
         wrong-job, wrong-label, self-hosted, wrong-signer, wrong-source,
         wrong-run, wrong-attempt, and wrong-locator outcomes. BURL-O001 fixtures
-        cover raw contract version `38`'s complete compatibility-stage rejection
+        cover raw contract version `39`'s complete compatibility-stage rejection
         inventory: missing, duplicate, substituted, expired, digest mismatch,
         unattested, wrong signer, wrong run, wrong role, wrong seal, stale
         producer receipt, noncanonical lineage, lineage SHA mismatch,
@@ -572,7 +640,7 @@ tickets:
         required, including token,
         configuration, artifact-runtime, receipt, evidence-profile, viewport,
         nonce, artifact, bundle, trust-anchor, source-allowlist, filesystem,
-        coordinator, and aggregation coverage. Raw contract version `38` adds
+        coordinator, and aggregation coverage. Raw contract version `39` retains
         its exact closure, environment, descriptor, teardown, host-prerequisite,
         compositor, authority, log, and cleanup fixtures to that inventory.
         Aggregate `accepted` requires all three successful candidate guard sets,
@@ -788,6 +856,24 @@ tickets:
         that run.
 
 
+        Failure-diagnostic fixtures reproduce the actual nested pinned-Bash
+        path. `candidate_exec` enables `errexit` before returning a child's
+        nonzero status. `run_ci_gate` retains that status and reaches diagnostic
+        recording. The unconditional top-level `candidate_phase` call exits
+        before a later gate runs. Fixtures reject `if`, `!`, `&&`, or `||`
+        contexts that disable `errexit` throughout the function. Oversized,
+        sparse, growing, linked, FIFO, directory, and available special-file
+        inputs prove no unbounded or blocking read. Regular-file fixtures
+        include lines that begin with `::error::`, `::warning::`, and other
+        workflow-command forms. A completed diagnostic binds the fixed gate ID,
+        original exit status, observed source size, and the retained tail's byte
+        count and SHA-256 without a complete-log digest. It emits validated
+        base64 with a fixed trusted prefix, never raw candidate output. An
+        unavailable or changing source can suppress
+        the diagnostic without changing cleanup or the original failure. No
+        diagnostic becomes accepted evidence or an uploaded artifact.
+
+
         Static workflow fixtures require literal `enable_kvm: false` at every
         trusted `cachix/install-nix-action` call site. They reject an omitted,
         true, expression-derived, environment-derived, wrapper-derived, or
@@ -878,6 +964,9 @@ tickets:
         before publication and reject publication of an accepted report.
         Lifecycle fixtures cover recovery from failed, cancelled, timed-out, and
         rejected reports.
+        The local client observes each fresh workflow for at most 21,600
+        seconds. That change doesn't alter role-job or candidate-session
+        timeouts, retry rules, topology, permissions, or cache trust.
         They require the exact 11-artifact ordinary inventory and the exact
         13-artifact BURL-O001 inventory, with `overwrite: false` on every
         upload. Each fixed artifact-name template has no variable component
@@ -896,7 +985,12 @@ tickets:
         `.constitution/evidence/BURL-M003/completion.md`, and their
         digest-bearing `.constitution/evidence/BURL-M003/manifest.yaml`.
         `BURL-M003` satisfies dependencies only after that reviewed pull request
-        merges. Any trusted-control change repeats the sequence. Final Stage 3
+        merges. The first raw-version-39 recovery base is the merged TechSpec
+        and Tasks recovery-documentation tip. Each later same-contract
+        correction uses the immediately preceding reviewed `master` tip. Every
+        replacement anchor has exactly one reviewed implementation commit above
+        its first-parent base and preserves the original PR #15 and BURL-M015
+        ancestry. Any trusted-control change repeats the sequence. Final Stage 3
         must revalidate the generator triple and generated output before
         downstream production tickets run.
     flows:

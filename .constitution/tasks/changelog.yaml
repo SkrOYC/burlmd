@@ -1,4 +1,24 @@
 entries:
+  - version: v3.2.13
+    date: 2026-09-09
+    changed:
+      - "Adapted BURL-M003 to TechSpec v2.1.28 and raw managed-evidence contract version 39. The ticket now quotes the canonical ubuntu-22.04 verification command and names the github-ubuntu-22_04-x86_64 profile, role schema version 16, aggregate schema version 20, and Spike-result schema version 21. Sealing receipt version 2 and receipt transport version 1 remain unchanged."
+      - "Defined the recovery ancestry without discarding the reviewed implementation. The first one-commit recovery uses the merged TechSpec and Tasks recovery-documentation tip as its strict first-parent base. A later same-contract correction uses the immediately preceding reviewed master tip. Every replacement anchor retains original PR #15 anchor f72659cef4487317c9e984e01f775a358f814a41 and reviewed BURL-M015 commit 6d30b7445b0108a6a5dd963cd2aa2ae5f5090485, then completes fresh self-validation with a new nonce, attempt 1, anchor equality, and the separate three-file evidence pull request."
+      - "Required the entire reviewed documentation pull request to merge before BURL-M003 implementation. The pull request contains separately validated and independently reviewed Stage 3, Stage 4, and Stage 3 acknowledgement commits. The acknowledgement remains pending and must cite the exact reviewed Tasks v3.2.13 commit before it can mark ci_bootstrap.stage4_tasks_adaptation satisfied."
+      - "Increased only the managed client's workflow observation bound from 7,200 to 21,600 seconds. Role-job and candidate-session timeouts, retries, topology, permissions, and cache trust remain unchanged. Runtime optimization remains deferred."
+      - "Mechanically restated the managed Linux label or profile for BURL-G011, BURL-P002, and BURL-O012 as ubuntu-22.04 and github-ubuntu-22_04-x86_64. No product implementation is authorized. Execution pauses after Epic M completes and before Epic H implementation or Epic G replay."
+      - "Regenerated critical-path.md from the unchanged 10-epic, 80-ticket, 564-point graph. Completed Epics A through F have no actuals blocks, so diff-lines-per-point and review-rounds-per-point calibration remains unavailable. The validator reports 70% of open tickets at the 8-point ceiling; no estimate changes."
+    fixed:
+      - "Required BURL-M003's bounded failure-only macOS diagnostic path. It selects a trusted log, opens it read-only with no-follow and nonblocking flags, accepts only a regular file, snapshots at most the final 65,536 bytes, and emits validated fixed-prefix base64 with only the observed source size and retained-tail digest. Diagnostics cannot affect cleanup, the original failure, accepted evidence, or artifact upload."
+      - "Added the actual nested pinned-Bash negative path. candidate_exec enables errexit, run_ci_gate retains the nonzero status and reaches diagnostic recording, and an unconditional candidate_phase call exits before a later gate. Fixtures cover oversized, sparse, changing, linked, FIFO, directory, and available special-file inputs without an unbounded or blocking read."
+    security:
+      - "Preserved the two Linux closure views, seven sessions, 42-record bill of materials, 35 trusted control paths, bootstrap source allowlist, exact 11-artifact ordinary and 13-artifact BURL-O001 inventories, permissions, evidence classes, fresh-seal trust boundary, and ubuntu-24.04 expected and receipt_digests control jobs."
+      - "Kept BURL-O001 blocked on its separate Stage 3 packaging-isolation and capacity decision. Its Ubuntu 22.04, Ubuntu 24.04, Ubuntu 26.04, Debian 12, and Debian 13 packaging targets remain unchanged, including .#checks.x86_64-linux.ubuntu-24_04."
+    upstream:
+      prd: v2.0.5
+      architecture: v2.1.2
+      tech-spec: v2.1.28
+    by: patch-lane
   - version: v3.2.12
     date: 2026-09-08
     fixed:

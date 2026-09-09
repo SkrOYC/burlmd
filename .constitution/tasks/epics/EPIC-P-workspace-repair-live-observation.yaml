@@ -96,12 +96,12 @@ tickets:
       expected: "exit 0 with burst/debounce/fallback and missed-event recovery tests
         passing, plus a managed report. A later evidence-only pull request
         contains managed-evidence.json and manifest.yaml with its byte count and
-        SHA-256 digest. Original verification detail: `ubuntu-24.04`: `cargo test
+        SHA-256 digest. Original verification detail: `ubuntu-22.04`: `cargo test
         --manifest-path rust/Cargo.toml && cargo clippy --workspace
         --all-targets --manifest-path rust/Cargo.toml -- -D warnings &&
         ./scripts/check-generated-bindings.sh && cargo run --release
         --manifest-path rust/Cargo.toml --bin workspace-observer-meter --
-        --run-id linux-reference --profile github-ubuntu-24_04-x86_64
+        --run-id linux-reference --profile github-ubuntu-22_04-x86_64
         --operations 100 --output target/observer-meters/linux-reference.json &&
         git diff --check`; Apple Silicon `macos-26`: `cargo test --manifest-path
         rust/Cargo.toml && cargo clippy --workspace --all-targets
