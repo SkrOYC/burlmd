@@ -558,7 +558,8 @@ tickets:
       expected: "exit 0 with the local feature matrix, reviewed visual evidence, and
         managed-evidence.json passing. A later evidence-only pull request contains
         managed-evidence.json and manifest.yaml with its byte count and SHA-256
-        digest. Original verification detail: `ubuntu-24.04`: `cargo test
+        digest. Original verification detail: `ubuntu-22.04` with profile
+        `github-ubuntu-22_04-x86_64`: `cargo test
         --manifest-path rust/Cargo.toml && flutter test && dart analyze &&
         ./scripts/visual-regression.sh shell-g011 --baseline
         test/goldens/shell-g011-linux.png --max-different-pixels 0 && git diff
