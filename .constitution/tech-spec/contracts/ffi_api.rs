@@ -1,4 +1,4 @@
-// FORWARD STATUS (live TechSpec v2.1.28; translated from reviewed v1.8.7-provisional): this is the delivered
+// FORWARD STATUS (live TechSpec v2.1.29; translated from reviewed v1.8.7-provisional): this is the delivered
 // brownfield interface, with the Epic G session-restore exception specified.
 // It is not otherwise an implementation-ready contract for structured PRD v2.0.5 and
 // Architecture v2.1.2.
