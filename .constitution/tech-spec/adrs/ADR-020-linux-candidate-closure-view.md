@@ -28,8 +28,10 @@ Bubblewrap invocation. It also ran Sway in the trusted parent and bound a
 parent-owned Wayland socket into every session. Arbitrary tested-source code is
 hostile, so the parent must not receive candidate-controlled display traffic.
 
-This correction doesn't change candidate placement, fresh-seal authority,
-evidence schemas, service artifacts, session IDs, or `BURL-O001` scope.
+This correction moves managed Linux candidate placement to `ubuntu-22.04` and
+advances the role and aggregate evidence schemas to versions `16` and `20`.
+It doesn't change fresh-seal authority, service artifacts, session IDs, or
+`BURL-O001` scope.
 
 ## Decision
 
