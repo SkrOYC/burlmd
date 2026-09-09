@@ -288,7 +288,7 @@ bill_of_materials:
     justification: "Provides the outer Linux user, mount, process, network, and filesystem isolation for the managed-evidence coordinator and all seven BURL-M003 candidate sessions, including the authority-backed read-only `/contract` mount and the two integration-only writable `xdg-runtime` binds"
     radar: assess
     certainty: assumed
-    assumption: "BURL-M003 adds pkgs.bubblewrap to devenv.nix; the pinned devenv.lock nixpkgs revision resolves 0.11.2, but no accepted managed run has established whether the exact pinned Bubblewrap and loopback prerequisite probe succeeds on the hosted Ubuntu 24.04 runner. Probe failure blocks hosted execution without a privileged fallback."
+    assumption: "BURL-M003 adds pkgs.bubblewrap to devenv.nix; the pinned devenv.lock nixpkgs revision resolves 0.11.2. The exact pinned Bubblewrap and loopback prerequisite failed on ubuntu-24.04 in run 34313264792 (`Failed RTM_NEWADDR: Operation not permitted`). The identical diagnostic passed on ubuntu-22.04 in run 34365475868, establishing prerequisite availability only for its observed image, not the complete role, documented resources, or BURL-M003 acceptance. Probe failure blocks hosted execution without a privileged fallback."
   - name: Sway
     role: infrastructure
     version: "1.12"
