@@ -176,6 +176,110 @@ rg -Fq 'preflight-bytes=' "$runner"
 rg -Fq 'print {$ack_write} q{G}' "$runner"
 rg -Fq 'm003_log=$output_root/logs/burl-m003-linux-closure-view.log' "$runner"
 rg -Fq 'burl-m003-linux-closure-view.log' "$runner"
+bundle_inventory_scope=$(awk '
+  /^export ROLE=/ { after_export = 1; next }
+  after_export && /^if \[\[ \$ticket == BURL-M003 \]\]; then$/ { active = 1 }
+  active { print }
+  active && /^\(\( \$\{#bundle_members\[@\]\} > 0 \)\)/ { exit }
+' "$runner")
+printf '%s\n' "$bundle_inventory_scope" | rg -Fq 'bundle_members+=(logs/burl-m003-linux-closure-view.log)'
+printf '%s\n' "$bundle_inventory_scope" | rg -Fq 'BURL-M003 Linux closure-view log is missing or unsafe'
+# Execute the exact production M003 collector block against a parent-owned
+# fixture. The declared manifest and archive must contain the final closure
+# view but no other log, even though another regular log exists below output.
+producer_fixture=$(mktemp -d "${TMPDIR:-/tmp}/burlmd-m003-producer.XXXXXXXX")
+(
+  trap 'rm -rf -- "$producer_fixture"' EXIT
+  producer_bin=$producer_fixture/bin
+  mkdir -p "$producer_bin"
+  printf '#!/usr/bin/env bash\nprintf "fixture flutter\\n"\n' >"$producer_bin/flutter"
+  printf '#!/usr/bin/env bash\nprintf "fixture dart\\n" >&2\n' >"$producer_bin/dart"
+  printf '#!/usr/bin/env bash\nexit 0\n' >"$producer_bin/check-jsonschema"
+  chmod +x "$producer_bin/flutter" "$producer_bin/dart" "$producer_bin/check-jsonschema"
+  PATH="$producer_bin:$PATH"
+  collector_runner=$runner
+  ticket=BURL-M003
+  role=linux-x86_64
+  output_root=$producer_fixture/output
+  m003_log=$output_root/logs/burl-m003-linux-closure-view.log
+  runner=fixture-runner
+  observed_arch=x86_64
+  cpu_model='fixture CPU'
+  os_release=fixture-os
+  filesystem=fixturefs
+  image_os=fixture-image
+  image_version=fixture-version
+  viewport_verified=false
+  observed_cpus=1
+  documented_memory=1
+  documented_storage=1
+  observed_memory=1
+  observed_storage=1
+  classes=common-functional
+  class_json='["common-functional"]'
+  role_schema=$producer_fixture/role-schema.json
+  role_schema_version=16
+  EXPECTED_IDENTITY=$producer_fixture/expected-identity.json
+  mkdir -p "$output_root/results" "$output_root/logs"
+  printf '{}\n' >"$EXPECTED_IDENTITY"
+  printf '{}\n' >"$role_schema"
+  printf result >"$output_root/results/result.json"
+  printf closure >"$m003_log"
+  printf ignored >"$output_root/logs/other.log"
+  producer_scope=$(awk '
+    /^export ROLE=/ { after_export = 1; next }
+    after_export && /^if \[\[ \$ticket == BURL-M003 \]\]; then$/ { active = 1 }
+    active { print }
+    active && /^\(cd "\$output_root" && tar --sort=name / { complete = 1; exit }
+    END { exit !complete }
+  ' "$collector_runner")
+  producer_scope_last_line=$(printf '%s\n' "$producer_scope" | tail -n 1)
+  [[ $producer_scope_last_line == *ci-role-evidence.tar.zst* && $producer_scope_last_line == *'${bundle_members[@]}'* ]]
+  eval "$producer_scope"
+  jq -e '.roleEvidence.internalArtifacts | map(.name) == ["results/result.json","logs/burl-m003-linux-closure-view.log"]' "$output_root/ci-role-evidence.json" >/dev/null
+  [[ $(LC_ALL=C tar --zstd -tf "$output_root/ci-role-evidence.tar.zst" | tr '\n' ' ') == 'ci-role-evidence.json results/result.json logs/burl-m003-linux-closure-view.log ' ]]
+  ! LC_ALL=C tar --zstd -tf "$output_root/ci-role-evidence.tar.zst" | rg -Fx 'logs/other.log'
+
+  # Disposable source mutations prove the assertions are coupled separately to
+  # the actual manifest and archive construction, not local reconstruction.
+  manifest_mutation_runner=$producer_fixture/run-managed-role-without-manifest-artifacts.sh
+  sed 's/--argjson artifacts "$artifacts"/--argjson artifacts "[]"/' "$collector_runner" >"$manifest_mutation_runner"
+  manifest_mutation_scope=$(awk '
+    /^export ROLE=/ { after_export = 1; next }
+    after_export && /^if \[\[ \$ticket == BURL-M003 \]\]; then$/ { active = 1 }
+    active { print }
+    active && /^\(cd "\$output_root" && tar --sort=name / { complete = 1; exit }
+    END { exit !complete }
+  ' "$manifest_mutation_runner")
+  output_root=$producer_fixture/manifest-mutated-output
+  m003_log=$output_root/logs/burl-m003-linux-closure-view.log
+  mkdir -p "$output_root/results" "$output_root/logs"
+  printf result >"$output_root/results/result.json"
+  printf closure >"$m003_log"
+  printf ignored >"$output_root/logs/other.log"
+  eval "$manifest_mutation_scope"
+  jq -e '.roleEvidence.internalArtifacts == []' "$output_root/ci-role-evidence.json" >/dev/null
+  [[ $(LC_ALL=C tar --zstd -tf "$output_root/ci-role-evidence.tar.zst" | tr '\n' ' ') == 'ci-role-evidence.json results/result.json logs/burl-m003-linux-closure-view.log ' ]]
+
+  archive_mutation_runner=$producer_fixture/run-managed-role-without-archive-members.sh
+  sed -E 's/ ci-role-evidence\.json "\$\{bundle_members\[@\]\}"\)$/ ci-role-evidence.json)/' "$collector_runner" >"$archive_mutation_runner"
+  archive_mutation_scope=$(awk '
+    /^export ROLE=/ { after_export = 1; next }
+    after_export && /^if \[\[ \$ticket == BURL-M003 \]\]; then$/ { active = 1 }
+    active { print }
+    active && /^\(cd "\$output_root" && tar --sort=name / { complete = 1; exit }
+    END { exit !complete }
+  ' "$archive_mutation_runner")
+  output_root=$producer_fixture/archive-mutated-output
+  m003_log=$output_root/logs/burl-m003-linux-closure-view.log
+  mkdir -p "$output_root/results" "$output_root/logs"
+  printf result >"$output_root/results/result.json"
+  printf closure >"$m003_log"
+  printf ignored >"$output_root/logs/other.log"
+  eval "$archive_mutation_scope"
+  jq -e '.roleEvidence.internalArtifacts | map(.name) == ["results/result.json","logs/burl-m003-linux-closure-view.log"]' "$output_root/ci-role-evidence.json" >/dev/null
+  [[ $(LC_ALL=C tar --zstd -tf "$output_root/ci-role-evidence.tar.zst" | tr '\n' ' ') == 'ci-role-evidence.json ' ]]
+)
 rg -Fq 'integration-378c340b182c219c9b1067d7918e48a70ed42307453d3b69402a1b075786b58d' "$runner"
 rg -Fq 'integration-2aa91e4e2d4b0febdfc223ef1bae763bf139e2fc6f81409a05bf19c5c9139e9d' "$runner"
 rg -Fq '"teardown-lock-verifier-path=$m003_flock_path"' "$runner"
@@ -310,6 +414,19 @@ rg -Fq "BURL-M003's managed profiles are explicitly non-authoritative" "$runner"
 rg -Fq 'observed_cpus=$(sysctl -n hw.logicalcpu)' "$runner"
 rg -Fq 'macos_filesystem_device=$(/bin/df -P "$canonical_output"' "$runner"
 rg -Fq '/usr/sbin/diskutil info -plist "$macos_filesystem_device"' "$runner"
+# Flutter 3.44.3's Darwin OS utility resolves these fixed host tools for OS
+# identification and post-command reporting. They are individual private-PATH
+# capabilities, not a host-directory grant; `which sysctl` falls through to
+# absolute sysctl.
+darwin_tool_scope=$(sed -n '/^prepare_candidate_tool_path()/,/^validate_pub_lock_dependencies()/p' "$runner")
+printf '%s\n' "$darwin_tool_scope" | rg -Fq 'for tool in sw_vers uname which; do'
+printf '%s\n' "$darwin_tool_scope" | rg -Fq '[[ -x /usr/bin/$tool ]]'
+printf '%s\n' "$darwin_tool_scope" | rg -Fq 'ln -s "/usr/bin/$tool" "$candidate_tool_path/$tool"'
+printf '%s\n' "$darwin_tool_scope" | rg -Fq 'ln -s /usr/bin/open "$candidate_tool_path/open"'
+if printf '%s\n' "$darwin_tool_scope" | rg -Fq '/usr/sbin/sysctl'; then
+  echo 'macOS candidate PATH must not expose sysctl' >&2
+  exit 1
+fi
 # Linux candidate descendants are contained by Bubblewrap's PID namespace
 # reaper. The lock remains the trusted host-side proof that the namespace has
 # fully exited before the runner can package role output. Hosted macOS instead
@@ -428,6 +545,13 @@ cat >"$tmp/bin/sw_vers" <<'EOF'
 version=${BURLMD_PROFILE_VERSION:-26.0}
 if [[ ${1:-} == -productVersion ]]; then printf '%s\n' "$version"; else printf 'ProductName:\tmacOS\nProductVersion:\t%s\n' "$version"; fi
 EOF
+cat >"$tmp/bin/which" <<'EOF'
+#!/usr/bin/env bash
+# Flutter's Darwin host-platform detection probes this helper first. Reporting
+# no PATH sysctl forces the documented absolute-sysctl fallback.
+[[ ${1:-} == sysctl && $# == 1 ]] || exit 64
+exit 1
+EOF
 cat >"$tmp/bin/check-jsonschema" <<'EOF'
 #!/usr/bin/env bash
 exit 0
@@ -496,7 +620,7 @@ run_viewport_fixture() {
     bwrap --die-with-parent --tmpfs / --proc /proc --dev /dev --ro-bind /nix /nix --ro-bind /etc /etc \
       --dir /home --dir /home/oscar --dir /home/oscar/GitHub --dir /home/oscar/GitHub/burlmd --ro-bind "$signer_git_common" "$signer_git_common" --ro-bind "$root" "$root" \
       --dir /tmp --bind "$tmp" "$tmp" --dir /bin --ro-bind "$sh_bin" /bin/sh --dir /usr --dir /usr/bin --dir /usr/sbin \
-      --ro-bind "$env_bin" /usr/bin/env --ro-bind "$tmp/source/fixture-bin/open" /usr/bin/open --ro-bind "$tmp/source/fixture-bin/df" /bin/df --ro-bind "$tmp/source/fixture-bin/diskutil" /usr/sbin/diskutil --ro-bind "$tmp/source/fixture-bin/plutil" /usr/bin/plutil \
+      --ro-bind "$env_bin" /usr/bin/env --ro-bind "$tmp/source/fixture-bin/open" /usr/bin/open --ro-bind "$tmp/source/fixture-bin/uname" /usr/bin/uname --ro-bind "$tmp/source/fixture-bin/sw_vers" /usr/bin/sw_vers --ro-bind "$tmp/source/fixture-bin/which" /usr/bin/which --ro-bind "$tmp/source/fixture-bin/df" /bin/df --ro-bind "$tmp/source/fixture-bin/diskutil" /usr/sbin/diskutil --ro-bind "$tmp/source/fixture-bin/plutil" /usr/bin/plutil \
       "$runner" macos-26-arm64 "$tmp/source" "$output" >"$log" 2>&1; then
     return 0
   fi

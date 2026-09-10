@@ -10,11 +10,9 @@ readonly API_TRANSIENT=75
 readonly API_PERMISSION=76
 readonly API_FAILURE=77
 readonly POLL_TRANSIENT_RETRIES=5
-# PR #37's independently reviewed post-merge closure records this exact final
-# documentation tip as the only base authorized for the first raw-39 recovery.
-# A later same-contract correction rotates this private pin, in that correction's
-# reviewed implementation commit, to the independently verified prior anchor.
-readonly BURL_M003_REVIEWED_BASE_SHA=f0e2e432b5b8d975f261923849d4309b39f94a9d
+# PR #38's independently reviewed post-merge closure records the immediate
+# reviewed master tip for this same-contract correction.
+readonly BURL_M003_REVIEWED_BASE_SHA=0f155121ab95191186dd03d2aca716b731b393ea
 die() { printf 'managed-evidence: %s\n' "$*" >&2; exit 2; }
 sha256_file() { sha256sum "$1" | awk '{print $1}'; }
 

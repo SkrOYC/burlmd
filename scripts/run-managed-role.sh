@@ -470,6 +470,17 @@ prepare_candidate_tool_path() {
       return 2
     }
     ln -s /usr/bin/open "$candidate_tool_path/open"
+    # Flutter 3.44.3's Darwin OS utility uses these fixed host helpers while
+    # tests start: sw_vers, uname -m, and which before its absolute sysctl
+    # fallback. Expose only the exact executables, never a broad /usr/bin PATH
+    # entry or a sysctl link.
+    for tool in sw_vers uname which; do
+      [[ -x /usr/bin/$tool ]] || {
+        echo "required macOS Flutter host helper is missing: /usr/bin/$tool" >&2
+        return 2
+      }
+      ln -s "/usr/bin/$tool" "$candidate_tool_path/$tool"
+    done
   fi
   [[ -n $trusted_perl && -f $trusted_perl && -x $trusted_perl && ! -L $trusted_perl ]] || {
     echo 'locked trusted Perl interpreter is unavailable' >&2
@@ -3714,6 +3725,12 @@ fi
 export ROLE="$role" RUNNER_LABEL="$runner" ARCH="$observed_arch" CPUS="$observed_cpus" MEMORY="$documented_memory" STORAGE="$documented_storage" CLASSES="$classes" OUTPUT_ROOT="$output_root"
 if [[ $ticket == BURL-M003 ]]; then
   mapfile -t bundle_members < <(find "$output_root/results" -type f -print | LC_ALL=C sort | sed "s#^$output_root/##")
+  if [[ $role == linux-x86_64 ]]; then
+    [[ $m003_log == "$output_root/logs/burl-m003-linux-closure-view.log" && -f $m003_log && ! -L $m003_log ]] || {
+      echo 'BURL-M003 Linux closure-view log is missing or unsafe' >&2; exit 1;
+    }
+    bundle_members+=(logs/burl-m003-linux-closure-view.log)
+  fi
 else
   mapfile -t bundle_members < <(find "$output_root" -type f -print | LC_ALL=C sort |
     sed "s#^$output_root/##" |

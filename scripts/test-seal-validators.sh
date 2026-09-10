@@ -506,6 +506,15 @@ m003_refresh_manifest() {
   jq --arg hash "$hash" --argjson bytes "$bytes" '.roleEvidence.internalArtifacts |= map(if .name == "logs/burl-m003-linux-closure-view.log" then .sha256 = $hash | .bytes = $bytes else . end)' "$m003_production_source/ci-role-evidence.json" >"$tmp/m003-production-manifest.next"
   mv "$tmp/m003-production-manifest.next" "$m003_production_source/ci-role-evidence.json"
 }
+# The Linux producer finalizes the closure view only after all seven sessions.
+# Keep the accepted manifest declaration intact but omit its archive member:
+# the unchanged seal validator must reject the resulting invalid transport.
+m003_without_log_bundle="$tmp/m003-production-without-log.tar.zst"
+(cd "$m003_production_source" && tar --zstd --sort=name --mtime='@0' --owner=0 --group=0 --numeric-owner -cf "$m003_without_log_bundle" ci-role-evidence.json results/result.json)
+if "$root/scripts/validate-managed-role-bundle.sh" --expected "$expected" --role "$role" --nonce "$nonce" --bundle "$m003_without_log_bundle" >/dev/null 2>&1; then
+  echo 'seal accepted BURL-M003 Linux manifest whose closure-view log is absent from the archive' >&2
+  exit 1
+fi
 m003_assert_rejected() {
   local name=$1 expression=$2 log bundle mutated restored
   log=$m003_production_source/logs/burl-m003-linux-closure-view.log

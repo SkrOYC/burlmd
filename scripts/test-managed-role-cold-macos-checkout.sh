@@ -10,6 +10,19 @@ if [[ ${BURLMD_COLD_MACOS_LOCKED_SHELL:-} != 1 ]]; then
   exec "$root/scripts/ci-devenv.sh" env BURLMD_COLD_MACOS_LOCKED_SHELL=1 "$0" "$@"
 fi
 
+populate_native_candidate_path() {
+  local candidate_path=$1 tool tool_path resolved
+  shift
+  for tool in "$@"; do
+    tool_path=$(command -v "$tool") || {
+      echo "native fixture missing production candidate tool: $tool" >&2
+      return 1
+    }
+    resolved=$(readlink -f "$tool_path") || return 1
+    [[ -e $candidate_path/$tool ]] || ln -s "$resolved" "$candidate_path/$tool"
+  done
+}
+
 # The Linux fixture below models the macOS role's authority boundaries, but a
 # Darwin runner must also exercise Cargokit's real native desktop build path.
 # In particular, it proves the locked rustup shim advertises the native target
@@ -31,13 +44,14 @@ if [[ $(uname) == Darwin ]]; then
   mapfile -t selected_tools < <(candidate_profile_tools BURL-M003 macos-26-arm64)
   candidate_path=$tmp/candidate-path
   mkdir -p "$candidate_path"
-  for tool in "${selected_tools[@]}" bash sh env mkdir rm cp mv ln find grep sed awk sort head tail dirname basename readlink sleep perl tr cat ls xcrun xcodebuild clang clang++ ld libtool plutil lipo install_name_tool arch open; do
-    tool_path=$(command -v "$tool") || { echo "native fixture missing production candidate tool: $tool" >&2; exit 1; }
-    resolved=$(readlink -f "$tool_path") || exit 1
-    ln -s "$resolved" "$candidate_path/$tool"
-  done
+  populate_native_candidate_path "$candidate_path" "${selected_tools[@]}" bash sh env mkdir rm cp mv ln find grep sed awk sort head tail dirname basename readlink sleep perl tr cat ls xcrun xcodebuild clang clang++ ld libtool plutil lipo install_name_tool arch open
   [[ -x $candidate_path/rustup ]] || { echo 'native fixture omitted the pinned rustup shim' >&2; exit 1; }
   [[ $(readlink "$candidate_path/open") == /usr/bin/open ]] || { echo 'native fixture did not pin open to /usr/bin/open' >&2; exit 1; }
+  for helper in sw_vers uname which; do
+    [[ -x /usr/bin/$helper ]] || { echo "native fixture missing /usr/bin/$helper" >&2; exit 1; }
+    ln -s "/usr/bin/$helper" "$candidate_path/$helper"
+    [[ $(readlink "$candidate_path/$helper") == "/usr/bin/$helper" ]] || { echo "native fixture did not pin $helper to /usr/bin/$helper" >&2; exit 1; }
+  done
   for forbidden in gh git actionlint taplo curl wget ssh shasum; do
     [[ ! -e $candidate_path/$forbidden ]] || { echo "native fixture exposed forbidden candidate tool: $forbidden" >&2; exit 1; }
   done
@@ -80,6 +94,31 @@ env_bin=$(readlink -f "$(command -v env)")
 sh_bin=$(readlink -f "$(command -v sh)")
 [[ $env_bin == /nix/store/* ]] || { echo 'cold macOS fixture requires the locked env executable' >&2; exit 1; }
 [[ $sh_bin == /nix/store/* ]] || { echo 'cold macOS fixture requires the locked sh executable' >&2; exit 1; }
+# The native profile includes env and the explicit runtime list repeats it. Run
+# the actual native path setup helper headlessly to prove the legacy link loop
+# fails on that repetition and the idempotent helper keeps exactly one link.
+native_path_setup=$tmp/native-path-setup.sh
+awk '/^populate_native_candidate_path\(\)/ { copy = 1 } copy { print } copy && /^}$/ { exit }' "$0" >"$native_path_setup"
+env -u DISPLAY -u WAYLAND_DISPLAY -u SWAYSOCK -u XDG_RUNTIME_DIR TMPDIR=/tmp \
+  LC_ALL=C bash -ceu '
+    source "$1"
+    fixture_root=$2
+    legacy_path=$fixture_root/legacy-native-path
+    candidate_path=$fixture_root/candidate-native-path
+    mkdir -p "$legacy_path" "$candidate_path"
+    env_target=$(readlink -f "$(command -v env)")
+    legacy_stderr=$fixture_root/legacy-native-path.stderr
+    set +e
+    for tool in env env; do
+      ln -s "$env_target" "$legacy_path/$tool"
+    done 2>"$legacy_stderr"
+    legacy_status=$?
+    set -e
+    [[ $legacy_status == 1 && -L $legacy_path/env ]]
+    rg -Fq "File exists" "$legacy_stderr"
+    populate_native_candidate_path "$candidate_path" env env
+    [[ $(readlink "$candidate_path/env") == "$env_target" && -x $candidate_path/env ]]
+  ' cold-native-path-setup "$native_path_setup" "$tmp"
 cat >"$bin/uname" <<EOF
 #!/usr/bin/env bash
 if [[ \${BURLMD_MACOS_COLD_HOST:-} == 1 ]]; then [[ \${1:-} == -m ]] && printf 'arm64\\n' || printf 'Darwin\\n'; else exec "$real_uname" "\$@"; fi
@@ -93,13 +132,21 @@ cat >"$bin/sw_vers" <<'EOF'
 case ${BURLMD_EXPECTED_DF_TARGET:-} in
   *output-macos-26) major=26;;
   *output-macos-15) major=15;;
-  *) exit 64;;
+  *) major=26;;
 esac
 case ${1:-} in
   '') printf 'ProductName:\tmacOS\nProductVersion:\t%s.0\n' "$major";;
+  -productName) [[ $# == 1 ]] || exit 64; printf 'macOS\n';;
   -productVersion) [[ $# == 1 ]] || exit 64; printf '%s.0\n' "$major";;
+  -buildVersion) [[ $# == 1 ]] || exit 64; printf 'fixture-build\n';;
   *) exit 64;;
 esac
+EOF
+cat >"$bin/which" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+[[ ${1:-} == sysctl && $# == 1 ]] || exit 64
+exit 1
 EOF
 printf '#!/usr/bin/env bash\nprintf "fixture Flutter\\n"\n' >"$bin/head"
 cat >"$bin/df" <<'EOF'
@@ -133,7 +180,17 @@ done
 cat >"$bin/flutter" <<EOF
 #!/usr/bin/env bash
 m="$marker"; for v in GH_TOKEN GITHUB_TOKEN ACTIONS_RUNTIME_TOKEN ACTIONS_ID_TOKEN_REQUEST_TOKEN SSH_AUTH_SOCK AWS_SECRET_ACCESS_KEY; do [[ -z \${!v:-} ]] || exit 91; done; unset BURLMD_MACOS_COLD_HOST
+verify_darwin_lookup() {
+  sw_vers -productName >/dev/null || exit 101
+  sw_vers -productVersion >/dev/null || exit 102
+  sw_vers -buildVersion >/dev/null || exit 103
+  uname -m >/dev/null || exit 104
+  which sysctl >/dev/null 2>&1
+  [[ \$? == 1 ]] || exit 105
+  echo flutter-darwin-lookup >>"\$m"
+}
 case \${1:-} in
+burlmd-verify-darwin-lookup) verify_darwin_lookup; exit 0;;
 pub)
   [[ \${2:-} == get && " \$* " == *' --enforce-lockfile '* && " \$* " == *' --no-precompile '* && " \$* " == *' --no-example '* ]] || exit 92
   for ((i = 1; i <= \$#; i++)); do if [[ \${!i} == --directory ]]; then j=\$((i + 1)); directory=\${!j}; fi; done
@@ -143,6 +200,7 @@ pub)
   ;;
 test)
   [[ " \$* " == *' --no-pub '* ]] || exit 93
+  verify_darwin_lookup
   reporter=
   for argument in "\$@"; do
     case \$argument in --file-reporter=json:*) reporter=\${argument#--file-reporter=json:};; esac
@@ -165,6 +223,22 @@ case \${1:-} in fetch) [[ " \$* " == *' --locked '* ]] || exit 95; echo cargo-fe
 exec "$real_cargo" "\$@"
 EOF
 chmod +x "$bin"/*
+# The helper wrapper preserves the real Flutter result/report flow, so it
+# checks each lookup explicitly instead of using global errexit. Exercise that
+# branch directly: only the expected `which` miss (status 1) may continue.
+run_lookup_fixture() {
+  env -u GH_TOKEN -u GITHUB_TOKEN -u ACTIONS_RUNTIME_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN -u SSH_AUTH_SOCK -u AWS_SECRET_ACCESS_KEY \
+    PATH="$bin:$PATH" BURLMD_EXPECTED_DF_TARGET="$tmp/output-macos-26" "$bin/flutter" burlmd-verify-darwin-lookup
+}
+run_lookup_fixture
+cp "$bin/sw_vers" "$tmp/sw_vers.good"
+printf '#!/usr/bin/env bash\nexit 64\n' >"$bin/sw_vers"
+chmod +x "$bin/sw_vers"
+if run_lookup_fixture; then
+  echo 'Darwin lookup accepted an executable sw_vers failure' >&2
+  exit 1
+fi
+cp "$tmp/sw_vers.good" "$bin/sw_vers"
 source=$tmp/source
 git clone -q --no-local "$root" "$source"; sha=$(git -C "$source" rev-parse HEAD)
 signer_sha=$(git -C "$root" rev-parse HEAD)
@@ -200,7 +274,7 @@ run_cold_macos_role() {
     bwrap --die-with-parent --tmpfs / --proc /proc --dev /dev --ro-bind /nix /nix --ro-bind /etc /etc \
       --dir /home --dir /home/oscar --dir /home/oscar/GitHub --dir "$signer_git_parent" --ro-bind "$root" "$root" --ro-bind "$signer_git_common" "$signer_git_common" \
       --dir /tmp --bind "$tmp" "$tmp" --dir /bin --ro-bind "$sh_bin" /bin/sh --dir /usr --dir /usr/bin --dir /usr/sbin \
-      --ro-bind "$env_bin" /usr/bin/env --ro-bind "$bin/open" /usr/bin/open --ro-bind "$bin/df" /bin/df --ro-bind "$bin/diskutil" /usr/sbin/diskutil --ro-bind "$bin/plutil" /usr/bin/plutil \
+      --ro-bind "$env_bin" /usr/bin/env --ro-bind "$bin/open" /usr/bin/open --ro-bind "$bin/uname" /usr/bin/uname --ro-bind "$bin/sw_vers" /usr/bin/sw_vers --ro-bind "$bin/which" /usr/bin/which --ro-bind "$bin/df" /bin/df --ro-bind "$bin/diskutil" /usr/sbin/diskutil --ro-bind "$bin/plutil" /usr/bin/plutil \
       "$root/scripts/run-managed-role.sh" "$role" "$source" "$output" >"$log" 2>&1; then
     cat "$marker"
     tail -n 80 "$log"
@@ -213,10 +287,33 @@ run_cold_macos_role macos-26-arm64 "$tmp/output-macos-26" "$tmp/role-macos-26.lo
 # launch with the stage-root variable absent, rather than pointing it at an
 # uncreated runner-temp directory.
 run_cold_macos_role macos-15-arm64 "$tmp/output-macos-15" "$tmp/role-macos-15.log"
+[[ $(rg -cx pub-get "$marker") == 2 && $(rg -cx cargo-fetch-locked "$marker") == 2 && $(rg -cx flutter-no-pub "$marker") -ge 6 && $(rg -cx flutter-darwin-lookup "$marker") -ge 6 && $(rg -cx cargo-metadata-offline "$marker") == 2 ]]
+# The fixed links are prechecked inside the role's private PATH. A missing
+# helper cannot silently fall back to an ambient host directory, and a helper
+# that returns an invalid Darwin response aborts the role before publication.
+chmod 644 "$bin/which"
+if run_cold_macos_role macos-26-arm64 "$tmp/output-missing-helper" "$tmp/role-missing-helper.log"; then
+  echo 'macOS role accepted a missing fixed Flutter helper' >&2
+  exit 1
+fi
+rg -Fq 'required macOS Flutter host helper is missing: /usr/bin/which' "$tmp/role-missing-helper.log"
+[[ ! -e $tmp/output-missing-helper/ci-role-evidence.json ]]
+chmod 755 "$bin/which"
+printf 'wrong helper\n' >"$bin/sw_vers"
+chmod 644 "$bin/sw_vers"
+if run_cold_macos_role macos-26-arm64 "$tmp/output-wrong-helper" "$tmp/role-wrong-helper.log"; then
+  echo 'macOS role accepted a wrong fixed Flutter helper' >&2
+  exit 1
+fi
+rg -Fq 'required macOS Flutter host helper is missing: /usr/bin/sw_vers' "$tmp/role-wrong-helper.log"
+[[ ! -e $tmp/output-wrong-helper/ci-role-evidence.json ]]
+cp "$source/fixture-bin/sw_vers" "$bin/sw_vers"
+chmod 755 "$bin/sw_vers"
+cmp -s "$source/fixture-bin/sw_vers" "$bin/sw_vers" || { echo 'macOS fixture did not restore sw_vers bytes' >&2; exit 1; }
+[[ $(stat -c '%a' "$bin/sw_vers") == 755 ]] || { echo 'macOS fixture did not restore sw_vers mode' >&2; exit 1; }
 [[ ! -e $tmp/authenticated-input ]] || { echo 'no-stage macOS 15 fixture created an authenticated input root' >&2; exit 1; }
 [[ $(rg -c '^df-posix:' "$marker") == 2 ]] || { echo 'macOS fixture did not resolve each output root with df -P' >&2; exit 1; }
 [[ $(sha256sum "$source/pubspec.lock" | awk '{print $1}') == "$pub" && $(sha256sum "$source/rust/Cargo.lock" | awk '{print $1}') == "$cargo" ]]
-[[ $(rg -cx pub-get "$marker") == 2 && $(rg -cx cargo-fetch-locked "$marker") == 2 && $(rg -cx flutter-no-pub "$marker") -ge 6 && $(rg -cx cargo-metadata-offline "$marker") == 2 ]]
 for output in "$tmp/output-macos-26" "$tmp/output-macos-15"; do
   jq -e '([.[] | select(.id == "flutter-test" and .status == "passed")] | length == 1) and ([.[] | select(.id == "cargo-metadata" and .status == "passed")] | length == 1)' "$output/results/role-steps.json" >/dev/null
   for json_log in "$output"/results/integration-*.jsonl; do
@@ -250,5 +347,8 @@ for role in macos-26 macos-15; do
     [[ -x $inventory/$required ]] || { echo "macOS candidate missed required locked tool: $required" >&2; exit 1; }
   done
   [[ $(readlink "$inventory/open") == /usr/bin/open ]] || { echo "macOS candidate did not pin open to /usr/bin/open: $role" >&2; exit 1; }
+  for helper in sw_vers uname which; do
+    [[ $(readlink "$inventory/$helper") == "/usr/bin/$helper" ]] || { echo "macOS candidate did not pin $helper to /usr/bin/$helper: $role" >&2; exit 1; }
+  done
 done
 echo 'managed role cold macOS-checkout fixture passed'
