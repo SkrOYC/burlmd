@@ -612,15 +612,11 @@ candidate_linux_mesa_dri=${BURLMD_MESA_DRI_PATH:?locked Mesa DRI path is require
 candidate_linux_mesa_egl=${BURLMD_MESA_EGL_VENDOR_PATH:?locked Mesa EGL path is required}
 [[ ${LIBCLANG_PATH:?locked LIBCLANG_PATH is required} == /nix/store/* && $candidate_linux_openssl_pkgconfig == /nix/store/* && $candidate_linux_openssl_include == /nix/store/* && $candidate_linux_openssl_lib == /nix/store/* && $candidate_linux_mesa_dri == /nix/store/* && $candidate_linux_mesa_egl == /nix/store/* ]]
 
-m003_plan_authorities
-m003_base_sources=$m003_runner_temp_root/burlmd-m003/base-sources.tsv
-m003_integration_sources=$m003_runner_temp_root/burlmd-m003/integration-sources.tsv
-m003_source_rows "$candidate_linux_base_manifest" base "$m003_base_sources"
-m003_source_rows "$candidate_linux_integration_manifest" integration "$m003_integration_sources"
-m003_base_source_count=$(wc -l <"$m003_base_sources" | tr -d ' ')
-m003_integration_source_count=$(wc -l <"$m003_integration_sources" | tr -d ' ')
-m003_base_source_sha=$(sha256sum "$m003_base_sources" | awk '{print $1}')
-m003_integration_source_sha=$(sha256sum "$m003_integration_sources" | awk '{print $1}')
+m003_prepare_closure_log
+m003_base_source_sha=$(awk -F= '/^base-source-identity-sha256=/{print $2}' "$m003_log")
+m003_integration_source_sha=$(awk -F= '/^integration-source-identity-sha256=/{print $2}' "$m003_log")
+[[ $m003_base_source_sha == $(awk -F$'\t' '$1 == "base-source" { print }' "$m003_log" | sha256sum | awk '{print $1}') ]]
+[[ $m003_integration_source_sha == $(awk -F$'\t' '$1 == "integration-source" { print }' "$m003_log" | sha256sum | awk '{print $1}') ]]
 m003_log=$m003_runner_temp_root/burlmd-m003/controller-live.log
 : >"$m003_log"
 bwrap_root=/nix/store/g7svy17fhkg2cq3q4lfzzc0mmsl3d8hq-bubblewrap-0.11.2

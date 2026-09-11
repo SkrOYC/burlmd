@@ -10,9 +10,9 @@ readonly API_TRANSIENT=75
 readonly API_PERMISSION=76
 readonly API_FAILURE=77
 readonly POLL_TRANSIENT_RETRIES=5
-# PR #38's independently reviewed post-merge closure records the immediate
+# PR #39's independently reviewed post-merge closure records the immediate
 # reviewed master tip for this same-contract correction.
-readonly BURL_M003_REVIEWED_BASE_SHA=0f155121ab95191186dd03d2aca716b731b393ea
+readonly BURL_M003_REVIEWED_BASE_SHA=5e9935d1c8a8c100593c0cdc2dee21d3ae97de2b
 die() { printf 'managed-evidence: %s\n' "$*" >&2; exit 2; }
 sha256_file() { sha256sum "$1" | awk '{print $1}'; }
 
