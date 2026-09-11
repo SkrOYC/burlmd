@@ -262,6 +262,8 @@ m003_log=
 m003_authorities=
 m003_base_sources=
 m003_integration_sources=
+m003_base_source_identities=
+m003_integration_source_identities=
 m003_base_source_sha=
 m003_integration_source_sha=
 m003_authority_sha=
@@ -1622,8 +1624,9 @@ m003_mountinfo_identity() {
 }
 
 m003_source_rows() {
-  local manifest=$1 class=$2 destination=$3 member file_type dev inode host_mount_device host_mount_root
-  : >"$destination"
+  local manifest=$1 class=$2 destination=$3 member file_type dev inode host_mount_device host_mount_root destination_count manifest_count
+  [[ -f $manifest && ! -L $manifest ]] || return 1
+  : >"$destination" || return 1
   while IFS= read -r member; do
     [[ $member == /nix/store/* && -e $member && ! -L $member ]] || return 1
     file_type=$(m003_file_type "$member") || return 1
@@ -1634,9 +1637,22 @@ m003_source_rows() {
     # same-path member bind has a mount root equal to the complete member path.
     printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\tro\n' \
       "$member" "$file_type" "$dev" "$inode" "$host_mount_device" "$host_mount_root" \
-      "$dev" "$inode" "$host_mount_device" "$member" >>"$destination"
-  done <"$manifest"
-  [[ -s $destination && $(wc -l <"$destination" | tr -d ' ') == $(wc -l <"$manifest" | tr -d ' ') ]]
+      "$dev" "$inode" "$host_mount_device" "$member" >>"$destination" || return 1
+  done <"$manifest" || return 1
+  destination_count=$(wc -l <"$destination" | tr -d ' ') || return 1
+  manifest_count=$(wc -l <"$manifest" | tr -d ' ') || return 1
+  [[ -s $destination && $destination_count == "$manifest_count" ]]
+}
+
+m003_serialize_source_identities() {
+  local source_rows=$1 prefix=$2 destination=$3 row_count
+  [[ -f $source_rows && ! -L $source_rows && ! -e $destination && ! -L $destination ]] || return 1
+  case $prefix in base-source|integration-source) ;; *) return 1;; esac
+  if ! awk -v prefix="$prefix" '{printf "%s\t%s\n", prefix, $0}' "$source_rows" >"$destination"; then
+    return 1
+  fi
+  row_count=$(wc -l <"$destination" | tr -d ' ') || return 1
+  [[ $row_count =~ ^[1-9][0-9]*$ && $row_count == $(wc -l <"$source_rows" | tr -d ' ') ]]
 }
 
 m003_close_authority_fds() {
@@ -1876,21 +1892,25 @@ m003_plan_authorities() {
 }
 
 m003_prepare_closure_log() {
-  local source_line
   [[ $ticket == BURL-M003 && $role == linux-x86_64 && -n $m003_runner_temp_root ]] || return 1
-  mkdir -p "$output_root/logs"
+  mkdir -p "$output_root/logs" || return 1
   m003_log=$output_root/logs/burl-m003-linux-closure-view.log
   [[ ! -e $m003_log && ! -L $m003_log ]] || return 1
+  m003_plan_authorities || return 1
   m003_base_sources=$m003_runner_temp_root/burlmd-m003/base-sources.tsv
   m003_integration_sources=$m003_runner_temp_root/burlmd-m003/integration-sources.tsv
+  m003_base_source_identities=$m003_runner_temp_root/burlmd-m003/base-source-identities.tsv
+  m003_integration_source_identities=$m003_runner_temp_root/burlmd-m003/integration-source-identities.tsv
   m003_source_rows "$candidate_linux_base_manifest" base "$m003_base_sources" || return 1
   m003_source_rows "$candidate_linux_integration_manifest" integration "$m003_integration_sources" || return 1
   m003_base_source_count=$(wc -l <"$m003_base_sources" | tr -d ' ')
   m003_integration_source_count=$(wc -l <"$m003_integration_sources" | tr -d ' ')
-  m003_base_source_sha=$(sha256sum "$m003_base_sources" | awk '{print $1}')
-  m003_integration_source_sha=$(sha256sum "$m003_integration_sources" | awk '{print $1}')
   [[ $m003_base_source_count == 488 && $m003_integration_source_count == 547 ]] || return 1
-  m003_plan_authorities || return 1
+  m003_serialize_source_identities "$m003_base_sources" base-source "$m003_base_source_identities" || return 1
+  m003_serialize_source_identities "$m003_integration_sources" integration-source "$m003_integration_source_identities" || return 1
+  m003_base_source_sha=$(sha256sum "$m003_base_source_identities" | awk '{print $1}') || return 1
+  m003_integration_source_sha=$(sha256sum "$m003_integration_source_identities" | awk '{print $1}') || return 1
+  [[ $m003_base_source_sha =~ ^[0-9a-f]{64}$ && $m003_integration_source_sha =~ ^[0-9a-f]{64}$ ]] || return 1
   {
     printf '%s\n' \
       'format=burlmd-linux-closure-view-v2' 'raw-contract-version=39' \
@@ -1915,11 +1935,11 @@ m003_prepare_closure_log() {
       "integration-source-identity-count=$m003_integration_source_count" "integration-source-identity-sha256=$m003_integration_source_sha" \
       "capacity-root-count=$m003_capacity_root_count" "capacity-authority-count=$m003_authority_count" "capacity-authority-sha256=$m003_authority_sha" \
       "capacity-filesystem-count=$m003_capacity_root_count" 'base-session-count=5' 'integration-session-count=2' 'session-count=7'
-    while IFS= read -r source_line; do printf 'base-source\t%s\n' "$source_line"; done <"$m003_base_sources"
-    while IFS= read -r source_line; do printf 'integration-source\t%s\n' "$source_line"; done <"$m003_integration_sources"
-    cat "$m003_authorities"
-  } >"$m003_log"
-  m003_fsync_file "$m003_log"
+    cat "$m003_base_source_identities" || return 1
+    cat "$m003_integration_source_identities" || return 1
+    cat "$m003_authorities" || return 1
+  } >"$m003_log" || return 1
+  m003_fsync_file "$m003_log" || return 1
 }
 
 m003_selected_source_file() {
