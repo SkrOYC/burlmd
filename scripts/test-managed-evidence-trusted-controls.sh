@@ -99,12 +99,12 @@ awk '/^read_trusted_control_paths\(\)/ {copy=1} /^workflow_guard\(\)/ {copy=0} c
 
 source_guard=$(sed -n '/^source_guard()/,/^completion_guard()/p' "$root/scripts/managed-evidence.sh")
 grep -Fq 'trusted_controls_equivalent "$anchor" "$workflow_signer" "$tested"' <<<"$source_guard"
-# Bootstrap identity is stricter than a normal ancestor range. Pin the first
-# correction to PR #38's independently recorded reviewed master tip.
-recorded_recovery_base=0f155121ab95191186dd03d2aca716b731b393ea
+# Bootstrap identity is stricter than a normal ancestor range. Pin this later
+# same-contract correction to PR #39's independently recorded reviewed master tip.
+recorded_recovery_base=5e9935d1c8a8c100593c0cdc2dee21d3ae97de2b
 production_recovery_base=$(awk -F= '$1 == "readonly BURL_M003_REVIEWED_BASE_SHA" {print $2; exit}' "$root/scripts/managed-evidence.sh")
 [[ $production_recovery_base == "$recorded_recovery_base" ]] || {
-  echo 'the production correction base differs from the reviewed PR #38 closure' >&2
+  echo 'the production correction base differs from the reviewed PR #39 closure' >&2
   exit 1
 }
 git -C "$root" merge-base --is-ancestor 6d30b7445b0108a6a5dd963cd2aa2ae5f5090485 "$recorded_recovery_base"
