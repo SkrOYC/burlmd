@@ -375,10 +375,11 @@ tickets:
         diagnostic data to `GITHUB_OUTPUT`, `GITHUB_ENV`, or a job summary, or
         accept or upload a diagnostic artifact. A link, FIFO, socket, device,
         directory, unavailable file, or changing file must not block cleanup or
-        replace the original status. STOP if tail-storage failure does not keep
-        its resolver relay draining and forwarding while suppressing capture, or
-        if relay read or forwarding-write failure is represented as a transparent
-        diagnostic loss. A relay failure must return a nonzero observer failure
+        replace the original status. STOP if a tail-retention/storage write
+        failure does not keep its resolver relay draining and forwarding while
+        suppressing capture, or if an upstream resolver-pipe read failure or
+        downstream forwarding-write failure is represented as capture loss.
+        Either observer execution failure must return nonzero
         before the enclosing candidate wrapper completes exact cleanup and
         preserves any already observed candidate status. It must publish no
         resolver handoff or resolver diagnostic data, and make no no-observer or
@@ -399,11 +400,13 @@ tickets:
       bounded cleanup and can emit only the bounded failure diagnostic defined
       by `ci_bootstrap.role_execution`. During the first macOS 26 integration
       gate, its private `xcrun` observer can record the fixed resolver handoff
-      only after both relays complete and the resolver terminates, including
-      nonzero. The observer then returns the observed resolver status before the
-      enclosing candidate wrapper cleans up. Tail-storage failure continues
-      forwarding and suppresses capture. Relay failure is a nonzero observer
-      failure, not a transparent diagnostic loss.
+      only after both relays complete without a tail-retention/storage write
+      failure and the resolver terminates, including nonzero. After both relay
+      data paths complete, the observer returns the observed resolver status
+      before the enclosing candidate wrapper cleans up. A tail-retention/storage
+      write failure keeps draining and forwarding while suppressing capture. An
+      upstream resolver-pipe read failure or downstream forwarding-write failure
+      is a nonzero observer execution failure, not a transparent diagnostic loss.
       Every candidate
       bundle is untrusted. After candidate commands finish, the trusted workflow
       wrapper uses only its job-scoped artifact runtime authority to upload the
@@ -657,12 +660,13 @@ tickets:
         version `39`'s exact closure, environment, descriptor, teardown,
         host-prerequisite, compositor, authority, log, and cleanup fixtures in
         that inventory. Resolver fixtures use streams exceeding their measured
-        pipe capacity. They prove that healthy relays and a nonzero resolver
-        publish bounded tails and return the observed resolver status before
-        enclosing cleanup. They prove that tail-storage failure keeps draining
-        and forwarding while suppressing capture. They separately inject relay
-        read and forwarding-write failures and require a nonzero observer
-        failure before exact cleanup, preservation of an already observed
+        pipe capacity. They prove that completed relays with no tail-retention/
+        storage write failure and a nonzero resolver publish bounded tails and
+        return the observed resolver status before enclosing cleanup. They prove
+        that a tail-retention/storage write failure keeps draining and forwarding
+        while suppressing capture. They separately inject upstream resolver-pipe
+        read and downstream forwarding-write failures and require a nonzero
+        observer execution failure before exact cleanup, preservation of an already observed
         candidate status, no resolver handoff or resolver diagnostic data, no
         counterfactual status claim, and no accepted-evidence effect.
         Aggregate `accepted` requires all three successful candidate guard sets,
@@ -916,18 +920,29 @@ tickets:
         uploaded artifact.
 
 
-        Only during the first BURL-M003 `macos-26-arm64` integration gate, the
-        private `xcrun` observer matches Flutter `3.44.3`'s natural four-argument
-        resolver call from the `macos` project directory:
-        `xcodebuild -clonedSourcePackagesDirPath ABSOLUTE_BUILD_DIRECTORY/SourcePackages -resolvePackageDependencies`.
-        A match runs the retained real `xcrun` once with unchanged argv, working
-        directory, environment, stdout, stderr, and exit status. Every nonmatch
-        executes that tool unchanged. Two relays forward the received streams
-        and retain only their final 32,768 bytes. They can alter delivery timing
-        and do not establish cross-stream order. The observer neither retries
-        nor runs a separate resolver command. Flutter's Darwin dependency
-        manager supports mixed Swift Package Manager and CocoaPods, so this
-        observation doesn't justify a Podfile change.
+        Only during the BURL-M003 `macos-26-arm64` first integration gate for
+        `integration_test/production_host_flow_test.dart`, the private `xcrun`
+        observer matches one exact invocation. Its working directory is the
+        canonical candidate workspace's `macos` directory, and argv is exactly
+        `xcodebuild -clonedSourcePackagesDirPath <candidate-workspace>/build/macos/SourcePackages -resolvePackageDependencies`.
+        The canonical candidate workspace is `candidate_root/workspace` below
+        the explicit candidate-output role argument. Flutter 3.44.3 derives
+        `build/macos` from the unoverridden `build-dir` default and appends
+        `SourcePackages`. A role, gate, working-directory, argv-count,
+        argument, or expected-path substitution is a nonmatch that executes
+        the retained real `xcrun` directly. A match runs that tool once with
+        unchanged argv, working directory, and environment. Two relays forward
+        the received stdout byte sequence to stdout and stderr byte sequence to
+        stderr, retain only their final 32,768 bytes, can alter delivery timing,
+        and don't establish cross-stream order. A tail-retention/storage write
+        failure is capture loss only: its relay must keep draining upstream
+        input and forwarding it downstream. An upstream resolver-pipe read
+        failure or downstream forwarding-write failure is an observer execution
+        failure. The observer returns nonzero first, then the enclosing
+        candidate wrapper performs cleanup. After both relay data paths complete, no tail-retention/storage write failure permits the completed relays to publish the handoff before the observer returns the observed resolver status. A tail-retention/storage write failure suppresses capture but the observer still returns the observed resolver status. The observer neither
+        retries nor runs a separate resolver command. Flutter's Darwin
+        dependency manager supports mixed Swift Package Manager and CocoaPods,
+        so this observation doesn't justify a Podfile change.
 
 
         The resolver handoff contains exactly `resolver.stdout.tail` for raw
@@ -942,9 +957,7 @@ tickets:
         `stderr_tail_sha256=LOWERCASE_64_HEX`. Each decimal is canonical unsigned
         ASCII decimal: `0` or a nonzero digit followed by zero or more digits, range-checked
         to the named inclusive bound. Leading zeros, signs, whitespace, and
-        alternative spellings reject. After both relays complete and the real
-        tool terminates, including nonzero, the observer atomically renames a
-        complete temporary status file and returns the observed real-tool status.
+        alternative spellings reject. After both relay data paths complete and the real tool terminates, including nonzero, no tail-retention/storage write failure permits the observer to atomically rename the complete temporary status file before it returns the observed real-tool status. A tail-retention/storage write failure suppresses capture but the observer still returns the observed real-tool status.
         After candidate cleanup, the parent opens each declared name
         descriptor-relatively with read-only no-follow nonblocking flags,
         immediately validates its type, mode, size, link count, and
@@ -959,8 +972,11 @@ tickets:
         check, so pathname removal cannot preserve that identity guarantee. A
         replacement, malformed, missing, changing, or incomplete handoff
         suppresses resolver data without changing the original candidate cleanup
-        or status. Relay failure returns nonzero before enclosing cleanup; it
-        never claims a counterfactual status. Fixtures read the filenames and grammar from the
+        or status. An upstream resolver-pipe read failure or downstream
+        forwarding-write failure returns nonzero before enclosing cleanup; it
+        never claims a counterfactual status. A tail-retention/storage write
+        failure is capture loss only, and its relay keeps draining and
+        forwarding. Fixtures read the filenames and grammar from the
         raw contract; reject linked, missing, extra, nonregular, wrong-mode,
         escaping, replaced, partial, malformed, wrong-encoding, wrong-order,
         wrong-field, wrong-digest, wrong-count, oversized, and preexisting
@@ -973,14 +989,17 @@ tickets:
         workflow commands,
         accepted artifacts, acceptance, or authority. Resolver fixtures invoke
         the exact match and reject a wrong role, gate, working directory,
-        argument count, argument value, or `SourcePackages` suffix. They verify
+        argument count, argument value, canonical expected `SourcePackages`
+        path, or path substitution. They verify
         stream tails below, at, and above 32,768 bytes against controlled bytes,
         including count, SHA-256, and unwrapped padded Base64 values. With
-        streams exceeding measured pipe capacity, healthy relays plus a nonzero
-        resolver must publish those bounded tails and return the observed status
-        before enclosing cleanup. Tail-storage failure must continue draining and
-        forwarding while suppressing capture. Relay read and forwarding-write
-        failures must return nonzero before exact cleanup, publish no resolver
+        streams exceeding measured pipe capacity, completed relays with no
+        tail-retention/storage failure plus a nonzero resolver must publish
+        those bounded tails and return the observed status before enclosing
+        cleanup. A tail-retention/storage write failure must continue draining
+        and forwarding while suppressing capture. Upstream resolver-pipe read
+        and downstream forwarding-write failures must return nonzero before
+        exact cleanup, publish no resolver
         handoff or resolver diagnostic data, preserve any already observed
         candidate status, and have no accepted-evidence effect. Reject a second
         resolver run, retry, manual resolver command, extra artifact, authority
