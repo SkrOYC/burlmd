@@ -375,7 +375,14 @@ tickets:
         diagnostic data to `GITHUB_OUTPUT`, `GITHUB_ENV`, or a job summary, or
         accept or upload a diagnostic artifact. A link, FIFO, socket, device,
         directory, unavailable file, or changing file must not block cleanup or
-        replace the original status.
+        replace the original status. STOP if tail-storage failure does not keep
+        its resolver relay draining and forwarding while suppressing capture, or
+        if relay read or forwarding-write failure is represented as a transparent
+        diagnostic loss. A relay failure must return a nonzero observer failure
+        before the enclosing candidate wrapper completes exact cleanup and
+        preserves any already observed candidate status. It must publish no
+        resolver handoff or resolver diagnostic data, and make no no-observer or
+        unobserved-resolver status claim.
       - STOP if the Flutter Rust Bridge generator, Rust crate, or Dart package
         differs from the provisionally authorized `2.12.0` triple. Use that
         triple only for bootstrap and require revalidation after final Stage 3.
@@ -391,7 +398,12 @@ tickets:
       plan through two exact read-only Bubblewrap views. Hosted macOS performs
       bounded cleanup and can emit only the bounded failure diagnostic defined
       by `ci_bootstrap.role_execution`. During the first macOS 26 integration
-      gate, its private `xcrun` observer can record the fixed resolver handoff.
+      gate, its private `xcrun` observer can record the fixed resolver handoff
+      only after both relays complete and the resolver terminates, including
+      nonzero. The observer then returns the observed resolver status before the
+      enclosing candidate wrapper cleans up. Tail-storage failure continues
+      forwarding and suppresses capture. Relay failure is a nonzero observer
+      failure, not a transparent diagnostic loss.
       Every candidate
       bundle is untrusted. After candidate commands finish, the trusted workflow
       wrapper uses only its job-scoped artifact runtime authority to upload the
@@ -644,7 +656,15 @@ tickets:
         coordinator, and aggregation coverage. Raw contract version `40` retains
         version `39`'s exact closure, environment, descriptor, teardown,
         host-prerequisite, compositor, authority, log, and cleanup fixtures in
-        that inventory.
+        that inventory. Resolver fixtures use streams exceeding their measured
+        pipe capacity. They prove that healthy relays and a nonzero resolver
+        publish bounded tails and return the observed resolver status before
+        enclosing cleanup. They prove that tail-storage failure keeps draining
+        and forwarding while suppressing capture. They separately inject relay
+        read and forwarding-write failures and require a nonzero observer
+        failure before exact cleanup, preservation of an already observed
+        candidate status, no resolver handoff or resolver diagnostic data, no
+        counterfactual status claim, and no accepted-evidence effect.
         Aggregate `accepted` requires all three successful candidate guard sets,
         all three attestation-backed seal origins, every applicable stage check,
         a verified receipt-digest transport, and no rejection reason.
@@ -922,9 +942,10 @@ tickets:
         `stderr_tail_sha256=LOWERCASE_64_HEX`. Each decimal is canonical unsigned
         ASCII decimal: `0` or a nonzero digit followed by zero or more digits, range-checked
         to the named inclusive bound. Leading zeros, signs, whitespace, and
-        alternative spellings reject. The observer atomically renames
-        a complete temporary status file only after both relays and the real
-        tool exit. After candidate cleanup, the parent opens each declared name
+        alternative spellings reject. After both relays complete and the real
+        tool terminates, including nonzero, the observer atomically renames a
+        complete temporary status file and returns the observed real-tool status.
+        After candidate cleanup, the parent opens each declared name
         descriptor-relatively with read-only no-follow nonblocking flags,
         immediately validates its type, mode, size, link count, and
         device-and-inode identity with `fstat`, and reads bounded bytes only
@@ -938,7 +959,8 @@ tickets:
         check, so pathname removal cannot preserve that identity guarantee. A
         replacement, malformed, missing, changing, or incomplete handoff
         suppresses resolver data without changing the original candidate cleanup
-        or status. Fixtures read the filenames and grammar from the
+        or status. Relay failure returns nonzero before enclosing cleanup; it
+        never claims a counterfactual status. Fixtures read the filenames and grammar from the
         raw contract; reject linked, missing, extra, nonregular, wrong-mode,
         escaping, replaced, partial, malformed, wrong-encoding, wrong-order,
         wrong-field, wrong-digest, wrong-count, oversized, and preexisting
@@ -953,10 +975,16 @@ tickets:
         the exact match and reject a wrong role, gate, working directory,
         argument count, argument value, or `SourcePackages` suffix. They verify
         stream tails below, at, and above 32,768 bytes against controlled bytes,
-        including count, SHA-256, and unwrapped padded Base64 values, and reject
-        a second resolver run, retry, manual resolver command, extra artifact,
-        accepted-evidence effect, authority expansion, or workflow-command
-        injection.
+        including count, SHA-256, and unwrapped padded Base64 values. With
+        streams exceeding measured pipe capacity, healthy relays plus a nonzero
+        resolver must publish those bounded tails and return the observed status
+        before enclosing cleanup. Tail-storage failure must continue draining and
+        forwarding while suppressing capture. Relay read and forwarding-write
+        failures must return nonzero before exact cleanup, publish no resolver
+        handoff or resolver diagnostic data, preserve any already observed
+        candidate status, and have no accepted-evidence effect. Reject a second
+        resolver run, retry, manual resolver command, extra artifact, authority
+        expansion, or workflow-command injection.
 
 
         Static workflow fixtures require literal `enable_kvm: false` at every
