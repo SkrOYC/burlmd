@@ -643,8 +643,9 @@ coordinator decision.
   retirement. Another label requires a measured Stage 3 replacement.
 - Missing dependencies, invalid cleanup, excessive argv size, or failed
   isolation produce no accepted evidence.
-- Stage 4 must adapt only BURL-M003 for this diagnostic delta. Earlier
-  BURL-G011, BURL-P002, and BURL-O012 adaptations remain historical.
+- The co-merged Tasks v3.2.14 adaptation satisfies the Stage 4 routing for this
+  diagnostic delta when the complete reviewed documentation pull request merges.
+  Earlier BURL-G011, BURL-P002, and BURL-O012 adaptations remain historical.
   `BURL-O001` remains in the maintained-stop list, which preserves its explicit
   Stage 3 route without authorizing implementation.
 

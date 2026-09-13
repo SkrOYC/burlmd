@@ -124,9 +124,12 @@ survive. The release contract must not make that claim.
 - On hosted macOS, a surviving candidate process can interfere with the later
   untrusted upload. The outcome is untrusted-output corruption or a fail-closed
   upload denial, not an authenticated candidate result.
-- The fixed BURL-M003 resolver diagnostic handoff validates only its three
-  transient files after cleanup. Its descriptor and identity checks don't claim
-  lifecycle containment for a surviving hosted-macOS candidate process.
+- The fixed BURL-M003 resolver diagnostic handoff validates bounded reads from
+  only its three transient files after the candidate's original cleanup. Its
+  descriptor and identity checks don't make final pathname removal atomic.
+  The parent leaves the small private area for the hosted job lifecycle rather
+  than remove an uncertain entry. These checks don't claim lifecycle containment
+  for a surviving hosted-macOS candidate process.
 - Accepted evidence authenticates reviewed workflow execution and sealed
   provenance from the fresh seal. It does not authenticate candidate hosted
   origin, establish lifecycle containment for arbitrary malicious macOS
