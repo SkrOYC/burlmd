@@ -1,4 +1,11 @@
 entries:
+  - version: v2.0.6
+    date: 2026-09-13
+    added:
+      - "Deferred public-release and non-Linux qualification for the private Linux-first usable milestone while retaining portable Workspace data requirements and future public `0.x` release commitments."
+    changed:
+      - "Clarified that the sole Writer's first usable version runs locally on Linux from a checkout. Local Linux evidence does not certify the supported release matrix."
+    by: stage
   - version: v2.0.5
     date: 2026-09-05
     fixed:
