@@ -919,7 +919,10 @@ tickets:
         `stdout_tail_bytes=DECIMAL_0_TO_32768`,
         `stdout_tail_sha256=LOWERCASE_64_HEX`,
         `stderr_tail_bytes=DECIMAL_0_TO_32768`, and
-        `stderr_tail_sha256=LOWERCASE_64_HEX`. The observer atomically renames
+        `stderr_tail_sha256=LOWERCASE_64_HEX`. Each decimal is canonical unsigned
+        ASCII decimal: `0` or a nonzero digit followed by zero or more digits, range-checked
+        to the named inclusive bound. Leading zeros, signs, whitespace, and
+        alternative spellings reject. The observer atomically renames
         a complete temporary status file only after both relays and the real
         tool exit. After candidate cleanup, the parent opens each declared name
         descriptor-relatively with read-only no-follow nonblocking flags,
@@ -927,16 +930,25 @@ tickets:
         device-and-inode identity with `fstat`, and reads bounded bytes only
         from that descriptor. It validates the status bindings, rechecks those
         descriptors, and revalidates file and directory identity through
-        descriptor-relative no-follow lookup before output or removal. A
+        descriptor-relative no-follow lookup before output. It performs no
+        handoff unlink or rmdir. The bounded no-removal policy leaves the small
+        private transient area for the hosted job lifecycle and never recursively
+        traverses, follows links, or removes an uncertain entry. A same-UID
+        surviving candidate can replace a final name after the last identity
+        check, so pathname removal cannot preserve that identity guarantee. A
         replacement, malformed, missing, changing, or incomplete handoff
-        suppresses resolver data without changing cleanup or status and without
-        removing a substitute. Fixtures read the filenames and grammar from the
+        suppresses resolver data without changing the original candidate cleanup
+        or status. Fixtures read the filenames and grammar from the
         raw contract; reject linked, missing, extra, nonregular, wrong-mode,
         escaping, replaced, partial, malformed, wrong-encoding, wrong-order,
         wrong-field, wrong-digest, wrong-count, oversized, and preexisting
-        records; and prove that no diagnostic descriptor crosses the candidate
-        boundary. Resolver data remains untrusted, enters only the existing one
-        post-cleanup failure block, and cannot affect workflow commands,
+        records; bind the canonical decimal grammar and reject leading-zero,
+        signed, whitespace, out-of-range, and alternative-spelling mutations;
+        prove that no diagnostic descriptor crosses the candidate boundary; and
+        prove no handoff unlink, rmdir, recursive traversal, or uncertain-entry
+        removal follows the final identity check. Resolver data remains untrusted,
+        enters only the existing one post-cleanup failure block, and cannot affect
+        workflow commands,
         accepted artifacts, acceptance, or authority. Resolver fixtures invoke
         the exact match and reject a wrong role, gate, working directory,
         argument count, argument value, or `SourcePackages` suffix. They verify
