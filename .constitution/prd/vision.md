@@ -1,7 +1,3 @@
----
-version: v1.3.7
----
-
 # Product vision
 
 ## Archetype
@@ -14,6 +10,16 @@ version: v1.3.7
 ## Executive summary
 
 burlmd is a local-first desktop note-taking application for people who write Markdown by choice. Notes remain plain files in a published open format on the user's disk. A Workspace combines a Directory tree with a knowledge graph of Links. The focused Block exposes its source, and other Blocks render as formatted content. A Workspace works without an account or network connection. An optional private Remote adds multi-device synchronization. burlmd presents content conflicts as Suggestions and gives structural or asset conflicts their own explicit decisions.
+
+## Private Linux-first usable milestone
+
+The first usable milestone serves one Writer who runs burlmd locally on Linux from a checkout. It prioritizes local data safety, editing fidelity, privacy, and dependable daily use.
+
+Local Linux evidence supports private use only. It doesn't qualify a package, a published release, macOS, another Linux system, or any other platform.
+
+This milestone retains cross-platform Workspace format and path portability. It doesn't permit data loss, Linux-specific file-format changes, or weaker ownership guarantees.
+
+CAP-075, CAP-076, CAP-079, and CAP-080 remain assumed commitments for a supported public `0.x` release. The user will reconsider publication and platform qualification only when they explicitly resume packaged, supported, or other-platform delivery during later roadmap planning.
 
 ## Established product baseline
 
