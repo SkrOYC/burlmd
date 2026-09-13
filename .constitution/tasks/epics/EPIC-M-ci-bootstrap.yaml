@@ -159,7 +159,7 @@ tickets:
         receipt-digest transport validation, and every typed negative fixture
         pass; the seal-owned BURL-O001 stage chain passes; Linux also finishes
         generated-binding and managed-isolation classes, including raw contract
-        version `39` closure-view checks across all seven ordered sessions; no
+        version `40` closure-view checks across all seven ordered sessions; no
         role claims
         performance or visual evidence;
         the dedicated evidence pull request contains only
@@ -171,18 +171,12 @@ tickets:
         `6d30b7445b0108a6a5dd963cd2aa2ae5f5090485` and original PR #15
         BURL-M003 anchor `f72659cef4487317c9e984e01f775a358f814a41`,
         whose first parent is that BURL-M015 commit. The first recovery branch
-        must be `fix/epic-m-hosted-runner-recovery` from the merged TechSpec and
-        Tasks recovery-documentation tip.
+        must be `fix/epic-m-hosted-runner-recovery` from the reviewed
+        documentation tip after the raw-version-40 Stage 4 adaptation merges.
       - >
         STOP before BURL-M003 implementation until the entire reviewed
-        recovery-documentation pull request merges. That pull request must
-        contain this separately validated and independently reviewed Stage 4
-        commit and a later separately validated and independently reviewed
-        Stage 3 acknowledgement that cites this exact Tasks commit and version
-        and changes
-        `ci_bootstrap.stage4_tasks_adaptation.status` from `required` to
-        `satisfied`. The initial Stage 3 contract commit doesn't need to merge
-        separately from that documentation pull request.
+        raw-version-40 TechSpec and Stage 4 BURL-M003 adaptation merge. The
+        adaptation must be separately validated and independently reviewed.
       - STOP if implementation imports or cherry-picks from the unmerged Epic G
         branch. Implement the accepted CI and headless contracts from merged
         `master`; later surgical replay must preserve this merged foundation.
@@ -220,14 +214,14 @@ tickets:
         `od -An -N16 -tx1 /dev/urandom | tr -d ' \n'`. Fail closed unless that
         command produces exactly 32 lowercase hexadecimal characters.
       - >
-        STOP if the first raw-version-39 recovery doesn't use the merged
-        recovery-documentation tip as `BASE_SHA`, or if a later same-contract
-        correction doesn't use the immediately preceding reviewed `master` tip
-        as `BASE_SHA`. In every case, require `BASE_SHA` to be the replacement
-        anchor's first parent and require `BASE_SHA..TRUST_ANCHOR_SHA` to contain
-        exactly one separately reviewed implementation commit within the
-        unchanged bootstrap allowlist. Don't accept an arbitrary ancestor or a
-        multi-commit correction range.
+        STOP if the first raw-version-40 recovery doesn't use the reviewed
+        documentation tip after the Stage 4 adaptation as `BASE_SHA`, or if a
+        later same-contract correction doesn't use the immediately preceding
+        reviewed `master` tip as `BASE_SHA`. In every case, require `BASE_SHA`
+        to be the replacement anchor's first parent and require
+        `BASE_SHA..TRUST_ANCHOR_SHA` to contain exactly one separately reviewed
+        implementation commit within the unchanged bootstrap allowlist. Don't
+        accept an arbitrary ancestor or a multi-commit correction range.
       - STOP if the trusted caller or any reusable role workflow does not invoke
         `scripts/validate-managed-workflow-inputs.sh` or require the literal
         environment value `GITHUB_RUN_ATTEMPT=1` before candidate execution,
@@ -393,10 +387,12 @@ tickets:
       reusable role workflows referenced through static local paths. Each role's
       candidate job has only contents read permission, checks out the separate
       tested SHA as data, and runs candidate commands without artifact or
-      signing credentials. Linux runs the raw-contract-version-39 seven-session
+      signing credentials. Linux runs the raw-contract-version-40 seven-session
       plan through two exact read-only Bubblewrap views. Hosted macOS performs
       bounded cleanup and can emit only the bounded failure diagnostic defined
-      by `ci_bootstrap.role_execution`. Every candidate
+      by `ci_bootstrap.role_execution`. During the first macOS 26 integration
+      gate, its private `xcrun` observer can record the fixed resolver handoff.
+      Every candidate
       bundle is untrusted. After candidate commands finish, the trusted workflow
       wrapper uses only its job-scoped artifact runtime authority to upload the
       handoff. Its dependent seal job starts on a fresh environment, never
@@ -512,23 +508,24 @@ tickets:
            `trusted_control_paths` inventory. Require the exact 11-artifact
            ordinary inventory and 13-artifact BURL-O001 inventory.
         6. Require every reusable role workflow to expose exactly `sealing-receipt-artifact-id` and `sealing-receipt-upload-action-digest` from its receipt upload. Pin `receipt_digests` to exactly `needs: [expected, linux, macos_26, macos_15]`, `runs-on: ubuntu-24.04`, and `permissions: contents: read`. Pass all six outputs directly through `needs` to `scripts/write-receipt-digest-observation.sh`. Upload only its schema-valid version-1 `receipt-upload-digests.json` as `managed-evidence-receipt-digests-{artifact_nonce}`, with `overwrite: false` and `if-no-files-found: error`. Require the exact 11-artifact ordinary inventory and 13-artifact BURL-O001 inventory. Make the collector resolve the transport's immutable ID from the exact run inventory, fetch that ID's REST object, and download the raw archive through the ID-addressed endpoint. Before extraction or JSON parsing, require the raw archive SHA-256 to equal the canonical REST digest. Corruption or substitution must produce `artifact-corrupt`; a REST ID, run, repository, name, or expiration-state mismatch must produce `artifact-api-mismatch`. Retain the immutable ID, exact name, REST digest, and computed raw-download hash in `receiptDigestTransportArtifact`. Semantically validate the extracted transport and match every transported receipt artifact ID and name to one unique REST artifact object. For each receipt, require the REST digest to equal `sha256:` plus the transported bare action digest, retain both in `origin.sealingReceiptArtifact`, and produce `artifact-digest-mismatch` on mismatch. Add fixtures that reject missing, extra, duplicate, malformed, reordered, wrong-role, wrong-run, wrong-attempt, wrong-signer, wrong-nonce, wrong-name, wrong-ID, and wrong-digest transport data.
-        7. After the complete reviewed recovery-documentation pull request
-           merges, create `fix/epic-m-hosted-runner-recovery` from that exact
-           `master` tip. Commit the recovery as exactly one implementation
+        7. After the complete reviewed raw-version-40 TechSpec and required
+           Stage 4 BURL-M003 adaptation merge, create
+           `fix/epic-m-hosted-runner-recovery` from the resulting reviewed
+           documentation `master` tip. Commit the recovery as exactly one implementation
            commit, validate it, independently review the milestone and pull
            request, and rebase-merge it into `master`. Record the resulting full
            `master` tip as `TRUST_ANCHOR_SHA`; don't treat the ticket as
-           complete. If a later run fails under the same raw-version-39
+           complete. If a later run fails under the same raw-version-40
            contract, make each correction one separately reviewed commit from
            the immediately preceding reviewed `master` tip.
         8. Create a clean detached `TRUST_ANCHOR_WORKTREE` at
            `TRUST_ANCHOR_SHA` and create `EVIDENCE_WORKTREE` on
            `docs/epic-m-ci-evidence` from that merged `master`. For the first
-           recovery, set `BASE_SHA` to the merged TechSpec and Tasks
-           recovery-documentation tip. For a later same-contract correction,
-           set it to the immediately preceding reviewed `master` tip. Require
-           `BASE_SHA` to be the anchor's first parent and require the base range
-           to contain exactly one reviewed implementation commit. Require
+           recovery, set `BASE_SHA` to the reviewed documentation tip after the
+           Stage 4 adaptation. For a later same-contract correction, set it to
+           the immediately preceding reviewed `master` tip. Require `BASE_SHA`
+           to be the anchor's first parent and require the base range to contain
+           exactly one reviewed implementation commit. Require
            `TRUST_ANCHOR_SHA`, `TESTED_SOURCE_SHA`, `WORKFLOW_SIGNER_SHA`, and
            `refs/heads/master` to resolve to the same commit. Run
            `TRUST_ANCHOR_WORKTREE/scripts/managed-evidence.sh run --ticket BURL-M003 --trust-anchor-sha TRUST_ANCHOR_SHA --source-ref refs/heads/master --tested-source-sha TRUST_ANCHOR_SHA --base-sha BASE_SHA --output EVIDENCE_WORKTREE/.constitution/evidence/BURL-M003/managed-evidence.json && git -C EVIDENCE_WORKTREE diff --check`.
@@ -603,7 +600,7 @@ tickets:
 
         Role documents validate against schema version `16`, and the aggregate
         validates against schema version `20`. Spike results validate against
-        schema version `21`. The raw managed-evidence contract is version `39`.
+        schema version `21`. The raw managed-evidence contract is version `40`.
         The sealing receipt validates against version `2`, and the receipt
         transport validates against version `1`. The exact
         service inventory remains 11 ordinary artifacts or 13 BURL-O001
@@ -635,7 +632,7 @@ tickets:
         Seal-origin fixtures cover in-progress, failed, missing, duplicate,
         wrong-job, wrong-label, self-hosted, wrong-signer, wrong-source,
         wrong-run, wrong-attempt, and wrong-locator outcomes. BURL-O001 fixtures
-        cover raw contract version `39`'s complete compatibility-stage rejection
+        cover raw contract version `40`'s complete compatibility-stage rejection
         inventory: missing, duplicate, substituted, expired, digest mismatch,
         unattested, wrong signer, wrong run, wrong role, wrong seal, stale
         producer receipt, noncanonical lineage, lineage SHA mismatch,
@@ -644,9 +641,10 @@ tickets:
         required, including token,
         configuration, artifact-runtime, receipt, evidence-profile, viewport,
         nonce, artifact, bundle, trust-anchor, source-allowlist, filesystem,
-        coordinator, and aggregation coverage. Raw contract version `39` retains
-        its exact closure, environment, descriptor, teardown, host-prerequisite,
-        compositor, authority, log, and cleanup fixtures to that inventory.
+        coordinator, and aggregation coverage. Raw contract version `40` retains
+        version `39`'s exact closure, environment, descriptor, teardown,
+        host-prerequisite, compositor, authority, log, and cleanup fixtures in
+        that inventory.
         Aggregate `accepted` requires all three successful candidate guard sets,
         all three attestation-backed seal origins, every applicable stage check,
         a verified receipt-digest transport, and no rejection reason.
@@ -898,6 +896,57 @@ tickets:
         uploaded artifact.
 
 
+        Only during the first BURL-M003 `macos-26-arm64` integration gate, the
+        private `xcrun` observer matches Flutter `3.44.3`'s natural four-argument
+        resolver call from the `macos` project directory:
+        `xcodebuild -clonedSourcePackagesDirPath ABSOLUTE_BUILD_DIRECTORY/SourcePackages -resolvePackageDependencies`.
+        A match runs the retained real `xcrun` once with unchanged argv, working
+        directory, environment, stdout, stderr, and exit status. Every nonmatch
+        executes that tool unchanged. Two relays forward the received streams
+        and retain only their final 32,768 bytes. They can alter delivery timing
+        and do not establish cross-stream order. The observer neither retries
+        nor runs a separate resolver command. Flutter's Darwin dependency
+        manager supports mixed Swift Package Manager and CocoaPods, so this
+        observation doesn't justify a Podfile change.
+
+
+        The resolver handoff contains exactly `resolver.stdout.tail` for raw
+        stdout bytes, `resolver.stderr.tail` for raw stderr bytes, and
+        `resolver.status` for a UTF-8 status record. Each tail is mode `0600`
+        and at most 32,768 bytes. The mode-`0600` status file is at most 512
+        bytes and has exactly these LF-terminated ordered lines:
+        `format=burlmd-m003-resolver-status-v1`, `exit_status=DECIMAL_0_TO_255`,
+        `stdout_tail_bytes=DECIMAL_0_TO_32768`,
+        `stdout_tail_sha256=LOWERCASE_64_HEX`,
+        `stderr_tail_bytes=DECIMAL_0_TO_32768`, and
+        `stderr_tail_sha256=LOWERCASE_64_HEX`. The observer atomically renames
+        a complete temporary status file only after both relays and the real
+        tool exit. After candidate cleanup, the parent opens each declared name
+        descriptor-relatively with read-only no-follow nonblocking flags,
+        immediately validates its type, mode, size, link count, and
+        device-and-inode identity with `fstat`, and reads bounded bytes only
+        from that descriptor. It validates the status bindings, rechecks those
+        descriptors, and revalidates file and directory identity through
+        descriptor-relative no-follow lookup before output or removal. A
+        replacement, malformed, missing, changing, or incomplete handoff
+        suppresses resolver data without changing cleanup or status and without
+        removing a substitute. Fixtures read the filenames and grammar from the
+        raw contract; reject linked, missing, extra, nonregular, wrong-mode,
+        escaping, replaced, partial, malformed, wrong-encoding, wrong-order,
+        wrong-field, wrong-digest, wrong-count, oversized, and preexisting
+        records; and prove that no diagnostic descriptor crosses the candidate
+        boundary. Resolver data remains untrusted, enters only the existing one
+        post-cleanup failure block, and cannot affect workflow commands,
+        accepted artifacts, acceptance, or authority. Resolver fixtures invoke
+        the exact match and reject a wrong role, gate, working directory,
+        argument count, argument value, or `SourcePackages` suffix. They verify
+        stream tails below, at, and above 32,768 bytes against controlled bytes,
+        including count, SHA-256, and unwrapped padded Base64 values, and reject
+        a second resolver run, retry, manual resolver command, extra artifact,
+        accepted-evidence effect, authority expansion, or workflow-command
+        injection.
+
+
         Static workflow fixtures require literal `enable_kvm: false` at every
         trusted `cachix/install-nix-action` call site. They reject an omitted,
         true, expression-derived, environment-derived, wrapper-derived, or
@@ -1009,8 +1058,8 @@ tickets:
         `.constitution/evidence/BURL-M003/completion.md`, and their
         digest-bearing `.constitution/evidence/BURL-M003/manifest.yaml`.
         `BURL-M003` satisfies dependencies only after that reviewed pull request
-        merges. The first raw-version-39 recovery base is the merged TechSpec
-        and Tasks recovery-documentation tip. Each later same-contract
+        merges. The first raw-version-40 recovery base is the reviewed
+        documentation tip after the Stage 4 adaptation. Each later same-contract
         correction uses the immediately preceding reviewed `master` tip. Every
         replacement anchor has exactly one reviewed implementation commit above
         its first-parent base and preserves the original PR #15 and BURL-M015
