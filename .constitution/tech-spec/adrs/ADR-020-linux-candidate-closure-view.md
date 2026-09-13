@@ -124,13 +124,13 @@ The encoded vector includes all of these values in their binding order:
 - The trusted preflight and supervisor executable and arguments.
 - The exact session command and all its arguments.
 
-Raw contract version `39` defines the complete ordered construction. Dynamic
+Raw contract version `40` defines the complete ordered construction. Dynamic
 sources come only from the retained capacity-authority and current-path rows.
 The launcher hashes the complete NUL-delimited bytes and executes the same
 in-memory vector without shell reparsing.
 
 Each session frame retains the complete-vector byte count and SHA-256. Fresh
-sealing reconstructs the vector from raw contract version `39`, the selected
+sealing reconstructs the vector from raw contract version `40`, the selected
 manifest payload, and retained authority/current-path rows. It requires exact
 byte count and SHA-256 equality.
 
@@ -243,7 +243,7 @@ handshake starts with these exact descriptor roles:
   and 2.
 
 The preflight records the private PID and network namespace properties. It
-doesn't contain `userns-disabled=true`; raw contract version `39` makes no such
+doesn't contain `userns-disabled=true`; raw contract version `40` makes no such
 claim, and the parser rejects that stale field.
 
 After the loopback check succeeds, the branches enforce different descriptor
@@ -643,9 +643,10 @@ coordinator decision.
   retirement. Another label requires a measured Stage 3 replacement.
 - Missing dependencies, invalid cleanup, excessive argv size, or failed
   isolation produce no accepted evidence.
-- Stage 4 must adapt BURL-M003 and the downstream Tasks that restate the hosted
-  Linux label or profile. `BURL-O001` remains in the maintained-stop list,
-  which preserves its explicit Stage 3 route without authorizing implementation.
+- Stage 4 must adapt only BURL-M003 for this diagnostic delta. Earlier
+  BURL-G011, BURL-P002, and BURL-O012 adaptations remain historical.
+  `BURL-O001` remains in the maintained-stop list, which preserves its explicit
+  Stage 3 route without authorizing implementation.
 
 ## Verification anchors
 

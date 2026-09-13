@@ -124,6 +124,9 @@ survive. The release contract must not make that claim.
 - On hosted macOS, a surviving candidate process can interfere with the later
   untrusted upload. The outcome is untrusted-output corruption or a fail-closed
   upload denial, not an authenticated candidate result.
+- The fixed BURL-M003 resolver diagnostic handoff validates only its three
+  transient files after cleanup. Its descriptor and identity checks don't claim
+  lifecycle containment for a surviving hosted-macOS candidate process.
 - Accepted evidence authenticates reviewed workflow execution and sealed
   provenance from the fresh seal. It does not authenticate candidate hosted
   origin, establish lifecycle containment for arbitrary malicious macOS
@@ -137,7 +140,7 @@ survive. The release contract must not make that claim.
 - Reviewed source and test contracts remain required. Provenance validation
   doesn't replace source review or test review.
 - The role and aggregate JSON schemas are versions `16` and `20`. The embedded
-  sealing receipt is version `2`. The live raw contract is version `39`. These
+  sealing receipt is version `2`. The live raw contract is version `40`. These
   contracts separate candidate runtime guards from attested seal origin and
   bind an immutable canonical compatibility-stage lineage. They also carry the
   post-upload receipt digest without making the receipt self-report it. The
