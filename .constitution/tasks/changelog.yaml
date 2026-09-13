@@ -1,4 +1,19 @@
 entries:
+  - version: v3.2.14
+    date: 2026-09-13
+    fixed:
+      - "Adapted only BURL-M003 to TechSpec v2.1.30 and raw managed-evidence contract version 40. The ticket retains the five-entry gate-log map, exact 24-byte diagnostic prefix, Linux closure views, seven sessions, schemas 16, 20, and 21, sealing receipt version 2, receipt transport version 1, and the exact 11-artifact ordinary and 13-artifact BURL-O001 inventories."
+      - "Added the diagnostic-only macOS 26 first-integration resolver reference: Flutter 3.44.3's natural xcrun resolver call runs once with unchanged argv, working directory, environment, streams, and status. The two relays retain only 32,768-byte stream tails through resolver.stdout.tail, resolver.stderr.tail, and the atomically published resolver.status handoff. Acceptance quotes the status grammar, descriptor-relative no-follow nonblocking checks, identity revalidation, and mutation fixtures."
+      - "Replaced stale raw-version-39 recovery-documentation references. The first recovery uses the reviewed documentation tip after the Stage 4 adaptation as its strict first-parent base, and every later same-contract correction uses its immediate reviewed master tip. The ticket requires one separately reviewed implementation commit, fresh attempt-1 dispatch with a new nonce, and the existing reviewed three-file evidence pull request without a Tasks SHA acknowledgement or self-referential placeholder."
+      - "BURL-G011, BURL-P002, and BURL-O012 remain historical adaptations. BURL-O001 remains the maintained stop. Ticket IDs, dependencies, scope, estimates, certainty, status, verification command, tech-spec patchability, and epic graph are unchanged. Completed epics still provide no actuals calibration, so estimates remain unchanged."
+    security:
+      - "The resolver observation adds no command, retry, artifact, accepted-evidence field, authority, or hosted-macOS lifecycle-containment claim. Resolver data remains untrusted and can enter only the existing post-cleanup failure block. The macOS 26 failure cause remains unknown; Flutter's mixed Swift Package Manager and CocoaPods support does not justify a Podfile change."
+      - "Preserved the 42-record bill of materials, exact 35 trusted control paths, control jobs, distribution targets, permissions, evidence classes, fresh-seal authority, source allowlist, timeouts, and cache-trust rules."
+    upstream:
+      prd: v2.0.5
+      architecture: v2.1.2
+      tech-spec: v2.1.30
+    by: patch-lane
   - version: v3.2.13
     date: 2026-09-09
     changed:
