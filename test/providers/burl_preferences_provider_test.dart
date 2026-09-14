@@ -41,6 +41,8 @@ class _ControlledDevicePreferencesStore extends DevicePreferencesStore {
   var _quarantineAttempt = 0;
   var _quarantineCollisionInjected = false;
 
+  int get renameAttemptCount => _renameAttempt;
+
   @override
   Future<BurlPreferences> load() {
     final gate = loadGate;
@@ -414,9 +416,13 @@ void main() {
       'quarantined restoration does not report a failure without a write',
       () async {
         await applicationSupport.create(recursive: true);
-        await File(
-          '${applicationSupport.path}/device-preferences.json',
-        ).writeAsString('{not valid json');
+        final file = File('${applicationSupport.path}/device-preferences.json');
+        final bytes = utf8.encode('{not valid json');
+        await file.writeAsBytes(bytes);
+        final controlledStore = _ControlledDevicePreferencesStore(
+          applicationSupportDirectory: () async => applicationSupport,
+        );
+        store = controlledStore;
 
         final scopedContainer = container();
         final writer = scopedContainer.read(burlPreferencesProvider.notifier);
@@ -426,6 +432,143 @@ void main() {
           scopedContainer.read(preferencesPersistenceFailureProvider),
           isNull,
         );
+        expect(controlledStore.renameAttemptCount, 0);
+        expect(await file.exists(), isFalse);
+        expect(
+          await (await _quarantinedFile(applicationSupport)).readAsBytes(),
+          bytes,
+        );
+      },
+    );
+
+    test(
+      'flush retries a recovered failed write without another setter',
+      () async {
+        final renameFailure = FileSystemException('preferences rename failed');
+        final controlledStore = _ControlledDevicePreferencesStore(
+          applicationSupportDirectory: () async => applicationSupport,
+          renameFailure: renameFailure,
+        );
+        store = controlledStore;
+        final scopedContainer = container();
+        final writer = scopedContainer.read(burlPreferencesProvider.notifier);
+
+        await writer.setTheme(BurlThemePreference.dark);
+        expect(controlledStore.renameAttemptCount, 1);
+        expect(
+          scopedContainer.read(preferencesPersistenceFailureProvider),
+          same(renameFailure),
+        );
+
+        controlledStore.renameFailure = null;
+        await writer.flushPendingWrites();
+
+        expect(controlledStore.renameAttemptCount, 2);
+        expect(
+          scopedContainer.read(preferencesPersistenceFailureProvider),
+          isNull,
+        );
+        final persisted = await DevicePreferencesStore(
+          applicationSupportDirectory: () async => applicationSupport,
+        ).load();
+        expect(persisted.theme, BurlThemePreference.dark);
+      },
+    );
+
+    test(
+      'flush retries a recovered temporary write failure without another setter',
+      () async {
+        final writeFailure = FileSystemException('preferences disk is full');
+        final controlledStore = _ControlledDevicePreferencesStore(
+          applicationSupportDirectory: () async => applicationSupport,
+          writeFailure: writeFailure,
+        );
+        store = controlledStore;
+        final scopedContainer = container();
+        final writer = scopedContainer.read(burlPreferencesProvider.notifier);
+
+        await writer.setUpdateNotifications(false);
+        expect(
+          scopedContainer.read(preferencesPersistenceFailureProvider),
+          same(writeFailure),
+        );
+
+        controlledStore.writeFailure = null;
+        await writer.flushPendingWrites();
+
+        expect(
+          scopedContainer.read(preferencesPersistenceFailureProvider),
+          isNull,
+        );
+        final persisted = await DevicePreferencesStore(
+          applicationSupportDirectory: () async => applicationSupport,
+        ).load();
+        expect(persisted.updateNotifications, isFalse);
+      },
+    );
+
+    test(
+      'each flush makes one final retry and reports a permanent failure',
+      () async {
+        final renameFailure = FileSystemException('preferences rename failed');
+        final controlledStore = _ControlledDevicePreferencesStore(
+          applicationSupportDirectory: () async => applicationSupport,
+          renameFailure: renameFailure,
+        );
+        store = controlledStore;
+        final writer = container().read(burlPreferencesProvider.notifier);
+
+        await writer.setTheme(BurlThemePreference.dark);
+        expect(controlledStore.renameAttemptCount, 1);
+
+        await expectLater(
+          writer.flushPendingWrites(),
+          throwsA(same(renameFailure)),
+        );
+        expect(controlledStore.renameAttemptCount, 2);
+
+        await expectLater(
+          writer.flushPendingWrites(),
+          throwsA(same(renameFailure)),
+        );
+        expect(controlledStore.renameAttemptCount, 3);
+      },
+    );
+
+    test(
+      'flush serializes and drains a setter admitted during its final retry',
+      () async {
+        final renameFailure = FileSystemException('preferences rename failed');
+        final controlledStore = _ControlledDevicePreferencesStore(
+          applicationSupportDirectory: () async => applicationSupport,
+          renameFailure: renameFailure,
+        );
+        store = controlledStore;
+        final writer = container().read(burlPreferencesProvider.notifier);
+
+        await writer.setTheme(BurlThemePreference.dark);
+        controlledStore.renameFailure = null;
+        final retryStarted = Completer<void>();
+        final retryGate = Completer<void>();
+        controlledStore
+          ..renameStarted = retryStarted
+          ..renameGate = retryGate.future;
+
+        final flush = writer.flushPendingWrites();
+        await retryStarted.future;
+        final update = writer.setFocusMode(true);
+        await Future<void>.delayed(Duration.zero);
+        expect(controlledStore.renameAttemptCount, 2);
+
+        retryGate.complete();
+        await Future.wait([flush, update]);
+        expect(controlledStore.renameAttemptCount, 3);
+
+        final persisted = await DevicePreferencesStore(
+          applicationSupportDirectory: () async => applicationSupport,
+        ).load();
+        expect(persisted.theme, BurlThemePreference.dark);
+        expect(persisted.focusMode, isTrue);
       },
     );
 

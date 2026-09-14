@@ -947,8 +947,15 @@ class NoteController extends Notifier<NoteState?> {
 
   /// The Close Others menu action. The kept tab is never addressed, while
   /// unrenderable live Core sessions still participate in the batch.
-  Future<bool> closeOtherTabs(String keptNoteId) =>
-      _closeBatch(keptNoteId: keptNoteId);
+  Future<bool> closeOtherTabs(String keptNoteId) {
+    // A delayed menu action can retain a tab id after that tab has closed.
+    // Refuse before admitting the batch, then verify again at the serialized
+    // close boundary below in case another close won this race.
+    if (ref.read(noteCloseEditingProvider) > 0 || !hasOpenTab(keptNoteId)) {
+      return Future.value(false);
+    }
+    return _closeBatch(keptNoteId: keptNoteId);
+  }
 
   /// G006's Workspace-adoption prerequisite. The caller may change Workspace
   /// only when this returns true; warnings and refusals cancel the wider
@@ -1002,6 +1009,7 @@ class NoteController extends Notifier<NoteState?> {
       await settlePendingOpen();
       if (!ref.mounted) return false;
       return await _enqueueClose(() async {
+        if (keptNoteId != null && !hasOpenTab(keptNoteId)) return false;
         final originalSessions = List<NoteState>.of(
           ref.read(openNoteSessionsProvider),
         );

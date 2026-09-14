@@ -265,4 +265,54 @@ void main() {
     expect(find.text('Project'), findsOneWidget);
     expect(find.text('Personal'), findsNothing);
   });
+
+  testWidgets('keyboard title navigation keeps the selected row in view', (
+    tester,
+  ) async {
+    final hits = List.generate(
+      25,
+      (index) => _note('result-$index', 'Result $index'),
+    );
+    final api = _NavigationRustApi(titleResults: {'Result': hits});
+    await _pumpPanel(tester, api);
+
+    await tester.enterText(find.byType(TextField), 'Result');
+    await tester.pumpAndSettle();
+    void expectSelectedInViewport(int index) {
+      final selected = find.byKey(
+        ValueKey('note-navigation-title-result-$index'),
+      );
+      final viewport = find.byKey(const ValueKey('note-navigation-results'));
+      final selectedRect = tester.getRect(selected);
+      final viewportRect = tester.getRect(viewport);
+      expect(selectedRect.top, greaterThanOrEqualTo(viewportRect.top));
+      expect(selectedRect.bottom, lessThanOrEqualTo(viewportRect.bottom));
+    }
+
+    for (var index = 0; index < 20; index++) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pump();
+    }
+    await tester.pumpAndSettle();
+    expectSelectedInViewport(20);
+
+    for (var index = 20; index > 0; index--) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.pump();
+    }
+    await tester.pumpAndSettle();
+    expectSelectedInViewport(0);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pumpAndSettle();
+    expectSelectedInViewport(24);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pumpAndSettle();
+    expectSelectedInViewport(0);
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'note-navigation-input',
+    );
+  });
 }

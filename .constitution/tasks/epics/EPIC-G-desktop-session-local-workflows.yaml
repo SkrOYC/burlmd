@@ -814,6 +814,13 @@ closeout:
     - Consider a focused session-controller extraction in the future roadmap
       after these correctness fixes. Do not expand this closeout into a broad
       provider refactor merely to reduce the current file's line count.
+    - PR 44 round four identified an unqualified cross-process case. The Linux
+      runner permits multiple instances, and these sidecar stores have no
+      cross-process version-publication lock. Concurrent different-schema
+      writers to one application-support profile are not qualified by the
+      single-instance private tests. Use one instance per profile for this
+      private checkout and route coordinated version publication to the future
+      architecture and TechSpec work before claiming that broader guarantee.
   settled:
     - record: prd/capabilities.yaml#CAP-023
       evidence:

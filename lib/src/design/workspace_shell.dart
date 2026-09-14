@@ -700,13 +700,24 @@ class _EditorPaneState extends ConsumerState<_EditorPane> {
   }
 
   Future<void> _closeOtherTabs(_CoreNoteTab keptTab) async {
-    final completedCleanly = await ref
-        .read(activeNoteProvider.notifier)
-        .closeOtherTabs(keptTab.id);
+    final controller = ref.read(activeNoteProvider.notifier);
+    // A tab's popup can outlive the tab itself. Do not turn its captured id
+    // into a "keep nothing" batch: Close Others is valid only for a tab that
+    // still has a visible, Core-backed session.
+    if (!controller.hasOpenTab(keptTab.id)) return;
+    // A primary close shortcut schedules its actual Core close from the
+    // editor pane's post-frame lifecycle. Let that request claim the shared
+    // close boundary before admitting this popup result, so Ctrl+W cannot let
+    // a still-mounted popup convert its just-closed tab into "keep nothing".
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted ||
+        ref.read(noteCloseEditingProvider) > 0 ||
+        !controller.hasOpenTab(keptTab.id)) {
+      return;
+    }
+    final completedCleanly = await controller.closeOtherTabs(keptTab.id);
     if (!mounted || !completedCleanly) return;
-    if (!ref
-        .read(activeNoteProvider.notifier)
-        .activateExistingTab(keptTab.id)) {
+    if (!controller.activateExistingTab(keptTab.id)) {
       return;
     }
     ref.read(selectedNoteIdProvider.notifier).select(keptTab.id);
@@ -923,6 +934,13 @@ class _WorkspaceTabState extends State<_WorkspaceTab> {
 
   Future<void> _showMenuAt(Offset globalPosition) async {
     final l10n = AppLocalizations.of(context)!;
+    // A popup route can outlive this tab, and an unkeyed list slot can be
+    // reused for a neighboring tab while it is open. Preserve the actions
+    // that belonged to the tab that opened the menu rather than reading a
+    // later widget configuration after the route completes.
+    final onClose = widget.onClose;
+    final onCloseOthers = widget.onCloseOthers;
+    final onCloseAll = widget.onCloseAll;
     final result = await showMenu<_TabMenuAction>(
       context: context,
       position: RelativeRect.fromLTRB(
@@ -951,11 +969,11 @@ class _WorkspaceTabState extends State<_WorkspaceTab> {
     );
     switch (result) {
       case _TabMenuAction.close:
-        widget.onClose();
+        onClose();
       case _TabMenuAction.closeOthers:
-        widget.onCloseOthers();
+        onCloseOthers();
       case _TabMenuAction.closeAll:
-        widget.onCloseAll();
+        onCloseAll();
       case null:
         break;
     }
