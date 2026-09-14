@@ -298,6 +298,12 @@ abstract class AppLocalizations {
   /// **'Close {title}'**
   String workspaceCloseNamedTab(String title);
 
+  /// One startup report listing saved Note identities Core could not reopen.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not restore saved notes: {noteIds}'**
+  String workspaceRestoreSavedNotes(String noteIds);
+
   /// Tooltip shown after copying the current note path.
   ///
   /// In en, this message translates to:

@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:burlmd/src/providers/rust_api_provider.dart';
 import 'package:burlmd/src/providers/workspace_provider.dart';
 import 'package:burlmd/src/design/burl_theme.dart';
 import 'package:burlmd/src/design/burl_motion.dart';
 import 'package:burlmd/src/providers/burl_preferences_provider.dart';
+import 'package:burlmd/src/providers/note_providers.dart';
 import 'package:burlmd/src/components/visual_parity_fixture.dart';
 import 'package:burlmd/l10n/generated/app_localizations.dart';
 import 'package:burlmd/src/rust/draft.dart';
@@ -32,6 +35,18 @@ class _MountingRustApi extends RustApi {
   /// What `pending_drafts` reports on startup.
   List<NoteMetadata> drafts = const [];
 
+  /// The durable identity-only state Core returns at workspace startup.
+  ActiveWorkspaceSessionSnapshot snapshot =
+      const ActiveWorkspaceSessionSnapshot(
+        openNoteIds: [],
+        expandedDirectoryIds: [],
+        searchQuery: '',
+        syncPresentation: SessionSyncPresentation.local,
+      );
+
+  /// Concept ids that no longer exist when a saved session is restored.
+  final Set<String> unavailableNoteIds = {};
+
   /// What every `note_write_status` poll reports until a test changes it.
   NoteWriteStatus status = const NoteWriteStatus(hasUnwrittenEdits: false);
 
@@ -41,6 +56,10 @@ class _MountingRustApi extends RustApi {
   int? searchLimit;
   Object? sessionLoadError;
   Object? sessionSaveError;
+
+  /// Delays an individual Core open so mounting tests can interleave a user
+  /// action with asynchronous session restoration.
+  final Map<String, Completer<NoteState>> openNoteGates = {};
 
   /// Every open/close/search call in issue order.
   final List<String> calls = [];
@@ -66,6 +85,11 @@ class _MountingRustApi extends RustApi {
   @override
   Future<NoteState> openNote(String noteId) async {
     calls.add('open:$noteId');
+    if (unavailableNoteIds.contains(noteId)) {
+      throw StateError('missing Note: $noteId');
+    }
+    final gate = openNoteGates[noteId];
+    if (gate != null) return gate.future;
     return NoteState(
       ast: ast,
       metadata: NoteMetadata(
@@ -131,12 +155,7 @@ class _MountingRustApi extends RustApi {
   loadActiveWorkspaceSessionSnapshot() async {
     final error = sessionLoadError;
     if (error != null) throw error;
-    return const ActiveWorkspaceSessionSnapshot(
-      openNoteIds: [],
-      expandedDirectoryIds: [],
-      searchQuery: '',
-      syncPresentation: SessionSyncPresentation.local,
-    );
+    return snapshot;
   }
 
   @override
@@ -165,6 +184,7 @@ Future<ProviderContainer> _pumpShell(
   WidgetTester tester,
   _MountingRustApi api, {
   bool disableAnimations = false,
+  bool settle = true,
 }) async {
   tester.view.physicalSize = const Size(1200, 800);
   tester.view.devicePixelRatio = 1;
@@ -196,7 +216,7 @@ Future<ProviderContainer> _pumpShell(
       ),
     ),
   );
-  await tester.pumpAndSettle();
+  if (settle) await tester.pumpAndSettle();
   return container;
 }
 
@@ -752,9 +772,9 @@ void main() {
 
     await refocusRawEditor();
     await sendPrimary(LogicalKeyboardKey.keyW);
-    expect(raw, findsOneWidget);
-    await tester.enterText(raw, 'ordinary typing');
-    expect(tester.widget<EditableText>(raw).controller.text, 'ordinary typing');
+    expect(raw, findsNothing);
+    expect(find.text('Select a note to open it'), findsOneWidget);
+    expect(api.calls, ['open:a', 'close:a']);
   });
 
   testWidgets('focus mode snaps paint without moving a block when reduced', (
@@ -898,33 +918,133 @@ void main() {
     expect(find.byKey(const ValueKey('history-unavailable')), findsOneWidget);
   });
 
-  testWidgets('the editor shell renders bounded visual tabs and keeps note '
-      'selection on the production provider seam', (tester) async {
+  testWidgets('the editor shell renders only Core-backed tabs on the '
+      'production selection seam', (tester) async {
     final api = _MountingRustApi([_treeNode('a', 'Alpha')]);
     final container = await _pumpShell(tester, api);
 
     expect(find.byKey(const Key('shell-tab-strip')), findsOneWidget);
-    expect(find.text('Welcome.md'), findsOneWidget);
+    expect(find.text('Welcome.md'), findsNothing);
+    expect(find.byKey(const Key('shell-add-tab')), findsNothing);
 
-    await tester.tap(find.byKey(const Key('shell-add-tab')));
-    await tester.pumpAndSettle();
-    expect(find.text('Untitled 1.md'), findsOneWidget);
-
-    // Tree selection still drives `selectedNoteIdProvider` and the existing
-    // open path; tabs merely reflect that real selected Note once it opens.
     await tester.tap(find.text('Alpha'));
     await tester.pumpAndSettle();
     expect(container.read(selectedNoteIdProvider), 'a');
-    expect(api.calls, contains('open:a'));
+    expect(api.calls, ['open:a']);
     expect(find.byKey(const Key('shell-tab-a')), findsOneWidget);
-    expect(find.text('Welcome.md'), findsNothing);
 
-    // Closing an active Note remains intentionally deferred until it can use
-    // the lifecycle-aware close/flush path; the provider-owned tab persists.
     await tester.tap(find.byTooltip('Close a.md'));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('shell-tab-a')), findsOneWidget);
+    expect(api.calls, ['open:a', 'close:a']);
+    expect(find.byKey(const Key('shell-tab-a')), findsNothing);
   });
+
+  testWidgets(
+    'a delayed startup restore cannot overwrite a user-opened Core tab',
+    (tester) async {
+      final restored = Completer<NoteState>();
+      final api =
+          _MountingRustApi([_treeNode('a', 'Alpha'), _treeNode('b', 'Beta')])
+            ..snapshot = const ActiveWorkspaceSessionSnapshot(
+              openNoteIds: ['a'],
+              activeNoteId: 'a',
+              expandedDirectoryIds: [],
+              searchQuery: '',
+              syncPresentation: SessionSyncPresentation.local,
+            )
+            ..openNoteGates['a'] = restored;
+      final container = await _pumpShell(tester, api, settle: false);
+
+      await tester.pump();
+      await tester.pump();
+      expect(api.calls, ['open:a']);
+
+      await tester.tap(find.byKey(const ValueKey('workspace-tree-note-b')));
+      await tester.pump();
+      restored.complete(
+        const NoteState(
+          ast: [],
+          metadata: NoteMetadata(
+            id: 'a',
+            path: 'a.md',
+            title: 'a',
+            lastModified: 0,
+            okfConformant: true,
+          ),
+          baseRevision: 'head',
+          restoredFromDraft: false,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(api.calls, ['open:a', 'close:a', 'open:b']);
+      expect(find.byKey(const Key('shell-tab-a')), findsNothing);
+      expect(find.byKey(const Key('shell-tab-b')), findsOneWidget);
+      expect(container.read(activeNoteProvider)?.metadata.id, 'b');
+      expect(container.read(workspaceSessionProvider).openNoteIds, ['b']);
+      expect(container.read(workspaceSessionProvider).activeNoteId, 'b');
+    },
+  );
+
+  testWidgets(
+    'restores Core-backed tab sessions, reports missing saved Notes once, '
+    'and chooses the following then preceding tab after close',
+    (tester) async {
+      final api =
+          _MountingRustApi([
+              _treeNode('a', 'Alpha'),
+              _treeNode('b', 'Beta'),
+              _treeNode('c', 'Gamma'),
+            ])
+            ..snapshot = const ActiveWorkspaceSessionSnapshot(
+              openNoteIds: ['a', 'missing', 'b', 'c'],
+              activeNoteId: 'b',
+              expandedDirectoryIds: [],
+              searchQuery: '',
+              syncPresentation: SessionSyncPresentation.local,
+            )
+            ..unavailableNoteIds.add('missing');
+      final container = await _pumpShell(tester, api);
+
+      // Every visible tab came back through Core `open_note`; a failed id is
+      // omitted, reported once, and does not prevent its later siblings.
+      expect(api.calls, ['open:a', 'open:missing', 'open:b', 'open:c']);
+      expect(find.byKey(const Key('shell-tab-a')), findsOneWidget);
+      expect(find.byKey(const Key('shell-tab-b')), findsOneWidget);
+      expect(find.byKey(const Key('shell-tab-c')), findsOneWidget);
+      expect(find.byKey(const Key('shell-tab-missing')), findsNothing);
+      expect(
+        find.textContaining('Could not restore saved notes'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('missing'), findsOneWidget);
+      expect(container.read(activeNoteProvider)?.metadata.id, 'b');
+      expect(container.read(workspaceSessionProvider).openNoteIds, [
+        'a',
+        'b',
+        'c',
+      ]);
+      expect(container.read(workspaceSessionProvider).activeNoteId, 'b');
+
+      // B has C after it, so C becomes active. C is now the last tab, so A
+      // becomes active after it closes.
+      await tester.tap(find.byKey(const ValueKey('shell-tab-close-b')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('shell-tab-b')), findsNothing);
+      expect(container.read(activeNoteProvider)?.metadata.id, 'c');
+      expect(container.read(selectedNoteIdProvider), 'c');
+      expect(container.read(workspaceSessionProvider).openNoteIds, ['a', 'c']);
+      expect(container.read(workspaceSessionProvider).activeNoteId, 'c');
+
+      await tester.tap(find.byKey(const ValueKey('shell-tab-close-c')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('shell-tab-c')), findsNothing);
+      expect(container.read(activeNoteProvider)?.metadata.id, 'a');
+      expect(container.read(selectedNoteIdProvider), 'a');
+      expect(container.read(workspaceSessionProvider).openNoteIds, ['a']);
+      expect(container.read(workspaceSessionProvider).activeNoteId, 'a');
+    },
+  );
 
   testWidgets('the production shell exposes no visual-fixture route', (
     tester,
@@ -942,13 +1062,14 @@ void main() {
     );
   });
 
-  testWidgets('a focused tab opens its context menu with Shift+F10', (
-    tester,
-  ) async {
+  testWidgets('a focused Core tab opens its single-tab context menu with '
+      'Shift+F10', (tester) async {
     final api = _MountingRustApi([_treeNode('a', 'Alpha')]);
     await _pumpShell(tester, api);
 
-    await tester.tap(find.byKey(const Key('shell-tab-visual-welcome')));
+    await tester.tap(find.byKey(const ValueKey('workspace-tree-note-a')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('shell-tab-a')));
     await tester.pump();
     await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
     await tester.sendKeyEvent(LogicalKeyboardKey.f10);
@@ -956,8 +1077,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey('tab-menu-close')), findsOneWidget);
-    expect(find.byKey(const ValueKey('tab-menu-close-others')), findsOneWidget);
-    expect(find.byKey(const ValueKey('tab-menu-close-all')), findsOneWidget);
+    expect(find.byKey(const ValueKey('tab-menu-close-others')), findsNothing);
+    expect(find.byKey(const ValueKey('tab-menu-close-all')), findsNothing);
   });
 
   testWidgets('a focused note tab selects with Enter and Space', (

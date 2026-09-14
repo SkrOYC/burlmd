@@ -327,7 +327,7 @@ tickets:
     flows:
       - flow-desktop-session
     certainty: assumed
-    status: planned
+    status: done
   - id: BURL-G005
     title: Serialize every Note-close and batch-close lifecycle
     type: Feature
