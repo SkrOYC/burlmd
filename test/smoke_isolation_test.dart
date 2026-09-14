@@ -155,7 +155,142 @@ void main() {
         expect(script, isNot(contains('mktemp /tmp/burlmd-selection-ready.')));
       },
     );
+
+    test(
+      'visual gate owns a headless compositor and clears ambient DISPLAY',
+      () async {
+        final visual = await File(
+          'scripts/visual-regression.sh',
+        ).readAsString();
+        final smoke = await File('scripts/smoke-shot.sh').readAsString();
+
+        expect(visual, contains("'WLR_BACKENDS=headless'"));
+        expect(visual, contains("'WLR_HEADLESS_OUTPUTS=1'"));
+        expect(visual, contains('env -u DISPLAY'));
+        expect(smoke, contains('env -u DISPLAY'));
+      },
+    );
+
+    test(
+      'clears ambient display variables before its first launcher helper',
+      () async {
+        final fixture = await _VisualLauncherEntryFixture.create();
+        addTearDown(fixture.dispose);
+
+        final result = await fixture.run();
+
+        expect(result.exitCode, 93, reason: result.stderr.toString());
+        expect(
+          await fixture.environmentMarker.readAsString(),
+          'DISPLAY=unset\nWAYLAND_DISPLAY=unset\nSWAYSOCK=unset\n',
+        );
+      },
+    );
   });
+
+  group('smoke PID handoff', () {
+    late _SmokeHandoffFixture fixture;
+
+    setUp(() async {
+      fixture = await _SmokeHandoffFixture.create();
+    });
+
+    tearDown(() => fixture.dispose());
+
+    test('publishes the launched PID and removes poisoned DISPLAY', () async {
+      final handoff = File('${fixture.root.path}/handoff');
+      final launched = File('${fixture.root.path}/launched');
+      final display = File('${fixture.root.path}/display');
+
+      final result = await fixture.runWithInheritedHandoff(
+        handoff: handoff,
+        launched: launched,
+        display: display,
+      );
+
+      expect(result.exitCode, 0, reason: result.stderr.toString());
+      expect(
+        handoff.readAsStringSync().trim(),
+        launched.readAsStringSync().trim(),
+      );
+      expect(
+        handoff.readAsStringSync().trim(),
+        matches(RegExp(r'^[1-9][0-9]*$')),
+      );
+      expect(display.readAsStringSync().trim(), 'unset');
+    });
+
+    test('rejects an invalid inherited PID descriptor before launch', () async {
+      final result = await fixture.run(
+        environment: {'BURLMD_SMOKE_APP_PID_FD': 'not-a-descriptor'},
+      );
+
+      expect(result.exitCode, 64, reason: result.stderr.toString());
+      expect(
+        result.stderr,
+        contains('must name an inherited owned regular-file FD'),
+      );
+    });
+  });
+}
+
+class _VisualLauncherEntryFixture {
+  _VisualLauncherEntryFixture._(
+    this.root,
+    this.fakeBin,
+    this.environmentMarker,
+  );
+
+  final Directory root;
+  final Directory fakeBin;
+  final File environmentMarker;
+
+  static Future<_VisualLauncherEntryFixture> create() async {
+    final root = await Directory.systemTemp.createTemp(
+      'burlmd-visual-launcher-entry.',
+    );
+    final fakeBin = await Directory('${root.path}/fake-bin').create();
+    final baseline = await File('${root.path}/baseline.png').create();
+    final environmentMarker = File('${root.path}/launcher-environment');
+    final mkdir = File('${fakeBin.path}/mkdir');
+    await baseline.writeAsBytes(const []);
+    await mkdir.writeAsString(r'''#!/usr/bin/env bash
+set -euo pipefail
+printf 'DISPLAY=%s\nWAYLAND_DISPLAY=%s\nSWAYSOCK=%s\n' \
+  "${DISPLAY-unset}" "${WAYLAND_DISPLAY-unset}" "${SWAYSOCK-unset}" \
+  > "$BURLMD_TEST_LAUNCHER_ENV_MARKER"
+if [[ -v DISPLAY || -v WAYLAND_DISPLAY || -v SWAYSOCK ]]; then
+  exit 92
+fi
+exit 93
+''');
+    await _SmokeHandoffFixture._makeExecutable(mkdir);
+
+    return _VisualLauncherEntryFixture._(root, fakeBin, environmentMarker);
+  }
+
+  Future<ProcessResult> run() => Process.run(
+    'bash',
+    [
+      'scripts/visual-regression.sh',
+      'launcher-entry',
+      '--baseline',
+      '${root.path}/baseline.png',
+      '--max-different-pixels',
+      '0',
+    ],
+    environment: {
+      ...Platform.environment,
+      'PATH': '${fakeBin.path}:${Platform.environment['PATH'] ?? ''}',
+      'BURLMD_VISUAL_REGRESSION_DIR': '${root.path}/capture',
+      'BURLMD_TEST_LAUNCHER_ENV_MARKER': environmentMarker.path,
+      'DISPLAY': 'poisoned-x11',
+      'WAYLAND_DISPLAY': 'poisoned-wayland',
+      'SWAYSOCK': 'poisoned-sway',
+    },
+  );
+
+  Future<void> dispose() => root.delete(recursive: true);
 }
 
 class _SmokeState {
@@ -197,4 +332,119 @@ class _SmokeState {
   }
 
   Future<void> dispose() => root.delete(recursive: true);
+}
+
+class _SmokeHandoffFixture {
+  _SmokeHandoffFixture._(this.root, this.script, this.fakeBin);
+
+  final Directory root;
+  final File script;
+  final Directory fakeBin;
+
+  static Future<_SmokeHandoffFixture> create() async {
+    final root = await Directory.systemTemp.createTemp('burlmd-smoke-handoff.');
+    final scripts = Directory('${root.path}/scripts');
+    final fakeBin = Directory('${root.path}/fake-bin');
+    await scripts.create();
+    await fakeBin.create();
+    await Directory('${root.path}/rust').create();
+    final script = File('${scripts.path}/smoke-shot.sh');
+    await File('scripts/smoke-shot.sh').copy(script.path);
+
+    for (final command in ['cargo', 'flutter']) {
+      final executable = File('${fakeBin.path}/$command');
+      await executable.writeAsString('#!/usr/bin/env bash\nexit 0\n');
+      await _makeExecutable(executable);
+    }
+    final grim = File('${fakeBin.path}/grim');
+    await grim.writeAsString(r'''#!/usr/bin/env bash
+set -euo pipefail
+output="${!#}"
+if [[ "$output" == *smoke-shot-candidate* ]]; then
+  { printf 'P6\n200 100\n255\n'; head -c 60000 /dev/zero; } > "$output"
+else
+  { printf 'P6\n200 100\n255\n'; head -c 60000 /dev/zero | tr '\0' '\377'; } > "$output"
+fi
+''');
+    await _makeExecutable(grim);
+
+    final app = File('${root.path}/build/linux/x64/release/bundle/burlmd');
+    await app.parent.create(recursive: true);
+    await app.writeAsString(r'''#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$$" > "$BURLMD_TEST_APP_LAUNCH_MARKER"
+printf '%s\n' "${DISPLAY-unset}" > "$BURLMD_TEST_APP_DISPLAY_MARKER"
+trap 'exit 0' TERM INT
+while :; do sleep .1; done
+''');
+    await _makeExecutable(app);
+
+    return _SmokeHandoffFixture._(root, script, fakeBin);
+  }
+
+  Future<ProcessResult> run({Map<String, String> environment = const {}}) =>
+      Process.run('bash', [
+        script.path,
+        'rejected',
+      ], environment: _environment(environment));
+
+  Future<ProcessResult> runWithInheritedHandoff({
+    required File handoff,
+    required File launched,
+    required File display,
+  }) => Process.run('bash', [
+    '-c',
+    r'''set -euo pipefail
+handoff="$1"
+launched="$2"
+display="$3"
+script="$4"
+exec 9<> "$handoff"
+DISPLAY='poisoned-ambient-display' BURLMD_SMOKE_APP_PID_FD=9 \
+  BURLMD_TEST_APP_LAUNCH_MARKER="$launched" \
+  BURLMD_TEST_APP_DISPLAY_MARKER="$display" \
+  "$script" handoff &
+smoke_pid=$!
+for _ in $(seq 1 200); do
+  if [[ -s "$handoff" && -s "$launched" && -s "$display" ]]; then
+    published_pid="$(<"$handoff")"
+    launched_pid="$(<"$launched")"
+    kill -0 "$published_pid"
+    [[ "$published_pid" == "$launched_pid" ]]
+    kill "$smoke_pid" 2>/dev/null || true
+    wait "$smoke_pid" 2>/dev/null || true
+    exit 0
+  fi
+  sleep .02
+done
+kill "$smoke_pid" 2>/dev/null || true
+wait "$smoke_pid" 2>/dev/null || true
+exit 1
+''',
+    'smoke-handoff-test',
+    handoff.path,
+    launched.path,
+    display.path,
+    script.path,
+  ], environment: _environment({'BURLMD_SMOKE_SHOT_DIR': '${root.path}/qa'}));
+
+  Map<String, String> _environment(Map<String, String> additions) => {
+    ...Platform.environment,
+    'PATH': '${fakeBin.path}:${Platform.environment['PATH']}',
+    ...additions,
+  };
+
+  Future<void> dispose() => root.delete(recursive: true);
+
+  static Future<void> _makeExecutable(File file) async {
+    final result = await Process.run('chmod', ['u+x', file.path]);
+    if (result.exitCode != 0) {
+      throw ProcessException(
+        'chmod',
+        ['u+x', file.path],
+        result.stderr.toString(),
+        result.exitCode,
+      );
+    }
+  }
 }
