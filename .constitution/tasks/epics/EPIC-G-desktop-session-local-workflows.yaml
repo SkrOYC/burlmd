@@ -4,20 +4,14 @@ kind: product
 capabilities:
   - CAP-023
   - CAP-024
-  - CAP-025
   - CAP-026
   - CAP-027
   - CAP-028
   - CAP-029
   - CAP-030
-  - CAP-032
   - CAP-033
-  - CAP-034
   - CAP-035
-  - CAP-043
-  - CAP-044
 depends_on:
-  - H
   - M
 scope:
   paths:
@@ -30,6 +24,9 @@ scope:
     - test/**
     - integration_test/**
     - scripts/visual-regression.sh
+    - lib/visual_capture_main.dart
+    - test_driver/visual_capture_driver.dart
+    - test/visual_capture_driver_protocol_test.dart
     - lib/src/design/**
     - lib/src/screens/workspace.dart
     - test/providers/**
@@ -72,6 +69,10 @@ tickets:
         - test/**
         - integration_test/**
         - scripts/visual-regression.sh
+        - scripts/smoke-shot.sh
+        - lib/visual_capture_main.dart
+        - test_driver/visual_capture_driver.dart
+        - test/visual_capture_driver_protocol_test.dart
       out:
         - linux/**
         - macos/**
@@ -85,9 +86,14 @@ tickets:
       - STOP if any production or executable test surface still selects,
         renders, or labels emulated macOS/Linux chrome; remove the obsolete
         contract instead of hiding it.
-      - STOP before claiming managed reference evidence if the viewport isn't
-        verified at 1920x1080 at 60 Hz, Linux capture touches the Writer's
-        desktop, or macOS 15 contributes visual evidence.
+      - STOP if the private harness reads an ambient display or accepts a PID
+        other than the smoke child PID written through the owned inherited file
+        descriptor. Verify that child's Sway geometry twice across a compositor
+        tick before capture.
+      - STOP if replay becomes a wholesale merge of primary G commit
+        `2fb9eb2a5e27b5b07f5491b7c6f752b4572c2727`, changes `.constitution`,
+        managed CI, or `.envrc`, or deletes unrelated files. Selectively replay
+        only the harness, application, and test changes within this ticket.
     description: Remove the Platform-chrome preference, state, widgets, localized
       copy, fixtures, tests, and executable visual assumptions introduced for
       prototype presentation. Preserve design provenance only in non-executable
@@ -96,13 +102,13 @@ tickets:
       mode: visual_regression
       evidence: The rebuilt `test/goldens/` shell baselines contain no simulated
         traffic lights, Linux title controls, Platform selector, or reserved
-        fake-titlebar spacing. The M0 command allows zero different Linux
-        pixels. After both `BURL-M003` pull requests merge, `BURL-G011` obtains
-        required Linux exact platform-regression evidence from the owned
-        headless environment and authoritative product visual evidence from
-        macOS 26. macOS 15 remains functional-only. Production and executable
-        tests contain no preference or code path that recreates emulated chrome.
-        CAP-SHELL-04 passes with host-owned chrome.
+        fake-titlebar spacing. The private harness owns its headless Sway
+        compositor, runtime directory, display, socket, input state, and smoke
+        child-PID protocol. It compares the checked-in baseline at zero product
+        pixels without reading the Writer's desktop. This is local integration
+        evidence only; it doesn't qualify Linux, macOS, or a supported release.
+        Production and executable tests contain no preference or code path that
+        recreates emulated chrome. CAP-SHELL-04 passes with host-owned chrome.
     flows:
       - flow-desktop-session
     certainty: assumed
@@ -119,7 +125,8 @@ tickets:
     title: Persist device-global preferences
     type: Feature
     effort: 5
-    depends_on: []
+    depends_on:
+      - BURL-G001
     category: Feature-Evolution
     scope:
       in:
@@ -129,9 +136,12 @@ tickets:
         - test/providers/**
         - test/screens/**
     verification:
-      command: flutter test && dart analyze && ./scripts/smoke-shot.sh pref-g002 &&
-        git diff --check && ! rg -n '\[DEBUG-' lib rust test scripts
-      expected: exit 0 with restart tests passing
+      command: flutter test && dart analyze && ./scripts/visual-regression.sh
+        pref-g002 --baseline .qa/pref-g002-private.png --max-different-pixels 0
+        --write-baseline && git diff --check && ! rg -n '\[DEBUG-' lib rust test
+        scripts
+      expected: exit 0 with restart tests and the private Linux visual smoke
+        passing
     stop_conditions:
       - STOP if persistence requires storing appearance or update choices in the
         Workspace; keep them device-global.
@@ -173,7 +183,8 @@ tickets:
     title: Persist versioned per-Workspace session snapshots
     type: Feature
     effort: 5
-    depends_on: []
+    depends_on:
+      - BURL-G001
     category: Correctness
     scope:
       in:
@@ -188,9 +199,12 @@ tickets:
     verification:
       command: cargo test --manifest-path rust/Cargo.toml &&
         ./scripts/check-generated-bindings.sh && flutter test && dart analyze &&
-        ./scripts/smoke-shot.sh state-g003 && git diff --check
-      expected: exit 0 with strict schema, semantic validation, quarantine, fallback,
-        and provider restore tests passing
+        ./scripts/visual-regression.sh state-g003 --baseline
+        .qa/state-g003-private.png --max-different-pixels 0 --write-baseline &&
+        git diff --check
+      expected: exit 0 with strict schema, semantic validation, quarantine,
+        fallback, provider restore tests, and the private Linux visual smoke
+        passing
     stop_conditions:
       - STOP if a snapshot can become authoritative Note/session state or
         contain Note content or secrets.
@@ -229,6 +243,7 @@ tickets:
     type: Feature
     effort: 8
     depends_on:
+      - BURL-G001
       - BURL-G003
     category: Correctness
     scope:
@@ -240,10 +255,13 @@ tickets:
         - scripts/smoke-shot.sh
         - test/**
     verification:
-      command: cargo test --manifest-path rust/Cargo.toml && flutter test && dart
-        analyze && BURLMD_SMOKE_TABS_G004=1 ./scripts/smoke-shot.sh tabs-g004 &&
-        git diff --check
-      expected: exit 0 and a smoke capture with multiple Core-backed tabs
+      command: cargo test --manifest-path rust/Cargo.toml &&
+        ./scripts/check-generated-bindings.sh && flutter test && dart analyze &&
+        BURLMD_SMOKE_TABS_G004=1 ./scripts/visual-regression.sh tabs-g004
+        --baseline .qa/tabs-g004-private.png --max-different-pixels 0
+        --write-baseline && git diff --check
+      expected: exit 0 and a private Linux visual smoke with multiple Core-backed
+        tabs
     stop_conditions:
       - STOP if Flutter invents or restores a writable Note session that Core
         doesn't own.
@@ -278,6 +296,7 @@ tickets:
     type: Feature
     effort: 8
     depends_on:
+      - BURL-G001
       - BURL-G004
     category: Correctness
     scope:
@@ -290,8 +309,11 @@ tickets:
         - integration_test/**
     verification:
       command: cargo test --manifest-path rust/Cargo.toml && flutter test && dart
-        analyze && ./scripts/smoke-shot.sh close-g005 && git diff --check
-      expected: exit 0 with all close-entry and partial-batch scenarios passing
+        analyze && ./scripts/visual-regression.sh close-g005 --baseline
+        .qa/close-g005-private.png --max-different-pixels 0 --write-baseline &&
+        git diff --check
+      expected: exit 0 with all close-entry and partial-batch scenarios and the
+        private Linux visual smoke passing
     stop_conditions:
       - STOP if any tab button, middle click, shortcut, Close Others, Close All,
         Workspace switch, or orderly shutdown removes a tab before Core returns
@@ -356,12 +378,17 @@ tickets:
       - flow-desktop-session
       - flow-workspace-bootstrap
     certainty: assumed
-    status: planned
+    status: deferred
+    deferred_to: Future adoption route for CAP-025 and CAP-043 after Epic H
+      establishes canonical Workspace authority and completes its preflight and
+      adoption route. Preserve the serialized-close prerequisite; don't treat
+      the private Linux milestone as authority or adoption evidence.
   - id: BURL-G007
     title: Surface keyboard title jump and backlinks
     type: Feature
     effort: 5
     depends_on:
+      - BURL-G001
       - BURL-G004
     category: Feature-Evolution
     scope:
@@ -371,9 +398,11 @@ tickets:
         - lib/src/providers/note_providers.dart
         - test/components/**
     verification:
-      command: flutter test && dart analyze && ./scripts/smoke-shot.sh nav-g007 && git
-        diff --check
-      expected: exit 0 with keyboard and backlink navigation tests passing
+      command: flutter test && dart analyze && ./scripts/visual-regression.sh
+        nav-g007 --baseline .qa/nav-g007-private.png --max-different-pixels 0
+        --write-baseline && git diff --check
+      expected: exit 0 with keyboard and backlink navigation tests and the
+        private Linux visual smoke passing
     stop_conditions:
       - STOP if the UI reimplements title matching, Link resolution, or backlink
         queries.
@@ -440,7 +469,10 @@ tickets:
     flows:
       - flow-edit-note
     certainty: assumed
-    status: planned
+    status: deferred
+    deferred_to: Future canonical-AST route for CAP-032 after Epic H selects
+      and implements the source-backed Note authority. Preserve the existing
+      command-stack dependencies when the deferred ticket is adopted.
   - id: BURL-G009
     title: Implement in-Note find and atomic replace
     type: Feature
@@ -476,7 +508,10 @@ tickets:
     flows:
       - flow-edit-note
     certainty: assumed
-    status: planned
+    status: deferred
+    deferred_to: Future canonical-AST route for CAP-034 after Epic H selects
+      and implements the source-backed Note authority and after the deferred
+      BURL-G008 command-stack route is adopted.
   - id: BURL-G010
     title: Surface and restore local Note history
     type: Feature
@@ -525,7 +560,10 @@ tickets:
     flows:
       - flow-history-diagnostics
     certainty: assumed
-    status: planned
+    status: deferred
+    deferred_to: Future final-history-contract route for CAP-044 after canonical
+      Workspace authority and the Stage 3 history contract are settled. The
+      private Linux milestone doesn't qualify history restoration.
   - id: BURL-G011
     title: Integrate and harden the feature-complete local shell
     type: Feature
@@ -612,4 +650,9 @@ tickets:
       - flow-desktop-session
       - flow-workspace-navigation
     certainty: assumed
-    status: planned
+    status: deferred
+    deferred_to: Full managed supported-release qualification for the shared G
+      capability set, CAP-023 through CAP-030, CAP-032 through CAP-035,
+      CAP-043, and CAP-044, after BURL-M003 completes through its reviewed
+      implementation and evidence-only pull request and the later platform and
+      release prerequisites are satisfied.

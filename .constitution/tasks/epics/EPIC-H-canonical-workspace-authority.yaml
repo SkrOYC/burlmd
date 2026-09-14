@@ -6,6 +6,7 @@ capabilities:
   - CAP-051
 depends_on:
   - M
+  - G
 scope:
   paths:
     - .constitution/prototypes/ast/**
