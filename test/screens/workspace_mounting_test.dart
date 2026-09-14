@@ -1206,6 +1206,71 @@ void main() {
     },
   );
 
+  testWidgets('mounted Close Others stops on a retired-session warning', (
+    tester,
+  ) async {
+    final api = _MountingRustApi([
+      _treeNode('a', 'Alpha'),
+      _treeNode('b', 'Beta'),
+      _treeNode('c', 'Gamma'),
+    ])..closeNoteErrors['a'] = const CloseNoteWarning('cleanup warning');
+    final container = await _pumpShell(tester, api);
+    final controller = container.read(activeNoteProvider.notifier);
+    await controller.openAsTab('a');
+    await controller.openAsTab('b');
+    await controller.openAsTab('c');
+    controller.activateExistingTab('b');
+    container.read(selectedNoteIdProvider.notifier).select('b');
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('shell-tab-b')));
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.f10);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('tab-menu-close-others')));
+    await tester.pumpAndSettle();
+
+    expect(api.calls.where((call) => call.startsWith('close:')), ['close:a']);
+    expect(find.byKey(const Key('shell-tab-a')), findsNothing);
+    expect(find.byKey(const Key('shell-tab-b')), findsOneWidget);
+    expect(find.byKey(const Key('shell-tab-c')), findsOneWidget);
+  });
+
+  testWidgets('mounted Close All stops on a true close refusal', (
+    tester,
+  ) async {
+    final api = _MountingRustApi([
+      _treeNode('a', 'Alpha'),
+      _treeNode('b', 'Beta'),
+      _treeNode('c', 'Gamma'),
+    ])..closeNoteErrors['b'] = StateError('close refused');
+    final container = await _pumpShell(tester, api);
+    final controller = container.read(activeNoteProvider.notifier);
+    await controller.openAsTab('a');
+    await controller.openAsTab('b');
+    await controller.openAsTab('c');
+    controller.activateExistingTab('b');
+    container.read(selectedNoteIdProvider.notifier).select('b');
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('shell-tab-b')));
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.f10);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('tab-menu-close-all')));
+    await tester.pumpAndSettle();
+
+    expect(api.calls.where((call) => call.startsWith('close:')), [
+      'close:a',
+      'close:b',
+    ]);
+    expect(find.byKey(const Key('shell-tab-a')), findsNothing);
+    expect(find.byKey(const Key('shell-tab-b')), findsOneWidget);
+    expect(find.byKey(const Key('shell-tab-c')), findsOneWidget);
+  });
+
   testWidgets('a middle-click tab close waits for the terminal Core result', (
     tester,
   ) async {
@@ -1231,7 +1296,7 @@ void main() {
   });
 
   testWidgets(
-    'the native app-exit callback cancels on a warning and exits after a clean batch',
+    'the native app-exit callback cancels on warning or refusal and exits only after a clean batch',
     (tester) async {
       final api = _MountingRustApi([_treeNode('a', 'Alpha')]);
       final container = await _pumpShell(tester, api);
@@ -1251,9 +1316,23 @@ void main() {
       expect(find.byKey(const Key('shell-tab-b')), findsOneWidget);
 
       api.closeNoteErrors.remove('a');
+      api.closeNoteErrors['b'] = StateError('close refused');
+      expect(
+        await tester.binding.handleRequestAppExit(),
+        AppExitResponse.cancel,
+      );
+      await tester.pump();
+      expect(api.calls.where((call) => call.startsWith('close:')), [
+        'close:a',
+        'close:b',
+      ]);
+      expect(find.byKey(const Key('shell-tab-b')), findsOneWidget);
+
+      api.closeNoteErrors.remove('b');
       expect(await tester.binding.handleRequestAppExit(), AppExitResponse.exit);
       expect(api.calls.where((call) => call.startsWith('close:')), [
         'close:a',
+        'close:b',
         'close:b',
       ]);
     },

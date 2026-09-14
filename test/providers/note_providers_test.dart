@@ -8,6 +8,55 @@ import 'package:burlmd/src/rust/error.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+enum _InjectedCloseOutcome { clean, warning, refusal }
+
+const _matrixNoteIds = ['a', 'b', 'c'];
+
+Iterable<Map<String, _InjectedCloseOutcome>> _threeNoteCloseOutcomes() sync* {
+  for (final a in _InjectedCloseOutcome.values) {
+    for (final b in _InjectedCloseOutcome.values) {
+      for (final c in _InjectedCloseOutcome.values) {
+        yield {'a': a, 'b': b, 'c': c};
+      }
+    }
+  }
+}
+
+Object? _errorFor(_InjectedCloseOutcome outcome) => switch (outcome) {
+  _InjectedCloseOutcome.clean => null,
+  _InjectedCloseOutcome.warning => const CloseNoteWarning('cleanup warning'),
+  _InjectedCloseOutcome.refusal => StateError('close refused'),
+};
+
+List<String> _expectedClosePrefix(
+  List<String> batchIds,
+  Map<String, _InjectedCloseOutcome> outcomes,
+) {
+  final prefix = <String>[];
+  for (final noteId in batchIds) {
+    prefix.add(noteId);
+    if (outcomes[noteId] != _InjectedCloseOutcome.clean) break;
+  }
+  return prefix;
+}
+
+List<String> _expectedRemainingSessions(
+  List<String> initialIds,
+  List<String> batchIds,
+  Map<String, _InjectedCloseOutcome> outcomes,
+) {
+  final remaining = initialIds.toSet();
+  for (final noteId in batchIds) {
+    final outcome = outcomes[noteId]!;
+    if (outcome != _InjectedCloseOutcome.refusal) remaining.remove(noteId);
+    if (outcome != _InjectedCloseOutcome.clean) break;
+  }
+  return initialIds.where(remaining.contains).toList(growable: false);
+}
+
+String _outcomeName(Map<String, _InjectedCloseOutcome> outcomes) =>
+    _matrixNoteIds.map((id) => '$id=${outcomes[id]!.name}').join(', ');
+
 class _SwitchingRustApi extends RustApi {
   _SwitchingRustApi({
     this.warningOnClose = false,
@@ -126,63 +175,163 @@ void main() {
     }
 
     test(
-      'batch result sequences retain input order and stop on the first terminal non-clean result',
+      'finite matrix preserves batch terminal outcomes for every public wide close entry point',
       () async {
-        for (final scenario
-            in <
+        final entryPoints =
+            <
               ({
                 String name,
-                Map<String, Object> errors,
-                List<String> expectedClosed,
-                List<String> expectedOpen,
+                List<String> batchIds,
+                Future<bool> Function(NoteController) invoke,
               })
             >[
               (
-                name: 'all clean',
-                errors: const {},
-                expectedClosed: ['a', 'b', 'c'],
-                expectedOpen: const [],
+                name: 'Close All',
+                batchIds: _matrixNoteIds,
+                invoke: (controller) => controller.closeAllTabs(),
               ),
               (
-                name: 'retired-session warning',
-                errors: const {'b': CloseNoteWarning('cleanup warning')},
-                expectedClosed: ['a', 'b'],
-                expectedOpen: ['c'],
+                name: 'Close Others (keep b)',
+                batchIds: const ['a', 'c'],
+                invoke: (controller) => controller.closeOtherTabs('b'),
               ),
               (
-                name: 'close refusal',
-                errors: {'b': StateError('disk unavailable')},
-                expectedClosed: ['a', 'b'],
-                expectedOpen: ['b', 'c'],
+                name: 'Workspace transition prerequisite',
+                batchIds: _matrixNoteIds,
+                invoke: (controller) =>
+                    controller.closeAllForWorkspaceTransition(),
               ),
-            ]) {
-          final api = _SwitchingRustApi()..closeErrors.addAll(scenario.errors);
+              (
+                name: 'orderly shutdown prerequisite',
+                batchIds: _matrixNoteIds,
+                invoke: (controller) => controller.closeAllForOrderlyShutdown(),
+              ),
+            ];
+
+        for (final entryPoint in entryPoints) {
+          for (final outcomes in _threeNoteCloseOutcomes()) {
+            final api = _SwitchingRustApi();
+            for (final noteId in _matrixNoteIds) {
+              final error = _errorFor(outcomes[noteId]!);
+              if (error != null) api.closeErrors[noteId] = error;
+            }
+            final container = _containerFor(api);
+            await openTabs(container, _matrixNoteIds);
+            final controller = container.read(activeNoteProvider.notifier);
+            final expectedPrefix = _expectedClosePrefix(
+              entryPoint.batchIds,
+              outcomes,
+            );
+            final expectedRemaining = _expectedRemainingSessions(
+              _matrixNoteIds,
+              entryPoint.batchIds,
+              outcomes,
+            );
+            final allBatchSessionsAreClean = entryPoint.batchIds.every(
+              (noteId) => outcomes[noteId] == _InjectedCloseOutcome.clean,
+            );
+            final scenario = '${entryPoint.name}: ${_outcomeName(outcomes)}';
+
+            final completedCleanly = await entryPoint.invoke(controller);
+
+            expect(
+              completedCleanly,
+              allBatchSessionsAreClean,
+              reason: scenario,
+            );
+            expect(
+              api.calls.where((call) => call.startsWith('close:')).toList(),
+              expectedPrefix.map((id) => 'close:$id').toList(),
+              reason: scenario,
+            );
+            expect(api.maxClosesInFlight, 1, reason: scenario);
+            expect(
+              container
+                  .read(openNoteSessionsProvider)
+                  .map((note) => note.metadata.id)
+                  .toList(),
+              expectedRemaining,
+              reason: scenario,
+            );
+            expect(
+              container.read(noteCloseBatchingProvider),
+              0,
+              reason: scenario,
+            );
+            expect(
+              container.read(lifecycleEditingProvider),
+              0,
+              reason: scenario,
+            );
+            expect(
+              container.read(editorInputBlockedProvider),
+              isFalse,
+              reason: scenario,
+            );
+
+            if (!completedCleanly) {
+              for (final noteId in expectedRemaining) {
+                expect(
+                  controller.activateExistingTab(noteId),
+                  isTrue,
+                  reason: scenario,
+                );
+                expect(
+                  controller.updateBlock([0], 'writable after $scenario'),
+                  isTrue,
+                  reason: scenario,
+                );
+              }
+              expect(api.blockUpdates, [
+                for (final noteId in expectedRemaining)
+                  '$noteId:0:writable after $scenario',
+              ], reason: scenario);
+            }
+          }
+        }
+      },
+    );
+
+    test(
+      'single-tab Note replacement distinguishes clean, warning, and refusal terminal results',
+      () async {
+        for (final outcome in _InjectedCloseOutcome.values) {
+          final api = _SwitchingRustApi();
+          final error = _errorFor(outcome);
+          if (error != null) api.closeErrors['a'] = error;
           final container = _containerFor(api);
-          await openTabs(container, ['a', 'b', 'c']);
+          final controller = container.read(activeNoteProvider.notifier);
 
-          final completedCleanly = await container
-              .read(activeNoteProvider.notifier)
-              .closeAllTabs();
+          await controller.open('a');
+          container.read(selectedNoteIdProvider.notifier).select('b');
+          await controller.open('b');
 
+          final replacementContinues = outcome != _InjectedCloseOutcome.refusal;
+          final activeId = replacementContinues ? 'b' : 'a';
           expect(
-            completedCleanly,
-            scenario.name == 'all clean',
-            reason: scenario.name,
+            api.calls,
+            replacementContinues
+                ? ['open:a', 'close:a', 'open:b']
+                : ['open:a', 'close:a'],
+            reason: outcome.name,
           );
-          expect(
-            api.calls.where((call) => call.startsWith('close:')).toList(),
-            scenario.expectedClosed.map((id) => 'close:$id').toList(),
-            reason: scenario.name,
-          );
-          expect(api.maxClosesInFlight, 1, reason: scenario.name);
+          expect(container.read(activeNoteProvider)!.metadata.id, activeId);
           expect(
             container
                 .read(openNoteSessionsProvider)
                 .map((note) => note.metadata.id)
                 .toList(),
-            scenario.expectedOpen,
-            reason: scenario.name,
+            [activeId],
           );
+          expect(container.read(noteSwitchingProvider), isFalse);
+          expect(container.read(editorInputBlockedProvider), isFalse);
+          expect(
+            controller.updateBlock([0], 'writable after ${outcome.name}'),
+            isTrue,
+          );
+          expect(api.blockUpdates, [
+            '$activeId:0:writable after ${outcome.name}',
+          ]);
         }
       },
     );
