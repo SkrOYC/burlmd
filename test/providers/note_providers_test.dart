@@ -1,11 +1,62 @@
 import 'dart:async';
 
+import 'package:burlmd/src/components/lifecycle_actions.dart';
 import 'package:burlmd/src/providers/note_providers.dart';
 import 'package:burlmd/src/providers/rust_api_provider.dart';
 import 'package:burlmd/src/providers/workspace_provider.dart';
 import 'package:burlmd/src/rust/draft.dart';
+import 'package:burlmd/src/rust/error.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+enum _InjectedCloseOutcome { clean, warning, refusal }
+
+const _matrixNoteIds = ['a', 'b', 'c'];
+
+Iterable<Map<String, _InjectedCloseOutcome>> _threeNoteCloseOutcomes() sync* {
+  for (final a in _InjectedCloseOutcome.values) {
+    for (final b in _InjectedCloseOutcome.values) {
+      for (final c in _InjectedCloseOutcome.values) {
+        yield {'a': a, 'b': b, 'c': c};
+      }
+    }
+  }
+}
+
+Object? _errorFor(_InjectedCloseOutcome outcome) => switch (outcome) {
+  _InjectedCloseOutcome.clean => null,
+  _InjectedCloseOutcome.warning => const CloseNoteWarning('cleanup warning'),
+  _InjectedCloseOutcome.refusal => StateError('close refused'),
+};
+
+List<String> _expectedClosePrefix(
+  List<String> batchIds,
+  Map<String, _InjectedCloseOutcome> outcomes,
+) {
+  final prefix = <String>[];
+  for (final noteId in batchIds) {
+    prefix.add(noteId);
+    if (outcomes[noteId] != _InjectedCloseOutcome.clean) break;
+  }
+  return prefix;
+}
+
+List<String> _expectedRemainingSessions(
+  List<String> initialIds,
+  List<String> batchIds,
+  Map<String, _InjectedCloseOutcome> outcomes,
+) {
+  final remaining = initialIds.toSet();
+  for (final noteId in batchIds) {
+    final outcome = outcomes[noteId]!;
+    if (outcome != _InjectedCloseOutcome.refusal) remaining.remove(noteId);
+    if (outcome != _InjectedCloseOutcome.clean) break;
+  }
+  return initialIds.where(remaining.contains).toList(growable: false);
+}
+
+String _outcomeName(Map<String, _InjectedCloseOutcome> outcomes) =>
+    _matrixNoteIds.map((id) => '$id=${outcomes[id]!.name}').join(', ');
 
 class _SwitchingRustApi extends RustApi {
   _SwitchingRustApi({
@@ -18,24 +69,47 @@ class _SwitchingRustApi extends RustApi {
   final String? failFirstOpenOf;
   final List<String> calls = [];
   final List<String> blockUpdates = [];
+  final Map<String, Object> closeErrors = {};
   final Completer<void>? closeGate;
+  final Map<String, Completer<void>> closeNoteGates = {};
+  var closesInFlight = 0;
+  var maxClosesInFlight = 0;
   Completer<NoteState>? reloadGate;
+  final Map<String, Completer<NoteState>> openNoteGates = {};
   Object? reloadError;
   var _hasFailedOpen = false;
 
   @override
   Future<void> closeNote(String noteId) async {
     calls.add('close:$noteId');
-    final gate = closeGate;
-    if (gate != null && !gate.isCompleted) await gate.future;
-    if (warningOnClose) {
-      throw const CloseNoteWarning('version-history recording was unavailable');
+    closesInFlight++;
+    maxClosesInFlight = maxClosesInFlight > closesInFlight
+        ? maxClosesInFlight
+        : closesInFlight;
+    try {
+      final perNoteGate = closeNoteGates[noteId];
+      if (perNoteGate != null && !perNoteGate.isCompleted) {
+        await perNoteGate.future;
+      }
+      final gate = closeGate;
+      if (gate != null && !gate.isCompleted) await gate.future;
+      if (warningOnClose) {
+        throw const CloseNoteWarning(
+          'version-history recording was unavailable',
+        );
+      }
+      final error = closeErrors[noteId];
+      if (error != null) throw error;
+    } finally {
+      closesInFlight--;
     }
   }
 
   @override
   Future<NoteState> openNote(String noteId) async {
     calls.add('open:$noteId');
+    final gate = openNoteGates[noteId];
+    if (gate != null) return gate.future;
     if (noteId == failFirstOpenOf && !_hasFailedOpen) {
       _hasFailedOpen = true;
       throw StateError('the incoming Note is temporarily unavailable');
@@ -90,6 +164,392 @@ ProviderContainer _containerFor(_SwitchingRustApi api) {
 }
 
 void main() {
+  group('serialized Note close coordinator', () {
+    Future<void> openTabs(
+      ProviderContainer container,
+      Iterable<String> ids,
+    ) async {
+      final controller = container.read(activeNoteProvider.notifier);
+      for (final id in ids) {
+        await controller.openAsTab(id);
+      }
+    }
+
+    test(
+      'finite matrix preserves batch terminal outcomes for every public wide close entry point',
+      () async {
+        final entryPoints =
+            <
+              ({
+                String name,
+                List<String> batchIds,
+                Future<bool> Function(NoteController) invoke,
+              })
+            >[
+              (
+                name: 'Close All',
+                batchIds: _matrixNoteIds,
+                invoke: (controller) => controller.closeAllTabs(),
+              ),
+              (
+                name: 'Close Others (keep b)',
+                batchIds: const ['a', 'c'],
+                invoke: (controller) => controller.closeOtherTabs('b'),
+              ),
+              (
+                name: 'Workspace transition prerequisite',
+                batchIds: _matrixNoteIds,
+                invoke: (controller) =>
+                    controller.closeAllForWorkspaceTransition(),
+              ),
+              (
+                name: 'orderly shutdown prerequisite',
+                batchIds: _matrixNoteIds,
+                invoke: (controller) => controller.closeAllForOrderlyShutdown(),
+              ),
+            ];
+
+        for (final entryPoint in entryPoints) {
+          for (final outcomes in _threeNoteCloseOutcomes()) {
+            final api = _SwitchingRustApi();
+            for (final noteId in _matrixNoteIds) {
+              final error = _errorFor(outcomes[noteId]!);
+              if (error != null) api.closeErrors[noteId] = error;
+            }
+            final container = _containerFor(api);
+            await openTabs(container, _matrixNoteIds);
+            final controller = container.read(activeNoteProvider.notifier);
+            final expectedPrefix = _expectedClosePrefix(
+              entryPoint.batchIds,
+              outcomes,
+            );
+            final expectedRemaining = _expectedRemainingSessions(
+              _matrixNoteIds,
+              entryPoint.batchIds,
+              outcomes,
+            );
+            final allBatchSessionsAreClean = entryPoint.batchIds.every(
+              (noteId) => outcomes[noteId] == _InjectedCloseOutcome.clean,
+            );
+            final scenario = '${entryPoint.name}: ${_outcomeName(outcomes)}';
+
+            final completedCleanly = await entryPoint.invoke(controller);
+
+            expect(
+              completedCleanly,
+              allBatchSessionsAreClean,
+              reason: scenario,
+            );
+            expect(
+              api.calls.where((call) => call.startsWith('close:')).toList(),
+              expectedPrefix.map((id) => 'close:$id').toList(),
+              reason: scenario,
+            );
+            expect(api.maxClosesInFlight, 1, reason: scenario);
+            expect(
+              container
+                  .read(openNoteSessionsProvider)
+                  .map((note) => note.metadata.id)
+                  .toList(),
+              expectedRemaining,
+              reason: scenario,
+            );
+            expect(
+              container.read(noteCloseBatchingProvider),
+              0,
+              reason: scenario,
+            );
+            expect(
+              container.read(lifecycleEditingProvider),
+              0,
+              reason: scenario,
+            );
+            expect(
+              container.read(editorInputBlockedProvider),
+              isFalse,
+              reason: scenario,
+            );
+
+            if (!completedCleanly) {
+              for (final noteId in expectedRemaining) {
+                expect(
+                  controller.activateExistingTab(noteId),
+                  isTrue,
+                  reason: scenario,
+                );
+                expect(
+                  controller.updateBlock([0], 'writable after $scenario'),
+                  isTrue,
+                  reason: scenario,
+                );
+              }
+              expect(api.blockUpdates, [
+                for (final noteId in expectedRemaining)
+                  '$noteId:0:writable after $scenario',
+              ], reason: scenario);
+            }
+          }
+        }
+      },
+    );
+
+    test(
+      'single-tab Note replacement distinguishes clean, warning, and refusal terminal results',
+      () async {
+        for (final outcome in _InjectedCloseOutcome.values) {
+          final api = _SwitchingRustApi();
+          final error = _errorFor(outcome);
+          if (error != null) api.closeErrors['a'] = error;
+          final container = _containerFor(api);
+          final controller = container.read(activeNoteProvider.notifier);
+
+          await controller.open('a');
+          container.read(selectedNoteIdProvider.notifier).select('b');
+          await controller.open('b');
+
+          final replacementContinues = outcome != _InjectedCloseOutcome.refusal;
+          final activeId = replacementContinues ? 'b' : 'a';
+          expect(
+            api.calls,
+            replacementContinues
+                ? ['open:a', 'close:a', 'open:b']
+                : ['open:a', 'close:a'],
+            reason: outcome.name,
+          );
+          expect(container.read(activeNoteProvider)!.metadata.id, activeId);
+          expect(
+            container
+                .read(openNoteSessionsProvider)
+                .map((note) => note.metadata.id)
+                .toList(),
+            [activeId],
+          );
+          expect(container.read(noteSwitchingProvider), isFalse);
+          expect(container.read(editorInputBlockedProvider), isFalse);
+          expect(
+            controller.updateBlock([0], 'writable after ${outcome.name}'),
+            isTrue,
+          );
+          expect(api.blockUpdates, [
+            '$activeId:0:writable after ${outcome.name}',
+          ]);
+        }
+      },
+    );
+
+    test(
+      'a warning retires the outgoing tab and permits only a standalone Note replacement',
+      () async {
+        final api = _SwitchingRustApi()
+          ..closeErrors['a'] = const CloseNoteWarning('cleanup warning');
+        final container = _containerFor(api);
+        final controller = container.read(activeNoteProvider.notifier);
+
+        await controller.open('a');
+        await controller.open('b');
+
+        expect(api.calls, ['open:a', 'close:a', 'open:b']);
+        expect(container.read(activeNoteProvider)!.metadata.id, 'b');
+        expect(
+          container
+              .read(openNoteSessionsProvider)
+              .map((note) => note.metadata.id),
+          ['b'],
+        );
+        expect(api.maxClosesInFlight, 1);
+      },
+    );
+
+    test(
+      'the batch includes retained Core sessions but never treats snapshot retry hints as Core sessions',
+      () async {
+        final api = _SwitchingRustApi()
+          ..closeErrors['retained'] = StateError('close refused');
+        final container = _containerFor(api);
+        await openTabs(container, ['a']);
+        container
+            .read(retainedCoreSessionIdsProvider.notifier)
+            .retain('retained');
+        container
+            .read(workspaceSessionProvider.notifier)
+            .addOpenNoteId('snapshot-retry-hint');
+
+        final completedCleanly = await container
+            .read(activeNoteProvider.notifier)
+            .closeAllTabs();
+
+        expect(completedCleanly, isFalse);
+        expect(api.calls.where((call) => call.startsWith('close:')).toList(), [
+          'close:a',
+          'close:retained',
+        ]);
+        expect(container.read(retainedCoreSessionIdsProvider), {'retained'});
+        expect(
+          container
+              .read(workspaceSessionProvider)
+              .openNoteIds
+              .contains('snapshot-retry-hint'),
+          isTrue,
+        );
+      },
+    );
+
+    test(
+      'concurrent close entry requests never overlap Core close calls',
+      () async {
+        final firstClose = Completer<void>();
+        final api = _SwitchingRustApi()..closeNoteGates['a'] = firstClose;
+        final container = _containerFor(api);
+        await openTabs(container, ['a', 'b']);
+        final controller = container.read(activeNoteProvider.notifier);
+
+        final closeA = controller.closeTab('a');
+        await Future<void>.delayed(Duration.zero);
+        final closeB = controller.closeTab('b');
+        await Future<void>.delayed(Duration.zero);
+
+        expect(api.calls.where((call) => call.startsWith('close:')), [
+          'close:a',
+        ]);
+        expect(api.maxClosesInFlight, 1);
+        firstClose.complete();
+        expect(await closeA, isTrue);
+        expect(await closeB, isTrue);
+        expect(api.calls.where((call) => call.startsWith('close:')), [
+          'close:a',
+          'close:b',
+        ]);
+        expect(api.maxClosesInFlight, 1);
+      },
+    );
+
+    test(
+      'a single close reserves editor, selection, and lifecycle admission until Core settles',
+      () async {
+        final closeGate = Completer<void>();
+        final api = _SwitchingRustApi()..closeNoteGates['a'] = closeGate;
+        final container = _containerFor(api);
+        await openTabs(container, ['a', 'b']);
+        final controller = container.read(activeNoteProvider.notifier);
+        controller.activateExistingTab('a');
+        container.read(selectedNoteIdProvider.notifier).select('a');
+
+        final closing = controller.closeTab('a');
+        await Future<void>.delayed(Duration.zero);
+
+        expect(container.read(editorInputBlockedProvider), isTrue);
+        expect(
+          container.read(selectedNoteIdProvider.notifier).select('b'),
+          isFalse,
+        );
+        expect(controller.updateBlock([0], 'must not reach Core'), isFalse);
+        expect(
+          await container.read(lifecycleActionsProvider).createNote('', 'New'),
+          isA<LifecycleFailed>(),
+        );
+        expect(api.blockUpdates, isEmpty);
+
+        closeGate.complete();
+        expect(await closing, isTrue);
+        expect(container.read(editorInputBlockedProvider), isFalse);
+        expect(
+          container.read(selectedNoteIdProvider.notifier).select('b'),
+          isTrue,
+        );
+        await controller.openAsTab('b');
+        expect(controller.updateBlock([0], 'writable again'), isTrue);
+        expect(api.blockUpdates, ['b:0:writable again']);
+      },
+    );
+
+    test(
+      'a cancelled wide close selects a surviving tab and keeps only valid retry hints',
+      () async {
+        for (final entryPoint in <Future<bool> Function(NoteController)>[
+          (controller) => controller.closeOtherTabs('b'),
+          (controller) => controller.closeAllForOrderlyShutdown(),
+        ]) {
+          final api = _SwitchingRustApi()
+            ..closeErrors['a'] = const CloseNoteWarning('cleanup warning');
+          final container = _containerFor(api);
+          await openTabs(container, ['a', 'b', 'c']);
+          final controller = container.read(activeNoteProvider.notifier);
+          controller.activateExistingTab('a');
+          container.read(selectedNoteIdProvider.notifier).select('a');
+
+          expect(await entryPoint(controller), isFalse);
+
+          expect(container.read(activeNoteProvider)?.metadata.id, 'b');
+          expect(container.read(selectedNoteIdProvider), 'b');
+          expect(
+            container
+                .read(openNoteSessionsProvider)
+                .map((note) => note.metadata.id)
+                .toList(),
+            ['b', 'c'],
+          );
+          expect(container.read(workspaceSessionProvider).openNoteIds, [
+            'b',
+            'c',
+          ]);
+          expect(controller.updateBlock([0], 'still writable'), isTrue);
+        }
+      },
+    );
+
+    test(
+      'wide close operations proceed only after an entirely clean batch',
+      () async {
+        for (final entryPoint in <Future<bool> Function(NoteController)>[
+          (controller) => controller.closeAllForWorkspaceTransition(),
+          (controller) => controller.closeAllForOrderlyShutdown(),
+        ]) {
+          for (final warning in [false, true]) {
+            final api = _SwitchingRustApi();
+            if (warning) {
+              api.closeErrors['a'] = const CloseNoteWarning('cleanup warning');
+            }
+            final container = _containerFor(api);
+            await openTabs(container, ['a', 'b']);
+
+            final canContinue = await entryPoint(
+              container.read(activeNoteProvider.notifier),
+            );
+
+            expect(canContinue, isNot(warning));
+            expect(
+              api.calls.where((call) => call.startsWith('close:')).toList(),
+              warning ? ['close:a'] : ['close:a', 'close:b'],
+            );
+          }
+        }
+      },
+    );
+
+    test(
+      'an orderly clean close retires Core sessions without clearing restart intent',
+      () async {
+        final api = _SwitchingRustApi();
+        final container = _containerFor(api);
+        await openTabs(container, ['a', 'b']);
+
+        expect(
+          await container
+              .read(activeNoteProvider.notifier)
+              .closeAllForOrderlyShutdown(),
+          isTrue,
+        );
+        expect(container.read(openNoteSessionsProvider), isEmpty);
+        expect(container.read(activeNoteProvider), isNull);
+        expect(container.read(workspaceSessionProvider).openNoteIds, [
+          'a',
+          'b',
+        ]);
+        expect(container.read(workspaceSessionProvider).activeNoteId, 'b');
+      },
+    );
+  });
+
   test(
     'an admission change during a delayed close releases switching before later navigation and editing',
     () async {
@@ -207,6 +667,288 @@ void main() {
       expect(container.read(selectedNoteIdProvider), 'b');
       expect(container.read(activeNoteProvider)!.metadata.id, 'b');
       expect(api.calls, ['open:a', 'close:a', 'open:b']);
+    },
+  );
+
+  test(
+    'a later tab selection wins when its Core result returns before an earlier selection',
+    () async {
+      final b = Completer<NoteState>();
+      final c = Completer<NoteState>();
+      final api = _SwitchingRustApi()
+        ..openNoteGates['b'] = b
+        ..openNoteGates['c'] = c;
+      final container = _containerFor(api);
+      final controller = container.read(activeNoteProvider.notifier);
+
+      await controller.openAsTab('a');
+      final openB = controller.openAsTab('b');
+      await Future<void>.delayed(Duration.zero);
+      expect(api.calls, ['open:a', 'open:b']);
+
+      final openC = controller.openAsTab('c');
+      // C's Core reply is ready first. The request may be held behind B for
+      // serialization, but B must never mount over this newer selection.
+      c.complete(
+        const NoteState(
+          ast: [],
+          metadata: NoteMetadata(
+            id: 'c',
+            path: 'c.md',
+            title: 'c',
+            lastModified: 0,
+            okfConformant: true,
+          ),
+          baseRevision: 'head',
+          restoredFromDraft: false,
+        ),
+      );
+      b.complete(
+        const NoteState(
+          ast: [],
+          metadata: NoteMetadata(
+            id: 'b',
+            path: 'b.md',
+            title: 'b',
+            lastModified: 0,
+            okfConformant: true,
+          ),
+          baseRevision: 'head',
+          restoredFromDraft: false,
+        ),
+      );
+      await Future.wait([openB, openC]);
+
+      expect(container.read(activeNoteProvider)!.metadata.id, 'c');
+      // B's reply created a Core session even though C had already won.
+      // Retire that superseded session instead of leaking its draft/timers.
+      expect(api.calls, ['open:a', 'open:b', 'close:b', 'open:c']);
+      expect(
+        container
+            .read(openNoteSessionsProvider)
+            .map((note) => note.metadata.id),
+        ['a', 'c'],
+      );
+    },
+  );
+
+  test(
+    'a delayed restore cannot replace a newer Core-backed tab or orphan its own session',
+    () async {
+      final restored = Completer<NoteState>();
+      final api = _SwitchingRustApi()..openNoteGates['a'] = restored;
+      final container = _containerFor(api);
+      final controller = container.read(activeNoteProvider.notifier);
+
+      final restore = controller.restoreOpenNotes(
+        openNoteIds: const ['a'],
+        activeNoteId: 'a',
+      );
+      await Future<void>.delayed(Duration.zero);
+      expect(api.calls, ['open:a']);
+
+      // The shell is already interactive while the asynchronous restore is
+      // waiting on Core, so a normal tab open can arrive in this gap.
+      final openB = controller.openAsTab('b');
+      restored.complete(
+        const NoteState(
+          ast: [],
+          metadata: NoteMetadata(
+            id: 'a',
+            path: 'a.md',
+            title: 'a',
+            lastModified: 0,
+            okfConformant: true,
+          ),
+          baseRevision: 'head',
+          restoredFromDraft: false,
+        ),
+      );
+      await Future.wait([restore, openB]);
+
+      expect(container.read(activeNoteProvider)!.metadata.id, 'b');
+      expect(
+        container
+            .read(openNoteSessionsProvider)
+            .map((note) => note.metadata.id),
+        ['b'],
+      );
+      expect(container.read(workspaceSessionProvider).openNoteIds, ['b']);
+      expect(container.read(workspaceSessionProvider).activeNoteId, 'b');
+      expect(api.calls, ['open:a', 'close:a', 'open:b']);
+    },
+  );
+
+  test('a close refusal preserves a superseded tab Core still owns', () async {
+    final b = Completer<NoteState>();
+    final api = _SwitchingRustApi()
+      ..openNoteGates['b'] = b
+      ..closeErrors['b'] = const AppError.ioError('temporary close failure');
+    final container = _containerFor(api);
+    final controller = container.read(activeNoteProvider.notifier);
+
+    await controller.openAsTab('a');
+    final openB = controller.openAsTab('b');
+    await Future<void>.delayed(Duration.zero);
+    final openC = controller.openAsTab('c');
+    b.complete(
+      const NoteState(
+        ast: [],
+        metadata: NoteMetadata(
+          id: 'b',
+          path: 'b.md',
+          title: 'b',
+          lastModified: 0,
+          okfConformant: true,
+        ),
+        baseRevision: 'head',
+        restoredFromDraft: false,
+      ),
+    );
+    await Future.wait([openB, openC]);
+
+    expect(container.read(activeNoteProvider)!.metadata.id, 'c');
+    expect(
+      container.read(openNoteSessionsProvider).map((note) => note.metadata.id),
+      ['a', 'b', 'c'],
+    );
+    expect(container.read(workspaceSessionProvider).openNoteIds, [
+      'a',
+      'b',
+      'c',
+    ]);
+    expect(api.calls, ['open:a', 'open:b', 'close:b', 'open:c']);
+  });
+
+  test(
+    'a reopened retained identity is released before a later close batch',
+    () async {
+      final reopened = Completer<NoteState>();
+      final api = _SwitchingRustApi()
+        ..openNoteGates['b'] = reopened
+        ..closeErrors['b'] = const AppError.ioError('temporary close failure');
+      final container = _containerFor(api);
+      final controller = container.read(activeNoteProvider.notifier);
+
+      await controller.openAsTab('a');
+      container.read(retainedCoreSessionIdsProvider.notifier).retain('b');
+      final openingB = controller.openAsTab('b');
+      await Future<void>.delayed(Duration.zero);
+      final openingC = controller.openAsTab('c');
+      reopened.complete(
+        const NoteState(
+          ast: [],
+          metadata: NoteMetadata(
+            id: 'b',
+            path: 'b.md',
+            title: 'b',
+            lastModified: 0,
+            okfConformant: true,
+          ),
+          baseRevision: 'head',
+          restoredFromDraft: false,
+        ),
+      );
+      await Future.wait([openingB, openingC]);
+
+      expect(
+        container
+            .read(openNoteSessionsProvider)
+            .map((note) => note.metadata.id),
+        ['a', 'b', 'c'],
+      );
+      expect(container.read(retainedCoreSessionIdsProvider), isEmpty);
+
+      api.closeErrors.remove('b');
+      expect(await controller.closeAllTabs(), isTrue);
+      expect(
+        api.calls.where((call) => call == 'close:b'),
+        hasLength(2),
+        reason: 'one refused stale-open cleanup and one batch close',
+      );
+    },
+  );
+
+  test(
+    'a close refusal preserves a stale restore tab while a newer tab stays active',
+    () async {
+      final restored = Completer<NoteState>();
+      final api = _SwitchingRustApi()
+        ..openNoteGates['a'] = restored
+        ..closeErrors['a'] = const AppError.ioError('temporary close failure');
+      final container = _containerFor(api);
+      final controller = container.read(activeNoteProvider.notifier);
+
+      final restore = controller.restoreOpenNotes(
+        openNoteIds: const ['a'],
+        activeNoteId: 'a',
+      );
+      await Future<void>.delayed(Duration.zero);
+      final openB = controller.openAsTab('b');
+      restored.complete(
+        const NoteState(
+          ast: [],
+          metadata: NoteMetadata(
+            id: 'a',
+            path: 'a.md',
+            title: 'a',
+            lastModified: 0,
+            okfConformant: true,
+          ),
+          baseRevision: 'head',
+          restoredFromDraft: false,
+        ),
+      );
+      await Future.wait([restore, openB]);
+
+      expect(container.read(activeNoteProvider)!.metadata.id, 'b');
+      expect(
+        container
+            .read(openNoteSessionsProvider)
+            .map((note) => note.metadata.id),
+        ['a', 'b'],
+      );
+      expect(container.read(workspaceSessionProvider).openNoteIds, ['a', 'b']);
+      expect(api.calls, ['open:a', 'close:a', 'open:b']);
+    },
+  );
+
+  test(
+    'retaining an unpresentable active Core session revokes only its matching stale projection',
+    () async {
+      final api = _SwitchingRustApi();
+      final container = _containerFor(api);
+      final controller = container.read(activeNoteProvider.notifier);
+
+      await controller.openAsTab('a');
+      final expected = container.read(activeNoteProvider)!;
+
+      expect(
+        controller.retainUnpresentableActiveCoreSession(
+          oldActiveId: 'a',
+          coreNoteId: 'a-renamed',
+          expectedState: expected,
+        ),
+        isTrue,
+      );
+      expect(container.read(activeNoteProvider), isNull);
+      expect(container.read(openNoteSessionsProvider), isEmpty);
+      expect(container.read(retainedCoreSessionIdsProvider), {'a-renamed'});
+      expect(container.read(workspaceSessionProvider).openNoteIds, [
+        'a-renamed',
+      ]);
+      expect(controller.updateBlock([0], 'must not reach Core'), isFalse);
+      expect(api.blockUpdates, isEmpty);
+
+      expect(
+        controller.retainUnpresentableActiveCoreSession(
+          oldActiveId: 'a',
+          coreNoteId: 'unexpected',
+          expectedState: expected,
+        ),
+        isFalse,
+      );
+      expect(container.read(retainedCoreSessionIdsProvider), {'a-renamed'});
     },
   );
 

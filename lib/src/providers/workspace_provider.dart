@@ -18,8 +18,554 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 final workspaceProvider = FutureProvider.autoDispose<WorkspaceInfo>((
   ref,
 ) async {
-  return ref.watch(rustApiProvider).openOrCreateLocalWorkspace();
+  final session = ref.read(workspaceSessionProvider.notifier);
+  final bootstrap = session._beginWorkspaceBootstrap();
+  final api = ref.watch(rustApiProvider);
+  try {
+    // Snapshot calls are scoped to Core's active Workspace. Finish every save
+    // admitted for the current scope before this call can change that scope.
+    await session._drainSnapshotWrites(bootstrap);
+    if (!ref.mounted || !session._isCurrentWorkspaceBootstrap(bootstrap)) {
+      throw StateError('Workspace bootstrap was superseded.');
+    }
+
+    final workspace = await api.openOrCreateLocalWorkspace();
+    if (!ref.mounted || !session._isCurrentWorkspaceBootstrap(bootstrap)) {
+      return workspace;
+    }
+    session._completeWorkspaceBootstrap(bootstrap, workspace);
+    return workspace;
+  } catch (_) {
+    session._failWorkspaceBootstrap(bootstrap);
+    rethrow;
+  }
 });
+
+/// Core-owned presentation state. These saved identifiers are never Note
+/// sessions: a later workflow may ask Core to open them, but the sidecar does
+/// not establish writable Note authority.
+class WorkspaceSessionState {
+  const WorkspaceSessionState({
+    required this.openNoteIds,
+    required this.activeNoteId,
+    required this.expandedDirectoryIds,
+    required this.searchQuery,
+    required this.syncPresentation,
+  });
+
+  const WorkspaceSessionState.empty()
+    : openNoteIds = const [],
+      activeNoteId = null,
+      expandedDirectoryIds = const {},
+      searchQuery = '',
+      syncPresentation = SessionSyncPresentation.local;
+
+  final List<String> openNoteIds;
+  final String? activeNoteId;
+  final Set<String> expandedDirectoryIds;
+  final String searchQuery;
+  final SessionSyncPresentation syncPresentation;
+
+  factory WorkspaceSessionState.fromSnapshot(
+    ActiveWorkspaceSessionSnapshot snapshot,
+  ) => WorkspaceSessionState(
+    openNoteIds: List.unmodifiable(snapshot.openNoteIds),
+    activeNoteId: snapshot.activeNoteId,
+    expandedDirectoryIds: Set.unmodifiable(snapshot.expandedDirectoryIds),
+    searchQuery: snapshot.searchQuery,
+    syncPresentation: snapshot.syncPresentation,
+  );
+
+  ActiveWorkspaceSessionSnapshot toSnapshot() => ActiveWorkspaceSessionSnapshot(
+    openNoteIds: List.of(openNoteIds),
+    activeNoteId: activeNoteId,
+    expandedDirectoryIds: expandedDirectoryIds.toList(),
+    searchQuery: searchQuery,
+    syncPresentation: syncPresentation,
+  );
+
+  WorkspaceSessionState copyWith({
+    List<String>? openNoteIds,
+    String? activeNoteId,
+    bool clearActiveNoteId = false,
+    Set<String>? expandedDirectoryIds,
+    String? searchQuery,
+    SessionSyncPresentation? syncPresentation,
+  }) => WorkspaceSessionState(
+    openNoteIds: openNoteIds ?? this.openNoteIds,
+    activeNoteId: clearActiveNoteId
+        ? null
+        : (activeNoteId ?? this.activeNoteId),
+    expandedDirectoryIds: expandedDirectoryIds ?? this.expandedDirectoryIds,
+    searchQuery: searchQuery ?? this.searchQuery,
+    syncPresentation: syncPresentation ?? this.syncPresentation,
+  );
+}
+
+/// The session sidecar is presentation state, but a Core/transport failure is
+/// still actionable: the shell reports it without making the Workspace
+/// unavailable. The Workspace identity and generation keep an older failure
+/// from being shown after Core has selected another Workspace.
+enum WorkspaceSessionOperation { load, save }
+
+class WorkspaceSessionFailure {
+  const WorkspaceSessionFailure({
+    required this.operation,
+    required this.error,
+    required this.workspaceId,
+    required this.scopeGeneration,
+  });
+
+  final WorkspaceSessionOperation operation;
+  final Object error;
+  final String workspaceId;
+  final int scopeGeneration;
+}
+
+class WorkspaceSessionFailures extends Notifier<WorkspaceSessionFailure?> {
+  @override
+  WorkspaceSessionFailure? build() => null;
+
+  void report(WorkspaceSessionFailure failure) => state = failure;
+
+  void clear() => state = null;
+}
+
+final workspaceSessionFailureProvider =
+    NotifierProvider<WorkspaceSessionFailures, WorkspaceSessionFailure?>(
+      WorkspaceSessionFailures.new,
+    );
+
+class WorkspaceSession extends Notifier<WorkspaceSessionState> {
+  Future<void> _writes = Future<void>.value();
+  String? _workspaceId;
+  var _scopeGeneration = 0;
+  var _bootstrapGeneration = 0;
+  int? _activeBootstrapGeneration;
+  var _savePendingDuringBootstrap = false;
+  var _restored = false;
+  int? _snapshotSavingDisabledScopeGeneration;
+
+  @override
+  WorkspaceSessionState build() => const WorkspaceSessionState.empty();
+
+  /// Starts a transition that could cause Core to select a different
+  /// Workspace. Saves already admitted for the current Workspace must settle
+  /// before that transition enters Core.
+  _WorkspaceBootstrap _beginWorkspaceBootstrap() {
+    final bootstrap = _WorkspaceBootstrap(++_bootstrapGeneration);
+    _activeBootstrapGeneration = bootstrap.generation;
+    return bootstrap;
+  }
+
+  bool _isCurrentWorkspaceBootstrap(_WorkspaceBootstrap bootstrap) =>
+      _activeBootstrapGeneration == bootstrap.generation;
+
+  Future<void> _drainSnapshotWrites(_WorkspaceBootstrap bootstrap) async {
+    if (!_isCurrentWorkspaceBootstrap(bootstrap)) return;
+    await _writes;
+  }
+
+  /// Makes [workspace] the sole presentation-state scope. A same-identity
+  /// refresh retains already-restored user state; a different Workspace first
+  /// exposes the writable empty state until its Core snapshot arrives.
+  void _completeWorkspaceBootstrap(
+    _WorkspaceBootstrap bootstrap,
+    WorkspaceInfo workspace,
+  ) {
+    if (!_isCurrentWorkspaceBootstrap(bootstrap)) return;
+    _activeBootstrapGeneration = null;
+
+    final savePending = _savePendingDuringBootstrap;
+    _savePendingDuringBootstrap = false;
+    if (_workspaceId != workspace.id) {
+      _workspaceId = workspace.id;
+      _scopeGeneration++;
+      _restored = false;
+      _snapshotSavingDisabledScopeGeneration = null;
+      ref.read(workspaceSessionFailureProvider.notifier).clear();
+      state = const WorkspaceSessionState.empty();
+      return;
+    }
+    if (savePending && _restored) _enqueueSave();
+  }
+
+  /// Leaves the current scope intact when bootstrap fails. A UI change that
+  /// happened while Core was unavailable is persisted once that failure ends.
+  void _failWorkspaceBootstrap(_WorkspaceBootstrap bootstrap) {
+    if (!_isCurrentWorkspaceBootstrap(bootstrap)) return;
+    _activeBootstrapGeneration = null;
+    final savePending = _savePendingDuringBootstrap;
+    _savePendingDuringBootstrap = false;
+    if (savePending && _restored) _enqueueSave();
+  }
+
+  int? _restoreScopeFor(String workspaceId) {
+    if (_activeBootstrapGeneration != null || _workspaceId != workspaceId) {
+      return null;
+    }
+    return _scopeGeneration;
+  }
+
+  bool _isCurrentWorkspaceScope(String workspaceId, int scopeGeneration) =>
+      _workspaceId == workspaceId && _scopeGeneration == scopeGeneration;
+
+  void _reportFailure({
+    required WorkspaceSessionOperation operation,
+    required Object error,
+    required String workspaceId,
+    required int scopeGeneration,
+  }) {
+    if (!_isCurrentWorkspaceScope(workspaceId, scopeGeneration)) return;
+    ref
+        .read(workspaceSessionFailureProvider.notifier)
+        .report(
+          WorkspaceSessionFailure(
+            operation: operation,
+            error: error,
+            workspaceId: workspaceId,
+            scopeGeneration: scopeGeneration,
+          ),
+        );
+  }
+
+  /// Reports a Note restore failure against the active snapshot scope. The
+  /// failed identity remains a nonauthoritative retry hint; this only gives
+  /// the shell a visible, dismissible failure for the failed Core request.
+  void reportNoteRestoreFailure(Object error) {
+    final workspaceId = _workspaceId;
+    if (workspaceId == null || _activeBootstrapGeneration != null) return;
+    _reportFailure(
+      operation: WorkspaceSessionOperation.load,
+      error: error,
+      workspaceId: workspaceId,
+      scopeGeneration: _scopeGeneration,
+    );
+  }
+
+  /// Restores once for this exact Workspace generation. Core's safe fallback
+  /// is already represented by an empty snapshot; transport failures use
+  /// [restoreAfterLoadFailure] so they cannot authorize a durable overwrite.
+  bool restore(
+    ActiveWorkspaceSessionSnapshot snapshot, {
+    required String workspaceId,
+    required int scopeGeneration,
+  }) {
+    if (_activeBootstrapGeneration != null ||
+        _workspaceId != workspaceId ||
+        _scopeGeneration != scopeGeneration ||
+        _restored) {
+      return false;
+    }
+    state = WorkspaceSessionState.fromSnapshot(snapshot);
+    _restored = true;
+    return true;
+  }
+
+  /// Core returns an empty snapshot only after it has safely handled invalid
+  /// on-disk bytes. A Dart-side FFI/transport failure has no such guarantee,
+  /// so keep the Workspace usable in memory without admitting a save that
+  /// could overwrite the unread durable snapshot.
+  bool restoreAfterLoadFailure({
+    required String workspaceId,
+    required int scopeGeneration,
+  }) {
+    if (_activeBootstrapGeneration != null ||
+        !_isCurrentWorkspaceScope(workspaceId, scopeGeneration) ||
+        _restored) {
+      return false;
+    }
+    state = const WorkspaceSessionState.empty();
+    _restored = true;
+    _snapshotSavingDisabledScopeGeneration = scopeGeneration;
+    return true;
+  }
+
+  void setSearchQuery(String query) {
+    if (state.searchQuery == query) return;
+    state = state.copyWith(searchQuery: query);
+    _scheduleSave();
+  }
+
+  void toggleDirectory(String directoryId) {
+    final expanded = {...state.expandedDirectoryIds};
+    if (!expanded.remove(directoryId)) expanded.add(directoryId);
+    state = state.copyWith(expandedDirectoryIds: Set.unmodifiable(expanded));
+    _scheduleSave();
+  }
+
+  /// Applies a successful Core directory rename to presentation-only tree
+  /// expansion. Prefix matching is segment-aware so `folder` never affects
+  /// `folder2`.
+  void rekeyExpandedDirectoryPrefix({
+    required String oldPath,
+    required String newPath,
+  }) {
+    final oldPrefix = '$oldPath/';
+    final expanded = {
+      for (final path in state.expandedDirectoryIds)
+        if (path == oldPath)
+          newPath
+        else if (path.startsWith(oldPrefix))
+          '$newPath/${path.substring(oldPrefix.length)}'
+        else
+          path,
+    };
+    if (expanded.length == state.expandedDirectoryIds.length &&
+        expanded.every(state.expandedDirectoryIds.contains)) {
+      return;
+    }
+    state = state.copyWith(expandedDirectoryIds: Set.unmodifiable(expanded));
+    _scheduleSave();
+  }
+
+  /// Drops only a deleted directory and its descendants after Core confirms
+  /// deletion. A sibling with a textual but not segment prefix remains open.
+  void removeExpandedDirectoryPrefix(String path) {
+    final prefix = '$path/';
+    final expanded = state.expandedDirectoryIds
+        .where(
+          (candidate) => candidate != path && !candidate.startsWith(prefix),
+        )
+        .toSet();
+    if (expanded.length == state.expandedDirectoryIds.length) return;
+    state = state.copyWith(expandedDirectoryIds: Set.unmodifiable(expanded));
+    _scheduleSave();
+  }
+
+  /// Records an identity only after Core has opened that Note successfully.
+  /// The snapshot remains an identity-only restore hint; Core owns the actual
+  /// session that made this id eligible to persist.
+  void addOpenNoteId(String noteId) {
+    if (state.openNoteIds.contains(noteId)) return;
+    state = state.copyWith(openNoteIds: [...state.openNoteIds, noteId]);
+    _scheduleSave();
+  }
+
+  /// Atomically records a Core-opened tab and makes it active. A restored
+  /// active identity already names the session being reopened, so defer
+  /// materializing it in `openNoteIds` until another active tab displaces it;
+  /// this lets an immediate lifecycle rekey persist only the new identity.
+  void recordOpenedNoteAsActive(String noteId) {
+    final openNoteIds = List.of(state.openNoteIds);
+    final priorActiveNoteId = state.activeNoteId;
+    if (priorActiveNoteId != null &&
+        priorActiveNoteId != noteId &&
+        !openNoteIds.contains(priorActiveNoteId)) {
+      openNoteIds.add(priorActiveNoteId);
+    }
+    if (priorActiveNoteId != noteId && !openNoteIds.contains(noteId)) {
+      openNoteIds.add(noteId);
+    }
+    if (state.activeNoteId == noteId &&
+        openNoteIds.length == state.openNoteIds.length) {
+      return;
+    }
+    state = state.copyWith(
+      openNoteIds: List.unmodifiable(openNoteIds),
+      activeNoteId: noteId,
+    );
+    _scheduleSave();
+  }
+
+  /// Removes an identity only after Core has retired its session. A closed
+  /// active id cannot remain as the snapshot's active identity.
+  void removeOpenNoteId(String noteId) {
+    if (!state.openNoteIds.contains(noteId)) return;
+    final openNoteIds = state.openNoteIds
+        .where((candidate) => candidate != noteId)
+        .toList(growable: false);
+    state = state.copyWith(
+      openNoteIds: openNoteIds,
+      clearActiveNoteId: state.activeNoteId == noteId,
+    );
+    _scheduleSave();
+  }
+
+  /// Replaces restored identities with exactly the Core sessions that
+  /// reopened. Permanently unavailable ids are absent; transient failures
+  /// remain retained Core identities until a later terminal close.
+  void replaceOpenNotes({
+    required List<String> openNoteIds,
+    required String? activeNoteId,
+  }) {
+    state = state.copyWith(
+      openNoteIds: List.unmodifiable(openNoteIds),
+      activeNoteId: activeNoteId,
+      clearActiveNoteId: activeNoteId == null,
+    );
+    _scheduleSave();
+  }
+
+  /// Records the active identity after Core has opened that Note successfully.
+  void setActiveNoteId(String? noteId) {
+    if (state.activeNoteId == noteId) return;
+    state = noteId == null
+        ? state.copyWith(clearActiveNoteId: true)
+        : state.copyWith(
+            openNoteIds: state.openNoteIds.contains(noteId)
+                ? state.openNoteIds
+                : [...state.openNoteIds, noteId],
+            activeNoteId: noteId,
+          );
+    _scheduleSave();
+  }
+
+  /// Carries a Core-open session across an identity-changing lifecycle
+  /// operation. The old slot remains in its restore position; if a legacy
+  /// snapshot did not record it, append the rekeyed identity instead.
+  void rekeyOpenNoteId({
+    required String oldNoteId,
+    required String newNoteId,
+    bool makeActive = false,
+  }) {
+    final openNoteIds = List.of(state.openNoteIds);
+    final oldIndex = openNoteIds.indexOf(oldNoteId);
+    if (oldIndex == -1) {
+      if (!openNoteIds.contains(newNoteId)) openNoteIds.add(newNoteId);
+    } else if (oldNoteId != newNoteId) {
+      // `openAsTab` may already have admitted the new Core session while a
+      // stale snapshot still names its old identity. Rekeying must collapse
+      // those two presentation entries rather than persisting one tab twice.
+      if (openNoteIds.contains(newNoteId)) {
+        openNoteIds.removeAt(oldIndex);
+      } else {
+        openNoteIds[oldIndex] = newNoteId;
+      }
+    }
+    state = state.copyWith(
+      openNoteIds: List.unmodifiable(openNoteIds),
+      activeNoteId: makeActive || state.activeNoteId == oldNoteId
+          ? newNoteId
+          : state.activeNoteId,
+      clearActiveNoteId: state.activeNoteId == null,
+    );
+    _scheduleSave();
+  }
+
+  void _scheduleSave() {
+    if (!_restored) return;
+    if (_activeBootstrapGeneration != null) {
+      _savePendingDuringBootstrap = true;
+      return;
+    }
+    _enqueueSave();
+  }
+
+  /// Drains a deliberate final save for the current Workspace scope. Orderly
+  /// exit calls this after Core has retired its live sessions: the snapshot is
+  /// presentation intent, not a live Dart session, and must reach Core before
+  /// Flutter accepts termination.
+  Future<void> flushPendingWrites() async {
+    final workspaceId = _workspaceId;
+    final scopeGeneration = _scopeGeneration;
+    if (!_restored ||
+        workspaceId == null ||
+        _activeBootstrapGeneration != null ||
+        _snapshotSavingDisabledScopeGeneration == scopeGeneration) {
+      throw StateError('Workspace session persistence is not available.');
+    }
+    _enqueueSave();
+    while (true) {
+      final writes = _writes;
+      await writes;
+      if (identical(writes, _writes)) break;
+    }
+    if (!ref.mounted ||
+        !_isCurrentWorkspaceScope(workspaceId, scopeGeneration)) {
+      throw StateError('Workspace session scope changed during persistence.');
+    }
+    final failure = ref.read(workspaceSessionFailureProvider);
+    if (failure != null &&
+        failure.operation == WorkspaceSessionOperation.save &&
+        failure.workspaceId == workspaceId &&
+        failure.scopeGeneration == scopeGeneration) {
+      throw failure.error;
+    }
+  }
+
+  void _enqueueSave() {
+    final workspaceId = _workspaceId;
+    if (workspaceId == null) return;
+    final scopeGeneration = _scopeGeneration;
+    if (_snapshotSavingDisabledScopeGeneration == scopeGeneration) return;
+    final snapshot = state.toSnapshot();
+    // Capture the app-side API seam when the state change is admitted. The
+    // queued task must not look it up after a Workspace transition.
+    final api = ref.read(rustApiProvider);
+    _writes = _writes.then((_) async {
+      if (!_isCurrentWorkspaceScope(workspaceId, scopeGeneration)) {
+        return;
+      }
+      try {
+        await api.saveActiveWorkspaceSessionSnapshot(snapshot);
+        final failure = ref.read(workspaceSessionFailureProvider);
+        if (failure != null &&
+            failure.operation == WorkspaceSessionOperation.save &&
+            failure.workspaceId == workspaceId &&
+            failure.scopeGeneration == scopeGeneration) {
+          ref.read(workspaceSessionFailureProvider.notifier).clear();
+        }
+      } catch (error) {
+        _reportFailure(
+          operation: WorkspaceSessionOperation.save,
+          error: error,
+          workspaceId: workspaceId,
+          scopeGeneration: scopeGeneration,
+        );
+      }
+    });
+  }
+}
+
+class _WorkspaceBootstrap {
+  const _WorkspaceBootstrap(this.generation);
+
+  final int generation;
+}
+
+final workspaceSessionProvider =
+    NotifierProvider<WorkspaceSession, WorkspaceSessionState>(
+      WorkspaceSession.new,
+    );
+
+/// Sidecar restore is independent of Workspace bootstrap: an optional session
+/// read cannot make a valid Workspace unavailable. Core already returns an
+/// empty default for invalid durable bytes; a transport failure instead keeps
+/// the app-side state empty and pauses writes for that restore scope.
+final workspaceSessionSnapshotProvider =
+    FutureProvider.autoDispose<WorkspaceSessionState>((ref) async {
+      final api = ref.watch(rustApiProvider);
+      final workspace = await ref.watch(workspaceProvider.future);
+      if (!ref.mounted) return const WorkspaceSessionState.empty();
+
+      final controller = ref.read(workspaceSessionProvider.notifier);
+      final scopeGeneration = controller._restoreScopeFor(workspace.id);
+      if (scopeGeneration == null) return ref.read(workspaceSessionProvider);
+
+      try {
+        final snapshot = await api.loadActiveWorkspaceSessionSnapshot();
+        if (!ref.mounted) return const WorkspaceSessionState.empty();
+        controller.restore(
+          snapshot,
+          workspaceId: workspace.id,
+          scopeGeneration: scopeGeneration,
+        );
+      } catch (error) {
+        if (!ref.mounted) return const WorkspaceSessionState.empty();
+        controller.restoreAfterLoadFailure(
+          workspaceId: workspace.id,
+          scopeGeneration: scopeGeneration,
+        );
+        controller._reportFailure(
+          operation: WorkspaceSessionOperation.load,
+          error: error,
+          workspaceId: workspace.id,
+          scopeGeneration: scopeGeneration,
+        );
+      }
+      return ref.read(workspaceSessionProvider);
+    });
 
 /// The Workspace's Directory/Note hierarchy (`WSPC-D009`'s single-call
 /// contract), fetched in one `workspace_tree()` round trip for the sidebar
@@ -62,6 +608,7 @@ class RescanEditing extends Notifier<int> {
 /// the selected Note itself.
 final noteSelectionBlockedProvider = Provider<bool>(
   (ref) =>
+      ref.watch(noteCloseEditingProvider) > 0 ||
       ref.watch(reloadEditingProvider) > 0 ||
       ref.watch(lifecycleEditingProvider) > 0 ||
       ref.watch(rescanEditingProvider) > 0,

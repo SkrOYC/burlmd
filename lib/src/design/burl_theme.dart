@@ -1,5 +1,3 @@
-import 'package:flutter/foundation.dart'
-    show TargetPlatform, defaultTargetPlatform;
 import 'package:flutter/material.dart';
 
 /// Font families embedded solely for the deterministic visual-parity fixture.
@@ -43,46 +41,73 @@ enum BurlMeasure {
   final double maxWidth;
 }
 
-enum BurlPlatformChrome { macos, linux, minimal }
-
 @immutable
 class BurlPreferences {
   const BurlPreferences({
     this.theme = BurlThemePreference.system,
     this.fontScale = BurlFontScale.standard,
     this.measure = BurlMeasure.standard,
-    this.platformChrome = BurlPlatformChrome.macos,
     this.focusMode = false,
+    this.updateNotifications = true,
   });
 
   final BurlThemePreference theme;
   final BurlFontScale fontScale;
   final BurlMeasure measure;
-  final BurlPlatformChrome platformChrome;
   final bool focusMode;
+  final bool updateNotifications;
 
-  /// The host window owns its titlebar on Linux, so drawing a second set of
-  /// macOS traffic controls there is misleading by default. The preference
-  /// remains explicit and can still be changed in the drawer.
-  factory BurlPreferences.defaults() => BurlPreferences(
-    platformChrome: defaultTargetPlatform == TargetPlatform.linux
-        ? BurlPlatformChrome.minimal
-        : BurlPlatformChrome.macos,
-  );
+  factory BurlPreferences.defaults() => const BurlPreferences();
 
   BurlPreferences copyWith({
     BurlThemePreference? theme,
     BurlFontScale? fontScale,
     BurlMeasure? measure,
-    BurlPlatformChrome? platformChrome,
     bool? focusMode,
+    bool? updateNotifications,
   }) => BurlPreferences(
     theme: theme ?? this.theme,
     fontScale: fontScale ?? this.fontScale,
     measure: measure ?? this.measure,
-    platformChrome: platformChrome ?? this.platformChrome,
     focusMode: focusMode ?? this.focusMode,
+    updateNotifications: updateNotifications ?? this.updateNotifications,
   );
+
+  factory BurlPreferences.fromJson(Object? value) {
+    if (value case {
+      'schema_version': 1,
+      'theme': String theme,
+      'font_scale': String fontScale,
+      'measure': String measure,
+      'focus_mode': bool focusMode,
+      'update_notifications': bool updateNotifications,
+    } when value.length == 6) {
+      return BurlPreferences(
+        theme: _enumByName(BurlThemePreference.values, theme),
+        fontScale: _enumByName(BurlFontScale.values, fontScale),
+        measure: _enumByName(BurlMeasure.values, measure),
+        focusMode: focusMode,
+        updateNotifications: updateNotifications,
+      );
+    }
+    throw const FormatException('Invalid device preferences');
+  }
+
+  Map<String, Object> toJson() => {
+    'schema_version': 1,
+    'theme': theme.name,
+    'font_scale': fontScale.name,
+    'measure': measure.name,
+    'focus_mode': focusMode,
+    'update_notifications': updateNotifications,
+  };
+
+  static T _enumByName<T extends Enum>(Iterable<T> values, String name) {
+    for (final value in values) {
+      if (value.name == name) return value;
+    }
+    throw const FormatException('Invalid device preferences');
+  }
 }
 
 extension on BurlThemePreference {

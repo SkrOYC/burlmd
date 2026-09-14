@@ -24,6 +24,7 @@ class _RescanRustApi extends RustApi {
   /// Whether the fake write tier reports unwritten edits for an open Note.
   bool unwrittenEdits = false;
   final Map<String, bool> unwrittenEditsByNote = {};
+  final Set<String> writeStatusErrors = {};
   final Set<String> restoredDraftIds = {};
 
   int treeFetches = 0;
@@ -50,11 +51,16 @@ class _RescanRustApi extends RustApi {
   }
 
   @override
-  NoteWriteStatus noteWriteStatus(String noteId) => NoteWriteStatus(
-    lastWrittenAt: null,
-    lastError: null,
-    hasUnwrittenEdits: unwrittenEditsByNote[noteId] ?? unwrittenEdits,
-  );
+  NoteWriteStatus noteWriteStatus(String noteId) {
+    if (writeStatusErrors.contains(noteId)) {
+      throw StateError('write-status poll failed for $noteId');
+    }
+    return NoteWriteStatus(
+      lastWrittenAt: null,
+      lastError: null,
+      hasUnwrittenEdits: unwrittenEditsByNote[noteId] ?? unwrittenEdits,
+    );
+  }
 
   @override
   Future<NoteState> openNote(String noteId) async {
@@ -217,7 +223,7 @@ void main() {
       // fresh against the dirty write tier and becomes unavailable.
       await tester.tap(find.text('Beta'));
       await tester.pumpAndSettle();
-      expect(api.calls, ['open:a', 'close:a', 'open:b']);
+      expect(api.calls, ['open:a', 'open:b']);
       expect(_rescanButton(tester).onPressed, isNull);
 
       // Invoking the controller directly anyway (the "stale frame slipped
@@ -316,11 +322,9 @@ void main() {
   );
 
   testWidgets(
-    'a delayed clean A-to-B switch refuses rescan until B is reconciled, then allows retry',
+    'opening another Core tab keeps rescan available once its session mounts',
     (tester) async {
       final api = _RescanRustApi([_note('a', 'Alpha'), _note('b', 'Beta')]);
-      final closeGate = Completer<void>();
-      api.closeGate = closeGate;
       var reindexCalls = 0;
       final container = await _pumpShell(
         tester,
@@ -334,25 +338,112 @@ void main() {
       await tester.tap(find.text('Alpha'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Beta'));
-      await tester.pump();
-      expect(container.read(noteSwitchingProvider), isTrue);
-      expect(_rescanButton(tester).onPressed, isNull);
-
-      await container.read(rescanStateProvider.notifier).run();
-      expect(reindexCalls, 0);
-      expect(container.read(rescanEditingProvider), 0);
-      expect(container.read(rescanStateProvider).refusedReason, isNotNull);
-
-      closeGate.complete();
       await tester.pumpAndSettle();
+
       expect(container.read(noteSwitchingProvider), isFalse);
       expect(container.read(selectedNoteIdProvider), 'b');
       expect(container.read(activeNoteProvider)!.metadata.id, 'b');
+      expect(api.calls, ['open:a', 'open:b']);
+      expect(_rescanButton(tester).onPressed, isNotNull);
 
       await container.read(rescanStateProvider.notifier).run();
       await tester.pumpAndSettle();
       expect(reindexCalls, 1);
       expect(container.read(rescanEditingProvider), 0);
+    },
+  );
+
+  testWidgets(
+    'a dirty inactive tab refuses rescan while the active tab is clean',
+    (tester) async {
+      final api = _RescanRustApi([_note('a', 'Alpha'), _note('b', 'Beta')])
+        ..unwrittenEditsByNote['a'] = true
+        ..unwrittenEditsByNote['b'] = false;
+      var reindexCalls = 0;
+      final container = await _pumpShell(
+        tester,
+        api,
+        reindex: () async {
+          reindexCalls++;
+          return 2;
+        },
+      );
+
+      await tester.tap(find.text('Alpha'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Beta'));
+      await tester.pumpAndSettle();
+      expect(container.read(activeNoteProvider)!.metadata.id, 'b');
+
+      await container.read(rescanStateProvider.notifier).run();
+
+      expect(reindexCalls, 0);
+      expect(
+        container.read(rescanStateProvider).refusedReason,
+        contains('unsaved edits'),
+      );
+    },
+  );
+
+  testWidgets(
+    'a dirty retained Core session refuses rescan without fabricating a tab',
+    (tester) async {
+      final api = _RescanRustApi([_note('a', 'Alpha')])
+        ..unwrittenEditsByNote['retained'] = true;
+      var reindexCalls = 0;
+      final container = await _pumpShell(
+        tester,
+        api,
+        reindex: () async {
+          reindexCalls++;
+          return 1;
+        },
+      );
+      container
+          .read(retainedCoreSessionIdsProvider.notifier)
+          .retain('retained');
+
+      await container.read(rescanStateProvider.notifier).run();
+
+      expect(reindexCalls, 0);
+      expect(container.read(openNoteSessionsProvider), isEmpty);
+      expect(container.read(activeNoteProvider), isNull);
+      expect(
+        container.read(rescanStateProvider).refusal,
+        RescanRefusal.retainedNoteUnwritten,
+      );
+    },
+  );
+
+  testWidgets(
+    'a failed retained-session poll refuses rescan and a clean retained session permits it',
+    (tester) async {
+      final api = _RescanRustApi([_note('a', 'Alpha')]);
+      var reindexCalls = 0;
+      final container = await _pumpShell(
+        tester,
+        api,
+        reindex: () async {
+          reindexCalls++;
+          return 1;
+        },
+      );
+      container
+          .read(retainedCoreSessionIdsProvider.notifier)
+          .retain('retained');
+      api.writeStatusErrors.add('retained');
+
+      await container.read(rescanStateProvider.notifier).run();
+
+      expect(reindexCalls, 0);
+      expect(
+        container.read(rescanStateProvider).refusal,
+        RescanRefusal.retainedNoteUnwritten,
+      );
+      api.writeStatusErrors.remove('retained');
+      await container.read(rescanStateProvider.notifier).run();
+
+      expect(reindexCalls, 1);
     },
   );
 

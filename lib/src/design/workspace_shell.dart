@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:burlmd/src/components/draft_recovery.dart';
 import 'package:burlmd/src/components/editor.dart';
+import 'package:burlmd/src/components/note_navigation_panel.dart';
 import 'package:burlmd/src/components/search_panel.dart';
 import 'package:burlmd/src/components/visual_parity_fixture.dart';
 import 'package:burlmd/src/components/workspace_tree.dart';
@@ -38,7 +39,16 @@ class _TabContextMenuIntent extends Intent {
   const _TabContextMenuIntent();
 }
 
-enum _ShellCommand { search, history, preferences, closeTab, dismiss }
+enum _ShellCommand {
+  search,
+  titleJump,
+  history,
+  preferences,
+  closeTab,
+  dismiss,
+}
+
+enum _ShellOverlay { navigator, search, titleJump, preferences, sync, history }
 
 const _visualFixture = bool.fromEnvironment('BURLMD_VISUAL_FIXTURE');
 
@@ -67,6 +77,7 @@ class BurlWorkspaceShell extends ConsumerStatefulWidget {
 class _BurlWorkspaceShellState extends ConsumerState<BurlWorkspaceShell> {
   bool _navigatorOpen = false;
   bool _searchOpen = false;
+  bool _titleJumpOpen = false;
   bool _preferencesOpen = false;
   bool _syncOpen = false;
   bool _historyOpen = false;
@@ -104,6 +115,7 @@ class _BurlWorkspaceShellState extends ConsumerState<BurlWorkspaceShell> {
       final hasOverlay =
           _navigatorOpen ||
           _searchOpen ||
+          _titleJumpOpen ||
           _preferencesOpen ||
           _syncOpen ||
           _historyOpen;
@@ -118,6 +130,7 @@ class _BurlWorkspaceShellState extends ConsumerState<BurlWorkspaceShell> {
     }
     final command = switch (event.logicalKey) {
       LogicalKeyboardKey.keyK => _ShellCommand.search,
+      LogicalKeyboardKey.keyP => _ShellCommand.titleJump,
       LogicalKeyboardKey.keyH => _ShellCommand.history,
       LogicalKeyboardKey.comma => _ShellCommand.preferences,
       LogicalKeyboardKey.keyW => _ShellCommand.closeTab,
@@ -132,6 +145,8 @@ class _BurlWorkspaceShellState extends ConsumerState<BurlWorkspaceShell> {
     setState(() {
       if (_searchOpen) {
         _searchOpen = false;
+      } else if (_titleJumpOpen) {
+        _titleJumpOpen = false;
       } else if (_preferencesOpen) {
         _preferencesOpen = false;
       } else if (_syncOpen) {
@@ -144,14 +159,35 @@ class _BurlWorkspaceShellState extends ConsumerState<BurlWorkspaceShell> {
     });
   }
 
+  void _openSearch() {
+    _showOverlay(_ShellOverlay.search);
+  }
+
+  void _openTitleJump() {
+    _showOverlay(_ShellOverlay.titleJump);
+  }
+
+  void _showOverlay(_ShellOverlay overlay) {
+    setState(() {
+      _navigatorOpen = overlay == _ShellOverlay.navigator;
+      _searchOpen = overlay == _ShellOverlay.search;
+      _titleJumpOpen = overlay == _ShellOverlay.titleJump;
+      _preferencesOpen = overlay == _ShellOverlay.preferences;
+      _syncOpen = overlay == _ShellOverlay.sync;
+      _historyOpen = overlay == _ShellOverlay.history;
+    });
+  }
+
   void _perform(_ShellCommand command) {
     switch (command) {
       case _ShellCommand.search:
-        setState(() => _searchOpen = true);
+        _openSearch();
+      case _ShellCommand.titleJump:
+        _openTitleJump();
       case _ShellCommand.history:
-        setState(() => _historyOpen = true);
+        _showOverlay(_ShellOverlay.history);
       case _ShellCommand.preferences:
-        setState(() => _preferencesOpen = true);
+        _showOverlay(_ShellOverlay.preferences);
       case _ShellCommand.closeTab:
         setState(() => _tabCloseRequest++);
       case _ShellCommand.dismiss:
@@ -175,6 +211,12 @@ class _BurlWorkspaceShellState extends ConsumerState<BurlWorkspaceShell> {
         ),
         SingleActivator(LogicalKeyboardKey.keyK, meta: true): _ShellIntent(
           _ShellCommand.search,
+        ),
+        SingleActivator(LogicalKeyboardKey.keyP, control: true): _ShellIntent(
+          _ShellCommand.titleJump,
+        ),
+        SingleActivator(LogicalKeyboardKey.keyP, meta: true): _ShellIntent(
+          _ShellCommand.titleJump,
         ),
         SingleActivator(LogicalKeyboardKey.keyH, control: true): _ShellIntent(
           _ShellCommand.history,
@@ -234,11 +276,11 @@ class _BurlWorkspaceShellState extends ConsumerState<BurlWorkspaceShell> {
                             width: 288,
                             child: _NavigatorPane(
                               workspaceName: widget.workspaceName,
-                              onSearch: () =>
-                                  setState(() => _searchOpen = true),
+                              onSearch: _openSearch,
+                              onTitleJump: _openTitleJump,
                               onPreferences: () =>
-                                  setState(() => _preferencesOpen = true),
-                              onSync: () => setState(() => _syncOpen = true),
+                                  _showOverlay(_ShellOverlay.preferences),
+                              onSync: () => _showOverlay(_ShellOverlay.sync),
                               rescanButton: widget.rescanButton,
                               onNoteSelected: () {},
                             ),
@@ -249,22 +291,25 @@ class _BurlWorkspaceShellState extends ConsumerState<BurlWorkspaceShell> {
                             openKey: tier == _ShellTier.wide
                                 ? const ValueKey('shell-sidebar-expand')
                                 : const Key('shell-open-navigator'),
-                            onOpen: () => setState(
-                              () => tier == _ShellTier.wide
-                                  ? _sidebarCollapsed = false
-                                  : _navigatorOpen = true,
-                            ),
-                            onSearch: () => setState(() => _searchOpen = true),
+                            onOpen: () {
+                              if (tier == _ShellTier.wide) {
+                                setState(() => _sidebarCollapsed = false);
+                              } else {
+                                _showOverlay(_ShellOverlay.navigator);
+                              }
+                            },
+                            onSearch: _openSearch,
+                            onTitleJump: _openTitleJump,
                             onPreferences: () =>
-                                setState(() => _preferencesOpen = true),
+                                _showOverlay(_ShellOverlay.preferences),
                           ),
                         Expanded(
                           child: _EditorPane(
                             compact: tier == _ShellTier.compact,
                             onOpenNavigator: () =>
-                                setState(() => _navigatorOpen = true),
+                                _showOverlay(_ShellOverlay.navigator),
                             onHistory: () =>
-                                setState(() => _historyOpen = true),
+                                _showOverlay(_ShellOverlay.history),
                             closeRequest: _tabCloseRequest,
                           ),
                         ),
@@ -289,15 +334,20 @@ class _BurlWorkspaceShellState extends ConsumerState<BurlWorkspaceShell> {
                       _NavigatorOverlay(
                         workspaceName: widget.workspaceName,
                         onClose: () => setState(() => _navigatorOpen = false),
-                        onSearch: () => setState(() => _searchOpen = true),
+                        onSearch: _openSearch,
+                        onTitleJump: _openTitleJump,
                         onPreferences: () =>
-                            setState(() => _preferencesOpen = true),
-                        onSync: () => setState(() => _syncOpen = true),
+                            _showOverlay(_ShellOverlay.preferences),
+                        onSync: () => _showOverlay(_ShellOverlay.sync),
                         rescanButton: widget.rescanButton,
                       ),
                     if (_searchOpen)
                       _SearchPalette(
                         onClose: () => setState(() => _searchOpen = false),
+                      ),
+                    if (_titleJumpOpen)
+                      _NoteNavigationPalette(
+                        onClose: () => setState(() => _titleJumpOpen = false),
                       ),
                     if (_preferencesOpen)
                       _PreferencesDrawer(
@@ -326,62 +376,22 @@ class _BurlWorkspaceShellState extends ConsumerState<BurlWorkspaceShell> {
 
 enum _ShellTier { wide, rail, compact }
 
-class _PlatformChrome extends ConsumerWidget {
-  const _PlatformChrome();
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final platform = ref.watch(burlPreferencesProvider).platformChrome;
-    return switch (platform) {
-      BurlPlatformChrome.macos => const Row(
-        key: Key('platform-chrome-macos'),
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _ChromeDot(0xffec6a5f),
-          SizedBox(width: 6),
-          _ChromeDot(0xfff4bf4f),
-          SizedBox(width: 6),
-          _ChromeDot(0xff61c554),
-        ],
-      ),
-      BurlPlatformChrome.linux => const Text(
-        key: Key('platform-chrome-linux'),
-        '─  □',
-        style: TextStyle(fontFamily: 'monospace', fontSize: 11),
-      ),
-      BurlPlatformChrome.minimal => const SizedBox(
-        key: Key('platform-chrome-minimal'),
-        width: 20,
-      ),
-    };
-  }
-}
-
-class _ChromeDot extends StatelessWidget {
-  const _ChromeDot(this.value);
-  final int value;
-  @override
-  Widget build(BuildContext context) => Container(
-    width: 10,
-    height: 10,
-    decoration: BoxDecoration(
-      color: Color(value),
-      shape: BoxShape.circle,
-      border: Border.all(color: const Color(0x55000000)),
-    ),
-  );
-}
-
 class _NavigatorPane extends StatelessWidget {
   const _NavigatorPane({
     required this.workspaceName,
     required this.onSearch,
+    required this.onTitleJump,
     required this.onPreferences,
     required this.onSync,
     required this.rescanButton,
     required this.onNoteSelected,
   });
   final String workspaceName;
-  final VoidCallback onSearch, onPreferences, onSync, onNoteSelected;
+  final VoidCallback onSearch,
+      onTitleJump,
+      onPreferences,
+      onSync,
+      onNoteSelected;
   final Widget rescanButton;
   @override
   Widget build(BuildContext context) {
@@ -400,8 +410,6 @@ class _NavigatorPane extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Row(
                 children: [
-                  const _PlatformChrome(),
-                  const SizedBox(width: 10),
                   Expanded(
                     child: Text(
                       workspaceName,
@@ -427,6 +435,17 @@ class _NavigatorPane extends StatelessWidget {
               tooltip: l10n.workspaceSearchNotesTooltip,
               trailing: _searchShortcutLabel(l10n),
               onPressed: onSearch,
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+            child: _QuietButton(
+              key: const Key('shell-title-jump'),
+              icon: LucideIcons.arrow_right_to_line,
+              label: l10n.workspaceJumpToNote,
+              tooltip: l10n.workspaceJumpToNoteTooltip,
+              trailing: _titleJumpShortcutLabel(l10n),
+              onPressed: onTitleJump,
             ),
           ),
           const Divider(height: 1),
@@ -476,10 +495,11 @@ class _Rail extends StatelessWidget {
   const _Rail({
     required this.onOpen,
     required this.onSearch,
+    required this.onTitleJump,
     required this.onPreferences,
     this.openKey = const Key('shell-open-navigator'),
   });
-  final VoidCallback onOpen, onSearch, onPreferences;
+  final VoidCallback onOpen, onSearch, onTitleJump, onPreferences;
   final Key openKey;
   @override
   Widget build(BuildContext context) {
@@ -507,6 +527,12 @@ class _Rail extends StatelessWidget {
               onPressed: onSearch,
               icon: const Icon(LucideIcons.search, size: 18),
             ),
+            IconButton(
+              key: const ValueKey('shell-rail-title-jump'),
+              tooltip: l10n.workspaceJumpToNoteTooltip,
+              onPressed: onTitleJump,
+              icon: const Icon(LucideIcons.arrow_right_to_line, size: 18),
+            ),
             const Spacer(),
             IconButton(
               key: const ValueKey('shell-rail-preferences'),
@@ -527,12 +553,13 @@ class _NavigatorOverlay extends StatelessWidget {
     required this.workspaceName,
     required this.onClose,
     required this.onSearch,
+    required this.onTitleJump,
     required this.onPreferences,
     required this.onSync,
     required this.rescanButton,
   });
   final String workspaceName;
-  final VoidCallback onClose, onSearch, onPreferences, onSync;
+  final VoidCallback onClose, onSearch, onTitleJump, onPreferences, onSync;
   final Widget rescanButton;
   @override
   Widget build(BuildContext context) => _ShellModalOverlay(
@@ -552,6 +579,10 @@ class _NavigatorOverlay extends StatelessWidget {
               onSearch: () {
                 onClose();
                 onSearch();
+              },
+              onTitleJump: () {
+                onClose();
+                onTitleJump();
               },
               onPreferences: onPreferences,
               onSync: onSync,
@@ -580,101 +611,185 @@ class _EditorPane extends ConsumerStatefulWidget {
 }
 
 class _EditorPaneState extends ConsumerState<_EditorPane> {
-  late final List<_VisualTab> _tabs;
-  var _tabsInitialized = false;
+  /// The tab order at the first close request for the active session. It
+  /// remains authoritative while later queued closes settle, because their
+  /// completion indices no longer describe the active tab's successor.
+  List<String>? _activeCloseOrder;
+  String? _activeCloseId;
 
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (_tabsInitialized) return;
-    _tabsInitialized = true;
-    _tabs = [
-      _VisualTab.visual(
-        AppLocalizations.of(context)!.workspaceWelcomeTab,
-        id: 'visual-welcome',
-      ),
-    ];
+  Future<void> _closeTab(_CoreNoteTab tab) async {
+    final sessions = ref.read(openNoteSessionsProvider);
+    if (!sessions.any((session) => session.metadata.id == tab.id)) return;
+    if (ref.read(activeNoteProvider)?.metadata.id == tab.id) {
+      _activeCloseOrder = sessions
+          .map((session) => session.metadata.id)
+          .toList(growable: false);
+      _activeCloseId = tab.id;
+    }
+    await ref.read(activeNoteProvider.notifier).closeTab(tab.id);
+    if (!mounted) return;
+
+    _reconcileAfterTabClose(completedTabId: tab.id);
   }
 
-  void _syncActiveTab(NoteState? active) {
-    if (active == null) return;
-    _tabs.removeWhere((tab) => tab.id == 'visual-welcome');
-    final id = active.metadata.id;
-    final index = _tabs.indexWhere((tab) => tab.id == id);
-    final tab = _VisualTab.note(
-      id,
-      _filename(active.metadata.path),
-      recovered: active.restoredFromDraft,
+  void _reconcileAfterTabClose({required String completedTabId}) {
+    // A queued close may refuse after the active close retires its tab. The
+    // first completion cannot select the survivor while the queued admission
+    // still blocks selection, so every terminal close result gets a chance to
+    // restore a coherent visible session after releasing its own gate.
+    if (ref.read(activeNoteProvider) != null) {
+      // An inactive close can settle ahead of the queued active close. Its
+      // completion must not discard the active close's original successor.
+      if (completedTabId == _activeCloseId) _clearActiveCloseAnchor();
+      return;
+    }
+
+    final remaining = ref.read(openNoteSessionsProvider);
+    if (remaining.isEmpty) {
+      ref.read(selectedNoteIdProvider.notifier).clear();
+      _clearActiveCloseAnchor();
+      return;
+    }
+    // CAP-SHELL-08: the old index names the following session after removal;
+    // only an end tab has no following session and falls back to its predecessor.
+    final selectedId = ref.read(selectedNoteIdProvider);
+    final selected = remaining.where(
+      (session) => session.metadata.id == selectedId,
     );
-    if (index == -1) {
-      _tabs.add(tab);
-    } else {
-      _tabs[index] = tab;
+    if (selected.isNotEmpty) {
+      final activated = ref
+          .read(activeNoteProvider.notifier)
+          .activateExistingTab(selected.first.metadata.id);
+      if (activated) _clearActiveCloseAnchor();
+      return;
+    }
+    final next = _successorFromActiveClose(remaining) ?? remaining.first;
+    // A newer admission can still own the selection boundary. In that case,
+    // leave its authoritative result alone instead of fabricating a tab state.
+    if (!ref.read(selectedNoteIdProvider.notifier).select(next.metadata.id)) {
+      return;
+    }
+    if (ref
+        .read(activeNoteProvider.notifier)
+        .activateExistingTab(next.metadata.id)) {
+      _clearActiveCloseAnchor();
     }
   }
 
-  void _addVisualTab() => setState(() {
-    _tabs.add(
-      _VisualTab.visual(
-        AppLocalizations.of(context)!.workspaceUntitledTab(_tabs.length),
-      ),
-    );
-  });
+  NoteState? _successorFromActiveClose(List<NoteState> remaining) {
+    final order = _activeCloseOrder;
+    final activeId = _activeCloseId;
+    if (order == null || activeId == null) return null;
+    final activeIndex = order.indexOf(activeId);
+    if (activeIndex == -1) return null;
+    final remainingById = {
+      for (final session in remaining) session.metadata.id: session,
+    };
+    for (var index = activeIndex + 1; index < order.length; index++) {
+      final successor = remainingById[order[index]];
+      if (successor != null) return successor;
+    }
+    for (var index = activeIndex - 1; index >= 0; index--) {
+      final predecessor = remainingById[order[index]];
+      if (predecessor != null) return predecessor;
+    }
+    return null;
+  }
 
-  // A visual close may remove an inactive/local tab. Closing the active Note
-  // is intentionally deferred: it must eventually use the lifecycle-aware
-  // provider path (including Core close/flush), rather than silently clearing
-  // UI state here. Until that surface exists, the active provider state
-  // repopulates its tab on rebuild.
-  void _closeVisualTab(_VisualTab tab) => setState(() => _tabs.remove(tab));
+  void _clearActiveCloseAnchor() {
+    _activeCloseOrder = null;
+    _activeCloseId = null;
+  }
 
-  void _closeOtherVisualTabs(_VisualTab tab) => setState(
-    () => _tabs.removeWhere(
-      (candidate) => candidate != tab && candidate.noteId == null,
-    ),
-  );
+  Future<void> _closeOtherTabs(_CoreNoteTab keptTab) async {
+    final controller = ref.read(activeNoteProvider.notifier);
+    // A tab's popup can outlive the tab itself. Do not turn its captured id
+    // into a "keep nothing" batch: Close Others is valid only for a tab that
+    // still has a visible, Core-backed session.
+    if (!controller.hasOpenTab(keptTab.id)) return;
+    // A primary close shortcut schedules its actual Core close from the
+    // editor pane's post-frame lifecycle. Let that request claim the shared
+    // close boundary before admitting this popup result, so Ctrl+W cannot let
+    // a still-mounted popup convert its just-closed tab into "keep nothing".
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted ||
+        ref.read(noteCloseEditingProvider) > 0 ||
+        !controller.hasOpenTab(keptTab.id)) {
+      return;
+    }
+    final completedCleanly = await controller.closeOtherTabs(keptTab.id);
+    if (!mounted || !completedCleanly) return;
+    if (!controller.activateExistingTab(keptTab.id)) {
+      return;
+    }
+    ref.read(selectedNoteIdProvider.notifier).select(keptTab.id);
+  }
 
-  void _closeAllVisualTabs() =>
-      setState(() => _tabs.removeWhere((tab) => tab.noteId == null));
+  Future<void> _closeAllTabs() async {
+    await ref.read(activeNoteProvider.notifier).closeAllTabs();
+    if (!mounted) return;
+    final remaining = ref.read(openNoteSessionsProvider);
+    if (remaining.isEmpty) {
+      ref.read(selectedNoteIdProvider.notifier).clear();
+      return;
+    }
+    if (ref.read(activeNoteProvider) == null) {
+      final next = remaining.first;
+      ref
+          .read(activeNoteProvider.notifier)
+          .activateExistingTab(next.metadata.id);
+      ref.read(selectedNoteIdProvider.notifier).select(next.metadata.id);
+    }
+  }
 
   @override
   void didUpdateWidget(covariant _EditorPane oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.closeRequest == oldWidget.closeRequest) return;
-    final active = ref.read(activeNoteProvider);
-    final tab = _tabs
-        .where((tab) => tab.noteId == active?.metadata.id)
-        .firstOrNull;
-    if (tab != null) _closeVisualTab(tab);
+    final activeId = ref.read(activeNoteProvider)?.metadata.id;
+    if (activeId == null) return;
+    final session = ref.read(openNoteSessionsProvider.notifier).byId(activeId);
+    if (session == null) return;
+    // A keyboard shortcut changes [closeRequest] during its ancestor's build.
+    // Reserve the provider admission immediately after that frame; mutating a
+    // Riverpod notifier synchronously from didUpdateWidget is forbidden.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final current = ref
+          .read(openNoteSessionsProvider.notifier)
+          .byId(activeId);
+      if (current != null) unawaited(_closeTab(_CoreNoteTab(current)));
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final c = context.burlColors;
     ref.listen<String?>(selectedNoteIdProvider, (_, next) {
-      if (next != null) ref.read(activeNoteProvider.notifier).open(next);
+      if (next != null) {
+        ref.read(activeNoteProvider.notifier).openAsTab(next);
+      }
     });
     final selected = ref.watch(selectedNoteIdProvider);
     final active = ref.watch(activeNoteProvider);
-    _syncActiveTab(active);
+    final tabs = ref
+        .watch(openNoteSessionsProvider)
+        .map(_CoreNoteTab.new)
+        .toList(growable: false);
     return DecoratedBox(
       decoration: BoxDecoration(color: c.editor),
       child: Column(
         children: [
-          _VisualTabStrip(
+          _CoreNoteTabStrip(
             compact: widget.compact,
-            tabs: _tabs,
+            tabs: tabs,
             activeId: active?.metadata.id,
             onOpenNavigator: widget.onOpenNavigator,
-            onSelect: (tab) {
-              if (tab.noteId case final noteId?) {
-                ref.read(selectedNoteIdProvider.notifier).select(noteId);
-              }
-            },
-            onClose: _closeVisualTab,
-            onCloseOthers: _closeOtherVisualTabs,
-            onCloseAll: _closeAllVisualTabs,
-            onAdd: _addVisualTab,
+            onSelect: (tab) =>
+                ref.read(selectedNoteIdProvider.notifier).select(tab.id),
+            onClose: (tab) => unawaited(_closeTab(tab)),
+            onCloseOthers: (tab) => unawaited(_closeOtherTabs(tab)),
+            onCloseAll: () => unawaited(_closeAllTabs()),
           ),
           _MetadataHeader(
             compact: widget.compact,
@@ -689,7 +804,7 @@ class _EditorPaneState extends ConsumerState<_EditorPane> {
               child: Column(
                 children: [
                   WriteTierNotice(),
-                  Expanded(child: Editor()),
+                  Expanded(child: Editor(consumeCloseFailures: false)),
                 ],
               ),
             ),
@@ -699,36 +814,20 @@ class _EditorPaneState extends ConsumerState<_EditorPane> {
   }
 }
 
-class _VisualTab {
-  const _VisualTab._({
-    required this.id,
-    required this.label,
-    this.noteId,
-    this.recovered = false,
-  });
+/// A rendered tab has one source: a [NoteState] Core returned for an open
+/// session. It intentionally carries no synthetic id, draft, or buffer.
+class _CoreNoteTab {
+  const _CoreNoteTab(this.note);
 
-  factory _VisualTab.note(
-    String noteId,
-    String label, {
-    bool recovered = false,
-  }) => _VisualTab._(
-    id: noteId,
-    label: label,
-    noteId: noteId,
-    recovered: recovered,
-  );
+  final NoteState note;
 
-  factory _VisualTab.visual(String label, {String? id}) =>
-      _VisualTab._(id: id ?? 'visual-$label', label: label);
-
-  final String id;
-  final String label;
-  final String? noteId;
-  final bool recovered;
+  String get id => note.metadata.id;
+  String get label => _filename(note.metadata.path);
+  bool get recovered => note.restoredFromDraft;
 }
 
-class _VisualTabStrip extends StatelessWidget {
-  const _VisualTabStrip({
+class _CoreNoteTabStrip extends StatelessWidget {
+  const _CoreNoteTabStrip({
     required this.compact,
     required this.tabs,
     required this.activeId,
@@ -737,18 +836,16 @@ class _VisualTabStrip extends StatelessWidget {
     required this.onClose,
     required this.onCloseOthers,
     required this.onCloseAll,
-    required this.onAdd,
   });
 
   final bool compact;
-  final List<_VisualTab> tabs;
+  final List<_CoreNoteTab> tabs;
   final String? activeId;
   final VoidCallback onOpenNavigator;
-  final ValueChanged<_VisualTab> onSelect;
-  final ValueChanged<_VisualTab> onClose;
-  final ValueChanged<_VisualTab> onCloseOthers;
+  final ValueChanged<_CoreNoteTab> onSelect;
+  final ValueChanged<_CoreNoteTab> onClose;
+  final ValueChanged<_CoreNoteTab> onCloseOthers;
   final VoidCallback onCloseAll;
-  final VoidCallback onAdd;
 
   @override
   Widget build(BuildContext context) {
@@ -785,7 +882,7 @@ class _VisualTabStrip extends StatelessWidget {
                 separatorBuilder: (_, _) => const SizedBox(width: 3),
                 itemBuilder: (context, index) {
                   final tab = tabs[index];
-                  final active = tab.noteId == activeId;
+                  final active = tab.id == activeId;
                   return _WorkspaceTab(
                     tab: tab,
                     active: active,
@@ -796,15 +893,6 @@ class _VisualTabStrip extends StatelessWidget {
                   );
                 },
               ),
-            ),
-            IconButton(
-              key: const Key('shell-add-tab'),
-              tooltip: l10n.workspaceAddVisualTab,
-              constraints: const BoxConstraints.tightFor(width: 36, height: 36),
-              padding: EdgeInsets.zero,
-              iconSize: 16,
-              onPressed: onAdd,
-              icon: const Icon(LucideIcons.plus),
             ),
           ],
         ),
@@ -823,7 +911,7 @@ class _WorkspaceTab extends StatefulWidget {
     required this.onCloseAll,
   });
 
-  final _VisualTab tab;
+  final _CoreNoteTab tab;
   final bool active;
   final VoidCallback onSelect, onClose, onCloseOthers, onCloseAll;
 
@@ -848,6 +936,13 @@ class _WorkspaceTabState extends State<_WorkspaceTab> {
 
   Future<void> _showMenuAt(Offset globalPosition) async {
     final l10n = AppLocalizations.of(context)!;
+    // A popup route can outlive this tab, and an unkeyed list slot can be
+    // reused for a neighboring tab while it is open. Preserve the actions
+    // that belonged to the tab that opened the menu rather than reading a
+    // later widget configuration after the route completes.
+    final onClose = widget.onClose;
+    final onCloseOthers = widget.onCloseOthers;
+    final onCloseAll = widget.onCloseAll;
     final result = await showMenu<_TabMenuAction>(
       context: context,
       position: RelativeRect.fromLTRB(
@@ -863,12 +958,12 @@ class _WorkspaceTabState extends State<_WorkspaceTab> {
           child: Text(l10n.workspaceCloseTab),
         ),
         PopupMenuItem(
-          key: ValueKey('tab-menu-close-others'),
+          key: const ValueKey('tab-menu-close-others'),
           value: _TabMenuAction.closeOthers,
           child: Text(l10n.workspaceCloseOtherTabs),
         ),
         PopupMenuItem(
-          key: ValueKey('tab-menu-close-all'),
+          key: const ValueKey('tab-menu-close-all'),
           value: _TabMenuAction.closeAll,
           child: Text(l10n.workspaceCloseAllVisualTabs),
         ),
@@ -876,11 +971,11 @@ class _WorkspaceTabState extends State<_WorkspaceTab> {
     );
     switch (result) {
       case _TabMenuAction.close:
-        widget.onClose();
+        onClose();
       case _TabMenuAction.closeOthers:
-        widget.onCloseOthers();
+        onCloseOthers();
       case _TabMenuAction.closeAll:
-        widget.onCloseAll();
+        onCloseAll();
       case null:
         break;
     }
@@ -1213,6 +1308,11 @@ String _searchShortcutLabel(AppLocalizations l10n) =>
     ? l10n.workspaceSearchShortcutMacos
     : l10n.workspaceSearchShortcutControl;
 
+String _titleJumpShortcutLabel(AppLocalizations l10n) =>
+    defaultTargetPlatform == TargetPlatform.macOS
+    ? l10n.workspaceJumpShortcutMacos
+    : l10n.workspaceJumpShortcutControl;
+
 String _breadcrumb(String path, AppLocalizations l10n) {
   final parts = path.split('/');
   return parts.length > 1
@@ -1429,6 +1529,64 @@ class _SearchPalette extends StatelessWidget {
   }
 }
 
+class _NoteNavigationPalette extends StatelessWidget {
+  const _NoteNavigationPalette({required this.onClose});
+
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.burlColors;
+    final l10n = AppLocalizations.of(context)!;
+    return _ShellModalOverlay(
+      key: const ValueKey('shell-note-navigation-overlay'),
+      onClose: onClose,
+      barrierColor: const Color(0x88000000),
+      child: Align(
+        alignment: const Alignment(0, -.68),
+        child: BurlScaleFadeEntrance(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 672),
+            child: Container(
+              key: const ValueKey('note-navigation-palette'),
+              margin: const EdgeInsets.all(16),
+              height: 480,
+              decoration: BoxDecoration(
+                color: c.surfaceRaised,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: c.borderStrong),
+                boxShadow: const [
+                  BoxShadow(color: Color(0x55000000), blurRadius: 28),
+                ],
+              ),
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: NoteNavigationPanel(
+                      onResultSelected: (_) => onClose(),
+                      onDismiss: onClose,
+                    ),
+                  ),
+                  Positioned(
+                    top: 3,
+                    right: 3,
+                    child: IconButton(
+                      key: const ValueKey('note-navigation-close'),
+                      tooltip: l10n.workspaceCloseNoteNavigation,
+                      onPressed: onClose,
+                      icon: const Icon(LucideIcons.x, size: 15),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _PreferencesDrawer extends ConsumerWidget {
   const _PreferencesDrawer({required this.onClose});
   final VoidCallback onClose;
@@ -1580,18 +1738,6 @@ class _PreferencesDrawer extends ConsumerWidget {
                                   .setMeasure,
                             ),
                           ),
-                          section(
-                            l10n.workspaceDesktopPlatformChrome,
-                            options(
-                              'platform-chrome',
-                              BurlPlatformChrome.values,
-                              p.platformChrome,
-                              (v) => _platformChromeLabel(v, l10n),
-                              ref
-                                  .read(burlPreferencesProvider.notifier)
-                                  .setPlatformChrome,
-                            ),
-                          ),
                           SwitchListTile(
                             key: const ValueKey('preferences-focus-mode'),
                             contentPadding: EdgeInsets.zero,
@@ -1601,6 +1747,20 @@ class _PreferencesDrawer extends ConsumerWidget {
                                 .setFocusMode,
                             title: Text(l10n.workspaceFocusMode),
                             subtitle: Text(l10n.workspaceFocusModeDescription),
+                          ),
+                          SwitchListTile(
+                            key: const ValueKey(
+                              'preferences-update-notifications',
+                            ),
+                            contentPadding: EdgeInsets.zero,
+                            value: p.updateNotifications,
+                            onChanged: ref
+                                .read(burlPreferencesProvider.notifier)
+                                .setUpdateNotifications,
+                            title: Text(l10n.workspaceUpdateNotifications),
+                            subtitle: Text(
+                              l10n.workspaceUpdateNotificationsDescription,
+                            ),
                           ),
                         ],
                       ),
@@ -1651,13 +1811,6 @@ String _measureLabel(BurlMeasure measure, AppLocalizations l10n) =>
       BurlMeasure.wide => l10n.measureWide,
       BurlMeasure.technical => l10n.measureTechnical,
       BurlMeasure.full => l10n.measureFull,
-    };
-
-String _platformChromeLabel(BurlPlatformChrome chrome, AppLocalizations l10n) =>
-    switch (chrome) {
-      BurlPlatformChrome.macos => l10n.platformChromeMacos,
-      BurlPlatformChrome.linux => l10n.platformChromeLinux,
-      BurlPlatformChrome.minimal => l10n.platformChromeMinimal,
     };
 
 enum _SyncVisualState {

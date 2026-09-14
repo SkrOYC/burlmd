@@ -172,6 +172,72 @@ abstract class AppLocalizations {
   /// **'Could not switch notes: {error}'**
   String noteCloseFailed(String error);
 
+  /// Dismissible status message when a close request is refused while Core reindexes the workspace.
+  ///
+  /// In en, this message translates to:
+  /// **'Close notes after the workspace rescan finishes.'**
+  String get noteCloseUnavailableDuringRescan;
+
+  /// Dismissible status message when a close request is refused while Core reloads a note from disk.
+  ///
+  /// In en, this message translates to:
+  /// **'Close notes after the note reload finishes.'**
+  String get noteCloseUnavailableDuringReload;
+
+  /// Dismissible status message when a live retained Core note prevents a workspace rescan.
+  ///
+  /// In en, this message translates to:
+  /// **'Rescan unavailable: a retained note has unsaved edits.'**
+  String get workspaceRescanRetainedNoteUnwritten;
+
+  /// Dismissible status after a workspace session snapshot load fails.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not restore workspace session: {error}'**
+  String workspaceSessionRestoreFailed(String error);
+
+  /// Dismissible status after a workspace session snapshot save fails.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not save workspace session: {error}'**
+  String workspaceSessionSaveFailed(String error);
+
+  /// Dismissible status after device preference persistence fails.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not save preferences: {error}'**
+  String workspacePreferencesSaveFailed(String error);
+
+  /// Dismissible status when final persistence prevents application exit.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not complete orderly exit: {error}'**
+  String workspaceOrderlyExitFailed(String error);
+
+  /// Dismissible status when a close batch is refused during a workspace lifecycle action.
+  ///
+  /// In en, this message translates to:
+  /// **'Close notes after workspace changes finish.'**
+  String get noteCloseUnavailableDuringLifecycle;
+
+  /// Dismissible status when a lifecycle action is refused during a note reload.
+  ///
+  /// In en, this message translates to:
+  /// **'Workspace changes are unavailable while a note reload is in progress.'**
+  String get lifecycleUnavailableDuringReload;
+
+  /// Dismissible status when a lifecycle action is refused during a rescan.
+  ///
+  /// In en, this message translates to:
+  /// **'Workspace changes are unavailable during a rescan.'**
+  String get lifecycleUnavailableDuringRescan;
+
+  /// Dismissible status when a lifecycle action is refused during note closure.
+  ///
+  /// In en, this message translates to:
+  /// **'Workspace changes are unavailable while notes are closing.'**
+  String get lifecycleUnavailableDuringClose;
+
   /// Dismissible status message after a Note or Directory lifecycle operation completes but Git cannot record it.
   ///
   /// In en, this message translates to:
@@ -213,6 +279,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Ctrl+K'**
   String get workspaceSearchShortcutControl;
+
+  /// Label for the title-prefix note navigation command.
+  ///
+  /// In en, this message translates to:
+  /// **'Jump to note…'**
+  String get workspaceJumpToNote;
+
+  /// Tooltip for the title-prefix note navigation command.
+  ///
+  /// In en, this message translates to:
+  /// **'Jump to note'**
+  String get workspaceJumpToNoteTooltip;
+
+  /// Displayed title-jump shortcut on macOS.
+  ///
+  /// In en, this message translates to:
+  /// **'⌘P'**
+  String get workspaceJumpShortcutMacos;
+
+  /// Displayed title-jump shortcut on non-macOS desktop platforms.
+  ///
+  /// In en, this message translates to:
+  /// **'Ctrl+P'**
+  String get workspaceJumpShortcutControl;
 
   /// Accessible label for dismissing a modal workspace overlay.
   ///
@@ -297,6 +387,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Close {title}'**
   String workspaceCloseNamedTab(String title);
+
+  /// One startup report listing saved Note identities Core could not reopen.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not restore saved notes: {noteIds}'**
+  String workspaceRestoreSavedNotes(String noteIds);
 
   /// Tooltip shown after copying the current note path.
   ///
@@ -388,6 +484,12 @@ abstract class AppLocalizations {
   /// **'Close search'**
   String get workspaceCloseSearch;
 
+  /// Tooltip for closing the title-jump and backlinks palette.
+  ///
+  /// In en, this message translates to:
+  /// **'Close note navigation'**
+  String get workspaceCloseNoteNavigation;
+
   /// Preferences drawer title.
   ///
   /// In en, this message translates to:
@@ -412,12 +514,6 @@ abstract class AppLocalizations {
   /// **'Prose line measure'**
   String get workspaceProseLineMeasure;
 
-  /// Preferences section label for desktop chrome style.
-  ///
-  /// In en, this message translates to:
-  /// **'Desktop platform chrome'**
-  String get workspaceDesktopPlatformChrome;
-
   /// Preferences toggle title for focus mode.
   ///
   /// In en, this message translates to:
@@ -429,6 +525,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Dim non-active blocks while editing'**
   String get workspaceFocusModeDescription;
+
+  /// Preferences toggle title for compatible update notifications.
+  ///
+  /// In en, this message translates to:
+  /// **'Update notifications'**
+  String get workspaceUpdateNotifications;
+
+  /// Preferences toggle description for compatible update notifications.
+  ///
+  /// In en, this message translates to:
+  /// **'Check for compatible updates'**
+  String get workspaceUpdateNotificationsDescription;
 
   /// Generic close or completion action in workspace surfaces.
   ///
@@ -507,24 +615,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Full width'**
   String get measureFull;
-
-  /// Desktop chrome preference for macOS-style controls.
-  ///
-  /// In en, this message translates to:
-  /// **'macOS'**
-  String get platformChromeMacos;
-
-  /// Desktop chrome preference for Linux-style controls.
-  ///
-  /// In en, this message translates to:
-  /// **'Linux'**
-  String get platformChromeLinux;
-
-  /// Desktop chrome preference without controls.
-  ///
-  /// In en, this message translates to:
-  /// **'Minimal'**
-  String get platformChromeMinimal;
 
   /// Title of the local workspace inspector.
   ///
@@ -886,6 +976,12 @@ abstract class AppLocalizations {
   /// **'The action failed: {error}'**
   String treeActionFailed(String error);
 
+  /// Lifecycle action failure status when the attempt to retire an unpresentable inactive note also reports a Core refusal or terminal warning.
+  ///
+  /// In en, this message translates to:
+  /// **'The action failed: {error}. Cleanup also needs attention: {cleanupError}'**
+  String treeActionFailedWithCleanup(String error, String cleanupError);
+
   /// Code-block copy button label.
   ///
   /// In en, this message translates to:
@@ -1041,6 +1137,48 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'If this keeps happening, run \"Rescan workspace\" to rebuild the search index.'**
   String get searchRescanHint;
+
+  /// Heading for the title-prefix navigation palette.
+  ///
+  /// In en, this message translates to:
+  /// **'Jump to note'**
+  String get noteNavigationTitle;
+
+  /// Title-prefix navigation text field hint.
+  ///
+  /// In en, this message translates to:
+  /// **'Type a title prefix'**
+  String get noteNavigationHint;
+
+  /// Empty title-prefix navigation state.
+  ///
+  /// In en, this message translates to:
+  /// **'Type a title prefix to find a note'**
+  String get noteNavigationTypePrompt;
+
+  /// Empty title-prefix navigation result state.
+  ///
+  /// In en, this message translates to:
+  /// **'No notes match this title'**
+  String get noteNavigationNoMatches;
+
+  /// Heading for notes that link to the open note.
+  ///
+  /// In en, this message translates to:
+  /// **'Notes that link here'**
+  String get noteNavigationBacklinks;
+
+  /// Empty backlinks state.
+  ///
+  /// In en, this message translates to:
+  /// **'No notes link here'**
+  String get noteNavigationNoBacklinks;
+
+  /// Failure heading for title-prefix navigation or backlinks.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load notes'**
+  String get noteNavigationFailed;
 }
 
 class _AppLocalizationsDelegate

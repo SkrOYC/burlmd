@@ -3132,6 +3132,25 @@ fn normalize_directory(path: &str) -> Result<String, AppError> {
     Ok(trimmed.to_string())
 }
 
+/// Validates a persisted Directory identity using the same Core path rules as
+/// lifecycle requests. Session restoration does not require a Directory to
+/// still exist: expansion is presentation state and a later rescan may have
+/// changed the tree. It does require an exact, nonempty relative identity.
+pub(crate) fn validate_persisted_directory_id(path: &str) -> Result<(), AppError> {
+    if path.is_empty() {
+        return Err(AppError::PathUnavailable(
+            "a persisted Directory identity cannot be empty".to_string(),
+        ));
+    }
+    let normalized = normalize_directory(path)?;
+    if normalized != path {
+        return Err(AppError::PathUnavailable(format!(
+            "{path} is not an exact bundle-relative Directory identity"
+        )));
+    }
+    Ok(())
+}
+
 /// The absolute path of a bundle-relative Directory, refusing one that does not
 /// resolve to where it names.
 ///

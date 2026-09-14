@@ -1,4 +1,21 @@
 entries:
+  - version: v2.3.1
+    date: 2026-09-14
+    fixed:
+      - "Corrected the layout metadata for scripts/visual-regression.sh, test/goldens/shell-g001-linux.png, and .constitution/evidence/BURL-G001 to record their presence in HEAD. This availability correction does not provide acceptance evidence."
+    upstream:
+      prd: v2.0.7
+      architecture: v2.1.2
+    by: patch-lane
+  - version: v2.3.0
+    date: 2026-09-14
+    changed:
+      - "Defined the bounded BURL-G001 private Linux reference-establishment procedure: independent visual approval of the G001-only state, capture-critical provenance, immutable source binding, two fresh non-writing zero-pixel comparisons, and manifest-backed evidence review."
+      - "Recorded that the available G001 references are ineligible because of application-state and capture-environment drift, without attributing the mismatch to Fontconfig or changing production typography, the 47-row HeaderBar exclusion, or private-Linux scope."
+    upstream:
+      prd: v2.0.7
+      architecture: v2.1.2
+    by: stage
   - version: v2.2.3
     date: 2026-09-14
     by: reconcile

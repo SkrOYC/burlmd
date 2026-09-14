@@ -1,17 +1,22 @@
+import 'dart:async';
+import 'dart:ui' show AppExitResponse;
+
 import 'package:burlmd/src/components/status_message.dart';
 import 'package:burlmd/src/components/visual_parity_fixture.dart';
 import 'package:burlmd/src/design/workspace_shell.dart';
+import 'package:burlmd/src/providers/burl_preferences_provider.dart';
 import 'package:burlmd/src/providers/note_providers.dart';
 import 'package:burlmd/src/providers/rust_api_provider.dart';
 import 'package:burlmd/src/providers/search_provider.dart';
 import 'package:burlmd/src/providers/workspace_provider.dart';
+import 'package:burlmd/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// The application's home surface: a Workspace shell with the Directory
 /// tree as its navigation sidebar (`SHEL-E003`) and the editor for the
 /// selected Note as its main pane (`SHEL-E004`).
-class WorkspaceScreen extends ConsumerWidget {
+class WorkspaceScreen extends ConsumerStatefulWidget {
   const WorkspaceScreen({super.key, this.fixtureCaptureController});
 
   /// Test-only bridge for the visual-fixture branch. Production callers leave
@@ -19,8 +24,107 @@ class WorkspaceScreen extends ConsumerWidget {
   final FixtureCaptureController? fixtureCaptureController;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<WorkspaceScreen> createState() => _WorkspaceScreenState();
+}
+
+class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
+  var _sessionRestoreStarted = false;
+  late final AppLifecycleListener _appLifecycleListener;
+
+  @override
+  void initState() {
+    super.initState();
+    _appLifecycleListener = AppLifecycleListener(
+      onExitRequested: () async {
+        try {
+          final completedCleanly = await ref
+              .read(activeNoteProvider.notifier)
+              .closeAllForOrderlyShutdown(
+                afterCleanCoreClose: () async {
+                  try {
+                    await ref
+                        .read(workspaceSessionProvider.notifier)
+                        .flushPendingWrites();
+                    await ref
+                        .read(burlPreferencesProvider.notifier)
+                        .flushPendingWrites();
+                    return true;
+                  } catch (error) {
+                    if (mounted) {
+                      showStatusMessage(
+                        context,
+                        AppLocalizations.of(
+                          context,
+                        )!.workspaceOrderlyExitFailed('$error'),
+                      );
+                    }
+                    return false;
+                  }
+                },
+              );
+          return completedCleanly
+              ? AppExitResponse.exit
+              : AppExitResponse.cancel;
+        } catch (error) {
+          if (mounted) {
+            showStatusMessage(
+              context,
+              AppLocalizations.of(
+                context,
+              )!.workspaceOrderlyExitFailed('$error'),
+            );
+          }
+          return AppExitResponse.cancel;
+        }
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _appLifecycleListener.dispose();
+    super.dispose();
+  }
+
+  Future<void> _restoreSessionTabs(WorkspaceSessionState snapshot) async {
+    final unavailable = await ref
+        .read(activeNoteProvider.notifier)
+        .restoreOpenNotes(
+          openNoteIds: snapshot.openNoteIds,
+          activeNoteId: snapshot.activeNoteId,
+        );
+    if (!mounted) return;
+
+    final activeNoteId = ref.read(activeNoteProvider)?.metadata.id;
+    if (activeNoteId != null) {
+      // The shell listener only activates the session Core already returned;
+      // it does not reopen or construct one from this selection identity.
+      ref.read(selectedNoteIdProvider.notifier).select(activeNoteId);
+    }
+    if (unavailable.isNotEmpty) {
+      _showRescanMessage(
+        context,
+        AppLocalizations.of(
+          context,
+        )!.workspaceRestoreSavedNotes(unavailable.join(', ')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final workspace = ref.watch(workspaceProvider);
+    final sessionSnapshot = ref.watch(workspaceSessionSnapshotProvider);
+    ref.listen<AsyncValue<WorkspaceSessionState>>(
+      workspaceSessionSnapshotProvider,
+      (_, next) {
+        if (_sessionRestoreStarted) return;
+        if (next case AsyncData(:final value)) {
+          _sessionRestoreStarted = true;
+          unawaited(_restoreSessionTabs(value));
+        }
+      },
+    );
     // Rescan outcomes surface here rather than inside the button widget, so
     // both the failure branch ("names the failure") and the refusal branch
     // of SHEL-E008 report through one SnackBar path on the shell's Scaffold.
@@ -28,9 +132,60 @@ class WorkspaceScreen extends ConsumerWidget {
       final failure = next.failure;
       if (failure != null) {
         _showRescanMessage(context, 'Rescan failed: $failure');
+      } else if (next.refusal == RescanRefusal.retainedNoteUnwritten) {
+        _showRescanMessage(
+          context,
+          AppLocalizations.of(context)!.workspaceRescanRetainedNoteUnwritten,
+        );
       } else if (next.refusedReason case final reason?) {
         _showRescanMessage(context, reason);
       }
+    });
+    ref.listen<WorkspaceSessionFailure?>(workspaceSessionFailureProvider, (
+      _,
+      failure,
+    ) {
+      if (failure == null) return;
+      final l10n = AppLocalizations.of(context)!;
+      showStatusMessage(context, switch (failure.operation) {
+        WorkspaceSessionOperation.load => l10n.workspaceSessionRestoreFailed(
+          '${failure.error}',
+        ),
+        WorkspaceSessionOperation.save => l10n.workspaceSessionSaveFailed(
+          '${failure.error}',
+        ),
+      });
+    });
+    // The shell can unmount [Editor] as a terminal close retires the final
+    // tab. Consume close outcomes here, at the stable Scaffold ancestor, so
+    // that a post-frame SnackBar is still shown after that unmount.
+    ref.listen<Object?>(noteCloseFailureProvider, (_, failure) {
+      if (failure == null) return;
+      final l10n = AppLocalizations.of(context)!;
+      final message = switch (failure) {
+        NoteCloseUnavailable(:final reason) => switch (reason) {
+          NoteCloseUnavailableReason.reindexing =>
+            l10n.noteCloseUnavailableDuringRescan,
+          NoteCloseUnavailableReason.reloading =>
+            l10n.noteCloseUnavailableDuringReload,
+          NoteCloseUnavailableReason.lifecycle =>
+            l10n.noteCloseUnavailableDuringLifecycle,
+        },
+        _ => l10n.noteCloseFailed('$failure'),
+      };
+      ref.read(noteCloseFailureProvider.notifier).acknowledge();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) showStatusMessage(context, message);
+      });
+    });
+    ref.listen<Object?>(preferencesPersistenceFailureProvider, (_, failure) {
+      if (failure == null) return;
+      showStatusMessage(
+        context,
+        AppLocalizations.of(
+          context,
+        )!.workspacePreferencesSaveFailed('$failure'),
+      );
     });
 
     return Scaffold(
@@ -56,13 +211,15 @@ class WorkspaceScreen extends ConsumerWidget {
             ),
           ),
         ),
-        data: (info) => BurlWorkspaceShell(
-          workspaceName: info.name,
-          workspacePath: info.localPath.isEmpty ? null : info.localPath,
-          rescanButton: const WorkspaceRescanButton(),
-          onRescan: () => ref.read(rescanStateProvider.notifier).run(),
-          fixtureCaptureController: fixtureCaptureController,
-        ),
+        data: (info) => sessionSnapshot.isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : BurlWorkspaceShell(
+                workspaceName: info.name,
+                workspacePath: info.localPath.isEmpty ? null : info.localPath,
+                rescanButton: const WorkspaceRescanButton(),
+                onRescan: () => ref.read(rescanStateProvider.notifier).run(),
+                fixtureCaptureController: widget.fixtureCaptureController,
+              ),
       ),
     );
   }
@@ -76,8 +233,15 @@ void _showRescanMessage(BuildContext context, String message) {
 /// [failure] and [refusedReason] are one-shot reports consumed by the
 /// screen's listener; a successful rescan leaves them null and the refreshed
 /// tree is the only visible outcome.
+enum RescanRefusal { retainedNoteUnwritten }
+
 class RescanState {
-  const RescanState({this.running = false, this.failure, this.refusedReason});
+  const RescanState({
+    this.running = false,
+    this.failure,
+    this.refusedReason,
+    this.refusal,
+  });
 
   static const idle = RescanState();
 
@@ -90,6 +254,9 @@ class RescanState {
 
   /// Why the last attempt was refused without touching the Core, if it was.
   final String? refusedReason;
+
+  /// A language-neutral refusal that Presentation turns into localized copy.
+  final RescanRefusal? refusal;
 }
 
 /// Drives CAP-WS-06's explicit refresh: re-derives the shell's view of the
@@ -113,6 +280,7 @@ class WorkspaceRescan extends Notifier<RescanState> {
     // The regular affordance is disabled by the same shared gate, but this
     // direct check protects a stale frame or programmatic caller as well.
     if (ref.read(lifecycleEditingProvider) > 0 ||
+        ref.read(noteCloseEditingProvider) > 0 ||
         ref.read(reloadEditingProvider) > 0 ||
         ref.read(noteSwitchingProvider)) {
       state = const RescanState(
@@ -127,14 +295,40 @@ class WorkspaceRescan extends Notifier<RescanState> {
     // any open Note whose write tier still holds unwritten edits refuses
     // the rescan outright. A poll that cannot be answered at all counts as
     // dirty — the guard fails closed.
-    final open = ref.read(activeNoteProvider);
-    if (open != null &&
-        noteHoldsUnwrittenEdits(ref.read(rustApiProvider), open.metadata.id)) {
+    final openSessions = {
+      for (final note in ref.read(openNoteSessionsProvider))
+        note.metadata.id: note,
+    };
+    // Legacy callers can still have an active session without a mounted tab;
+    // include it in the same conservative guard until those callers retire.
+    final active = ref.read(activeNoteProvider);
+    if (active != null) {
+      openSessions.putIfAbsent(active.metadata.id, () => active);
+    }
+    for (final open in openSessions.values) {
+      if (!noteHoldsUnwrittenEdits(
+        ref.read(rustApiProvider),
+        open.metadata.id,
+      )) {
+        continue;
+      }
       state = RescanState(
         refusedReason:
             'Rescan unavailable: "${open.metadata.title}" still has '
             'unsaved edits.',
       );
+      return;
+    }
+    // Retained identities are live Core sessions whose last Dart state was
+    // deliberately discarded. They must receive the same fail-closed poll,
+    // but cannot be converted into a synthetic NoteState merely to obtain a
+    // title for the status text.
+    for (final noteId in ref.read(retainedCoreSessionIdsProvider)) {
+      if (openSessions.containsKey(noteId) ||
+          !noteHoldsUnwrittenEdits(ref.read(rustApiProvider), noteId)) {
+        continue;
+      }
+      state = const RescanState(refusal: RescanRefusal.retainedNoteUnwritten);
       return;
     }
 

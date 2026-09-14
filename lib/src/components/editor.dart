@@ -157,7 +157,12 @@ class _WholeNoteRangeTarget extends _RangeTarget {
 /// this widget reads them only transiently to build a [BlockRange] for a
 /// copy request.
 class Editor extends ConsumerStatefulWidget {
-  const Editor({super.key});
+  const Editor({super.key, this.consumeCloseFailures = true});
+
+  /// Embedded consumers without a stable workspace ancestor retain the
+  /// original one-shot close-status behavior. The production shell delegates
+  /// consumption to [WorkspaceScreen], which survives a final-tab unmount.
+  final bool consumeCloseFailures;
 
   @override
   ConsumerState<Editor> createState() => EditorState();
@@ -319,6 +324,7 @@ class EditorState extends ConsumerState<Editor> {
       if (inputBlocked) _closeRangeInput();
     });
     ref.listen<Object?>(noteCloseFailureProvider, (_, failure) {
+      if (!widget.consumeCloseFailures) return;
       if (failure == null) return;
       final message = AppLocalizations.of(context)!.noteCloseFailed('$failure');
       // Acknowledge before scheduling the UI update so provider changes cannot

@@ -62,6 +62,54 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get noteCloseUnavailableDuringRescan =>
+      'Close notes after the workspace rescan finishes.';
+
+  @override
+  String get noteCloseUnavailableDuringReload =>
+      'Close notes after the note reload finishes.';
+
+  @override
+  String get workspaceRescanRetainedNoteUnwritten =>
+      'Rescan unavailable: a retained note has unsaved edits.';
+
+  @override
+  String workspaceSessionRestoreFailed(String error) {
+    return 'Could not restore workspace session: $error';
+  }
+
+  @override
+  String workspaceSessionSaveFailed(String error) {
+    return 'Could not save workspace session: $error';
+  }
+
+  @override
+  String workspacePreferencesSaveFailed(String error) {
+    return 'Could not save preferences: $error';
+  }
+
+  @override
+  String workspaceOrderlyExitFailed(String error) {
+    return 'Could not complete orderly exit: $error';
+  }
+
+  @override
+  String get noteCloseUnavailableDuringLifecycle =>
+      'Close notes after workspace changes finish.';
+
+  @override
+  String get lifecycleUnavailableDuringReload =>
+      'Workspace changes are unavailable while a note reload is in progress.';
+
+  @override
+  String get lifecycleUnavailableDuringRescan =>
+      'Workspace changes are unavailable during a rescan.';
+
+  @override
+  String get lifecycleUnavailableDuringClose =>
+      'Workspace changes are unavailable while notes are closing.';
+
+  @override
   String lifecycleCommitWarning(String detail) {
     return 'The change is applied, but its Git commit failed: $detail';
   }
@@ -87,6 +135,18 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get workspaceSearchShortcutControl => 'Ctrl+K';
+
+  @override
+  String get workspaceJumpToNote => 'Jump to note…';
+
+  @override
+  String get workspaceJumpToNoteTooltip => 'Jump to note';
+
+  @override
+  String get workspaceJumpShortcutMacos => '⌘P';
+
+  @override
+  String get workspaceJumpShortcutControl => 'Ctrl+P';
 
   @override
   String get workspaceDismissOverlay => 'Dismiss overlay';
@@ -134,6 +194,11 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String workspaceCloseNamedTab(String title) {
     return 'Close $title';
+  }
+
+  @override
+  String workspaceRestoreSavedNotes(String noteIds) {
+    return 'Could not restore saved notes: $noteIds';
   }
 
   @override
@@ -193,6 +258,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get workspaceCloseSearch => 'Close search';
 
   @override
+  String get workspaceCloseNoteNavigation => 'Close note navigation';
+
+  @override
   String get workspaceEditorPreferences => 'Editor Preferences';
 
   @override
@@ -205,14 +273,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get workspaceProseLineMeasure => 'Prose line measure';
 
   @override
-  String get workspaceDesktopPlatformChrome => 'Desktop platform chrome';
-
-  @override
   String get workspaceFocusMode => 'Focus Mode (Zen)';
 
   @override
   String get workspaceFocusModeDescription =>
       'Dim non-active blocks while editing';
+
+  @override
+  String get workspaceUpdateNotifications => 'Update notifications';
+
+  @override
+  String get workspaceUpdateNotificationsDescription =>
+      'Check for compatible updates';
 
   @override
   String get workspaceDone => 'Done';
@@ -252,15 +324,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get measureFull => 'Full width';
-
-  @override
-  String get platformChromeMacos => 'macOS';
-
-  @override
-  String get platformChromeLinux => 'Linux';
-
-  @override
-  String get platformChromeMinimal => 'Minimal';
 
   @override
   String get syncInspectorTitle => 'Sync & Storage';
@@ -473,6 +536,11 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String treeActionFailedWithCleanup(String error, String cleanupError) {
+    return 'The action failed: $error. Cleanup also needs attention: $cleanupError';
+  }
+
+  @override
   String get codeCopy => 'Copy';
 
   @override
@@ -559,4 +627,25 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get searchRescanHint =>
       'If this keeps happening, run \"Rescan workspace\" to rebuild the search index.';
+
+  @override
+  String get noteNavigationTitle => 'Jump to note';
+
+  @override
+  String get noteNavigationHint => 'Type a title prefix';
+
+  @override
+  String get noteNavigationTypePrompt => 'Type a title prefix to find a note';
+
+  @override
+  String get noteNavigationNoMatches => 'No notes match this title';
+
+  @override
+  String get noteNavigationBacklinks => 'Notes that link here';
+
+  @override
+  String get noteNavigationNoBacklinks => 'No notes link here';
+
+  @override
+  String get noteNavigationFailed => 'Could not load notes';
 }

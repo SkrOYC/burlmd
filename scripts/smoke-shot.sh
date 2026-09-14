@@ -47,6 +47,18 @@ APP_BIN="$APP_BUNDLE/burlmd"
 cd "$REPO_ROOT"
 mkdir -p "$QA_DIR"
 
+# A private visual gate supplies this inherited regular-file descriptor to bind
+# its compositor capture to the exact process launched here. A pathname from a
+# caller is never resolved, so it cannot redirect the handoff through a swap.
+APP_PID_FD="${BURLMD_SMOKE_APP_PID_FD:-}"
+if [[ -n "$APP_PID_FD" &&
+    ( ! "$APP_PID_FD" =~ ^[1-9][0-9]*$ ||
+      ! -f "/proc/self/fd/$APP_PID_FD" ||
+      ! -O "/proc/self/fd/$APP_PID_FD" ) ]]; then
+  echo "smoke-shot: BURLMD_SMOKE_APP_PID_FD must name an inherited owned regular-file FD" >&2
+  exit 64
+fi
+
 # Drop any screenshot left by an earlier run up front, so a failed run can
 # never leave a stale .qa/<name>.png behind.
 rm -f "$SHOT"
@@ -182,7 +194,8 @@ SCENARIO_ENV=()
 for scenario_var in \
   BURLMD_SMOKE_F001 BURLMD_SMOKE_F001_FOCUSED_INDEX \
   BURLMD_SMOKE_F002 BURLMD_SMOKE_F003 BURLMD_SMOKE_F004 \
-  BURLMD_SMOKE_F005 BURLMD_SMOKE_F006 BURLMD_SMOKE_F007; do
+  BURLMD_SMOKE_F005 BURLMD_SMOKE_F006 BURLMD_SMOKE_F007 \
+  BURLMD_SMOKE_TABS_G004; do
   if [[ -v "$scenario_var" ]]; then
     SCENARIO_ENV+=("$scenario_var=${!scenario_var}")
   fi
@@ -193,18 +206,33 @@ fi
 # The app validates all of these paths by canonical resolution before Rust
 # initializes. The Workspace path is the Core's XDG default; it is explicit so
 # a direct launch cannot substitute a real default Workspace by stealth.
-env "${SCENARIO_ENV[@]}" \
-  "BURLMD_SMOKE_ISOLATED=1" \
-  "BURLMD_SMOKE_ROOT=$SMOKE_STATE_DIR" \
-  "BURLMD_SMOKE_NONCE=$SMOKE_NONCE" \
-  "BURLMD_SMOKE_NONCE_FILE=$SMOKE_NONCE_FILE" \
-  "BURLMD_SMOKE_WORKSPACE=$SMOKE_WORKSPACE" \
-  "BURLMD_SMOKE_READY_FILE=$READY_FILE" \
-  "HOME=$SMOKE_HOME" \
-  "XDG_DATA_HOME=$SMOKE_DATA_HOME" \
-  "BURLMD_DB_PATH=$SMOKE_DB_PATH" \
-  "$APP_BIN" &
+# DISPLAY is never part of the smoke child's capability set. The visual gate
+# passes only its owned Wayland socket and runtime directory to this script.
+# This child has no authority to publish or replace the PID handoff. The
+# subshell closes the already-validated descriptor and removes its name before
+# exec replaces the subshell with the app; therefore $! remains the app PID.
+(
+  unset BURLMD_SMOKE_APP_PID_FD
+  if [[ -n "$APP_PID_FD" ]]; then
+    exec {APP_PID_FD}>&-
+  fi
+  exec env -u DISPLAY "${SCENARIO_ENV[@]}" \
+    "BURLMD_SMOKE_ISOLATED=1" \
+    "BURLMD_SMOKE_ROOT=$SMOKE_STATE_DIR" \
+    "BURLMD_SMOKE_NONCE=$SMOKE_NONCE" \
+    "BURLMD_SMOKE_NONCE_FILE=$SMOKE_NONCE_FILE" \
+    "BURLMD_SMOKE_WORKSPACE=$SMOKE_WORKSPACE" \
+    "BURLMD_SMOKE_READY_FILE=$READY_FILE" \
+    "HOME=$SMOKE_HOME" \
+    "XDG_DATA_HOME=$SMOKE_DATA_HOME" \
+    "BURLMD_DB_PATH=$SMOKE_DB_PATH" \
+    "$APP_BIN"
+) &
 APP_PID=$!
+if [[ -n "$APP_PID_FD" ]]; then
+  printf '%s\n' "$APP_PID" >&"$APP_PID_FD" \
+    || fail "could not publish the launched application PID"
+fi
 
 echo "[smoke-shot] waiting for the window to render..."
 RENDER_DEADLINE="$(deadline "$RENDER_TIMEOUT")"
@@ -267,6 +295,12 @@ if [[ "${BURLMD_SMOKE_F007:-}" == "1" ]]; then
   [[ -s "$READY_FILE" ]] || fail "F007 scenario never completed type input, Action paste, and Action delete to the phantom caret"
   [[ "$(<"$READY_FILE")" == "f007-type-input-paste-action-delete-action-core-caret-phantom" ]] \
     || fail "F007 scenario readiness marker was invalid"
+fi
+
+if [[ "${BURLMD_SMOKE_TABS_G004:-}" == "1" ]]; then
+  [[ -s "$READY_FILE" ]] || fail "TABS-G004 scenario never staged Core-backed sessions"
+  [[ "$(<"$READY_FILE")" == "tabs-g004-core-sessions" ]] \
+    || fail "TABS-G004 scenario readiness marker was invalid"
 fi
 
 grim "$SHOT" >/dev/null 2>&1 || fail "final grim capture failed"
