@@ -4,6 +4,7 @@ import 'dart:ui' show AppExitResponse;
 import 'package:burlmd/src/components/status_message.dart';
 import 'package:burlmd/src/components/visual_parity_fixture.dart';
 import 'package:burlmd/src/design/workspace_shell.dart';
+import 'package:burlmd/src/providers/burl_preferences_provider.dart';
 import 'package:burlmd/src/providers/note_providers.dart';
 import 'package:burlmd/src/providers/rust_api_provider.dart';
 import 'package:burlmd/src/providers/search_provider.dart';
@@ -37,7 +38,27 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
       onExitRequested: () async {
         final completedCleanly = await ref
             .read(activeNoteProvider.notifier)
-            .closeAllForOrderlyShutdown();
+            .closeAllForOrderlyShutdown(
+              afterCleanCoreClose: () async {
+                try {
+                  await ref
+                      .read(workspaceSessionProvider.notifier)
+                      .flushPendingWrites();
+                  await ref
+                      .read(burlPreferencesProvider.notifier)
+                      .flushPendingWrites();
+                  return true;
+                } catch (error) {
+                  if (mounted) {
+                    showStatusMessage(
+                      context,
+                      'Could not complete orderly exit: $error',
+                    );
+                  }
+                  return false;
+                }
+              },
+            );
         return completedCleanly ? AppExitResponse.exit : AppExitResponse.cancel;
       },
     );
@@ -105,6 +126,10 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
     ) {
       if (failure == null) return;
       showStatusMessage(context, failure.message);
+    });
+    ref.listen<Object?>(preferencesPersistenceFailureProvider, (_, failure) {
+      if (failure == null) return;
+      showStatusMessage(context, 'Could not save preferences: $failure');
     });
 
     return Scaffold(
@@ -189,6 +214,7 @@ class WorkspaceRescan extends Notifier<RescanState> {
     // The regular affordance is disabled by the same shared gate, but this
     // direct check protects a stale frame or programmatic caller as well.
     if (ref.read(lifecycleEditingProvider) > 0 ||
+        ref.read(noteCloseEditingProvider) > 0 ||
         ref.read(reloadEditingProvider) > 0 ||
         ref.read(noteSwitchingProvider)) {
       state = const RescanState(

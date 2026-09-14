@@ -55,12 +55,39 @@ class SearchPanel extends ConsumerStatefulWidget {
 
 class _SearchPanelState extends ConsumerState<SearchPanel> {
   final _inputFocusNode = FocusNode(debugLabel: 'search-panel-input');
+  final _inputController = TextEditingController();
   int _selectedIndex = 0;
 
   @override
+  void initState() {
+    super.initState();
+    ref.listenManual(
+      searchQueryProvider,
+      (_, query) => _syncInput(query),
+      fireImmediately: true,
+    );
+  }
+
+  @override
   void dispose() {
+    _inputController.dispose();
     _inputFocusNode.dispose();
     super.dispose();
+  }
+
+  void _syncInput(String query) {
+    if (_inputController.text == query) return;
+    final previousSelection = _inputController.selection;
+    final cursor = previousSelection.extentOffset < 0
+        ? query.length
+        : previousSelection.extentOffset.clamp(0, query.length);
+    final base = previousSelection.baseOffset < 0
+        ? cursor
+        : previousSelection.baseOffset.clamp(0, query.length);
+    _inputController.value = TextEditingValue(
+      text: query,
+      selection: TextSelection(baseOffset: base, extentOffset: cursor),
+    );
   }
 
   @override
@@ -132,6 +159,7 @@ class _SearchPanelState extends ConsumerState<SearchPanel> {
               },
               child: TextField(
                 key: const ValueKey('search-panel-input'),
+                controller: _inputController,
                 focusNode: _inputFocusNode,
                 autofocus: true,
                 style: TextStyle(color: colors.textPrimary, fontSize: 13),

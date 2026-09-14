@@ -265,6 +265,86 @@ void main() {
     },
   );
 
+  test(
+    'an orderly persistence drain writes the current snapshot and rejects an unresolved save failure',
+    () async {
+      final api = _SessionSnapshotRustApi(
+        const ActiveWorkspaceSessionSnapshot(
+          openNoteIds: [],
+          expandedDirectoryIds: [],
+          searchQuery: '',
+          syncPresentation: SessionSyncPresentation.local,
+        ),
+      );
+      final container = ProviderContainer(
+        overrides: [rustApiProvider.overrideWithValue(api)],
+      );
+      addTearDown(container.dispose);
+      await container.read(workspaceSessionSnapshotProvider.future);
+      final session = container.read(workspaceSessionProvider.notifier);
+
+      session.setActiveNoteId('restart-me');
+      await session.flushPendingWrites();
+      expect(api.savedSnapshots.last.openNoteIds, ['restart-me']);
+      expect(api.savedSnapshots.last.activeNoteId, 'restart-me');
+
+      api.saveError = StateError('sidecar write unavailable');
+      await expectLater(session.flushPendingWrites(), throwsStateError);
+      expect(
+        container.read(workspaceSessionFailureProvider)?.operation,
+        WorkspaceSessionOperation.save,
+      );
+    },
+  );
+
+  test(
+    'a persistence drain waits for a save admitted while its first save is pending',
+    () async {
+      final api = _ScopedSessionSnapshotRustApi([_workspaceA]);
+      final container = ProviderContainer(
+        overrides: [rustApiProvider.overrideWithValue(api)],
+      );
+      addTearDown(container.dispose);
+      final sessionSubscription = container.listen(
+        workspaceSessionProvider,
+        (_, _) {},
+      );
+      addTearDown(sessionSubscription.close);
+
+      final restored = container.read(workspaceSessionSnapshotProvider.future);
+      final load = await api.loadRequestAt(0);
+      load.completer.complete(
+        const ActiveWorkspaceSessionSnapshot(
+          openNoteIds: [],
+          expandedDirectoryIds: [],
+          searchQuery: '',
+          syncPresentation: SessionSyncPresentation.local,
+        ),
+      );
+      await restored;
+      final session = container.read(workspaceSessionProvider.notifier);
+      session.setSearchQuery('first');
+      final firstSave = await api.saveRequestAt(0);
+
+      final draining = session.flushPendingWrites();
+      session.setSearchQuery('second');
+      firstSave.completer.complete();
+      final drainSave = await api.saveRequestAt(1);
+      expect(drainSave.snapshot.searchQuery, 'first');
+      drainSave.completer.complete();
+      final laterSave = await api.saveRequestAt(2);
+      expect(laterSave.snapshot.searchQuery, 'second');
+
+      var drained = false;
+      draining.whenComplete(() => drained = true);
+      await Future<void>.delayed(Duration.zero);
+      expect(drained, isFalse);
+      laterSave.completer.complete();
+      await draining;
+      expect(drained, isTrue);
+    },
+  );
+
   test('an opened active Note is saved in the open-ID list', () async {
     final api = _SessionSnapshotRustApi(
       const ActiveWorkspaceSessionSnapshot(

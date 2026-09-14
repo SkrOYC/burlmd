@@ -491,6 +491,17 @@ class LifecycleActions {
         ),
       );
     }
+    // A single close owns its Core session until its terminal result arrives.
+    // Lifecycle work cannot snapshot or mutate that retiring identity.
+    if (_ref.read(noteCloseEditingProvider) > 0) {
+      return Future.value(
+        LifecycleFailed(
+          StateError(
+            'Workspace lifecycle changes are unavailable while a note is closing.',
+          ),
+        ),
+      );
+    }
     final editing = _ref.read(lifecycleEditingProvider.notifier);
     // Reserve the shared gate at submission time, including while this
     // request waits behind an admitted action. That blocks both editing and

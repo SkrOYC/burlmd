@@ -58,6 +58,7 @@ Future<ProviderContainer> _pumpPanel(
   _NavigationRustApi api, {
   String? backlinksForNoteId,
   ValueChanged<String>? onResultSelected,
+  VoidCallback? onDismiss,
 }) async {
   late ProviderContainer container;
   await tester.pumpWidget(
@@ -75,6 +76,7 @@ Future<ProviderContainer> _pumpPanel(
                 child: NoteNavigationPanel(
                   backlinksForNoteId: backlinksForNoteId,
                   onResultSelected: onResultSelected,
+                  onDismiss: onDismiss,
                 ),
               );
             },
@@ -165,6 +167,21 @@ void main() {
     expect(find.text('Type a title prefix to find a note'), findsOneWidget);
     expect(find.text('No notes link here'), findsOneWidget);
     expect(api.titleCalls, isEmpty);
+  });
+
+  testWidgets('Escape dismisses an embedding surface with no candidates', (
+    tester,
+  ) async {
+    var dismissed = 0;
+    await _pumpPanel(
+      tester,
+      _NavigationRustApi(),
+      onDismiss: () => dismissed++,
+    );
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+
+    expect(dismissed, 1);
   });
 
   testWidgets(

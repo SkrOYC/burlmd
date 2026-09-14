@@ -344,8 +344,9 @@ tickets:
           - lib/src/components/lifecycle_actions.dart
         justification: Route the existing stale-create and failed-refresh Core
           close calls through the same serialized close boundary as tab and
-          shutdown requests. The epic owns this path; leaving these callers
-          independent would violate the ticket's non-overlap invariant.
+          shutdown requests, and share admission guards so lifecycle mutations
+          cannot race a pending close. The epic owns this path; leaving these
+          callers independent would violate the ticket's non-overlap invariant.
     depends_on:
       - BURL-G001
       - BURL-G004
@@ -782,6 +783,14 @@ closeout:
       that deferred commands or tickets were executed successfully.
     - The whole FFI contract and desktop-session flow remain assumed where
       they include work beyond these tests, including deferred Workspace adoption.
+    - Defer the two PR 44 round-one P2 exact-number parsing cases to BURL-O005
+      hardening or its replacement in the user's next roadmap. Rust serde_json
+      and Dart jsonDecode can round a manually supplied fractional version such
+      as 1.0000000000000001 to 1, accepting it instead of quarantining it. The
+      application writes canonical integer versions; these sidecars contain
+      presentation hints, not Note content. Exact raw-token parsing is outside
+      this closeout's low-cost fixes, and the snapshot schema remains assumed
+      rather than being claimed fully settled with this known limitation.
   settled:
     - record: prd/capabilities.yaml#CAP-023
       evidence:
@@ -850,11 +859,3 @@ closeout:
         date: 2026-09-14
         note: Mounted keyboard navigation requests Core backlinks for the active
           Note and opens a returned target as a Core-backed tab.
-    - record: tech-spec/data-models/workspace-session-snapshot.schema.meta.yaml
-      evidence:
-        kind: repository
-        ref: rust/src/workspace/session_snapshot.rs
-        date: 2026-09-14
-        note: Schema-artifact assertions, semantic fixtures, atomic round trips,
-          Workspace partitioning, and byte-preserving refusal and quarantine
-          regressions exercise the v1 snapshot contract.

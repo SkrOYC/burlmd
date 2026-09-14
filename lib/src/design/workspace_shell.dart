@@ -608,9 +608,11 @@ class _EditorPaneState extends ConsumerState<_EditorPane> {
       (session) => session.metadata.id == tab.id,
     );
     if (index == -1) return;
-    final wasActive = ref.read(activeNoteProvider)?.metadata.id == tab.id;
     final closed = await ref.read(activeNoteProvider.notifier).closeTab(tab.id);
-    if (!mounted || !closed || !wasActive) return;
+    if (!mounted || !closed) return;
+
+    // Never let the pre-await tab state override a newer authoritative tab.
+    if (ref.read(activeNoteProvider) != null) return;
 
     final remaining = ref.read(openNoteSessionsProvider);
     if (remaining.isEmpty) {
@@ -660,7 +662,17 @@ class _EditorPaneState extends ConsumerState<_EditorPane> {
     final activeId = ref.read(activeNoteProvider)?.metadata.id;
     if (activeId == null) return;
     final session = ref.read(openNoteSessionsProvider.notifier).byId(activeId);
-    if (session != null) unawaited(_closeTab(_CoreNoteTab(session)));
+    if (session == null) return;
+    // A keyboard shortcut changes [closeRequest] during its ancestor's build.
+    // Reserve the provider admission immediately after that frame; mutating a
+    // Riverpod notifier synchronously from didUpdateWidget is forbidden.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final current = ref
+          .read(openNoteSessionsProvider.notifier)
+          .byId(activeId);
+      if (current != null) unawaited(_closeTab(_CoreNoteTab(current)));
+    });
   }
 
   @override

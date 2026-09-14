@@ -2,6 +2,7 @@ import 'package:burlmd/src/components/search_panel.dart';
 import 'package:burlmd/l10n/generated/app_localizations.dart';
 import 'package:burlmd/src/providers/note_providers.dart';
 import 'package:burlmd/src/providers/rust_api_provider.dart';
+import 'package:burlmd/src/providers/search_provider.dart';
 import 'package:burlmd/src/providers/workspace_provider.dart';
 import 'package:burlmd/src/rust/draft.dart';
 import 'package:flutter/material.dart';
@@ -56,6 +57,7 @@ Future<ProviderContainer> _pumpPanel(
   WidgetTester tester,
   _StubRustApi api, {
   int resultLimit = 10,
+  String? restoredQuery,
   ValueChanged<String>? onNoteSelected,
   VoidCallback? onResultSelected,
   VoidCallback? onDismiss,
@@ -63,7 +65,13 @@ Future<ProviderContainer> _pumpPanel(
   late ProviderContainer container;
   await tester.pumpWidget(
     ProviderScope(
-      overrides: [rustApiProvider.overrideWithValue(api)],
+      overrides: [
+        rustApiProvider.overrideWithValue(api),
+        if (restoredQuery != null)
+          workspaceSessionProvider.overrideWith(
+            () => _RestoredWorkspaceSession(restoredQuery),
+          ),
+      ],
       child: MaterialApp(
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
@@ -88,6 +96,16 @@ Future<ProviderContainer> _pumpPanel(
   );
   await tester.pumpAndSettle();
   return container;
+}
+
+class _RestoredWorkspaceSession extends WorkspaceSession {
+  _RestoredWorkspaceSession(this.restoredQuery);
+
+  final String restoredQuery;
+
+  @override
+  WorkspaceSessionState build() =>
+      const WorkspaceSessionState.empty().copyWith(searchQuery: restoredQuery);
 }
 
 Future<void> _type(WidgetTester tester, String text) async {
@@ -115,6 +133,35 @@ void main() {
     // The query crossed to the Core verbatim — ranked index hits, not a
     // client-side filter — and the surface's own limit travelled with it.
     expect(api.calls, [(query, 10)]);
+  });
+
+  testWidgets('a restored query is visible, editable, and sent to Core', (
+    WidgetTester tester,
+  ) async {
+    const restoredQuery = 'release checklist';
+    const editedQuery = 'release checklist v2';
+    final api = _StubRustApi({
+      restoredQuery: [hit('release', 'Release checklist')],
+      editedQuery: [hit('release-v2', 'Release checklist v2')],
+    });
+    final container = await _pumpPanel(
+      tester,
+      api,
+      restoredQuery: restoredQuery,
+    );
+
+    final field = tester.widget<TextField>(
+      find.byKey(const ValueKey('search-panel-input')),
+    );
+    expect(field.controller!.text, restoredQuery);
+    expect(find.text('Release checklist'), findsOneWidget);
+    expect(api.calls, [(restoredQuery, 10)]);
+
+    await _type(tester, editedQuery);
+
+    expect(container.read(searchQueryProvider), editedQuery);
+    expect(find.text('Release checklist v2'), findsOneWidget);
+    expect(api.calls.last, (editedQuery, 10));
   });
 
   testWidgets('the result limit is the surface parameter, not a constant', (
