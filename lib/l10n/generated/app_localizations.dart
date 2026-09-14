@@ -214,6 +214,30 @@ abstract class AppLocalizations {
   /// **'Ctrl+K'**
   String get workspaceSearchShortcutControl;
 
+  /// Label for the title-prefix note navigation command.
+  ///
+  /// In en, this message translates to:
+  /// **'Jump to note…'**
+  String get workspaceJumpToNote;
+
+  /// Tooltip for the title-prefix note navigation command.
+  ///
+  /// In en, this message translates to:
+  /// **'Jump to note'**
+  String get workspaceJumpToNoteTooltip;
+
+  /// Displayed title-jump shortcut on macOS.
+  ///
+  /// In en, this message translates to:
+  /// **'⌘P'**
+  String get workspaceJumpShortcutMacos;
+
+  /// Displayed title-jump shortcut on non-macOS desktop platforms.
+  ///
+  /// In en, this message translates to:
+  /// **'Ctrl+P'**
+  String get workspaceJumpShortcutControl;
+
   /// Accessible label for dismissing a modal workspace overlay.
   ///
   /// In en, this message translates to:
@@ -393,6 +417,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Close search'**
   String get workspaceCloseSearch;
+
+  /// Tooltip for closing the title-jump and backlinks palette.
+  ///
+  /// In en, this message translates to:
+  /// **'Close note navigation'**
+  String get workspaceCloseNoteNavigation;
 
   /// Preferences drawer title.
   ///
@@ -1035,6 +1065,48 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'If this keeps happening, run \"Rescan workspace\" to rebuild the search index.'**
   String get searchRescanHint;
+
+  /// Heading for the title-prefix navigation palette.
+  ///
+  /// In en, this message translates to:
+  /// **'Jump to note'**
+  String get noteNavigationTitle;
+
+  /// Title-prefix navigation text field hint.
+  ///
+  /// In en, this message translates to:
+  /// **'Type a title prefix'**
+  String get noteNavigationHint;
+
+  /// Empty title-prefix navigation state.
+  ///
+  /// In en, this message translates to:
+  /// **'Type a title prefix to find a note'**
+  String get noteNavigationTypePrompt;
+
+  /// Empty title-prefix navigation result state.
+  ///
+  /// In en, this message translates to:
+  /// **'No notes match this title'**
+  String get noteNavigationNoMatches;
+
+  /// Heading for notes that link to the open note.
+  ///
+  /// In en, this message translates to:
+  /// **'Notes that link here'**
+  String get noteNavigationBacklinks;
+
+  /// Empty backlinks state.
+  ///
+  /// In en, this message translates to:
+  /// **'No notes link here'**
+  String get noteNavigationNoBacklinks;
+
+  /// Failure heading for title-prefix navigation or backlinks.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load notes'**
+  String get noteNavigationFailed;
 }
 
 class _AppLocalizationsDelegate

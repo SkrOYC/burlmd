@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:burlmd/src/components/draft_recovery.dart';
 import 'package:burlmd/src/components/editor.dart';
+import 'package:burlmd/src/components/note_navigation_panel.dart';
 import 'package:burlmd/src/components/search_panel.dart';
 import 'package:burlmd/src/components/visual_parity_fixture.dart';
 import 'package:burlmd/src/components/workspace_tree.dart';
@@ -38,7 +39,14 @@ class _TabContextMenuIntent extends Intent {
   const _TabContextMenuIntent();
 }
 
-enum _ShellCommand { search, history, preferences, closeTab, dismiss }
+enum _ShellCommand {
+  search,
+  titleJump,
+  history,
+  preferences,
+  closeTab,
+  dismiss,
+}
 
 const _visualFixture = bool.fromEnvironment('BURLMD_VISUAL_FIXTURE');
 
@@ -67,6 +75,7 @@ class BurlWorkspaceShell extends ConsumerStatefulWidget {
 class _BurlWorkspaceShellState extends ConsumerState<BurlWorkspaceShell> {
   bool _navigatorOpen = false;
   bool _searchOpen = false;
+  bool _titleJumpOpen = false;
   bool _preferencesOpen = false;
   bool _syncOpen = false;
   bool _historyOpen = false;
@@ -104,6 +113,7 @@ class _BurlWorkspaceShellState extends ConsumerState<BurlWorkspaceShell> {
       final hasOverlay =
           _navigatorOpen ||
           _searchOpen ||
+          _titleJumpOpen ||
           _preferencesOpen ||
           _syncOpen ||
           _historyOpen;
@@ -118,6 +128,7 @@ class _BurlWorkspaceShellState extends ConsumerState<BurlWorkspaceShell> {
     }
     final command = switch (event.logicalKey) {
       LogicalKeyboardKey.keyK => _ShellCommand.search,
+      LogicalKeyboardKey.keyP => _ShellCommand.titleJump,
       LogicalKeyboardKey.keyH => _ShellCommand.history,
       LogicalKeyboardKey.comma => _ShellCommand.preferences,
       LogicalKeyboardKey.keyW => _ShellCommand.closeTab,
@@ -132,6 +143,8 @@ class _BurlWorkspaceShellState extends ConsumerState<BurlWorkspaceShell> {
     setState(() {
       if (_searchOpen) {
         _searchOpen = false;
+      } else if (_titleJumpOpen) {
+        _titleJumpOpen = false;
       } else if (_preferencesOpen) {
         _preferencesOpen = false;
       } else if (_syncOpen) {
@@ -148,6 +161,8 @@ class _BurlWorkspaceShellState extends ConsumerState<BurlWorkspaceShell> {
     switch (command) {
       case _ShellCommand.search:
         setState(() => _searchOpen = true);
+      case _ShellCommand.titleJump:
+        setState(() => _titleJumpOpen = true);
       case _ShellCommand.history:
         setState(() => _historyOpen = true);
       case _ShellCommand.preferences:
@@ -175,6 +190,12 @@ class _BurlWorkspaceShellState extends ConsumerState<BurlWorkspaceShell> {
         ),
         SingleActivator(LogicalKeyboardKey.keyK, meta: true): _ShellIntent(
           _ShellCommand.search,
+        ),
+        SingleActivator(LogicalKeyboardKey.keyP, control: true): _ShellIntent(
+          _ShellCommand.titleJump,
+        ),
+        SingleActivator(LogicalKeyboardKey.keyP, meta: true): _ShellIntent(
+          _ShellCommand.titleJump,
         ),
         SingleActivator(LogicalKeyboardKey.keyH, control: true): _ShellIntent(
           _ShellCommand.history,
@@ -236,6 +257,8 @@ class _BurlWorkspaceShellState extends ConsumerState<BurlWorkspaceShell> {
                               workspaceName: widget.workspaceName,
                               onSearch: () =>
                                   setState(() => _searchOpen = true),
+                              onTitleJump: () =>
+                                  setState(() => _titleJumpOpen = true),
                               onPreferences: () =>
                                   setState(() => _preferencesOpen = true),
                               onSync: () => setState(() => _syncOpen = true),
@@ -255,6 +278,8 @@ class _BurlWorkspaceShellState extends ConsumerState<BurlWorkspaceShell> {
                                   : _navigatorOpen = true,
                             ),
                             onSearch: () => setState(() => _searchOpen = true),
+                            onTitleJump: () =>
+                                setState(() => _titleJumpOpen = true),
                             onPreferences: () =>
                                 setState(() => _preferencesOpen = true),
                           ),
@@ -290,6 +315,8 @@ class _BurlWorkspaceShellState extends ConsumerState<BurlWorkspaceShell> {
                         workspaceName: widget.workspaceName,
                         onClose: () => setState(() => _navigatorOpen = false),
                         onSearch: () => setState(() => _searchOpen = true),
+                        onTitleJump: () =>
+                            setState(() => _titleJumpOpen = true),
                         onPreferences: () =>
                             setState(() => _preferencesOpen = true),
                         onSync: () => setState(() => _syncOpen = true),
@@ -298,6 +325,10 @@ class _BurlWorkspaceShellState extends ConsumerState<BurlWorkspaceShell> {
                     if (_searchOpen)
                       _SearchPalette(
                         onClose: () => setState(() => _searchOpen = false),
+                      ),
+                    if (_titleJumpOpen)
+                      _NoteNavigationPalette(
+                        onClose: () => setState(() => _titleJumpOpen = false),
                       ),
                     if (_preferencesOpen)
                       _PreferencesDrawer(
@@ -330,13 +361,18 @@ class _NavigatorPane extends StatelessWidget {
   const _NavigatorPane({
     required this.workspaceName,
     required this.onSearch,
+    required this.onTitleJump,
     required this.onPreferences,
     required this.onSync,
     required this.rescanButton,
     required this.onNoteSelected,
   });
   final String workspaceName;
-  final VoidCallback onSearch, onPreferences, onSync, onNoteSelected;
+  final VoidCallback onSearch,
+      onTitleJump,
+      onPreferences,
+      onSync,
+      onNoteSelected;
   final Widget rescanButton;
   @override
   Widget build(BuildContext context) {
@@ -380,6 +416,17 @@ class _NavigatorPane extends StatelessWidget {
               tooltip: l10n.workspaceSearchNotesTooltip,
               trailing: _searchShortcutLabel(l10n),
               onPressed: onSearch,
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+            child: _QuietButton(
+              key: const Key('shell-title-jump'),
+              icon: LucideIcons.arrow_right_to_line,
+              label: l10n.workspaceJumpToNote,
+              tooltip: l10n.workspaceJumpToNoteTooltip,
+              trailing: _titleJumpShortcutLabel(l10n),
+              onPressed: onTitleJump,
             ),
           ),
           const Divider(height: 1),
@@ -429,10 +476,11 @@ class _Rail extends StatelessWidget {
   const _Rail({
     required this.onOpen,
     required this.onSearch,
+    required this.onTitleJump,
     required this.onPreferences,
     this.openKey = const Key('shell-open-navigator'),
   });
-  final VoidCallback onOpen, onSearch, onPreferences;
+  final VoidCallback onOpen, onSearch, onTitleJump, onPreferences;
   final Key openKey;
   @override
   Widget build(BuildContext context) {
@@ -460,6 +508,12 @@ class _Rail extends StatelessWidget {
               onPressed: onSearch,
               icon: const Icon(LucideIcons.search, size: 18),
             ),
+            IconButton(
+              key: const ValueKey('shell-rail-title-jump'),
+              tooltip: l10n.workspaceJumpToNoteTooltip,
+              onPressed: onTitleJump,
+              icon: const Icon(LucideIcons.arrow_right_to_line, size: 18),
+            ),
             const Spacer(),
             IconButton(
               key: const ValueKey('shell-rail-preferences'),
@@ -480,12 +534,13 @@ class _NavigatorOverlay extends StatelessWidget {
     required this.workspaceName,
     required this.onClose,
     required this.onSearch,
+    required this.onTitleJump,
     required this.onPreferences,
     required this.onSync,
     required this.rescanButton,
   });
   final String workspaceName;
-  final VoidCallback onClose, onSearch, onPreferences, onSync;
+  final VoidCallback onClose, onSearch, onTitleJump, onPreferences, onSync;
   final Widget rescanButton;
   @override
   Widget build(BuildContext context) => _ShellModalOverlay(
@@ -505,6 +560,10 @@ class _NavigatorOverlay extends StatelessWidget {
               onSearch: () {
                 onClose();
                 onSearch();
+              },
+              onTitleJump: () {
+                onClose();
+                onTitleJump();
               },
               onPreferences: onPreferences,
               onSync: onSync,
@@ -1133,6 +1192,11 @@ String _searchShortcutLabel(AppLocalizations l10n) =>
     ? l10n.workspaceSearchShortcutMacos
     : l10n.workspaceSearchShortcutControl;
 
+String _titleJumpShortcutLabel(AppLocalizations l10n) =>
+    defaultTargetPlatform == TargetPlatform.macOS
+    ? l10n.workspaceJumpShortcutMacos
+    : l10n.workspaceJumpShortcutControl;
+
 String _breadcrumb(String path, AppLocalizations l10n) {
   final parts = path.split('/');
   return parts.length > 1
@@ -1335,6 +1399,64 @@ class _SearchPalette extends StatelessWidget {
                     child: IconButton(
                       key: const ValueKey('search-close'),
                       tooltip: l10n.workspaceCloseSearch,
+                      onPressed: onClose,
+                      icon: const Icon(LucideIcons.x, size: 15),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _NoteNavigationPalette extends StatelessWidget {
+  const _NoteNavigationPalette({required this.onClose});
+
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.burlColors;
+    final l10n = AppLocalizations.of(context)!;
+    return _ShellModalOverlay(
+      key: const ValueKey('shell-note-navigation-overlay'),
+      onClose: onClose,
+      barrierColor: const Color(0x88000000),
+      child: Align(
+        alignment: const Alignment(0, -.68),
+        child: BurlScaleFadeEntrance(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 672),
+            child: Container(
+              key: const ValueKey('note-navigation-palette'),
+              margin: const EdgeInsets.all(16),
+              height: 480,
+              decoration: BoxDecoration(
+                color: c.surfaceRaised,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: c.borderStrong),
+                boxShadow: const [
+                  BoxShadow(color: Color(0x55000000), blurRadius: 28),
+                ],
+              ),
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: NoteNavigationPanel(
+                      onResultSelected: (_) => onClose(),
+                      onDismiss: onClose,
+                    ),
+                  ),
+                  Positioned(
+                    top: 3,
+                    right: 3,
+                    child: IconButton(
+                      key: const ValueKey('note-navigation-close'),
+                      tooltip: l10n.workspaceCloseNoteNavigation,
                       onPressed: onClose,
                       icon: const Icon(LucideIcons.x, size: 15),
                     ),

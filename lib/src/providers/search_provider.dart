@@ -47,3 +47,27 @@ final searchResultsProvider = FutureProvider.autoDispose
       if (query.isEmpty) return const [];
       return ref.watch(rustApiProvider).searchNotes(query, limit);
     });
+
+/// One Core-owned title-prefix request for the keyboard title-jump surface.
+///
+/// This request retains the entered query verbatim. Core owns title matching,
+/// including the contract's prefix-only rule, so Presentation neither trims
+/// nor filters a nonempty query. An empty field has no candidate to request.
+typedef TitleJumpRequest = ({String query, int limit});
+
+final titleJumpResultsProvider = FutureProvider.autoDispose
+    .family<List<NoteMetadata>, TitleJumpRequest>((ref, request) async {
+      if (request.query.isEmpty) return const [];
+      return ref
+          .watch(rustApiProvider)
+          .findNotesByTitle(request.query, request.limit);
+    });
+
+/// Core-derived Notes that link to an open Note.
+///
+/// The note id keys this provider, so an inbound-link response for a former
+/// active Note cannot become the visible response for a later active Note.
+final backlinksProvider = FutureProvider.autoDispose
+    .family<List<NoteMetadata>, String>(
+      (ref, noteId) => ref.watch(rustApiProvider).backlinks(noteId),
+    );
