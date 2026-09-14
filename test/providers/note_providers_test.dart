@@ -821,6 +821,55 @@ void main() {
   });
 
   test(
+    'a reopened retained identity is released before a later close batch',
+    () async {
+      final reopened = Completer<NoteState>();
+      final api = _SwitchingRustApi()
+        ..openNoteGates['b'] = reopened
+        ..closeErrors['b'] = const AppError.ioError('temporary close failure');
+      final container = _containerFor(api);
+      final controller = container.read(activeNoteProvider.notifier);
+
+      await controller.openAsTab('a');
+      container.read(retainedCoreSessionIdsProvider.notifier).retain('b');
+      final openingB = controller.openAsTab('b');
+      await Future<void>.delayed(Duration.zero);
+      final openingC = controller.openAsTab('c');
+      reopened.complete(
+        const NoteState(
+          ast: [],
+          metadata: NoteMetadata(
+            id: 'b',
+            path: 'b.md',
+            title: 'b',
+            lastModified: 0,
+            okfConformant: true,
+          ),
+          baseRevision: 'head',
+          restoredFromDraft: false,
+        ),
+      );
+      await Future.wait([openingB, openingC]);
+
+      expect(
+        container
+            .read(openNoteSessionsProvider)
+            .map((note) => note.metadata.id),
+        ['a', 'b', 'c'],
+      );
+      expect(container.read(retainedCoreSessionIdsProvider), isEmpty);
+
+      api.closeErrors.remove('b');
+      expect(await controller.closeAllTabs(), isTrue);
+      expect(
+        api.calls.where((call) => call == 'close:b'),
+        hasLength(2),
+        reason: 'one refused stale-open cleanup and one batch close',
+      );
+    },
+  );
+
+  test(
     'a close refusal preserves a stale restore tab while a newer tab stays active',
     () async {
       final restored = Completer<NoteState>();

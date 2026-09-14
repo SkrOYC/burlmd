@@ -208,17 +208,26 @@ fi
 # a direct launch cannot substitute a real default Workspace by stealth.
 # DISPLAY is never part of the smoke child's capability set. The visual gate
 # passes only its owned Wayland socket and runtime directory to this script.
-env -u DISPLAY "${SCENARIO_ENV[@]}" \
-  "BURLMD_SMOKE_ISOLATED=1" \
-  "BURLMD_SMOKE_ROOT=$SMOKE_STATE_DIR" \
-  "BURLMD_SMOKE_NONCE=$SMOKE_NONCE" \
-  "BURLMD_SMOKE_NONCE_FILE=$SMOKE_NONCE_FILE" \
-  "BURLMD_SMOKE_WORKSPACE=$SMOKE_WORKSPACE" \
-  "BURLMD_SMOKE_READY_FILE=$READY_FILE" \
-  "HOME=$SMOKE_HOME" \
-  "XDG_DATA_HOME=$SMOKE_DATA_HOME" \
-  "BURLMD_DB_PATH=$SMOKE_DB_PATH" \
-  "$APP_BIN" &
+# This child has no authority to publish or replace the PID handoff. The
+# subshell closes the already-validated descriptor and removes its name before
+# exec replaces the subshell with the app; therefore $! remains the app PID.
+(
+  unset BURLMD_SMOKE_APP_PID_FD
+  if [[ -n "$APP_PID_FD" ]]; then
+    exec {APP_PID_FD}>&-
+  fi
+  exec env -u DISPLAY "${SCENARIO_ENV[@]}" \
+    "BURLMD_SMOKE_ISOLATED=1" \
+    "BURLMD_SMOKE_ROOT=$SMOKE_STATE_DIR" \
+    "BURLMD_SMOKE_NONCE=$SMOKE_NONCE" \
+    "BURLMD_SMOKE_NONCE_FILE=$SMOKE_NONCE_FILE" \
+    "BURLMD_SMOKE_WORKSPACE=$SMOKE_WORKSPACE" \
+    "BURLMD_SMOKE_READY_FILE=$READY_FILE" \
+    "HOME=$SMOKE_HOME" \
+    "XDG_DATA_HOME=$SMOKE_DATA_HOME" \
+    "BURLMD_DB_PATH=$SMOKE_DB_PATH" \
+    "$APP_BIN"
+) &
 APP_PID=$!
 if [[ -n "$APP_PID_FD" ]]; then
   printf '%s\n' "$APP_PID" >&"$APP_PID_FD" \

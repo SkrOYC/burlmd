@@ -48,6 +48,8 @@ enum _ShellCommand {
   dismiss,
 }
 
+enum _ShellOverlay { navigator, search, titleJump, preferences, sync, history }
+
 const _visualFixture = bool.fromEnvironment('BURLMD_VISUAL_FIXTURE');
 
 /// Desktop workspace chrome. It intentionally hosts the existing navigation
@@ -158,16 +160,21 @@ class _BurlWorkspaceShellState extends ConsumerState<BurlWorkspaceShell> {
   }
 
   void _openSearch() {
-    setState(() {
-      _searchOpen = true;
-      _titleJumpOpen = false;
-    });
+    _showOverlay(_ShellOverlay.search);
   }
 
   void _openTitleJump() {
+    _showOverlay(_ShellOverlay.titleJump);
+  }
+
+  void _showOverlay(_ShellOverlay overlay) {
     setState(() {
-      _titleJumpOpen = true;
-      _searchOpen = false;
+      _navigatorOpen = overlay == _ShellOverlay.navigator;
+      _searchOpen = overlay == _ShellOverlay.search;
+      _titleJumpOpen = overlay == _ShellOverlay.titleJump;
+      _preferencesOpen = overlay == _ShellOverlay.preferences;
+      _syncOpen = overlay == _ShellOverlay.sync;
+      _historyOpen = overlay == _ShellOverlay.history;
     });
   }
 
@@ -178,9 +185,9 @@ class _BurlWorkspaceShellState extends ConsumerState<BurlWorkspaceShell> {
       case _ShellCommand.titleJump:
         _openTitleJump();
       case _ShellCommand.history:
-        setState(() => _historyOpen = true);
+        _showOverlay(_ShellOverlay.history);
       case _ShellCommand.preferences:
-        setState(() => _preferencesOpen = true);
+        _showOverlay(_ShellOverlay.preferences);
       case _ShellCommand.closeTab:
         setState(() => _tabCloseRequest++);
       case _ShellCommand.dismiss:
@@ -272,8 +279,8 @@ class _BurlWorkspaceShellState extends ConsumerState<BurlWorkspaceShell> {
                               onSearch: _openSearch,
                               onTitleJump: _openTitleJump,
                               onPreferences: () =>
-                                  setState(() => _preferencesOpen = true),
-                              onSync: () => setState(() => _syncOpen = true),
+                                  _showOverlay(_ShellOverlay.preferences),
+                              onSync: () => _showOverlay(_ShellOverlay.sync),
                               rescanButton: widget.rescanButton,
                               onNoteSelected: () {},
                             ),
@@ -284,23 +291,25 @@ class _BurlWorkspaceShellState extends ConsumerState<BurlWorkspaceShell> {
                             openKey: tier == _ShellTier.wide
                                 ? const ValueKey('shell-sidebar-expand')
                                 : const Key('shell-open-navigator'),
-                            onOpen: () => setState(
-                              () => tier == _ShellTier.wide
-                                  ? _sidebarCollapsed = false
-                                  : _navigatorOpen = true,
-                            ),
+                            onOpen: () {
+                              if (tier == _ShellTier.wide) {
+                                setState(() => _sidebarCollapsed = false);
+                              } else {
+                                _showOverlay(_ShellOverlay.navigator);
+                              }
+                            },
                             onSearch: _openSearch,
                             onTitleJump: _openTitleJump,
                             onPreferences: () =>
-                                setState(() => _preferencesOpen = true),
+                                _showOverlay(_ShellOverlay.preferences),
                           ),
                         Expanded(
                           child: _EditorPane(
                             compact: tier == _ShellTier.compact,
                             onOpenNavigator: () =>
-                                setState(() => _navigatorOpen = true),
+                                _showOverlay(_ShellOverlay.navigator),
                             onHistory: () =>
-                                setState(() => _historyOpen = true),
+                                _showOverlay(_ShellOverlay.history),
                             closeRequest: _tabCloseRequest,
                           ),
                         ),
@@ -328,8 +337,8 @@ class _BurlWorkspaceShellState extends ConsumerState<BurlWorkspaceShell> {
                         onSearch: _openSearch,
                         onTitleJump: _openTitleJump,
                         onPreferences: () =>
-                            setState(() => _preferencesOpen = true),
-                        onSync: () => setState(() => _syncOpen = true),
+                            _showOverlay(_ShellOverlay.preferences),
+                        onSync: () => _showOverlay(_ShellOverlay.sync),
                         rescanButton: widget.rescanButton,
                       ),
                     if (_searchOpen)
@@ -602,27 +611,92 @@ class _EditorPane extends ConsumerStatefulWidget {
 }
 
 class _EditorPaneState extends ConsumerState<_EditorPane> {
+  /// The tab order at the first close request for the active session. It
+  /// remains authoritative while later queued closes settle, because their
+  /// completion indices no longer describe the active tab's successor.
+  List<String>? _activeCloseOrder;
+  String? _activeCloseId;
+
   Future<void> _closeTab(_CoreNoteTab tab) async {
     final sessions = ref.read(openNoteSessionsProvider);
-    final index = sessions.indexWhere(
-      (session) => session.metadata.id == tab.id,
-    );
-    if (index == -1) return;
-    final closed = await ref.read(activeNoteProvider.notifier).closeTab(tab.id);
-    if (!mounted || !closed) return;
+    if (!sessions.any((session) => session.metadata.id == tab.id)) return;
+    if (ref.read(activeNoteProvider)?.metadata.id == tab.id) {
+      _activeCloseOrder = sessions
+          .map((session) => session.metadata.id)
+          .toList(growable: false);
+      _activeCloseId = tab.id;
+    }
+    await ref.read(activeNoteProvider.notifier).closeTab(tab.id);
+    if (!mounted) return;
 
-    // Never let the pre-await tab state override a newer authoritative tab.
-    if (ref.read(activeNoteProvider) != null) return;
+    _reconcileAfterTabClose();
+  }
+
+  void _reconcileAfterTabClose() {
+    // A queued close may refuse after the active close retires its tab. The
+    // first completion cannot select the survivor while the queued admission
+    // still blocks selection, so every terminal close result gets a chance to
+    // restore a coherent visible session after releasing its own gate.
+    if (ref.read(activeNoteProvider) != null) {
+      _clearActiveCloseAnchor();
+      return;
+    }
 
     final remaining = ref.read(openNoteSessionsProvider);
     if (remaining.isEmpty) {
       ref.read(selectedNoteIdProvider.notifier).clear();
+      _clearActiveCloseAnchor();
       return;
     }
     // CAP-SHELL-08: the old index names the following session after removal;
     // only an end tab has no following session and falls back to its predecessor.
-    final next = index < remaining.length ? remaining[index] : remaining.last;
-    ref.read(selectedNoteIdProvider.notifier).select(next.metadata.id);
+    final selectedId = ref.read(selectedNoteIdProvider);
+    final selected = remaining.where(
+      (session) => session.metadata.id == selectedId,
+    );
+    if (selected.isNotEmpty) {
+      final activated = ref
+          .read(activeNoteProvider.notifier)
+          .activateExistingTab(selected.first.metadata.id);
+      if (activated) _clearActiveCloseAnchor();
+      return;
+    }
+    final next = _successorFromActiveClose(remaining) ?? remaining.first;
+    // A newer admission can still own the selection boundary. In that case,
+    // leave its authoritative result alone instead of fabricating a tab state.
+    if (!ref.read(selectedNoteIdProvider.notifier).select(next.metadata.id)) {
+      return;
+    }
+    if (ref
+        .read(activeNoteProvider.notifier)
+        .activateExistingTab(next.metadata.id)) {
+      _clearActiveCloseAnchor();
+    }
+  }
+
+  NoteState? _successorFromActiveClose(List<NoteState> remaining) {
+    final order = _activeCloseOrder;
+    final activeId = _activeCloseId;
+    if (order == null || activeId == null) return null;
+    final activeIndex = order.indexOf(activeId);
+    if (activeIndex == -1) return null;
+    final remainingById = {
+      for (final session in remaining) session.metadata.id: session,
+    };
+    for (var index = activeIndex + 1; index < order.length; index++) {
+      final successor = remainingById[order[index]];
+      if (successor != null) return successor;
+    }
+    for (var index = activeIndex - 1; index >= 0; index--) {
+      final predecessor = remainingById[order[index]];
+      if (predecessor != null) return predecessor;
+    }
+    return null;
+  }
+
+  void _clearActiveCloseAnchor() {
+    _activeCloseOrder = null;
+    _activeCloseId = null;
   }
 
   Future<void> _closeOtherTabs(_CoreNoteTab keptTab) async {

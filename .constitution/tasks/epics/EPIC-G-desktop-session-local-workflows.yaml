@@ -806,6 +806,14 @@ closeout:
       presentation hints, not Note content. Exact raw-token parsing is outside
       this closeout's low-cost fixes, and the snapshot schema remains assumed
       rather than being claimed fully settled with this known limitation.
+    - PR 44 round three proposed measuring rapid snapshot updates on slower
+      application-support storage. No slow-storage workload measurement was
+      performed in this private Linux pass. Defer that measurement
+      and any resulting coalescing change to the user's quality roadmap; the
+      current queues retain their tested stable-drain correctness behavior.
+    - Consider a focused session-controller extraction in the future roadmap
+      after these correctness fixes. Do not expand this closeout into a broad
+      provider refactor merely to reduce the current file's line count.
   settled:
     - record: prd/capabilities.yaml#CAP-023
       evidence:

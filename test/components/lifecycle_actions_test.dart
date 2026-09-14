@@ -2883,7 +2883,9 @@ void main() {
 
       closeGate.complete();
       expect(await creating, isA<LifecycleCompleted>());
-      expect(await closingOld, isTrue);
+      expect(await closingOld, isFalse);
+      expect(api.calls, ['createNote::Created', 'closeNote:Created']);
+      expect(await controller.closeTab('Old'), isTrue);
       expect(api.calls, [
         'createNote::Created',
         'closeNote:Created',
@@ -2919,6 +2921,87 @@ void main() {
 
       closeGate.complete();
       expect(await closing, isTrue);
+    },
+  );
+
+  testWidgets(
+    'a single close visibly refuses while an admitted rename owns its identity',
+    (tester) async {
+      final renameGate = Completer<void>();
+      final api = _LifecycleApi()
+        ..openStates = {'Old': stateFor('Old')}
+        ..renameNoteGate = renameGate
+        ..renameNoteResult = (stateFor('Renamed'), effects());
+      late ProviderContainer container;
+      await tester.pumpWidget(_probeHarness(api, (c) => container = c));
+      addTearDown(container.dispose);
+      final controller = container.read(activeNoteProvider.notifier);
+      await controller.openAsTab('Old');
+      container.read(selectedNoteIdProvider.notifier).select('Old');
+
+      final renaming = container
+          .read(lifecycleActionsProvider)
+          .renameNote('Old', 'Renamed');
+      await tester.pump();
+
+      expect(container.read(lifecycleEditingProvider), 1);
+      expect(await controller.closeTab('Old'), isFalse);
+      expect(api.calls, ['renameNote:Old:Renamed']);
+      expect(
+        container.read(noteCloseFailureProvider),
+        isA<NoteCloseUnavailable>().having(
+          (unavailable) => unavailable.reason,
+          'reason',
+          NoteCloseUnavailableReason.lifecycle,
+        ),
+      );
+      expect(container.read(activeNoteProvider)!.metadata.id, 'Old');
+
+      renameGate.complete();
+      expect(await renaming, isA<LifecycleCompleted>());
+      expect(api.calls, ['renameNote:Old:Renamed']);
+      expect(container.read(activeNoteProvider)!.metadata.id, 'Renamed');
+      expect(container.read(retainedCoreSessionIdsProvider), isEmpty);
+    },
+  );
+
+  testWidgets(
+    'a single close visibly refuses while an admitted delete owns its identity',
+    (tester) async {
+      final deleteGate = Completer<void>();
+      final api = _LifecycleApi()
+        ..openStates = {'Old': stateFor('Old')}
+        ..deleteNoteGate = deleteGate;
+      late ProviderContainer container;
+      await tester.pumpWidget(_probeHarness(api, (c) => container = c));
+      addTearDown(container.dispose);
+      final controller = container.read(activeNoteProvider.notifier);
+      await controller.openAsTab('Old');
+      container.read(selectedNoteIdProvider.notifier).select('Old');
+
+      final deleting = container
+          .read(lifecycleActionsProvider)
+          .deleteNote('Old');
+      await tester.pump();
+
+      expect(container.read(lifecycleEditingProvider), 1);
+      expect(await controller.closeTab('Old'), isFalse);
+      expect(api.calls, ['deleteNote:Old']);
+      expect(
+        container.read(noteCloseFailureProvider),
+        isA<NoteCloseUnavailable>().having(
+          (unavailable) => unavailable.reason,
+          'reason',
+          NoteCloseUnavailableReason.lifecycle,
+        ),
+      );
+      expect(container.read(activeNoteProvider)!.metadata.id, 'Old');
+
+      deleteGate.complete();
+      expect(await deleting, isA<LifecycleCompleted>());
+      expect(api.calls, ['deleteNote:Old']);
+      expect(container.read(activeNoteProvider), isNull);
+      expect(container.read(retainedCoreSessionIdsProvider), isEmpty);
     },
   );
 }
