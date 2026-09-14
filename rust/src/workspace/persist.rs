@@ -392,6 +392,10 @@ impl Workspace {
     /// Applies the existing Note identity and containment rules to persisted
     /// presentation state without opening, reading, or requiring the Note.
     pub(crate) fn validate_persisted_note_id(&self, note_id: &str) -> Result<(), AppError> {
+        // A persisted id is an existing Core identity, not a path request. Use
+        // the lifecycle validator before containment so aliases such as `a//b`
+        // cannot restore two sessions for the one file they resolve to.
+        crate::workspace::lifecycle::link_target_identity(note_id)?;
         self.note_path(note_id).map(|_| ())
     }
 

@@ -52,7 +52,9 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
                   if (mounted) {
                     showStatusMessage(
                       context,
-                      'Could not complete orderly exit: $error',
+                      AppLocalizations.of(
+                        context,
+                      )!.workspaceOrderlyExitFailed('$error'),
                     );
                   }
                   return false;
@@ -116,6 +118,11 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
       final failure = next.failure;
       if (failure != null) {
         _showRescanMessage(context, 'Rescan failed: $failure');
+      } else if (next.refusal == RescanRefusal.retainedNoteUnwritten) {
+        _showRescanMessage(
+          context,
+          AppLocalizations.of(context)!.workspaceRescanRetainedNoteUnwritten,
+        );
       } else if (next.refusedReason case final reason?) {
         _showRescanMessage(context, reason);
       }
@@ -125,11 +132,46 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
       failure,
     ) {
       if (failure == null) return;
-      showStatusMessage(context, failure.message);
+      final l10n = AppLocalizations.of(context)!;
+      showStatusMessage(context, switch (failure.operation) {
+        WorkspaceSessionOperation.load => l10n.workspaceSessionRestoreFailed(
+          '${failure.error}',
+        ),
+        WorkspaceSessionOperation.save => l10n.workspaceSessionSaveFailed(
+          '${failure.error}',
+        ),
+      });
+    });
+    // The shell can unmount [Editor] as a terminal close retires the final
+    // tab. Consume close outcomes here, at the stable Scaffold ancestor, so
+    // that a post-frame SnackBar is still shown after that unmount.
+    ref.listen<Object?>(noteCloseFailureProvider, (_, failure) {
+      if (failure == null) return;
+      final l10n = AppLocalizations.of(context)!;
+      final message = switch (failure) {
+        NoteCloseUnavailable(:final reason) => switch (reason) {
+          NoteCloseUnavailableReason.reindexing =>
+            l10n.noteCloseUnavailableDuringRescan,
+          NoteCloseUnavailableReason.reloading =>
+            l10n.noteCloseUnavailableDuringReload,
+          NoteCloseUnavailableReason.lifecycle =>
+            l10n.noteCloseUnavailableDuringLifecycle,
+        },
+        _ => l10n.noteCloseFailed('$failure'),
+      };
+      ref.read(noteCloseFailureProvider.notifier).acknowledge();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) showStatusMessage(context, message);
+      });
     });
     ref.listen<Object?>(preferencesPersistenceFailureProvider, (_, failure) {
       if (failure == null) return;
-      showStatusMessage(context, 'Could not save preferences: $failure');
+      showStatusMessage(
+        context,
+        AppLocalizations.of(
+          context,
+        )!.workspacePreferencesSaveFailed('$failure'),
+      );
     });
 
     return Scaffold(
@@ -177,8 +219,15 @@ void _showRescanMessage(BuildContext context, String message) {
 /// [failure] and [refusedReason] are one-shot reports consumed by the
 /// screen's listener; a successful rescan leaves them null and the refreshed
 /// tree is the only visible outcome.
+enum RescanRefusal { retainedNoteUnwritten }
+
 class RescanState {
-  const RescanState({this.running = false, this.failure, this.refusedReason});
+  const RescanState({
+    this.running = false,
+    this.failure,
+    this.refusedReason,
+    this.refusal,
+  });
 
   static const idle = RescanState();
 
@@ -191,6 +240,9 @@ class RescanState {
 
   /// Why the last attempt was refused without touching the Core, if it was.
   final String? refusedReason;
+
+  /// A language-neutral refusal that Presentation turns into localized copy.
+  final RescanRefusal? refusal;
 }
 
 /// Drives CAP-WS-06's explicit refresh: re-derives the shell's view of the
@@ -251,6 +303,18 @@ class WorkspaceRescan extends Notifier<RescanState> {
             'Rescan unavailable: "${open.metadata.title}" still has '
             'unsaved edits.',
       );
+      return;
+    }
+    // Retained identities are live Core sessions whose last Dart state was
+    // deliberately discarded. They must receive the same fail-closed poll,
+    // but cannot be converted into a synthetic NoteState merely to obtain a
+    // title for the status text.
+    for (final noteId in ref.read(retainedCoreSessionIdsProvider)) {
+      if (openSessions.containsKey(noteId) ||
+          !noteHoldsUnwrittenEdits(ref.read(rustApiProvider), noteId)) {
+        continue;
+      }
+      state = const RescanState(refusal: RescanRefusal.retainedNoteUnwritten);
       return;
     }
 

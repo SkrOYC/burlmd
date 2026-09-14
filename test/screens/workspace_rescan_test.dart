@@ -24,6 +24,7 @@ class _RescanRustApi extends RustApi {
   /// Whether the fake write tier reports unwritten edits for an open Note.
   bool unwrittenEdits = false;
   final Map<String, bool> unwrittenEditsByNote = {};
+  final Set<String> writeStatusErrors = {};
   final Set<String> restoredDraftIds = {};
 
   int treeFetches = 0;
@@ -50,11 +51,16 @@ class _RescanRustApi extends RustApi {
   }
 
   @override
-  NoteWriteStatus noteWriteStatus(String noteId) => NoteWriteStatus(
-    lastWrittenAt: null,
-    lastError: null,
-    hasUnwrittenEdits: unwrittenEditsByNote[noteId] ?? unwrittenEdits,
-  );
+  NoteWriteStatus noteWriteStatus(String noteId) {
+    if (writeStatusErrors.contains(noteId)) {
+      throw StateError('write-status poll failed for $noteId');
+    }
+    return NoteWriteStatus(
+      lastWrittenAt: null,
+      lastError: null,
+      hasUnwrittenEdits: unwrittenEditsByNote[noteId] ?? unwrittenEdits,
+    );
+  }
 
   @override
   Future<NoteState> openNote(String noteId) async {
@@ -376,6 +382,68 @@ void main() {
         container.read(rescanStateProvider).refusedReason,
         contains('unsaved edits'),
       );
+    },
+  );
+
+  testWidgets(
+    'a dirty retained Core session refuses rescan without fabricating a tab',
+    (tester) async {
+      final api = _RescanRustApi([_note('a', 'Alpha')])
+        ..unwrittenEditsByNote['retained'] = true;
+      var reindexCalls = 0;
+      final container = await _pumpShell(
+        tester,
+        api,
+        reindex: () async {
+          reindexCalls++;
+          return 1;
+        },
+      );
+      container
+          .read(retainedCoreSessionIdsProvider.notifier)
+          .retain('retained');
+
+      await container.read(rescanStateProvider.notifier).run();
+
+      expect(reindexCalls, 0);
+      expect(container.read(openNoteSessionsProvider), isEmpty);
+      expect(container.read(activeNoteProvider), isNull);
+      expect(
+        container.read(rescanStateProvider).refusal,
+        RescanRefusal.retainedNoteUnwritten,
+      );
+    },
+  );
+
+  testWidgets(
+    'a failed retained-session poll refuses rescan and a clean retained session permits it',
+    (tester) async {
+      final api = _RescanRustApi([_note('a', 'Alpha')]);
+      var reindexCalls = 0;
+      final container = await _pumpShell(
+        tester,
+        api,
+        reindex: () async {
+          reindexCalls++;
+          return 1;
+        },
+      );
+      container
+          .read(retainedCoreSessionIdsProvider.notifier)
+          .retain('retained');
+      api.writeStatusErrors.add('retained');
+
+      await container.read(rescanStateProvider.notifier).run();
+
+      expect(reindexCalls, 0);
+      expect(
+        container.read(rescanStateProvider).refusal,
+        RescanRefusal.retainedNoteUnwritten,
+      );
+      api.writeStatusErrors.remove('retained');
+      await container.read(rescanStateProvider.notifier).run();
+
+      expect(reindexCalls, 1);
     },
   );
 

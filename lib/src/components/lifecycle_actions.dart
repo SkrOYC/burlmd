@@ -43,6 +43,19 @@ class LifecycleFailed extends LifecycleOutcome {
   final Object error;
 }
 
+enum LifecycleUnavailableReason {
+  reloading,
+  rescanning,
+  closingBatch,
+  closingNote,
+}
+
+class LifecycleUnavailable implements Exception {
+  const LifecycleUnavailable(this.reason);
+
+  final LifecycleUnavailableReason reason;
+}
+
 /// Drives Note and Directory creation, rename, move and deletion against the
 /// Core's lifecycle surface (`WSPC-D006`), and discharges the two obligations
 /// the contract puts on every caller of an identity-changing operation:
@@ -227,6 +240,12 @@ class LifecycleActions {
     String newName,
   ) => _guard((operation) async {
     final result = await _request(() => _api.renameDirectory(path, newName));
+    _ref
+        .read(workspaceSessionProvider.notifier)
+        .rekeyExpandedDirectoryPrefix(
+          oldPath: path,
+          newPath: _renamedDirectoryPath(path, newName),
+        );
     _ref.invalidate(workspaceTreeProvider);
     await _settleEffects(
       invokedNoteId: null,
@@ -243,6 +262,9 @@ class LifecycleActions {
     operation,
   ) async {
     final result = await _request(() => _api.deleteDirectory(path));
+    _ref
+        .read(workspaceSessionProvider.notifier)
+        .removeExpandedDirectoryPrefix(path);
     _ref.invalidate(workspaceTreeProvider);
     if (!_isExpectedSession(
       operation,
@@ -280,6 +302,13 @@ class LifecycleActions {
     throw StateError(
       'Core $operation result omitted its authoritative Note state.',
     );
+  }
+
+  String _renamedDirectoryPath(String path, String newName) {
+    final separator = path.lastIndexOf('/');
+    return separator == -1
+        ? newName
+        : '${path.substring(0, separator)}/$newName';
   }
 
   /// Marks errors from the single Core lifecycle request, before its
@@ -460,9 +489,7 @@ class LifecycleActions {
     if (_ref.read(reloadEditingProvider) > 0) {
       return Future.value(
         LifecycleFailed(
-          StateError(
-            'Workspace lifecycle changes are unavailable while a note reload is in progress.',
-          ),
+          const LifecycleUnavailable(LifecycleUnavailableReason.reloading),
         ),
       );
     }
@@ -472,9 +499,7 @@ class LifecycleActions {
     if (_ref.read(rescanEditingProvider) > 0) {
       return Future.value(
         LifecycleFailed(
-          StateError(
-            'Workspace lifecycle changes are unavailable during a rescan.',
-          ),
+          const LifecycleUnavailable(LifecycleUnavailableReason.rescanning),
         ),
       );
     }
@@ -485,9 +510,7 @@ class LifecycleActions {
     if (_ref.read(noteCloseBatchingProvider) > 0) {
       return Future.value(
         LifecycleFailed(
-          StateError(
-            'Workspace lifecycle changes are unavailable while notes are closing.',
-          ),
+          const LifecycleUnavailable(LifecycleUnavailableReason.closingBatch),
         ),
       );
     }
@@ -496,9 +519,7 @@ class LifecycleActions {
     if (_ref.read(noteCloseEditingProvider) > 0) {
       return Future.value(
         LifecycleFailed(
-          StateError(
-            'Workspace lifecycle changes are unavailable while a note is closing.',
-          ),
+          const LifecycleUnavailable(LifecycleUnavailableReason.closingNote),
         ),
       );
     }
@@ -727,7 +748,18 @@ class LifecycleActions {
 
     for (final remap in effects.remapped) {
       final stale = tabs.openTabState(remap.oldId);
-      if (stale == null) continue;
+      if (stale == null) {
+        // A retained identity is a live Core session without a safe Dart
+        // projection. Core's remap is sufficient to update that identity;
+        // don't fetch or fabricate a NoteState merely to maintain it.
+        if (_isCurrentOperation(operation)) {
+          tabs.rekeyRetainedCoreSession(
+            oldNoteId: remap.oldId,
+            newNoteId: remap.newId,
+          );
+        }
+        continue;
+      }
       try {
         final opened = await _openCurrentTabSession(operation, remap.newId);
         if (opened == null) return;

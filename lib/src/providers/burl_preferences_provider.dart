@@ -110,12 +110,35 @@ class DevicePreferencesStore {
     return false;
   }
 
+  /// Produces the next same-directory quarantine filename to reserve.
+  ///
+  /// Keeping this overridable permits deterministic collision coverage without
+  /// relying on wall-clock timing.
+  String nextQuarantinePath(File file) =>
+      '${file.path}.quarantine-${DateTime.now().microsecondsSinceEpoch}-${_nextTemporaryFile++}';
+
+  /// Exclusively reserves a quarantine filename before its payload is moved.
+  ///
+  /// `File.rename` replaces an existing file, so [_quarantine] only ever
+  /// replaces the empty file this method just created. This is overridable for
+  /// deterministic filesystem-failure coverage.
+  Future<File> createQuarantineReservation(File destination) =>
+      destination.create(exclusive: true);
+
   Future<void> _quarantine(File file) async {
     _persistenceBlocked = true;
     try {
-      await file.rename(
-        '${file.path}.quarantine-${DateTime.now().microsecondsSinceEpoch}-${_nextTemporaryFile++}',
-      );
+      while (true) {
+        final destination = File(nextQuarantinePath(file));
+        try {
+          await createQuarantineReservation(destination);
+        } on PathExistsException {
+          // A previous process owns this name; reserve a distinct one.
+          continue;
+        }
+        await file.rename(destination.path);
+        return;
+      }
     } catch (_) {
       // The original bytes remain in place. Later saves stay disabled.
     }

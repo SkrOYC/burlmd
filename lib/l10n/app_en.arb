@@ -74,6 +74,34 @@
       "error": { "type": "String", "example": "Could not commit the note" }
     }
   },
+  "noteCloseUnavailableDuringRescan": "Close notes after the workspace rescan finishes.",
+  "@noteCloseUnavailableDuringRescan": {
+    "description": "Dismissible status message when a close request is refused while Core reindexes the workspace."
+  },
+  "noteCloseUnavailableDuringReload": "Close notes after the note reload finishes.",
+  "@noteCloseUnavailableDuringReload": {
+    "description": "Dismissible status message when a close request is refused while Core reloads a note from disk."
+  },
+  "workspaceRescanRetainedNoteUnwritten": "Rescan unavailable: a retained note has unsaved edits.",
+  "@workspaceRescanRetainedNoteUnwritten": {
+    "description": "Dismissible status message when a live retained Core note prevents a workspace rescan."
+  },
+  "workspaceSessionRestoreFailed": "Could not restore workspace session: {error}",
+  "@workspaceSessionRestoreFailed": {"description": "Dismissible status after a workspace session snapshot load fails.", "placeholders": {"error": {"type": "String", "example": "Storage unavailable"}}},
+  "workspaceSessionSaveFailed": "Could not save workspace session: {error}",
+  "@workspaceSessionSaveFailed": {"description": "Dismissible status after a workspace session snapshot save fails.", "placeholders": {"error": {"type": "String", "example": "Storage unavailable"}}},
+  "workspacePreferencesSaveFailed": "Could not save preferences: {error}",
+  "@workspacePreferencesSaveFailed": {"description": "Dismissible status after device preference persistence fails.", "placeholders": {"error": {"type": "String", "example": "Storage unavailable"}}},
+  "workspaceOrderlyExitFailed": "Could not complete orderly exit: {error}",
+  "@workspaceOrderlyExitFailed": {"description": "Dismissible status when final persistence prevents application exit.", "placeholders": {"error": {"type": "String", "example": "Storage unavailable"}}},
+  "noteCloseUnavailableDuringLifecycle": "Close notes after workspace changes finish.",
+  "@noteCloseUnavailableDuringLifecycle": {"description": "Dismissible status when a close batch is refused during a workspace lifecycle action."},
+  "lifecycleUnavailableDuringReload": "Workspace changes are unavailable while a note reload is in progress.",
+  "@lifecycleUnavailableDuringReload": {"description": "Dismissible status when a lifecycle action is refused during a note reload."},
+  "lifecycleUnavailableDuringRescan": "Workspace changes are unavailable during a rescan.",
+  "@lifecycleUnavailableDuringRescan": {"description": "Dismissible status when a lifecycle action is refused during a rescan."},
+  "lifecycleUnavailableDuringClose": "Workspace changes are unavailable while notes are closing.",
+  "@lifecycleUnavailableDuringClose": {"description": "Dismissible status when a lifecycle action is refused during note closure."},
   "lifecycleCommitWarning": "The change is applied, but its Git commit failed: {detail}",
   "@lifecycleCommitWarning": {
     "description": "Dismissible status message after a Note or Directory lifecycle operation completes but Git cannot record it.",

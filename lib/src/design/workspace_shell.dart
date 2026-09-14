@@ -717,7 +717,7 @@ class _EditorPaneState extends ConsumerState<_EditorPane> {
               child: Column(
                 children: [
                   WriteTierNotice(),
-                  Expanded(child: Editor()),
+                  Expanded(child: Editor(consumeCloseFailures: false)),
                 ],
               ),
             ),

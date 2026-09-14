@@ -40,6 +40,17 @@ class NoteCloseFailure extends Notifier<Object?> {
   void acknowledge() => state = null;
 }
 
+/// A close request that cannot enter Core because another operation owns the
+/// same Note boundary. Presentation translates this closed reason into local
+/// copy while preserving Core errors verbatim.
+enum NoteCloseUnavailableReason { reindexing, reloading, lifecycle }
+
+class NoteCloseUnavailable implements Exception {
+  const NoteCloseUnavailable(this.reason);
+
+  final NoteCloseUnavailableReason reason;
+}
+
 /// The last refused per-keystroke write (`update_block`, ADR-008 tier 1), or
 /// `null` when the latest keystroke went through. Deliberately **not**
 /// [editorErrorProvider]: flow-edit-note.md requires that a failed keystroke
@@ -703,12 +714,33 @@ class NoteController extends Notifier<NoteState?> {
     }
     final sessions = ref.read(openNoteSessionsProvider.notifier);
     final session = sessions.byId(noteId);
-    if (session == null ||
-        (expectedState != null && !identical(session, expectedState))) {
+    if (session != null &&
+        expectedState != null &&
+        !identical(session, expectedState)) {
       return;
     }
-    sessions.remove(noteId);
+    if (session != null) sessions.remove(noteId);
+    ref.read(retainedCoreSessionIdsProvider.notifier).release(noteId);
     ref.read(workspaceSessionProvider.notifier).removeOpenNoteId(noteId);
+  }
+
+  /// Carries an unrenderable live Core session through a Core-authoritative
+  /// identity remap without creating a Dart [NoteState]. A visible session at
+  /// either identity wins; this path is solely for retained identities.
+  void rekeyRetainedCoreSession({
+    required String oldNoteId,
+    required String newNoteId,
+  }) {
+    final retained = ref.read(retainedCoreSessionIdsProvider);
+    if (!retained.contains(oldNoteId)) return;
+    final sessions = ref.read(openNoteSessionsProvider.notifier);
+    if (sessions.byId(oldNoteId) != null) return;
+    final registry = ref.read(retainedCoreSessionIdsProvider.notifier);
+    registry.release(oldNoteId);
+    if (sessions.byId(newNoteId) == null) registry.retain(newNoteId);
+    ref
+        .read(workspaceSessionProvider.notifier)
+        .rekeyOpenNoteId(oldNoteId: oldNoteId, newNoteId: newNoteId);
   }
 
   Future<void> _open(String noteId, {bool admittedByLifecycle = false}) =>
@@ -866,6 +898,13 @@ class NoteController extends Notifier<NoteState?> {
   /// presentation identity; a refusal leaves it fully writable and retryable.
   Future<bool> closeTab(String noteId) async {
     if (!ref.mounted || !_hasLiveCoreSession(noteId)) return false;
+    final unavailable = _closeUnavailableReason();
+    if (unavailable != null) {
+      ref
+          .read(noteCloseFailureProvider.notifier)
+          .report(NoteCloseUnavailable(unavailable));
+      return false;
+    }
     final editing = ref.read(noteCloseEditingProvider.notifier);
     // Reserve before joining the close queue: another admitted close can
     // flush Core state before this one reaches its queue head.
@@ -925,6 +964,13 @@ class NoteController extends Notifier<NoteState?> {
     bool preserveSnapshotIntentOnSuccess = false,
     Future<bool> Function()? afterCleanCoreClose,
   }) async {
+    final unavailable = _closeUnavailableReason();
+    if (unavailable != null) {
+      ref
+          .read(noteCloseFailureProvider.notifier)
+          .report(NoteCloseUnavailable(unavailable));
+      return false;
+    }
     // A lifecycle operation can create or remap a Core session after its FFI
     // result returns. It therefore invalidates the all-clean proof a wider
     // close needs. Refuse visibly so the caller can retry after it settles.
@@ -932,9 +978,7 @@ class NoteController extends Notifier<NoteState?> {
       ref
           .read(noteCloseFailureProvider.notifier)
           .report(
-            StateError(
-              'Close all is unavailable while workspace changes are in progress.',
-            ),
+            const NoteCloseUnavailable(NoteCloseUnavailableReason.lifecycle),
           );
       return false;
     }
@@ -986,6 +1030,10 @@ class NoteController extends Notifier<NoteState?> {
           }
         }
         if (afterCleanCoreClose != null && !await afterCleanCoreClose()) {
+          // All Core sessions are already retired. Do not resurrect their
+          // stale Dart NoteStates; leave a coherent empty presentation while
+          // preserving the pre-exit snapshot intent for a later restart.
+          ref.read(selectedNoteIdProvider.notifier).clear();
           return false;
         }
         return true;
@@ -994,6 +1042,16 @@ class NoteController extends Notifier<NoteState?> {
       if (ref.mounted) editing.end();
       if (ref.mounted) batching.end();
     }
+  }
+
+  NoteCloseUnavailableReason? _closeUnavailableReason() {
+    if (ref.read(rescanEditingProvider) > 0) {
+      return NoteCloseUnavailableReason.reindexing;
+    }
+    if (ref.read(reloadEditingProvider) > 0) {
+      return NoteCloseUnavailableReason.reloading;
+    }
+    return null;
   }
 
   /// A warning retires a Core session even though it cancels the enclosing

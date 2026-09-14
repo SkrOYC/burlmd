@@ -347,6 +347,16 @@ tickets:
           shutdown requests, and share admission guards so lifecycle mutations
           cannot race a pending close. The epic owns this path; leaving these
           callers independent would violate the ticket's non-overlap invariant.
+      - files:
+          - lib/src/components/editor.dart
+          - lib/src/components/workspace_tree.dart
+          - lib/l10n/**
+        justification: Move production close-status consumption to the stable
+          Workspace screen while preserving embedded Editor behavior, and
+          localize the new close, lifecycle, and persistence failure messages
+          through the existing status surfaces. These
+          epic-owned integration paths keep terminal warnings visible after
+          the final editor unmounts.
     depends_on:
       - BURL-G001
       - BURL-G004
@@ -768,6 +778,11 @@ closeout:
         post-failure writes. The separately reviewed Stage 3 Evolution commit
         a88e1f6 established the G001-only visual-reference policy before code;
         it is not an execution spec patch.
+    - directory: tasks
+      type: changed
+      text: The separately reviewed owning Stage 3 patch 1c5996f records three
+        delivered G001 layout paths as existing in TechSpec v2.3.1. This is
+        availability metadata, not new acceptance or release evidence.
   candidate_terms: []
   routed_upstream:
     - stage: tasks

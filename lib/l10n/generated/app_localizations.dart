@@ -172,6 +172,72 @@ abstract class AppLocalizations {
   /// **'Could not switch notes: {error}'**
   String noteCloseFailed(String error);
 
+  /// Dismissible status message when a close request is refused while Core reindexes the workspace.
+  ///
+  /// In en, this message translates to:
+  /// **'Close notes after the workspace rescan finishes.'**
+  String get noteCloseUnavailableDuringRescan;
+
+  /// Dismissible status message when a close request is refused while Core reloads a note from disk.
+  ///
+  /// In en, this message translates to:
+  /// **'Close notes after the note reload finishes.'**
+  String get noteCloseUnavailableDuringReload;
+
+  /// Dismissible status message when a live retained Core note prevents a workspace rescan.
+  ///
+  /// In en, this message translates to:
+  /// **'Rescan unavailable: a retained note has unsaved edits.'**
+  String get workspaceRescanRetainedNoteUnwritten;
+
+  /// Dismissible status after a workspace session snapshot load fails.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not restore workspace session: {error}'**
+  String workspaceSessionRestoreFailed(String error);
+
+  /// Dismissible status after a workspace session snapshot save fails.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not save workspace session: {error}'**
+  String workspaceSessionSaveFailed(String error);
+
+  /// Dismissible status after device preference persistence fails.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not save preferences: {error}'**
+  String workspacePreferencesSaveFailed(String error);
+
+  /// Dismissible status when final persistence prevents application exit.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not complete orderly exit: {error}'**
+  String workspaceOrderlyExitFailed(String error);
+
+  /// Dismissible status when a close batch is refused during a workspace lifecycle action.
+  ///
+  /// In en, this message translates to:
+  /// **'Close notes after workspace changes finish.'**
+  String get noteCloseUnavailableDuringLifecycle;
+
+  /// Dismissible status when a lifecycle action is refused during a note reload.
+  ///
+  /// In en, this message translates to:
+  /// **'Workspace changes are unavailable while a note reload is in progress.'**
+  String get lifecycleUnavailableDuringReload;
+
+  /// Dismissible status when a lifecycle action is refused during a rescan.
+  ///
+  /// In en, this message translates to:
+  /// **'Workspace changes are unavailable during a rescan.'**
+  String get lifecycleUnavailableDuringRescan;
+
+  /// Dismissible status when a lifecycle action is refused during note closure.
+  ///
+  /// In en, this message translates to:
+  /// **'Workspace changes are unavailable while notes are closing.'**
+  String get lifecycleUnavailableDuringClose;
+
   /// Dismissible status message after a Note or Directory lifecycle operation completes but Git cannot record it.
   ///
   /// In en, this message translates to:
