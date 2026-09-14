@@ -1170,3 +1170,38 @@ tickets:
       master, and a separate reviewed evidence-only pull request. Do not infer
       CAP-076 or ticket completion from the earlier implementation or local
       checks.
+closeout:
+  tickets_completed:
+    - BURL-M015
+  tickets_deferred:
+    - id: BURL-M003
+      route: >-
+        Tasks Evolution for supported-release qualification after the user
+        resumes that scope and the required upstream stages authorize execution.
+      reason: >-
+        The approved private Linux checkout milestone excludes managed release
+        qualification. No accepted three-role report or reviewed completion
+        evidence exists. Retained implementation and local fixture checks do
+        not complete BURL-M003 or deliver CAP-076.
+  points_completed: 3
+  spec_patches: []
+  changelog_entries:
+    - directory: tasks
+      type: fixed
+      text: >-
+        BURL-M015 observes final shorter-retry timer quiescence without changing
+        production behavior or weakening assertions. Committed-source evidence
+        records 101 exact invocations per fixture, 202 successful processes in
+        total, and exit 0. Independent milestone review repeated the exact gate
+        and passed all 538 Rust tests, formatting, and Clippy.
+  candidate_terms: []
+  routed_upstream:
+    - stage: tasks
+      item: >-
+        Preserve BURL-M003 as deferred supported-release qualification. Its
+        retained raw-40 protocol is dormant until user-resumed upstream planning
+        and a later approved Stage 3/4 adaptation. Resumption must retain the
+        separate reviewed implementation and accepted evidence-only completion
+        path; private Linux fixture evidence cannot replace it.
+  follow_ups: []
+  settled: []
