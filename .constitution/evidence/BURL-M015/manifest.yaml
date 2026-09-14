@@ -1,0 +1,32 @@
+owner: BURL-M015
+mode: stat_threshold
+produced:
+  date: 2026-09-14
+  commit: db60855c20ca9eec13d0ca35440ecb8197328251
+  command: >-
+    cargo test --manifest-path rust/Cargo.toml
+    workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success -- --exact
+    && cargo test --manifest-path rust/Cargo.toml
+    workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries -- --exact
+    && ./scripts/repeat-test.sh --count 100 -- cargo test --manifest-path rust/Cargo.toml
+    workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success -- --exact
+    && ./scripts/repeat-test.sh --count 100 -- cargo test --manifest-path rust/Cargo.toml
+    workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries -- --exact
+    && git diff --check
+  host: >-
+    Private Linux x86-64 checkout; rustc and cargo 1.97.1; LC_ALL=C.
+    The transcript retains historical checkout and build-cache paths.
+    This is local fixture evidence, not managed platform or release qualification.
+files:
+  - path: exact-gate.log
+    sha256: f6574814f18d640be98bfad030b2a9e028ca5a4ea3e60b99bb432cc1b026c3dd
+    bytes: 90307
+    role: transcript
+pass_criteria: >-
+  The command and every selected test process exit 0. Each of the two fully
+  qualified fixtures passes one ordinary invocation and 100 consecutive isolated
+  repetitions, for 101 named successes per fixture and 202 one-test successes.
+  No invocation selects zero tests, fails, or ignores an assertion. Preserve
+  complete NoteState equality and observe deterministic final timer quiescence
+  without fixed sleeps or changes to production semantics. An OK test summary
+  followed by a process crash does not pass. The retained run exited 0.
