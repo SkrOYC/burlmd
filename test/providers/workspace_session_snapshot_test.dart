@@ -12,6 +12,7 @@ class _SessionSnapshotRustApi extends RustApi {
   final ActiveWorkspaceSessionSnapshot snapshot;
   final List<ActiveWorkspaceSessionSnapshot> savedSnapshots = [];
   Object? loadError;
+  Object? saveError;
   var openNoteCalls = 0;
 
   @override
@@ -35,6 +36,8 @@ class _SessionSnapshotRustApi extends RustApi {
   Future<void> saveActiveWorkspaceSessionSnapshot(
     ActiveWorkspaceSessionSnapshot snapshot,
   ) async {
+    final error = saveError;
+    if (error != null) throw error;
     savedSnapshots.add(snapshot);
   }
 
@@ -198,32 +201,69 @@ void main() {
     expect(api.savedSnapshots.last.openNoteIds, isEmpty);
   });
 
-  test('load failure retains a writable empty presentation default', () async {
-    final api = _SessionSnapshotRustApi(
-      const ActiveWorkspaceSessionSnapshot(
-        openNoteIds: ['stale'],
-        activeNoteId: 'stale',
-        expandedDirectoryIds: ['stale-directory'],
-        searchQuery: 'stale',
-        syncPresentation: SessionSyncPresentation.connected,
-      ),
-    )..loadError = StateError('sidecar unavailable');
-    final container = ProviderContainer(
-      overrides: [rustApiProvider.overrideWithValue(api)],
-    );
-    addTearDown(container.dispose);
+  test(
+    'load failure is reported and does not overwrite an unread snapshot',
+    () async {
+      final api = _SessionSnapshotRustApi(
+        const ActiveWorkspaceSessionSnapshot(
+          openNoteIds: ['stale'],
+          activeNoteId: 'stale',
+          expandedDirectoryIds: ['stale-directory'],
+          searchQuery: 'stale',
+          syncPresentation: SessionSyncPresentation.connected,
+        ),
+      )..loadError = StateError('sidecar unavailable');
+      final container = ProviderContainer(
+        overrides: [rustApiProvider.overrideWithValue(api)],
+      );
+      addTearDown(container.dispose);
 
-    final restored = await container.read(
-      workspaceSessionSnapshotProvider.future,
-    );
-    expect(restored, isA<WorkspaceSessionState>());
-    expect(restored.openNoteIds, isEmpty);
-    expect(restored.activeNoteId, isNull);
-    expect(restored.expandedDirectoryIds, isEmpty);
-    container.read(searchQueryProvider.notifier).set('user change');
-    await Future<void>.delayed(Duration.zero);
-    expect(api.savedSnapshots.single.searchQuery, 'user change');
-  });
+      final restored = await container.read(
+        workspaceSessionSnapshotProvider.future,
+      );
+      expect(restored, isA<WorkspaceSessionState>());
+      expect(restored.openNoteIds, isEmpty);
+      expect(restored.activeNoteId, isNull);
+      expect(restored.expandedDirectoryIds, isEmpty);
+      final failure = container.read(workspaceSessionFailureProvider);
+      expect(failure?.operation, WorkspaceSessionOperation.load);
+      expect(failure?.error, isA<StateError>());
+      container.read(searchQueryProvider.notifier).set('user change');
+      await Future<void>.delayed(Duration.zero);
+      expect(api.savedSnapshots, isEmpty);
+    },
+  );
+
+  test(
+    'save failure is reported while the in-memory session remains usable',
+    () async {
+      final api = _SessionSnapshotRustApi(
+        const ActiveWorkspaceSessionSnapshot(
+          openNoteIds: [],
+          expandedDirectoryIds: [],
+          searchQuery: '',
+          syncPresentation: SessionSyncPresentation.local,
+        ),
+      )..saveError = StateError('sidecar write unavailable');
+      final container = ProviderContainer(
+        overrides: [rustApiProvider.overrideWithValue(api)],
+      );
+      addTearDown(container.dispose);
+      await container.read(workspaceSessionSnapshotProvider.future);
+
+      container.read(searchQueryProvider.notifier).set('user change');
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(
+        container.read(workspaceSessionProvider).searchQuery,
+        'user change',
+      );
+      final failure = container.read(workspaceSessionFailureProvider);
+      expect(failure?.operation, WorkspaceSessionOperation.save);
+      expect(failure?.error, isA<StateError>());
+    },
+  );
 
   test('an opened active Note is saved in the open-ID list', () async {
     final api = _SessionSnapshotRustApi(
@@ -327,6 +367,54 @@ void main() {
       expect(state.expandedDirectoryIds, {'workspace-b/directory'});
       expect(state.searchQuery, 'Workspace B only');
       expect(state.syncPresentation, SessionSyncPresentation.connected);
+    },
+  );
+
+  test(
+    'a stale Workspace A load failure is not reported for Workspace B',
+    () async {
+      final api = _ScopedSessionSnapshotRustApi([_workspaceA, _workspaceB]);
+      final container = ProviderContainer(
+        overrides: [rustApiProvider.overrideWithValue(api)],
+      );
+      addTearDown(container.dispose);
+      final sessionSubscription = container.listen(
+        workspaceSessionProvider,
+        (_, _) {},
+      );
+      addTearDown(sessionSubscription.close);
+
+      final workspaceAFuture = container.read(
+        workspaceSessionSnapshotProvider.future,
+      );
+      final workspaceALoad = await api.loadRequestAt(0);
+
+      container.invalidate(workspaceProvider);
+      container.invalidate(workspaceSessionSnapshotProvider);
+      final workspaceBFuture = container.read(
+        workspaceSessionSnapshotProvider.future,
+      );
+      final workspaceBLoad = await api.loadRequestAt(1);
+      workspaceBLoad.completer.complete(
+        const ActiveWorkspaceSessionSnapshot(
+          openNoteIds: [],
+          expandedDirectoryIds: [],
+          searchQuery: 'Workspace B snapshot',
+          syncPresentation: SessionSyncPresentation.local,
+        ),
+      );
+      await workspaceBFuture;
+
+      workspaceALoad.completer.completeError(
+        StateError('Workspace A unavailable'),
+      );
+      await workspaceAFuture;
+
+      expect(container.read(workspaceSessionFailureProvider), isNull);
+      expect(
+        container.read(workspaceSessionProvider).searchQuery,
+        'Workspace B snapshot',
+      );
     },
   );
 
