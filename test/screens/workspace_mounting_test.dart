@@ -248,6 +248,7 @@ Future<ProviderContainer> _pumpShell(
   _MountingRustApi api, {
   bool disableAnimations = false,
   bool settle = true,
+  bool throwExitCoordinator = false,
 }) async {
   tester.view.physicalSize = const Size(1200, 800);
   tester.view.devicePixelRatio = 1;
@@ -262,6 +263,8 @@ Future<ProviderContainer> _pumpShell(
       // No periodic timer in tests (there is no fake clock to fire it); the
       // monitor's *armed* state is still observable through its built state.
       writeStatusPollIntervalProvider.overrideWithValue(null),
+      if (throwExitCoordinator)
+        activeNoteProvider.overrideWith(_ThrowingExitNoteController.new),
     ],
   );
   addTearDown(container.dispose);
@@ -284,6 +287,13 @@ Future<ProviderContainer> _pumpShell(
   );
   if (settle) await tester.pumpAndSettle();
   return container;
+}
+
+class _ThrowingExitNoteController extends NoteController {
+  @override
+  Future<bool> closeAllForOrderlyShutdown({
+    Future<bool> Function()? afterCleanCoreClose,
+  }) async => throw StateError('exit coordinator failed');
 }
 
 ValueNotifier<String?> _captureClipboard(WidgetTester tester) {
@@ -757,6 +767,53 @@ void main() {
         find.byKey(const ValueKey('note-navigation-palette')),
         findsOneWidget,
       );
+    },
+  );
+
+  testWidgets(
+    'an open title-jump palette clamps stale backlinks after Ctrl+W closes its active tab',
+    (tester) async {
+      final api =
+          _MountingRustApi([_treeNode('a', 'Alpha'), _treeNode('b', 'Beta')])
+            ..backlinkResults['a'] = [
+              _metadata('a-1', 'A one'),
+              _metadata('a-2', 'A two'),
+              _metadata('a-3', 'A three'),
+            ]
+            ..backlinkResults['b'] = [
+              _metadata('valid-target', 'Valid target'),
+            ];
+      final container = await _pumpShell(tester, api);
+      final controller = container.read(activeNoteProvider.notifier);
+      await controller.openAsTab('a');
+      await controller.openAsTab('b');
+      controller.activateExistingTab('a');
+      container.read(selectedNoteIdProvider.notifier).select('a');
+      await tester.pumpAndSettle();
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyP);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('note-navigation-palette')),
+        findsOneWidget,
+      );
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pump();
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyW);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pumpAndSettle();
+      expect(container.read(activeNoteProvider)?.metadata.id, 'b');
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(container.read(selectedNoteIdProvider), 'valid-target');
+      expect(api.calls, contains('open:valid-target'));
     },
   );
 
@@ -1640,6 +1697,57 @@ void main() {
     expect(container.read(selectedNoteIdProvider), 'b');
   });
 
+  testWidgets(
+    'a Close Others popup that outlives its tab cannot close the remaining tabs',
+    (tester) async {
+      final api = _MountingRustApi([
+        _treeNode('a', 'Alpha'),
+        _treeNode('b', 'Beta'),
+        _treeNode('c', 'Gamma'),
+      ]);
+      final container = await _pumpShell(tester, api);
+      final controller = container.read(activeNoteProvider.notifier);
+      await controller.openAsTab('a');
+      await controller.openAsTab('b');
+      await controller.openAsTab('c');
+      controller.activateExistingTab('b');
+      container.read(selectedNoteIdProvider.notifier).select('b');
+      await tester.pumpAndSettle();
+
+      final staleTab = find.byKey(const Key('shell-tab-b'));
+      Focus.of(tester.element(staleTab)).requestFocus();
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.f10);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('tab-menu-close-others')),
+        findsOneWidget,
+      );
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyW);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('shell-tab-b')), findsNothing);
+      expect(
+        container
+            .read(openNoteSessionsProvider)
+            .map((note) => note.metadata.id),
+        ['a', 'c'],
+      );
+      expect(controller.hasOpenTab('b'), isFalse);
+      expect(api.calls.where((call) => call.startsWith('close:')), ['close:b']);
+
+      await tester.tap(find.byKey(const ValueKey('tab-menu-close-others')));
+      await tester.pumpAndSettle();
+
+      expect(api.calls.where((call) => call.startsWith('close:')), ['close:b']);
+      expect(find.byKey(const Key('shell-tab-a')), findsOneWidget);
+      expect(find.byKey(const Key('shell-tab-c')), findsOneWidget);
+    },
+  );
+
   testWidgets('mounted Close All stops on a true close refusal', (
     tester,
   ) async {
@@ -1963,6 +2071,29 @@ void main() {
       expect(
         container.read(selectedNoteIdProvider.notifier).select('a'),
         isTrue,
+      );
+    },
+  );
+
+  testWidgets(
+    'the native exit callback catches a coordinator exception and cancels exit',
+    (tester) async {
+      await _pumpShell(
+        tester,
+        _MountingRustApi([_treeNode('a', 'Alpha')]),
+        throwExitCoordinator: true,
+      );
+
+      expect(
+        await tester.binding.handleRequestAppExit(),
+        AppExitResponse.cancel,
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining(
+          'Could not complete orderly exit: Bad state: exit coordinator failed',
+        ),
+        findsOneWidget,
       );
     },
   );

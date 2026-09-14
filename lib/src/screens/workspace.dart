@@ -36,32 +36,46 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
     super.initState();
     _appLifecycleListener = AppLifecycleListener(
       onExitRequested: () async {
-        final completedCleanly = await ref
-            .read(activeNoteProvider.notifier)
-            .closeAllForOrderlyShutdown(
-              afterCleanCoreClose: () async {
-                try {
-                  await ref
-                      .read(workspaceSessionProvider.notifier)
-                      .flushPendingWrites();
-                  await ref
-                      .read(burlPreferencesProvider.notifier)
-                      .flushPendingWrites();
-                  return true;
-                } catch (error) {
-                  if (mounted) {
-                    showStatusMessage(
-                      context,
-                      AppLocalizations.of(
+        try {
+          final completedCleanly = await ref
+              .read(activeNoteProvider.notifier)
+              .closeAllForOrderlyShutdown(
+                afterCleanCoreClose: () async {
+                  try {
+                    await ref
+                        .read(workspaceSessionProvider.notifier)
+                        .flushPendingWrites();
+                    await ref
+                        .read(burlPreferencesProvider.notifier)
+                        .flushPendingWrites();
+                    return true;
+                  } catch (error) {
+                    if (mounted) {
+                      showStatusMessage(
                         context,
-                      )!.workspaceOrderlyExitFailed('$error'),
-                    );
+                        AppLocalizations.of(
+                          context,
+                        )!.workspaceOrderlyExitFailed('$error'),
+                      );
+                    }
+                    return false;
                   }
-                  return false;
-                }
-              },
+                },
+              );
+          return completedCleanly
+              ? AppExitResponse.exit
+              : AppExitResponse.cancel;
+        } catch (error) {
+          if (mounted) {
+            showStatusMessage(
+              context,
+              AppLocalizations.of(
+                context,
+              )!.workspaceOrderlyExitFailed('$error'),
             );
-        return completedCleanly ? AppExitResponse.exit : AppExitResponse.cancel;
+          }
+          return AppExitResponse.cancel;
+        }
       },
     );
   }

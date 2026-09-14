@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:burlmd/l10n/generated/app_localizations.dart';
 import 'package:burlmd/src/design/burl_theme.dart';
 import 'package:burlmd/src/providers/note_providers.dart';
@@ -40,7 +42,10 @@ class _NoteNavigationPanelState extends ConsumerState<NoteNavigationPanel> {
   final _inputFocusNode = FocusNode(debugLabel: 'note-navigation-input');
   var _query = '';
   var _selectedIndex = 0;
+  var _titleSelectionPolicy = ScrollPositionAlignmentPolicy.keepVisibleAtEnd;
   int? _selectedBacklinkIndex;
+  var _backlinkSelectionPolicy = ScrollPositionAlignmentPolicy.keepVisibleAtEnd;
+  String? _backlinkScopeId;
 
   @override
   void initState() {
@@ -77,19 +82,35 @@ class _NoteNavigationPanelState extends ConsumerState<NoteNavigationPanel> {
     }
     if (hits.isEmpty && backlinks.isEmpty) return KeyEventResult.ignored;
     if (hits.isEmpty) {
-      final selectedBacklink = _selectedBacklinkIndex ?? 0;
+      // The active tab can change beneath the palette (for example, from the
+      // shell close shortcut). Clamp synchronously as well as resetting the
+      // remembered index below, so a key event between those frames cannot
+      // address a row from the old backlink response.
+      final selectedBacklink = (_selectedBacklinkIndex ?? 0).clamp(
+        0,
+        backlinks.length - 1,
+      );
       switch (event.logicalKey) {
         case LogicalKeyboardKey.arrowDown:
-          setState(
-            () => _selectedBacklinkIndex =
-                (selectedBacklink + 1) % backlinks.length,
-          );
+          final next = (selectedBacklink + 1) % backlinks.length;
+          setState(() {
+            _selectedBacklinkIndex = next;
+            _backlinkSelectionPolicy = _selectionPolicy(
+              previous: selectedBacklink,
+              next: next,
+            );
+          });
           return KeyEventResult.handled;
         case LogicalKeyboardKey.arrowUp:
-          setState(
-            () => _selectedBacklinkIndex =
-                (selectedBacklink - 1 + backlinks.length) % backlinks.length,
-          );
+          final next =
+              (selectedBacklink - 1 + backlinks.length) % backlinks.length;
+          setState(() {
+            _selectedBacklinkIndex = next;
+            _backlinkSelectionPolicy = _selectionPolicy(
+              previous: selectedBacklink,
+              next: next,
+            );
+          });
           return KeyEventResult.handled;
         case LogicalKeyboardKey.enter || LogicalKeyboardKey.numpadEnter:
           _select(backlinks[selectedBacklink]);
@@ -101,13 +122,24 @@ class _NoteNavigationPanelState extends ConsumerState<NoteNavigationPanel> {
     final selectedIndex = _selectedIndex.clamp(0, hits.length - 1);
     switch (event.logicalKey) {
       case LogicalKeyboardKey.arrowDown:
-        setState(() => _selectedIndex = (selectedIndex + 1) % hits.length);
+        final next = (selectedIndex + 1) % hits.length;
+        setState(() {
+          _selectedIndex = next;
+          _titleSelectionPolicy = _selectionPolicy(
+            previous: selectedIndex,
+            next: next,
+          );
+        });
         return KeyEventResult.handled;
       case LogicalKeyboardKey.arrowUp:
-        setState(
-          () =>
-              _selectedIndex = (selectedIndex - 1 + hits.length) % hits.length,
-        );
+        final next = (selectedIndex - 1 + hits.length) % hits.length;
+        setState(() {
+          _selectedIndex = next;
+          _titleSelectionPolicy = _selectionPolicy(
+            previous: selectedIndex,
+            next: next,
+          );
+        });
         return KeyEventResult.handled;
       case LogicalKeyboardKey.enter || LogicalKeyboardKey.numpadEnter:
         _select(hits[selectedIndex]);
@@ -116,6 +148,13 @@ class _NoteNavigationPanelState extends ConsumerState<NoteNavigationPanel> {
         return KeyEventResult.ignored;
     }
   }
+
+  ScrollPositionAlignmentPolicy _selectionPolicy({
+    required int previous,
+    required int next,
+  }) => next > previous
+      ? ScrollPositionAlignmentPolicy.keepVisibleAtEnd
+      : ScrollPositionAlignmentPolicy.keepVisibleAtStart;
 
   @override
   Widget build(BuildContext context) {
@@ -130,6 +169,15 @@ class _NoteNavigationPanelState extends ConsumerState<NoteNavigationPanel> {
         : ref.watch(backlinksProvider(activeNoteId));
     final titleHits = titleResults.value ?? const <NoteMetadata>[];
     final backlinkHits = backlinks.value ?? const <NoteMetadata>[];
+    if (_backlinkScopeId != activeNoteId) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _backlinkScopeId == activeNoteId) return;
+        setState(() {
+          _backlinkScopeId = activeNoteId;
+          _selectedBacklinkIndex = null;
+        });
+      });
+    }
     final selectedIndex = _selectedIndex.clamp(
       0,
       titleHits.isEmpty ? 0 : titleHits.length - 1,
@@ -193,6 +241,7 @@ class _NoteNavigationPanelState extends ConsumerState<NoteNavigationPanel> {
                   query: _query,
                   results: titleResults,
                   selectedIndex: selectedIndex,
+                  selectionPolicy: _titleSelectionPolicy,
                   onSelect: _select,
                   onRetry: () =>
                       ref.invalidate(titleJumpResultsProvider(request)),
@@ -211,6 +260,7 @@ class _NoteNavigationPanelState extends ConsumerState<NoteNavigationPanel> {
                   _BacklinkResults(
                     results: backlinks,
                     selectedIndex: _selectedBacklinkIndex,
+                    selectionPolicy: _backlinkSelectionPolicy,
                     onSelect: _select,
                     onRetry: () =>
                         ref.invalidate(backlinksProvider(activeNoteId)),
@@ -230,6 +280,7 @@ class _TitleResults extends StatelessWidget {
     required this.query,
     required this.results,
     required this.selectedIndex,
+    required this.selectionPolicy,
     required this.onSelect,
     required this.onRetry,
   });
@@ -237,6 +288,7 @@ class _TitleResults extends StatelessWidget {
   final String query;
   final AsyncValue<List<NoteMetadata>> results;
   final int selectedIndex;
+  final ScrollPositionAlignmentPolicy selectionPolicy;
   final ValueChanged<NoteMetadata> onSelect;
   final VoidCallback onRetry;
 
@@ -269,8 +321,10 @@ class _TitleResults extends StatelessWidget {
           children: [
             for (var index = 0; index < hits.length; index++)
               _NavigationResultRow(
+                key: ValueKey('note-navigation-title-${hits[index].id}'),
                 note: hits[index],
                 selected: index == selectedIndex,
+                selectionPolicy: selectionPolicy,
                 onSelect: () => onSelect(hits[index]),
               ),
           ],
@@ -284,12 +338,14 @@ class _BacklinkResults extends StatelessWidget {
   const _BacklinkResults({
     required this.results,
     required this.selectedIndex,
+    required this.selectionPolicy,
     required this.onSelect,
     required this.onRetry,
   });
 
   final AsyncValue<List<NoteMetadata>> results;
   final int? selectedIndex;
+  final ScrollPositionAlignmentPolicy selectionPolicy;
   final ValueChanged<NoteMetadata> onSelect;
   final VoidCallback onRetry;
 
@@ -324,6 +380,7 @@ class _BacklinkResults extends StatelessWidget {
                     ),
                     note: notes[index],
                     selected: index == selectedIndex,
+                    selectionPolicy: selectionPolicy,
                     onSelect: () => onSelect(notes[index]),
                   ),
               ],
@@ -332,17 +389,45 @@ class _BacklinkResults extends StatelessWidget {
   }
 }
 
-class _NavigationResultRow extends StatelessWidget {
+class _NavigationResultRow extends StatefulWidget {
   const _NavigationResultRow({
     super.key,
     required this.note,
     this.selected = false,
+    required this.selectionPolicy,
     required this.onSelect,
   });
 
   final NoteMetadata note;
   final bool selected;
+  final ScrollPositionAlignmentPolicy selectionPolicy;
   final VoidCallback onSelect;
+
+  @override
+  State<_NavigationResultRow> createState() => _NavigationResultRowState();
+}
+
+class _NavigationResultRowState extends State<_NavigationResultRow> {
+  @override
+  void didUpdateWidget(covariant _NavigationResultRow oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!oldWidget.selected && widget.selected) _keepSelectedRowVisible();
+  }
+
+  void _keepSelectedRowVisible() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !widget.selected) return;
+      // This changes only the enclosing scroll position. In particular, it
+      // does not focus a result row and so leaves the search field ready for
+      // uninterrupted typing.
+      unawaited(
+        Scrollable.ensureVisible(
+          context,
+          alignmentPolicy: widget.selectionPolicy,
+        ),
+      );
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -355,18 +440,18 @@ class _NavigationResultRow extends StatelessWidget {
       actions: {
         ActivateIntent: CallbackAction<ActivateIntent>(
           onInvoke: (_) {
-            onSelect();
+            widget.onSelect();
             return null;
           },
         ),
       },
       child: ListTile(
-        selected: selected,
+        selected: widget.selected,
         selectedTileColor: colors.surface,
         dense: true,
-        title: Text(note.title, overflow: TextOverflow.ellipsis),
-        subtitle: Text(note.path, overflow: TextOverflow.ellipsis),
-        onTap: onSelect,
+        title: Text(widget.note.title, overflow: TextOverflow.ellipsis),
+        subtitle: Text(widget.note.path, overflow: TextOverflow.ellipsis),
+        onTap: widget.onSelect,
       ),
     );
   }

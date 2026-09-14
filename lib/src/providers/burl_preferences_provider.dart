@@ -180,6 +180,7 @@ class BurlPreferencesController extends Notifier<BurlPreferences> {
   late final Future<void> _restoration;
   Future<void> _writes = Future.value();
   final _locallyChanged = <_PreferenceField>{};
+  var _hasFailedWrite = false;
 
   @override
   BurlPreferences build() {
@@ -213,15 +214,26 @@ class BurlPreferencesController extends Notifier<BurlPreferences> {
   /// shutdown use this method to surface any unresolved failure explicitly.
   Future<void> flushPendingWrites() async {
     await _restoration;
+    await _drainWrites();
+    if (_hasFailedWrite) {
+      // A failed setter is acknowledged by its caller without throwing. Give
+      // transient storage failures one exit-time retry, through the same tail.
+      // A further failure stays visible; this deliberately does not loop.
+      _enqueuePersistence();
+      await _drainWrites();
+    }
+    final failure = ref.read(preferencesPersistenceFailureProvider);
+    if (failure != null) throw failure;
+  }
+
+  Future<void> _drainWrites() async {
     while (true) {
       final writes = _writes;
       await writes;
       // Setters replace the tail synchronously, including while this await is
       // pending. Keep draining until no later admitted write remains.
-      if (identical(writes, _writes)) break;
+      if (identical(writes, _writes)) return;
     }
-    final failure = ref.read(preferencesPersistenceFailureProvider);
-    if (failure != null) throw failure;
   }
 
   Future<void> _restore() async {
@@ -257,6 +269,11 @@ class BurlPreferencesController extends Notifier<BurlPreferences> {
   ) {
     _locallyChanged.add(changedField);
     state = preferences;
+    _enqueuePersistence();
+    return _writes;
+  }
+
+  void _enqueuePersistence() {
     _writes = _writes.then(
       (_) async {
         await _restoration;
@@ -267,14 +284,15 @@ class BurlPreferencesController extends Notifier<BurlPreferences> {
         await _persist(state);
       },
     );
-    return _writes;
   }
 
   Future<void> _persist(BurlPreferences preferences) async {
     try {
       await _store.save(preferences);
+      _hasFailedWrite = false;
       _clearPersistenceFailure();
     } catch (error) {
+      _hasFailedWrite = true;
       _reportPersistenceFailure(error);
     }
   }
