@@ -197,7 +197,7 @@ tickets:
     flows:
       - flow-desktop-session
     certainty: assumed
-    status: planned
+    status: done
   - id: BURL-G003
     title: Persist versioned per-Workspace session snapshots
     type: Feature

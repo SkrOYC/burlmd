@@ -212,6 +212,13 @@ class AppLocalizationsEn extends AppLocalizations {
       'Dim non-active blocks while editing';
 
   @override
+  String get workspaceUpdateNotifications => 'Update notifications';
+
+  @override
+  String get workspaceUpdateNotificationsDescription =>
+      'Check for compatible updates';
+
+  @override
   String get workspaceDone => 'Done';
 
   @override
