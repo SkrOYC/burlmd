@@ -1,4 +1,18 @@
 entries:
+  - version: v3.2.15
+    date: 2026-09-13
+    changed:
+      - "Retained BURL-M015 as planned after the fresh exact gate exposed a shorter-retry failure at repetition 46 of 100. The bounded correction adds only the missing final timer-quiescence observation in the named fixture and reruns the unchanged exact gate. It starts on `fix/epic-m-linux-test-teardown` from reviewed merged `master`, requires fresh proof and review, and preserves the two-fixture, no-production-change boundary."
+      - "Deferred BURL-M003 to the supported-release qualification route. Epic M no longer claims CAP-076, and neither an earlier implementation nor local checks complete the ticket."
+      - "Authorized BURL-G001 through BURL-G005 and BURL-G007 for private Linux use after M closes. G001 owns the private Sway visual harness and smoke-child PID protocol. The remaining active G tickets quote the private Linux commands from the guidelines and depend on G001. Selective replay may use primary G commit `2fb9eb2a5e27b5b07f5491b7c6f752b4572c2727` only for in-scope application and test changes."
+      - "Deferred BURL-G006, BURL-G008, BURL-G009, BURL-G010, and BURL-G011 to their explicit adoption, canonical-AST, final-history-contract, or full managed supported-release routes. BURL-G011 remains a supported-release gate."
+      - "Changed the direct graph edge to EPIC-M → EPIC-G → EPIC-H because G and H overlap on Workspace, FFI, component, and test paths. This serializes the authorized private G work before H without asserting that H is complete or removing H from any deferred route. Other epic dependencies remain unchanged."
+      - "Completed epics A through F still lack actuals blocks. Observed diff-lines-per-point and review-rounds-per-point ratios remain unavailable, so this bounded adaptation preserves estimates."
+    upstream:
+      prd: v2.0.6
+      architecture: v2.1.2
+      tech-spec: v2.2.0
+    by: stage
   - version: v3.2.14
     date: 2026-09-13
     fixed:

@@ -1,8 +1,7 @@
 id: M
 name: CI bootstrap
 kind: tooling
-capabilities:
-  - CAP-076
+capabilities: []
 depends_on: []
 scope:
   paths:
@@ -56,8 +55,10 @@ tickets:
         preserve complete NoteState equality at the required observation points,
         and their post-publication timers become quiescent deterministically
     stop_conditions:
-      - STOP if this ticket isn't running as the first reviewed milestone on
-        `chore/epic-m-ci-foundation` from merged `master`.
+      - STOP if this correction isn't the first reviewed milestone on
+        `fix/epic-m-linux-test-teardown` from the reviewed merged `master` tip.
+        The earlier `chore/epic-m-ci-foundation` execution and its reported pass
+        are historical evidence, not current acceptance.
       - STOP if work expands beyond
         `a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success`
         and
@@ -66,7 +67,8 @@ tickets:
       - STOP if fixed sleeps or wall-clock coincidence replace observation of
         deterministic settlement; bounded predicate polling remains permitted.
       - STOP if work skips an assertion, weakens complete NoteState equality,
-        hides an ordering failure, or changes production semantics; don't
+        hides an ordering failure, changes production semantics, or changes a
+        file outside the two named fixtures and `scripts/repeat-test.sh`; don't
         improvise.
     description: Make exactly the two named persistence regression fixtures
       deterministic. Preserve authoritative-success behavior in
@@ -77,8 +79,9 @@ tickets:
       NoteState equality for both draft-refusal paths in
       `an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries`
       and observe timer quiescence after the longer retry's draft row clears and
-      before capturing `state_before_shorter`, without changing production
-      semantics
+      before capturing `state_before_shorter`. Add the missing bounded final
+      timer-quiescence observation after the shorter retry. The correction is
+      test-only and must not change production semantics
     acceptance:
       mode: stat_threshold
       constraints:
@@ -97,11 +100,16 @@ tickets:
         timestamp advance, and observes final timer quiescence. The second
         fixture preserves complete NoteState equality for both longer and shorter
         draft-refusal paths. It observes timer quiescence after the longer retry's
-        draft row clears and before capturing `state_before_shorter`. Both
-        fixtures use bounded predicate polling for settlement observations.
+        draft row clears and before capturing `state_before_shorter`, then
+        observes final timer quiescence after the shorter retry. The fresh exact
+        gate failed at shorter-retry repetition 46 of 100 after an OK summary.
+        The added final observation must detect a post-return timer that remains
+        non-quiescent. Both fixtures use
+        bounded predicate polling for settlement observations.
         Neither fixture substitutes fixed sleeps or wall-clock coincidence for
         observed settlement, skips an assertion, or changes production semantics.
-        The milestone receives one full review before `BURL-M003` begins."
+        The correction receives fresh exact-gate proof and one full review before
+        any later work."
     flows:
       - flow-edit-note
     certainty: assumed
@@ -1156,4 +1164,9 @@ tickets:
     flows:
       - flow-release
     certainty: assumed
-    status: planned
+    status: deferred
+    deferred_to: Future supported-release qualification after the bounded M015
+      correction, a reviewed implementation on its own fresh branch from merged
+      master, and a separate reviewed evidence-only pull request. Do not infer
+      CAP-076 or ticket completion from the earlier implementation or local
+      checks.
