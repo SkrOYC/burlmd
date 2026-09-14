@@ -718,3 +718,143 @@ tickets:
       CAP-043, and CAP-044, after BURL-M003 completes through its reviewed
       implementation and evidence-only pull request and the later platform and
       release prerequisites are satisfied.
+closeout:
+  tickets_completed:
+    - BURL-G001
+    - BURL-G002
+    - BURL-G003
+    - BURL-G004
+    - BURL-G005
+    - BURL-G007
+  tickets_deferred:
+    - id: BURL-G006
+      route: Future Workspace adoption work after Epic H, as recorded in deferred_to.
+      reason: Canonical Workspace authority, preflight, and adoption remain upstream
+        prerequisites. G005 supplies the serialized-close prerequisite only.
+    - id: BURL-G008
+      route: Future undo and redo work after Epic H's canonical AST and command stack.
+      reason: The private Linux session work does not establish the canonical
+        editing authority required for undo and redo.
+    - id: BURL-G009
+      route: Future find and replace work after BURL-G008.
+      reason: Undoable replacement depends on the deferred editing-command work.
+    - id: BURL-G010
+      route: Future history work after the final Stage 3 history contract and
+        canonical Workspace authority are settled.
+      reason: The private Linux milestone does not qualify history restoration.
+    - id: BURL-G011
+      route: Future feature-complete shell and managed supported-release qualification.
+      reason: Deferred local features, BURL-M003, and platform and release
+        prerequisites remain incomplete. Private headless smoke is not a substitute.
+  points_completed: 34
+  spec_patches: []
+  changelog_entries:
+    - directory: tasks
+      type: changed
+      text: Close Epic G's approved private Linux scope with BURL-G001 through
+        BURL-G005 and BURL-G007 complete, totaling 34 points. Preserve the five
+        explicit dependency and release deferrals without claiming their acceptance.
+    - directory: tasks
+      type: added
+      text: Deliver host-owned chrome, device-global preferences, validated
+        Workspace session hints, Core-backed tabs, serialized close and native
+        exit handling, and keyboard title-prefix and backlink navigation.
+    - directory: tasks
+      type: fixed
+      text: Preserve unread and unsupported durable state, fence stale restores,
+        retain live Core identities after refused cleanup, surface Core errors,
+        and verify close outcomes with a finite 108-scenario batch matrix and
+        post-failure writes. The separately reviewed Stage 3 Evolution commit
+        a88e1f6 established the G001-only visual-reference policy before code;
+        it is not an execution spec patch.
+  candidate_terms: []
+  routed_upstream:
+    - stage: tasks
+      item: The user will restructure the future roadmap after M and G close.
+        Retain the five G deferral routes and dormant BURL-M003 as inputs;
+        do not automatically start Epic H or expand this private Linux milestone.
+  follow_ups:
+    - G001 visual proof remains bound to immutable source 4ea6139 and its
+      manifest-backed reference. Later G milestones intentionally change the
+      UI and use private smoke captures, not a replacement G001 baseline.
+    - Full platform, packaging, performance, and supported-release qualification
+      remain deferred. Reconciliation of command availability is not evidence
+      that deferred commands or tickets were executed successfully.
+    - The whole FFI contract and desktop-session flow remain assumed where
+      they include work beyond these tests, including deferred Workspace adoption.
+  settled:
+    - record: prd/capabilities.yaml#CAP-023
+      evidence:
+        kind: repository
+        ref: test/providers/burl_preferences_provider_test.dart
+        date: 2026-09-14
+        note: Private Linux tests recreate both controller and storage across
+          restart and verify all device preferences stay outside Workspace and Git.
+    - record: prd/capabilities.yaml#CAP-024
+      evidence:
+        kind: repository
+        ref: test/screens/workspace_mounting_test.dart
+        date: 2026-09-14
+        note: Mounted tab, middle-click, shortcut, batch-menu, and native-exit
+          tests exercise Core close completion before presentation retirement;
+          provider invariants cover the terminal result combinations.
+    - record: prd/capabilities.yaml#CAP-026
+      evidence:
+        kind: measurement
+        ref: .constitution/evidence/BURL-G001
+        date: 2026-09-14
+        note: Two immutable-source private Linux comparisons establish the
+          approved host-owned-chrome reference; shared UI tests remove emulation.
+          This does not qualify other platforms or a supported release.
+    - record: prd/capabilities.yaml#CAP-027
+      evidence:
+        kind: repository
+        ref: test/providers/note_providers_test.dart
+        date: 2026-09-14
+        note: Finite terminal-prefix matrix and delayed-call tests verify ordered,
+          non-overlapping batches stop on warning or refusal.
+    - record: prd/capabilities.yaml#CAP-028
+      evidence:
+        kind: repository
+        ref: test/providers/note_providers_test.dart
+        date: 2026-09-14
+        note: Warning cases retire the affected session, permit standalone
+          replacement, and cancel wider-operation prerequisites with survivors intact.
+    - record: prd/capabilities.yaml#CAP-029
+      evidence:
+        kind: repository
+        ref: test/providers/note_providers_test.dart
+        date: 2026-09-14
+        note: Refusal cases retain failed and unprocessed sessions and exercise
+          actual updateBlock calls after reactivation; mounted native-exit tests
+          verify cancellation rather than only a callback result.
+    - record: prd/capabilities.yaml#CAP-030
+      evidence:
+        kind: repository
+        ref: test/screens/workspace_mounting_test.dart
+        date: 2026-09-14
+        note: Core-backed tab restoration and active-close tests exercise
+          following-then-preceding selection in the mounted shell.
+    - record: prd/capabilities.yaml#CAP-033
+      evidence:
+        kind: repository
+        ref: test/screens/workspace_mounting_test.dart
+        date: 2026-09-14
+        note: Ctrl+P and keyboard result activation call Core title-prefix search
+          and open an authoritative tab. Prefix behavior follows the existing
+          Stage 3 contract; no substring or new indexing claim is made.
+    - record: prd/capabilities.yaml#CAP-035
+      evidence:
+        kind: repository
+        ref: test/screens/workspace_mounting_test.dart
+        date: 2026-09-14
+        note: Mounted keyboard navigation requests Core backlinks for the active
+          Note and opens a returned target as a Core-backed tab.
+    - record: tech-spec/data-models/workspace-session-snapshot.schema.meta.yaml
+      evidence:
+        kind: repository
+        ref: rust/src/workspace/session_snapshot.rs
+        date: 2026-09-14
+        note: Schema-artifact assertions, semantic fixtures, atomic round trips,
+          Workspace partitioning, and byte-preserving refusal and quarantine
+          regressions exercise the v1 snapshot contract.
