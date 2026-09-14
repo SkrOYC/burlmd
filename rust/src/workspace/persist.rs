@@ -5469,6 +5469,13 @@ mod tests {
             wait_until(Duration::from_millis(300), || f.draft("a").is_none()),
             "tier 2 did not clear the shorter retry's draft row"
         );
+        assert!(
+            wait_until(Duration::from_secs(3), || {
+                let timer = session.0.timer.state.lock().unwrap();
+                !timer.running && timer.deadline.is_none()
+            }),
+            "the shorter retry timer did not finish before the fixture was dropped"
+        );
     }
 
     /// The regression ADR-008 decision 2 exists to make unrepresentable: a
