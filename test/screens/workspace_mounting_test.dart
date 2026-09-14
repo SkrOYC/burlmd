@@ -664,6 +664,60 @@ void main() {
     },
   );
 
+  testWidgets(
+    'search and title-jump palettes replace each other before Escape dismisses',
+    (tester) async {
+      final api = _MountingRustApi([_treeNode('a', 'Alpha')]);
+      await _pumpShell(tester, api);
+
+      Future<void> sendPrimary(LogicalKeyboardKey key) async {
+        await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+        await tester.sendKeyEvent(key);
+        await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+        await tester.pumpAndSettle();
+      }
+
+      await sendPrimary(LogicalKeyboardKey.keyK);
+      await sendPrimary(LogicalKeyboardKey.keyP);
+      expect(find.byKey(const ValueKey('search-palette')), findsNothing);
+      expect(
+        find.byKey(const ValueKey('note-navigation-palette')),
+        findsOneWidget,
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('search-palette')), findsNothing);
+      expect(
+        find.byKey(const ValueKey('note-navigation-palette')),
+        findsNothing,
+      );
+
+      await sendPrimary(LogicalKeyboardKey.keyP);
+      await sendPrimary(LogicalKeyboardKey.keyK);
+      expect(find.byKey(const ValueKey('search-palette')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('note-navigation-palette')),
+        findsNothing,
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('search-palette')), findsNothing);
+
+      await tester.tap(find.byKey(const Key('shell-search')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('search-palette')), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('shell-title-jump')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('search-palette')), findsNothing);
+      expect(
+        find.byKey(const ValueKey('note-navigation-palette')),
+        findsOneWidget,
+      );
+    },
+  );
+
   testWidgets('keyboard title and backlink navigation open Core-backed tabs', (
     tester,
   ) async {

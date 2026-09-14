@@ -6,6 +6,7 @@ import 'package:burlmd/src/providers/note_providers.dart';
 import 'package:burlmd/src/providers/rust_api_provider.dart';
 import 'package:burlmd/src/providers/workspace_provider.dart';
 import 'package:burlmd/src/rust/draft.dart';
+import 'package:burlmd/src/rust/error.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -166,19 +167,63 @@ void main() {
     expect(api.titleCalls, isEmpty);
   });
 
-  testWidgets('a Core failure is visible instead of being rendered as empty', (
-    tester,
-  ) async {
-    final api = _NavigationRustApi()..titleError = StateError('index offline');
-    await _pumpPanel(tester, api);
+  testWidgets(
+    'a retrying Core title failure stays visible and its keyboard retry recovers',
+    (tester) async {
+      final api = _NavigationRustApi(
+        titleResults: {
+          'Pro': [_note('project-plan', 'Project plan')],
+        },
+      )..titleError = AppError.databaseError('title index offline');
+      await _pumpPanel(tester, api);
 
-    await tester.enterText(find.byType(TextField), 'Pro');
-    await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'Pro');
+      await tester.pump();
+      await tester.pump();
 
-    expect(find.text('Could not load notes'), findsOneWidget);
-    expect(find.textContaining('index offline'), findsOneWidget);
-    expect(find.text('No notes match this title'), findsNothing);
-  });
+      expect(find.text('Could not load notes'), findsOneWidget);
+      expect(find.textContaining('title index offline'), findsOneWidget);
+      expect(find.text('No notes match this title'), findsNothing);
+
+      api.titleError = null;
+      final retry = find.byKey(const ValueKey('note-navigation-title-retry'));
+      await tester.ensureVisible(retry);
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Project plan'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'a retrying Core backlink failure stays visible and its keyboard retry recovers',
+    (tester) async {
+      final api = _NavigationRustApi(
+        backlinkResults: {
+          'open-note': [_note('inbound-note', 'Inbound note')],
+        },
+      )..backlinkError = AppError.databaseError('backlink index offline');
+      await _pumpPanel(tester, api, backlinksForNoteId: 'open-note');
+
+      await tester.pump();
+
+      expect(find.text('Could not load notes'), findsOneWidget);
+      expect(find.textContaining('backlink index offline'), findsOneWidget);
+      expect(find.text('No notes link here'), findsNothing);
+
+      api.backlinkError = null;
+      final retry = find.byKey(
+        const ValueKey('note-navigation-backlinks-retry'),
+      );
+      await tester.ensureVisible(retry);
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Inbound note'), findsOneWidget);
+    },
+  );
 
   testWidgets('a completed earlier prefix never replaces the latest response', (
     tester,

@@ -125,9 +125,8 @@ class _NoteNavigationPanelState extends ConsumerState<NoteNavigationPanel> {
   Widget build(BuildContext context) {
     final colors = context.burlColors;
     final l10n = AppLocalizations.of(context)!;
-    final titleResults = ref.watch(
-      titleJumpResultsProvider((query: _query, limit: widget.titleResultLimit)),
-    );
+    final request = (query: _query, limit: widget.titleResultLimit);
+    final titleResults = ref.watch(titleJumpResultsProvider(request));
     final activeNoteId =
         widget.backlinksForNoteId ?? ref.watch(activeNoteProvider)?.metadata.id;
     final backlinks = activeNoteId == null
@@ -199,6 +198,8 @@ class _NoteNavigationPanelState extends ConsumerState<NoteNavigationPanel> {
                   results: titleResults,
                   selectedIndex: selectedIndex,
                   onSelect: _select,
+                  onRetry: () =>
+                      ref.invalidate(titleJumpResultsProvider(request)),
                 ),
                 if (activeNoteId != null) ...[
                   const SizedBox(height: 16),
@@ -215,6 +216,8 @@ class _NoteNavigationPanelState extends ConsumerState<NoteNavigationPanel> {
                     results: backlinks,
                     selectedIndex: _selectedBacklinkIndex,
                     onSelect: _select,
+                    onRetry: () =>
+                        ref.invalidate(backlinksProvider(activeNoteId)),
                   ),
                 ],
               ],
@@ -232,22 +235,35 @@ class _TitleResults extends StatelessWidget {
     required this.results,
     required this.selectedIndex,
     required this.onSelect,
+    required this.onRetry,
   });
 
   final String query;
   final AsyncValue<List<NoteMetadata>> results;
   final int selectedIndex;
   final ValueChanged<NoteMetadata> onSelect;
+  final VoidCallback onRetry;
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    if (results.hasError && results.value == null) {
+      return _NavigationFailure(
+        error: results.error!,
+        onRetry: onRetry,
+        retryKey: const ValueKey('note-navigation-title-retry'),
+      );
+    }
     return results.when(
       loading: () => const Padding(
         padding: EdgeInsets.all(16),
         child: Center(child: CircularProgressIndicator()),
       ),
-      error: (error, _) => _NavigationFailure(error: error),
+      error: (error, _) => _NavigationFailure(
+        error: error,
+        onRetry: onRetry,
+        retryKey: const ValueKey('note-navigation-title-retry'),
+      ),
       data: (hits) {
         if (query.isEmpty) {
           return _NavigationEmpty(l10n.noteNavigationTypePrompt);
@@ -273,21 +289,34 @@ class _BacklinkResults extends StatelessWidget {
     required this.results,
     required this.selectedIndex,
     required this.onSelect,
+    required this.onRetry,
   });
 
   final AsyncValue<List<NoteMetadata>> results;
   final int? selectedIndex;
   final ValueChanged<NoteMetadata> onSelect;
+  final VoidCallback onRetry;
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    if (results.hasError && results.value == null) {
+      return _NavigationFailure(
+        error: results.error!,
+        onRetry: onRetry,
+        retryKey: const ValueKey('note-navigation-backlinks-retry'),
+      );
+    }
     return results.when(
       loading: () => const Padding(
         padding: EdgeInsets.all(16),
         child: Center(child: CircularProgressIndicator()),
       ),
-      error: (error, _) => _NavigationFailure(error: error),
+      error: (error, _) => _NavigationFailure(
+        error: error,
+        onRetry: onRetry,
+        retryKey: const ValueKey('note-navigation-backlinks-retry'),
+      ),
       data: (notes) => notes.isEmpty
           ? _NavigationEmpty(l10n.noteNavigationNoBacklinks)
           : Column(
@@ -364,9 +393,15 @@ class _NavigationEmpty extends StatelessWidget {
 }
 
 class _NavigationFailure extends StatelessWidget {
-  const _NavigationFailure({required this.error});
+  const _NavigationFailure({
+    required this.error,
+    required this.onRetry,
+    required this.retryKey,
+  });
 
   final Object error;
+  final VoidCallback onRetry;
+  final Key retryKey;
 
   @override
   Widget build(BuildContext context) {
@@ -379,6 +414,13 @@ class _NavigationFailure extends StatelessWidget {
           Text(
             l10n.noteNavigationFailed,
             style: TextStyle(color: colors.syncError, fontSize: 12),
+          ),
+          const SizedBox(height: 8),
+          TextButton.icon(
+            key: retryKey,
+            onPressed: onRetry,
+            icon: const Icon(LucideIcons.refresh_cw, size: 15),
+            label: Text(l10n.treeRetry),
           ),
           const SizedBox(height: 4),
           Text(
