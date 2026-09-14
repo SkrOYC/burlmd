@@ -90,10 +90,12 @@ tickets:
         other than the smoke child PID written through the owned inherited file
         descriptor. Verify that child's Sway geometry twice across a compositor
         tick before capture.
-      - STOP if replay becomes a wholesale merge of primary G commit
-        `2fb9eb2a5e27b5b07f5491b7c6f752b4572c2727`, changes `.constitution`,
-        managed CI, or `.envrc`, or deletes unrelated files. Selectively replay
-        only the harness, application, and test changes within this ticket.
+      - STOP if replay treats source-tree snapshot
+        `2fb9eb2a5e27b5b07f5491b7c6f752b4572c2727` as a cherry-pickable commit.
+        Its sole delta deletes `.envrc`; don't replay that deletion. Reproduce
+        this ticket from the verified source commits in the Tasks changelog and
+        apply only its in-scope harness, application, and test changes. Don't
+        change `.constitution`, managed CI, `.envrc`, or unrelated files.
     description: Remove the Platform-chrome preference, state, widgets, localized
       copy, fixtures, tests, and executable visual assumptions introduced for
       prototype presentation. Preserve design provenance only in non-executable
@@ -113,14 +115,6 @@ tickets:
       - flow-desktop-session
     certainty: assumed
     status: planned
-    deviations:
-      - files:
-          - README.md
-          - .constitution/tech-spec/stack.yaml
-          - .constitution/tech-spec/data-models/schema.sql
-        justification: Review found restated production-stop and version banners outside
-          the original M0 file list. Those copies would instruct executors to
-          stop the authorized Epic G tickets.
   - id: BURL-G002
     title: Persist device-global preferences
     type: Feature
