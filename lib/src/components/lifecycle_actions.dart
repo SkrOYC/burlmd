@@ -638,6 +638,15 @@ class LifecycleActions {
     )) {
       return;
     }
+    Object? firstRefreshError;
+    StackTrace? firstRefreshStackTrace;
+
+    void rememberRefreshFailure(Object error, StackTrace stackTrace) {
+      if (firstRefreshError != null) return;
+      firstRefreshError = error;
+      firstRefreshStackTrace = stackTrace;
+    }
+
     final activeId = _ref.read(activeNoteProvider)?.metadata.id;
 
     if (returnedState != null &&
@@ -690,17 +699,49 @@ class LifecycleActions {
       final anchoredId = activeId ?? operation.selectedId;
       for (final remap in effects.remapped) {
         if (remap.oldId != anchoredId) continue;
-        final reanchored = await _openForExpectedSession(
-          operation,
-          expectedActive: operation.active,
-          expectedSelectedId: operation.selectedId,
-          noteId: remap.newId,
-        );
-        if (reanchored == null) return;
-        _adoptRekeyedState(operation, oldId: remap.oldId, newState: reanchored);
-        _ref
-            .read(selectedNoteIdProvider.notifier)
-            .selectForLifecycle(remap.newId);
+        try {
+          final reanchored = await _openForExpectedSession(
+            operation,
+            expectedActive: operation.active,
+            expectedSelectedId: operation.selectedId,
+            noteId: remap.newId,
+          );
+          if (reanchored == null) return;
+          _adoptRekeyedState(
+            operation,
+            oldId: remap.oldId,
+            newState: reanchored,
+          );
+          _ref
+              .read(selectedNoteIdProvider.notifier)
+              .selectForLifecycle(remap.newId);
+        } catch (error, stackTrace) {
+          // Core already moved the active session. Its old projection is not
+          // a retryable buffer: retain the actual Core identity without a
+          // NoteState so a later close or explicit open can address it.
+          final expectedActive = operation.active;
+          if (expectedActive != null &&
+              expectedActive.metadata.id == remap.oldId &&
+              _isExpectedSession(
+                operation,
+                expectedActive,
+                operation.selectedId,
+              )) {
+            final revoked = _ref
+                .read(activeNoteProvider.notifier)
+                .retainUnpresentableActiveCoreSession(
+                  oldActiveId: remap.oldId,
+                  coreNoteId: remap.newId,
+                  expectedState: expectedActive,
+                );
+            if (revoked && _ref.read(selectedNoteIdProvider) == remap.oldId) {
+              _ref
+                  .read(selectedNoteIdProvider.notifier)
+                  .selectForLifecycle(remap.newId);
+            }
+          }
+          rememberRefreshFailure(error, stackTrace);
+        }
         break;
       }
     }
@@ -714,14 +755,30 @@ class LifecycleActions {
     if (openAfter != null && effects.rewritten.contains(openAfter)) {
       final expectedActive = _ref.read(activeNoteProvider);
       final expectedSelectedId = _ref.read(selectedNoteIdProvider);
-      final rewritten = await _openForExpectedSession(
-        operation,
-        expectedActive: expectedActive,
-        expectedSelectedId: expectedSelectedId,
-        noteId: openAfter,
-      );
-      if (rewritten == null) return;
-      _ref.read(activeNoteProvider.notifier).adopt(rewritten);
+      try {
+        final rewritten = await _openForExpectedSession(
+          operation,
+          expectedActive: expectedActive,
+          expectedSelectedId: expectedSelectedId,
+          noteId: openAfter,
+        );
+        if (rewritten == null) return;
+        _ref.read(activeNoteProvider.notifier).adopt(rewritten);
+      } catch (error, stackTrace) {
+        // A same-id rewrite invalidates the active bytes just as surely as a
+        // remap invalidates its old id. Do not let a released input gate turn
+        // this stale NoteState into Core's next update_block source.
+        if (_isExpectedSession(operation, expectedActive, expectedSelectedId)) {
+          _ref
+              .read(activeNoteProvider.notifier)
+              .retainUnpresentableActiveCoreSession(
+                oldActiveId: openAfter,
+                coreNoteId: openAfter,
+                expectedState: expectedActive!,
+              );
+        }
+        rememberRefreshFailure(error, stackTrace);
+      }
     }
 
     await _reconcileInactiveTabs(
@@ -729,7 +786,11 @@ class LifecycleActions {
       invokedNoteId: invokedNoteId,
       returnedState: returnedState,
       effects: effects,
+      rememberRefreshFailure: rememberRefreshFailure,
     );
+    if (firstRefreshError != null) {
+      Error.throwWithStackTrace(firstRefreshError!, firstRefreshStackTrace!);
+    }
   }
 
   /// Reconciles tabs the active-editor paths above did not touch. A tab is a
@@ -740,8 +801,11 @@ class LifecycleActions {
     required String? invokedNoteId,
     required NoteState? returnedState,
     required LifecycleEffects effects,
+    required void Function(Object error, StackTrace stackTrace)
+    rememberRefreshFailure,
   }) async {
     final tabs = _ref.read(activeNoteProvider.notifier);
+
     if (invokedNoteId != null && returnedState != null) {
       tabs.reconcileTabSession(oldNoteId: invokedNoteId, state: returnedState);
     }
@@ -764,7 +828,7 @@ class LifecycleActions {
         final opened = await _openCurrentTabSession(operation, remap.newId);
         if (opened == null) return;
         tabs.reconcileTabSession(oldNoteId: remap.oldId, state: opened);
-      } catch (_) {
+      } catch (error, stackTrace) {
         // Core has already moved this session. If its fresh state cannot be
         // fetched, the old Dart buffer must not remain selectable or writable.
         if (_isCurrentOperation(operation) &&
@@ -782,7 +846,7 @@ class LifecycleActions {
             );
           }
         }
-        rethrow;
+        rememberRefreshFailure(error, stackTrace);
       }
     }
 
@@ -796,7 +860,7 @@ class LifecycleActions {
         final opened = await _openCurrentTabSession(operation, noteId);
         if (opened == null) return;
         tabs.reconcileTabSession(oldNoteId: noteId, state: opened);
-      } catch (_) {
+      } catch (error, stackTrace) {
         // The same Core session remains live, but its cached bytes cannot be
         // selected until Core returns a fresh state.
         if (_isCurrentOperation(operation) &&
@@ -807,7 +871,7 @@ class LifecycleActions {
             expectedState: stale,
           );
         }
-        rethrow;
+        rememberRefreshFailure(error, stackTrace);
       }
     }
   }
@@ -988,6 +1052,18 @@ class LifecycleActions {
   /// case handled by [_discardRetiredTab].
   void _clearIfSelected(String noteId) {
     if (_ref.read(selectedNoteIdProvider) != noteId) return;
+    final active = _ref.read(activeNoteProvider);
+    if (active != null && active.metadata.id != noteId) {
+      // B's failed incoming tab open can leave it selected while A remains a
+      // valid Core-backed tab. Deleting B clears only that dead selection and
+      // its fatal open error; clearing the active controller here would orphan
+      // A's live Core session and discard its snapshot intent.
+      _ref.read(editorErrorProvider.notifier).report(null);
+      _ref
+          .read(selectedNoteIdProvider.notifier)
+          .selectForLifecycle(active.metadata.id);
+      return;
+    }
     // A prior incoming open can have closed the old session and then failed
     // before mounting this selected Note. Deletion makes that selection dead;
     // use the same presentation clear as the mounted-victim path so its fatal

@@ -1481,6 +1481,208 @@ void main() {
   });
 
   testWidgets(
+    'an inactive close settling before an active close keeps the active successor anchor',
+    (tester) async {
+      final closeA = Completer<void>();
+      final closeB = Completer<void>();
+      final api =
+          _MountingRustApi([
+              _treeNode('a', 'Alpha'),
+              _treeNode('x', 'Xray'),
+              _treeNode('b', 'Beta'),
+              _treeNode('c', 'Gamma'),
+            ])
+            ..snapshot = const ActiveWorkspaceSessionSnapshot(
+              openNoteIds: ['a', 'x', 'b', 'c'],
+              activeNoteId: 'b',
+              expandedDirectoryIds: [],
+              searchQuery: '',
+              syncPresentation: SessionSyncPresentation.local,
+            )
+            ..closeNoteGates['a'] = closeA
+            ..closeNoteGates['b'] = closeB;
+      final container = await _pumpShell(tester, api);
+
+      Future<void> middleClose(String noteId) async {
+        final gesture = await tester.startGesture(
+          tester.getCenter(find.byKey(Key('shell-tab-$noteId'))),
+          buttons: kMiddleMouseButton,
+        );
+        await gesture.up();
+      }
+
+      await middleClose('a');
+      await tester.pump();
+      await middleClose('b');
+      await tester.pump();
+      closeA.complete();
+      await tester.pump();
+      expect(api.calls.where((call) => call.startsWith('close:')), [
+        'close:a',
+        'close:b',
+      ]);
+      closeB.complete();
+      await tester.pumpAndSettle();
+
+      expect(container.read(activeNoteProvider)?.metadata.id, 'c');
+      expect(container.read(selectedNoteIdProvider), 'c');
+      expect(
+        container.read(activeNoteProvider.notifier).updateBlock([
+          0,
+        ], 'c is writable after queued close'),
+        isTrue,
+      );
+    },
+  );
+
+  testWidgets(
+    'an active close settling before an inactive close keeps its original successor',
+    (tester) async {
+      final closeB = Completer<void>();
+      final closeA = Completer<void>();
+      final api =
+          _MountingRustApi([
+              _treeNode('a', 'Alpha'),
+              _treeNode('x', 'Xray'),
+              _treeNode('b', 'Beta'),
+              _treeNode('c', 'Gamma'),
+            ])
+            ..snapshot = const ActiveWorkspaceSessionSnapshot(
+              openNoteIds: ['a', 'x', 'b', 'c'],
+              activeNoteId: 'b',
+              expandedDirectoryIds: [],
+              searchQuery: '',
+              syncPresentation: SessionSyncPresentation.local,
+            )
+            ..closeNoteGates['b'] = closeB
+            ..closeNoteGates['a'] = closeA;
+      final container = await _pumpShell(tester, api);
+
+      Future<void> middleClose(String noteId) async {
+        final gesture = await tester.startGesture(
+          tester.getCenter(find.byKey(Key('shell-tab-$noteId'))),
+          buttons: kMiddleMouseButton,
+        );
+        await gesture.up();
+      }
+
+      await middleClose('b');
+      await tester.pump();
+      await middleClose('a');
+      await tester.pump();
+      closeB.complete();
+      await tester.pump();
+      closeA.complete();
+      await tester.pumpAndSettle();
+
+      expect(container.read(activeNoteProvider)?.metadata.id, 'c');
+      expect(container.read(selectedNoteIdProvider), 'c');
+    },
+  );
+
+  testWidgets(
+    'a refused active close stays writable after an earlier inactive close',
+    (tester) async {
+      final closeA = Completer<void>();
+      final closeB = Completer<void>();
+      final api =
+          _MountingRustApi([
+              _treeNode('a', 'Alpha'),
+              _treeNode('x', 'Xray'),
+              _treeNode('b', 'Beta'),
+              _treeNode('c', 'Gamma'),
+            ])
+            ..snapshot = const ActiveWorkspaceSessionSnapshot(
+              openNoteIds: ['a', 'x', 'b', 'c'],
+              activeNoteId: 'b',
+              expandedDirectoryIds: [],
+              searchQuery: '',
+              syncPresentation: SessionSyncPresentation.local,
+            )
+            ..closeNoteGates['a'] = closeA
+            ..closeNoteGates['b'] = closeB
+            ..closeNoteErrors['b'] = StateError('b close refused');
+      final container = await _pumpShell(tester, api);
+
+      Future<void> middleClose(String noteId) async {
+        final gesture = await tester.startGesture(
+          tester.getCenter(find.byKey(Key('shell-tab-$noteId'))),
+          buttons: kMiddleMouseButton,
+        );
+        await gesture.up();
+      }
+
+      await middleClose('a');
+      await tester.pump();
+      await middleClose('b');
+      await tester.pump();
+      closeA.complete();
+      await tester.pump();
+      closeB.complete();
+      await tester.pumpAndSettle();
+
+      expect(container.read(activeNoteProvider)?.metadata.id, 'b');
+      expect(container.read(selectedNoteIdProvider), 'b');
+      expect(
+        container.read(activeNoteProvider.notifier).updateBlock([
+          0,
+        ], 'b remains writable after refusal'),
+        isTrue,
+      );
+    },
+  );
+
+  testWidgets('an active close skips its already-closed initial successor', (
+    tester,
+  ) async {
+    final closeC = Completer<void>();
+    final closeB = Completer<void>();
+    final api =
+        _MountingRustApi([
+            _treeNode('a', 'Alpha'),
+            _treeNode('x', 'Xray'),
+            _treeNode('b', 'Beta'),
+            _treeNode('c', 'Gamma'),
+          ])
+          ..snapshot = const ActiveWorkspaceSessionSnapshot(
+            openNoteIds: ['a', 'x', 'b', 'c'],
+            activeNoteId: 'b',
+            expandedDirectoryIds: [],
+            searchQuery: '',
+            syncPresentation: SessionSyncPresentation.local,
+          )
+          ..closeNoteGates['c'] = closeC
+          ..closeNoteGates['b'] = closeB;
+    final container = await _pumpShell(tester, api);
+
+    Future<void> middleClose(String noteId) async {
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byKey(Key('shell-tab-$noteId'))),
+        buttons: kMiddleMouseButton,
+      );
+      await gesture.up();
+    }
+
+    await middleClose('c');
+    await tester.pump();
+    await middleClose('b');
+    await tester.pump();
+    closeC.complete();
+    await tester.pump();
+    closeB.complete();
+    await tester.pumpAndSettle();
+
+    expect(container.read(activeNoteProvider)?.metadata.id, 'x');
+    expect(container.read(selectedNoteIdProvider), 'x');
+    expect(
+      container.read(activeNoteProvider.notifier).updateBlock([
+        0,
+      ], 'x stays writable after successor closes first'),
+      isTrue,
+    );
+  });
+
+  testWidgets(
     'a queued close skips an already-closed initial active successor',
     (tester) async {
       final closeA = Completer<void>();
@@ -1967,6 +2169,208 @@ void main() {
       expect(await tester.binding.handleRequestAppExit(), AppExitResponse.exit);
       expect(api.savedSnapshots.last.openNoteIds, ['a', 'b']);
       expect(api.savedSnapshots.last.activeNoteId, 'a');
+    },
+  );
+
+  testWidgets(
+    'the native exit callback preserves a gated startup restore snapshot',
+    (tester) async {
+      final restored = Completer<NoteState>();
+      final api = _MountingRustApi([_treeNode('a', 'Alpha')])
+        ..snapshot = const ActiveWorkspaceSessionSnapshot(
+          openNoteIds: ['a'],
+          activeNoteId: 'a',
+          expandedDirectoryIds: [],
+          searchQuery: '',
+          syncPresentation: SessionSyncPresentation.local,
+        )
+        ..openNoteGates['a'] = restored;
+      await _pumpShell(tester, api, settle: false);
+
+      await tester.pump();
+      await tester.pump();
+      expect(api.calls, ['open:a']);
+
+      final exiting = tester.binding.handleRequestAppExit();
+      await tester.pump();
+      restored.complete(
+        const NoteState(
+          ast: [],
+          metadata: NoteMetadata(
+            id: 'a',
+            path: 'a.md',
+            title: 'a',
+            lastModified: 0,
+            okfConformant: true,
+          ),
+          baseRevision: 'head',
+          restoredFromDraft: false,
+        ),
+      );
+
+      expect(await exiting, AppExitResponse.exit);
+      expect(api.calls, ['open:a', 'close:a']);
+      expect(api.savedSnapshots.last.openNoteIds, ['a']);
+      expect(api.savedSnapshots.last.activeNoteId, 'a');
+    },
+  );
+
+  testWidgets(
+    'a gated startup restore removes a missing identity before orderly exit',
+    (tester) async {
+      final restored = Completer<NoteState>();
+      final api = _MountingRustApi([_treeNode('a', 'Alpha')])
+        ..snapshot = const ActiveWorkspaceSessionSnapshot(
+          openNoteIds: ['missing', 'a'],
+          activeNoteId: 'a',
+          expandedDirectoryIds: [],
+          searchQuery: '',
+          syncPresentation: SessionSyncPresentation.local,
+        )
+        ..unavailableNoteIds.add('missing')
+        ..openNoteGates['a'] = restored;
+      await _pumpShell(tester, api, settle: false);
+
+      await tester.pump();
+      await tester.pump();
+      expect(api.calls, ['open:missing', 'open:a']);
+
+      final exiting = tester.binding.handleRequestAppExit();
+      await tester.pump();
+      restored.complete(
+        const NoteState(
+          ast: [],
+          metadata: NoteMetadata(
+            id: 'a',
+            path: 'a.md',
+            title: 'a',
+            lastModified: 0,
+            okfConformant: true,
+          ),
+          baseRevision: 'head',
+          restoredFromDraft: false,
+        ),
+      );
+
+      expect(await exiting, AppExitResponse.exit);
+      expect(api.savedSnapshots.last.openNoteIds, ['a']);
+      expect(api.savedSnapshots.last.activeNoteId, 'a');
+    },
+  );
+
+  testWidgets(
+    'a refused cleanup preserves already-restored Core tabs in snapshot order',
+    (tester) async {
+      final restored = Completer<NoteState>();
+      final api =
+          _MountingRustApi([_treeNode('kept', 'Kept'), _treeNode('a', 'Alpha')])
+            ..snapshot = const ActiveWorkspaceSessionSnapshot(
+              openNoteIds: ['kept', 'a'],
+              activeNoteId: 'a',
+              expandedDirectoryIds: [],
+              searchQuery: '',
+              syncPresentation: SessionSyncPresentation.local,
+            )
+            ..openNoteGates['a'] = restored
+            ..closeNoteErrors['a'] = StateError('close refused');
+      final container = await _pumpShell(tester, api, settle: false);
+
+      await tester.pump();
+      await tester.pump();
+      expect(api.calls, ['open:kept', 'open:a']);
+      final exiting = tester.binding.handleRequestAppExit();
+      await tester.pump();
+      restored.complete(
+        const NoteState(
+          ast: [],
+          metadata: NoteMetadata(
+            id: 'a',
+            path: 'a.md',
+            title: 'a',
+            lastModified: 0,
+            okfConformant: true,
+          ),
+          baseRevision: 'head',
+          restoredFromDraft: false,
+        ),
+      );
+
+      expect(await exiting, AppExitResponse.cancel);
+      expect(api.calls, ['open:kept', 'open:a', 'close:a']);
+      await tester.pump();
+      await tester.pump();
+      expect(container.read(activeNoteProvider)?.metadata.id, 'kept');
+      expect(
+        container
+            .read(openNoteSessionsProvider)
+            .map((note) => note.metadata.id),
+        ['kept', 'a'],
+      );
+      expect(container.read(workspaceSessionProvider).openNoteIds, [
+        'kept',
+        'a',
+      ]);
+      expect(find.textContaining('Could not switch notes'), findsOneWidget);
+      expect(
+        container.read(activeNoteProvider.notifier).updateBlock([
+          0,
+        ], 'retry tab remains writable'),
+        isTrue,
+      );
+    },
+  );
+
+  testWidgets(
+    'a warning cleanup for a gated startup restore cancels exit without reviving the retired tab',
+    (tester) async {
+      final restored = Completer<NoteState>();
+      final api =
+          _MountingRustApi([_treeNode('kept', 'Kept'), _treeNode('a', 'Alpha')])
+            ..snapshot = const ActiveWorkspaceSessionSnapshot(
+              openNoteIds: ['kept', 'a'],
+              activeNoteId: 'a',
+              expandedDirectoryIds: [],
+              searchQuery: '',
+              syncPresentation: SessionSyncPresentation.local,
+            )
+            ..openNoteGates['a'] = restored
+            ..closeNoteErrors['a'] = const CloseNoteWarning('cleanup warning');
+      final container = await _pumpShell(tester, api, settle: false);
+
+      await tester.pump();
+      await tester.pump();
+      final exiting = tester.binding.handleRequestAppExit();
+      await tester.pump();
+      restored.complete(
+        const NoteState(
+          ast: [],
+          metadata: NoteMetadata(
+            id: 'a',
+            path: 'a.md',
+            title: 'a',
+            lastModified: 0,
+            okfConformant: true,
+          ),
+          baseRevision: 'head',
+          restoredFromDraft: false,
+        ),
+      );
+
+      expect(await exiting, AppExitResponse.cancel);
+      expect(api.calls, ['open:kept', 'open:a', 'close:a']);
+      await tester.pump();
+      await tester.pump();
+      expect(container.read(activeNoteProvider)?.metadata.id, 'kept');
+      expect(container.read(openNoteSessionsProvider), hasLength(1));
+      expect(container.read(workspaceSessionProvider).openNoteIds, ['kept']);
+      expect(container.read(workspaceSessionProvider).activeNoteId, 'kept');
+      expect(find.textContaining('Could not switch notes'), findsOneWidget);
+      expect(
+        container.read(activeNoteProvider.notifier).updateBlock([
+          0,
+        ], 'kept remains writable after warning'),
+        isTrue,
+      );
     },
   );
 
