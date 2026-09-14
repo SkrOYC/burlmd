@@ -140,6 +140,11 @@
     "description": "Tooltip for closing a named workspace tab.",
     "placeholders": { "title": { "type": "String", "example": "draft.md" } }
   },
+  "workspaceRestoreSavedNotes": "Could not restore saved notes: {noteIds}",
+  "@workspaceRestoreSavedNotes": {
+    "description": "One startup report listing saved Note identities Core could not reopen.",
+    "placeholders": { "noteIds": { "type": "String", "example": "archive/missing" } }
+  },
   "workspaceCopiedPath": "Copied path",
   "@workspaceCopiedPath": { "description": "Tooltip shown after copying the current note path." },
   "workspaceCopyPath": "Copy path",

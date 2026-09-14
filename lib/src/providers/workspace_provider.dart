@@ -287,37 +287,113 @@ class WorkspaceSession extends Notifier<WorkspaceSessionState> {
     _scheduleSave();
   }
 
-  void setActiveNoteId(String? noteId) {
-    if (state.activeNoteId == noteId) return;
-    if (noteId == null) {
-      final previous = state.activeNoteId;
-      state = state.copyWith(
-        openNoteIds: previous == null
-            ? state.openNoteIds
-            : state.openNoteIds.where((id) => id != previous).toList(),
-        clearActiveNoteId: true,
-      );
-    } else {
-      final open = state.openNoteIds.contains(noteId)
-          ? state.openNoteIds
-          : [...state.openNoteIds, noteId];
-      state = state.copyWith(openNoteIds: open, activeNoteId: noteId);
-    }
+  /// Records an identity only after Core has opened that Note successfully.
+  /// The snapshot remains an identity-only restore hint; Core owns the actual
+  /// session that made this id eligible to persist.
+  void addOpenNoteId(String noteId) {
+    if (state.openNoteIds.contains(noteId)) return;
+    state = state.copyWith(openNoteIds: [...state.openNoteIds, noteId]);
     _scheduleSave();
   }
 
-  /// Rekeys only identities that Core's lifecycle result proved equivalent.
-  void rekeyOpenNoteId({required String oldNoteId, required String newNoteId}) {
-    if (oldNoteId == newNoteId) return;
-    final ids = <String>[];
-    for (final id in state.openNoteIds) {
-      final replacement = id == oldNoteId ? newNoteId : id;
-      if (!ids.contains(replacement)) ids.add(replacement);
+  /// Atomically records a Core-opened tab and makes it active. A restored
+  /// active identity already names the session being reopened, so defer
+  /// materializing it in `openNoteIds` until another active tab displaces it;
+  /// this lets an immediate lifecycle rekey persist only the new identity.
+  void recordOpenedNoteAsActive(String noteId) {
+    final openNoteIds = List.of(state.openNoteIds);
+    final priorActiveNoteId = state.activeNoteId;
+    if (priorActiveNoteId != null &&
+        priorActiveNoteId != noteId &&
+        !openNoteIds.contains(priorActiveNoteId)) {
+      openNoteIds.add(priorActiveNoteId);
     }
-    final active = state.activeNoteId == oldNoteId
-        ? newNoteId
-        : state.activeNoteId;
-    state = state.copyWith(openNoteIds: ids, activeNoteId: active);
+    if (priorActiveNoteId != noteId && !openNoteIds.contains(noteId)) {
+      openNoteIds.add(noteId);
+    }
+    if (state.activeNoteId == noteId &&
+        openNoteIds.length == state.openNoteIds.length) {
+      return;
+    }
+    state = state.copyWith(
+      openNoteIds: List.unmodifiable(openNoteIds),
+      activeNoteId: noteId,
+    );
+    _scheduleSave();
+  }
+
+  /// Removes an identity only after Core has retired its session. A closed
+  /// active id cannot remain as the snapshot's active identity.
+  void removeOpenNoteId(String noteId) {
+    if (!state.openNoteIds.contains(noteId)) return;
+    final openNoteIds = state.openNoteIds
+        .where((candidate) => candidate != noteId)
+        .toList(growable: false);
+    state = state.copyWith(
+      openNoteIds: openNoteIds,
+      clearActiveNoteId: state.activeNoteId == noteId,
+    );
+    _scheduleSave();
+  }
+
+  /// Replaces restored identities with exactly the Core sessions that
+  /// reopened. Failed ids are intentionally absent so the next startup does
+  /// not keep retrying a Note Core said is unavailable.
+  void replaceOpenNotes({
+    required List<String> openNoteIds,
+    required String? activeNoteId,
+  }) {
+    state = state.copyWith(
+      openNoteIds: List.unmodifiable(openNoteIds),
+      activeNoteId: activeNoteId,
+      clearActiveNoteId: activeNoteId == null,
+    );
+    _scheduleSave();
+  }
+
+  /// Records the active identity after Core has opened that Note successfully.
+  void setActiveNoteId(String? noteId) {
+    if (state.activeNoteId == noteId) return;
+    state = noteId == null
+        ? state.copyWith(clearActiveNoteId: true)
+        : state.copyWith(
+            openNoteIds: state.openNoteIds.contains(noteId)
+                ? state.openNoteIds
+                : [...state.openNoteIds, noteId],
+            activeNoteId: noteId,
+          );
+    _scheduleSave();
+  }
+
+  /// Carries a Core-open session across an identity-changing lifecycle
+  /// operation. The old slot remains in its restore position; if a legacy
+  /// snapshot did not record it, append the rekeyed identity instead.
+  void rekeyOpenNoteId({
+    required String oldNoteId,
+    required String newNoteId,
+    bool makeActive = false,
+  }) {
+    final openNoteIds = List.of(state.openNoteIds);
+    final oldIndex = openNoteIds.indexOf(oldNoteId);
+    if (oldIndex == -1) {
+      if (!openNoteIds.contains(newNoteId)) openNoteIds.add(newNoteId);
+    } else if (oldNoteId != newNoteId) {
+      // `openAsTab` may already have admitted the new Core session while a
+      // stale snapshot still names its old identity. Rekeying must collapse
+      // those two presentation entries rather than persisting one tab twice.
+      if (openNoteIds.contains(newNoteId)) {
+        openNoteIds.removeAt(oldIndex);
+      } else {
+        openNoteIds[oldIndex] = newNoteId;
+      }
+    }
+    state = state.copyWith(
+      openNoteIds: List.unmodifiable(openNoteIds),
+      activeNoteId: makeActive || state.activeNoteId == oldNoteId
+          ? newNoteId
+          : state.activeNoteId,
+      clearActiveNoteId: state.activeNoteId == null,
+    );
     _scheduleSave();
   }
 
