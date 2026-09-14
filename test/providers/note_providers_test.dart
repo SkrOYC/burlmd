@@ -914,6 +914,45 @@ void main() {
   );
 
   test(
+    'retaining an unpresentable active Core session revokes only its matching stale projection',
+    () async {
+      final api = _SwitchingRustApi();
+      final container = _containerFor(api);
+      final controller = container.read(activeNoteProvider.notifier);
+
+      await controller.openAsTab('a');
+      final expected = container.read(activeNoteProvider)!;
+
+      expect(
+        controller.retainUnpresentableActiveCoreSession(
+          oldActiveId: 'a',
+          coreNoteId: 'a-renamed',
+          expectedState: expected,
+        ),
+        isTrue,
+      );
+      expect(container.read(activeNoteProvider), isNull);
+      expect(container.read(openNoteSessionsProvider), isEmpty);
+      expect(container.read(retainedCoreSessionIdsProvider), {'a-renamed'});
+      expect(container.read(workspaceSessionProvider).openNoteIds, [
+        'a-renamed',
+      ]);
+      expect(controller.updateBlock([0], 'must not reach Core'), isFalse);
+      expect(api.blockUpdates, isEmpty);
+
+      expect(
+        controller.retainUnpresentableActiveCoreSession(
+          oldActiveId: 'a',
+          coreNoteId: 'unexpected',
+          expectedState: expected,
+        ),
+        isFalse,
+      );
+      expect(container.read(retainedCoreSessionIdsProvider), {'a-renamed'});
+    },
+  );
+
+  test(
     'a pending disk reload blocks writes and navigation until its replacement is adopted',
     () async {
       final api = _SwitchingRustApi();

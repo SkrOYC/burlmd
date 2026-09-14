@@ -629,16 +629,18 @@ class _EditorPaneState extends ConsumerState<_EditorPane> {
     await ref.read(activeNoteProvider.notifier).closeTab(tab.id);
     if (!mounted) return;
 
-    _reconcileAfterTabClose();
+    _reconcileAfterTabClose(completedTabId: tab.id);
   }
 
-  void _reconcileAfterTabClose() {
+  void _reconcileAfterTabClose({required String completedTabId}) {
     // A queued close may refuse after the active close retires its tab. The
     // first completion cannot select the survivor while the queued admission
     // still blocks selection, so every terminal close result gets a chance to
     // restore a coherent visible session after releasing its own gate.
     if (ref.read(activeNoteProvider) != null) {
-      _clearActiveCloseAnchor();
+      // An inactive close can settle ahead of the queued active close. Its
+      // completion must not discard the active close's original successor.
+      if (completedTabId == _activeCloseId) _clearActiveCloseAnchor();
       return;
     }
 
