@@ -18,7 +18,12 @@ scope:
     - lib/src/design/workspace_shell.dart
     - lib/src/design/burl_theme.dart
     - lib/src/providers/burl_preferences_provider.dart
+    - pubspec.yaml
+    - pubspec.lock
+    - linux/flutter/generated_plugins.cmake
     - lib/src/components/visual_parity_fixture.dart
+    - devenv.nix
+    - lib/main.dart
     - test/goldens/**
     - lib/l10n/**
     - test/**
@@ -32,6 +37,7 @@ scope:
     - test/providers/**
     - test/screens/**
     - lib/src/providers/workspace_provider.dart
+    - lib/src/providers/rust_api_provider.dart
     - lib/src/providers/search_provider.dart
     - rust/src/db/**
     - rust/src/workspace/**
@@ -43,7 +49,15 @@ scope:
     - rust/src/workspace/persist.rs
     - rust/src/workspace/bootstrap.rs
     - lib/src/components/**
+    - lib/src/components/lifecycle_actions.dart
+    - lib/src/components/workspace_tree.dart
     - test/components/**
+    - test/components/editor_test.dart
+    - test/components/lifecycle_actions_test.dart
+    - test/providers/note_providers_test.dart
+    - test/screens/workspace_mounting_test.dart
+    - test/screens/workspace_rescan_test.dart
+    - test/widget_test.dart
     - rust/src/draft.rs
     - rust/src/markdown/**
     - lib/src/components/editor.dart
@@ -68,6 +82,7 @@ tickets:
         - lib/l10n/**
         - test/**
         - integration_test/**
+        - devenv.nix
         - scripts/visual-regression.sh
         - scripts/smoke-shot.sh
         - lib/visual_capture_main.dart
@@ -90,6 +105,9 @@ tickets:
         other than the smoke child PID written through the owned inherited file
         descriptor. Verify that child's Sway geometry twice across a compositor
         tick before capture.
+      - STOP if the smoke child inherits `DISPLAY` at any point in its launch.
+        Clear `DISPLAY` for the entire child launch, then pass only the
+        harness-owned display state that the child requires.
       - STOP if replay treats source-tree snapshot
         `2fb9eb2a5e27b5b07f5491b7c6f752b4572c2727` as a cherry-pickable commit.
         Its sole delta deletes `.envrc`; don't replay that deletion. Reproduce
@@ -110,7 +128,10 @@ tickets:
         pixels without reading the Writer's desktop. This is local integration
         evidence only; it doesn't qualify Linux, macOS, or a supported release.
         Production and executable tests contain no preference or code path that
-        recreates emulated chrome. CAP-SHELL-04 passes with host-owned chrome.
+        recreates emulated chrome. A regression launches the smoke child with a
+        poisoned ambient `DISPLAY`, verifies that the child never inherits it,
+        and captures only through the harness-owned display. CAP-SHELL-04
+        passes with host-owned chrome after this ticket's verification runs.
     flows:
       - flow-desktop-session
     certainty: assumed
@@ -127,6 +148,10 @@ tickets:
         - lib/src/providers/burl_preferences_provider.dart
         - lib/src/design/**
         - lib/src/screens/workspace.dart
+        - lib/l10n/**
+        - pubspec.yaml
+        - pubspec.lock
+        - linux/flutter/generated_plugins.cmake
         - test/providers/**
         - test/screens/**
     verification:
@@ -182,14 +207,25 @@ tickets:
     category: Correctness
     scope:
       in:
+        - lib/src/components/lifecycle_actions.dart
+        - lib/src/components/workspace_tree.dart
+        - lib/src/providers/note_providers.dart
         - lib/src/providers/workspace_provider.dart
+        - lib/src/providers/rust_api_provider.dart
         - lib/src/providers/search_provider.dart
         - rust/src/db/**
         - rust/src/workspace/**
         - rust/src/api/ffi_api.rs
         - rust/src/frb_generated.rs
         - lib/src/rust/**
+        - lib/src/screens/workspace.dart
         - test/providers/**
+        - test/components/editor_test.dart
+        - test/components/lifecycle_actions_test.dart
+        - test/providers/note_providers_test.dart
+        - test/screens/workspace_mounting_test.dart
+        - test/screens/workspace_rescan_test.dart
+        - test/widget_test.dart
     verification:
       command: cargo test --manifest-path rust/Cargo.toml &&
         ./scripts/check-generated-bindings.sh && flutter test && dart analyze &&
@@ -242,12 +278,19 @@ tickets:
     category: Correctness
     scope:
       in:
+        - lib/main.dart
         - lib/src/design/workspace_shell.dart
+        - lib/src/components/lifecycle_actions.dart
         - lib/src/providers/note_providers.dart
         - lib/src/providers/workspace_provider.dart
         - lib/src/screens/workspace.dart
+        - lib/l10n/**
         - scripts/smoke-shot.sh
-        - test/**
+        - test/components/editor_test.dart
+        - test/components/lifecycle_actions_test.dart
+        - test/providers/note_providers_test.dart
+        - test/screens/workspace_mounting_test.dart
+        - test/screens/workspace_rescan_test.dart
     verification:
       command: cargo test --manifest-path rust/Cargo.toml &&
         ./scripts/check-generated-bindings.sh && flutter test && dart analyze &&

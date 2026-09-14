@@ -1,9 +1,20 @@
 entries:
+  - version: v3.2.17
+    date: 2026-09-13
+    fixed:
+      - "Corrected the authorized six-ticket Epic G replay scope without expanding product or platform scope. BURL-G001 owns the `devenv.nix` Sway package required by its private harness. BURL-G002 owns the required `path_provider` dependency declaration and lockfile, generated Linux plugin registration, and localized preference surfaces. BURL-G003 owns the workspace-tree, lifecycle-action, Note, Rust API-provider, Workspace-screen, generated-binding, and focused component and screen test paths that its snapshot replay requires. BURL-G004 owns its main-entry smoke staging, localized missing-Note report, workspace shell, provider, Workspace-screen, smoke, lifecycle-action, and focused test paths."
+      - "Replaced replay ranges with exact verified commit lists. Reproduce BURL-G001 from `8051931a0ea9afd7012b92e71a219d704a0987bf`, `367af4df44c3920f9361deac00a5f66bd4784260`, `7a6cbe6931877630cd05a380401a91b69e2d9594`, `d3a2844ed6ba54c80b89b702a217263d9617c2cc`, and `7e0eb066a3488bd2cd58d8b1342480acc4ed0cc5`; BURL-G002 from `0e875d87719a41a87db7f72a479e2d006b9a0ddb` and `f916d68ce8c535e62f821980d2f66a8773d1e1d6`; BURL-G003 from `0e1dfd6b7e9ab1cb274d95a809408cbd63fd6cf0`, `fbd92b09ca8dd5527944acf5c58c98f78a43d9ab`, `60931cde94e434f50cf640488ca67717d7f2654f`, and `80fdcfe234cc32c1af562b32825558464f52f45d`; and BURL-G004 from `82682cfc002f4d3c6ad0904462f6a752a0ac429d`, `69388cdd02ced71b69e864b2a0242cd308d26b49`, `75428bee19c9a20b00f98b1b12db1f2bbfb6a83d`, `b0173e7fd626a77cfa9f5d8f1dd618a8528e7b10`, `7d99c0c92759d3edaada902fe72b39c8d2338d45`, `fc7727935411edd6b3868b092d5516858946fec9`, `d3a92f8d04296f4b85dffeba3e20c66752383b9d`, and `3267f6363b016ebd1bd601f0366909c25bb85a4c`. Use the checked-out `scripts/check-generated-bindings.sh` for BURL-G003 verification; don't replay the historical checker implementation."
+      - "Added a BURL-G001 poisoned-ambient-`DISPLAY` regression requirement. The entire smoke-child launch clears `DISPLAY`; a capture cannot use a display inherited from the Writer's environment."
+    upstream:
+      prd: v2.0.7
+      architecture: v2.1.2
+      tech-spec: v2.2.1
+    by: patch-lane
   - version: v3.2.16
     date: 2026-09-13
     fixed:
       - "Removed BURL-G001's historical deviation record for `README.md`, `.constitution/tech-spec/stack.yaml`, and `.constitution/tech-spec/data-models/schema.sql`. The planned ticket doesn't authorize those files; Git history retains the review context."
-      - "Corrected the G replay instruction. Source-tree snapshot `2fb9eb2a5e27b5b07f5491b7c6f752b4572c2727` is an inspection reference, not a cherry-pick source: its sole delta deletes `.envrc`. Reproduce scoped changes from verified commits: G001 `8051931a0ea9afd7012b92e71a219d704a0987bf`; G002 `0e875d87719a41a87db7f72a479e2d006b9a0ddb` and `f916d68ce8c535e62f821980d2f66a8773d1e1d6`; G003 `0e1dfd6b7e9ab1cb274d95a809408cbd63fd6cf0`, `fbd92b09ca8dd5527944acf5c58c98f78a43d9ab`, `60931cde94e434f50cf640488ca67717d7f2654f`, and later `STATE-G003` fixes through `80fdcfe234cc32c1af562b32825558464f52f45d`; G004 `82682cfc002f4d3c6ad0904462f6a752a0ac429d` and later `TABS-G004` fixes through `3267f6363b016ebd1bd601f0366909c25bb85a4c`; and the private-harness fixes `367af4df44c3920f9361deac00a5f66bd4784260`, `7a6cbe6931877630cd05a380401a91b69e2d9594`, `d3a2844ed6ba54c80b89b702a217263d9617c2cc`, and `7e0eb066a3488bd2cd58d8b1342480acc4ed0cc5`. Apply only each ticket's scoped source changes; don't replay the snapshot's `.envrc` deletion or change `.constitution`, managed CI, or unrelated files."
+      - "Corrected the G replay instruction. Source-tree snapshot `2fb9eb2a5e27b5b07f5491b7c6f752b4572c2727` is an inspection reference, not a cherry-pick source: its sole delta deletes `.envrc`. Apply only each ticket's scoped source changes. Don't replay the snapshot's `.envrc` deletion or change `.constitution`, managed CI, or unrelated files. The later v3.2.17 entry names every authorized replay commit."
     upstream:
       prd: v2.0.6
       architecture: v2.1.2
