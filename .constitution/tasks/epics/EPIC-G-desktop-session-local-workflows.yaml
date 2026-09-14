@@ -135,7 +135,7 @@ tickets:
     flows:
       - flow-desktop-session
     certainty: assumed
-    status: planned
+    status: done
   - id: BURL-G002
     title: Persist device-global preferences
     type: Feature

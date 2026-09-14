@@ -1,0 +1,77 @@
+owner: BURL-G001
+mode: visual_regression
+produced:
+  date: 2026-09-14
+  commit: 4ea6139a0c996fc8e80a2b1ead58511deaf671d6
+  command: >-
+    flutter test && dart analyze && ./scripts/visual-regression.sh
+    shell-g001 --baseline test/goldens/shell-g001-linux.png
+    --max-different-pixels 0 && git diff --check && ! rg -n '\[DEBUG-' lib
+    rust test scripts
+  host: >-
+    Private Linux x86-64 capture under the pinned devenv shell. Exact tool,
+    lockfile, Fontconfig, and resolved-font identities are retained in the
+    render-input records. Paths in the byte-preserved transcripts are historical.
+files:
+  - path: approval.md
+    sha256: 49ad21c1f995a07315f58050c7fafc23e730d93d9afde4b985763b2acb3a694d
+    bytes: 2105
+    role: approval
+  - path: g001-final-run1-shell-g001.png
+    sha256: af4ce587e7ad9470bdc2cc9e28c711c03c2b09521e9a48a920664e8dc4d66981
+    bytes: 39680
+    role: capture
+  - path: g001-final-run1.log.gz
+    sha256: be654f8e4d47bf23fcab005e0527379ec74722b9279316e81beea507b0e42599
+    bytes: 5918
+    role: transcript
+  - path: g001-final-run2-shell-g001.png
+    sha256: af4ce587e7ad9470bdc2cc9e28c711c03c2b09521e9a48a920664e8dc4d66981
+    bytes: 39680
+    role: capture
+  - path: g001-final-run2.log.gz
+    sha256: cfe60d8a3ecf78af1ff888f9cbbd23fa2f2c4c165e6764fdf4bfb01c529d6479
+    bytes: 5819
+    role: transcript
+  - path: g001-fontconfig-run1-before.stderr.gz
+    sha256: 8455a28a9123fbd9656ea6b66d352f69ebdda6eb1e01bb009815893c23c8aed8
+    bytes: 525
+    role: transcript
+  - path: g001-fontconfig-run2-after.stderr.gz
+    sha256: 8455a28a9123fbd9656ea6b66d352f69ebdda6eb1e01bb009815893c23c8aed8
+    bytes: 525
+    role: transcript
+  - path: g001-fontconfig-run2-before.stderr.gz
+    sha256: 8455a28a9123fbd9656ea6b66d352f69ebdda6eb1e01bb009815893c23c8aed8
+    bytes: 525
+    role: transcript
+  - path: g001-render-inputs-final.txt
+    sha256: 97efe27271eba4311580f02300234a55496c3ea8c8347a91a108004d9e7f3f21
+    bytes: 3301
+    role: render-inputs
+  - path: g001-render-inputs-run1-before.txt
+    sha256: 2538d77220b5ce6c434a887a5c779acaf512bfba5d6b8a9fc03339eae1f1b61b
+    bytes: 21014
+    role: render-inputs
+  - path: g001-render-inputs-run2-after.txt
+    sha256: 2538d77220b5ce6c434a887a5c779acaf512bfba5d6b8a9fc03339eae1f1b61b
+    bytes: 21014
+    role: render-inputs
+  - path: g001-render-inputs-run2-before.txt
+    sha256: 2538d77220b5ce6c434a887a5c779acaf512bfba5d6b8a9fc03339eae1f1b61b
+    bytes: 21014
+    role: render-inputs
+  - path: reference.png
+    sha256: af4ce587e7ad9470bdc2cc9e28c711c03c2b09521e9a48a920664e8dc4d66981
+    bytes: 39680
+    role: baseline
+pass_criteria: >-
+  Independently approve the G001-only reference before proposal generation.
+  Bind the implementation and reference to one immutable source commit.
+  Run the exact non-writing command at least twice, with each complete command
+  exiting 0, Flutter tests and analysis passing, stable recorded render inputs,
+  and zero changed pixels across all 1,769,076 product pixels.
+  Require an owned private display, cleared ambient display variables, the
+  inherited owned app-PID handoff, and twice-verified 1878x989 geometry.
+  Exclude only the 47-row host HeaderBar. A same-command baseline write does
+  not count as acceptance, and this proof does not qualify a release or platform.

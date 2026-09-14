@@ -1,0 +1,67 @@
+G001 final render-input record
+
+Tested source: 4ea6139a0c996fc8e80a2b1ead58511deaf671d6.
+
+Exact non-writing command:
+
+  flutter test && dart analyze && ./scripts/visual-regression.sh shell-g001 --baseline test/goldens/shell-g001-linux.png --max-different-pixels 0 && git diff --check && ! rg -n '\[DEBUG-' lib rust test scripts
+
+The command ran twice in the pinned devenv shell with poisoned caller DISPLAY,
+WAYLAND_DISPLAY, and SWAYSOCK values. Both complete command exits were 0.
+Each run passed 356 Flutter tests, reported no Dart analysis issues, compared
+1,769,076 product pixels, and reported zero changed pixels. The harness kept
+the 47-row host HeaderBar exclusion and wrote a fresh image before it was
+copied to its run-specific QA path. It did not use --write-baseline.
+
+Approved baseline: test/goldens/shell-g001-linux.png
+SHA-256: af4ce587e7ad9470bdc2cc9e28c711c03c2b09521e9a48a920664e8dc4d66981.
+Size: 39,680 bytes. Dimensions: 1878x989.
+
+Stable lock identities:
+
+  devenv.lock: 883cdbf983bdfbb4ba10c738654cf6b66b18dc217d77878ca6e901addd2cff91
+  pubspec.lock: 6015578c1f5a81657ca3dac7de914c26b8801fd0ed954858d9d6767fc43ec373
+  rust/Cargo.lock: 774aaf28e7ef4e92f1b4cd4b8ca2cd7b5cb889903dc8648fb4fa23d167e9cf46
+  rust-toolchain.toml: a1a5a9de18460873305eee8b4b993385e86e2d3ff6bdf90876a591cbdee04906
+
+Tool identities observed in the devenv shell:
+
+  devenv 2.2.2 (x86_64-linux)
+  Flutter 3.44.3, stable; Dart 3.12.2
+  Sway 1.12; Fontconfig 2.17.1
+  grim 1.5.0, resolved from
+  /nix/store/kg9cz0758g74fs5g497f2s1mq0vw3ykh-grim-1.5.0
+  NAR hash: sha256-S4S+HhYLKlBhHzzzoRfTu1FQpbTndNL++VmnagjeVaA=
+
+The smoke context used a private temporary HOME and XDG_DATA_HOME. It inherited
+XDG_CONFIG_HOME=/home/oscar/.config, with FONTCONFIG_FILE and FONTCONFIG_PATH
+unset. The three fresh render-input snapshots are byte-identical:
+
+  .qa/g001-render-inputs-run1-before.txt
+  .qa/g001-render-inputs-run2-before.txt
+  .qa/g001-render-inputs-run2-after.txt
+
+They record effective Fontconfig configuration-file paths, resolved targets,
+and content digests. They also resolve the following font files:
+
+  sans-serif: Public Sans Regular
+  /nix/store/l0jyz37b1g6iflj3n5y80h0ggq962swk-public-sans-2.001/share/fonts/opentype/PublicSans-Regular.otf
+  89cca4915bd88489323ad0d0107f7cd1dc81164416584f3c3c6da00e187cd581
+
+  monospace: JetBrainsMono NF Regular
+  /nix/store/qgi0zfsds1x52ax69iak1kziznav550l-nerd-fonts-jetbrains-mono-3.5.0+2.304/share/fonts/truetype/NerdFonts/JetBrainsMono/JetBrainsMonoNerdFont-Regular.ttf
+  1767e08e6b207eb57c114e833b817e26c6a7625bbcf474e3b4dd0f73c10e5bdc
+
+  Roboto: Public Sans Regular fallback
+  /nix/store/l0jyz37b1g6iflj3n5y80h0ggq962swk-public-sans-2.001/share/fonts/opentype/PublicSans-Regular.otf
+  89cca4915bd88489323ad0d0107f7cd1dc81164416584f3c3c6da00e187cd581
+
+Limitations and observations:
+
+  devenv printed that its 2.2.2 CLI is newer than the 2.1.2 input recorded in
+  devenv.lock. This record preserves the observed CLI version and lock digest.
+  grim does not expose a supported version option. Its version is derived from
+  its resolved Nix store path and NAR identity. Fontconfig emitted parser
+  warnings; the three diagnostic files are byte-identical. These observations
+  record render inputs and do not establish Fontconfig as a cause of any render
+  result.
