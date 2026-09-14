@@ -73,6 +73,9 @@ void main() {
           'update_notifications': false,
         });
 
+        store = DevicePreferencesStore(
+          applicationSupportDirectory: () async => applicationSupport,
+        );
         final second = container();
         final initial = second.read(burlPreferencesProvider);
         expect(initial.theme, BurlThemePreference.system);
