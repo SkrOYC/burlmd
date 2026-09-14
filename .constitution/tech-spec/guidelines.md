@@ -55,7 +55,7 @@ verification_commands:
     label: quoted by BURL-N006
     command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && dart analyze && ./scripts/verify-second-device-join.sh --private-remote \"$BURLMD_TEST_PRIVATE_REMOTE_URL\" --object-endpoint \"$BURLMD_TEST_S3_ENDPOINT\" --output target/runbooks/clone-k005.json && git diff --check"
     exists: false
-    owner: BURL-M003
+    owner: BURL-N006
   - name: test
     label: "quoted by BURL-H006, BURL-J001, BURL-J002, BURL-J003, BURL-J004, BURL-J005, BURL-N007, BURL-L004, BURL-L008"
     command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && dart analyze && git diff --check"
@@ -370,6 +370,31 @@ verification_commands:
     exists: false
     owner: BURL-M003
   - name: test
+    label: private Linux smoke for BURL-G002 after BURL-G001
+    command: "flutter test && dart analyze && ./scripts/visual-regression.sh pref-g002 --baseline .qa/pref-g002-private.png --max-different-pixels 0 --write-baseline && git diff --check && ! rg -n '\\[DEBUG-' lib rust test scripts"
+    exists: false
+    owner: BURL-G002
+  - name: test
+    label: private Linux smoke for BURL-G003 after BURL-G001
+    command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/visual-regression.sh state-g003 --baseline .qa/state-g003-private.png --max-different-pixels 0 --write-baseline && git diff --check"
+    exists: false
+    owner: BURL-G003
+  - name: test
+    label: private Linux smoke for BURL-G004 after BURL-G001
+    command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && BURLMD_SMOKE_TABS_G004=1 ./scripts/visual-regression.sh tabs-g004 --baseline .qa/tabs-g004-private.png --max-different-pixels 0 --write-baseline && git diff --check"
+    exists: false
+    owner: BURL-G004
+  - name: test
+    label: private Linux smoke for BURL-G005 after BURL-G001
+    command: "cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && ./scripts/visual-regression.sh close-g005 --baseline .qa/close-g005-private.png --max-different-pixels 0 --write-baseline && git diff --check"
+    exists: false
+    owner: BURL-G005
+  - name: test
+    label: private Linux smoke for BURL-G007 after BURL-G001
+    command: "flutter test && dart analyze && ./scripts/visual-regression.sh nav-g007 --baseline .qa/nav-g007-private.png --max-different-pixels 0 --write-baseline && git diff --check"
+    exists: false
+    owner: BURL-G007
+  - name: test
     label: quoted by BURL-G001
     command: "flutter test && dart analyze && ./scripts/visual-regression.sh shell-g001 --baseline test/goldens/shell-g001-linux.png --max-different-pixels 0 && git diff --check && ! rg -n '\\[DEBUG-' lib rust test scripts"
     exists: false
@@ -517,12 +542,12 @@ layout:
   - path: scripts
     purpose: Repository-owned validation entry points
   - path: scripts/smoke-shot.sh
-    purpose: Manual QA gate for every UI ticket (BURL-E001)
+    purpose: Legacy ambient-display manual capture, used by private Linux only through visual-regression.sh
   - path: scripts/visual-regression.sh
-    purpose: Exact visual gate introduced by BURL-G001
+    purpose: BURL-G001 private headless Sway desktop smoke and zero-pixel shell regression gate
     exists: false
   - path: scripts/managed-evidence.sh
-    purpose: Managed evidence client implemented by BURL-M003
+    purpose: Deferred managed evidence client for the future supported-release matrix
     exists: false
   - path: scripts/supervise-linux-session.sh
     purpose: Trusted in-namespace Linux session supervisor
@@ -1209,6 +1234,12 @@ The active editor-depth tickets quote these commands exactly. `BURLMD_SMOKE_F005
 
 Stage 4 tickets quote one of these gates and replace `<ticket-id>` with their lowercase ticket identifier. Ticket-specific tests and hardware-in-the-loop procedures supplement the gate; they don't remove it.
 
+For the private Linux-first usability milestone, a direct `scripts/smoke-shot.sh`
+invocation is not an eligible desktop check. It reads an ambient display. Stage 4
+must replace the active Epic G commands with the private Linux commands below.
+Those commands use the owned visual harness after `BURL-G001`; they do not
+authorize a change to a public-release gate.
+
 - **Core-only:** `cargo test --manifest-path rust/Cargo.toml && cargo clippy --workspace --all-targets --manifest-path rust/Cargo.toml -- -D warnings && git diff --check`
 - **Core/FFI/UI:** `cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh <ticket-id> && git diff --check && ! rg -n '\[DEBUG-' lib rust test scripts`
 - **Flutter-only:** `flutter test && dart analyze && ./scripts/smoke-shot.sh <ticket-id> && git diff --check && ! rg -n '\[DEBUG-' lib rust test scripts`
@@ -1216,6 +1247,48 @@ Stage 4 tickets quote one of these gates and replace `<ticket-id>` with their lo
 - **macOS release build:** `flutter build macos --release && git diff --check`
 
 Spike-dependent implementation tickets may quote the stable portion of these commands while the TechSpec is provisional. They must stop before implementation until final Stage 3 replaces every candidate-specific command and Stage 4 adapts the ticket.
+
+## Private Linux-first verification
+
+This contract applies only to the approved local-use work: `BURL-G001` through
+`BURL-G005`, and `BURL-G007`. It verifies a checkout on one Linux system. It
+does not produce a package, publish an artifact, or qualify a supported
+platform.
+
+`BURL-G001` owns `scripts/visual-regression.sh`. Before a capture, it must
+start a private headless Sway compositor and clear ambient `DISPLAY`,
+`WAYLAND_DISPLAY`, and `SWAYSOCK`. The harness must use its private runtime
+directory, compositor socket, Wayland display, and input state. It must accept
+only the application PID that `scripts/smoke-shot.sh` writes through its owned
+inherited file descriptor. The harness must verify that PID's Sway client
+geometry twice, separated by a compositor tick, before it captures.
+
+The private capture is `1878x989`. It retains the GTK HeaderBar in the PNG but
+excludes its 47 rows from the product-pixel comparison. This is a local
+integration and visual-smoke check, not the 1920x1080 at 60 Hz managed
+qualification required by NFC-37. It cannot supply Linux platform-regression
+evidence, authoritative macOS visual evidence, performance evidence, or a
+supported-release claim.
+
+For `BURL-G001`, the existing checked-in
+`test/goldens/shell-g001-linux.png` baseline must compare at zero different
+pixels. The private commands for `BURL-G002` through `BURL-G005` and
+`BURL-G007` use `--write-baseline` only to prove the isolated desktop launch
+and capture path. A baseline that the same command creates is not regression
+proof. A later zero-pixel comparison needs a pre-existing reviewed baseline.
+
+The private commands pair the actual Linux desktop smoke with tests and static
+analysis. Any ticket that changes an FFI surface must also run
+`./scripts/check-generated-bindings.sh`; it regenerates the two binding
+surfaces, rejects stale output, and leaves the pre-check tree unchanged. The
+`BURL-G004` command also requires the existing Core-session readiness input.
+
+Stage 4 must quote the new private commands from the front matter, make
+`BURL-G002` through `BURL-G005` and `BURL-G007` depend on `BURL-G001` for the
+harness, and preserve the existing tests. It must defer `BURL-G006`,
+`BURL-G008`, `BURL-G009`, `BURL-G010`, and `BURL-G011`. The latter remains the
+supported-release integration gate and must not be repurposed as private Linux
+evidence. This pass records no Tasks status or dependency change.
 
 ## Index connection obligations
 
@@ -1258,7 +1331,15 @@ all of it inside the commit. The standing suggestion is unchanged and still not
 acted on: consider moving clippy to the `pre-push` stage, leaving `cargo fmt` on
 `pre-commit`.
 
-The coordinating Epic G branch proves the hash-and-regenerate drift check and contains the first private headless visual gate. The merged base doesn't contain the generated-binding checker or accepted managed CI evidence. `BURL-M003` implements the stronger non-mutating checker from the preceding contract and may bootstrap both gates without importing the Epic G branch. Until an evidence commit passes milestone review, the broader testing standard, Rust async-avoidance rule, and Dart widget-statelessness rule remain review obligations.
+The reviewed recovery checkout contains the non-mutating generated-binding
+checker and managed-validation control paths, but their presence is not a
+managed acceptance result. The private milestone does not invoke the
+`BURL-M003` hosted workflow, role, sealing, or aggregation path. Do not infer
+completion from local scripts. `BURL-G001` carries the first private headless
+visual harness. The private G commands use the checked-in generation checker
+where an FFI surface changes. Until an evidence commit passes milestone review,
+the broader testing standard, Rust async-avoidance rule, and Dart
+widget-statelessness rule remain review obligations.
 
 ## Running the real app (manual visual verification)
 
@@ -1277,7 +1358,12 @@ Before running the desktop app locally (`flutter run -d linux`, or any manual
 visual check), run `cargo build --release` once from `rust/` (and again after
 any change to the Rust API surface) so that path exists.
 
-Since `BURL-E001` the procedure below is also a command: `scripts/smoke-shot.sh <name>` builds the release native library and app bundle, launches, waits for actual rendering, captures `.qa/<name>.png`, and exits non-zero if the application fails to start or render. `BURLMD_SMOKE_SHOT_DIR` may direct a deliberately reviewed evidence capture elsewhere; `SPK-BURL-F001` is the sole current exception, with its four generated captures kept under `.constitution/evidence/SPK-BURL-F001/`. Render detection compares raw pixels against a measured desktop noise floor rather than byte-comparing images, because background desktop animation always differs between two captures. Every UI ticket's Verification Command gates on it.
+`scripts/smoke-shot.sh <name>` builds the release native library and app bundle,
+launches, waits for rendering, and captures `.qa/<name>.png`. It remains a
+component of the private harness, but it must not be invoked directly for this
+milestone because its display selection is ambient. The harness passes an
+owned capture directory and PID descriptor to it. The direct command remains a
+legacy record for tickets outside this scoped pass.
 
 For actually looking at rendered output rather than only asserting widget
 properties in `flutter test` — screenshot with `grim`, and, when keystroke
@@ -1299,9 +1385,42 @@ Canonical acceptance artifacts for `BURL-K009`, `BURL-N009`, and `BURL-O014` lik
 
 ## Execution conventions
 
-- Production authorization is contract-scoped. Epic G M0 keeps `BURL-G001`, `BURL-G002`, `BURL-G003`, `BURL-G004`, `BURL-G005`, and `BURL-G007` executable. The bootstrap additionally makes `BURL-M015` and `BURL-M003` executable. Every other production ticket has an implicit STOP until its own decision evidence, any required Product Requirements or Architecture evolution, final Stage 3 contract, and Stage 4 adaptation are merged. An unrelated unresolved Spike doesn't block an otherwise authorized ticket.
-- The five `Spike` tickets remain research-only and executable within their exhaustive allowlists after their declared dependencies are satisfied. `BURL-M003` satisfies those dependencies only after both its reviewed implementation pull request and dedicated reviewed evidence pull request merge. Every managed Spike runs the launcher from a clean immutable trust-anchor checkout; the trusted default-branch workflow checks out the separate tested source as data. Before dispatch and during collection, the launcher rejects any change outside the ticket's exact write allowlist or any changed validation control. Within the declared H Spike tranche, the committed, validated, and independently reviewed `BURL-H001` milestone satisfies `BURL-H002`; a draft or unmerged branch never satisfies a cross-tranche or cross-branch dependency.
+- Production authorization is contract-scoped. For this pass, only
+  `BURL-G001`, `BURL-G002`, `BURL-G003`, `BURL-G004`, `BURL-G005`, and
+  `BURL-G007` are executable after a Stage 4 plan adaptation quotes the
+  private commands. This pass does not alter the existing `BURL-M015`
+  verification, acceptance, or Tasks status. The private milestone excludes
+  `BURL-M003` and all hosted managed validation. Every other production ticket
+  has an implicit STOP until its own decision evidence, any required Product
+  Requirements or Architecture evolution, final Stage 3 contract, and Stage 4
+  adaptation are merged. An unrelated unresolved Spike doesn't block an
+  otherwise authorized ticket. Stage 4 must plan the active and deferred G
+  split before implementation. `BURL-G011` remains a supported-release gate,
+  not private Linux evidence.
+- When the user resumes managed validation, the five `Spike` tickets remain
+  research-only and executable within their exhaustive allowlists after their
+  declared dependencies are satisfied. `BURL-M003` satisfies those dependencies
+  only after both its reviewed implementation pull request and dedicated
+  reviewed evidence pull request merge. Every managed Spike runs the launcher
+  from a clean immutable trust-anchor checkout; the trusted default-branch
+  workflow checks out the separate tested source as data. Before dispatch and
+  during collection, the launcher rejects any change outside the ticket's exact
+  write allowlist or any changed validation control. Within the declared H
+  Spike tranche, the committed, validated, and independently reviewed
+  `BURL-H001` milestone satisfies `BURL-H002`; a draft or unmerged branch never
+  satisfies a cross-tranche or cross-branch dependency.
 - A ticket that scopes `rust/src/api/ffi_api.rs` also scopes both generated outputs: `lib/src/rust/**` and `rust/src/frb_generated.rs`. Its verification must regenerate and compare both byte for byte, fail on stale output, and leave the pre-check working tree unchanged. This convention avoids repeating generated files in every FFI ticket without transferring ownership away from the ticket.
-- `BURL-M003` is authorized to bootstrap with the provisionally aligned Flutter Rust Bridge generator, Rust crate, and Dart package at `2.12.0`. It must implement the missing non-mutating generated-binding checker before the ordered gate invokes that file. The reviewed implementation merge establishes `TRUST_ANCHOR_SHA`; `.constitution/evidence/BURL-M003/managed-evidence.json`, `completion.md`, and `manifest.yaml` record the accepted self-validation and complete the ticket only after independent review and merge. Any later validation-control change repeats this anchor rotation. Final Stage 3 must revalidate the triple and generated bytes before a downstream production ticket relies on it.
+- The private milestone excludes `BURL-M003`; it doesn't change the completion
+  guard. When the user resumes managed validation, `BURL-M003` must revalidate
+  the Flutter Rust Bridge generator, Rust crate, and Dart package at `2.12.0`.
+  Its reviewed implementation merge establishes `TRUST_ANCHOR_SHA`. Its
+  independently reviewed evidence pull request contains only
+  `.constitution/evidence/BURL-M003/managed-evidence.json`, `completion.md`,
+  and `manifest.yaml`. The ticket cannot complete until that evidence pull
+  request merges. Any validation-control change repeats this anchor rotation.
+  Final Stage 3 must revalidate the triple and generated bytes before a
+  downstream production ticket relies on them, independent of `BURL-M003`
+  completion. This private pass does not substitute a single-role attestation,
+  a certification framework, or local macOS diagnostics.
 
 PR #11 remains the delivered redesign foundation and isn’t retroactively assigned to an epic. `BURL-G001` removes the presentation-only Platform chrome that leaked from its prototype.
