@@ -236,6 +236,20 @@ class WorkspaceSession extends Notifier<WorkspaceSessionState> {
         );
   }
 
+  /// Reports a Note restore failure against the active snapshot scope. The
+  /// failed identity remains a nonauthoritative retry hint; this only gives
+  /// the shell a visible, dismissible failure for the failed Core request.
+  void reportNoteRestoreFailure(Object error) {
+    final workspaceId = _workspaceId;
+    if (workspaceId == null || _activeBootstrapGeneration != null) return;
+    _reportFailure(
+      operation: WorkspaceSessionOperation.load,
+      error: error,
+      workspaceId: workspaceId,
+      scopeGeneration: _scopeGeneration,
+    );
+  }
+
   /// Restores once for this exact Workspace generation. Core's safe fallback
   /// is already represented by an empty snapshot; transport failures use
   /// [restoreAfterLoadFailure] so they cannot authorize a durable overwrite.

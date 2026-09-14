@@ -4,6 +4,7 @@ import 'package:burlmd/src/providers/note_providers.dart';
 import 'package:burlmd/src/providers/rust_api_provider.dart';
 import 'package:burlmd/src/providers/workspace_provider.dart';
 import 'package:burlmd/src/rust/draft.dart';
+import 'package:burlmd/src/rust/error.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -18,6 +19,7 @@ class _SwitchingRustApi extends RustApi {
   final String? failFirstOpenOf;
   final List<String> calls = [];
   final List<String> blockUpdates = [];
+  final Map<String, Object> closeErrors = {};
   final Completer<void>? closeGate;
   Completer<NoteState>? reloadGate;
   final Map<String, Completer<NoteState>> openNoteGates = {};
@@ -32,6 +34,8 @@ class _SwitchingRustApi extends RustApi {
     if (warningOnClose) {
       throw const CloseNoteWarning('version-history recording was unavailable');
     }
+    final error = closeErrors[noteId];
+    if (error != null) throw error;
   }
 
   @override
@@ -318,6 +322,91 @@ void main() {
       );
       expect(container.read(workspaceSessionProvider).openNoteIds, ['b']);
       expect(container.read(workspaceSessionProvider).activeNoteId, 'b');
+      expect(api.calls, ['open:a', 'close:a', 'open:b']);
+    },
+  );
+
+  test('a close refusal preserves a superseded tab Core still owns', () async {
+    final b = Completer<NoteState>();
+    final api = _SwitchingRustApi()
+      ..openNoteGates['b'] = b
+      ..closeErrors['b'] = const AppError.ioError('temporary close failure');
+    final container = _containerFor(api);
+    final controller = container.read(activeNoteProvider.notifier);
+
+    await controller.openAsTab('a');
+    final openB = controller.openAsTab('b');
+    await Future<void>.delayed(Duration.zero);
+    final openC = controller.openAsTab('c');
+    b.complete(
+      const NoteState(
+        ast: [],
+        metadata: NoteMetadata(
+          id: 'b',
+          path: 'b.md',
+          title: 'b',
+          lastModified: 0,
+          okfConformant: true,
+        ),
+        baseRevision: 'head',
+        restoredFromDraft: false,
+      ),
+    );
+    await Future.wait([openB, openC]);
+
+    expect(container.read(activeNoteProvider)!.metadata.id, 'c');
+    expect(
+      container.read(openNoteSessionsProvider).map((note) => note.metadata.id),
+      ['a', 'b', 'c'],
+    );
+    expect(container.read(workspaceSessionProvider).openNoteIds, [
+      'a',
+      'b',
+      'c',
+    ]);
+    expect(api.calls, ['open:a', 'open:b', 'close:b', 'open:c']);
+  });
+
+  test(
+    'a close refusal preserves a stale restore tab while a newer tab stays active',
+    () async {
+      final restored = Completer<NoteState>();
+      final api = _SwitchingRustApi()
+        ..openNoteGates['a'] = restored
+        ..closeErrors['a'] = const AppError.ioError('temporary close failure');
+      final container = _containerFor(api);
+      final controller = container.read(activeNoteProvider.notifier);
+
+      final restore = controller.restoreOpenNotes(
+        openNoteIds: const ['a'],
+        activeNoteId: 'a',
+      );
+      await Future<void>.delayed(Duration.zero);
+      final openB = controller.openAsTab('b');
+      restored.complete(
+        const NoteState(
+          ast: [],
+          metadata: NoteMetadata(
+            id: 'a',
+            path: 'a.md',
+            title: 'a',
+            lastModified: 0,
+            okfConformant: true,
+          ),
+          baseRevision: 'head',
+          restoredFromDraft: false,
+        ),
+      );
+      await Future.wait([restore, openB]);
+
+      expect(container.read(activeNoteProvider)!.metadata.id, 'b');
+      expect(
+        container
+            .read(openNoteSessionsProvider)
+            .map((note) => note.metadata.id),
+        ['a', 'b'],
+      );
+      expect(container.read(workspaceSessionProvider).openNoteIds, ['a', 'b']);
       expect(api.calls, ['open:a', 'close:a', 'open:b']);
     },
   );
