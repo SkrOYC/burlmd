@@ -25,12 +25,8 @@ class DevicePreferencesStore {
   var _persistenceBlocked = false;
 
   Future<BurlPreferences> load() async {
-    final file = await _preferencesFileOrNull();
-    if (file == null) {
-      _persistenceBlocked = true;
-      return BurlPreferences.defaults();
-    }
     if (_persistenceBlocked) return BurlPreferences.defaults();
+    final file = await _preferencesFile();
 
     try {
       if (await _hasPreservedPayload(file.parent)) {
@@ -44,9 +40,9 @@ class DevicePreferencesStore {
     } on FormatException {
       await _quarantine(file);
       return BurlPreferences.defaults();
-    } catch (_) {
+    } catch (error, stackTrace) {
       _persistenceBlocked = true;
-      return BurlPreferences.defaults();
+      Error.throwWithStackTrace(error, stackTrace);
     }
   }
 
@@ -54,23 +50,25 @@ class DevicePreferencesStore {
     File? temporary;
     try {
       await load();
-      if (_persistenceBlocked) return;
-      final file = await _preferencesFileOrNull();
-      if (file == null || _persistenceBlocked) return;
+      if (_persistenceBlocked) {
+        throw StateError(
+          'Device preferences are preserved and cannot be saved.',
+        );
+      }
+      final file = await _preferencesFile();
       if (await _hasPreservedPayload(file.parent)) {
         _persistenceBlocked = true;
-        return;
+        throw StateError(
+          'Device preferences are preserved and cannot be saved.',
+        );
       }
       await file.parent.create(recursive: true);
       temporary = File(
         '${file.path}.tmp-${DateTime.now().microsecondsSinceEpoch}-${_nextTemporaryFile++}',
       );
-      await temporary.writeAsString(
-        jsonEncode(preferences.toJson()),
-        flush: true,
-      );
-      await temporary.rename(file.path);
-    } catch (_) {
+      await writeTemporaryFile(temporary, jsonEncode(preferences.toJson()));
+      await renameTemporaryFile(temporary, file.path);
+    } catch (error, stackTrace) {
       if (temporary != null) {
         try {
           if (await temporary.exists()) await temporary.delete();
@@ -78,33 +76,38 @@ class DevicePreferencesStore {
           // A failed cleanup does not change the persisted preference state.
         }
       }
+      Error.throwWithStackTrace(error, stackTrace);
     }
   }
 
-  Future<File?> _preferencesFileOrNull() async {
-    try {
-      final directory = await applicationSupportDirectory();
-      return File('${directory.path}/$fileName');
-    } catch (_) {
-      return null;
-    }
+  /// Writes a complete temporary payload before it replaces the destination.
+  ///
+  /// This is overridable so regression tests can deterministically exercise
+  /// write failures without depending on host filesystem permissions.
+  Future<void> writeTemporaryFile(File file, String contents) =>
+      file.writeAsString(contents, flush: true);
+
+  /// Atomically promotes a completed temporary payload to the destination.
+  ///
+  /// This is overridable so regression tests can deterministically exercise
+  /// rename failures without depending on host filesystem permissions.
+  Future<File> renameTemporaryFile(File temporary, String destination) =>
+      temporary.rename(destination);
+
+  Future<File> _preferencesFile() async {
+    final directory = await applicationSupportDirectory();
+    return File('${directory.path}/$fileName');
   }
 
   Future<bool> _hasPreservedPayload(Directory directory) async {
-    try {
-      if (!await directory.exists()) return false;
-      await for (final entity in directory.list()) {
-        if (entity is File &&
-            entity.uri.pathSegments.last.startsWith(_quarantineMarker)) {
-          return true;
-        }
+    if (!await directory.exists()) return false;
+    await for (final entity in directory.list()) {
+      if (entity is File &&
+          entity.uri.pathSegments.last.startsWith(_quarantineMarker)) {
+        return true;
       }
-      return false;
-    } catch (_) {
-      // If the Platform cannot establish the directory contents, it must not
-      // risk replacing bytes that could be a preserved payload.
-      return true;
     }
+    return false;
   }
 
   Future<void> _quarantine(File file) async {
@@ -124,6 +127,25 @@ final devicePreferencesStoreProvider = Provider<DevicePreferencesStore>(
     applicationSupportDirectory: getApplicationSupportDirectory,
   ),
 );
+
+/// The most recent unresolved device-preference persistence failure.
+///
+/// A null value means there is no known pending failure. The controller clears
+/// a prior failure after a later write succeeds, so orderly exit can retry a
+/// transient filesystem error without treating preserved legacy data as one.
+class PreferencesPersistenceFailure extends Notifier<Object?> {
+  @override
+  Object? build() => null;
+
+  void report(Object error) => state = error;
+
+  void clear() => state = null;
+}
+
+final preferencesPersistenceFailureProvider =
+    NotifierProvider<PreferencesPersistenceFailure, Object?>(
+      PreferencesPersistenceFailure.new,
+    );
 
 /// Owns the user's in-session editor presentation preferences.
 ///
@@ -161,39 +183,87 @@ class BurlPreferencesController extends Notifier<BurlPreferences> {
     _PreferenceField.updateNotifications,
   );
 
+  /// Waits for restoration and every admitted write.
+  ///
+  /// Setters report failures instead of completing with an error because UI
+  /// callbacks invoke them without awaiting. Callers that need an orderly
+  /// shutdown use this method to surface any unresolved failure explicitly.
+  Future<void> flushPendingWrites() async {
+    await _restoration;
+    while (true) {
+      final writes = _writes;
+      await writes;
+      // Setters replace the tail synchronously, including while this await is
+      // pending. Keep draining until no later admitted write remains.
+      if (identical(writes, _writes)) break;
+    }
+    final failure = ref.read(preferencesPersistenceFailureProvider);
+    if (failure != null) throw failure;
+  }
+
   Future<void> _restore() async {
-    final restored = await _store.load();
-    if (!ref.mounted) return;
-    state = restored.copyWith(
-      theme: _locallyChanged.contains(_PreferenceField.theme)
-          ? state.theme
-          : null,
-      fontScale: _locallyChanged.contains(_PreferenceField.fontScale)
-          ? state.fontScale
-          : null,
-      measure: _locallyChanged.contains(_PreferenceField.measure)
-          ? state.measure
-          : null,
-      focusMode: _locallyChanged.contains(_PreferenceField.focusMode)
-          ? state.focusMode
-          : null,
-      updateNotifications:
-          _locallyChanged.contains(_PreferenceField.updateNotifications)
-          ? state.updateNotifications
-          : null,
-    );
+    try {
+      final restored = await _store.load();
+      if (!ref.mounted) return;
+      state = restored.copyWith(
+        theme: _locallyChanged.contains(_PreferenceField.theme)
+            ? state.theme
+            : null,
+        fontScale: _locallyChanged.contains(_PreferenceField.fontScale)
+            ? state.fontScale
+            : null,
+        measure: _locallyChanged.contains(_PreferenceField.measure)
+            ? state.measure
+            : null,
+        focusMode: _locallyChanged.contains(_PreferenceField.focusMode)
+            ? state.focusMode
+            : null,
+        updateNotifications:
+            _locallyChanged.contains(_PreferenceField.updateNotifications)
+            ? state.updateNotifications
+            : null,
+      );
+    } catch (error) {
+      _reportPersistenceFailure(error);
+    }
   }
 
   Future<void> _update(
     BurlPreferences preferences,
     _PreferenceField changedField,
-  ) async {
+  ) {
     _locallyChanged.add(changedField);
     state = preferences;
-    await _restoration;
-    final current = state;
-    _writes = _writes.then((_) => _store.save(current));
-    await _writes;
+    _writes = _writes.then(
+      (_) async {
+        await _restoration;
+        await _persist(state);
+      },
+      onError: (_, _) async {
+        await _restoration;
+        await _persist(state);
+      },
+    );
+    return _writes;
+  }
+
+  Future<void> _persist(BurlPreferences preferences) async {
+    try {
+      await _store.save(preferences);
+      _clearPersistenceFailure();
+    } catch (error) {
+      _reportPersistenceFailure(error);
+    }
+  }
+
+  void _reportPersistenceFailure(Object error) {
+    if (!ref.mounted) return;
+    ref.read(preferencesPersistenceFailureProvider.notifier).report(error);
+  }
+
+  void _clearPersistenceFailure() {
+    if (!ref.mounted) return;
+    ref.read(preferencesPersistenceFailureProvider.notifier).clear();
   }
 }
 

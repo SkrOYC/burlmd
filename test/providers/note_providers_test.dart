@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:burlmd/src/components/lifecycle_actions.dart';
 import 'package:burlmd/src/providers/note_providers.dart';
 import 'package:burlmd/src/providers/rust_api_provider.dart';
 import 'package:burlmd/src/providers/workspace_provider.dart';
@@ -423,6 +424,80 @@ void main() {
     );
 
     test(
+      'a single close reserves editor, selection, and lifecycle admission until Core settles',
+      () async {
+        final closeGate = Completer<void>();
+        final api = _SwitchingRustApi()..closeNoteGates['a'] = closeGate;
+        final container = _containerFor(api);
+        await openTabs(container, ['a', 'b']);
+        final controller = container.read(activeNoteProvider.notifier);
+        controller.activateExistingTab('a');
+        container.read(selectedNoteIdProvider.notifier).select('a');
+
+        final closing = controller.closeTab('a');
+        await Future<void>.delayed(Duration.zero);
+
+        expect(container.read(editorInputBlockedProvider), isTrue);
+        expect(
+          container.read(selectedNoteIdProvider.notifier).select('b'),
+          isFalse,
+        );
+        expect(controller.updateBlock([0], 'must not reach Core'), isFalse);
+        expect(
+          await container.read(lifecycleActionsProvider).createNote('', 'New'),
+          isA<LifecycleFailed>(),
+        );
+        expect(api.blockUpdates, isEmpty);
+
+        closeGate.complete();
+        expect(await closing, isTrue);
+        expect(container.read(editorInputBlockedProvider), isFalse);
+        expect(
+          container.read(selectedNoteIdProvider.notifier).select('b'),
+          isTrue,
+        );
+        await controller.openAsTab('b');
+        expect(controller.updateBlock([0], 'writable again'), isTrue);
+        expect(api.blockUpdates, ['b:0:writable again']);
+      },
+    );
+
+    test(
+      'a cancelled wide close selects a surviving tab and keeps only valid retry hints',
+      () async {
+        for (final entryPoint in <Future<bool> Function(NoteController)>[
+          (controller) => controller.closeOtherTabs('b'),
+          (controller) => controller.closeAllForOrderlyShutdown(),
+        ]) {
+          final api = _SwitchingRustApi()
+            ..closeErrors['a'] = const CloseNoteWarning('cleanup warning');
+          final container = _containerFor(api);
+          await openTabs(container, ['a', 'b', 'c']);
+          final controller = container.read(activeNoteProvider.notifier);
+          controller.activateExistingTab('a');
+          container.read(selectedNoteIdProvider.notifier).select('a');
+
+          expect(await entryPoint(controller), isFalse);
+
+          expect(container.read(activeNoteProvider)?.metadata.id, 'b');
+          expect(container.read(selectedNoteIdProvider), 'b');
+          expect(
+            container
+                .read(openNoteSessionsProvider)
+                .map((note) => note.metadata.id)
+                .toList(),
+            ['b', 'c'],
+          );
+          expect(container.read(workspaceSessionProvider).openNoteIds, [
+            'b',
+            'c',
+          ]);
+          expect(controller.updateBlock([0], 'still writable'), isTrue);
+        }
+      },
+    );
+
+    test(
       'wide close operations proceed only after an entirely clean batch',
       () async {
         for (final entryPoint in <Future<bool> Function(NoteController)>[
@@ -448,6 +523,29 @@ void main() {
             );
           }
         }
+      },
+    );
+
+    test(
+      'an orderly clean close retires Core sessions without clearing restart intent',
+      () async {
+        final api = _SwitchingRustApi();
+        final container = _containerFor(api);
+        await openTabs(container, ['a', 'b']);
+
+        expect(
+          await container
+              .read(activeNoteProvider.notifier)
+              .closeAllForOrderlyShutdown(),
+          isTrue,
+        );
+        expect(container.read(openNoteSessionsProvider), isEmpty);
+        expect(container.read(activeNoteProvider), isNull);
+        expect(container.read(workspaceSessionProvider).openNoteIds, [
+          'a',
+          'b',
+        ]);
+        expect(container.read(workspaceSessionProvider).activeNoteId, 'b');
       },
     );
   });

@@ -67,6 +67,7 @@ class _MountingRustApi extends RustApi {
   final Map<String, List<NoteMetadata>> backlinkResults = {};
   Object? sessionLoadError;
   Object? sessionSaveError;
+  Completer<void>? sessionSaveGate;
 
   /// Delays an individual Core open so mounting tests can interleave a user
   /// action with asynchronous session restoration.
@@ -205,9 +206,26 @@ class _MountingRustApi extends RustApi {
   Future<void> saveActiveWorkspaceSessionSnapshot(
     ActiveWorkspaceSessionSnapshot snapshot,
   ) async {
+    final gate = sessionSaveGate;
+    if (gate != null && !gate.isCompleted) await gate.future;
     final error = sessionSaveError;
     if (error != null) throw error;
     savedSnapshots.add(snapshot);
+  }
+}
+
+class _MountingPreferencesStore extends DevicePreferencesStore {
+  _MountingPreferencesStore()
+    : super(applicationSupportDirectory: () => throw UnimplementedError());
+
+  BurlPreferences _preferences = BurlPreferences.defaults();
+
+  @override
+  Future<BurlPreferences> load() async => _preferences;
+
+  @override
+  Future<void> save(BurlPreferences preferences) async {
+    _preferences = preferences;
   }
 }
 
@@ -237,6 +255,9 @@ Future<ProviderContainer> _pumpShell(
   final container = ProviderContainer(
     overrides: [
       rustApiProvider.overrideWithValue(api),
+      devicePreferencesStoreProvider.overrideWithValue(
+        _MountingPreferencesStore(),
+      ),
       // No periodic timer in tests (there is no fake clock to fire it); the
       // monitor's *armed* state is still observable through its built state.
       writeStatusPollIntervalProvider.overrideWithValue(null),
@@ -1342,11 +1363,14 @@ void main() {
     await controller.openAsTab('a');
     await controller.openAsTab('b');
     await controller.openAsTab('c');
-    controller.activateExistingTab('b');
-    container.read(selectedNoteIdProvider.notifier).select('b');
+    controller.activateExistingTab('a');
+    container.read(selectedNoteIdProvider.notifier).select('a');
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('shell-tab-b')));
+    Focus.of(
+      tester.element(find.byKey(const Key('shell-tab-b'))),
+    ).requestFocus();
+    await tester.pump();
     await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
     await tester.sendKeyEvent(LogicalKeyboardKey.f10);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
@@ -1358,6 +1382,8 @@ void main() {
     expect(find.byKey(const Key('shell-tab-a')), findsNothing);
     expect(find.byKey(const Key('shell-tab-b')), findsOneWidget);
     expect(find.byKey(const Key('shell-tab-c')), findsOneWidget);
+    expect(container.read(activeNoteProvider)?.metadata.id, 'b');
+    expect(container.read(selectedNoteIdProvider), 'b');
   });
 
   testWidgets('mounted Close All stops on a true close refusal', (
@@ -1426,6 +1452,7 @@ void main() {
       final controller = container.read(activeNoteProvider.notifier);
       await controller.openAsTab('a');
       await controller.openAsTab('b');
+      controller.activateExistingTab('a');
       await tester.pump();
       api.closeNoteErrors['a'] = const CloseNoteWarning('cleanup warning');
 
@@ -1458,6 +1485,25 @@ void main() {
         'close:b',
         'close:b',
       ]);
+      expect(api.savedSnapshots.last.openNoteIds, ['b']);
+      expect(api.savedSnapshots.last.activeNoteId, 'b');
+    },
+  );
+
+  testWidgets(
+    'the native exit callback flushes the clean pre-exit tab snapshot before exit',
+    (tester) async {
+      final api = _MountingRustApi([_treeNode('a', 'Alpha')]);
+      final container = await _pumpShell(tester, api);
+      final controller = container.read(activeNoteProvider.notifier);
+      await controller.openAsTab('a');
+      await controller.openAsTab('b');
+      controller.activateExistingTab('a');
+      await tester.pump();
+
+      expect(await tester.binding.handleRequestAppExit(), AppExitResponse.exit);
+      expect(api.savedSnapshots.last.openNoteIds, ['a', 'b']);
+      expect(api.savedSnapshots.last.activeNoteId, 'a');
     },
   );
 
@@ -1496,6 +1542,67 @@ void main() {
 
       createGate.complete();
       expect(await creating, isA<LifecycleCompleted>());
+    },
+  );
+
+  testWidgets(
+    'the native exit callback keeps close admission while the final snapshot drain is pending',
+    (tester) async {
+      final saveGate = Completer<void>();
+      final api = _MountingRustApi([_treeNode('a', 'Alpha')]);
+      final container = await _pumpShell(tester, api);
+      final controller = container.read(activeNoteProvider.notifier);
+      await controller.openAsTab('a');
+      await tester.pumpAndSettle();
+      api.sessionSaveGate = saveGate;
+
+      final exiting = tester.binding.handleRequestAppExit();
+      await tester.pump();
+
+      expect(api.calls.where((call) => call.startsWith('close:')), ['close:a']);
+      expect(container.read(editorInputBlockedProvider), isTrue);
+      expect(
+        container.read(selectedNoteIdProvider.notifier).select('b'),
+        isFalse,
+      );
+      await controller.openAsTab('b');
+      expect(api.calls, isNot(contains('open:b')));
+      expect(
+        await container.read(lifecycleActionsProvider).createNote('', 'New'),
+        isA<LifecycleFailed>(),
+      );
+
+      saveGate.complete();
+      expect(await exiting, AppExitResponse.exit);
+      expect(container.read(editorInputBlockedProvider), isFalse);
+    },
+  );
+
+  testWidgets(
+    'the native exit callback reports and cancels an unresolved preferences write',
+    (tester) async {
+      final api = _MountingRustApi([_treeNode('a', 'Alpha')]);
+      final container = await _pumpShell(tester, api);
+      container
+          .read(preferencesPersistenceFailureProvider.notifier)
+          .report(StateError('preferences unavailable'));
+      await tester.pump();
+
+      expect(find.textContaining('Could not save preferences'), findsOneWidget);
+      expect(
+        await tester.binding.handleRequestAppExit(),
+        AppExitResponse.cancel,
+      );
+      await tester.pump();
+      expect(
+        find.textContaining('Could not complete orderly exit'),
+        findsOneWidget,
+      );
+      expect(container.read(editorInputBlockedProvider), isFalse);
+      expect(
+        container.read(selectedNoteIdProvider.notifier).select('a'),
+        isTrue,
+      );
     },
   );
 

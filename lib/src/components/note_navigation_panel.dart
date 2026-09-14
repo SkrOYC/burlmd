@@ -69,6 +69,12 @@ class _NoteNavigationPanelState extends ConsumerState<NoteNavigationPanel> {
     List<NoteMetadata> backlinks,
   ) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    if (event.logicalKey == LogicalKeyboardKey.escape) {
+      widget.onDismiss?.call();
+      return widget.onDismiss == null
+          ? KeyEventResult.ignored
+          : KeyEventResult.handled;
+    }
     if (hits.isEmpty && backlinks.isEmpty) return KeyEventResult.ignored;
     if (hits.isEmpty) {
       final selectedBacklink = _selectedBacklinkIndex ?? 0;
@@ -88,11 +94,6 @@ class _NoteNavigationPanelState extends ConsumerState<NoteNavigationPanel> {
         case LogicalKeyboardKey.enter || LogicalKeyboardKey.numpadEnter:
           _select(backlinks[selectedBacklink]);
           return KeyEventResult.handled;
-        case LogicalKeyboardKey.escape:
-          widget.onDismiss?.call();
-          return widget.onDismiss == null
-              ? KeyEventResult.ignored
-              : KeyEventResult.handled;
         default:
           return KeyEventResult.ignored;
       }
@@ -111,11 +112,6 @@ class _NoteNavigationPanelState extends ConsumerState<NoteNavigationPanel> {
       case LogicalKeyboardKey.enter || LogicalKeyboardKey.numpadEnter:
         _select(hits[selectedIndex]);
         return KeyEventResult.handled;
-      case LogicalKeyboardKey.escape:
-        widget.onDismiss?.call();
-        return widget.onDismiss == null
-            ? KeyEventResult.ignored
-            : KeyEventResult.handled;
       default:
         return KeyEventResult.ignored;
     }

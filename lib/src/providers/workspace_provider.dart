@@ -420,6 +420,38 @@ class WorkspaceSession extends Notifier<WorkspaceSessionState> {
     _enqueueSave();
   }
 
+  /// Drains a deliberate final save for the current Workspace scope. Orderly
+  /// exit calls this after Core has retired its live sessions: the snapshot is
+  /// presentation intent, not a live Dart session, and must reach Core before
+  /// Flutter accepts termination.
+  Future<void> flushPendingWrites() async {
+    final workspaceId = _workspaceId;
+    final scopeGeneration = _scopeGeneration;
+    if (!_restored ||
+        workspaceId == null ||
+        _activeBootstrapGeneration != null ||
+        _snapshotSavingDisabledScopeGeneration == scopeGeneration) {
+      throw StateError('Workspace session persistence is not available.');
+    }
+    _enqueueSave();
+    while (true) {
+      final writes = _writes;
+      await writes;
+      if (identical(writes, _writes)) break;
+    }
+    if (!ref.mounted ||
+        !_isCurrentWorkspaceScope(workspaceId, scopeGeneration)) {
+      throw StateError('Workspace session scope changed during persistence.');
+    }
+    final failure = ref.read(workspaceSessionFailureProvider);
+    if (failure != null &&
+        failure.operation == WorkspaceSessionOperation.save &&
+        failure.workspaceId == workspaceId &&
+        failure.scopeGeneration == scopeGeneration) {
+      throw failure.error;
+    }
+  }
+
   void _enqueueSave() {
     final workspaceId = _workspaceId;
     if (workspaceId == null) return;
@@ -435,6 +467,13 @@ class WorkspaceSession extends Notifier<WorkspaceSessionState> {
       }
       try {
         await api.saveActiveWorkspaceSessionSnapshot(snapshot);
+        final failure = ref.read(workspaceSessionFailureProvider);
+        if (failure != null &&
+            failure.operation == WorkspaceSessionOperation.save &&
+            failure.workspaceId == workspaceId &&
+            failure.scopeGeneration == scopeGeneration) {
+          ref.read(workspaceSessionFailureProvider.notifier).clear();
+        }
       } catch (error) {
         _reportFailure(
           operation: WorkspaceSessionOperation.save,
@@ -537,6 +576,7 @@ class RescanEditing extends Notifier<int> {
 /// the selected Note itself.
 final noteSelectionBlockedProvider = Provider<bool>(
   (ref) =>
+      ref.watch(noteCloseEditingProvider) > 0 ||
       ref.watch(reloadEditingProvider) > 0 ||
       ref.watch(lifecycleEditingProvider) > 0 ||
       ref.watch(rescanEditingProvider) > 0,
