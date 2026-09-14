@@ -1,10 +1,16 @@
 entries:
+  - version: v3.2.18
+    date: 2026-09-14
+    changed: ["BURL-M003 deferred to Tasks Evolution for supported-release qualification after the user resumes that scope and the required upstream stages authorize execution.: The approved private Linux checkout milestone excludes managed release qualification. No accepted three-role report or reviewed completion evidence exists. Retained implementation and local fixture checks do not complete BURL-M003 or deliver CAP-076.", "EPIC-M CI bootstrap archived: 1 tickets, 3 points, 24156 diff lines, 5 review rounds"]
+    by: reconcile
+    fixed: ["BURL-M015 observes final shorter-retry timer quiescence without changing production behavior or weakening assertions. Committed-source evidence records 101 exact invocations per fixture, 202 successful processes in total, and exit 0. Independent milestone review repeated the exact gate and passed all 538 Rust tests, formatting, and Clippy."]
+    upstream:
+      prd: v2.0.7
+      architecture: v2.1.2
+      tech-spec: v2.2.3
   - version: v3.2.17
     date: 2026-09-13
-    fixed:
-      - "Corrected the authorized six-ticket Epic G replay scope without expanding product or platform scope. BURL-G001 owns the `devenv.nix` Sway package required by its private harness. BURL-G002 owns the required `path_provider` dependency declaration and lockfile, generated Linux plugin registration, and localized preference surfaces. BURL-G003 owns the workspace-tree, lifecycle-action, Note, Rust API-provider, Workspace-screen, generated-binding, and focused component and screen test paths that its snapshot replay requires. BURL-G004 owns its main-entry smoke staging, localized missing-Note report, workspace shell, provider, Workspace-screen, smoke, lifecycle-action, and focused test paths."
-      - "Replaced replay ranges with exact verified commit lists. Reproduce BURL-G001 from `8051931a0ea9afd7012b92e71a219d704a0987bf`, `367af4df44c3920f9361deac00a5f66bd4784260`, `7a6cbe6931877630cd05a380401a91b69e2d9594`, `d3a2844ed6ba54c80b89b702a217263d9617c2cc`, and `7e0eb066a3488bd2cd58d8b1342480acc4ed0cc5`; BURL-G002 from `0e875d87719a41a87db7f72a479e2d006b9a0ddb` and `f916d68ce8c535e62f821980d2f66a8773d1e1d6`; BURL-G003 from `0e1dfd6b7e9ab1cb274d95a809408cbd63fd6cf0`, `fbd92b09ca8dd5527944acf5c58c98f78a43d9ab`, `60931cde94e434f50cf640488ca67717d7f2654f`, and `80fdcfe234cc32c1af562b32825558464f52f45d`; and BURL-G004 from `82682cfc002f4d3c6ad0904462f6a752a0ac429d`, `69388cdd02ced71b69e864b2a0242cd308d26b49`, `75428bee19c9a20b00f98b1b12db1f2bbfb6a83d`, `b0173e7fd626a77cfa9f5d8f1dd618a8528e7b10`, `7d99c0c92759d3edaada902fe72b39c8d2338d45`, `fc7727935411edd6b3868b092d5516858946fec9`, `d3a92f8d04296f4b85dffeba3e20c66752383b9d`, and `3267f6363b016ebd1bd601f0366909c25bb85a4c`. Use the checked-out `scripts/check-generated-bindings.sh` for BURL-G003 verification; don't replay the historical checker implementation."
-      - "Added a BURL-G001 poisoned-ambient-`DISPLAY` regression requirement. The entire smoke-child launch clears `DISPLAY`; a capture cannot use a display inherited from the Writer's environment."
+    fixed: ["Corrected the authorized six-ticket Epic G replay scope without expanding product or platform scope. BURL-G001 owns the `devenv.nix` Sway package required by its private harness. BURL-G002 owns the required `path_provider` dependency declaration and lockfile, generated Linux plugin registration, and localized preference surfaces. BURL-G003 owns the workspace-tree, lifecycle-action, Note, Rust API-provider, Workspace-screen, generated-binding, and focused component and screen test paths that its snapshot replay requires. BURL-G004 owns its main-entry smoke staging, localized missing-Note report, workspace shell, provider, Workspace-screen, smoke, lifecycle-action, and focused test paths.", "Replaced replay ranges with exact verified commit lists. Reproduce BURL-G001 from `8051931a0ea9afd7012b92e71a219d704a0987bf`, `367af4df44c3920f9361deac00a5f66bd4784260`, `7a6cbe6931877630cd05a380401a91b69e2d9594`, `d3a2844ed6ba54c80b89b702a217263d9617c2cc`, and `7e0eb066a3488bd2cd58d8b1342480acc4ed0cc5`; BURL-G002 from `0e875d87719a41a87db7f72a479e2d006b9a0ddb` and `f916d68ce8c535e62f821980d2f66a8773d1e1d6`; BURL-G003 from `0e1dfd6b7e9ab1cb274d95a809408cbd63fd6cf0`, `fbd92b09ca8dd5527944acf5c58c98f78a43d9ab`, `60931cde94e434f50cf640488ca67717d7f2654f`, and `80fdcfe234cc32c1af562b32825558464f52f45d`; and BURL-G004 from `82682cfc002f4d3c6ad0904462f6a752a0ac429d`, `69388cdd02ced71b69e864b2a0242cd308d26b49`, `75428bee19c9a20b00f98b1b12db1f2bbfb6a83d`, `b0173e7fd626a77cfa9f5d8f1dd618a8528e7b10`, `7d99c0c92759d3edaada902fe72b39c8d2338d45`, `fc7727935411edd6b3868b092d5516858946fec9`, `d3a92f8d04296f4b85dffeba3e20c66752383b9d`, and `3267f6363b016ebd1bd601f0366909c25bb85a4c`. Use the checked-out `scripts/check-generated-bindings.sh` for BURL-G003 verification; don't replay the historical checker implementation.", "Added a BURL-G001 poisoned-ambient-`DISPLAY` regression requirement. The entire smoke-child launch clears `DISPLAY`; a capture cannot use a display inherited from the Writer's environment."]
     upstream:
       prd: v2.0.7
       architecture: v2.1.2
@@ -12,9 +18,7 @@ entries:
     by: patch-lane
   - version: v3.2.16
     date: 2026-09-13
-    fixed:
-      - "Removed BURL-G001's historical deviation record for `README.md`, `.constitution/tech-spec/stack.yaml`, and `.constitution/tech-spec/data-models/schema.sql`. The planned ticket doesn't authorize those files; Git history retains the review context."
-      - "Corrected the G replay instruction. Source-tree snapshot `2fb9eb2a5e27b5b07f5491b7c6f752b4572c2727` is an inspection reference, not a cherry-pick source: its sole delta deletes `.envrc`. Apply only each ticket's scoped source changes. Don't replay the snapshot's `.envrc` deletion or change `.constitution`, managed CI, or unrelated files. The later v3.2.17 entry names every authorized replay commit."
+    fixed: ["Removed BURL-G001's historical deviation record for `README.md`, `.constitution/tech-spec/stack.yaml`, and `.constitution/tech-spec/data-models/schema.sql`. The planned ticket doesn't authorize those files; Git history retains the review context.", "Corrected the G replay instruction. Source-tree snapshot `2fb9eb2a5e27b5b07f5491b7c6f752b4572c2727` is an inspection reference, not a cherry-pick source: its sole delta deletes `.envrc`. Apply only each ticket's scoped source changes. Don't replay the snapshot's `.envrc` deletion or change `.constitution`, managed CI, or unrelated files. The later v3.2.17 entry names every authorized replay commit."]
     upstream:
       prd: v2.0.6
       architecture: v2.1.2
@@ -22,13 +26,7 @@ entries:
     by: patch-lane
   - version: v3.2.15
     date: 2026-09-13
-    changed:
-      - "Retained BURL-M015 as planned after the fresh exact gate exposed a shorter-retry failure at repetition 46 of 100. The bounded correction adds only the missing final timer-quiescence observation in the named fixture and reruns the unchanged exact gate. It starts on `fix/epic-m-linux-test-teardown` from reviewed merged `master`, requires fresh proof and review, and preserves the two-fixture, no-production-change boundary."
-      - "Deferred BURL-M003 to the supported-release qualification route. Epic M no longer claims CAP-076, and neither an earlier implementation nor local checks complete the ticket."
-      - "Authorized BURL-G001 through BURL-G005 and BURL-G007 for private Linux use after M closes. G001 owns the private Sway visual harness and smoke-child PID protocol. The remaining active G tickets quote the private Linux commands from the guidelines and depend on G001. Selective replay may use primary G commit `2fb9eb2a5e27b5b07f5491b7c6f752b4572c2727` only for in-scope application and test changes."
-      - "Deferred BURL-G006, BURL-G008, BURL-G009, BURL-G010, and BURL-G011 to their explicit adoption, canonical-AST, final-history-contract, or full managed supported-release routes. BURL-G011 remains a supported-release gate."
-      - "Changed the direct graph edge to EPIC-M → EPIC-G → EPIC-H because G and H overlap on Workspace, FFI, component, and test paths. This serializes the authorized private G work before H without asserting that H is complete or removing H from any deferred route. Other epic dependencies remain unchanged."
-      - "Completed epics A through F still lack actuals blocks. Observed diff-lines-per-point and review-rounds-per-point ratios remain unavailable, so this bounded adaptation preserves estimates."
+    changed: ["Retained BURL-M015 as planned after the fresh exact gate exposed a shorter-retry failure at repetition 46 of 100. The bounded correction adds only the missing final timer-quiescence observation in the named fixture and reruns the unchanged exact gate. It starts on `fix/epic-m-linux-test-teardown` from reviewed merged `master`, requires fresh proof and review, and preserves the two-fixture, no-production-change boundary.", "Deferred BURL-M003 to the supported-release qualification route. Epic M no longer claims CAP-076, and neither an earlier implementation nor local checks complete the ticket.", "Authorized BURL-G001 through BURL-G005 and BURL-G007 for private Linux use after M closes. G001 owns the private Sway visual harness and smoke-child PID protocol. The remaining active G tickets quote the private Linux commands from the guidelines and depend on G001. Selective replay may use primary G commit `2fb9eb2a5e27b5b07f5491b7c6f752b4572c2727` only for in-scope application and test changes.", "Deferred BURL-G006, BURL-G008, BURL-G009, BURL-G010, and BURL-G011 to their explicit adoption, canonical-AST, final-history-contract, or full managed supported-release routes. BURL-G011 remains a supported-release gate.", "Changed the direct graph edge to EPIC-M → EPIC-G → EPIC-H because G and H overlap on Workspace, FFI, component, and test paths. This serializes the authorized private G work before H without asserting that H is complete or removing H from any deferred route. Other epic dependencies remain unchanged.", "Completed epics A through F still lack actuals blocks. Observed diff-lines-per-point and review-rounds-per-point ratios remain unavailable, so this bounded adaptation preserves estimates."]
     upstream:
       prd: v2.0.6
       architecture: v2.1.2
@@ -36,14 +34,8 @@ entries:
     by: stage
   - version: v3.2.14
     date: 2026-09-13
-    fixed:
-      - "Adapted only BURL-M003 to TechSpec v2.1.30 and raw managed-evidence contract version 40. This co-merged adaptation satisfies the Stage 4 routing requirement when the complete reviewed documentation pull request merges. The ticket retains the five-entry gate-log map, exact 24-byte diagnostic prefix, Linux closure views, seven sessions, schemas 16, 20, and 21, sealing receipt version 2, receipt transport version 1, and the exact 11-artifact ordinary and 13-artifact BURL-O001 inventories."
-      - "Added the diagnostic-only macOS 26 first-integration resolver reference: Flutter 3.44.3's xcrun resolver call runs only for the BURL-M003 macos-26-arm64 first integration gate from the canonical candidate-workspace macos cwd with the exact candidate-workspace/build/macos/SourcePackages argument; the match runs once with unchanged argv, working directory, and environment. The two relays retain only 32,768-byte stream tails. A completed relay pair with successful tail retention publishes resolver.stdout.tail, resolver.stderr.tail, and the atomically published resolver.status handoff only for a normal xcrun exit in 1 through 255, before the observer returns that normal status and the enclosing candidate wrapper cleans up. A normal exit of 0, including before a later integration failure, and a signal-terminated xcrun publish no resolver handoff or diagnostic data. The observer distinguishes the native wait status, restores or unblocks the child's signal as needed, and terminates itself with it. Flutter then observes its child as signal-terminated. The observer never sends the signal to the Flutter parent or returns 128 plus the signal number. Paired fixtures distinguish normal exit 137, which returns normal 137 and publishes the handoff after successful relays, from `SIGKILL`, for which the observer terminates itself and Dart observes -9 with no resolver handoff or diagnostic data. A tail-retention/storage write failure continues draining and forwarding while suppressing capture. An upstream resolver-pipe read failure or downstream forwarding-write failure is a nonzero observer execution failure before cleanup, publishes no resolver handoff or resolver diagnostic data, and makes no counterfactual status claim. Acceptance uses streams exceeding measured pipe capacity, canonical unsigned ASCII decimal status fields, descriptor-relative no-follow nonblocking checks, bounded reads, no-removal residual-race policy, and mutation fixtures."
-      - "Replaced stale raw-version-39 recovery-documentation references. The first recovery uses the reviewed documentation tip after the Stage 4 adaptation as its strict first-parent base, and every later same-contract correction uses its immediate reviewed master tip. The ticket requires one separately reviewed implementation commit, fresh attempt-1 dispatch with a new nonce, and the existing reviewed three-file evidence pull request without a Tasks SHA acknowledgement or self-referential placeholder."
-      - "BURL-G011, BURL-P002, and BURL-O012 remain historical adaptations. BURL-O001 remains blocked, but its raw-contract-version-39, PR #37, and Tasks-SHA stop wording is stale. Preserving the stop does not make it current or settle it. Its owning later Stage 3 routing and Stage 4 adaptation must replace that wording before BURL-O001 can run. Ticket IDs, dependencies, scope, estimates, certainty, status, verification command, tech-spec patchability, and epic graph are unchanged. Completed epics still provide no actuals calibration, so estimates remain unchanged."
-    security:
-      - "The resolver observation adds no command, retry, artifact, accepted-evidence field, authority, or hosted-macOS lifecycle-containment claim. Resolver data remains untrusted and can enter only the existing post-cleanup failure block. The parent leaves the small private diagnostic area for the hosted job lifecycle rather than remove a final name after an identity check. The macOS 26 failure cause remains unknown; Flutter's mixed Swift Package Manager and CocoaPods support does not justify a Podfile change."
-      - "Preserved the 42-record bill of materials, exact 35 trusted control paths, control jobs, distribution targets, permissions, evidence classes, fresh-seal authority, source allowlist, timeouts, and cache-trust rules."
+    fixed: ["Adapted only BURL-M003 to TechSpec v2.1.30 and raw managed-evidence contract version 40. This co-merged adaptation satisfies the Stage 4 routing requirement when the complete reviewed documentation pull request merges. The ticket retains the five-entry gate-log map, exact 24-byte diagnostic prefix, Linux closure views, seven sessions, schemas 16, 20, and 21, sealing receipt version 2, receipt transport version 1, and the exact 11-artifact ordinary and 13-artifact BURL-O001 inventories.", "Added the diagnostic-only macOS 26 first-integration resolver reference: Flutter 3.44.3's xcrun resolver call runs only for the BURL-M003 macos-26-arm64 first integration gate from the canonical candidate-workspace macos cwd with the exact candidate-workspace/build/macos/SourcePackages argument; the match runs once with unchanged argv, working directory, and environment. The two relays retain only 32,768-byte stream tails. A completed relay pair with successful tail retention publishes resolver.stdout.tail, resolver.stderr.tail, and the atomically published resolver.status handoff only for a normal xcrun exit in 1 through 255, before the observer returns that normal status and the enclosing candidate wrapper cleans up. A normal exit of 0, including before a later integration failure, and a signal-terminated xcrun publish no resolver handoff or diagnostic data. The observer distinguishes the native wait status, restores or unblocks the child's signal as needed, and terminates itself with it. Flutter then observes its child as signal-terminated. The observer never sends the signal to the Flutter parent or returns 128 plus the signal number. Paired fixtures distinguish normal exit 137, which returns normal 137 and publishes the handoff after successful relays, from `SIGKILL`, for which the observer terminates itself and Dart observes -9 with no resolver handoff or diagnostic data. A tail-retention/storage write failure continues draining and forwarding while suppressing capture. An upstream resolver-pipe read failure or downstream forwarding-write failure is a nonzero observer execution failure before cleanup, publishes no resolver handoff or resolver diagnostic data, and makes no counterfactual status claim. Acceptance uses streams exceeding measured pipe capacity, canonical unsigned ASCII decimal status fields, descriptor-relative no-follow nonblocking checks, bounded reads, no-removal residual-race policy, and mutation fixtures.", "Replaced stale raw-version-39 recovery-documentation references. The first recovery uses the reviewed documentation tip after the Stage 4 adaptation as its strict first-parent base, and every later same-contract correction uses its immediate reviewed master tip. The ticket requires one separately reviewed implementation commit, fresh attempt-1 dispatch with a new nonce, and the existing reviewed three-file evidence pull request without a Tasks SHA acknowledgement or self-referential placeholder.", "BURL-G011, BURL-P002, and BURL-O012 remain historical adaptations. BURL-O001 remains blocked, but its raw-contract-version-39, PR #37, and Tasks-SHA stop wording is stale. Preserving the stop does not make it current or settle it. Its owning later Stage 3 routing and Stage 4 adaptation must replace that wording before BURL-O001 can run. Ticket IDs, dependencies, scope, estimates, certainty, status, verification command, tech-spec patchability, and epic graph are unchanged. Completed epics still provide no actuals calibration, so estimates remain unchanged."]
+    security: ["The resolver observation adds no command, retry, artifact, accepted-evidence field, authority, or hosted-macOS lifecycle-containment claim. Resolver data remains untrusted and can enter only the existing post-cleanup failure block. The parent leaves the small private diagnostic area for the hosted job lifecycle rather than remove a final name after an identity check. The macOS 26 failure cause remains unknown; Flutter's mixed Swift Package Manager and CocoaPods support does not justify a Podfile change.", "Preserved the 42-record bill of materials, exact 35 trusted control paths, control jobs, distribution targets, permissions, evidence classes, fresh-seal authority, source allowlist, timeouts, and cache-trust rules."]
     upstream:
       prd: v2.0.5
       architecture: v2.1.2
@@ -51,21 +43,9 @@ entries:
     by: patch-lane
   - version: v3.2.13
     date: 2026-09-09
-    changed:
-      - "Adapted BURL-M003 to TechSpec v2.1.29 and raw managed-evidence contract version 39. The ticket now quotes the canonical ubuntu-22.04 verification command and names the github-ubuntu-22_04-x86_64 profile, role schema version 16, aggregate schema version 20, and Spike-result schema version 21. Sealing receipt version 2 and receipt transport version 1 remain unchanged."
-      - "Defined the recovery ancestry without discarding the reviewed implementation. The first one-commit recovery uses the merged TechSpec and Tasks recovery-documentation tip as its strict first-parent base. A later same-contract correction uses the immediately preceding reviewed master tip. Every replacement anchor retains original PR #15 anchor f72659cef4487317c9e984e01f775a358f814a41 and reviewed BURL-M015 commit 6d30b7445b0108a6a5dd963cd2aa2ae5f5090485, then completes fresh self-validation with a new nonce, attempt 1, anchor equality, and the separate three-file evidence pull request."
-      - "Required the entire reviewed documentation pull request to merge before BURL-M003 implementation. The pull request contains separately validated and independently reviewed Stage 3, Stage 4, and Stage 3 acknowledgement commits. At this Stage 4 pass, the acknowledgement was pending and had to cite the exact reviewed Tasks v3.2.13 commit before it could mark ci_bootstrap.stage4_tasks_adaptation satisfied; the later Stage 3 acknowledgement is now satisfied. BURL-M003 implementation remains unauthorized until the full reviewed documentation pull request merges."
-      - "Increased only the managed client's workflow observation bound from 7,200 to 21,600 seconds. Role-job and candidate-session timeouts, retries, topology, permissions, and cache trust remain unchanged. Runtime optimization remains deferred."
-      - "Mechanically restated the managed Linux label or profile for BURL-G011, BURL-P002, and BURL-O012 as ubuntu-22.04 and github-ubuntu-22_04-x86_64. No product implementation is authorized. Execution pauses after Epic M completes and before Epic H implementation or Epic G replay."
-      - "Regenerated critical-path.md from the unchanged 10-epic, 80-ticket, 564-point graph. Completed Epics A through F have no actuals blocks, so diff-lines-per-point and review-rounds-per-point calibration remains unavailable. The validator reports 70% of open tickets at the 8-point ceiling; no estimate changes."
-    fixed:
-      - "Required BURL-M003's bounded failure-only macOS diagnostic path. It selects a trusted log, opens it read-only with no-follow and nonblocking flags, accepts only a regular file, snapshots at most the final 65,536 bytes, and emits validated fixed-prefix base64 with the fixed gate ID, original exit status, observed source size, retained-tail size, and retained-tail SHA-256. Diagnostics cannot affect cleanup, the original failure, accepted evidence, or artifact upload."
-      - "Added the actual nested pinned-Bash negative path. candidate_exec enables errexit, run_ci_gate retains the nonzero status and reaches diagnostic recording, and an unconditional candidate_phase call exits before a later gate. Fixtures cover oversized, sparse, changing, linked, FIFO, directory, and available special-file inputs without an unbounded or blocking read."
-      - "Quoted BURL-M003's exhaustive five-entry diagnostic map exactly once in its acceptance evidence, including the macOS results/integration-SHA.log paths, and required exact ordered equality. Fixtures reject missing, extra, duplicate, substituted, reordered, unknown-ID, unknown-path, Linux-path, and prefix mutations, including every trailing-space mutation of the exact 24-byte ASCII prefix."
-      - "Clarified that a source at or below 65,536 bytes can fit wholly in one bounded snapshot; no additional or unbounded full-file pass is allowed, only the snapshot is hashed, and no complete-log integrity claim is made. Replaced BURL-O001's acknowledgement-only stop with the complete reviewed PR #37 merge gate and post-merge source-to-landed Tasks SHA plus final documentation-tip record."
-    security:
-      - "Preserved the two Linux closure views, seven sessions, 42-record bill of materials, 35 trusted control paths, bootstrap source allowlist, exact 11-artifact ordinary and 13-artifact BURL-O001 inventories, permissions, evidence classes, fresh-seal trust boundary, and ubuntu-24.04 expected and receipt_digests control jobs."
-      - "Kept BURL-O001 blocked on its separate Stage 3 packaging-isolation and capacity decision. Its Ubuntu 22.04, Ubuntu 24.04, Ubuntu 26.04, Debian 12, and Debian 13 packaging targets remain unchanged, including .#checks.x86_64-linux.ubuntu-24_04."
+    changed: ["Adapted BURL-M003 to TechSpec v2.1.29 and raw managed-evidence contract version 39. The ticket now quotes the canonical ubuntu-22.04 verification command and names the github-ubuntu-22_04-x86_64 profile, role schema version 16, aggregate schema version 20, and Spike-result schema version 21. Sealing receipt version 2 and receipt transport version 1 remain unchanged.", "Defined the recovery ancestry without discarding the reviewed implementation. The first one-commit recovery uses the merged TechSpec and Tasks recovery-documentation tip as its strict first-parent base. A later same-contract correction uses the immediately preceding reviewed master tip. Every replacement anchor retains original PR #15 anchor f72659cef4487317c9e984e01f775a358f814a41 and reviewed BURL-M015 commit 6d30b7445b0108a6a5dd963cd2aa2ae5f5090485, then completes fresh self-validation with a new nonce, attempt 1, anchor equality, and the separate three-file evidence pull request.", "Required the entire reviewed documentation pull request to merge before BURL-M003 implementation. The pull request contains separately validated and independently reviewed Stage 3, Stage 4, and Stage 3 acknowledgement commits. At this Stage 4 pass, the acknowledgement was pending and had to cite the exact reviewed Tasks v3.2.13 commit before it could mark ci_bootstrap.stage4_tasks_adaptation satisfied; the later Stage 3 acknowledgement is now satisfied. BURL-M003 implementation remains unauthorized until the full reviewed documentation pull request merges.", "Increased only the managed client's workflow observation bound from 7,200 to 21,600 seconds. Role-job and candidate-session timeouts, retries, topology, permissions, and cache trust remain unchanged. Runtime optimization remains deferred.", "Mechanically restated the managed Linux label or profile for BURL-G011, BURL-P002, and BURL-O012 as ubuntu-22.04 and github-ubuntu-22_04-x86_64. No product implementation is authorized. Execution pauses after Epic M completes and before Epic H implementation or Epic G replay.", "Regenerated critical-path.md from the unchanged 10-epic, 80-ticket, 564-point graph. Completed Epics A through F have no actuals blocks, so diff-lines-per-point and review-rounds-per-point calibration remains unavailable. The validator reports 70% of open tickets at the 8-point ceiling; no estimate changes."]
+    fixed: ["Required BURL-M003's bounded failure-only macOS diagnostic path. It selects a trusted log, opens it read-only with no-follow and nonblocking flags, accepts only a regular file, snapshots at most the final 65,536 bytes, and emits validated fixed-prefix base64 with the fixed gate ID, original exit status, observed source size, retained-tail size, and retained-tail SHA-256. Diagnostics cannot affect cleanup, the original failure, accepted evidence, or artifact upload.", "Added the actual nested pinned-Bash negative path. candidate_exec enables errexit, run_ci_gate retains the nonzero status and reaches diagnostic recording, and an unconditional candidate_phase call exits before a later gate. Fixtures cover oversized, sparse, changing, linked, FIFO, directory, and available special-file inputs without an unbounded or blocking read.", "Quoted BURL-M003's exhaustive five-entry diagnostic map exactly once in its acceptance evidence, including the macOS results/integration-SHA.log paths, and required exact ordered equality. Fixtures reject missing, extra, duplicate, substituted, reordered, unknown-ID, unknown-path, Linux-path, and prefix mutations, including every trailing-space mutation of the exact 24-byte ASCII prefix.", "Clarified that a source at or below 65,536 bytes can fit wholly in one bounded snapshot; no additional or unbounded full-file pass is allowed, only the snapshot is hashed, and no complete-log integrity claim is made. Replaced BURL-O001's acknowledgement-only stop with the complete reviewed PR #37 merge gate and post-merge source-to-landed Tasks SHA plus final documentation-tip record."]
+    security: ["Preserved the two Linux closure views, seven sessions, 42-record bill of materials, 35 trusted control paths, bootstrap source allowlist, exact 11-artifact ordinary and 13-artifact BURL-O001 inventories, permissions, evidence classes, fresh-seal trust boundary, and ubuntu-24.04 expected and receipt_digests control jobs.", "Kept BURL-O001 blocked on its separate Stage 3 packaging-isolation and capacity decision. Its Ubuntu 22.04, Ubuntu 24.04, Ubuntu 26.04, Debian 12, and Debian 13 packaging targets remain unchanged, including .#checks.x86_64-linux.ubuntu-24_04."]
     upstream:
       prd: v2.0.5
       architecture: v2.1.2
@@ -73,12 +53,7 @@ entries:
     by: patch-lane
   - version: v3.2.12
     date: 2026-09-08
-    fixed:
-      - "Expanded BURL-M015 to exactly two named persistence regression fixtures. Each fixture must pass one ordinary run and 100 consecutive isolated repetitions with 0 failures and no skipped assertions. Every Cargo invocation uses the fully qualified `workspace::persist::tests::...` name followed by `-- --exact`, so substring-matched tests cannot count toward acceptance."
-      - "Required the first fixture to compare the complete returned and live `NoteState` values while tier 2 session settlement is deliberately paused. After releasing the pause, it must observe the metadata timestamp advance and final timer quiescence without changing authoritative-success behavior."
-      - "Required the second fixture to preserve complete `NoteState` equality for both refusal paths and observe timer quiescence after the longer retry's draft row clears and before capturing `state_before_shorter`. Bounded predicate polling remains permitted, but fixed sleeps and wall-clock coincidence cannot substitute for observing settlement. Production semantics remain unchanged."
-      - "Kept BURL-M015 at 3 points with its existing paths and preserved BURL-M003's dependency on it. No BURL-M016 or other ticket was added. The 11-point Epic M and the 10-epic, 564-point graph remain unchanged."
-      - "Completed Epics A through F have no actuals blocks, so diff-lines-per-point and review-rounds-per-point calibration remains unavailable. Validation still reports 70% of open tickets at the 8-point ceiling; this bounded 3-point refinement doesn't justify re-estimation."
+    fixed: ["Expanded BURL-M015 to exactly two named persistence regression fixtures. Each fixture must pass one ordinary run and 100 consecutive isolated repetitions with 0 failures and no skipped assertions. Every Cargo invocation uses the fully qualified `workspace::persist::tests::...` name followed by `-- --exact`, so substring-matched tests cannot count toward acceptance.", "Required the first fixture to compare the complete returned and live `NoteState` values while tier 2 session settlement is deliberately paused. After releasing the pause, it must observe the metadata timestamp advance and final timer quiescence without changing authoritative-success behavior.", "Required the second fixture to preserve complete `NoteState` equality for both refusal paths and observe timer quiescence after the longer retry's draft row clears and before capturing `state_before_shorter`. Bounded predicate polling remains permitted, but fixed sleeps and wall-clock coincidence cannot substitute for observing settlement. Production semantics remain unchanged.", "Kept BURL-M015 at 3 points with its existing paths and preserved BURL-M003's dependency on it. No BURL-M016 or other ticket was added. The 11-point Epic M and the 10-epic, 564-point graph remain unchanged.", "Completed Epics A through F have no actuals blocks, so diff-lines-per-point and review-rounds-per-point calibration remains unavailable. Validation still reports 70% of open tickets at the 8-point ceiling; this bounded 3-point refinement doesn't justify re-estimation."]
     upstream:
       prd: v2.0.5
       architecture: v2.1.2
@@ -86,15 +61,8 @@ entries:
     by: patch-lane
   - version: v3.2.11
     date: 2026-09-08
-    changed:
-      - "Prepared only BURL-M003's Tasks artifacts for the ci_bootstrap.stage4_tasks_adaptation acknowledgement against ADR-0020 and raw contract version 38. Acceptance names the exact closure, session, argv, authority, environment, descriptor, compositor, loopback, teardown, cleanup, log, and mutation records without copying the raw protocol into Tasks."
-      - "Kept BURL-M003 implementation blocked. After this patch merges, Stage 3 must change ci_bootstrap.stage4_tasks_adaptation.status from required to satisfied. The Stage 3 acknowledgement must merge before implementation begins."
-      - "Required the two exact read-only Linux closure views, seven ordered Bubblewrap sessions, 42-record bill of materials, 35-path trusted_control_paths inventory, literal enable_kvm: false, and the fail-closed hosted prerequisite. The native-isolation prerequisite and candidate path allow no host-policy mutation or fallback. Added positive and negative acceptance for every changed behavior."
-      - "Preserved role schema version 15, aggregate schema version 19, sealing receipt version 2, receipt transport version 1, the exact 11-artifact ordinary inventory, and the exact 13-artifact BURL-O001 inventory. Existing receipt, compatibility, evidence-profile, and typed-rejection acceptance remains required."
-      - "Maintained BURL-O001's explicit stop pending a later Stage 3 decision defining approved Linux Nix packaging execution, isolation, and capacity. This patch doesn't authorize BURL-O001 or any Epic G, H, or O implementation."
-      - "Preserved all ticket IDs, dependencies, effort, scope, owned paths, and the 10-epic, 80-ticket, 564-point graph. Completed Epics A through F have no actuals blocks, so diff-lines-per-point and review-rounds-per-point calibration remains unavailable. The validator's 70% ceiling-share observation leaves BURL-M003 and stop-only BURL-O001 at 8 points and doesn't justify re-estimating another ticket."
-    security:
-      - "A hosted Bubblewrap or loopback prerequisite failure blocks candidate execution, bundle creation, and upload. The native-isolation prerequisite and candidate path cannot modify AppArmor, sysctl, or another host policy, or use a privileged fallback. Trusted Nix installation uses the pinned action interface with literal enable_kvm: false."
+    changed: ["Prepared only BURL-M003's Tasks artifacts for the ci_bootstrap.stage4_tasks_adaptation acknowledgement against ADR-0020 and raw contract version 38. Acceptance names the exact closure, session, argv, authority, environment, descriptor, compositor, loopback, teardown, cleanup, log, and mutation records without copying the raw protocol into Tasks.", "Kept BURL-M003 implementation blocked. After this patch merges, Stage 3 must change ci_bootstrap.stage4_tasks_adaptation.status from required to satisfied. The Stage 3 acknowledgement must merge before implementation begins.", "Required the two exact read-only Linux closure views, seven ordered Bubblewrap sessions, 42-record bill of materials, 35-path trusted_control_paths inventory, literal enable_kvm: false, and the fail-closed hosted prerequisite. The native-isolation prerequisite and candidate path allow no host-policy mutation or fallback. Added positive and negative acceptance for every changed behavior.", "Preserved role schema version 15, aggregate schema version 19, sealing receipt version 2, receipt transport version 1, the exact 11-artifact ordinary inventory, and the exact 13-artifact BURL-O001 inventory. Existing receipt, compatibility, evidence-profile, and typed-rejection acceptance remains required.", "Maintained BURL-O001's explicit stop pending a later Stage 3 decision defining approved Linux Nix packaging execution, isolation, and capacity. This patch doesn't authorize BURL-O001 or any Epic G, H, or O implementation.", "Preserved all ticket IDs, dependencies, effort, scope, owned paths, and the 10-epic, 80-ticket, 564-point graph. Completed Epics A through F have no actuals blocks, so diff-lines-per-point and review-rounds-per-point calibration remains unavailable. The validator's 70% ceiling-share observation leaves BURL-M003 and stop-only BURL-O001 at 8 points and doesn't justify re-estimating another ticket."]
+    security: ["A hosted Bubblewrap or loopback prerequisite failure blocks candidate execution, bundle creation, and upload. The native-isolation prerequisite and candidate path cannot modify AppArmor, sysctl, or another host policy, or use a privileged fallback. Trusted Nix installation uses the pinned action interface with literal enable_kvm: false."]
     upstream:
       prd: v2.0.5
       architecture: v2.1.2
@@ -102,14 +70,8 @@ entries:
     by: patch-lane
   - version: v3.2.10
     date: 2026-09-07
-    fixed:
-      - "Adapted BURL-M003 and BURL-O001 to raw managed-evidence contract version 35 and aggregate schema version 19. Each reusable role workflow exposes exactly sealing-receipt-artifact-id and sealing-receipt-upload-action-digest. The caller's fresh receipt_digests job needs exactly expected, linux, macos_26, and macos_15; runs on ubuntu-24.04 with contents: read; maps all six values into the version-1 transport through scripts/write-receipt-digest-observation.sh; and uploads only receipt-upload-digests.json as managed-evidence-receipt-digests-{artifact_nonce}, with overwrite: false and if-no-files-found: error."
-      - "Required immutable-ID lookup and ID-addressed raw download for the receipt-digest transport. Collection compares the raw archive SHA-256 with the canonical REST digest before extraction or JSON parsing. It then semantically validates the extracted transport and matches every transported receipt artifact ID and name to one unique REST artifact object. Fixtures reject missing, extra, duplicate, malformed, reordered, wrong-role, wrong-run, wrong-attempt, wrong-signer, wrong-nonce, wrong-name, wrong-ID, and wrong-digest transport data. Corruption or substitution rejects with artifact-corrupt, and a REST identity or state mismatch rejects with artifact-api-mismatch."
-      - "Required aggregate receiptDigestTransportArtifact retention and each origin.sealingReceiptArtifact to retain the transported bare action digest and matching canonical REST digest. Updated the exact inventories to 11 ordinary artifacts and 13 BURL-O001 artifacts."
-      - "Preserved ticket IDs, dependencies, effort, scope, graph topology, fresh-dispatch recovery, no-deletion checks, compatibility-stage behavior, and trust-anchor requirements. The validator's observed calibration remains 70% of open tickets at the 8-point ceiling. Completed Epics A through F have no actuals blocks, so diff-lines-per-point and review-rounds-per-point ratios remain unavailable; both affected estimates remain 8."
-      - "Regenerated critical-path.md from the unchanged 10-epic, 80-ticket, 564-point graph."
-    security:
-      - "The receipt-digest transport proves that downloaded bytes match the selected GitHub REST artifact object. It does not add independent provenance. Sealing receipts remain free of self-referential post-upload claims."
+    fixed: ["Adapted BURL-M003 and BURL-O001 to raw managed-evidence contract version 35 and aggregate schema version 19. Each reusable role workflow exposes exactly sealing-receipt-artifact-id and sealing-receipt-upload-action-digest. The caller's fresh receipt_digests job needs exactly expected, linux, macos_26, and macos_15; runs on ubuntu-24.04 with contents: read; maps all six values into the version-1 transport through scripts/write-receipt-digest-observation.sh; and uploads only receipt-upload-digests.json as managed-evidence-receipt-digests-{artifact_nonce}, with overwrite: false and if-no-files-found: error.", "Required immutable-ID lookup and ID-addressed raw download for the receipt-digest transport. Collection compares the raw archive SHA-256 with the canonical REST digest before extraction or JSON parsing. It then semantically validates the extracted transport and matches every transported receipt artifact ID and name to one unique REST artifact object. Fixtures reject missing, extra, duplicate, malformed, reordered, wrong-role, wrong-run, wrong-attempt, wrong-signer, wrong-nonce, wrong-name, wrong-ID, and wrong-digest transport data. Corruption or substitution rejects with artifact-corrupt, and a REST identity or state mismatch rejects with artifact-api-mismatch.", Required aggregate receiptDigestTransportArtifact retention and each origin.sealingReceiptArtifact to retain the transported bare action digest and matching canonical REST digest. Updated the exact inventories to 11 ordinary artifacts and 13 BURL-O001 artifacts., "Preserved ticket IDs, dependencies, effort, scope, graph topology, fresh-dispatch recovery, no-deletion checks, compatibility-stage behavior, and trust-anchor requirements. The validator's observed calibration remains 70% of open tickets at the 8-point ceiling. Completed Epics A through F have no actuals blocks, so diff-lines-per-point and review-rounds-per-point ratios remain unavailable; both affected estimates remain 8.", "Regenerated critical-path.md from the unchanged 10-epic, 80-ticket, 564-point graph."]
+    security: [The receipt-digest transport proves that downloaded bytes match the selected GitHub REST artifact object. It does not add independent provenance. Sealing receipts remain free of self-referential post-upload claims.]
     upstream:
       prd: v2.0.5
       architecture: v2.1.2
@@ -117,8 +79,7 @@ entries:
     by: patch-lane
   - version: v3.2.9
     date: 2026-09-06
-    fixed:
-      - "Aligned the current Tasks metadata with merged TechSpec v2.1.8 after Tasks v3.2.8 completed the fresh-dispatch-only adaptation for BURL-M003 and BURL-O001. Preserved v3.2.8's historical upstream.tech-spec pointer at v2.1.7. BURL-M003 and BURL-O001 planning is unchanged. Ticket IDs, dependencies, scope, estimates, and the generated critical-path graph remain unchanged; this patch is metadata-only."
+    fixed: ["Aligned the current Tasks metadata with merged TechSpec v2.1.8 after Tasks v3.2.8 completed the fresh-dispatch-only adaptation for BURL-M003 and BURL-O001. Preserved v3.2.8's historical upstream.tech-spec pointer at v2.1.7. BURL-M003 and BURL-O001 planning is unchanged. Ticket IDs, dependencies, scope, estimates, and the generated critical-path graph remain unchanged; this patch is metadata-only."]
     upstream:
       prd: v2.0.5
       architecture: v2.1.2
@@ -126,11 +87,7 @@ entries:
     by: patch-lane
   - version: v3.2.8
     date: 2026-09-06
-    fixed:
-      - "Adapted BURL-M003 and BURL-O001 to TechSpec v2.1.7's fresh-dispatch-only lifecycle. Recovery requires a new workflow_dispatch run, distinct workflow run ID, and a fresh 128-bit nonce from the pinned /dev/urandom and coreutils od command. The trusted caller and every reusable role workflow invoke scripts/validate-managed-workflow-inputs.sh and require literal GITHUB_RUN_ATTEMPT=1 before relevant work. Local collection ignores ambient GITHUB_RUN_ATTEMPT, accepts only literal --attempt 1, and requires REST run_attempt == 1 before acquisition and immediately before accepted publication. A rerun or attempt drift before publication rejects without an accepted report."
-      - "Required separate in-workflow environment, local CLI, and REST/attempt-drift fixtures. They reject invalid GITHUB_RUN_ATTEMPT values, nonliteral local attempts, and invalid REST run_attempt values; inject attempt drift; cover failed, cancelled, timed-out, and rejected recovery; require the exact 10-artifact ordinary and 12-artifact BURL-O001 inventories; require overwrite: false; and allow the nonce as the only variable artifact-name component."
-      - "Required a static artifact-deletion-endpoint scan across the complete trusted_control_paths inventory and a recording fake API that covers every executable API call site. The graph, ticket IDs, dependencies, scope, and 8-point estimates remain unchanged."
-      - "Regenerated critical-path.md from the unchanged 10-epic, 80-ticket, 564-point graph. Completed Epics A through F have no actuals blocks, so diff-lines-per-point and review-rounds-per-point calibration remains unavailable; both affected estimates remain 8."
+    fixed: ["Adapted BURL-M003 and BURL-O001 to TechSpec v2.1.7's fresh-dispatch-only lifecycle. Recovery requires a new workflow_dispatch run, distinct workflow run ID, and a fresh 128-bit nonce from the pinned /dev/urandom and coreutils od command. The trusted caller and every reusable role workflow invoke scripts/validate-managed-workflow-inputs.sh and require literal GITHUB_RUN_ATTEMPT=1 before relevant work. Local collection ignores ambient GITHUB_RUN_ATTEMPT, accepts only literal --attempt 1, and requires REST run_attempt == 1 before acquisition and immediately before accepted publication. A rerun or attempt drift before publication rejects without an accepted report.", "Required separate in-workflow environment, local CLI, and REST/attempt-drift fixtures. They reject invalid GITHUB_RUN_ATTEMPT values, nonliteral local attempts, and invalid REST run_attempt values; inject attempt drift; cover failed, cancelled, timed-out, and rejected recovery; require the exact 10-artifact ordinary and 12-artifact BURL-O001 inventories; require overwrite: false; and allow the nonce as the only variable artifact-name component.", "Required a static artifact-deletion-endpoint scan across the complete trusted_control_paths inventory and a recording fake API that covers every executable API call site. The graph, ticket IDs, dependencies, scope, and 8-point estimates remain unchanged.", "Regenerated critical-path.md from the unchanged 10-epic, 80-ticket, 564-point graph. Completed Epics A through F have no actuals blocks, so diff-lines-per-point and review-rounds-per-point calibration remains unavailable; both affected estimates remain 8."]
     upstream:
       prd: v2.0.5
       architecture: v2.1.2
@@ -138,8 +95,7 @@ entries:
     by: patch-lane
   - version: v3.2.7
     date: 2026-09-06
-    fixed:
-      - "Aligned the current Tasks metadata with merged TechSpec v2.1.6 after restoring Tasks v3.2.6's upstream.tech-spec pointer to v2.1.5. BURL-M003 and BURL-O001 planning is unchanged. The Stage 3 routing gate is satisfied. No ticket, graph, estimate, or critical-path change occurs. Upstream PRD v2.0.5 and Architecture v2.1.2 remain."
+    fixed: ["Aligned the current Tasks metadata with merged TechSpec v2.1.6 after restoring Tasks v3.2.6's upstream.tech-spec pointer to v2.1.5. BURL-M003 and BURL-O001 planning is unchanged. The Stage 3 routing gate is satisfied. No ticket, graph, estimate, or critical-path change occurs. Upstream PRD v2.0.5 and Architecture v2.1.2 remain."]
     upstream:
       prd: v2.0.5
       architecture: v2.1.2
@@ -147,10 +103,7 @@ entries:
     by: patch-lane
   - version: v3.2.6
     date: 2026-09-06
-    fixed:
-      - "Required BURL-M003 and BURL-O001 fixtures to accept consumerBinding.downloadedStageArtifactId only when it equals producerLineage.stageArtifact.artifactId in the macOS 15 manifest, its sealing receipt, and the final aggregate. Fixtures reject a mismatch at each surface."
-      - "Resolved the deferred offline-attestation acceptance gap. Three distinct offline attestation commands write stage-verification.json, receipt-verification.json, and lineage-verification.json. Before credential removal or read-only exposure, the trusted consumer helper must consume and validate all three result files together with all 26 runtime values. Fixtures fail if the helper ignores, swaps, or does not validate any result file or runtime value."
-      - "Regenerated critical-path.md from the unchanged 10-epic, 80-ticket, 564-point graph. Completed Epics A through F have no actuals blocks, so diff-lines-per-point and review-rounds-per-point calibration remains unavailable; both affected estimates remain 8."
+    fixed: ["Required BURL-M003 and BURL-O001 fixtures to accept consumerBinding.downloadedStageArtifactId only when it equals producerLineage.stageArtifact.artifactId in the macOS 15 manifest, its sealing receipt, and the final aggregate. Fixtures reject a mismatch at each surface.", "Resolved the deferred offline-attestation acceptance gap. Three distinct offline attestation commands write stage-verification.json, receipt-verification.json, and lineage-verification.json. Before credential removal or read-only exposure, the trusted consumer helper must consume and validate all three result files together with all 26 runtime values. Fixtures fail if the helper ignores, swaps, or does not validate any result file or runtime value.", "Regenerated critical-path.md from the unchanged 10-epic, 80-ticket, 564-point graph. Completed Epics A through F have no actuals blocks, so diff-lines-per-point and review-rounds-per-point calibration remains unavailable; both affected estimates remain 8."]
     upstream:
       prd: v2.0.5
       architecture: v2.1.2
@@ -158,13 +111,8 @@ entries:
     by: patch-lane
   - version: v3.2.5
     date: 2026-09-06
-    fixed:
-      - "Adapted BURL-M003 and BURL-O001 to TechSpec v2.1.5. BURL-M003 protects and invokes the compatibility-interface validator before acquisition, offline verification, or consumer processing, and fixtures pin the exact ordered 26-key source mapping from canonical input through uppercase environment variable to validator inventory."
-      - "Required both the macOS 26 seal-job output boundary and reusable-workflow output boundary to ticket-gate and normalize producer-sealing-check-run-id, producer-sealing-receipt-artifact-id, and producer-sealing-receipt-upload-action-digest to empty strings for every non-O001 ticket before caller mapping."
-      - "Required behavioral fixtures to accept all-nonempty BURL-O001 values and run all three immutable-ID downloads, three offline attestation verifications, and consumer processing, while accepting all-empty non-O001 values, skipping only those compatibility steps, and continuing the ordinary candidate path."
-      - "Regenerated critical-path.md from the unchanged 10-epic, 80-ticket, 564-point graph. Completed Epics A through F have no actuals blocks, so diff-lines-per-point and review-rounds-per-point calibration remains unavailable; both affected estimates remain 8."
-    security:
-      - "The validator is a trust-anchor-protected control. Static fixtures reject swapped, missing, extra, duplicated, and reordered source mappings where observable. Runtime validation does not claim source-shape or arbitrary-value provenance; downstream identity, attestation, digest, lineage, and freshness checks validate consumed values."
+    fixed: ["Adapted BURL-M003 and BURL-O001 to TechSpec v2.1.5. BURL-M003 protects and invokes the compatibility-interface validator before acquisition, offline verification, or consumer processing, and fixtures pin the exact ordered 26-key source mapping from canonical input through uppercase environment variable to validator inventory.", "Required both the macOS 26 seal-job output boundary and reusable-workflow output boundary to ticket-gate and normalize producer-sealing-check-run-id, producer-sealing-receipt-artifact-id, and producer-sealing-receipt-upload-action-digest to empty strings for every non-O001 ticket before caller mapping.", "Required behavioral fixtures to accept all-nonempty BURL-O001 values and run all three immutable-ID downloads, three offline attestation verifications, and consumer processing, while accepting all-empty non-O001 values, skipping only those compatibility steps, and continuing the ordinary candidate path.", "Regenerated critical-path.md from the unchanged 10-epic, 80-ticket, 564-point graph. Completed Epics A through F have no actuals blocks, so diff-lines-per-point and review-rounds-per-point calibration remains unavailable; both affected estimates remain 8."]
+    security: ["The validator is a trust-anchor-protected control. Static fixtures reject swapped, missing, extra, duplicated, and reordered source mappings where observable. Runtime validation does not claim source-shape or arbitrary-value provenance; downstream identity, attestation, digest, lineage, and freshness checks validate consumed values."]
     upstream:
       prd: v2.0.5
       architecture: v2.1.2
@@ -172,16 +120,9 @@ entries:
     by: patch-lane
   - version: v3.2.4
     date: 2026-09-06
-    changed:
-      - "Aligned BURL-M003 with the canonical TechSpec v2.1.3 verification command and raw contract version 33. Acceptance separates four noncryptographic candidate runtime guards from attestation-backed seal origin and requires the complete focused role, reconciliation, seal, and compatibility-stage fixture inventory."
-      - "Required BURL-O001 to use the macOS 26 seal-owned compatibility stage and post-receipt immutable RFC 8785 producer-lineage artifact. The macOS 15 wrapper downloads all three artifacts by immutable ID and verifies all three attestations offline. The tickets bind the lineage artifact's exact bytes and SHA-256, transport identity and attestation, signed producer-receipt lifetime, parsed lineage, and consumer binding through macOS 15 and final aggregation."
-      - "Preserved the BURL-M003 implementation and evidence pull-request bootstrap, the exact private-headless Linux and cold-checkout macOS verification, both 8-point estimates, all ticket IDs, and the 10-epic dependency topology."
-      - "Regenerated critical-path.md from the unchanged 10-epic, 80-ticket, 564-point graph."
-      - "Completed Epics A through F contain no actuals blocks, so observed diff-lines-per-point and review-rounds-per-point calibration remain unavailable. Unmerged PR #15 is implementation input, not completed calibration; it doesn't justify changing either affected estimate."
-    fixed:
-      - "Removed the remaining BURL-M003 acceptance claim that candidate REST labels authenticate hosted origin and replaced the post-run macOS archive handoff with the seal-owned pre-candidate BURL-O001 stage chain."
-    security:
-      - "Required typed failures for every candidate guard, seal-origin, and compatibility-stage mismatch defined by TechSpec v2.1.3, including stale producer receipt, noncanonical lineage, and lineage-SHA mismatch. `artifact-digest-mismatch` applies only to expected, candidate, sealed, and receipt artifacts; stage and lineage transport digest failures use `compatibility-stage-digest-mismatch`. Candidate jobs remain credential-free, and fresh non-executing seal provenance remains the sole hosted-origin authority."
+    changed: ["Aligned BURL-M003 with the canonical TechSpec v2.1.3 verification command and raw contract version 33. Acceptance separates four noncryptographic candidate runtime guards from attestation-backed seal origin and requires the complete focused role, reconciliation, seal, and compatibility-stage fixture inventory.", "Required BURL-O001 to use the macOS 26 seal-owned compatibility stage and post-receipt immutable RFC 8785 producer-lineage artifact. The macOS 15 wrapper downloads all three artifacts by immutable ID and verifies all three attestations offline. The tickets bind the lineage artifact's exact bytes and SHA-256, transport identity and attestation, signed producer-receipt lifetime, parsed lineage, and consumer binding through macOS 15 and final aggregation.", "Preserved the BURL-M003 implementation and evidence pull-request bootstrap, the exact private-headless Linux and cold-checkout macOS verification, both 8-point estimates, all ticket IDs, and the 10-epic dependency topology.", "Regenerated critical-path.md from the unchanged 10-epic, 80-ticket, 564-point graph.", "Completed Epics A through F contain no actuals blocks, so observed diff-lines-per-point and review-rounds-per-point calibration remain unavailable. Unmerged PR #15 is implementation input, not completed calibration; it doesn't justify changing either affected estimate."]
+    fixed: [Removed the remaining BURL-M003 acceptance claim that candidate REST labels authenticate hosted origin and replaced the post-run macOS archive handoff with the seal-owned pre-candidate BURL-O001 stage chain.]
+    security: ["Required typed failures for every candidate guard, seal-origin, and compatibility-stage mismatch defined by TechSpec v2.1.3, including stale producer receipt, noncanonical lineage, and lineage-SHA mismatch. `artifact-digest-mismatch` applies only to expected, candidate, sealed, and receipt artifacts; stage and lineage transport digest failures use `compatibility-stage-digest-mismatch`. Candidate jobs remain credential-free, and fresh non-executing seal provenance remains the sole hosted-origin authority."]
     upstream:
       prd: v2.0.5
       architecture: v2.1.2
@@ -189,10 +130,7 @@ entries:
     by: stage
   - version: v3.2.3
     date: 2026-09-05
-    fixed:
-      - "Corrected the completed Epic A deviation record to name integration_test/ and test_driver/ as distinct paths instead of a malformed combined path, preserving the existing existence-checked formatting and stray-Dart guard meaning."
-      - "Revalidated the Tasks directory against PRD v2.0.5, Architecture v2.1.1, and TechSpec v2.1.1; the active 10-epic, 80-ticket, 564-point graph remains unchanged."
-      - "Regenerated critical-path.md from the active epic graph."
+    fixed: ["Corrected the completed Epic A deviation record to name integration_test/ and test_driver/ as distinct paths instead of a malformed combined path, preserving the existing existence-checked formatting and stray-Dart guard meaning.", "Revalidated the Tasks directory against PRD v2.0.5, Architecture v2.1.1, and TechSpec v2.1.1; the active 10-epic, 80-ticket, 564-point graph remains unchanged.", Regenerated critical-path.md from the active epic graph.]
     upstream:
       prd: v2.0.5
       architecture: v2.1.1
@@ -200,10 +138,7 @@ entries:
     by: patch-lane
   - version: v3.2.2
     date: 2026-09-05
-    changed:
-      - "Revalidated the active task graph against Architecture v2.1.0 and TechSpec v2.1.0 without duplicating upstream contracts. The exact non-Spike source-write allowlists remain covered by BURL-G011, BURL-P002, BURL-O004, and BURL-O011 through BURL-O013, and BURL-O004's planned rust/benches/prd-meters-coordinator package remains inside its ticket scope; the 10-epic, 80-ticket, 564-point plan is unchanged."
-      - "Clarified BURL-O012's STOP boundary to exclude AppImage verification and installed macOS artifact/package verification owned by BURL-O013 while retaining the required common-functional evidence on both macOS roles."
-      - "Regenerated critical-path.md from the unchanged 10-epic graph."
+    changed: ["Revalidated the active task graph against Architecture v2.1.0 and TechSpec v2.1.0 without duplicating upstream contracts. The exact non-Spike source-write allowlists remain covered by BURL-G011, BURL-P002, BURL-O004, and BURL-O011 through BURL-O013, and BURL-O004's planned rust/benches/prd-meters-coordinator package remains inside its ticket scope; the 10-epic, 80-ticket, 564-point plan is unchanged.", "Clarified BURL-O012's STOP boundary to exclude AppImage verification and installed macOS artifact/package verification owned by BURL-O013 while retaining the required common-functional evidence on both macOS roles.", Regenerated critical-path.md from the unchanged 10-epic graph.]
     upstream:
       prd: v2.0.5
       architecture: v2.1.0
@@ -211,8 +146,7 @@ entries:
     by: stage
   - version: v3.2.1
     date: 2026-09-05
-    fixed:
-      - "Corrected completed BURL-A001 to quote the canonical TechSpec v2.0.16 command byte-for-byte: FRB generation, root-safe Cargo build and tests, Flutter tests, and Dart analysis. Replaced the unsupported macOS-launch output and acceptance claim with the immutable PR #3 merge commit 4a8c2bbcac1583dd3c34d44907125fcfc725c973, whose PR body records those verification checks without launch evidence. Preserved BURL-A001's done status, scope, effort, and dependencies; the Epic A graph is unchanged."
+    fixed: ["Corrected completed BURL-A001 to quote the canonical TechSpec v2.0.16 command byte-for-byte: FRB generation, root-safe Cargo build and tests, Flutter tests, and Dart analysis. Replaced the unsupported macOS-launch output and acceptance claim with the immutable PR #3 merge commit 4a8c2bbcac1583dd3c34d44907125fcfc725c973, whose PR body records those verification checks without launch evidence. Preserved BURL-A001's done status, scope, effort, and dependencies; the Epic A graph is unchanged."]
     upstream:
       prd: v2.0.4
       architecture: v2.0.5
@@ -220,21 +154,8 @@ entries:
     by: patch-lane
   - version: v3.2.0
     date: 2026-09-05
-    changed:
-      - Split Workspace repair and live observation from Epic H into the
-        five-ticket Epic P. Preserved all ticket effort, behavioral scope,
-        acceptance evidence, and canonical verification commands while mapping
-        BURL-H008 through BURL-H012 to BURL-P001 through BURL-P005.
-      - Reduced Epic H to its seven authority-foundation tickets and added Epic
-        P after Epics H and I. Updated the downstream epic dependencies without
-        changing the 80-ticket, 564-point plan.
-      - Expanded BURL-O004 to cover NFC-01 through NFC-11 and NFC-37 through
-        NFC-39, including the reference environments, identity record, editing
-        fixture, and nonblocking nightly cadence.
-      - Regenerated critical-path.md from the 10-epic graph.
-    fixed:
-      - Kept the authorized tranche focused on completing Epic H and replaying
-        Epic G. Epic P remains downstream and outside the tranche.
+    changed: ["Split Workspace repair and live observation from Epic H into the five-ticket Epic P. Preserved all ticket effort, behavioral scope, acceptance evidence, and canonical verification commands while mapping BURL-H008 through BURL-H012 to BURL-P001 through BURL-P005.", "Reduced Epic H to its seven authority-foundation tickets and added Epic P after Epics H and I. Updated the downstream epic dependencies without changing the 80-ticket, 564-point plan.", "Expanded BURL-O004 to cover NFC-01 through NFC-11 and NFC-37 through NFC-39, including the reference environments, identity record, editing fixture, and nonblocking nightly cadence.", Regenerated critical-path.md from the 10-epic graph.]
+    fixed: [Kept the authorized tranche focused on completing Epic H and replaying Epic G. Epic P remains downstream and outside the tranche.]
     upstream:
       prd: v2.0.4
       architecture: v2.0.5
@@ -242,18 +163,8 @@ entries:
     by: stage
   - version: v3.1.4
     date: 2026-09-05
-    changed:
-      - Updated the completed BURL-A001, BURL-A002, BURL-A003, BURL-B001,
-        BURL-B002, BURL-B003, BURL-B004, and BURL-B007 verification records to
-        quote their canonical root-safe TechSpec v2.0.12 commands byte-for-byte.
-      - Reconciled BURL-A001's expected output and acceptance evidence with its
-        recorded FRB generation, release Rust build, and macOS launch command;
-        the record makes no Rust-test claim because that command runs no Rust tests.
-      - Regenerated critical-path.md from the unchanged active epic graph.
-    fixed:
-      - Removed the temporary root-unsafe command aliases from the completed
-        Epic A and Epic B Task consumers while preserving their historical scope,
-        status, dependencies, effort, and evidence.
+    changed: ["Updated the completed BURL-A001, BURL-A002, BURL-A003, BURL-B001, BURL-B002, BURL-B003, BURL-B004, and BURL-B007 verification records to quote their canonical root-safe TechSpec v2.0.12 commands byte-for-byte.", "Reconciled BURL-A001's expected output and acceptance evidence with its recorded FRB generation, release Rust build, and macOS launch command; the record makes no Rust-test claim because that command runs no Rust tests.", Regenerated critical-path.md from the unchanged active epic graph.]
+    fixed: ["Removed the temporary root-unsafe command aliases from the completed Epic A and Epic B Task consumers while preserving their historical scope, status, dependencies, effort, and evidence."]
     upstream:
       prd: v2.0.3
       architecture: v2.0.5
@@ -261,17 +172,8 @@ entries:
     by: patch-lane
   - version: v3.1.3
     date: 2026-09-05
-    changed:
-      - Aligned BURL-O004's verification command with TechSpec v2.0.10 so one
-        managed-evidence.sh run owns authenticated staging, coordinator execution,
-        and durable nightly-prd-meters.json output before git diff --check.
-      - Removed the obsolete external double-aggregation detail from BURL-O004's
-        expected output while preserving its performance evidence classes, manifest
-        handoff, and NFC thresholds.
-      - Regenerated critical-path.md from the unchanged epic graph.
-    fixed:
-      - Corrected BURL-O004's bounded verification path to avoid invoking
-        aggregate-prd-meters.sh a second time after managed-evidence.sh run.
+    changed: ["Aligned BURL-O004's verification command with TechSpec v2.0.10 so one managed-evidence.sh run owns authenticated staging, coordinator execution, and durable nightly-prd-meters.json output before git diff --check.", "Removed the obsolete external double-aggregation detail from BURL-O004's expected output while preserving its performance evidence classes, manifest handoff, and NFC thresholds.", Regenerated critical-path.md from the unchanged epic graph.]
+    fixed: ["Corrected BURL-O004's bounded verification path to avoid invoking aggregate-prd-meters.sh a second time after managed-evidence.sh run."]
     upstream:
       prd: v2.0.2
       architecture: v2.0.4
@@ -279,21 +181,8 @@ entries:
     by: patch-lane
   - version: v3.1.2
     date: 2026-09-05
-    changed:
-      - Restored all 82 legacy Out-of-Scope clauses across the 80 active
-        tickets. Literal ownership exclusions remain in scope.out, and product
-        or behavioral boundaries are explicit stop conditions.
-      - Replaced the BURL-O011, BURL-O012, and BURL-O013 compatibility aliases
-        with the canonical managed-evidence commands. Each gate owns its exact
-        evidence directory and requires a later independently reviewed,
-        manifest-backed evidence-only pull request.
-      - Bound BURL-O014 to the three reviewed accepted gate aggregates, their
-        manifests, and one common BURL-O009 release identity. Restored
-        CHANGELOG.md ownership to BURL-O009 and BURL-O014.
-      - Regenerated critical-path.md from the corrected epic records.
-    fixed:
-      - Removed the non-path 0.x value from BURL-O008 scope.out and restored its
-        release boundary as a stop condition.
+    changed: ["Restored all 82 legacy Out-of-Scope clauses across the 80 active tickets. Literal ownership exclusions remain in scope.out, and product or behavioral boundaries are explicit stop conditions.", "Replaced the BURL-O011, BURL-O012, and BURL-O013 compatibility aliases with the canonical managed-evidence commands. Each gate owns its exact evidence directory and requires a later independently reviewed, manifest-backed evidence-only pull request.", "Bound BURL-O014 to the three reviewed accepted gate aggregates, their manifests, and one common BURL-O009 release identity. Restored CHANGELOG.md ownership to BURL-O009 and BURL-O014.", Regenerated critical-path.md from the corrected epic records.]
+    fixed: [Removed the non-path 0.x value from BURL-O008 scope.out and restored its release boundary as a stop condition.]
     upstream:
       prd: v2.0.2
       architecture: v2.0.4
@@ -301,19 +190,8 @@ entries:
     by: patch-lane
   - version: v3.1.1
     date: 2026-09-05
-    changed:
-      - Corrected active and completed ticket verification records against the
-        Stage 3 v2.0.6 commands. BURL-K009, BURL-N009, and BURL-O014 write only
-        their canonical evidence directories. BURL-O012 includes the required
-        non-authoritative Linux platform regression while preserving NFC-34
-        parity. BURL-A001 runs Rust and Flutter checks.
-      - Added manifest-backed, independently reviewed evidence-only acceptance
-        requirements and exact evidence-directory ownership for BURL-G011,
-        BURL-H009, BURL-O004, BURL-K009, BURL-N009, and BURL-O014.
-      - Regenerated critical-path.md from the unchanged epic graph.
-    fixed:
-      - Removed the duplicated migration-date sentence from the historical
-        v0.0.1 entry.
+    changed: ["Corrected active and completed ticket verification records against the Stage 3 v2.0.6 commands. BURL-K009, BURL-N009, and BURL-O014 write only their canonical evidence directories. BURL-O012 includes the required non-authoritative Linux platform regression while preserving NFC-34 parity. BURL-A001 runs Rust and Flutter checks.", "Added manifest-backed, independently reviewed evidence-only acceptance requirements and exact evidence-directory ownership for BURL-G011, BURL-H009, BURL-O004, BURL-K009, BURL-N009, and BURL-O014.", Regenerated critical-path.md from the unchanged epic graph.]
+    fixed: [Removed the duplicated migration-date sentence from the historical v0.0.1 entry.]
     upstream:
       prd: v2.0.2
       architecture: v2.0.4
@@ -321,20 +199,8 @@ entries:
     by: patch-lane
   - version: v3.1.0
     date: 2026-09-05
-    changed:
-      - Repaired the active Epic M through O graph after the OD-09 and OD-10
-        ruling. The graph has nine serial waves from CI bootstrap through
-        quality releases.
-      - Moved the eleven downstream lifecycle and reconciliation tickets to Epic
-        N and the fourteen quality and release tickets to Epic O. Updated active
-        ticket and Spike identities, scopes, capabilities, and canonical
-        verification commands.
-      - Regenerated critical-path.md from the repaired graph. Historical
-        Markdown task paths remain historical; active work uses the current YAML
-        epic records.
-    fixed:
-      - Corrected the structured-migration count to 80 active tickets and the
-        editor Spike evidence path to .constitution/evidence/SPK-BURL-F001/.
+    changed: [Repaired the active Epic M through O graph after the OD-09 and OD-10 ruling. The graph has nine serial waves from CI bootstrap through quality releases., "Moved the eleven downstream lifecycle and reconciliation tickets to Epic N and the fourteen quality and release tickets to Epic O. Updated active ticket and Spike identities, scopes, capabilities, and canonical verification commands.", "Regenerated critical-path.md from the repaired graph. Historical Markdown task paths remain historical; active work uses the current YAML epic records."]
+    fixed: [Corrected the structured-migration count to 80 active tickets and the editor Spike evidence path to .constitution/evidence/SPK-BURL-F001/.]
     upstream:
       prd: v2.0.1
       architecture: v2.0.2
@@ -342,39 +208,8 @@ entries:
     by: stage
   - version: v3.0.1
     date: 2026-09-04
-    changed:
-      - Translated the reviewed Stage 4 v2.2.1 through v2.2.7 lineage into the
-        canonical structured task records against PRD v2.0.0, Architecture
-        v2.0.1, and TechSpec v2.0.1. Conditional viewport verification, complete
-        host profiles, runner-label reconciliation, and the platform-specific
-        fresh-seal ruling now remain explicit where their tickets consume them.
-      - Mapped the live managed-validation references CI-M003, FLAKE-M002,
-        AST-H001, PATH-H002, ASSET-I001, GIT-L001, and PKG-M001 to BURL-M003,
-        BURL-M015, BURL-H001, BURL-H002, BURL-I001, BURL-L001, and BURL-M001.
-        Updated the tranche record without changing its single-axis milestone
-        sequence.
-      - Moved the planned BURL-M003 completion artifacts to
-        .constitution/evidence/BURL-M003/managed-evidence.json, completion.md,
-        and manifest.yaml, preserving the two-pull-request completion gate and
-        leaving all ticket statuses planned.
-      - Preserved all 80 active tickets, 564 points, epic and ticket
-        dependencies, acceptance modes, and the generated seven-wave graph.
-        Completed epic archives contain no actuals blocks, so no observed
-        diff-lines-per-point or review-rounds-per-point calibration was
-        available; this correction changes no estimate.
-    fixed:
-      - Copied the canonical TechSpec verification commands byte-for-byte into
-        BURL-M006, BURL-M011, BURL-M012, and BURL-M013, replacing their
-        temporary legacy aliases.
-      - "Restored the reviewed evidence boundary: Linux candidate execution has
-        strict private-PID teardown, hosted macOS performs bounded cleanup
-        without claiming universal containment, candidate commands remain
-        credential-free, the trusted wrapper alone uploads the immutable
-        untrusted handoff, and the fresh non-executing seal alone receives OIDC
-        and attestation authority."
-      - Made BURL-I001 verify a recorded viewport only when its authenticated
-        evidence assignment contains a viewport-bound class, and made BURL-M003
-        reject runner-label mismatch before ordered evidence-class comparison.
+    changed: ["Translated the reviewed Stage 4 v2.2.1 through v2.2.7 lineage into the canonical structured task records against PRD v2.0.0, Architecture v2.0.1, and TechSpec v2.0.1. Conditional viewport verification, complete host profiles, runner-label reconciliation, and the platform-specific fresh-seal ruling now remain explicit where their tickets consume them.", "Mapped the live managed-validation references CI-M003, FLAKE-M002, AST-H001, PATH-H002, ASSET-I001, GIT-L001, and PKG-M001 to BURL-M003, BURL-M015, BURL-H001, BURL-H002, BURL-I001, BURL-L001, and BURL-M001. Updated the tranche record without changing its single-axis milestone sequence.", "Moved the planned BURL-M003 completion artifacts to .constitution/evidence/BURL-M003/managed-evidence.json, completion.md, and manifest.yaml, preserving the two-pull-request completion gate and leaving all ticket statuses planned.", "Preserved all 80 active tickets, 564 points, epic and ticket dependencies, acceptance modes, and the generated seven-wave graph. Completed epic archives contain no actuals blocks, so no observed diff-lines-per-point or review-rounds-per-point calibration was available; this correction changes no estimate."]
+    fixed: ["Copied the canonical TechSpec verification commands byte-for-byte into BURL-M006, BURL-M011, BURL-M012, and BURL-M013, replacing their temporary legacy aliases.", "Restored the reviewed evidence boundary: Linux candidate execution has strict private-PID teardown, hosted macOS performs bounded cleanup without claiming universal containment, candidate commands remain credential-free, the trusted wrapper alone uploads the immutable untrusted handoff, and the fresh non-executing seal alone receives OIDC and attestation authority.", "Made BURL-I001 verify a recorded viewport only when its authenticated evidence assignment contains a viewport-bound class, and made BURL-M003 reject runner-label mismatch before ordered evidence-class comparison."]
     upstream:
       prd: v2.0.0
       architecture: v2.0.1
@@ -382,48 +217,9 @@ entries:
     by: patch-lane
   - version: v3.0.0
     date: 2026-09-03
-    added:
-      - "Added the concurrency mechanics to constitution.yaml from the practice
-        the v2.2.0 entry describes: one worktree and branch per epic, created
-        from merged master, rebase-merged back."
-    changed:
-      - "Converted tasks/ to the structured layout: one YAML file per epic under
-        epics/ and completed/, and a rendered critical-path.md."
-      - "Renamed every ticket to the framework's <ACRONYM>-<EPIC><NNN> form
-        under the project acronym BURL, because the plan used a different prefix
-        per subject and no single acronym could satisfy the ticket-id rule. The
-        numeric suffix is unchanged except where two tickets in one epic shared
-        it: AUTH-K001 and REG-K001 became BURL-K001 and BURL-K009, and LOG-M002,
-        FLAKE-M002, BENCH-M004, and HEALTH-M004 became BURL-M002, BURL-M015,
-        BURL-M004, and BURL-M016. The seven spike files were renamed to match.
-        The old identifiers stay recoverable from git history."
-      - "Broke the epic dependency cycle. Epic M now depends on nothing, because
-        its BURL-M003 managed-validation matrix is the prerequisite every other
-        epic's tickets name, and a graph in which M also depends on G, H, I, J,
-        K, and L cannot start. Epic I no longer depends on Epic L for the same
-        reason in the other direction: Epic K and Epic L both need Epic I's
-        Object identity and retention, so making Epic I downstream of Epic L
-        would only move the cycle. Both losses are recorded as OD-09 and OD-10
-        rather than left implicit."
-      - Set each epic's capability coverage from its markdown header, its
-        estimated diff lines from its open points at 150 lines per point, and
-        the flows each of the 80 active tickets serves.
-      - "Reworded the three product durations the time-unit check reads as
-        estimates: the CAP-058 30-day cache-eviction window and the two 24-hour
-        attestation freshness windows. The rule they express is unchanged."
-      - Replaced the day-based time boxes in the five unexecuted spike reports
-        with a points budget matching the owning Spike ticket.
-      - "Migration date retained for v3.0.0: no master commit introducing this
-        version string was found."
-    fixed:
-      - "Recovered thirteen tickets the conversion silently dropped because
-        their prefix was longer than six characters: PREFLIGHT-H007,
-        TRANSFER-I005, RECOVER-I006, MIGRATE-I011, ARCHIVE-J003, COLLIDE-J005,
-        CONNECT-K004, ANALYZE-L002, SUGGEST-L004, MIGRATE-M005, APPIMAGE-M006,
-        RELEASE-M009, and PUBLISH-M014. The backlog is 80 active tickets and 564
-        open points again, matching v2.2.0."
-      - Added a digest manifest to .constitution/evidence/SPK-BURL-F001/, so the
-        four production-font captures the editor spike produced are checkable.
+    added: ["Added the concurrency mechanics to constitution.yaml from the practice the v2.2.0 entry describes: one worktree and branch per epic, created from merged master, rebase-merged back."]
+    changed: ["Converted tasks/ to the structured layout: one YAML file per epic under epics/ and completed/, and a rendered critical-path.md.", "Renamed every ticket to the framework's <ACRONYM>-<EPIC><NNN> form under the project acronym BURL, because the plan used a different prefix per subject and no single acronym could satisfy the ticket-id rule. The numeric suffix is unchanged except where two tickets in one epic shared it: AUTH-K001 and REG-K001 became BURL-K001 and BURL-K009, and LOG-M002, FLAKE-M002, BENCH-M004, and HEALTH-M004 became BURL-M002, BURL-M015, BURL-M004, and BURL-M016. The seven spike files were renamed to match. The old identifiers stay recoverable from git history.", "Broke the epic dependency cycle. Epic M now depends on nothing, because its BURL-M003 managed-validation matrix is the prerequisite every other epic's tickets name, and a graph in which M also depends on G, H, I, J, K, and L cannot start. Epic I no longer depends on Epic L for the same reason in the other direction: Epic K and Epic L both need Epic I's Object identity and retention, so making Epic I downstream of Epic L would only move the cycle. Both losses are recorded as OD-09 and OD-10 rather than left implicit.", "Set each epic's capability coverage from its markdown header, its estimated diff lines from its open points at 150 lines per point, and the flows each of the 80 active tickets serves.", "Reworded the three product durations the time-unit check reads as estimates: the CAP-058 30-day cache-eviction window and the two 24-hour attestation freshness windows. The rule they express is unchanged.", Replaced the day-based time boxes in the five unexecuted spike reports with a points budget matching the owning Spike ticket., "Migration date retained for v3.0.0: no master commit introducing this version string was found."]
+    fixed: ["Recovered thirteen tickets the conversion silently dropped because their prefix was longer than six characters: PREFLIGHT-H007, TRANSFER-I005, RECOVER-I006, MIGRATE-I011, ARCHIVE-J003, COLLIDE-J005, CONNECT-K004, ANALYZE-L002, SUGGEST-L004, MIGRATE-M005, APPIMAGE-M006, RELEASE-M009, and PUBLISH-M014. The backlog is 80 active tickets and 564 open points again, matching v2.2.0.", "Added a digest manifest to .constitution/evidence/SPK-BURL-F001/, so the four production-font captures the editor spike produced are checkable."]
     by: migrate
     upstream:
       prd: v2.0.0
@@ -431,129 +227,9 @@ entries:
       tech-spec: v2.0.0
   - version: v2.2.0
     date: 2026-08-31
-    changed:
-      - Evolution pass for PRD v1.3.7, Architecture v1.4.15, and TechSpec
-        v1.8.0-provisional. The backlog remains 80 tickets and 564 active story
-        points. The dependency graph now has 226 edges, and the recomputed
-        critical path is 180 points
-      - Replaced the global all-five-Spike production stop with contract-scoped
-        authorization. The six Epic G M0 tickets remain executable; BURL-M015
-        and BURL-M003 are executable bootstrap work. Every other production
-        ticket waits for its own evidence, required upstream finalization, and
-        Stage 4 adaptation
-      - Made BURL-M003 the merged prerequisite for managed-evidence Spikes.
-        BURL-H001 and BURL-H002 run sequentially in the H Spike tranche; the H
-        foundation then runs BURL-H003, BURL-H005, BURL-H004, BURL-H006, and
-        BURL-H007 in order
-      - Replaced physical workstation profiles with managed ubuntu-24.04, Apple
-        Silicon macos-26, and Apple Silicon macos-15 roles. Linux and macOS 26
-        own performance evidence, Linux uses private headless exact
-        platform-regression capture, macOS 26 owns the sole authoritative
-        product visual baseline, and macOS 15 remains functional
-        compatibility-only
-      - Updated CI, AST, path, Asset, observer, packaging, benchmark, shell, and
-        installed-candidate evidence to use authoritative expected identity,
-        immutable pre-upload role bundles, authenticated artifact handoff, and
-        accepted or rejected aggregation
-      - Authorized the provisional Flutter Rust Bridge 2.12.0 generator and
-        runtime triple only for CI bootstrap in a disposable checkout.
-        Downstream production remains blocked until final Stage 3 revalidates
-        the triple and generated bytes
-    added:
-      - "Added the user-authorized isolated tranche sequence: M bootstrap, H
-        Spikes, constitution evidence finalization, H authority foundation, and
-        surgical Epic G replay. Every tranche starts from merged master, uses
-        its own worktree, branch, and pull request, and runs one full review per
-        ticket milestone"
-      - Added exact ownership for chore/epic-m-ci-foundation,
-        spike/epic-h-canonical-foundations, and
-        feat/epic-h-authority-foundation. Partial H and M tranches don't archive
-        their epics. Cross-tranche and cross-branch prerequisites must be merged
-        into the base; within a declared tranche, an earlier committed,
-        validated, and independently reviewed milestone satisfies the next
-        ticket
-    fixed:
-      - Replaced candidate-owned source-branch validation with trust-anchor
-        dispatch. CI and managed Spike commands run the launcher from a clean
-        immutable anchor checkout, name the separate tested source and ticket
-        base, and dispatch trusted master workflows that check out candidate
-        bytes as data
-      - Split each managed role into a minimally privileged candidate job and a
-        fresh dependent sealing job. The separate sealing receipt contains
-        immutable in-job facts and job.check_run_id, but no final state. After
-        the attempt completes, aggregation resolves that locator and requires
-        one successful API job. Artifact checks normalize the pinned action's
-        bare 64-hex digest to the REST and aggregate sha256:<hex> form and
-        reject mismatches
-      - Assigned exact evidence classes per ticket and role. CI bootstrap proves
-        functional, generated-binding, analysis, integration, protocol,
-        security, and isolation outcomes without claiming performance or visual
-        evidence. The five Spikes require only their measured AST, filesystem,
-        Git, Asset, or packaging classes. Later benchmark, shell, and release
-        tickets retain their own performance and visual gates
-      - Clarified the close-warning invariant. A standalone Note-to-Note
-        replacement continues after removing the warned retired tab. Batch close
-        stops with unprocessed tabs preserved, and an enclosing Workspace switch
-        or orderly shutdown is canceled
-      - "Restored the real desktop integration gates in BURL-M003: Linux runs
-        the complete integration_test/ directory on the Linux device inside its
-        owned headless environment, and both macOS roles run it on the macOS
-        device. Each role retains the Flutter unit and analyzer gates and proves
-        that every discovered integration test ran"
-      - Bound CI self-bootstrap and all five managed Spikes to the exact Stage 3
-        managed-evidence.sh run command. The command creates expected identity,
-        uses the dispatch response's run ID, enforces trusted-control and
-        source-allowlist guards, and produces durable accepted or rejected
-        reports
-      - Clarified that merge-before-dependency applies across tranches and
-        branches. Earlier milestones in the same declared tranche satisfy the
-        next ticket only after commit, validation, and independent review. After
-        adding the managed BURL-M003 prerequisite to BURL-L001, ticket count,
-        effort, dependency edges, and critical path are 80 tickets, 564 points,
-        226 edges, and 180 points
-      - Added the managed BURL-M003 dependency and evidence command to
-        BURL-L001, synchronized the README authorization banner, and made the
-        build graph match the fifth managed Spike
-      - Distinguished required Linux exact platform-regression evidence from the
-        sole authoritative macOS 26 product visual reference across every
-        affected ticket
-      - "Aligned device-preference and Workspace-snapshot later-version handling
-        with BURL-M005: preserve unsupported bytes unchanged, use in-memory
-        defaults, and isolate any later current-format write"
-      - Made the provisional Spike contract the sole authority for BURL-M001
-        inner command order and added test_driver to the BURL-M003 format gate
-      - Made BURL-M003 implement the missing non-mutating generated-binding
-        checker before its ordered gate invokes that file. The checker preserves
-        both generated surfaces on clean, stale, failed-generator, premodified,
-        and interrupted runs
-      - Tightened BURL-G003 with nonempty and unique identity schema rules plus
-        Core validation for active Workspace and active Note membership.
-        Malformed bytes remain preserved in quarantine, and runtime receives an
-        empty writable default
-      - Advanced the modified Epic L marker to v2.2.0; the modified Epic G and
-        Epic M files already use v2.2.0
-      - Replaced every managed Spike's manual cross-role handoff with
-        authenticated role-bundle staging and exact coordinator steps. AST,
-        path, Git, Asset, and packaging milestones now require their declared
-        results.json, accepted managed report, and executor-authored human
-        report in one evidence commit. Packaging passes the macOS archive to the
-        compatibility role only through a verified staged bundle
-      - Split managed evidence at the credential boundary. BURL-M003 must
-        prepare and identify each locked coordinator before authentication,
-        restrict authenticated work to evidence acquisition, destroy credentials
-        and descriptors, and then run the prebuilt executable in pinned
-        Bubblewrap with no network, read-only inputs, and only its output
-        writable. Exact canary fixtures cover both role commands and all five
-        managed-Spike coordinators
-      - Added the two-pull-request trust-on-first-merge exception.
-        chore/epic-m-ci-foundation lands the reviewed implementation and
-        establishes its immutable anchor. docs/epic-m-ci-evidence contains only
-        the accepted CI report and completion record. BURL-M003 satisfies no
-        dependency until the second reviewed pull request merges
-      - Assigned descriptor closure to the trusted launcher. A non-CLOEXEC
-        canary proves that it enumerates and closes every nonallowlisted
-        descriptor before Bubblewrap supplies namespace, network, and filesystem
-        isolation
+    changed: ["Evolution pass for PRD v1.3.7, Architecture v1.4.15, and TechSpec v1.8.0-provisional. The backlog remains 80 tickets and 564 active story points. The dependency graph now has 226 edges, and the recomputed critical path is 180 points", "Replaced the global all-five-Spike production stop with contract-scoped authorization. The six Epic G M0 tickets remain executable; BURL-M015 and BURL-M003 are executable bootstrap work. Every other production ticket waits for its own evidence, required upstream finalization, and Stage 4 adaptation", "Made BURL-M003 the merged prerequisite for managed-evidence Spikes. BURL-H001 and BURL-H002 run sequentially in the H Spike tranche; the H foundation then runs BURL-H003, BURL-H005, BURL-H004, BURL-H006, and BURL-H007 in order", "Replaced physical workstation profiles with managed ubuntu-24.04, Apple Silicon macos-26, and Apple Silicon macos-15 roles. Linux and macOS 26 own performance evidence, Linux uses private headless exact platform-regression capture, macOS 26 owns the sole authoritative product visual baseline, and macOS 15 remains functional compatibility-only", "Updated CI, AST, path, Asset, observer, packaging, benchmark, shell, and installed-candidate evidence to use authoritative expected identity, immutable pre-upload role bundles, authenticated artifact handoff, and accepted or rejected aggregation", Authorized the provisional Flutter Rust Bridge 2.12.0 generator and runtime triple only for CI bootstrap in a disposable checkout. Downstream production remains blocked until final Stage 3 revalidates the triple and generated bytes]
+    added: ["Added the user-authorized isolated tranche sequence: M bootstrap, H Spikes, constitution evidence finalization, H authority foundation, and surgical Epic G replay. Every tranche starts from merged master, uses its own worktree, branch, and pull request, and runs one full review per ticket milestone", "Added exact ownership for chore/epic-m-ci-foundation, spike/epic-h-canonical-foundations, and feat/epic-h-authority-foundation. Partial H and M tranches don't archive their epics. Cross-tranche and cross-branch prerequisites must be merged into the base; within a declared tranche, an earlier committed, validated, and independently reviewed milestone satisfies the next ticket"]
+    fixed: ["Replaced candidate-owned source-branch validation with trust-anchor dispatch. CI and managed Spike commands run the launcher from a clean immutable anchor checkout, name the separate tested source and ticket base, and dispatch trusted master workflows that check out candidate bytes as data", "Split each managed role into a minimally privileged candidate job and a fresh dependent sealing job. The separate sealing receipt contains immutable in-job facts and job.check_run_id, but no final state. After the attempt completes, aggregation resolves that locator and requires one successful API job. Artifact checks normalize the pinned action's bare 64-hex digest to the REST and aggregate sha256:<hex> form and reject mismatches", "Assigned exact evidence classes per ticket and role. CI bootstrap proves functional, generated-binding, analysis, integration, protocol, security, and isolation outcomes without claiming performance or visual evidence. The five Spikes require only their measured AST, filesystem, Git, Asset, or packaging classes. Later benchmark, shell, and release tickets retain their own performance and visual gates", "Clarified the close-warning invariant. A standalone Note-to-Note replacement continues after removing the warned retired tab. Batch close stops with unprocessed tabs preserved, and an enclosing Workspace switch or orderly shutdown is canceled", "Restored the real desktop integration gates in BURL-M003: Linux runs the complete integration_test/ directory on the Linux device inside its owned headless environment, and both macOS roles run it on the macOS device. Each role retains the Flutter unit and analyzer gates and proves that every discovered integration test ran", "Bound CI self-bootstrap and all five managed Spikes to the exact Stage 3 managed-evidence.sh run command. The command creates expected identity, uses the dispatch response's run ID, enforces trusted-control and source-allowlist guards, and produces durable accepted or rejected reports", "Clarified that merge-before-dependency applies across tranches and branches. Earlier milestones in the same declared tranche satisfy the next ticket only after commit, validation, and independent review. After adding the managed BURL-M003 prerequisite to BURL-L001, ticket count, effort, dependency edges, and critical path are 80 tickets, 564 points, 226 edges, and 180 points", "Added the managed BURL-M003 dependency and evidence command to BURL-L001, synchronized the README authorization banner, and made the build graph match the fifth managed Spike", Distinguished required Linux exact platform-regression evidence from the sole authoritative macOS 26 product visual reference across every affected ticket, "Aligned device-preference and Workspace-snapshot later-version handling with BURL-M005: preserve unsupported bytes unchanged, use in-memory defaults, and isolate any later current-format write", Made the provisional Spike contract the sole authority for BURL-M001 inner command order and added test_driver to the BURL-M003 format gate, "Made BURL-M003 implement the missing non-mutating generated-binding checker before its ordered gate invokes that file. The checker preserves both generated surfaces on clean, stale, failed-generator, premodified, and interrupted runs", "Tightened BURL-G003 with nonempty and unique identity schema rules plus Core validation for active Workspace and active Note membership. Malformed bytes remain preserved in quarantine, and runtime receives an empty writable default", "Advanced the modified Epic L marker to v2.2.0; the modified Epic G and Epic M files already use v2.2.0", "Replaced every managed Spike's manual cross-role handoff with authenticated role-bundle staging and exact coordinator steps. AST, path, Git, Asset, and packaging milestones now require their declared results.json, accepted managed report, and executor-authored human report in one evidence commit. Packaging passes the macOS archive to the compatibility role only through a verified staged bundle", "Split managed evidence at the credential boundary. BURL-M003 must prepare and identify each locked coordinator before authentication, restrict authenticated work to evidence acquisition, destroy credentials and descriptors, and then run the prebuilt executable in pinned Bubblewrap with no network, read-only inputs, and only its output writable. Exact canary fixtures cover both role commands and all five managed-Spike coordinators", Added the two-pull-request trust-on-first-merge exception. chore/epic-m-ci-foundation lands the reviewed implementation and establishes its immutable anchor. docs/epic-m-ci-evidence contains only the accepted CI report and completion record. BURL-M003 satisfies no dependency until the second reviewed pull request merges, "Assigned descriptor closure to the trusted launcher. A non-CLOEXEC canary proves that it enumerates and closes every nonallowlisted descriptor before Bubblewrap supplies namespace, network, and filesystem isolation"]
     by: migrate
     upstream:
       prd: v1.3.7
@@ -561,778 +237,153 @@ entries:
       tech-spec: v1.8.0
   - version: v2.1.21
     date: 2026-08-30
-    changed:
-      - "M0 authorizes the six Epic G production exceptions: BURL-G001,
-        BURL-G002, BURL-G003, BURL-G004, BURL-G005, and BURL-G007. The stack.md,
-        README.md, and data-models/schema.sql status banners now match that
-        exception. The contracts define device preferences, per-Workspace
-        session snapshots, active-Workspace FFI, and Linux/macOS
-        visual-regression gates. BURL-G006, BURL-G008, BURL-G009, BURL-G010, and
-        BURL-G011 remain in Epic G with live owners"
+    changed: ["M0 authorizes the six Epic G production exceptions: BURL-G001, BURL-G002, BURL-G003, BURL-G004, BURL-G005, and BURL-G007. The stack.md, README.md, and data-models/schema.sql status banners now match that exception. The contracts define device preferences, per-Workspace session snapshots, active-Workspace FFI, and Linux/macOS visual-regression gates. BURL-G006, BURL-G008, BURL-G009, BURL-G010, and BURL-G011 remain in Epic G with live owners"]
   - version: v2.1.20
     date: 2026-08-26
-    changed:
-      - "PR #12 full review round 18 closes the device-flow expiry identifier
-        gap. BURL-K001 tests and accepts both expired_token and GitHub's
-        documented token_expired wording as restart outcomes. Ticket count,
-        effort, dependencies, and critical path remain 80 tickets, 564 points,
-        217 edges, and 153 points"
+    changed: ["PR #12 full review round 18 closes the device-flow expiry identifier gap. BURL-K001 tests and accepts both expired_token and GitHub's documented token_expired wording as restart outcomes. Ticket count, effort, dependencies, and critical path remain 80 tickets, 564 points, 217 edges, and 153 points"]
   - version: v2.1.19
     date: 2026-08-26
-    changed:
-      - "PR #12 full review round 17 closes two P1 and one P2 evidence gaps.
-        PATH roles are bound to Linux/ext4 and macOS/APFS. Packaging requires
-        Linux/x86-64 build hosts and system-captured guest evidence for every
-        named Ubuntu and Debian runtime. GitHub REST fixtures assert the
-        accepted media type and X-GitHub-Api-Version header. Ticket count,
-        effort, dependencies, and critical path remain 80 tickets, 564 points,
-        217 edges, and 153 points"
+    changed: ["PR #12 full review round 17 closes two P1 and one P2 evidence gaps. PATH roles are bound to Linux/ext4 and macOS/APFS. Packaging requires Linux/x86-64 build hosts and system-captured guest evidence for every named Ubuntu and Debian runtime. GitHub REST fixtures assert the accepted media type and X-GitHub-Api-Version header. Ticket count, effort, dependencies, and critical path remain 80 tickets, 564 points, 217 edges, and 153 points"]
   - version: v2.1.18
     date: 2026-08-26
-    changed:
-      - "PR #12 full review round 15 fixes the executable Spike bootstrap. Every
-        Rust prototype now creates and commits a lockfile before its first
-        --locked command and regenerates that lock after CLI-declared dependency
-        changes. Ticket count, effort, dependencies, and critical path remain 80
-        tickets, 564 points, 217 edges, and 153 points"
+    changed: ["PR #12 full review round 15 fixes the executable Spike bootstrap. Every Rust prototype now creates and commits a lockfile before its first --locked command and regenerates that lock after CLI-declared dependency changes. Ticket count, effort, dependencies, and critical path remain 80 tickets, 564 points, 217 edges, and 153 points"]
   - version: v2.1.17
     date: 2026-08-26
-    changed:
-      - "PR #12 full review round 14 closes two P1 gaps. Privacy-paused Object
-        synchronization resumes only after the complete negative anonymous List,
-        Get, Put, and Delete probe. BURL-M014 now depends directly on BURL-K009
-        and reruns its drift check with administrator-approved token-expiration
-        evidence no older than 24 hours. The new direct dependency produces 217
-        edges; ticket count, effort, and critical path remain 80 tickets, 564
-        points, and 153 points"
+    changed: ["PR #12 full review round 14 closes two P1 gaps. Privacy-paused Object synchronization resumes only after the complete negative anonymous List, Get, Put, and Delete probe. BURL-M014 now depends directly on BURL-K009 and reruns its drift check with administrator-approved token-expiration evidence no older than 24 hours. The new direct dependency produces 217 edges; ticket count, effort, and critical path remain 80 tickets, 564 points, and 153 points"]
   - version: v2.1.16
     date: 2026-08-26
-    changed:
-      - "PR #12 full review round 12 expands Object Store privacy validation
-        from anonymous read denial to negative anonymous List, Get, Put, and
-        Delete probes. Disposable sentinels, post-delete survival verification,
-        and unconditional authenticated cleanup make metadata disclosure and
-        anonymous mutation release-blocking. Ticket count, effort, dependencies,
-        and critical path remain 80 tickets, 564 points, 216 edges, and 153
-        points"
+    changed: ["PR #12 full review round 12 expands Object Store privacy validation from anonymous read denial to negative anonymous List, Get, Put, and Delete probes. Disposable sentinels, post-delete survival verification, and unconditional authenticated cleanup make metadata disclosure and anonymous mutation release-blocking. Ticket count, effort, dependencies, and critical path remain 80 tickets, 564 points, 216 edges, and 153 points"]
   - version: v2.1.15
     date: 2026-08-26
-    changed:
-      - "PR #12 full review round 11 removes a detach-state ambiguity in the
-        auth flow. Direct transition to LocalOnly is asset-free only;
-        asset-bearing Workspaces enter LocalWithObjectStore from connected,
-        privacy-paused, authentication-required, or signed-out states and must
-        reconnect the exact prior Remote before full-local preparation. Ticket
-        count, effort, dependencies, and critical path remain 80 tickets, 564
-        points, 216 edges, and 153 points"
+    changed: ["PR #12 full review round 11 removes a detach-state ambiguity in the auth flow. Direct transition to LocalOnly is asset-free only; asset-bearing Workspaces enter LocalWithObjectStore from connected, privacy-paused, authentication-required, or signed-out states and must reconnect the exact prior Remote before full-local preparation. Ticket count, effort, dependencies, and critical path remain 80 tickets, 564 points, 216 edges, and 153 points"]
   - version: v2.1.14
     date: 2026-08-26
-    changed:
-      - "PR #12 full review round 10 closes three P1 and three P2 gaps.
-        Replacement-store migration now validates privacy before intent or copy
-        and continuously through migration. Consolidation tests include the
-        second preparation and publication phase. Offline Remote detach retains
-        the Object Store until the exact prior Remote reconnects and supplies
-        fresh authenticated authority for a full-local transition, preserving
-        CAP-ASSET-11. Refresh errors have typed terminal or Writer-action
-        outcomes, and Spike evidence validates semantic timestamps and real Git
-        revision widths. Ticket count, effort, dependencies, and critical path
-        remain 80 tickets, 564 points, 216 edges, and 153 points"
+    changed: ["PR #12 full review round 10 closes three P1 and three P2 gaps. Replacement-store migration now validates privacy before intent or copy and continuously through migration. Consolidation tests include the second preparation and publication phase. Offline Remote detach retains the Object Store until the exact prior Remote reconnects and supplies fresh authenticated authority for a full-local transition, preserving CAP-ASSET-11. Refresh errors have typed terminal or Writer-action outcomes, and Spike evidence validates semantic timestamps and real Git revision widths. Ticket count, effort, dependencies, and critical path remain 80 tickets, 564 points, 216 edges, and 153 points"]
   - version: v2.1.13
     date: 2026-08-26
-    changed:
-      - "PR #12 full review round 9 closes three P1 and three P2 execution gaps.
-        Consolidation must return through prerequisite verification and initial
-        publication. Object Store privacy is revalidated on startup,
-        periodically, and before publication, with drift pausing
-        synchronization. Authenticated attestations stay with BURL-M009 and
-        BURL-M014 instead of the prototype-only packaging Spike. Stable Export
-        leases now bind empty Directories, profile-bound Spike results require
-        complete hardware facts, and UI-only tickets no longer mutate unscoped
-        generated FFI outputs during verification. Ticket count, effort,
-        dependencies, and the 153-point critical path remain unchanged at 80
-        tickets, 564 points, and 216 edges"
+    changed: ["PR #12 full review round 9 closes three P1 and three P2 execution gaps. Consolidation must return through prerequisite verification and initial publication. Object Store privacy is revalidated on startup, periodically, and before publication, with drift pausing synchronization. Authenticated attestations stay with BURL-M009 and BURL-M014 instead of the prototype-only packaging Spike. Stable Export leases now bind empty Directories, profile-bound Spike results require complete hardware facts, and UI-only tickets no longer mutate unscoped generated FFI outputs during verification. Ticket count, effort, dependencies, and the 153-point critical path remain unchanged at 80 tickets, 564 points, and 216 edges"]
   - version: v2.1.12
     date: 2026-08-26
-    changed:
-      - "PR #12 full review round 8 closes four P1 and four P2 execution gaps.
-        Spike result schema v7 binds multi-host evidence to the same immutable
-        inputs, the AST Spike evaluates both pulldown-cmark versions
-        independently, and the packaging Spike tests the actual deterministic
-        macOS archive. Release tickets require authenticated GitHub Actions
-        attestations, nightly aggregation rejects corpus or meter-definition
-        drift, publication rechecks the current macOS support pair, and complete
-        advertised-ref analysis has explicit resource limits and cleanup.
-        Replacement-store migration retains an old-store fallback and BURL-K005
-        exercises it from a fresh device. The added BURL-I011 → BURL-K005
-        dependency produces 216 edges; the backlog remains 80 tickets and 564
-        points, and the recomputed critical path remains 153 points with
-        migration and fresh-device recovery now on it"
+    changed: ["PR #12 full review round 8 closes four P1 and four P2 execution gaps. Spike result schema v7 binds multi-host evidence to the same immutable inputs, the AST Spike evaluates both pulldown-cmark versions independently, and the packaging Spike tests the actual deterministic macOS archive. Release tickets require authenticated GitHub Actions attestations, nightly aggregation rejects corpus or meter-definition drift, publication rechecks the current macOS support pair, and complete advertised-ref analysis has explicit resource limits and cleanup. Replacement-store migration retains an old-store fallback and BURL-K005 exercises it from a fresh device. The added BURL-I011 → BURL-K005 dependency produces 216 edges; the backlog remains 80 tickets and 564 points, and the recomputed critical path remains 153 points with migration and fresh-device recovery now on it"]
   - version: v2.1.11
     date: 2026-08-26
-    changed:
-      - "PR #12 full review round 7 found four P1 integrity gaps and one P2
-        schema defect. This patch resolves all five"
-      - Deferred authoritative Object Store deletion during 0.x; verified 30-day
-        local cache eviction remains planned
-      - Added durable replacement-store migration intent, mandatory dual-write
-        publication, delta reconciliation, and revision-bound compare-and-swap
-        cutover
-      - Enforced assets/objects/ exclusion in every Core staging and commit path
-        without trusting .gitignore or ambient Git configuration
-      - Added direct hydration and retained-store removal from
-        LocalWithObjectStore without reconnecting the detached Remote
-      - Allowed honest empty stdout and stderr strings in result schema v6
-      - Re-estimated BURL-I011 and BURL-I012 from 5 to 8 points each. The active
-        backlog remains 80 tickets and becomes 564 points; 215 dependency edges
-        remain, and the critical path becomes 153 points
+    changed: ["PR #12 full review round 7 found four P1 integrity gaps and one P2 schema defect. This patch resolves all five", "Deferred authoritative Object Store deletion during 0.x; verified 30-day local cache eviction remains planned", "Added durable replacement-store migration intent, mandatory dual-write publication, delta reconciliation, and revision-bound compare-and-swap cutover", Enforced assets/objects/ exclusion in every Core staging and commit path without trusting .gitignore or ambient Git configuration, Added direct hydration and retained-store removal from LocalWithObjectStore without reconnecting the detached Remote, Allowed honest empty stdout and stderr strings in result schema v6, "Re-estimated BURL-I011 and BURL-I012 from 5 to 8 points each. The active backlog remains 80 tickets and becomes 564 points; 215 dependency edges remain, and the critical path becomes 153 points"]
   - version: v2.1.10
     date: 2026-08-26
-    changed:
-      - "PR #12 full review round 6 found one P1 and four P2 contract gaps. This
-        patch resolves all five and corrects one stale lineage banner"
-    fixed:
-      - Expanded the Git-analysis Spike to distinct verified default Linux and
-        macOS filesystems, with every candidate and host-dependent Git behavior
-        required on both
-      - Required JSON refresh-token responses with every field needed for atomic
-        access-token and refresh-token rotation
-      - Added the explicit local-with-Object-Store state, Remote reconnection,
-        and safe retained-store removal after offline Remote detach
-      - Separated read-only find queries and navigation from editing,
-        replacement, undo, and draft persistence
-      - Added the forbidden-debug-marker scan to both exact CI runner commands
-      - Updated the FFI forward-status banner to PRD v1.3.4, Architecture
-        v1.4.7, and TechSpec v1.7.8-provisional
-      - Revalidated the unchanged 80-ticket, 558-point, 215-edge graph and
-        150-point critical path
+    changed: ["PR #12 full review round 6 found one P1 and four P2 contract gaps. This patch resolves all five and corrects one stale lineage banner"]
+    fixed: ["Expanded the Git-analysis Spike to distinct verified default Linux and macOS filesystems, with every candidate and host-dependent Git behavior required on both", Required JSON refresh-token responses with every field needed for atomic access-token and refresh-token rotation, "Added the explicit local-with-Object-Store state, Remote reconnection, and safe retained-store removal after offline Remote detach", "Separated read-only find queries and navigation from editing, replacement, undo, and draft persistence", Added the forbidden-debug-marker scan to both exact CI runner commands, "Updated the FFI forward-status banner to PRD v1.3.4, Architecture v1.4.7, and TechSpec v1.7.8-provisional", "Revalidated the unchanged 80-ticket, 558-point, 215-edge graph and 150-point critical path"]
   - version: v2.1.9
     date: 2026-08-26
-    changed:
-      - "PR #12 full review round 5 found four P1 and two P2 contract gaps. This
-        patch resolves all six"
-    fixed:
-      - Added schema v5 system-captured CPU, core, memory, storage, graphics,
-        display, power, and thermal facts, then bound AST and Asset evidence to
-        the complete PRD reference profiles
-      - Reworked the macOS packaging protocol so one immutable SHA-256-identical
-        artifact runs on distinct macOS 26 and macOS 15 hosts. A separate
-        same-host repeated construction proves reproducibility
-      - Expanded Protected State enumeration from branches and tags to every
-        fetchable ref advertised by unfiltered git ls-remote --refs;
-        unclassified or unfetchable advertised refs block authoritative deletion
-      - Kept the GitHub App at least privilege by refusing current or historical
-        .github/workflows/ publication instead of requesting Workflows
-        permission. Consolidation into a clean Workspace is the recovery path
-      - Added typed bad_verification_code restart and unverified_user_email
-        guidance to the GitHub device-flow contract and fixtures
-      - Revalidated the unchanged 80-ticket, 558-point, 215-edge graph and
-        150-point critical path
+    changed: ["PR #12 full review round 5 found four P1 and two P2 contract gaps. This patch resolves all six"]
+    fixed: ["Added schema v5 system-captured CPU, core, memory, storage, graphics, display, power, and thermal facts, then bound AST and Asset evidence to the complete PRD reference profiles", Reworked the macOS packaging protocol so one immutable SHA-256-identical artifact runs on distinct macOS 26 and macOS 15 hosts. A separate same-host repeated construction proves reproducibility, "Expanded Protected State enumeration from branches and tags to every fetchable ref advertised by unfiltered git ls-remote --refs; unclassified or unfetchable advertised refs block authoritative deletion", Kept the GitHub App at least privilege by refusing current or historical .github/workflows/ publication instead of requesting Workflows permission. Consolidation into a clean Workspace is the recovery path, Added typed bad_verification_code restart and unverified_user_email guidance to the GitHub device-flow contract and fixtures, "Revalidated the unchanged 80-ticket, 558-point, 215-edge graph and 150-point critical path"]
   - version: v2.1.8
     date: 2026-08-26
-    changed:
-      - "PR #12 full review round 4 found six P1 and two P2 contract gaps. This
-        patch resolves all eight"
-    fixed:
-      - Bound AST evidence to system-captured host fingerprints and verified
-        x86-64 Linux and Apple Silicon macOS facts; caller-supplied flags are
-        assertions only
-      - Made the macOS packaging Spike run each installed probe from the copied
-        artifact that aggregation hashes
-      - Bound packaging evidence to distinct Apple Silicon hosts running macOS
-        26 and macOS 15
-      - Split GitHub App verification into automated public drift checks and a
-        fresh administrator-approved expiring-token attestation
-      - Limited offline Remote detach to attachment-only mode that retains the
-        Object Store. Full-local transition now requires fresh authenticated
-        Remote-ref enumeration
-      - Integrated optional Consolidation into the connection state machine
-        before initial Remote publication, including an end-to-end
-        release-matrix scenario
-      - Clarified full-local transition in PRD v1.3.3, evolved Architecture to
-        v1.4.5, bound Stage 3 to both, corrected the earlier v1.4.4 lineage
-        marker, and reconciled ADR-011 with the prohibition on signed-location
-        and content-derived diagnostics
-      - Recomputed 215 dependency edges. The 150-point critical path now
-        includes the required Consolidation-to-connection sequence; ticket count
-        and effort remain 80 tickets and 558 points
+    changed: ["PR #12 full review round 4 found six P1 and two P2 contract gaps. This patch resolves all eight"]
+    fixed: ["Bound AST evidence to system-captured host fingerprints and verified x86-64 Linux and Apple Silicon macOS facts; caller-supplied flags are assertions only", Made the macOS packaging Spike run each installed probe from the copied artifact that aggregation hashes, Bound packaging evidence to distinct Apple Silicon hosts running macOS 26 and macOS 15, Split GitHub App verification into automated public drift checks and a fresh administrator-approved expiring-token attestation, Limited offline Remote detach to attachment-only mode that retains the Object Store. Full-local transition now requires fresh authenticated Remote-ref enumeration, "Integrated optional Consolidation into the connection state machine before initial Remote publication, including an end-to-end release-matrix scenario", "Clarified full-local transition in PRD v1.3.3, evolved Architecture to v1.4.5, bound Stage 3 to both, corrected the earlier v1.4.4 lineage marker, and reconciled ADR-011 with the prohibition on signed-location and content-derived diagnostics", "Recomputed 215 dependency edges. The 150-point critical path now includes the required Consolidation-to-connection sequence; ticket count and effort remain 80 tickets and 558 points"]
   - version: v2.1.7
     date: 2026-08-26
-    changed:
-      - "PR #12 full review round 3 found three P1 and two P2 gaps. This patch
-        resolves all five"
-    added:
-      - Added BURL-K009 to own project GitHub App registration, installation
-        URL, versioned permissions, device-flow/expiring-token settings, release
-        client ID, and live drift gate
-      - Added BURL-I013 for independent Object Store detach when complete
-        Protected-State enumeration proves no Object reference exists, without
-        detaching the private GitHub Remote
-      - Added BURL-M015 to stabilize the existing authoritative-success
-        timestamp regression before CI makes the full Rust suite a required gate
-    fixed:
-      - Added proactive access-token refresh and exactly one refresh/replay
-        after an authenticated 401; a second 401 becomes authentication-required
-      - Reconciled provisional Stage 3 against Architecture v1.4.4
-      - Added opaque SHA-256-verified cross-host result export, SCP transfer,
-        import, and aggregation for AST, path, Asset, and packaging Spikes
-      - Recomputed the active backlog to 80 tickets, 558 points, and 214
-        dependency edges. The critical path remains 129 points
+    changed: ["PR #12 full review round 3 found three P1 and two P2 gaps. This patch resolves all five"]
+    added: ["Added BURL-K009 to own project GitHub App registration, installation URL, versioned permissions, device-flow/expiring-token settings, release client ID, and live drift gate", "Added BURL-I013 for independent Object Store detach when complete Protected-State enumeration proves no Object reference exists, without detaching the private GitHub Remote", Added BURL-M015 to stabilize the existing authoritative-success timestamp regression before CI makes the full Rust suite a required gate]
+    fixed: ["Added proactive access-token refresh and exactly one refresh/replay after an authenticated 401; a second 401 becomes authentication-required", Reconciled provisional Stage 3 against Architecture v1.4.4, "Added opaque SHA-256-verified cross-host result export, SCP transfer, import, and aggregation for AST, path, Asset, and packaging Spikes", "Recomputed the active backlog to 80 tickets, 558 points, and 214 dependency edges. The critical path remains 129 points"]
   - version: v2.1.6
     date: 2026-08-26
-    changed:
-      - "PR #12 full review round 2 found five P1 and two P2 gaps. This patch
-        resolves all seven"
-    fixed:
-      - Bound Asset-Spike reference-profile evidence to verified, distinct Linux
-        and macOS hosts
-      - Made both CI runners execute the real desktop integration_test/ suite on
-        their named device target, with Xvfb on Linux
-      - Required replacement-store migration and full-local preparation to wait
-        for complete published Remote branch/tag enumeration
-      - Required Rescan to wait for the guest-change decision pipeline it
-        preserves
-      - Staged a real Core-backed multi-tab smoke scenario rather than using the
-        screenshot name as implied setup
-      - Updated the repository README to describe the active 77-ticket,
-        545-point roadmap and current deferrals
-      - Recomputed 206 dependency edges and the 129-point critical path. Ticket
-        count and effort are unchanged
+    changed: ["PR #12 full review round 2 found five P1 and two P2 gaps. This patch resolves all seven"]
+    fixed: ["Bound Asset-Spike reference-profile evidence to verified, distinct Linux and macOS hosts", "Made both CI runners execute the real desktop integration_test/ suite on their named device target, with Xvfb on Linux", Required replacement-store migration and full-local preparation to wait for complete published Remote branch/tag enumeration, Required Rescan to wait for the guest-change decision pipeline it preserves, Staged a real Core-backed multi-tab smoke scenario rather than using the screenshot name as implied setup, "Updated the repository README to describe the active 77-ticket, 545-point roadmap and current deferrals", Recomputed 206 dependency edges and the 129-point critical path. Ticket count and effort are unchanged]
   - version: v2.1.5
     date: 2026-08-26
-    changed:
-      - "PR #12 full review round 1 found three P1 and five low-cost P2 contract
-        gaps. This patch resolves all of them without changing ticket count,
-        effort, dependencies, or the critical path"
-    fixed:
-      - Required the packaging Spike to copy Nix out-link results into its
-        contained artifacts/ directory before hashing or aggregation
-      - Split AST performance and FFI projection evidence across distinct Linux
-        and Apple Silicon macOS reference hosts with rejecting aggregation
-      - Extended the generated-output convention and checker to
-        rust/src/frb_generated.rs as well as lib/src/rust/
-      - Bound path-Spike runs to verified operating-system roles and required
-        two distinct operating systems
-      - Classified all documented GitHub device-flow polling errors as
-        transient, terminal authorization, or fatal configuration/protocol
-        outcomes
-      - Made the CI ticket run formatting, Clippy, workflow lint, and explicit
-        Linux/macOS matrix assertions
-      - Added required production manifests and Platform seams to the Object
-        Store and image-import ticket scopes
-      - Required Spike result tools to validate RFC 3339 timestamps without
-        assuming an optional JSON Schema format plugin
+    changed: ["PR #12 full review round 1 found three P1 and five low-cost P2 contract gaps. This patch resolves all of them without changing ticket count, effort, dependencies, or the critical path"]
+    fixed: [Required the packaging Spike to copy Nix out-link results into its contained artifacts/ directory before hashing or aggregation, Split AST performance and FFI projection evidence across distinct Linux and Apple Silicon macOS reference hosts with rejecting aggregation, Extended the generated-output convention and checker to rust/src/frb_generated.rs as well as lib/src/rust/, Bound path-Spike runs to verified operating-system roles and required two distinct operating systems, "Classified all documented GitHub device-flow polling errors as transient, terminal authorization, or fatal configuration/protocol outcomes", "Made the CI ticket run formatting, Clippy, workflow lint, and explicit Linux/macOS matrix assertions", Added required production manifests and Platform seams to the Object Store and image-import ticket scopes, Required Spike result tools to validate RFC 3339 timestamps without assuming an optional JSON Schema format plugin]
   - version: v2.1.4
     date: 2026-08-26
-    changed:
-      - The fourth and final fresh review found no P0 issues and two P1
-        dependency/evidence gaps
-    fixed:
-      - Made the Writer-facing Remote UI depend on completed second-device join
-        and detach/reconnect Core behavior, and explicitly assigned both
-        workflows to that UI ticket
-      - Split nightly PRD-meter verification into exact Linux and Apple Silicon
-        macOS host commands plus an aggregation command that rejects missing,
-        duplicate, or same-host evidence
-      - Recomputed 203 dependency edges. Ticket count and effort remain 77
-        tickets and 545 points; the complete Remote UI dependencies move the
-        critical path to 113 points
+    changed: [The fourth and final fresh review found no P0 issues and two P1 dependency/evidence gaps]
+    fixed: ["Made the Writer-facing Remote UI depend on completed second-device join and detach/reconnect Core behavior, and explicitly assigned both workflows to that UI ticket", "Split nightly PRD-meter verification into exact Linux and Apple Silicon macOS host commands plus an aggregation command that rejects missing, duplicate, or same-host evidence", "Recomputed 203 dependency edges. Ticket count and effort remain 77 tickets and 545 points; the complete Remote UI dependencies move the critical path to 113 points"]
   - version: v2.1.3
     date: 2026-08-26
-    changed:
-      - A third fresh full-stage review found no P0 issues and five P1
-        verification gaps. This patch resolves all five
-    fixed:
-      - Removed the pre-check binding generation that could erase stale evidence
-        before check-generated-bindings.sh took its snapshot. All 43 FFI tickets
-        now call the non-mutating checker directly
-      - Added the mandatory real-application smoke launch to the six remaining
-        UI-touching tickets
-      - Added an explicit 3,600-second offline scenario to the live
-        synchronization freshness meter
-      - Narrowed BURL-M008 to reproducible archive construction; installed
-        two-version verification remains solely in dependent BURL-M013
-      - Added exact apply/probe/cleanup commands and machine-readable outcomes
-        to the second-device and private GitHub canary runbooks
-      - Aligned the PRD vision version marker and corrected the extra H1 in the
-        critical-path document
+    changed: [A third fresh full-stage review found no P0 issues and five P1 verification gaps. This patch resolves all five]
+    fixed: [Removed the pre-check binding generation that could erase stale evidence before check-generated-bindings.sh took its snapshot. All 43 FFI tickets now call the non-mutating checker directly, Added the mandatory real-application smoke launch to the six remaining UI-touching tickets, "Added an explicit 3,600-second offline scenario to the live synchronization freshness meter", "Narrowed BURL-M008 to reproducible archive construction; installed two-version verification remains solely in dependent BURL-M013", Added exact apply/probe/cleanup commands and machine-readable outcomes to the second-device and private GitHub canary runbooks, Aligned the PRD vision version marker and corrected the extra H1 in the critical-path document]
   - version: v2.1.2
     date: 2026-08-26
-    changed:
-      - A second fresh full-stage review found no P0 issues and four P1 gaps.
-        This patch resolves all four and the review’s lower-priority
-        correctness/style observations
-      - Made immutable candidate construction depend on diagnostics, the
-        complete nightly/product chain, and migration so later product changes
-        can't fall outside the candidate hash
-      - Added BURL-M003 as an explicit dependency of every FFI-changing ticket
-        and made its non-mutating generated-binding checker part of all 43 FFI
-        verification gates
-      - Replaced the observer’s unavailable single-host benchmark script with
-        exact Rust meter commands for the distinct Linux and Apple Silicon macOS
-        reference hosts
-      - Added an exact live private-Remote freshness command and dataset to
-        BURL-L003
-      - Clarified that Object Store credential rotation removes the earlier
-        local secret and instructs the Writer to revoke it at the provider
-      - Reclassified implemented CAP-GRAPH-04 as delivered and retained it as a
-        preservation obligation
-      - Applied sentence case to the new Stage 4 document headings
-      - Recomputed 201 dependency edges. The active total remains 77 tickets and
-        545 points, and the critical path remains 108 points
+    changed: ["A second fresh full-stage review found no P0 issues and four P1 gaps. This patch resolves all four and the review’s lower-priority correctness/style observations", "Made immutable candidate construction depend on diagnostics, the complete nightly/product chain, and migration so later product changes can't fall outside the candidate hash", Added BURL-M003 as an explicit dependency of every FFI-changing ticket and made its non-mutating generated-binding checker part of all 43 FFI verification gates, "Replaced the observer’s unavailable single-host benchmark script with exact Rust meter commands for the distinct Linux and Apple Silicon macOS reference hosts", Added an exact live private-Remote freshness command and dataset to BURL-L003, Clarified that Object Store credential rotation removes the earlier local secret and instructs the Writer to revoke it at the provider, Reclassified implemented CAP-GRAPH-04 as delivered and retained it as a preservation obligation, Applied sentence case to the new Stage 4 document headings, "Recomputed 201 dependency edges. The active total remains 77 tickets and 545 points, and the critical path remains 108 points"]
   - version: v2.1.1
     date: 2026-08-26
-    changed:
-      - Fresh full-stage review found no P0 issues and nine P1 gaps. This patch
-        resolves all nine and the review’s ticket-size concern
-      - Recomputed the active backlog to 77 tickets and 545 story points. The
-        critical path is now 108 points and ends with verified GitHub prerelease
-        publication
-      - Moved update-notification implementation before immutable candidate
-        construction. Publication now depends on three installed-artifact gates
-      - Made nightly meters depend on complete synchronization and the
-        history-health warning, and gave the observer and nightly meters exact
-        profile commands
-      - Quoted the exact multi-host PATH, Asset, and packaging Spike commands
-      - Made Platform-chrome removal own burl_theme.dart, named its visual
-        baselines, and set the visual-diff threshold explicitly
-      - Required plain-copy Export to preserve and report nonconforming guest
-        Notes without repair or refusal
-      - Aligned local diagnostics with PRD v1.3.1 and Architecture v1.4.1,
-        including signed-location and content-derived-data exclusions
-    added:
-      - Added BURL-M016 for the accepted history-storage meter and Writer-facing
-        warning
-      - Split Object Store credential rotation, replacement-store migration, and
-        full-local detach into BURL-I008, BURL-I011, and BURL-I012
-      - Split Export and Consolidation UI into BURL-J006 and BURL-J007
-      - Split the installed release matrix into AppImage, Nix, and Apple Silicon
-        macOS gates and added terminal BURL-M014 publication
-      - "Added a shared execution gate: only the five Spikes run while Stage 3
-        is provisional. Every production ticket waits for measured upstream
-        evolution, final Stage 3, and Stage 4 adaptation"
-      - Added a shared generated-binding scope convention for every FFI-changing
-        ticket
+    changed: ["Fresh full-stage review found no P0 issues and nine P1 gaps. This patch resolves all nine and the review’s ticket-size concern", Recomputed the active backlog to 77 tickets and 545 story points. The critical path is now 108 points and ends with verified GitHub prerelease publication, Moved update-notification implementation before immutable candidate construction. Publication now depends on three installed-artifact gates, "Made nightly meters depend on complete synchronization and the history-health warning, and gave the observer and nightly meters exact profile commands", "Quoted the exact multi-host PATH, Asset, and packaging Spike commands", "Made Platform-chrome removal own burl_theme.dart, named its visual baselines, and set the visual-diff threshold explicitly", Required plain-copy Export to preserve and report nonconforming guest Notes without repair or refusal, "Aligned local diagnostics with PRD v1.3.1 and Architecture v1.4.1, including signed-location and content-derived-data exclusions"]
+    added: [Added BURL-M016 for the accepted history-storage meter and Writer-facing warning, "Split Object Store credential rotation, replacement-store migration, and full-local detach into BURL-I008, BURL-I011, and BURL-I012", Split Export and Consolidation UI into BURL-J006 and BURL-J007, "Split the installed release matrix into AppImage, Nix, and Apple Silicon macOS gates and added terminal BURL-M014 publication", "Added a shared execution gate: only the five Spikes run while Stage 3 is provisional. Every production ticket waits for measured upstream evolution, final Stage 3, and Stage 4 adaptation", Added a shared generated-binding scope convention for every FFI-changing ticket]
   - version: v2.1.0
     date: 2026-08-26
-    added:
-      - "Added the complete forward backlog: 70 atomic tickets across seven
-        active epics and 522 story points"
-      - Added Epic G (desktop session and local workflows), Epic H (canonical
-        Workspace authority and monitoring), Epic I (Assets and Object Store),
-        Epic J (Export and Consolidation), Epic K (private GitHub Remote), Epic
-        L (synchronization and reconciliation), and Epic M (quality and
-        releases)
-      - Added explicit capability coverage for all 60 active PRD capabilities
-        and preservation/integration obligations for the delivered baseline
-      - Added the complete cross-epic dependency graph and the 114-point
-        critical path from canonical AST research through the installed release
-        gate
-    changed:
-      - "Moved each decision-producing Spike into the epic it governs: BURL-H001
-        and BURL-H002, BURL-I001, BURL-L001, and BURL-M001"
-      - Planned downstream implementation tickets now. Spike-dependent tickets
-        depend on their owning Spike and stop until measured upstream evolution
-        accepts the contract; Stage 4 then adapts their scope, estimates, and
-        verification rather than recreating the roadmap
-      - "Replaced the one-epic research-only plan with the forward execution
-        sequence: independent foundations, canonical local application,
-        Assets/portability/private Remote, synchronization/reconciliation, then
-        quality/release"
-    fixed:
-      - Corrected the earlier interpretation that a provisional TechSpec
-        prevented epic planning. It prevents premature implementation of
-        unresolved contracts; it doesn't prevent dependency-ordered backlog
-        design
-    removed:
-      - Removed the single umbrella Research Foundations epic. Its five Spikes
-        remain, now as the first relevant tickets of their owning epics
+    added: ["Added the complete forward backlog: 70 atomic tickets across seven active epics and 522 story points", "Added Epic G (desktop session and local workflows), Epic H (canonical Workspace authority and monitoring), Epic I (Assets and Object Store), Epic J (Export and Consolidation), Epic K (private GitHub Remote), Epic L (synchronization and reconciliation), and Epic M (quality and releases)", Added explicit capability coverage for all 60 active PRD capabilities and preservation/integration obligations for the delivered baseline, Added the complete cross-epic dependency graph and the 114-point critical path from canonical AST research through the installed release gate]
+    changed: ["Moved each decision-producing Spike into the epic it governs: BURL-H001 and BURL-H002, BURL-I001, BURL-L001, and BURL-M001", "Planned downstream implementation tickets now. Spike-dependent tickets depend on their owning Spike and stop until measured upstream evolution accepts the contract; Stage 4 then adapts their scope, estimates, and verification rather than recreating the roadmap", "Replaced the one-epic research-only plan with the forward execution sequence: independent foundations, canonical local application, Assets/portability/private Remote, synchronization/reconciliation, then quality/release"]
+    fixed: ["Corrected the earlier interpretation that a provisional TechSpec prevented epic planning. It prevents premature implementation of unresolved contracts; it doesn't prevent dependency-ordered backlog design"]
+    removed: ["Removed the single umbrella Research Foundations epic. Its five Spikes remain, now as the first relevant tickets of their owning epics"]
   - version: v2.0.0
     date: 2026-08-25
-    added:
-      - Added active Epic G, Research Foundations, with five independent 8-point
-        Spike tickets for the canonical AST, cross-platform paths, Git
-        reconciliation analysis, hybrid assets and S3-compatible objects, and
-        prerelease packaging
-      - Added one framework-standard Spike report placeholder per ticket under
-        .constitution/spikes/
-      - Added exact TechSpec-derived prototype roots, write allowlists,
-        verification commands, STOP conditions, and mode-tagged evidence to
-        every ticket
-    changed:
-      - Replaced the empty active backlog with 40 research-only points and five
-        equal parallel 8-point critical paths
-      - "Replaced the obsolete Wave 3 narrative with the forward pipeline:
-        execute Spikes, route measured thresholds through Product Requirements
-        and Architecture, finalize Technical Implementation, then generate the
-        production backlog"
-      - "Reserved PR #11 as delivered redesign foundation. No retrospective
-        design epic or fictional reconciliation ticket was created for it"
-    fixed:
-      - "Cross-epic dependency provenance, dropped to keep the migration graph
-        acyclic; OD-09 and OD-10 own the decision: BURL-M004 ← BURL-G011,
-        BURL-H012, BURL-I010, BURL-L012."
-      - "Cross-epic dependency provenance, dropped to keep the migration graph
-        acyclic; OD-09 and OD-10 own the decision: BURL-M016 ← BURL-I001,
-        BURL-G010."
-      - "Cross-epic dependency provenance, dropped to keep the migration graph
-        acyclic; OD-09 and OD-10 own the decision: BURL-M005 ← BURL-G003,
-        BURL-H006."
-      - "Cross-epic dependency provenance, dropped to keep the migration graph
-        acyclic; OD-09 and OD-10 own the decision: BURL-M006 ← BURL-J006,
-        BURL-J007, BURL-L012, BURL-G011."
-      - "Cross-epic dependency provenance, dropped to keep the migration graph
-        acyclic; OD-09 and OD-10 own the decision: BURL-M007 ← BURL-J006,
-        BURL-J007, BURL-L012."
-      - "Cross-epic dependency provenance, dropped to keep the migration graph
-        acyclic; OD-09 and OD-10 own the decision: BURL-M008 ← BURL-J006,
-        BURL-J007, BURL-L012."
-      - "Cross-epic dependency provenance, dropped to keep the migration graph
-        acyclic; OD-09 and OD-10 own the decision: BURL-M010 ← BURL-G002."
-      - "Cross-epic dependency provenance, dropped to keep the migration graph
-        acyclic; OD-09 and OD-10 own the decision: BURL-M014 ← BURL-K009."
-      - "Cross-epic dependency provenance, dropped to keep the migration graph
-        acyclic; OD-09 and OD-10 own the decision: BURL-I011 ← BURL-L010;
-        BURL-I012 ← BURL-L010; BURL-I013 ← BURL-L010."
-    removed:
-      - Removed the provisional Epic G/H/I narrative assignments from the active
-        roadmap. The new Epic G is a real active research epic with explicit
-        tickets; it isn't the prior placeholder for sync integration
+    added: ["Added active Epic G, Research Foundations, with five independent 8-point Spike tickets for the canonical AST, cross-platform paths, Git reconciliation analysis, hybrid assets and S3-compatible objects, and prerelease packaging", Added one framework-standard Spike report placeholder per ticket under .constitution/spikes/, "Added exact TechSpec-derived prototype roots, write allowlists, verification commands, STOP conditions, and mode-tagged evidence to every ticket"]
+    changed: [Replaced the empty active backlog with 40 research-only points and five equal parallel 8-point critical paths, "Replaced the obsolete Wave 3 narrative with the forward pipeline: execute Spikes, route measured thresholds through Product Requirements and Architecture, finalize Technical Implementation, then generate the production backlog", "Reserved PR #11 as delivered redesign foundation. No retrospective design epic or fictional reconciliation ticket was created for it"]
+    fixed: ["Cross-epic dependency provenance, dropped to keep the migration graph acyclic; OD-09 and OD-10 own the decision: BURL-M004 ← BURL-G011, BURL-H012, BURL-I010, BURL-L012.", "Cross-epic dependency provenance, dropped to keep the migration graph acyclic; OD-09 and OD-10 own the decision: BURL-M016 ← BURL-I001, BURL-G010.", "Cross-epic dependency provenance, dropped to keep the migration graph acyclic; OD-09 and OD-10 own the decision: BURL-M005 ← BURL-G003, BURL-H006.", "Cross-epic dependency provenance, dropped to keep the migration graph acyclic; OD-09 and OD-10 own the decision: BURL-M006 ← BURL-J006, BURL-J007, BURL-L012, BURL-G011.", "Cross-epic dependency provenance, dropped to keep the migration graph acyclic; OD-09 and OD-10 own the decision: BURL-M007 ← BURL-J006, BURL-J007, BURL-L012.", "Cross-epic dependency provenance, dropped to keep the migration graph acyclic; OD-09 and OD-10 own the decision: BURL-M008 ← BURL-J006, BURL-J007, BURL-L012.", "Cross-epic dependency provenance, dropped to keep the migration graph acyclic; OD-09 and OD-10 own the decision: BURL-M010 ← BURL-G002.", "Cross-epic dependency provenance, dropped to keep the migration graph acyclic; OD-09 and OD-10 own the decision: BURL-M014 ← BURL-K009.", "Cross-epic dependency provenance, dropped to keep the migration graph acyclic; OD-09 and OD-10 own the decision: BURL-I011 ← BURL-L010; BURL-I012 ← BURL-L010; BURL-I013 ← BURL-L010."]
+    removed: ["Removed the provisional Epic G/H/I narrative assignments from the active roadmap. The new Epic G is a real active research epic with explicit tickets; it isn't the prior placeholder for sync integration"]
   - version: v1.9.4
     date: 2026-08-23
-    changed:
-      - "Bounded PR #10 review round 23 documentation for an archived Epic F
-        scope deviation. The record covers schema recovery for version-zero
-        SQLite files and its verification. It does not reopen tickets or change
-        active scope, estimates, dependencies, acceptance criteria, the backlog,
-        or the critical path"
+    changed: ["Bounded PR #10 review round 23 documentation for an archived Epic F scope deviation. The record covers schema recovery for version-zero SQLite files and its verification. It does not reopen tickets or change active scope, estimates, dependencies, acceptance criteria, the backlog, or the critical path"]
   - version: v1.9.3
     date: 2026-08-23
-    changed:
-      - "Bounded PR #10 review round 7 correction to archived Epic F. The
-        correction hardens the existing editor-depth persistence and
-        continuation behavior; it does not reopen scope, estimates,
-        dependencies, acceptance criteria, active backlog, or the critical path"
+    changed: ["Bounded PR #10 review round 7 correction to archived Epic F. The correction hardens the existing editor-depth persistence and continuation behavior; it does not reopen scope, estimates, dependencies, acceptance criteria, active backlog, or the critical path"]
   - version: v1.9.2
     date: 2026-08-23
-    changed:
-      - "PR #10 review round 6 corrected the archived Epic F scope-closeout
-        statement and recorded the post-closeout hardening. The correction does
-        not change task scope, estimates, dependencies, acceptance criteria, the
-        active backlog, or the critical path"
+    changed: ["PR #10 review round 6 corrected the archived Epic F scope-closeout statement and recorded the post-closeout hardening. The correction does not change task scope, estimates, dependencies, acceptance criteria, the active backlog, or the critical path"]
   - version: v1.9.1
     date: 2026-08-23
-    changed:
-      - Reviewed for upstream delta; no task changes required
+    changed: ["Reviewed for upstream delta; no task changes required"]
   - version: v1.9.0
     date: 2026-08-23
-    changed:
-      - Epic F — Editor Depth completed and archived. All seven tickets
-        (BURL-F001 through BURL-F007, 38 story points) are complete. The
-        delivery spans 25 commits (a960e34 through 1dd94d3), including the
-        feature work, contract reconciliation, and mandatory review corrections.
-        The epic moves from active/ to completed/ with completion notes and
-        deferred follow-ups
+    changed: ["Epic F — Editor Depth completed and archived. All seven tickets (BURL-F001 through BURL-F007, 38 story points) are complete. The delivery spans 25 commits (a960e34 through 1dd94d3), including the feature work, contract reconciliation, and mandatory review corrections. The epic moves from active/ to completed/ with completion notes and deferred follow-ups"]
   - version: v1.8.0
     date: 2026-08-31
-    changed:
-      - "Evolution pass consuming Technical Implementation v1.6.0. Minor bump:
-        the remaining active Editor Depth tickets materially expand in scope and
-        effort, while their dependency topology stays unchanged"
+    changed: ["Evolution pass consuming Technical Implementation v1.6.0. Minor bump: the remaining active Editor Depth tickets materially expand in scope and effort, while their dependency topology stays unchanged"]
   - version: v1.7.1
     date: 2026-08-23
-    changed:
-      - "Independent-review correction to BURL-F001: the original Spike's
-        single-commit STOP remains historical rather than being rewritten. A
-        separately committed correction is explicitly allowed for
-        independent-review findings, with its out-of-scope
-        production/test/ADR/evidence touches documented in the active Epic. It
-        closes the focused-drag range loophole, adds durable production-font
-        hitl_sil captures, and stabilizes raw-source wrap-boundary height
-        without changing the Stage 3 model"
+    changed: ["Independent-review correction to BURL-F001: the original Spike's single-commit STOP remains historical rather than being rewritten. A separately committed correction is explicitly allowed for independent-review findings, with its out-of-scope production/test/ADR/evidence touches documented in the active Epic. It closes the focused-drag range loophole, adds durable production-font hitl_sil captures, and stabilizes raw-source wrap-boundary height without changing the Stage 3 model"]
   - version: v1.7.0
     date: 2026-08-22
-    changed:
-      - "Epic E — Shell & Navigation completed and archived. All eight tickets
-        (BURL-E001 … E008, 27 story points) are implemented, independently
-        reviewed and merged across 15 commits (713de70 … b3cd66f: nine feature
-        commits, three docs commits recording deviations, one review-fix commit,
-        one harness hardening, one integration milestone).
-        EPIC-E-shell-navigation.md moves from active/ to completed/ with
-        Completion Notes appended. The active backlog drops from 57 points to 30
-        — Epic F alone. Minor bump: scope removed by completion, no
-        restructuring of the stage"
+    changed: ["Epic E — Shell & Navigation completed and archived. All eight tickets (BURL-E001 … E008, 27 story points) are implemented, independently reviewed and merged across 15 commits (713de70 … b3cd66f: nine feature commits, three docs commits recording deviations, one review-fix commit, one harness hardening, one integration milestone). EPIC-E-shell-navigation.md moves from active/ to completed/ with Completion Notes appended. The active backlog drops from 57 points to 30 — Epic F alone. Minor bump: scope removed by completion, no restructuring of the stage"]
   - version: v1.6.0
     date: 2026-08-21
-    changed:
-      - "Stage 4 pass of the 2026-08-21 constitution realignment, executed after
-        PRD v1.2.0, architecture v1.3.0 and tech-spec v1.3.0. Totals change: 55
-        → 57 active points; the critical path is unchanged at 33"
+    changed: ["Stage 4 pass of the 2026-08-21 constitution realignment, executed after PRD v1.2.0, architecture v1.3.0 and tech-spec v1.3.0. Totals change: 55 → 57 active points; the critical path is unchanged at 33"]
   - version: v1.5.0
     date: 2026-08-05
-    changed:
-      - "Epic D — Workspace & Persistence completed and archived. All nine
-        tickets (BURL-D001 … BURL-D009, 50 story points, one of them a Spike)
-        are implemented, reviewed and merged across 17 commits, and
-        EPIC-D-workspace-persistence.md moves from active/ to completed/ with a
-        Completion Notes section appended. The active backlog drops from 105
-        points to 55 — Epic E (25) and Epic F (30). Minor bump: scope removed by
-        completion, no restructuring of the stage"
+    changed: ["Epic D — Workspace & Persistence completed and archived. All nine tickets (BURL-D001 … BURL-D009, 50 story points, one of them a Spike) are implemented, reviewed and merged across 17 commits, and EPIC-D-workspace-persistence.md moves from active/ to completed/ with a Completion Notes section appended. The active backlog drops from 105 points to 55 — Epic E (25) and Epic F (30). Minor bump: scope removed by completion, no restructuring of the stage"]
   - version: v1.4.0
     date: 2026-08-22
-    changed:
-      - "New active backlog: Epic D (Workspace & Persistence, 50 points), Epic E
-        (Shell & Navigation, 25) and Epic F (Editor Depth, 30), totalling 105
-        story points across 23 tickets, of which 2 are Spikes. Minor bump: new
-        scope, no restructuring of the stage"
+    changed: ["New active backlog: Epic D (Workspace & Persistence, 50 points), Epic E (Shell & Navigation, 25) and Epic F (Editor Depth, 30), totalling 105 story points across 23 tickets, of which 2 are Spikes. Minor bump: new scope, no restructuring of the stage"]
   - version: v1.3.0
     date: 2026-08-21
-    changed:
-      - "- Completed Epic C: Security & Sync (BURL-C001–BURL-C003), total 16
-        story points: a gix/git-CLI hybrid for clone/commit/push/pull against
-        the local Workspace, a GitHub OAuth PKCE login flow with OS-Keychain
-        token storage, and a debounced background sync scheduler with
-        exponential-backoff retry and conflict-path re-index/notify hooks. -
-        Each milestone passed an independent single-pass review gate before the
-        next started; BURL-C001 needed one follow-up fix commit (ecd705e) for
-        two P2 findings (a commit_all deletion/rename bug, and redacting
-        GitCredentials' Debug output so a stray {:?} can never print a token).
-        BURL-C002 and BURL-C003 each passed their single review pass clean. -
-        Archived EPIC-C-security-sync.md to .constitution/tasks/completed/, with
-        a new \"Completion Notes & Deferred Follow-Ups\" section recording six
-        concrete deferred items un-ticketed by this epic: GitHub OAuth App
-        registration (real-network exchange is only mock/fixture-tested so far);
-        a keychain credential-readback accessor the scheduler needs but
-        api::auth doesn't yet expose; the missing notes/notes_fts re-index
-        function the scheduler's conflict hook currently no-ops against;
-        app-lifecycle wiring (constructing/starting the scheduler,
-        notify_activity() from save, the login flow's clone+index-init tail, and
-        session-restore-on-startup — none of which exist yet, so every restart
-        re-shows login); SyncScheduler::stop()'s unbounded wait on an in-flight
-        git subprocess; and the open question of whether a post-conflict clean
-        auto-merge should re-push immediately rather than waiting for the next
-        natural trigger. - Recomputed the active backlog to 0 story points and
-        the critical path to empty (see tasks/critical-path.md v1.3.0) — all
-        three epics originally scoped (52 story points total) are now complete.
-        Moved the BURL-C001→BURL-C003 nodes into a \"Completed - Epic C\"
-        subgraph in the Build Order diagram, preserving all existing edges and
-        styling. - Ran the tech-spec half of the Constitution Freshness &
-        Reconciliation Pass alongside this closeout: corrected a doc-drift bug
-        in tech-spec/changelog.md's v1.0.4 entry (named a nonexistent
-        KeyringTokenStore type instead of the real store_tokens_in_keyring
-        function), backfilled stack.md's BOM with the reqwest direct dependency
-        and a keyring 4.1.5 known-issue note, and added the rust/src/sync/ and
-        lib/src/screens/ directories to guidelines.md's repo-layout tree. See
-        tech-spec/changelog.md v1.0.5. - Recommend a future
-        /planning-engineering-execution pass to convert the deferred follow-ups
-        above into a ticketed integration-work epic before further capability
-        work begins"
+    changed: ["- Completed Epic C: Security & Sync (BURL-C001–BURL-C003), total 16 story points: a gix/git-CLI hybrid for clone/commit/push/pull against the local Workspace, a GitHub OAuth PKCE login flow with OS-Keychain token storage, and a debounced background sync scheduler with exponential-backoff retry and conflict-path re-index/notify hooks. - Each milestone passed an independent single-pass review gate before the next started; BURL-C001 needed one follow-up fix commit (ecd705e) for two P2 findings (a commit_all deletion/rename bug, and redacting GitCredentials' Debug output so a stray {:?} can never print a token). BURL-C002 and BURL-C003 each passed their single review pass clean. - Archived EPIC-C-security-sync.md to .constitution/tasks/completed/, with a new \"Completion Notes & Deferred Follow-Ups\" section recording six concrete deferred items un-ticketed by this epic: GitHub OAuth App registration (real-network exchange is only mock/fixture-tested so far); a keychain credential-readback accessor the scheduler needs but api::auth doesn't yet expose; the missing notes/notes_fts re-index function the scheduler's conflict hook currently no-ops against; app-lifecycle wiring (constructing/starting the scheduler, notify_activity() from save, the login flow's clone+index-init tail, and session-restore-on-startup — none of which exist yet, so every restart re-shows login); SyncScheduler::stop()'s unbounded wait on an in-flight git subprocess; and the open question of whether a post-conflict clean auto-merge should re-push immediately rather than waiting for the next natural trigger. - Recomputed the active backlog to 0 story points and the critical path to empty (see tasks/critical-path.md v1.3.0) — all three epics originally scoped (52 story points total) are now complete. Moved the BURL-C001→BURL-C003 nodes into a \"Completed - Epic C\" subgraph in the Build Order diagram, preserving all existing edges and styling. - Ran the tech-spec half of the Constitution Freshness & Reconciliation Pass alongside this closeout: corrected a doc-drift bug in tech-spec/changelog.md's v1.0.4 entry (named a nonexistent KeyringTokenStore type instead of the real store_tokens_in_keyring function), backfilled stack.md's BOM with the reqwest direct dependency and a keyring 4.1.5 known-issue note, and added the rust/src/sync/ and lib/src/screens/ directories to guidelines.md's repo-layout tree. See tech-spec/changelog.md v1.0.5. - Recommend a future /planning-engineering-execution pass to convert the deferred follow-ups above into a ticketed integration-work epic before further capability work begins"]
   - version: v1.2.5
     date: 2026-07-22
-    changed:
-      - "PR #4 dual-axis review, round 4 (confirming pass after round 3's
-        material behavior changes) — loop closed, no fixes needed. - Both axes
-        returned zero P0/P1, the third consecutive clean high-priority round
-        (after 2 and 3), satisfying the review loop's stop condition. No code
-        changes this round. - Documented, not fixed: a Feature-Envy P2
-        (Standards) — search_notes_impl/save_note_impl/fts5_phrase_query still
-        live in api::ffi_api rather than db, the other half of round 2's
-        Divergent-Change fix; a missing error surface for FFI failures in
-        note_providers.dart (P2, Spec, currently unreachable since Editor isn't
-        mounted); and an Investigate (Spec) that search_notes has no
-        workspace_id filter despite prd/capabilities.md's \"search... in their
-        Workspace\" wording — currently unreachable since only one hardcoded
-        workspace exists and no workspace-selection ticket has landed. - See
-        tasks/completed/EPIC-B-ui-database.md's \"Post-PR-review round 4\" note
-        for full detail"
+    changed: ["PR #4 dual-axis review, round 4 (confirming pass after round 3's material behavior changes) — loop closed, no fixes needed. - Both axes returned zero P0/P1, the third consecutive clean high-priority round (after 2 and 3), satisfying the review loop's stop condition. No code changes this round. - Documented, not fixed: a Feature-Envy P2 (Standards) — search_notes_impl/save_note_impl/fts5_phrase_query still live in api::ffi_api rather than db, the other half of round 2's Divergent-Change fix; a missing error surface for FFI failures in note_providers.dart (P2, Spec, currently unreachable since Editor isn't mounted); and an Investigate (Spec) that search_notes has no workspace_id filter despite prd/capabilities.md's \"search... in their Workspace\" wording — currently unreachable since only one hardcoded workspace exists and no workspace-selection ticket has landed. - See tasks/completed/EPIC-B-ui-database.md's \"Post-PR-review round 4\" note for full detail"]
   - version: v1.2.4
     date: 2026-07-22
-    changed:
-      - "PR #4 dual-axis review, round 3 (confirming pass after round 2's clean
-        high-priority result). - Fixed a real correctness regression introduced
-        by round 2's own fix (Spec axis): quoting the *entire* search query as
-        one phrase turned multi-word search into exact-adjacent-phrase matching,
-        contradicting prd/capabilities.md's \"search across all Notes.\"
-        fts5_phrase_query now quotes each whitespace-split token individually
-        and joins with a space, restoring implicit-AND-across-terms matching
-        while still avoiding FTS5 syntax errors on
-        hyphens/colons/parens/unmatched quotes. Replaced the round-2 test that
-        had encoded the wrong phrase-only semantics. - Fixed a zeroization gap
-        (P2, Standards axis): the SQLCipher key's hex encoding was built via a
-        chain of per-byte format! calls (each an un-zeroized, dropped-not-wiped
-        intermediate String) before the final result was wrapped in Zeroizing.
-        Now writes hex digits directly into one pre-sized Zeroizing<String> via
-        std::fmt::Write, so there is exactly one key-hex allocation and it was
-        zeroizing-wrapped from the start. - Fixed a Single-Responsibility P2
-        (Standards axis): split _EditableBlock into a top-level
-        _buildBlock/_isSingleTextRun eligibility dispatcher and a narrower
-        _EditableParagraph that operates on an already-validated single-run
-        content list rather than a whole AstNode. - Fixed a spec-honesty P2
-        (Standards axis): schema.sql's header comment claimed migration tracking
-        via PRAGMA user_version, but no statement ever set it. Added PRAGMA
-        user_version = 1; to both schema copies, with a comment that the first
-        real migration should branch on this baseline. Added a test asserting
-        the pragma reads back as 1. - Backfilled a documentation gap in
-        BURL-B001's Justification (P2, Standards axis): the zeroize crate
-        addition was never recorded alongside keyring/getrandom. - Documented
-        (not fixed): architecture/resilience.md's \"SQLite Draft Persistence\"
-        bullet describes per-keystroke persistence to the drafts table with
-        restore-on-boot, but no Epic B ticket ever wired this up — update_block
-        only mutates the in-memory cache. Added a \"Current implementation
-        status (Epic B)\" note flagging this as needing its own future ticket.
-        Also noted devenv.nix's grim/wtype additions as intentionally outside
-        this ticket's production-code scope. - See
-        tasks/completed/EPIC-B-ui-database.md's \"Post-PR-review fixes (round
-        3)\" note for full detail. Rounds 2 and 3 both produced zero P0/P1
-        findings, satisfying the review loop's two-consecutive-clean-round stop
-        condition"
+    changed: ["PR #4 dual-axis review, round 3 (confirming pass after round 2's clean high-priority result). - Fixed a real correctness regression introduced by round 2's own fix (Spec axis): quoting the *entire* search query as one phrase turned multi-word search into exact-adjacent-phrase matching, contradicting prd/capabilities.md's \"search across all Notes.\" fts5_phrase_query now quotes each whitespace-split token individually and joins with a space, restoring implicit-AND-across-terms matching while still avoiding FTS5 syntax errors on hyphens/colons/parens/unmatched quotes. Replaced the round-2 test that had encoded the wrong phrase-only semantics. - Fixed a zeroization gap (P2, Standards axis): the SQLCipher key's hex encoding was built via a chain of per-byte format! calls (each an un-zeroized, dropped-not-wiped intermediate String) before the final result was wrapped in Zeroizing. Now writes hex digits directly into one pre-sized Zeroizing<String> via std::fmt::Write, so there is exactly one key-hex allocation and it was zeroizing-wrapped from the start. - Fixed a Single-Responsibility P2 (Standards axis): split _EditableBlock into a top-level _buildBlock/_isSingleTextRun eligibility dispatcher and a narrower _EditableParagraph that operates on an already-validated single-run content list rather than a whole AstNode. - Fixed a spec-honesty P2 (Standards axis): schema.sql's header comment claimed migration tracking via PRAGMA user_version, but no statement ever set it. Added PRAGMA user_version = 1; to both schema copies, with a comment that the first real migration should branch on this baseline. Added a test asserting the pragma reads back as 1. - Backfilled a documentation gap in BURL-B001's Justification (P2, Standards axis): the zeroize crate addition was never recorded alongside keyring/getrandom. - Documented (not fixed): architecture/resilience.md's \"SQLite Draft Persistence\" bullet describes per-keystroke persistence to the drafts table with restore-on-boot, but no Epic B ticket ever wired this up — update_block only mutates the in-memory cache. Added a \"Current implementation status (Epic B)\" note flagging this as needing its own future ticket. Also noted devenv.nix's grim/wtype additions as intentionally outside this ticket's production-code scope. - See tasks/completed/EPIC-B-ui-database.md's \"Post-PR-review fixes (round 3)\" note for full detail. Rounds 2 and 3 both produced zero P0/P1 findings, satisfying the review loop's two-consecutive-clean-round stop condition"]
   - version: v1.2.3
     date: 2026-07-22
-    changed:
-      - "PR #4 dual-axis review, round 2. - Fixed a real,
-        exploitable-by-any-ordinary-search P2 (Spec axis): search_notes_impl
-        passed raw user input straight into FTS5's MATCH, whose query grammar
-        throws syntax errors on hyphens, colons, parens, and unmatched quotes —
-        everyday search terms. Now wraps the query in a quoted-phrase escape
-        (fts5_phrase_query) so it's always treated as one literal phrase. Added
-        tests for the exact previously-broken inputs. - Fixed Editor's
-        ListView(children: [...]) eagerly building every block (both axes
-        independently flagged this against architecture/risks.md #1/#3);
-        switched to ListView.builder. - Fixed a Divergent-Change P2 (Standards
-        axis): extracted the active-note draft-state domain (NoteMetadata,
-        NoteState, the in-memory cache, set_node_at_path) out of api::ffi_api
-        into a new rust/src/draft.rs leaf module, matching containers.md's
-        framing of draft-state management as distinct from the FFI bridge.
-        Regenerated FRB bindings; updated Dart imports accordingly. - Documented
-        (not fixed) the search result cap (LIMIT 50, no pagination) in both the
-        contract and implementation, and a second facet of the open→save wiring
-        gap (open_note's path-based id vs. notes.id's UUID shape) alongside the
-        existing base_revision note. - See
-        tasks/completed/EPIC-B-ui-database.md's \"Post-PR-review fixes (round
-        2)\" note for full detail"
+    changed: ["PR #4 dual-axis review, round 2. - Fixed a real, exploitable-by-any-ordinary-search P2 (Spec axis): search_notes_impl passed raw user input straight into FTS5's MATCH, whose query grammar throws syntax errors on hyphens, colons, parens, and unmatched quotes — everyday search terms. Now wraps the query in a quoted-phrase escape (fts5_phrase_query) so it's always treated as one literal phrase. Added tests for the exact previously-broken inputs. - Fixed Editor's ListView(children: [...]) eagerly building every block (both axes independently flagged this against architecture/risks.md #1/#3); switched to ListView.builder. - Fixed a Divergent-Change P2 (Standards axis): extracted the active-note draft-state domain (NoteMetadata, NoteState, the in-memory cache, set_node_at_path) out of api::ffi_api into a new rust/src/draft.rs leaf module, matching containers.md's framing of draft-state management as distinct from the FFI bridge. Regenerated FRB bindings; updated Dart imports accordingly. - Documented (not fixed) the search result cap (LIMIT 50, no pagination) in both the contract and implementation, and a second facet of the open→save wiring gap (open_note's path-based id vs. notes.id's UUID shape) alongside the existing base_revision note. - See tasks/completed/EPIC-B-ui-database.md's \"Post-PR-review fixes (round 2)\" note for full detail"]
   - version: v1.2.2
     date: 2026-07-22
-    changed:
-      - "PR #4 dual-axis review, round 1. - Fixed a real architectural defect
-        (P1, Standards axis): db::connection and security::keyring imported
-        AppError from the FFI-facing api::ffi_api module, an upward dependency
-        architecture/containers.md explicitly rules out for those containers.
-        Moved AppError into a new shared leaf module (rust/src/error.rs); api,
-        db, and security all depend on it inward now. Also corrected
-        containers.md's Local Repository entry, which claimed \"Depends on:
-        None\" despite always having called into Secure Storage for the root
-        key. - Fixed two duplicated-code P2s (Standards axis): renderInline's
-        identical Link/ExternalLink arms, and the repeated
-        DB-singleton-acquire-and-lock preamble in search_notes/save_note (now a
-        shared with_connection helper). - Fixed an unclear-error P2 (Spec axis):
-        save_note on an unknown note id now reports AppError::IoError instead of
-        a raw DatabaseError surfaced from rusqlite::Error::QueryReturnedNoRows.
-        - Documented (not fixed, no reachable path exists yet) a real latent
-        inconsistency both review axes independently found: open_note's
-        placeholder base_revision and save_note's DB-sourced
-        expected_base_revision are not the same token yet, since open_note never
-        touches the notes table. Added explicit comments at both ends instead of
-        inventing the open→edit→save wiring this epic never scoped. - See
-        tasks/completed/EPIC-B-ui-database.md's new \"Post-PR-review fixes
-        (round 1)\" note for full detail"
+    changed: ["PR #4 dual-axis review, round 1. - Fixed a real architectural defect (P1, Standards axis): db::connection and security::keyring imported AppError from the FFI-facing api::ffi_api module, an upward dependency architecture/containers.md explicitly rules out for those containers. Moved AppError into a new shared leaf module (rust/src/error.rs); api, db, and security all depend on it inward now. Also corrected containers.md's Local Repository entry, which claimed \"Depends on: None\" despite always having called into Secure Storage for the root key. - Fixed two duplicated-code P2s (Standards axis): renderInline's identical Link/ExternalLink arms, and the repeated DB-singleton-acquire-and-lock preamble in search_notes/save_note (now a shared with_connection helper). - Fixed an unclear-error P2 (Spec axis): save_note on an unknown note id now reports AppError::IoError instead of a raw DatabaseError surfaced from rusqlite::Error::QueryReturnedNoRows. - Documented (not fixed, no reachable path exists yet) a real latent inconsistency both review axes independently found: open_note's placeholder base_revision and save_note's DB-sourced expected_base_revision are not the same token yet, since open_note never touches the notes table. Added explicit comments at both ends instead of inventing the open→edit→save wiring this epic never scoped. - See tasks/completed/EPIC-B-ui-database.md's new \"Post-PR-review fixes (round 1)\" note for full detail"]
   - version: v1.2.1
     date: 2026-07-22
-    changed:
-      - "Post-closeout correction for Epic B, prompted by a request to actually
-        visually verify the shipped UI rather than rely solely on flutter test
-        assertions against fakes. - Discovered and fixed a real regression in
-        lib/src/components/editor.dart: multi-run paragraphs (any paragraph
-        mixing plain text with a bold/italic/code/strikethrough run, or
-        containing a Link) were silently made editable via TextField alongside
-        single-run ones, and _paragraphStyle only reads the first run — so the
-        field displayed the whole paragraph in one flattened style, dropping
-        every other run's formatting even before any edit. This directly
-        regressed BURL-B006's own bold-rendering Gherkin and was invisible to
-        all six existing widget tests, since every test paragraph happened to be
-        single-run. Fixed by gating paragraph editability on a new
-        _isSingleTextRun check; multi-run and Link-containing paragraphs now
-        correctly stay read-only via renderBlock. Added a regression test (a
-        multi-run paragraph stays read-only and keeps each run's distinct
-        styling). - Discovered, separately, that flutter run -d linux crashed on
-        startup with no code involved: flutter_rust_bridge's generated Dart
-        loader expects rust/target/release/librust.so, but no ticket's
-        Verification Command through Epic A or B ever ran cargo build --release
-        or flutter run — every gate exercised either the Rust half alone (cargo
-        build/cargo test) or the Dart half against fakes (flutter test), so the
-        actual compiled app had never once been launched. Documented the fix
-        (cargo build --release from rust/) and the underlying gap in
-        tech-spec/guidelines.md's new \"Running the real app\" section. - Added
-        grim (screenshot) and wtype (keystroke injection) to devenv.nix as
-        standing Wayland-only manual-QA tooling, so rendered output can be
-        inspected directly rather than only through widget-test property
-        assertions. - See tasks/completed/EPIC-B-ui-database.md's BURL-B007
-        section for the full write-up, and tech-spec/guidelines.md for the
-        standing workflow note"
+    changed: ["Post-closeout correction for Epic B, prompted by a request to actually visually verify the shipped UI rather than rely solely on flutter test assertions against fakes. - Discovered and fixed a real regression in lib/src/components/editor.dart: multi-run paragraphs (any paragraph mixing plain text with a bold/italic/code/strikethrough run, or containing a Link) were silently made editable via TextField alongside single-run ones, and _paragraphStyle only reads the first run — so the field displayed the whole paragraph in one flattened style, dropping every other run's formatting even before any edit. This directly regressed BURL-B006's own bold-rendering Gherkin and was invisible to all six existing widget tests, since every test paragraph happened to be single-run. Fixed by gating paragraph editability on a new _isSingleTextRun check; multi-run and Link-containing paragraphs now correctly stay read-only via renderBlock. Added a regression test (a multi-run paragraph stays read-only and keeps each run's distinct styling). - Discovered, separately, that flutter run -d linux crashed on startup with no code involved: flutter_rust_bridge's generated Dart loader expects rust/target/release/librust.so, but no ticket's Verification Command through Epic A or B ever ran cargo build --release or flutter run — every gate exercised either the Rust half alone (cargo build/cargo test) or the Dart half against fakes (flutter test), so the actual compiled app had never once been launched. Documented the fix (cargo build --release from rust/) and the underlying gap in tech-spec/guidelines.md's new \"Running the real app\" section. - Added grim (screenshot) and wtype (keystroke injection) to devenv.nix as standing Wayland-only manual-QA tooling, so rendered output can be inspected directly rather than only through widget-test property assertions. - See tasks/completed/EPIC-B-ui-database.md's BURL-B007 section for the full write-up, and tech-spec/guidelines.md for the standing workflow note"]
   - version: v1.2.0
     date: 2026-08-21
-    changed:
-      - "- Completed Epic B: UI & Database (BURL-B001–BURL-B007), total 23 story
-        points: OS Keychain root-key generation, SQLCipher-encrypted SQLite
-        (raw-key PRAGMA, no PBKDF2), schema initialization with FTS5 search,
-        search_notes/save_note/update_block exposed across the FFI boundary,
-        Riverpod provider wiring, and a hybrid Markdown editor widget with live
-        keystroke streaming back to the Rust core. - Archived
-        EPIC-B-ui-database.md to .constitution/tasks/completed/. Recomputed the
-        active backlog to 16 story points (Epic C only); BURL-C001 and
-        BURL-C002's dependencies on BURL-B004/BURL-B005 are now satisfied, so
-        Epic C is front-of-line. - Ran the Constitution Freshness &
-        Reconciliation Pass: corrected architecture/containers.md and
-        prd/capabilities.md to distinguish OS-level (raw Markdown files) from
-        application-level SQLCipher (SQLite index) at-rest encryption, corrected
-        architecture/flows/flow-edit-note.md to accurately describe
-        update_block's full-NoteState return and flag the not-yet-implemented
-        Markdown-serialize/commit-to-disk phase, and annotated
-        architecture/risks.md risk #6 to record that save_note's OCC currently
-        guards only the database's last_modified bookkeeping, not file content.
-        See architecture/changelog.md v1.0.1 and prd/changelog.md v1.0.1. -
-        Recorded deferred follow-ups (not blocking, tracked for future tickets):
-        no Markdown serializer/write-through exists yet for save_note; the
-        Editor widget is fully built and tested but not yet mounted in main.dart
-        (no note-open or search UI exists in the running app); paragraph editing
-        collapses to a single plain-text run per keystroke (rich multi-run
-        inline editing, and list/heading/blockquote editing, remain out of
-        scope); inline links are dropped from the AST on the first edit of a
-        paragraph that contains them; Image.asset cannot load real note images
-        (placeholder only)"
+    changed: ["- Completed Epic B: UI & Database (BURL-B001–BURL-B007), total 23 story points: OS Keychain root-key generation, SQLCipher-encrypted SQLite (raw-key PRAGMA, no PBKDF2), schema initialization with FTS5 search, search_notes/save_note/update_block exposed across the FFI boundary, Riverpod provider wiring, and a hybrid Markdown editor widget with live keystroke streaming back to the Rust core. - Archived EPIC-B-ui-database.md to .constitution/tasks/completed/. Recomputed the active backlog to 16 story points (Epic C only); BURL-C001 and BURL-C002's dependencies on BURL-B004/BURL-B005 are now satisfied, so Epic C is front-of-line. - Ran the Constitution Freshness & Reconciliation Pass: corrected architecture/containers.md and prd/capabilities.md to distinguish OS-level (raw Markdown files) from application-level SQLCipher (SQLite index) at-rest encryption, corrected architecture/flows/flow-edit-note.md to accurately describe update_block's full-NoteState return and flag the not-yet-implemented Markdown-serialize/commit-to-disk phase, and annotated architecture/risks.md risk #6 to record that save_note's OCC currently guards only the database's last_modified bookkeeping, not file content. See architecture/changelog.md v1.0.1 and prd/changelog.md v1.0.1. - Recorded deferred follow-ups (not blocking, tracked for future tickets): no Markdown serializer/write-through exists yet for save_note; the Editor widget is fully built and tested but not yet mounted in main.dart (no note-open or search UI exists in the running app); paragraph editing collapses to a single plain-text run per keystroke (rich multi-run inline editing, and list/heading/blockquote editing, remain out of scope); inline links are dropped from the AST on the first edit of a paragraph that contains them; Image.asset cannot load real note images (placeholder only)"]
   - version: v1.1.0
     date: 2026-07-24
-    changed:
-      - "- Completed Epic A: Scaffolding & Core Engine (BURL-A001, BURL-A002,
-        BURL-A003), total 10 story points. - Monorepo scaffolded using
-        flutter_rust_bridge (v2), Markdown AST parser implemented with
-        pulldown-cmark, and AST/FFI API contracts exposed across the FFI
-        boundary to Dart"
+    changed: ["- Completed Epic A: Scaffolding & Core Engine (BURL-A001, BURL-A002, BURL-A003), total 10 story points. - Monorepo scaffolded using flutter_rust_bridge (v2), Markdown AST parser implemented with pulldown-cmark, and AST/FFI API contracts exposed across the FFI boundary to Dart"]
   - version: v1.0.1
     date: 2026-07-22
-    changed:
-      - "- Recorded Phase 0 (tooling readiness), executed ahead of BURL-A001. It
-        provisions the reproducible devenv environment and the pre-commit
-        quality gates; it adds no application code and consumes no story points,
-        so the critical path and totals are unchanged. - Every file it
-        introduces falls outside the Scope (In-Scope Files) of Epics A/B/C by
-        design. BURL-A001 keeps Dependencies: None, but its verification
-        commands are now expected to run inside the devenv shell, per the
-        Toolchain section of tech-spec/guidelines.md. - Added a note to
-        BURL-A001: FRB scaffolds vendored third-party Dart under
-        rust_builder/cargokit/, which must be excluded via analyzer.exclude in
-        analysis_options.yaml or the dart analyze gate will fail on code the
-        project does not own. - Corrected the BURL-B002 acceptance criterion,
-        which asserted AES-256-GCM. SQLCipher 4.x is AES-256-CBC with
-        HMAC-SHA512 page authentication; see tech-spec/stack.md v1.0.1"
+    changed: ["- Recorded Phase 0 (tooling readiness), executed ahead of BURL-A001. It provisions the reproducible devenv environment and the pre-commit quality gates; it adds no application code and consumes no story points, so the critical path and totals are unchanged. - Every file it introduces falls outside the Scope (In-Scope Files) of Epics A/B/C by design. BURL-A001 keeps Dependencies: None, but its verification commands are now expected to run inside the devenv shell, per the Toolchain section of tech-spec/guidelines.md. - Added a note to BURL-A001: FRB scaffolds vendored third-party Dart under rust_builder/cargokit/, which must be excluded via analyzer.exclude in analysis_options.yaml or the dart analyze gate will fail on code the project does not own. - Corrected the BURL-B002 acceptance criterion, which asserted AES-256-GCM. SQLCipher 4.x is AES-256-CBC with HMAC-SHA512 page authentication; see tech-spec/stack.md v1.0.1"]
   - version: v1.0.0
     date: 2026-07-20
-    changed:
-      - "- Initial formulation of the execution constitution. - Created active
-        backlog totaling 52 Story Points. - Sequenced work into Desktop-first
-        phased delivery (Epic A: Scaffolding, Epic B: UI/DB, Epic C:
-        Security/Sync). - Mapped Build Order diagram and defined critical path"
+    changed: ["- Initial formulation of the execution constitution. - Created active backlog totaling 52 Story Points. - Sequenced work into Desktop-first phased delivery (Epic A: Scaffolding, Epic B: UI/DB, Epic C: Security/Sync). - Mapped Build Order diagram and defined critical path"]
   - version: v0.0.1
     date: 2026-09-03
-    added:
-      - History before migration; the markdown changelog is in git
+    added: ["History before migration; the markdown changelog is in git"]
     by: migrate

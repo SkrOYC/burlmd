@@ -62,7 +62,7 @@ decisions:
         cons: ["Migration-authored placeholder: the source register records the option name but no analysis."]
       - name: genuinely parallel tracks
         pros: ["Recorded ruling: the user chose genuinely parallel tracks and delegated the concrete interleave to planning."]
-        cons: ["Stage 4 must draw the handoffs explicitly rather than assume parallelism is free."]
+        cons: [Stage 4 must draw the handoffs explicitly rather than assume parallelism is free.]
     recommendation: genuinely parallel tracks
     closure: ruling
     ruler: "The user, at the next wave-planning pass"
@@ -234,7 +234,7 @@ decisions:
       - name: Keep Epic I upstream and create downstream Epic N after Epic L
         pros: ["Preserves the acyclic Epic I → Epic K → Epic L → Epic N authority order while allowing BURL-N002 through BURL-N005 to consume BURL-L010.", "Keeps the coupled downstream K and L lifecycle work together, so BURL-N006 and BURL-N007 can consume BURL-N002 and BURL-N003 without recreating the K↔L cycle."]
         cons: [Requires moving and renaming eleven downstream tickets from Epics I, K, and L and migrating their references., Adds another serial epic with broad overlapping scope, so the cut improves graph correctness rather than concurrency.]
-    recommendation: "Keep Epic I upstream and create downstream Epic N after Epic L"
+    recommendation: Keep Epic I upstream and create downstream Epic N after Epic L
     closure: ruling
     ruler: "The lead, under the user's delegated authority on 2026-09-04"
     status: closed
@@ -245,19 +245,19 @@ decisions:
       ref: reports/2026-09-04-interview-tasks.md
       date: 2026-09-04
       summary: "Under the user's delegated authority, adopted the downstream EPIC-N refinement: Epic I remains upstream, Epic L retains BURL-L010, and EPIC-N carries BURL-N002, BURL-N003, BURL-N004, and their BURL-N005 completion gate after Epic L. Direct placement in Epic L cannot preserve the downstream K obligations because second-device join and detach consume the lifecycle work while Epic L already depends on Epic K; adding the reverse Epic K → Epic L dependency would recreate the K↔L cycle. The EPIC-N cut preserves the acyclic Epic I → Epic K → Epic L → Epic N order."
-      chosen: "Keep Epic I upstream and create downstream Epic N after Epic L"
+      chosen: Keep Epic I upstream and create downstream Epic N after Epic L
   - id: OD-11
     question: "How should managed evidence establish candidate placement, authenticated hosted origin, and the BURL-O001 macOS 26-to-macOS 15 handoff while candidate jobs remain credential-free and receive no OIDC or attestation authority?"
     blocks: [BURL-M003, BURL-O001, ADR-0019, BND-16, BND-17]
     options:
       - name: Split candidate placement from seal provenance and make the macOS 26 seal own the authenticated stage
-        pros: ["Preserves the least-privilege candidate boundary while making only the fresh non-executing seal cryptographically authoritative.", "Binds the exact BURL-O001 stage artifact, digest, producing seal locator, and attestation through macOS 15 and final evidence without adding another authority job."]
-        cons: ["Candidate GitHub-hosted placement remains a trusted-workflow and runtime guard rather than cryptographic proof.", "Requires coordinated Architecture, TechSpec, Tasks, schema, workflow, fixture, and PR #15 changes."]
+        pros: [Preserves the least-privilege candidate boundary while making only the fresh non-executing seal cryptographically authoritative., "Binds the exact BURL-O001 stage artifact, digest, producing seal locator, and attestation through macOS 15 and final evidence without adding another authority job."]
+        cons: [Candidate GitHub-hosted placement remains a trusted-workflow and runtime guard rather than cryptographic proof., "Requires coordinated Architecture, TechSpec, Tasks, schema, workflow, fixture, and PR #15 changes."]
       - name: Grant candidate jobs OIDC and attestation authority
-        pros: ["Could attach a cryptographic GitHub-hosted runner claim directly to each candidate job.", "Avoids distinguishing candidate placement evidence from sealing provenance in the final schema."]
-        cons: ["Gives the environment that executes candidate-controlled code a signing capability and violates the accepted credential-free candidate design.", "Collapses the fresh-seal authority boundary that limits a malicious or surviving candidate process."]
+        pros: [Could attach a cryptographic GitHub-hosted runner claim directly to each candidate job., Avoids distinguishing candidate placement evidence from sealing provenance in the final schema.]
+        cons: [Gives the environment that executes candidate-controlled code a signing capability and violates the accepted credential-free candidate design., Collapses the fresh-seal authority boundary that limits a malicious or surviving candidate process.]
       - name: Keep REST-label candidate authentication and the separate name-only staging job
-        pros: ["Requires the smallest immediate change to PR #15.", "Retains the current workflow topology and aggregate schema shape."]
+        pros: ["Requires the smallest immediate change to PR #15.", Retains the current workflow topology and aggregate schema shape.]
         cons: ["A self-hosted runner can omit default labels and use a hosted-looking custom label, so the candidate origin claim isn't cryptographically supported.", "The macOS 15 consumer and final evidence still don't bind the stage artifact ID, digest, producer seal locator, and attestation end to end."]
     recommendation: Split candidate placement from seal provenance and make the macOS 26 seal own the authenticated stage
     closure: ruling

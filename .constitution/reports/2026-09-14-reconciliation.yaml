@@ -1,0 +1,10 @@
+date: 2026-09-14
+commit: 5c494d8
+epics: [M]
+routed:
+  - stage: tasks
+    item: "Preserve BURL-M003 as deferred supported-release qualification. Its retained raw-40 protocol is dormant until user-resumed upstream planning and a later approved Stage 3/4 adaptation. Resumption must retain the separate reviewed implementation and accepted evidence-only completion path; private Linux fixture evidence cannot replace it."
+    from: M
+proposed_decisions: []
+candidate_terms: []
+stale_owners: [".constitution/evidence/BURL-M015/manifest.yaml: BURL-M015", ".constitution/tech-spec/adrs/ADR-020-linux-candidate-closure-view.md: BURL-M003", ".constitution/tech-spec/adrs/ADR-019-hosted-candidate-seal-authority.md: BURL-M003"]
