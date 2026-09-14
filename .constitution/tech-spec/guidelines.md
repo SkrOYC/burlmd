@@ -497,6 +497,12 @@ layout:
   - path: scripts/visual-regression.sh
     purpose: BURL-G001 private headless Sway desktop smoke and zero-pixel shell regression gate
     exists: false
+  - path: test/goldens/shell-g001-linux.png
+    purpose: BURL-G001 approved private Linux shell reference image
+    exists: false
+  - path: .constitution/evidence/BURL-G001
+    purpose: BURL-G001 approved reference provenance and manifest-backed repetition evidence
+    exists: false
   - path: scripts/managed-evidence.sh
     purpose: Deferred managed evidence client for the future supported-release matrix
     exists: false
@@ -619,7 +625,7 @@ commit_convention: Conventional Commits
 
 ## Provisional research boundary
 
-TechSpec v2.2.2 (translated from reviewed v1.8.7-provisional) permits research code only under `.constitution/prototypes/`. The active Epic G M0 production exceptions are `BURL-G001` through `BURL-G005`, `BURL-G007`, and `BURL-M015`. Raw contract version 40 and `BURL-M003` ci_bootstrap are dormant. They permit no bootstrap, recovery, production, or hosted execution. The private Linux-first path contains no hosted-execution authority and must not invoke the `BURL-M003` workflow, role, sealing, or aggregation path. `BURL-O001` remains independently blocked, a maintained stop, and isn't authorized.
+TechSpec v2.3.0 (translated from reviewed v1.8.7-provisional) permits research code only under `.constitution/prototypes/`. The active Epic G M0 production exceptions are `BURL-G001` through `BURL-G005`, `BURL-G007`, and `BURL-M015`. Raw contract version 40 and `BURL-M003` ci_bootstrap are dormant. They permit no bootstrap, recovery, production, or hosted execution. The private Linux-first path contains no hosted-execution authority and must not invoke the `BURL-M003` workflow, role, sealing, or aggregation path. `BURL-O001` remains independently blocked, a maintained stop, and isn't authorized.
 
 If the user resumes upstream planning, a later approved Stage 3/4 adaptation can make the retained raw-version-40 protocol eligible for BURL-M003. Only then does its recovery sequence apply: complete Epic M, including the reviewed `BURL-M003` recovery implementation, fresh accepted managed run, exact three-file evidence pull request, epic closeout, and reconciliation. Until then, BURL-M003 cannot precede or block the active private Epic G work. Every other production ticket remains blocked by its own decision evidence and matching Stage 3 and Stage 4 adaptation. Except for the active contract-scoped exceptions, production directories (`lib/`, `rust/`, `linux/`, and `macos/`) are read-only inputs to this research wave.
 
@@ -1235,6 +1241,73 @@ pixels. The private commands for `BURL-G002` through `BURL-G005` and
 `BURL-G007` use `--write-baseline` only to prove the isolated desktop launch
 and capture path. A baseline that the same command creates is not regression
 proof. A later zero-pixel comparison needs a pre-existing reviewed baseline.
+
+### BURL-G001 reference establishment
+
+The present `BURL-G001` reference is not eligible for acceptance. The final
+reference from `7a6cbe6` includes application-state controls introduced by
+`BURL-G002`, `BURL-G003`, and `BURL-G004`. A G001-only capture retains the
+`Welcome.md` item and plus control, and differs from that reference by 16,370
+of 1,769,076 product pixels. The `8051931` and `367af4d` images predate the
+headless Sway harness, include 28 Hyprland corner pixels, and differ from the
+current capture by 9,851 pixels. These observations rule out the references;
+they don't establish a font or Fontconfig cause. No controlled recapture has
+isolated that cause.
+
+Keep the production typography and design unchanged while establishing a
+reference. Don't add a font package, platform framework, image mask, or a
+product font-size change. The existing 47-row host HeaderBar exclusion,
+1878x989 capture, owned display and PID rules, and zero-pixel threshold remain
+unchanged. No other pixels are excluded. The procedure records stable render
+input identities so a later run detects environment drift. It is not a
+complete host attestation.
+
+Before a worker can propose a replacement, an independent lead visually
+approves the G001-only state from the private capture: `Welcome.md` and the
+plus control are present, no emulated macOS or Linux chrome appears, and only
+host-owned window chrome remains. Never create a user desktop launch for this
+review. The lead can inspect a temporary capture before any source commit.
+After that approval, the worker captures through the existing G001 command and
+path with `--write-baseline` appended:
+
+```sh
+flutter test && dart analyze && \
+    ./scripts/visual-regression.sh shell-g001 \
+    --baseline test/goldens/shell-g001-linux.png \
+    --max-different-pixels 0 --write-baseline && git diff --check && \
+    ! rg -n '\[DEBUG-' lib rust test scripts
+```
+
+That run creates a proposal only. It cannot turn the known failure green or
+count as an acceptance run.
+
+The implementation commit can then add the approved image at
+`test/goldens/shell-g001-linux.png`. The proposal does not need a commit, but
+final acceptance binds the later immutable implementation commit. From a
+checkout of that commit, write a short plaintext provenance record with its
+tested-source SHA and exact non-writing G001 command. Record the SHA-256
+digests of `devenv.lock` and `pubspec.lock`; the `devenv`, Flutter, Dart, Sway,
+grim, and Fontconfig versions; the effective Fontconfig configuration-file
+identities; and the resolved file identities for `sans-serif`, `monospace`,
+and `Roboto`. Compare these stable content identities, not per-run temporary
+paths. This record detects the observed environment drift; it does not prove
+that Fontconfig caused it.
+
+From the same immutable checkout, run the existing G001 command without
+`--write-baseline` at least twice. Both fresh captures must use the recorded
+render inputs and compare at zero different pixels before `BURL-G001` completes
+or later G work begins. A baseline created by its own command is never
+acceptance proof.
+
+After the two passing runs, freeze the approved image, plaintext provenance,
+two non-writing capture images, and their transcripts in the existing
+evidence-manifest convention at `.constitution/evidence/BURL-G001/`. The
+manifest must retain `owner`, `mode`, `produced`, `files`, and `pass_criteria`,
+and digest each retained artifact. `produced` identifies the immutable
+implementation commit and exact non-writing command. This evidence-only change
+doesn't alter the tested source. The standard fresh Sol milestone review
+independently checks the committed code, approved baseline, source binding,
+provenance, and evidence. The worker doesn't approve their own reference.
 
 The private commands pair the actual Linux desktop smoke with tests and static
 analysis. Any ticket that changes an FFI surface must also run
