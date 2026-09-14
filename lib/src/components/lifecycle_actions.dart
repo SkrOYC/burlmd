@@ -717,8 +717,15 @@ class LifecycleActions {
           // Removing the stale old-id tab alone would orphan Core's live
           // new-id session. This is lifecycle cleanup, not CLOSE-G005 tab
           // close orchestration.
-          await _retireFailedInactiveRefresh(remap.newId);
-          tabs.discardRetiredTab(remap.oldId, expectedState: stale);
+          if (await _retireFailedInactiveRefresh(remap.newId)) {
+            tabs.discardRetiredTab(remap.oldId, expectedState: stale);
+          } else {
+            tabs.retainUnpresentableCoreSession(
+              oldTabId: remap.oldId,
+              coreNoteId: remap.newId,
+              expectedState: stale,
+            );
+          }
         }
         rethrow;
       }
@@ -735,11 +742,15 @@ class LifecycleActions {
         if (opened == null) return;
         tabs.reconcileTabSession(oldNoteId: noteId, state: opened);
       } catch (_) {
-        // A same-id rewrite invalidates the cached bytes just as a rekey
-        // invalidates the old id; remove the stale session on a live failure.
+        // The same Core session remains live, but its cached bytes cannot be
+        // selected until Core returns a fresh state.
         if (_isCurrentOperation(operation) &&
             identical(tabs.openTabState(noteId), stale)) {
-          tabs.discardRetiredTab(noteId, expectedState: stale);
+          tabs.retainUnpresentableCoreSession(
+            oldTabId: noteId,
+            coreNoteId: noteId,
+            expectedState: stale,
+          );
         }
         rethrow;
       }
@@ -749,17 +760,20 @@ class LifecycleActions {
   /// Retires the Core session that a failed inactive remap refresh cannot
   /// safely present. A close warning is terminal, while a close refusal is
   /// reported alongside the refresh failure without replacing that failure.
-  Future<void> _retireFailedInactiveRefresh(String noteId) async {
+  Future<bool> _retireFailedInactiveRefresh(String noteId) async {
     try {
       await _api.closeNote(noteId);
+      return true;
     } on CloseNoteWarning catch (warning) {
       if (_ref.mounted) {
         _ref.read(noteCloseFailureProvider.notifier).report(warning);
       }
+      return true;
     } catch (error) {
       if (_ref.mounted) {
         _ref.read(noteCloseFailureProvider.notifier).report(error);
       }
+      return false;
     }
   }
 

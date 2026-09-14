@@ -46,6 +46,8 @@ class _MountingRustApi extends RustApi {
 
   /// Concept ids that no longer exist when a saved session is restored.
   final Set<String> unavailableNoteIds = {};
+  final Map<String, Object> openNoteErrors = {};
+  final List<ActiveWorkspaceSessionSnapshot> savedSnapshots = [];
 
   /// What every `note_write_status` poll reports until a test changes it.
   NoteWriteStatus status = const NoteWriteStatus(hasUnwrittenEdits: false);
@@ -86,8 +88,10 @@ class _MountingRustApi extends RustApi {
   Future<NoteState> openNote(String noteId) async {
     calls.add('open:$noteId');
     if (unavailableNoteIds.contains(noteId)) {
-      throw StateError('missing Note: $noteId');
+      throw AppError.notFound('missing Note: $noteId');
     }
+    final error = openNoteErrors[noteId];
+    if (error != null) throw error;
     final gate = openNoteGates[noteId];
     if (gate != null) return gate.future;
     return NoteState(
@@ -164,6 +168,7 @@ class _MountingRustApi extends RustApi {
   ) async {
     final error = sessionSaveError;
     if (error != null) throw error;
+    savedSnapshots.add(snapshot);
   }
 }
 
@@ -1043,6 +1048,49 @@ void main() {
       expect(container.read(selectedNoteIdProvider), 'a');
       expect(container.read(workspaceSessionProvider).openNoteIds, ['a']);
       expect(container.read(workspaceSessionProvider).activeNoteId, 'a');
+    },
+  );
+
+  testWidgets(
+    'retains a transiently unavailable restore identity without showing it as missing',
+    (tester) async {
+      final api =
+          _MountingRustApi([_treeNode('a', 'Alpha'), _treeNode('b', 'Beta')])
+            ..snapshot = const ActiveWorkspaceSessionSnapshot(
+              openNoteIds: ['a', 'retry', 'b'],
+              activeNoteId: 'a',
+              expandedDirectoryIds: [],
+              searchQuery: '',
+              syncPresentation: SessionSyncPresentation.local,
+            )
+            ..openNoteErrors['retry'] = const AppError.ioError(
+              'temporary database transport failure',
+            );
+      final container = await _pumpShell(tester, api);
+
+      expect(api.calls, ['open:a', 'open:retry', 'open:b']);
+      expect(find.byKey(const Key('shell-tab-a')), findsOneWidget);
+      expect(find.byKey(const Key('shell-tab-b')), findsOneWidget);
+      expect(find.byKey(const Key('shell-tab-retry')), findsNothing);
+      expect(
+        find.textContaining('Could not restore saved notes'),
+        findsNothing,
+      );
+      expect(
+        find.textContaining('Could not restore workspace session'),
+        findsOneWidget,
+      );
+      expect(container.read(workspaceSessionProvider).openNoteIds, [
+        'a',
+        'retry',
+        'b',
+      ]);
+
+      container.read(workspaceSessionProvider.notifier).setSearchQuery('later');
+      await tester.pump();
+      await tester.pump();
+      expect(api.savedSnapshots.last.openNoteIds, ['a', 'retry', 'b']);
+      expect(api.savedSnapshots.last.searchQuery, 'later');
     },
   );
 
