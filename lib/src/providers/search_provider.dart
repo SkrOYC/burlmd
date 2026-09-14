@@ -1,4 +1,5 @@
 import 'package:burlmd/src/providers/rust_api_provider.dart';
+import 'package:burlmd/src/providers/workspace_provider.dart';
 import 'package:burlmd/src/rust/draft.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -11,11 +12,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 /// the sub-100ms constraint holds without debouncing.
 class SearchQuery extends Notifier<String> {
   @override
-  String build() => '';
+  String build() => ref.watch(workspaceSessionProvider).searchQuery;
 
-  void set(String query) => state = query;
+  void set(String query) =>
+      ref.read(workspaceSessionProvider.notifier).setSearchQuery(query);
 
-  void clear() => state = '';
+  void clear() => set('');
 }
 
 final searchQueryProvider = NotifierProvider<SearchQuery, String>(

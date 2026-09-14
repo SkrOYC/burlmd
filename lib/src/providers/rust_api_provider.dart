@@ -5,6 +5,7 @@ import 'package:burlmd/src/rust/index/query.dart';
 import 'package:burlmd/src/rust/workspace/bootstrap.dart' as bootstrap_ffi;
 import 'package:burlmd/src/rust/workspace/lifecycle.dart';
 import 'package:burlmd/src/rust/workspace/persist.dart';
+import 'package:burlmd/src/rust/workspace/session_snapshot.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart'
     show Uint64List;
@@ -37,6 +38,8 @@ export 'package:burlmd/src/rust/workspace/lifecycle.dart'
         LifecycleWarning,
         LifecycleWarningStage;
 export 'package:burlmd/src/rust/workspace/persist.dart' show NoteWriteStatus;
+export 'package:burlmd/src/rust/workspace/session_snapshot.dart'
+    show ActiveWorkspaceSessionSnapshot, SessionSyncPresentation;
 export 'package:burlmd/src/rust/workspace/persist.dart'
     show StructuralEditInsertionSlot;
 
@@ -114,6 +117,16 @@ class RustApi {
   /// Notes with an unflushed draft from a previous session, for surfacing
   /// recovered work on startup (CAP-WS-03).
   Future<List<NoteMetadata>> pendingDrafts() => ffi.pendingDrafts();
+
+  Future<ActiveWorkspaceSessionSnapshot> loadActiveWorkspaceSessionSnapshot() =>
+      ffi.loadActiveWorkspaceSessionSnapshot();
+
+  Future<void> saveActiveWorkspaceSessionSnapshot(
+    ActiveWorkspaceSessionSnapshot snapshot,
+  ) => ffi.saveActiveWorkspaceSessionSnapshot(snapshot: snapshot);
+
+  Future<void> clearCorruptActiveWorkspaceSessionSnapshot() =>
+      ffi.clearCorruptActiveWorkspaceSessionSnapshot();
 
   /// The raw Markdown source of one Block, including its delimiters and
   /// terminating newline, for populating the editable field on focus

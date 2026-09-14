@@ -267,7 +267,7 @@ tickets:
       - flow-desktop-session
       - flow-workspace-navigation
     certainty: assumed
-    status: planned
+    status: done
   - id: BURL-G004
     title: Replace visual-only tabs with authoritative Note sessions
     type: Feature

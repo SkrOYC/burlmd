@@ -22,6 +22,9 @@ pub use crate::workspace::WorkspaceInfo;
 // ADR-008's machinery and the type it reports through, and the `#[frb]`
 // functions below are wrappers over it.
 pub use crate::workspace::persist::StructuralEditInsertionSlot;
+pub use crate::workspace::session_snapshot::{
+    ActiveWorkspaceSessionSnapshot, SessionSyncPresentation,
+};
 pub use crate::workspace::NoteWriteStatus;
 // Same reason again for the lifecycle domain: `workspace::lifecycle` owns the
 // atomic create/rename/move/delete machinery and the two shapes it reports
@@ -250,6 +253,47 @@ pub async fn close_note(note_id: String) -> Result<CloseNoteResult, AppError> {
 pub async fn pending_drafts() -> Result<Vec<NoteMetadata>, AppError> {
     let workspace = crate::workspace::persist::Workspace::active()?;
     crate::workspace::persist::pending_drafts(&workspace)
+}
+
+// ---------------------------------------------------------------------------
+// Workspace session snapshots (BURL-G003)
+// ---------------------------------------------------------------------------
+
+/// Loads Core-owned, presentation-only state for the active Workspace.
+///
+/// Core, rather than the caller, selects the Workspace. Invalid or corrupt
+/// current data is quarantined and returns the writable empty default; a later
+/// version is preserved and refuses normal-path writes until BURL-O005 owns an
+/// explicitly safe recovery path.
+#[frb]
+pub async fn load_active_workspace_session_snapshot(
+) -> Result<ActiveWorkspaceSessionSnapshot, AppError> {
+    let workspace = crate::workspace::persist::Workspace::active()?;
+    crate::workspace::session_snapshot::SessionSnapshotStore::application_support()?
+        .load(&workspace)
+}
+
+/// Atomically saves presentation-only state for the active Workspace.
+///
+/// The FFI intentionally does not accept `workspace_id` or `schema_version`:
+/// Core supplies both, validates every identity, and owns the partition.
+#[frb]
+pub async fn save_active_workspace_session_snapshot(
+    snapshot: ActiveWorkspaceSessionSnapshot,
+) -> Result<(), AppError> {
+    let workspace = crate::workspace::persist::Workspace::active()?;
+    crate::workspace::session_snapshot::SessionSnapshotStore::application_support()?
+        .save(&workspace, &snapshot)
+}
+
+/// Moves an invalid current-version active snapshot out of its live path while
+/// preserving its bytes. It never clears the refusal recorded for a later
+/// schema version.
+#[frb]
+pub async fn clear_corrupt_active_workspace_session_snapshot() -> Result<(), AppError> {
+    let workspace = crate::workspace::persist::Workspace::active()?;
+    crate::workspace::session_snapshot::SessionSnapshotStore::application_support()?
+        .clear_corrupt(&workspace)
 }
 
 // ---------------------------------------------------------------------------

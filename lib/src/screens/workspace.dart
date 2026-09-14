@@ -21,6 +21,7 @@ class WorkspaceScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final workspace = ref.watch(workspaceProvider);
+    final sessionSnapshot = ref.watch(workspaceSessionSnapshotProvider);
     // Rescan outcomes surface here rather than inside the button widget, so
     // both the failure branch ("names the failure") and the refusal branch
     // of SHEL-E008 report through one SnackBar path on the shell's Scaffold.
@@ -56,13 +57,15 @@ class WorkspaceScreen extends ConsumerWidget {
             ),
           ),
         ),
-        data: (info) => BurlWorkspaceShell(
-          workspaceName: info.name,
-          workspacePath: info.localPath.isEmpty ? null : info.localPath,
-          rescanButton: const WorkspaceRescanButton(),
-          onRescan: () => ref.read(rescanStateProvider.notifier).run(),
-          fixtureCaptureController: fixtureCaptureController,
-        ),
+        data: (info) => sessionSnapshot.isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : BurlWorkspaceShell(
+                workspaceName: info.name,
+                workspacePath: info.localPath.isEmpty ? null : info.localPath,
+                rescanButton: const WorkspaceRescanButton(),
+                onRescan: () => ref.read(rescanStateProvider.notifier).run(),
+                fixtureCaptureController: fixtureCaptureController,
+              ),
       ),
     );
   }

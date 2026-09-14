@@ -18,8 +18,301 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 final workspaceProvider = FutureProvider.autoDispose<WorkspaceInfo>((
   ref,
 ) async {
-  return ref.watch(rustApiProvider).openOrCreateLocalWorkspace();
+  final session = ref.read(workspaceSessionProvider.notifier);
+  final bootstrap = session._beginWorkspaceBootstrap();
+  final api = ref.watch(rustApiProvider);
+  try {
+    // Snapshot calls are scoped to Core's active Workspace. Finish every save
+    // admitted for the current scope before this call can change that scope.
+    await session._drainSnapshotWrites(bootstrap);
+    if (!ref.mounted || !session._isCurrentWorkspaceBootstrap(bootstrap)) {
+      throw StateError('Workspace bootstrap was superseded.');
+    }
+
+    final workspace = await api.openOrCreateLocalWorkspace();
+    if (!ref.mounted || !session._isCurrentWorkspaceBootstrap(bootstrap)) {
+      return workspace;
+    }
+    session._completeWorkspaceBootstrap(bootstrap, workspace);
+    return workspace;
+  } catch (_) {
+    session._failWorkspaceBootstrap(bootstrap);
+    rethrow;
+  }
 });
+
+/// Core-owned presentation state. These saved identifiers are never Note
+/// sessions: a later workflow may ask Core to open them, but the sidecar does
+/// not establish writable Note authority.
+class WorkspaceSessionState {
+  const WorkspaceSessionState({
+    required this.openNoteIds,
+    required this.activeNoteId,
+    required this.expandedDirectoryIds,
+    required this.searchQuery,
+    required this.syncPresentation,
+  });
+
+  const WorkspaceSessionState.empty()
+    : openNoteIds = const [],
+      activeNoteId = null,
+      expandedDirectoryIds = const {},
+      searchQuery = '',
+      syncPresentation = SessionSyncPresentation.local;
+
+  final List<String> openNoteIds;
+  final String? activeNoteId;
+  final Set<String> expandedDirectoryIds;
+  final String searchQuery;
+  final SessionSyncPresentation syncPresentation;
+
+  factory WorkspaceSessionState.fromSnapshot(
+    ActiveWorkspaceSessionSnapshot snapshot,
+  ) => WorkspaceSessionState(
+    openNoteIds: List.unmodifiable(snapshot.openNoteIds),
+    activeNoteId: snapshot.activeNoteId,
+    expandedDirectoryIds: Set.unmodifiable(snapshot.expandedDirectoryIds),
+    searchQuery: snapshot.searchQuery,
+    syncPresentation: snapshot.syncPresentation,
+  );
+
+  ActiveWorkspaceSessionSnapshot toSnapshot() => ActiveWorkspaceSessionSnapshot(
+    openNoteIds: List.of(openNoteIds),
+    activeNoteId: activeNoteId,
+    expandedDirectoryIds: expandedDirectoryIds.toList(),
+    searchQuery: searchQuery,
+    syncPresentation: syncPresentation,
+  );
+
+  WorkspaceSessionState copyWith({
+    List<String>? openNoteIds,
+    String? activeNoteId,
+    bool clearActiveNoteId = false,
+    Set<String>? expandedDirectoryIds,
+    String? searchQuery,
+    SessionSyncPresentation? syncPresentation,
+  }) => WorkspaceSessionState(
+    openNoteIds: openNoteIds ?? this.openNoteIds,
+    activeNoteId: clearActiveNoteId
+        ? null
+        : (activeNoteId ?? this.activeNoteId),
+    expandedDirectoryIds: expandedDirectoryIds ?? this.expandedDirectoryIds,
+    searchQuery: searchQuery ?? this.searchQuery,
+    syncPresentation: syncPresentation ?? this.syncPresentation,
+  );
+}
+
+class WorkspaceSession extends Notifier<WorkspaceSessionState> {
+  Future<void> _writes = Future<void>.value();
+  String? _workspaceId;
+  var _scopeGeneration = 0;
+  var _bootstrapGeneration = 0;
+  int? _activeBootstrapGeneration;
+  var _savePendingDuringBootstrap = false;
+  var _restored = false;
+
+  @override
+  WorkspaceSessionState build() => const WorkspaceSessionState.empty();
+
+  /// Starts a transition that could cause Core to select a different
+  /// Workspace. Saves already admitted for the current Workspace must settle
+  /// before that transition enters Core.
+  _WorkspaceBootstrap _beginWorkspaceBootstrap() {
+    final bootstrap = _WorkspaceBootstrap(++_bootstrapGeneration);
+    _activeBootstrapGeneration = bootstrap.generation;
+    return bootstrap;
+  }
+
+  bool _isCurrentWorkspaceBootstrap(_WorkspaceBootstrap bootstrap) =>
+      _activeBootstrapGeneration == bootstrap.generation;
+
+  Future<void> _drainSnapshotWrites(_WorkspaceBootstrap bootstrap) async {
+    if (!_isCurrentWorkspaceBootstrap(bootstrap)) return;
+    await _writes;
+  }
+
+  /// Makes [workspace] the sole presentation-state scope. A same-identity
+  /// refresh retains already-restored user state; a different Workspace first
+  /// exposes the writable empty state until its Core snapshot arrives.
+  void _completeWorkspaceBootstrap(
+    _WorkspaceBootstrap bootstrap,
+    WorkspaceInfo workspace,
+  ) {
+    if (!_isCurrentWorkspaceBootstrap(bootstrap)) return;
+    _activeBootstrapGeneration = null;
+
+    final savePending = _savePendingDuringBootstrap;
+    _savePendingDuringBootstrap = false;
+    if (_workspaceId != workspace.id) {
+      _workspaceId = workspace.id;
+      _scopeGeneration++;
+      _restored = false;
+      state = const WorkspaceSessionState.empty();
+      return;
+    }
+    if (savePending && _restored) _enqueueSave();
+  }
+
+  /// Leaves the current scope intact when bootstrap fails. A UI change that
+  /// happened while Core was unavailable is persisted once that failure ends.
+  void _failWorkspaceBootstrap(_WorkspaceBootstrap bootstrap) {
+    if (!_isCurrentWorkspaceBootstrap(bootstrap)) return;
+    _activeBootstrapGeneration = null;
+    final savePending = _savePendingDuringBootstrap;
+    _savePendingDuringBootstrap = false;
+    if (savePending && _restored) _enqueueSave();
+  }
+
+  int? _restoreScopeFor(String workspaceId) {
+    if (_activeBootstrapGeneration != null || _workspaceId != workspaceId) {
+      return null;
+    }
+    return _scopeGeneration;
+  }
+
+  /// Restores once for this exact Workspace generation. A failed read commits
+  /// the same writable default as Core's corrupt-snapshot fallback, so a
+  /// later stale retry cannot replace user changes or another Workspace.
+  bool restore(
+    ActiveWorkspaceSessionSnapshot snapshot, {
+    required String workspaceId,
+    required int scopeGeneration,
+  }) {
+    if (_activeBootstrapGeneration != null ||
+        _workspaceId != workspaceId ||
+        _scopeGeneration != scopeGeneration ||
+        _restored) {
+      return false;
+    }
+    state = WorkspaceSessionState.fromSnapshot(snapshot);
+    _restored = true;
+    return true;
+  }
+
+  void setSearchQuery(String query) {
+    if (state.searchQuery == query) return;
+    state = state.copyWith(searchQuery: query);
+    _scheduleSave();
+  }
+
+  void toggleDirectory(String directoryId) {
+    final expanded = {...state.expandedDirectoryIds};
+    if (!expanded.remove(directoryId)) expanded.add(directoryId);
+    state = state.copyWith(expandedDirectoryIds: Set.unmodifiable(expanded));
+    _scheduleSave();
+  }
+
+  void setActiveNoteId(String? noteId) {
+    if (state.activeNoteId == noteId) return;
+    if (noteId == null) {
+      final previous = state.activeNoteId;
+      state = state.copyWith(
+        openNoteIds: previous == null
+            ? state.openNoteIds
+            : state.openNoteIds.where((id) => id != previous).toList(),
+        clearActiveNoteId: true,
+      );
+    } else {
+      final open = state.openNoteIds.contains(noteId)
+          ? state.openNoteIds
+          : [...state.openNoteIds, noteId];
+      state = state.copyWith(openNoteIds: open, activeNoteId: noteId);
+    }
+    _scheduleSave();
+  }
+
+  /// Rekeys only identities that Core's lifecycle result proved equivalent.
+  void rekeyOpenNoteId({required String oldNoteId, required String newNoteId}) {
+    if (oldNoteId == newNoteId) return;
+    final ids = <String>[];
+    for (final id in state.openNoteIds) {
+      final replacement = id == oldNoteId ? newNoteId : id;
+      if (!ids.contains(replacement)) ids.add(replacement);
+    }
+    final active = state.activeNoteId == oldNoteId
+        ? newNoteId
+        : state.activeNoteId;
+    state = state.copyWith(openNoteIds: ids, activeNoteId: active);
+    _scheduleSave();
+  }
+
+  void _scheduleSave() {
+    if (!_restored) return;
+    if (_activeBootstrapGeneration != null) {
+      _savePendingDuringBootstrap = true;
+      return;
+    }
+    _enqueueSave();
+  }
+
+  void _enqueueSave() {
+    final workspaceId = _workspaceId;
+    if (workspaceId == null) return;
+    final scopeGeneration = _scopeGeneration;
+    final snapshot = state.toSnapshot();
+    // Capture the app-side API seam when the state change is admitted. The
+    // queued task must not look it up after a Workspace transition.
+    final api = ref.read(rustApiProvider);
+    _writes = _writes.then((_) async {
+      if (_workspaceId != workspaceId || _scopeGeneration != scopeGeneration) {
+        return;
+      }
+      try {
+        await api.saveActiveWorkspaceSessionSnapshot(snapshot);
+      } catch (_) {
+        // Optional presentation persistence never changes in-memory state.
+      }
+    });
+  }
+}
+
+class _WorkspaceBootstrap {
+  const _WorkspaceBootstrap(this.generation);
+
+  final int generation;
+}
+
+final workspaceSessionProvider =
+    NotifierProvider<WorkspaceSession, WorkspaceSessionState>(
+      WorkspaceSession.new,
+    );
+
+/// Sidecar restore is independent of Workspace bootstrap: an optional session
+/// read cannot make a valid Workspace unavailable. Core already returns an
+/// empty default for invalid durable bytes; a transport failure does likewise.
+final workspaceSessionSnapshotProvider =
+    FutureProvider.autoDispose<WorkspaceSessionState>((ref) async {
+      final api = ref.watch(rustApiProvider);
+      final workspace = await ref.watch(workspaceProvider.future);
+      if (!ref.mounted) return const WorkspaceSessionState.empty();
+
+      final controller = ref.read(workspaceSessionProvider.notifier);
+      final scopeGeneration = controller._restoreScopeFor(workspace.id);
+      if (scopeGeneration == null) return ref.read(workspaceSessionProvider);
+
+      try {
+        final snapshot = await api.loadActiveWorkspaceSessionSnapshot();
+        if (!ref.mounted) return const WorkspaceSessionState.empty();
+        controller.restore(
+          snapshot,
+          workspaceId: workspace.id,
+          scopeGeneration: scopeGeneration,
+        );
+      } catch (_) {
+        if (!ref.mounted) return const WorkspaceSessionState.empty();
+        controller.restore(
+          const ActiveWorkspaceSessionSnapshot(
+            openNoteIds: [],
+            expandedDirectoryIds: [],
+            searchQuery: '',
+            syncPresentation: SessionSyncPresentation.local,
+          ),
+          workspaceId: workspace.id,
+          scopeGeneration: scopeGeneration,
+        );
+      }
+      return ref.read(workspaceSessionProvider);
+    });
 
 /// The Workspace's Directory/Note hierarchy (`WSPC-D009`'s single-call
 /// contract), fetched in one `workspace_tree()` round trip for the sidebar
