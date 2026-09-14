@@ -18,9 +18,6 @@ class BurlPreferencesController extends Notifier<BurlPreferences> {
 
   void setMeasure(BurlMeasure value) => state = state.copyWith(measure: value);
 
-  void setPlatformChrome(BurlPlatformChrome value) =>
-      state = state.copyWith(platformChrome: value);
-
   void setFocusMode(bool value) => state = state.copyWith(focusMode: value);
 }
 

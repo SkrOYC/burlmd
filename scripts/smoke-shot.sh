@@ -47,6 +47,18 @@ APP_BIN="$APP_BUNDLE/burlmd"
 cd "$REPO_ROOT"
 mkdir -p "$QA_DIR"
 
+# A private visual gate supplies this inherited regular-file descriptor to bind
+# its compositor capture to the exact process launched here. A pathname from a
+# caller is never resolved, so it cannot redirect the handoff through a swap.
+APP_PID_FD="${BURLMD_SMOKE_APP_PID_FD:-}"
+if [[ -n "$APP_PID_FD" &&
+    ( ! "$APP_PID_FD" =~ ^[1-9][0-9]*$ ||
+      ! -f "/proc/self/fd/$APP_PID_FD" ||
+      ! -O "/proc/self/fd/$APP_PID_FD" ) ]]; then
+  echo "smoke-shot: BURLMD_SMOKE_APP_PID_FD must name an inherited owned regular-file FD" >&2
+  exit 64
+fi
+
 # Drop any screenshot left by an earlier run up front, so a failed run can
 # never leave a stale .qa/<name>.png behind.
 rm -f "$SHOT"
@@ -193,7 +205,9 @@ fi
 # The app validates all of these paths by canonical resolution before Rust
 # initializes. The Workspace path is the Core's XDG default; it is explicit so
 # a direct launch cannot substitute a real default Workspace by stealth.
-env "${SCENARIO_ENV[@]}" \
+# DISPLAY is never part of the smoke child's capability set. The visual gate
+# passes only its owned Wayland socket and runtime directory to this script.
+env -u DISPLAY "${SCENARIO_ENV[@]}" \
   "BURLMD_SMOKE_ISOLATED=1" \
   "BURLMD_SMOKE_ROOT=$SMOKE_STATE_DIR" \
   "BURLMD_SMOKE_NONCE=$SMOKE_NONCE" \
@@ -205,6 +219,10 @@ env "${SCENARIO_ENV[@]}" \
   "BURLMD_DB_PATH=$SMOKE_DB_PATH" \
   "$APP_BIN" &
 APP_PID=$!
+if [[ -n "$APP_PID_FD" ]]; then
+  printf '%s\n' "$APP_PID" >&"$APP_PID_FD" \
+    || fail "could not publish the launched application PID"
+fi
 
 echo "[smoke-shot] waiting for the window to render..."
 RENDER_DEADLINE="$(deadline "$RENDER_TIMEOUT")"

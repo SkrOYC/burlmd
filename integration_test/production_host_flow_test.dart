@@ -652,11 +652,6 @@ void main() {
         find.byKey(ValueKey('preferences-measure-${measure.name}')),
       );
     }
-    for (final chrome in BurlPlatformChrome.values) {
-      await tester.tap(
-        find.byKey(ValueKey('preferences-platform-chrome-${chrome.name}')),
-      );
-    }
     if (!container.read(burlPreferencesProvider).focusMode) {
       await tester.tap(find.byKey(const ValueKey('preferences-focus-mode')));
       await tester.pumpAndSettle();
