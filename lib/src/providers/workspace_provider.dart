@@ -102,6 +102,47 @@ class WorkspaceSessionState {
   );
 }
 
+/// The session sidecar is presentation state, but a Core/transport failure is
+/// still actionable: the shell reports it without making the Workspace
+/// unavailable. The Workspace identity and generation keep an older failure
+/// from being shown after Core has selected another Workspace.
+enum WorkspaceSessionOperation { load, save }
+
+class WorkspaceSessionFailure {
+  const WorkspaceSessionFailure({
+    required this.operation,
+    required this.error,
+    required this.workspaceId,
+    required this.scopeGeneration,
+  });
+
+  final WorkspaceSessionOperation operation;
+  final Object error;
+  final String workspaceId;
+  final int scopeGeneration;
+
+  String get message => switch (operation) {
+    WorkspaceSessionOperation.load =>
+      'Could not restore workspace session: $error',
+    WorkspaceSessionOperation.save =>
+      'Could not save workspace session: $error',
+  };
+}
+
+class WorkspaceSessionFailures extends Notifier<WorkspaceSessionFailure?> {
+  @override
+  WorkspaceSessionFailure? build() => null;
+
+  void report(WorkspaceSessionFailure failure) => state = failure;
+
+  void clear() => state = null;
+}
+
+final workspaceSessionFailureProvider =
+    NotifierProvider<WorkspaceSessionFailures, WorkspaceSessionFailure?>(
+      WorkspaceSessionFailures.new,
+    );
+
 class WorkspaceSession extends Notifier<WorkspaceSessionState> {
   Future<void> _writes = Future<void>.value();
   String? _workspaceId;
@@ -110,6 +151,7 @@ class WorkspaceSession extends Notifier<WorkspaceSessionState> {
   int? _activeBootstrapGeneration;
   var _savePendingDuringBootstrap = false;
   var _restored = false;
+  int? _snapshotSavingDisabledScopeGeneration;
 
   @override
   WorkspaceSessionState build() => const WorkspaceSessionState.empty();
@@ -147,6 +189,8 @@ class WorkspaceSession extends Notifier<WorkspaceSessionState> {
       _workspaceId = workspace.id;
       _scopeGeneration++;
       _restored = false;
+      _snapshotSavingDisabledScopeGeneration = null;
+      ref.read(workspaceSessionFailureProvider.notifier).clear();
       state = const WorkspaceSessionState.empty();
       return;
     }
@@ -170,9 +214,31 @@ class WorkspaceSession extends Notifier<WorkspaceSessionState> {
     return _scopeGeneration;
   }
 
-  /// Restores once for this exact Workspace generation. A failed read commits
-  /// the same writable default as Core's corrupt-snapshot fallback, so a
-  /// later stale retry cannot replace user changes or another Workspace.
+  bool _isCurrentWorkspaceScope(String workspaceId, int scopeGeneration) =>
+      _workspaceId == workspaceId && _scopeGeneration == scopeGeneration;
+
+  void _reportFailure({
+    required WorkspaceSessionOperation operation,
+    required Object error,
+    required String workspaceId,
+    required int scopeGeneration,
+  }) {
+    if (!_isCurrentWorkspaceScope(workspaceId, scopeGeneration)) return;
+    ref
+        .read(workspaceSessionFailureProvider.notifier)
+        .report(
+          WorkspaceSessionFailure(
+            operation: operation,
+            error: error,
+            workspaceId: workspaceId,
+            scopeGeneration: scopeGeneration,
+          ),
+        );
+  }
+
+  /// Restores once for this exact Workspace generation. Core's safe fallback
+  /// is already represented by an empty snapshot; transport failures use
+  /// [restoreAfterLoadFailure] so they cannot authorize a durable overwrite.
   bool restore(
     ActiveWorkspaceSessionSnapshot snapshot, {
     required String workspaceId,
@@ -186,6 +252,25 @@ class WorkspaceSession extends Notifier<WorkspaceSessionState> {
     }
     state = WorkspaceSessionState.fromSnapshot(snapshot);
     _restored = true;
+    return true;
+  }
+
+  /// Core returns an empty snapshot only after it has safely handled invalid
+  /// on-disk bytes. A Dart-side FFI/transport failure has no such guarantee,
+  /// so keep the Workspace usable in memory without admitting a save that
+  /// could overwrite the unread durable snapshot.
+  bool restoreAfterLoadFailure({
+    required String workspaceId,
+    required int scopeGeneration,
+  }) {
+    if (_activeBootstrapGeneration != null ||
+        !_isCurrentWorkspaceScope(workspaceId, scopeGeneration) ||
+        _restored) {
+      return false;
+    }
+    state = const WorkspaceSessionState.empty();
+    _restored = true;
+    _snapshotSavingDisabledScopeGeneration = scopeGeneration;
     return true;
   }
 
@@ -249,18 +334,24 @@ class WorkspaceSession extends Notifier<WorkspaceSessionState> {
     final workspaceId = _workspaceId;
     if (workspaceId == null) return;
     final scopeGeneration = _scopeGeneration;
+    if (_snapshotSavingDisabledScopeGeneration == scopeGeneration) return;
     final snapshot = state.toSnapshot();
     // Capture the app-side API seam when the state change is admitted. The
     // queued task must not look it up after a Workspace transition.
     final api = ref.read(rustApiProvider);
     _writes = _writes.then((_) async {
-      if (_workspaceId != workspaceId || _scopeGeneration != scopeGeneration) {
+      if (!_isCurrentWorkspaceScope(workspaceId, scopeGeneration)) {
         return;
       }
       try {
         await api.saveActiveWorkspaceSessionSnapshot(snapshot);
-      } catch (_) {
-        // Optional presentation persistence never changes in-memory state.
+      } catch (error) {
+        _reportFailure(
+          operation: WorkspaceSessionOperation.save,
+          error: error,
+          workspaceId: workspaceId,
+          scopeGeneration: scopeGeneration,
+        );
       }
     });
   }
@@ -279,7 +370,8 @@ final workspaceSessionProvider =
 
 /// Sidecar restore is independent of Workspace bootstrap: an optional session
 /// read cannot make a valid Workspace unavailable. Core already returns an
-/// empty default for invalid durable bytes; a transport failure does likewise.
+/// empty default for invalid durable bytes; a transport failure instead keeps
+/// the app-side state empty and pauses writes for that restore scope.
 final workspaceSessionSnapshotProvider =
     FutureProvider.autoDispose<WorkspaceSessionState>((ref) async {
       final api = ref.watch(rustApiProvider);
@@ -298,15 +390,15 @@ final workspaceSessionSnapshotProvider =
           workspaceId: workspace.id,
           scopeGeneration: scopeGeneration,
         );
-      } catch (_) {
+      } catch (error) {
         if (!ref.mounted) return const WorkspaceSessionState.empty();
-        controller.restore(
-          const ActiveWorkspaceSessionSnapshot(
-            openNoteIds: [],
-            expandedDirectoryIds: [],
-            searchQuery: '',
-            syncPresentation: SessionSyncPresentation.local,
-          ),
+        controller.restoreAfterLoadFailure(
+          workspaceId: workspace.id,
+          scopeGeneration: scopeGeneration,
+        );
+        controller._reportFailure(
+          operation: WorkspaceSessionOperation.load,
+          error: error,
           workspaceId: workspace.id,
           scopeGeneration: scopeGeneration,
         );

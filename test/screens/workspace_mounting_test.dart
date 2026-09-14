@@ -39,6 +39,8 @@ class _MountingRustApi extends RustApi {
   List<NoteMetadata> searchResult = const [];
   String? searchQuery;
   int? searchLimit;
+  Object? sessionLoadError;
+  Object? sessionSaveError;
 
   /// Every open/close/search call in issue order.
   final List<String> calls = [];
@@ -123,6 +125,27 @@ class _MountingRustApi extends RustApi {
     searchLimit = limit;
     return searchResult;
   }
+
+  @override
+  Future<ActiveWorkspaceSessionSnapshot>
+  loadActiveWorkspaceSessionSnapshot() async {
+    final error = sessionLoadError;
+    if (error != null) throw error;
+    return const ActiveWorkspaceSessionSnapshot(
+      openNoteIds: [],
+      expandedDirectoryIds: [],
+      searchQuery: '',
+      syncPresentation: SessionSyncPresentation.local,
+    );
+  }
+
+  @override
+  Future<void> saveActiveWorkspaceSessionSnapshot(
+    ActiveWorkspaceSessionSnapshot snapshot,
+  ) async {
+    final error = sessionSaveError;
+    if (error != null) throw error;
+  }
 }
 
 TreeNode _treeNode(String id, String title) =>
@@ -200,6 +223,38 @@ ValueNotifier<String?> _captureClipboard(WidgetTester tester) {
 }
 
 void main() {
+  testWidgets('a session snapshot load failure is visible and dismissible', (
+    tester,
+  ) async {
+    final api = _MountingRustApi([_treeNode('a', 'Alpha')])
+      ..sessionLoadError = StateError('sidecar read unavailable');
+    await _pumpShell(tester, api);
+
+    expect(
+      find.textContaining('Could not restore workspace session'),
+      findsOneWidget,
+    );
+    expect(find.byType(SnackBar), findsOneWidget);
+    await tester.drag(find.byType(SnackBar), const Offset(0, 400));
+    await tester.pumpAndSettle();
+    expect(find.byType(SnackBar), findsNothing);
+  });
+
+  testWidgets('a session snapshot save failure is visible', (tester) async {
+    final api = _MountingRustApi([_treeNode('a', 'Alpha')])
+      ..sessionSaveError = StateError('sidecar write unavailable');
+    final container = await _pumpShell(tester, api);
+    container.read(workspaceSessionProvider.notifier).setSearchQuery('retry');
+    await tester.pump();
+    await tester.pump();
+
+    expect(
+      find.textContaining('Could not save workspace session'),
+      findsOneWidget,
+    );
+    expect(find.byType(SnackBar), findsOneWidget);
+  });
+
   testWidgets('the sidebar search affordance opens the search panel, passes '
       'its result limit to the Core, and a selected hit opens its note', (
     tester,

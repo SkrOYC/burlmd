@@ -323,15 +323,39 @@ enum SnapshotVersion {
 }
 
 fn snapshot_version(raw: &Value) -> SnapshotVersion {
-    match raw
+    let Some(version) = raw
         .as_object()
         .and_then(|object| object.get("schema_version"))
-        .and_then(Value::as_u64)
-    {
-        Some(version) if version == u64::from(CURRENT_SCHEMA_VERSION) => SnapshotVersion::Current,
-        Some(version) if version > u64::from(CURRENT_SCHEMA_VERSION) => SnapshotVersion::Later,
-        _ => SnapshotVersion::Unknown,
+    else {
+        return SnapshotVersion::Unknown;
+    };
+    if is_current_schema_version(version) {
+        SnapshotVersion::Current
+    } else if is_later_integer_schema_version(version) {
+        SnapshotVersion::Later
+    } else {
+        SnapshotVersion::Unknown
     }
+}
+
+/// JSON Schema's `integer` includes numbers with a zero fractional part, so
+/// the current schema's `const: 1` accepts spellings such as `1.0` and `1e0`.
+/// `serde_json` stores those spellings as floating-point numbers by default;
+/// this predicate recognizes only the numerically equal current version.
+fn is_current_schema_version(value: &Value) -> bool {
+    value.as_u64() == Some(u64::from(CURRENT_SCHEMA_VERSION))
+        || value
+            .as_f64()
+            .is_some_and(|version| version == f64::from(CURRENT_SCHEMA_VERSION))
+}
+
+fn is_later_integer_schema_version(value: &Value) -> bool {
+    value
+        .as_u64()
+        .is_some_and(|version| version > u64::from(CURRENT_SCHEMA_VERSION))
+        || value.as_f64().is_some_and(|version| {
+            version.fract() == 0.0 && version > f64::from(CURRENT_SCHEMA_VERSION)
+        })
 }
 
 fn normal_path_refusal() -> AppError {
@@ -340,8 +364,8 @@ fn normal_path_refusal() -> AppError {
     )
 }
 
-fn parse_current_schema(raw: Value) -> Result<PersistedWorkspaceSessionSnapshot, ()> {
-    let Some(object) = raw.as_object() else {
+fn parse_current_schema(mut raw: Value) -> Result<PersistedWorkspaceSessionSnapshot, ()> {
+    let Some(object) = raw.as_object_mut() else {
         return Err(());
     };
     const KEYS: [&str; 7] = [
@@ -356,8 +380,9 @@ fn parse_current_schema(raw: Value) -> Result<PersistedWorkspaceSessionSnapshot,
     if object.len() != KEYS.len() || KEYS.iter().any(|key| !object.contains_key(*key)) {
         return Err(());
     }
-    let valid_version = object.get("schema_version").and_then(Value::as_u64)
-        == Some(u64::from(CURRENT_SCHEMA_VERSION));
+    let valid_version = object
+        .get("schema_version")
+        .is_some_and(is_current_schema_version);
     let active_is_nullable_string = object
         .get("active_note_id")
         .is_some_and(|value| value.is_null() || value.as_str().is_some());
@@ -381,6 +406,12 @@ fn parse_current_schema(raw: Value) -> Result<PersistedWorkspaceSessionSnapshot,
     {
         return Err(());
     }
+    // Normalize only this in-memory value. The source bytes remain untouched
+    // on a successful read, while serde can deserialize its `u32` field.
+    object.insert(
+        "schema_version".to_string(),
+        Value::from(CURRENT_SCHEMA_VERSION),
+    );
     serde_json::from_value(raw).map_err(|_| ())
 }
 
@@ -790,6 +821,53 @@ mod tests {
         assert_eq!(preserved.len(), 2);
         assert!(preserved.iter().any(|payload| payload == old_payload));
         assert!(preserved.iter().any(|payload| payload == new_payload));
+    }
+
+    #[test]
+    fn restores_current_schema_from_json_schema_integer_spellings() {
+        let (_directory, store, workspace) = store();
+        let schema: Value = serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../.constitution/tech-spec/data-models/workspace-session-snapshot.schema.json"
+        )))
+        .unwrap();
+        assert_eq!(schema["properties"]["schema_version"]["type"], "integer");
+        assert_eq!(schema["properties"]["schema_version"]["const"], 1);
+
+        for spelling in ["1.0", "1e0"] {
+            let path = store.snapshot_path(workspace.id());
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            let raw = format!(
+                r#"{{"schema_version":{spelling},"workspace_id":"workspace-a","open_note_ids":[],"active_note_id":null,"expanded_directory_ids":[],"search_query":"","sync_presentation":"local"}}"#
+            );
+            std::fs::write(&path, raw.as_bytes()).unwrap();
+
+            assert_eq!(
+                store.load(&workspace).unwrap(),
+                ActiveWorkspaceSessionSnapshot::default()
+            );
+            assert!(path.exists());
+            assert_eq!(std::fs::read(&path).unwrap(), raw.as_bytes());
+        }
+    }
+
+    #[test]
+    fn rejects_fractional_and_string_schema_versions() {
+        let (_directory, store, workspace) = store();
+        for spelling in ["1.5", r#""1""#] {
+            let path = store.snapshot_path(workspace.id());
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            let raw = format!(
+                r#"{{"schema_version":{spelling},"workspace_id":"workspace-a","open_note_ids":[],"active_note_id":null,"expanded_directory_ids":[],"search_query":"","sync_presentation":"local"}}"#
+            );
+            std::fs::write(&path, raw.as_bytes()).unwrap();
+
+            assert_eq!(
+                store.load(&workspace).unwrap(),
+                ActiveWorkspaceSessionSnapshot::default()
+            );
+            assert!(!path.exists());
+        }
     }
 
     #[test]

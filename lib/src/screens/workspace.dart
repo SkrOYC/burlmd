@@ -33,6 +33,13 @@ class WorkspaceScreen extends ConsumerWidget {
         _showRescanMessage(context, reason);
       }
     });
+    ref.listen<WorkspaceSessionFailure?>(workspaceSessionFailureProvider, (
+      _,
+      failure,
+    ) {
+      if (failure == null) return;
+      showStatusMessage(context, failure.message);
+    });
 
     return Scaffold(
       body: workspace.when(
