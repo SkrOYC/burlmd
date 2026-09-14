@@ -1,7 +1,12 @@
 ---
 decision: deferred
 date: 2026-09-13
-ruling: "User message, 2026-09-13: \"Prioritize Linux, let's defer our focus on other platforms to avoid more time costs.\""
+ruling: >-
+  User messages, 2026-09-13: "Prioritize Linux, let's defer our focus on other
+  platforms to avoid more time costs."; and "Good. Continue working", approving
+  the proposed private Linux checkout plan that retained local data-safety and
+  headless checks and pull request reviews while deferring packaging,
+  public-supported-release certification, and non-Linux qualification.
 revisit_when: "The user explicitly resumes packaged, supported, or other-platform delivery during later roadmap planning."
 ---
 
@@ -9,7 +14,7 @@ revisit_when: "The user explicitly resumes packaged, supported, or other-platfor
 
 ## Context
 
-The first usable milestone serves one Writer on Linux and runs locally from a checkout. The product also retains a longer-term public `0.x` release scope for supported Linux and macOS artifacts.
+The first usable milestone serves one Writer on Linux and runs locally from a checkout. After the platform-priority ruling, the proposed private-checkout plan retained local data-safety and headless checks and pull request reviews. It deferred packaging, public-supported-release certification, and non-Linux qualification. The Writer approved that direction with "Good. Continue working." The product also retains a longer-term public `0.x` release scope for supported Linux and macOS artifacts.
 
 ## Decision
 

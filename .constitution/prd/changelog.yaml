@@ -1,4 +1,10 @@
 entries:
+  - version: v2.0.7
+    date: 2026-09-13
+    changed:
+      - "Clarified the separate approval for the private Linux checkout path."
+      - "Recorded that the approved path retains local data-safety and headless checks and pull request reviews while deferring packaging, public-supported-release certification, and non-Linux qualification."
+    by: patch-lane
   - version: v2.0.6
     date: 2026-09-13
     added:
