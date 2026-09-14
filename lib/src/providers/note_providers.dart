@@ -508,6 +508,13 @@ class NoteController extends Notifier<NoteState?> {
   /// hint only and does not authorize a Dart-created session.
   void _preserveUnretiredTab(NoteState opened) {
     ref.read(openNoteSessionsProvider.notifier).upsert(opened);
+    // A Core-returned state is now the sole visible owner of this identity.
+    // Leaving a same-id retained entry behind makes a later batch address the
+    // already-retired session twice and can turn a clean drain into a false
+    // cancellation.
+    ref
+        .read(retainedCoreSessionIdsProvider.notifier)
+        .release(opened.metadata.id);
     ref
         .read(workspaceSessionProvider.notifier)
         .addOpenNoteId(opened.metadata.id);
@@ -1000,12 +1007,18 @@ class NoteController extends Notifier<NoteState?> {
         );
         final originalActiveId = state?.metadata.id;
         final retiredIds = <String>[];
-        final ids = <String>[
-          for (final note in ref.read(openNoteSessionsProvider))
-            if (note.metadata.id != keptNoteId) note.metadata.id,
-          for (final noteId in ref.read(retainedCoreSessionIdsProvider))
-            if (noteId != keptNoteId) noteId,
-        ];
+        final ids = <String>[];
+        final seen = <String>{};
+        void addId(String noteId) {
+          if (noteId != keptNoteId && seen.add(noteId)) ids.add(noteId);
+        }
+
+        for (final note in ref.read(openNoteSessionsProvider)) {
+          addId(note.metadata.id);
+        }
+        for (final noteId in ref.read(retainedCoreSessionIdsProvider)) {
+          addId(noteId);
+        }
         for (final noteId in ids) {
           final result = await _closeKnownSessionNow(
             noteId,
@@ -1050,6 +1063,9 @@ class NoteController extends Notifier<NoteState?> {
     }
     if (ref.read(reloadEditingProvider) > 0) {
       return NoteCloseUnavailableReason.reloading;
+    }
+    if (ref.read(lifecycleEditingProvider) > 0) {
+      return NoteCloseUnavailableReason.lifecycle;
     }
     return null;
   }

@@ -341,6 +341,26 @@ void main() {
     expect(find.byType(SnackBar), findsOneWidget);
   });
 
+  testWidgets('a lifecycle-owned close refusal has a localized status', (
+    tester,
+  ) async {
+    final api = _MountingRustApi([_treeNode('a', 'Alpha')]);
+    final container = await _pumpShell(tester, api);
+
+    container
+        .read(noteCloseFailureProvider.notifier)
+        .report(
+          const NoteCloseUnavailable(NoteCloseUnavailableReason.lifecycle),
+        );
+    await tester.pump();
+    await tester.pump();
+
+    expect(
+      find.text('Close notes after workspace changes finish.'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('the sidebar search affordance opens the search panel, passes '
       'its result limit to the Core, and a selected hit opens its note', (
     tester,
@@ -737,6 +757,82 @@ void main() {
         find.byKey(const ValueKey('note-navigation-palette')),
         findsOneWidget,
       );
+    },
+  );
+
+  testWidgets(
+    'every modal command replaces a focused title palette before Escape',
+    (tester) async {
+      final api = _MountingRustApi([_treeNode('a', 'Alpha')]);
+      await _pumpShell(tester, api);
+
+      Future<void> openTitlePalette() async {
+        await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+        await tester.sendKeyEvent(LogicalKeyboardKey.keyP);
+        await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('note-navigation-palette')),
+          findsOneWidget,
+        );
+        expect(FocusManager.instance.primaryFocus, isNotNull);
+      }
+
+      for (final surface in [
+        (
+          const ValueKey('shell-preferences'),
+          const ValueKey('preferences-drawer'),
+          true,
+          1,
+        ),
+        (
+          const ValueKey('shell-history'),
+          const ValueKey('history-drawer'),
+          false,
+          1,
+        ),
+        (
+          const ValueKey('shell-sync'),
+          const ValueKey('sync-inspector'),
+          false,
+          2,
+        ),
+      ]) {
+        await openTitlePalette();
+        final trigger = find.byKey(surface.$1);
+        if (surface.$3) {
+          tester.widget<TextButton>(trigger).onPressed!();
+        } else {
+          tester
+              .widget<OutlinedButton>(
+                surface.$1 == const Key('shell-history')
+                    ? trigger
+                    : find.descendant(
+                        of: trigger,
+                        matching: find.byType(OutlinedButton),
+                      ),
+              )
+              .onPressed!();
+        }
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(const ValueKey('note-navigation-palette')),
+          findsNothing,
+        );
+        expect(find.byKey(surface.$2), findsNWidgets(surface.$4));
+
+        final callsBeforeInput = List<String>.of(api.calls);
+        tester.testTextInput.updateEditingValue(
+          const TextEditingValue(text: 'orphaned title query'),
+        );
+        await tester.pumpAndSettle();
+        expect(api.calls, callsBeforeInput);
+
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        await tester.pumpAndSettle();
+        expect(find.byKey(surface.$2), findsNothing);
+      }
     },
   );
 
@@ -1218,6 +1314,163 @@ void main() {
       expect(container.read(selectedNoteIdProvider), 'a');
       expect(container.read(workspaceSessionProvider).openNoteIds, ['a']);
       expect(container.read(workspaceSessionProvider).activeNoteId, 'a');
+    },
+  );
+
+  testWidgets(
+    'a refused queued close restores the surviving tab after its gate releases',
+    (tester) async {
+      final closeA = Completer<void>();
+      final closeB = Completer<void>();
+      final api =
+          _MountingRustApi([_treeNode('a', 'Alpha'), _treeNode('b', 'Beta')])
+            ..snapshot = const ActiveWorkspaceSessionSnapshot(
+              openNoteIds: ['a', 'b'],
+              activeNoteId: 'a',
+              expandedDirectoryIds: [],
+              searchQuery: '',
+              syncPresentation: SessionSyncPresentation.local,
+            )
+            ..closeNoteGates['a'] = closeA
+            ..closeNoteGates['b'] = closeB
+            ..closeNoteErrors['b'] = StateError('b close refused');
+      final container = await _pumpShell(tester, api);
+
+      Future<void> middleClose(String noteId) async {
+        final gesture = await tester.startGesture(
+          tester.getCenter(find.byKey(Key('shell-tab-$noteId'))),
+          buttons: kMiddleMouseButton,
+        );
+        await gesture.up();
+      }
+
+      await middleClose('a');
+      await tester.pump();
+      await middleClose('b');
+      await tester.pump();
+      expect(api.calls.where((call) => call.startsWith('close:')), ['close:a']);
+
+      closeA.complete();
+      await tester.pump();
+      expect(api.calls.where((call) => call.startsWith('close:')), [
+        'close:a',
+        'close:b',
+      ]);
+
+      closeB.complete();
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('shell-tab-a')), findsNothing);
+      expect(find.byKey(const Key('shell-tab-b')), findsOneWidget);
+      expect(container.read(activeNoteProvider)?.metadata.id, 'b');
+      expect(container.read(selectedNoteIdProvider), 'b');
+      expect(
+        container.read(activeNoteProvider.notifier).updateBlock([
+          0,
+        ], 'writable after refusal'),
+        isTrue,
+      );
+    },
+  );
+
+  testWidgets('a later refused close keeps the initial active tab successor', (
+    tester,
+  ) async {
+    final closeA = Completer<void>();
+    final closeB = Completer<void>();
+    final api =
+        _MountingRustApi([
+            _treeNode('a', 'Alpha'),
+            _treeNode('x', 'Xray'),
+            _treeNode('b', 'Beta'),
+            _treeNode('c', 'Gamma'),
+          ])
+          ..snapshot = const ActiveWorkspaceSessionSnapshot(
+            openNoteIds: ['a', 'x', 'b', 'c'],
+            activeNoteId: 'a',
+            expandedDirectoryIds: [],
+            searchQuery: '',
+            syncPresentation: SessionSyncPresentation.local,
+          )
+          ..closeNoteGates['a'] = closeA
+          ..closeNoteGates['b'] = closeB
+          ..closeNoteErrors['b'] = StateError('b close refused');
+    final container = await _pumpShell(tester, api);
+
+    Future<void> middleClose(String noteId) async {
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byKey(Key('shell-tab-$noteId'))),
+        buttons: kMiddleMouseButton,
+      );
+      await gesture.up();
+    }
+
+    await middleClose('a');
+    await tester.pump();
+    await middleClose('b');
+    await tester.pump();
+    closeA.complete();
+    await tester.pump();
+    closeB.complete();
+    await tester.pumpAndSettle();
+
+    expect(container.read(activeNoteProvider)?.metadata.id, 'x');
+    expect(container.read(selectedNoteIdProvider), 'x');
+    expect(
+      container.read(activeNoteProvider.notifier).updateBlock([
+        0,
+      ], 'x stays writable after b refuses'),
+      isTrue,
+    );
+  });
+
+  testWidgets(
+    'a queued close skips an already-closed initial active successor',
+    (tester) async {
+      final closeA = Completer<void>();
+      final closeX = Completer<void>();
+      final api =
+          _MountingRustApi([
+              _treeNode('a', 'Alpha'),
+              _treeNode('x', 'Xray'),
+              _treeNode('b', 'Beta'),
+              _treeNode('c', 'Gamma'),
+            ])
+            ..snapshot = const ActiveWorkspaceSessionSnapshot(
+              openNoteIds: ['a', 'x', 'b', 'c'],
+              activeNoteId: 'a',
+              expandedDirectoryIds: [],
+              searchQuery: '',
+              syncPresentation: SessionSyncPresentation.local,
+            )
+            ..closeNoteGates['a'] = closeA
+            ..closeNoteGates['x'] = closeX;
+      final container = await _pumpShell(tester, api);
+
+      Future<void> middleClose(String noteId) async {
+        final gesture = await tester.startGesture(
+          tester.getCenter(find.byKey(Key('shell-tab-$noteId'))),
+          buttons: kMiddleMouseButton,
+        );
+        await gesture.up();
+      }
+
+      await middleClose('a');
+      await tester.pump();
+      await middleClose('x');
+      await tester.pump();
+      closeA.complete();
+      await tester.pump();
+      closeX.complete();
+      await tester.pumpAndSettle();
+
+      expect(container.read(activeNoteProvider)?.metadata.id, 'b');
+      expect(container.read(selectedNoteIdProvider), 'b');
+      expect(
+        container.read(activeNoteProvider.notifier).updateBlock([
+          0,
+        ], 'b stays writable after a and x close'),
+        isTrue,
+      );
     },
   );
 
