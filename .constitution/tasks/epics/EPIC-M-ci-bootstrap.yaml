@@ -113,7 +113,7 @@ tickets:
     flows:
       - flow-edit-note
     certainty: assumed
-    status: planned
+    status: done
   - id: BURL-M003
     title: Establish the Linux and Apple Silicon macOS managed validation matrix
     type: Chore

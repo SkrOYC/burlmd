@@ -1,0 +1,1621 @@
+db60855c20ca9eec13d0ca35440ecb8197328251
+rustc 1.97.1 (8bab26f4f 2026-07-14)
+cargo 1.97.1 (c980f4866 2026-06-30)
+Verification command: cargo test --manifest-path rust/Cargo.toml workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success -- --exact && cargo test --manifest-path rust/Cargo.toml workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries -- --exact && ./scripts/repeat-test.sh --count 100 -- cargo test --manifest-path rust/Cargo.toml workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success -- --exact && ./scripts/repeat-test.sh --count 100 -- cargo test --manifest-path rust/Cargo.toml workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries -- --exact && git diff --check
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.40s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.22s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.22s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.22s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.38s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.38s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.41s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.38s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.32s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.24s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.36s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.35s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.22s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.24s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.22s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.35s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.24s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.24s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.24s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.32s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.22s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.36s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.32s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.22s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.22s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.25s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.24s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.32s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.24s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.22s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.35s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.22s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.22s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.22s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.25s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.24s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::a_structural_draft_failure_after_tier_two_publication_returns_authoritative_success ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.32s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.29s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.32s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.32s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.29s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.29s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.29s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.36s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.37s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.36s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.36s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.29s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.29s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.29s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.35s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.29s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.37s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.29s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.35s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.36s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.29s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.29s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.37s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.35s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.39s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.29s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.35s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.29s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.29s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.29s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.35s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.29s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.29s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.37s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.29s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.32s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.29s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.32s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.32s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.29s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.29s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.29s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.32s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.29s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.32s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.29s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.32s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.32s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.29s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.29s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (/home/oscar/GitHub/burlmd-m-resolver-implementation/rust/target/debug/deps/rust-018b183214ed28e1)
+
+running 1 test
+test workspace::persist::tests::an_update_block_draft_insert_failure_restores_spans_for_longer_and_shorter_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 537 filtered out; finished in 0.30s
+
+verification_exit=0
