@@ -157,12 +157,26 @@ class _BurlWorkspaceShellState extends ConsumerState<BurlWorkspaceShell> {
     });
   }
 
+  void _openSearch() {
+    setState(() {
+      _searchOpen = true;
+      _titleJumpOpen = false;
+    });
+  }
+
+  void _openTitleJump() {
+    setState(() {
+      _titleJumpOpen = true;
+      _searchOpen = false;
+    });
+  }
+
   void _perform(_ShellCommand command) {
     switch (command) {
       case _ShellCommand.search:
-        setState(() => _searchOpen = true);
+        _openSearch();
       case _ShellCommand.titleJump:
-        setState(() => _titleJumpOpen = true);
+        _openTitleJump();
       case _ShellCommand.history:
         setState(() => _historyOpen = true);
       case _ShellCommand.preferences:
@@ -255,10 +269,8 @@ class _BurlWorkspaceShellState extends ConsumerState<BurlWorkspaceShell> {
                             width: 288,
                             child: _NavigatorPane(
                               workspaceName: widget.workspaceName,
-                              onSearch: () =>
-                                  setState(() => _searchOpen = true),
-                              onTitleJump: () =>
-                                  setState(() => _titleJumpOpen = true),
+                              onSearch: _openSearch,
+                              onTitleJump: _openTitleJump,
                               onPreferences: () =>
                                   setState(() => _preferencesOpen = true),
                               onSync: () => setState(() => _syncOpen = true),
@@ -277,9 +289,8 @@ class _BurlWorkspaceShellState extends ConsumerState<BurlWorkspaceShell> {
                                   ? _sidebarCollapsed = false
                                   : _navigatorOpen = true,
                             ),
-                            onSearch: () => setState(() => _searchOpen = true),
-                            onTitleJump: () =>
-                                setState(() => _titleJumpOpen = true),
+                            onSearch: _openSearch,
+                            onTitleJump: _openTitleJump,
                             onPreferences: () =>
                                 setState(() => _preferencesOpen = true),
                           ),
@@ -314,9 +325,8 @@ class _BurlWorkspaceShellState extends ConsumerState<BurlWorkspaceShell> {
                       _NavigatorOverlay(
                         workspaceName: widget.workspaceName,
                         onClose: () => setState(() => _navigatorOpen = false),
-                        onSearch: () => setState(() => _searchOpen = true),
-                        onTitleJump: () =>
-                            setState(() => _titleJumpOpen = true),
+                        onSearch: _openSearch,
+                        onTitleJump: _openTitleJump,
                         onPreferences: () =>
                             setState(() => _preferencesOpen = true),
                         onSync: () => setState(() => _syncOpen = true),
