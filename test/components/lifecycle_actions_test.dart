@@ -650,12 +650,13 @@ void main() {
     testWidgets(
       'a refused inactive remap cleanup retains only Core\'s new identity',
       (tester) async {
+        const closeFailure = AppError.ioError('temporary close failure');
         final api = _LifecycleApi()
           ..openStates = {'A': stateFor('A'), 'B': stateFor('B')}
           ..renameDirectoryResult = effects(
             remapped: [IdRemap(oldId: 'B', newId: 'Renamed/B')],
           )
-          ..closeNoteError = const AppError.ioError('temporary close failure');
+          ..closeNoteError = closeFailure;
         final (container, _) = await openTabs(tester, api);
 
         final outcome = await container
@@ -663,6 +664,7 @@ void main() {
             .renameDirectory('', 'Renamed');
 
         expect(outcome, isA<LifecycleFailed>());
+        expect((outcome as LifecycleFailed).cleanupError, same(closeFailure));
         expect(
           container
               .read(openNoteSessionsProvider)
@@ -676,10 +678,7 @@ void main() {
         ]);
         expect(container.read(activeNoteProvider)!.metadata.id, 'A');
         expect(container.read(selectedNoteIdProvider), 'A');
-        expect(
-          container.read(noteCloseFailureProvider),
-          isA<AppError_IoError>(),
-        );
+        expect(container.read(noteCloseFailureProvider), isNull);
         expect(api.calls, ['renameDirectory::Renamed', 'closeNote:Renamed/B']);
       },
     );
@@ -687,12 +686,13 @@ void main() {
     testWidgets(
       'a terminal inactive remap warning drops its stale projection',
       (tester) async {
+        const closeWarning = CloseNoteWarning('commit cleanup failed');
         final api = _LifecycleApi()
           ..openStates = {'A': stateFor('A'), 'B': stateFor('B')}
           ..renameDirectoryResult = effects(
             remapped: [IdRemap(oldId: 'B', newId: 'Renamed/B')],
           )
-          ..closeNoteError = const CloseNoteWarning('commit cleanup failed');
+          ..closeNoteError = closeWarning;
         final (container, _) = await openTabs(tester, api);
 
         final outcome = await container
@@ -700,6 +700,7 @@ void main() {
             .renameDirectory('', 'Renamed');
 
         expect(outcome, isA<LifecycleFailed>());
+        expect((outcome as LifecycleFailed).cleanupError, same(closeWarning));
         expect(
           container
               .read(openNoteSessionsProvider)
@@ -708,10 +709,7 @@ void main() {
         );
         expect(container.read(retainedCoreSessionIdsProvider), isEmpty);
         expect(container.read(workspaceSessionProvider).openNoteIds, ['A']);
-        expect(
-          container.read(noteCloseFailureProvider),
-          isA<CloseNoteWarning>(),
-        );
+        expect(container.read(noteCloseFailureProvider), isNull);
         expect(api.calls, ['renameDirectory::Renamed', 'closeNote:Renamed/B']);
       },
     );
@@ -829,6 +827,7 @@ void main() {
         expect(outcome, isA<LifecycleFailed>());
         expect((outcome as LifecycleFailed).error, isA<StateError>());
         expect(outcome.error.toString(), contains('Renamed/B'));
+        expect(outcome.cleanupError, same(closeFailure));
         expect(
           container
               .read(openNoteSessionsProvider)
@@ -847,7 +846,7 @@ void main() {
         // Both stale projections are revoked, even though each refresh fails.
         expect(api.openNoteCalls, ['A', 'B', 'C', 'Renamed/B', 'C']);
         expect(api.calls, ['renameDirectory::Renamed', 'closeNote:Renamed/B']);
-        expect(container.read(noteCloseFailureProvider), same(closeFailure));
+        expect(container.read(noteCloseFailureProvider), isNull);
       },
     );
 

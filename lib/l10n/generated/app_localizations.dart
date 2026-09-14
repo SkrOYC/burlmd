@@ -976,6 +976,12 @@ abstract class AppLocalizations {
   /// **'The action failed: {error}'**
   String treeActionFailed(String error);
 
+  /// Lifecycle action failure status when the attempt to retire an unpresentable inactive note also reports a Core refusal or terminal warning.
+  ///
+  /// In en, this message translates to:
+  /// **'The action failed: {error}. Cleanup also needs attention: {cleanupError}'**
+  String treeActionFailedWithCleanup(String error, String cleanupError);
+
   /// Code-block copy button label.
   ///
   /// In en, this message translates to:

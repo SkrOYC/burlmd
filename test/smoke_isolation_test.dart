@@ -234,6 +234,116 @@ void main() {
         contains('must name an inherited owned regular-file FD'),
       );
     });
+
+    test(
+      'keeps an unlinked handoff undiscoverable and reads the actual app PID',
+      () async {
+        final root = await Directory.systemTemp.createTemp(
+          'burlmd-unlinked-pid-handoff.',
+        );
+        addTearDown(() => root.delete(recursive: true));
+        final runtime = await Directory('${root.path}/runtime').create();
+        final app = File('${root.path}/malicious-app');
+        final discovery = File('${root.path}/discovery');
+        final received = File('${root.path}/received');
+
+        await app.writeAsString(r'''#!/usr/bin/env bash
+set -euo pipefail
+[[ ! -v BURLMD_SMOKE_APP_PID_FD ]] || exit 91
+if find /proc/self/fd -maxdepth 1 -type l -exec readlink {} \; \
+  | grep -q '\\.app-pid\\.'; then
+  exit 92
+fi
+find "$XDG_RUNTIME_DIR" -maxdepth 1 -name '*.app-pid.*' -printf '%f\n' \
+  > "$BURLMD_TEST_DISCOVERY"
+while IFS= read -r handoff; do
+  printf '%s\n' attacker > "$XDG_RUNTIME_DIR/$handoff"
+done < "$BURLMD_TEST_DISCOVERY"
+printf '%s\n' "$$" > "$BURLMD_TEST_RECEIVED"
+sleep .5
+''');
+        await _SmokeHandoffFixture._makeExecutable(app);
+
+        final result = await Process.run('bash', [
+          '-c',
+          r'''set -euo pipefail
+runtime="$1"
+app="$2"
+discovery="$3"
+received="$4"
+handoff="$(mktemp "$runtime/.visual-regression-protocol.app-pid.XXXXXX")"
+exec {writer_fd}<> "$handoff"
+exec {reader_fd}< "$handoff"
+rm -f -- "$handoff"
+# A failed pre-publication read must not consume the reader's offset.
+if IFS= read -r -u "$reader_fd" unexpected; then
+  exit 1
+fi
+(
+  # The visual parent keeps this reader private when it execs smoke-shot.
+  exec {reader_fd}<&-
+  BURLMD_SMOKE_APP_PID_FD="$writer_fd" \
+    BURLMD_TEST_DISCOVERY="$discovery" \
+    BURLMD_TEST_RECEIVED="$received" \
+    bash -c '
+      set -euo pipefail
+      writer_fd="$BURLMD_SMOKE_APP_PID_FD"
+      (
+        unset BURLMD_SMOKE_APP_PID_FD
+        exec {writer_fd}>&-
+        exec "$0"
+      ) &
+      app_pid=$!
+      printf "%s\\n" "$app_pid" >&"$writer_fd"
+      wait "$app_pid"
+    ' "$app"
+) &
+launcher_pid=$!
+for _ in $(seq 1 100); do
+  if IFS= read -r -u "$reader_fd" app_pid; then
+    [[ "$app_pid" =~ ^[1-9][0-9]*$ ]]
+    kill -0 "$app_pid"
+    wait "$launcher_pid"
+    exit 0
+  fi
+  sleep .01
+done
+wait "$launcher_pid"
+exit 1
+''',
+          'unlinked-handoff-test',
+          runtime.path,
+          app.path,
+          discovery.path,
+          received.path,
+        ]);
+
+        expect(result.exitCode, 0, reason: result.stderr.toString());
+        expect(await discovery.readAsString(), isEmpty);
+        expect(
+          (await received.readAsString()).trim(),
+          matches(RegExp(r'^[1-9][0-9]*$')),
+        );
+      },
+    );
+
+    test(
+      'visual gate unlinks the handoff and reads only its private reader',
+      () async {
+        final visual = await File(
+          'scripts/visual-regression.sh',
+        ).readAsString();
+
+        expect(visual, contains(r'exec {APP_PID_READ_FD}< "$APP_PID_FILE"'));
+        expect(visual, contains(r'rm -f -- "$APP_PID_FILE"'));
+        expect(visual, contains(r'read -r -u "$APP_PID_READ_FD" app_pid'));
+        expect(visual, contains(r'exec {APP_PID_READ_FD}<&-'));
+        expect(
+          visual,
+          isNot(contains(r'head -n 1 "/proc/self/fd/$APP_PID_FD"')),
+        );
+      },
+    );
   });
 }
 

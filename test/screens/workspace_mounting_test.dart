@@ -52,6 +52,8 @@ class _MountingRustApi extends RustApi {
   final Set<String> unavailableNoteIds = {};
   final Map<String, Object> openNoteErrors = {};
   final Map<String, Object> closeNoteErrors = {};
+  LifecycleEffects? renameDirectoryEffects;
+  Object? renameDirectoryError;
   final Map<String, Completer<void>> closeNoteGates = {};
   NoteState? createNoteResult;
   Completer<void>? createNoteGate;
@@ -138,6 +140,19 @@ class _MountingRustApi extends RustApi {
     return LifecycleResult(
       state: created,
       effects: const LifecycleEffects(remapped: [], rewritten: []),
+      removed: const [],
+    );
+  }
+
+  @override
+  Future<LifecycleResult> renameDirectory(String path, String newName) async {
+    calls.add('renameDirectory:$path:$newName');
+    final error = renameDirectoryError;
+    if (error != null) throw error;
+    return LifecycleResult(
+      effects:
+          renameDirectoryEffects ??
+          const LifecycleEffects(remapped: [], rewritten: []),
       removed: const [],
     );
   }
@@ -370,6 +385,141 @@ void main() {
       findsOneWidget,
     );
   });
+
+  testWidgets(
+    'an inactive remap refresh failure retains its cleanup refusal in one status',
+    (tester) async {
+      final api =
+          _MountingRustApi([
+              TreeNode.directory(
+                name: 'Projects',
+                path: 'Projects',
+                children: [_treeNode('b', 'Beta')],
+              ),
+              _treeNode('a', 'Alpha'),
+            ])
+            ..snapshot = const ActiveWorkspaceSessionSnapshot(
+              openNoteIds: ['a', 'b'],
+              activeNoteId: 'a',
+              expandedDirectoryIds: [],
+              searchQuery: '',
+              syncPresentation: SessionSyncPresentation.local,
+            )
+            ..renameDirectoryEffects = const LifecycleEffects(
+              remapped: [IdRemap(oldId: 'b', newId: 'Renamed/b')],
+              rewritten: [],
+            )
+            ..openNoteErrors['Renamed/b'] = StateError('remap refresh failed')
+            ..closeNoteErrors['Renamed/b'] = StateError(
+              'cleanup close refused',
+            );
+      final container = await _pumpShell(tester, api);
+
+      await tester.tap(
+        find.byKey(const ValueKey('workspace-tree-directory-actions-Projects')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('tree-context-rename-directory-Projects')),
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('lifecycle-text-input')),
+        'Renamed',
+      );
+      await tester.tap(find.byKey(const ValueKey('lifecycle-dialog-confirm')));
+      await tester.pumpAndSettle();
+
+      expect(api.calls, contains('renameDirectory:Projects:Renamed'));
+      expect(
+        find.text(
+          'The action failed: Bad state: remap refresh failed. '
+          'Cleanup also needs attention: Bad state: cleanup close refused',
+        ),
+        findsOneWidget,
+      );
+      await tester.pump();
+      expect(find.byType(SnackBar), findsOneWidget);
+      expect(
+        find.textContaining(
+          'The action failed: Bad state: remap refresh failed',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('Bad state: cleanup close refused'),
+        findsOneWidget,
+      );
+      expect(container.read(noteCloseFailureProvider), isNull);
+      expect(container.read(retainedCoreSessionIdsProvider), {'Renamed/b'});
+    },
+  );
+
+  testWidgets(
+    'an inactive remap refresh failure retains its terminal cleanup warning in one status',
+    (tester) async {
+      final api =
+          _MountingRustApi([
+              TreeNode.directory(
+                name: 'Projects',
+                path: 'Projects',
+                children: [_treeNode('b', 'Beta')],
+              ),
+              _treeNode('a', 'Alpha'),
+            ])
+            ..snapshot = const ActiveWorkspaceSessionSnapshot(
+              openNoteIds: ['a', 'b'],
+              activeNoteId: 'a',
+              expandedDirectoryIds: [],
+              searchQuery: '',
+              syncPresentation: SessionSyncPresentation.local,
+            )
+            ..renameDirectoryEffects = const LifecycleEffects(
+              remapped: [IdRemap(oldId: 'b', newId: 'Renamed/b')],
+              rewritten: [],
+            )
+            ..openNoteErrors['Renamed/b'] = StateError('remap refresh failed')
+            ..closeNoteErrors['Renamed/b'] = const CloseNoteWarning(
+              'cleanup close warning',
+            );
+      final container = await _pumpShell(tester, api);
+
+      await tester.tap(
+        find.byKey(const ValueKey('workspace-tree-directory-actions-Projects')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('tree-context-rename-directory-Projects')),
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('lifecycle-text-input')),
+        'Renamed',
+      );
+      await tester.tap(find.byKey(const ValueKey('lifecycle-dialog-confirm')));
+      await tester.pumpAndSettle();
+
+      expect(api.calls, contains('renameDirectory:Projects:Renamed'));
+      expect(
+        find.text(
+          'The action failed: Bad state: remap refresh failed. '
+          'Cleanup also needs attention: cleanup close warning',
+        ),
+        findsOneWidget,
+      );
+      await tester.pump();
+      expect(find.byType(SnackBar), findsOneWidget);
+      expect(
+        find.textContaining(
+          'The action failed: Bad state: remap refresh failed',
+        ),
+        findsOneWidget,
+      );
+      expect(find.textContaining('cleanup close warning'), findsOneWidget);
+      expect(container.read(noteCloseFailureProvider), isNull);
+      expect(container.read(retainedCoreSessionIdsProvider), isEmpty);
+    },
+  );
 
   testWidgets('the sidebar search affordance opens the search panel, passes '
       'its result limit to the Core, and a selected hit opens its note', (

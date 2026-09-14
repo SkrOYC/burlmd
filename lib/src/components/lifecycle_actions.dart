@@ -38,9 +38,15 @@ class LifecycleRefused extends LifecycleOutcome {
 /// The round trip failed for another reason (IO, database, ...). Surfaced
 /// like any other boundary error rather than swallowed.
 class LifecycleFailed extends LifecycleOutcome {
-  const LifecycleFailed(this.error);
+  const LifecycleFailed(this.error, {this.cleanupError});
 
   final Object error;
+
+  /// An attempted cleanup after [error] invalidated an inactive tab. This
+  /// travels with the primary lifecycle failure so the status surface can
+  /// retain both Core reports in one message instead of replacing the first
+  /// SnackBar in the following frame.
+  final Object? cleanupError;
 }
 
 enum LifecycleUnavailableReason {
@@ -596,6 +602,11 @@ class LifecycleActions {
         };
         await _restoreUnchangedRequestSelection(operation);
         return outcome;
+      } on _LifecycleEffectsFailure catch (failure) {
+        return LifecycleFailed(
+          failure.error,
+          cleanupError: failure.cleanupError,
+        );
       } catch (error) {
         return LifecycleFailed(error);
       }
@@ -640,11 +651,16 @@ class LifecycleActions {
     }
     Object? firstRefreshError;
     StackTrace? firstRefreshStackTrace;
+    Object? firstCleanupError;
 
     void rememberRefreshFailure(Object error, StackTrace stackTrace) {
       if (firstRefreshError != null) return;
       firstRefreshError = error;
       firstRefreshStackTrace = stackTrace;
+    }
+
+    void rememberCleanupFailure(Object error) {
+      firstCleanupError ??= error;
     }
 
     final activeId = _ref.read(activeNoteProvider)?.metadata.id;
@@ -787,9 +803,16 @@ class LifecycleActions {
       returnedState: returnedState,
       effects: effects,
       rememberRefreshFailure: rememberRefreshFailure,
+      rememberCleanupFailure: rememberCleanupFailure,
     );
     if (firstRefreshError != null) {
-      Error.throwWithStackTrace(firstRefreshError!, firstRefreshStackTrace!);
+      Error.throwWithStackTrace(
+        _LifecycleEffectsFailure(
+          firstRefreshError!,
+          cleanupError: firstCleanupError,
+        ),
+        firstRefreshStackTrace!,
+      );
     }
   }
 
@@ -803,6 +826,7 @@ class LifecycleActions {
     required LifecycleEffects effects,
     required void Function(Object error, StackTrace stackTrace)
     rememberRefreshFailure,
+    required void Function(Object error) rememberCleanupFailure,
   }) async {
     final tabs = _ref.read(activeNoteProvider.notifier);
 
@@ -836,7 +860,11 @@ class LifecycleActions {
           // Removing the stale old-id tab alone would orphan Core's live
           // new-id session. This is lifecycle cleanup, not CLOSE-G005 tab
           // close orchestration.
-          if (await _retireFailedInactiveRefresh(remap.newId)) {
+          final retirement = await _retireFailedInactiveRefresh(remap.newId);
+          if (retirement.cleanupError case final cleanupError?) {
+            rememberCleanupFailure(cleanupError);
+          }
+          if (retirement.retired) {
             tabs.discardRetiredTab(remap.oldId, expectedState: stale);
           } else {
             tabs.retainUnpresentableCoreSession(
@@ -877,22 +905,18 @@ class LifecycleActions {
   }
 
   /// Retires the Core session that a failed inactive remap refresh cannot
-  /// safely present. A close warning is terminal, while a close refusal is
-  /// reported alongside the refresh failure without replacing that failure.
-  Future<bool> _retireFailedInactiveRefresh(String noteId) async {
+  /// safely present. Its close outcome is retained with the refresh failure
+  /// so the mounted status surface can report both Core details together.
+  Future<_InactiveRefreshRetirement> _retireFailedInactiveRefresh(
+    String noteId,
+  ) async {
     try {
       final warning = await _ref
           .read(activeNoteProvider.notifier)
           .retireCoreSessionForLifecycle(noteId);
-      if (warning != null && _ref.mounted) {
-        _ref.read(noteCloseFailureProvider.notifier).report(warning);
-      }
-      return true;
+      return _InactiveRefreshRetirement(retired: true, cleanupError: warning);
     } catch (error) {
-      if (_ref.mounted) {
-        _ref.read(noteCloseFailureProvider.notifier).report(error);
-      }
-      return false;
+      return _InactiveRefreshRetirement(retired: false, cleanupError: error);
     }
   }
 
@@ -1093,4 +1117,24 @@ class _LifecycleRequestError implements Exception {
   const _LifecycleRequestError(this.error);
 
   final Object error;
+}
+
+/// Carries the first failed refresh and its associated close result out of
+/// effect settlement without changing the first-error, continue-all-effects
+/// contract.
+class _LifecycleEffectsFailure implements Exception {
+  const _LifecycleEffectsFailure(this.error, {this.cleanupError});
+
+  final Object error;
+  final Object? cleanupError;
+}
+
+/// Whether cleanup retired an unpresentable inactive Core session. A terminal
+/// close warning still means the session is retired; a refusal keeps its live
+/// identity retained for a later close.
+class _InactiveRefreshRetirement {
+  const _InactiveRefreshRetirement({required this.retired, this.cleanupError});
+
+  final bool retired;
+  final Object? cleanupError;
 }

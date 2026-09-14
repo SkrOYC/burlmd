@@ -889,6 +889,10 @@ void report(BuildContext context, LifecycleOutcome outcome) {
           context,
         )!.lifecycleUnavailableDuringClose,
       },
+    LifecycleFailed(:final error, cleanupError: final cleanupError?) =>
+      AppLocalizations.of(
+        context,
+      )!.treeActionFailedWithCleanup('$error', '$cleanupError'),
     LifecycleFailed(:final error) => AppLocalizations.of(
       context,
     )!.treeActionFailed('$error'),
