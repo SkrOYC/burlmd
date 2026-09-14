@@ -273,6 +273,41 @@ final retainedCoreSessionIdsProvider =
       RetainedCoreSessionIds.new,
     );
 
+/// Number of whole-tab batches that own the close boundary. Lifecycle actions
+/// use this narrow signal to refuse a new mutation while a batch has already
+/// established the all-clean precondition for a wider transition or exit.
+class NoteCloseBatching extends Notifier<int> {
+  @override
+  int build() => 0;
+
+  void begin() => state++;
+
+  void end() {
+    assert(state > 0, 'Note close batch released without an owner.');
+    if (state > 0) state--;
+  }
+}
+
+final noteCloseBatchingProvider = NotifierProvider<NoteCloseBatching, int>(
+  NoteCloseBatching.new,
+);
+
+enum _NoteCloseTerminal { clean, warning, failure, skipped }
+
+class _NoteCloseResult {
+  const _NoteCloseResult(this.terminal, {this.error});
+
+  final _NoteCloseTerminal terminal;
+  final Object? error;
+
+  bool get retired => switch (terminal) {
+    _NoteCloseTerminal.clean || _NoteCloseTerminal.warning => true,
+    _NoteCloseTerminal.failure || _NoteCloseTerminal.skipped => false,
+  };
+
+  bool get clean => terminal == _NoteCloseTerminal.clean;
+}
+
 /// Holds the active Note state. Tab sessions remain separately in
 /// [openNoteSessionsProvider] until their own Core close completes.
 class NoteController extends Notifier<NoteState?> {
@@ -427,20 +462,14 @@ class NoteController extends Notifier<NoteState?> {
   /// A close warning is terminal. Any other error leaves the session live,
   /// and the caller retains its Core-returned state as a tab.
   Future<bool> _retireSupersededTabOpen(RustApi api, String noteId) async {
-    try {
-      await api.closeNote(noteId);
-      return true;
-    } on CloseNoteWarning catch (warning) {
-      if (ref.mounted) {
-        ref.read(noteCloseFailureProvider.notifier).report(warning);
-      }
-      return true;
-    } catch (error) {
-      if (ref.mounted) {
-        ref.read(noteCloseFailureProvider.notifier).report(error);
-      }
-      return false;
+    final result = await _enqueueClose(
+      () => _closeCoreSessionNow(noteId, api: api),
+    );
+    final error = result.error;
+    if (ref.mounted && error != null) {
+      ref.read(noteCloseFailureProvider.notifier).report(error);
     }
+    return result.retired;
   }
 
   /// A late open can still be a live Core session when its close refuses.
@@ -662,29 +691,6 @@ class NoteController extends Notifier<NoteState?> {
     ref.read(workspaceSessionProvider.notifier).removeOpenNoteId(noteId);
   }
 
-  /// Retires one known Core session. Batch close orchestration belongs to the
-  /// following CLOSE-G005 ticket; this only handles the individual tab.
-  Future<bool> closeTab(String noteId) async {
-    if (ref.read(openNoteSessionsProvider.notifier).byId(noteId) == null) {
-      return false;
-    }
-    try {
-      await ref.read(rustApiProvider).closeNote(noteId);
-    } on CloseNoteWarning catch (warning) {
-      ref.read(noteCloseFailureProvider.notifier).report(warning);
-    } catch (error) {
-      ref.read(noteCloseFailureProvider.notifier).report(error);
-      return false;
-    }
-    ref.read(openNoteSessionsProvider.notifier).remove(noteId);
-    ref.read(workspaceSessionProvider.notifier).removeOpenNoteId(noteId);
-    if (state?.metadata.id == noteId) {
-      state = null;
-      ref.read(keystrokeWriteFailureProvider.notifier).report(null);
-    }
-    return true;
-  }
-
   Future<void> _open(String noteId, {bool admittedByLifecycle = false}) =>
       _enqueueOpen(
         (ticket) => _openExclusive(
@@ -741,10 +747,175 @@ class NoteController extends Notifier<NoteState?> {
   /// Core, which is what makes close-before-open orderable.
   Future<void>? _pendingOpen;
 
+  /// The tail shared by every call that can issue `close_note`. A close is a
+  /// Core lifecycle boundary: even otherwise-independent tab actions must not
+  /// overlap because a warning and a refusal have materially different
+  /// presentation outcomes. Keeping the tail here also lets batch operations
+  /// own their whole ordered sequence rather than allowing a later tab click
+  /// to slip between two batch members.
+  Future<void> _pendingClose = Future<void>.value();
+
   /// Monotonic count of [open] requests. A queued request whose ticket no
   /// longer equals the newest one was superseded while waiting and must do
   /// nothing.
   int _openRequests = 0;
+
+  Future<T> _enqueueClose<T>(Future<T> Function() action) {
+    final previous = _pendingClose;
+    final result = () async {
+      await previous;
+      return action();
+    }();
+    // Keep the queue alive after an unexpected caller failure while returning
+    // the original future to that caller. The normal close outcomes below are
+    // values, not exceptions, so this is only a disposal-safety backstop.
+    _pendingClose = result.then<void>((_) {}, onError: (_, _) {});
+    return result;
+  }
+
+  bool _hasLiveCoreSession(String noteId) =>
+      ref.read(openNoteSessionsProvider.notifier).byId(noteId) != null ||
+      ref.read(retainedCoreSessionIdsProvider).contains(noteId);
+
+  Future<_NoteCloseResult> _closeCoreSessionNow(
+    String noteId, {
+    RustApi? api,
+  }) async {
+    final closeApi = api ?? (ref.mounted ? ref.read(rustApiProvider) : null);
+    if (closeApi == null) {
+      return const _NoteCloseResult(_NoteCloseTerminal.skipped);
+    }
+    try {
+      await closeApi.closeNote(noteId);
+      return const _NoteCloseResult(_NoteCloseTerminal.clean);
+    } on CloseNoteWarning catch (warning) {
+      return _NoteCloseResult(_NoteCloseTerminal.warning, error: warning);
+    } catch (error) {
+      return _NoteCloseResult(_NoteCloseTerminal.failure, error: error);
+    }
+  }
+
+  void _retirePresentationSession(String noteId) {
+    final sessions = ref.read(openNoteSessionsProvider.notifier);
+    if (sessions.byId(noteId) != null) sessions.remove(noteId);
+    ref.read(retainedCoreSessionIdsProvider.notifier).release(noteId);
+    ref.read(workspaceSessionProvider.notifier).removeOpenNoteId(noteId);
+    if (state?.metadata.id == noteId) {
+      state = null;
+      ref.read(keystrokeWriteFailureProvider.notifier).report(null);
+    }
+  }
+
+  Future<_NoteCloseResult> _closeKnownSessionNow(String noteId) async {
+    if (!ref.mounted) {
+      return const _NoteCloseResult(_NoteCloseTerminal.skipped);
+    }
+    if (!_hasLiveCoreSession(noteId)) {
+      return const _NoteCloseResult(_NoteCloseTerminal.skipped);
+    }
+    final result = await _closeCoreSessionNow(noteId);
+    switch (result.terminal) {
+      case _NoteCloseTerminal.clean || _NoteCloseTerminal.warning:
+        _retirePresentationSession(noteId);
+        if (result.error case final Object error) {
+          ref.read(noteCloseFailureProvider.notifier).report(error);
+        }
+        break;
+      case _NoteCloseTerminal.failure:
+        ref.read(noteCloseFailureProvider.notifier).report(result.error!);
+        break;
+      case _NoteCloseTerminal.skipped:
+        break;
+    }
+    return result;
+  }
+
+  /// Closes a visible Core-backed tab or an unrenderable retained Core
+  /// session. A successful close and a post-close warning both retire the
+  /// presentation identity; a refusal leaves it fully writable and retryable.
+  Future<bool> closeTab(String noteId) async {
+    final result = await _enqueueClose(() => _closeKnownSessionNow(noteId));
+    return result.retired;
+  }
+
+  /// Retires a Core session created or retained by [LifecycleActions] through
+  /// the same close queue as every tab entry point. Lifecycle owns the
+  /// projection reconciliation around these cleanup calls, so this returns a
+  /// terminal warning for it to surface and rethrows a true close refusal.
+  Future<CloseNoteWarning?> retireCoreSessionForLifecycle(String noteId) async {
+    final result = await _enqueueClose(() => _closeCoreSessionNow(noteId));
+    return switch (result.terminal) {
+      _NoteCloseTerminal.clean || _NoteCloseTerminal.skipped => null,
+      _NoteCloseTerminal.warning => result.error! as CloseNoteWarning,
+      _NoteCloseTerminal.failure => throw result.error!,
+    };
+  }
+
+  /// Closes all live session identities in tab order, followed by any Core
+  /// sessions retained after a lifecycle refresh could not safely render
+  /// them. Snapshot retry hints are deliberately excluded: Core never opened
+  /// them in this process. A warning is terminal for a batch just like a
+  /// refusal, so every later session stays available to retry.
+  Future<bool> closeAllTabs() => _closeBatch();
+
+  /// The Close Others menu action. The kept tab is never addressed, while
+  /// unrenderable live Core sessions still participate in the batch.
+  Future<bool> closeOtherTabs(String keptNoteId) =>
+      _closeBatch(keptNoteId: keptNoteId);
+
+  /// G006's Workspace-adoption prerequisite. The caller may change Workspace
+  /// only when this returns true; warnings and refusals cancel the wider
+  /// operation after preserving every unprocessed session.
+  Future<bool> closeAllForWorkspaceTransition() => _closeBatch();
+
+  /// The orderly application-exit prerequisite. Flutter's cancelable exit
+  /// callback maps a false result to `AppExitResponse.cancel`.
+  Future<bool> closeAllForOrderlyShutdown() => _closeBatch();
+
+  Future<bool> _closeBatch({String? keptNoteId}) async {
+    // A lifecycle operation can create or remap a Core session after its FFI
+    // result returns. It therefore invalidates the all-clean proof a wider
+    // close needs. Refuse visibly so the caller can retry after it settles.
+    if (ref.read(lifecycleEditingProvider) > 0) {
+      ref
+          .read(noteCloseFailureProvider.notifier)
+          .report(
+            StateError(
+              'Close all is unavailable while workspace changes are in progress.',
+            ),
+          );
+      return false;
+    }
+    final batching = ref.read(noteCloseBatchingProvider.notifier);
+    batching.begin();
+    // Fence navigation before awaiting the existing open chain. This retains
+    // G003/G004's lifecycle-admission rule: an already-issued open settles or
+    // retires itself before the batch snapshots Core-owned sessions, and a new
+    // user open cannot appear part-way through the batch.
+    final editing = ref.read(lifecycleEditingProvider.notifier);
+    editing.begin();
+    ref.read(lifecycleAdmissionProvider.notifier).next();
+    try {
+      await settlePendingOpen();
+      if (!ref.mounted) return false;
+      return await _enqueueClose(() async {
+        final ids = <String>[
+          for (final note in ref.read(openNoteSessionsProvider))
+            if (note.metadata.id != keptNoteId) note.metadata.id,
+          for (final noteId in ref.read(retainedCoreSessionIdsProvider))
+            if (noteId != keptNoteId) noteId,
+        ];
+        for (final noteId in ids) {
+          final result = await _closeKnownSessionNow(noteId);
+          if (!result.clean) return false;
+        }
+        return true;
+      });
+    } finally {
+      if (ref.mounted) editing.end();
+      if (ref.mounted) batching.end();
+    }
+  }
 
   Future<void> _openExclusive(
     int ticket,
@@ -778,10 +949,11 @@ class NoteController extends Notifier<NoteState?> {
         // delayed, and must never leave editor input permanently blocked.
         switching = true;
         ref.read(noteSwitchingProvider.notifier).set(true);
-        try {
-          await api.closeNote(current.metadata.id);
-        } catch (error) {
-          if (error is CloseNoteWarning) {
+        final close = await _enqueueClose(
+          () => _closeKnownSessionNow(current.metadata.id),
+        );
+        switch (close.terminal) {
+          case _NoteCloseTerminal.warning:
             // Core retired the outgoing session after the bytes were safe, but
             // could not finish commit or draft cleanup. Continue to the selected
             // Note: restoring `current` here would make its raw editor writable
@@ -789,31 +961,23 @@ class NoteController extends Notifier<NoteState?> {
             // warning through the same dismissible status surface as a refusal.
             closedWithWarning = true;
             ref.read(editorErrorProvider.notifier).report(null);
-            ref.read(noteCloseFailureProvider.notifier).report(error);
-          } else {
+          case _NoteCloseTerminal.failure:
             // Closing refused, so the old session remains Core-valid and can be
             // edited again. It is a nonfatal one-shot outcome, not the persistent
             // no-session error panel used for a failed open.
             ref.read(editorErrorProvider.notifier).report(null);
-            ref.read(noteCloseFailureProvider.notifier).report(error);
             // The switch aborts with the old Note still open; point the tree
             // back at it so the selection highlight matches what the editor
             // actually shows. The error stays surfaced above.
             _restoreSelection(current.metadata.id, admittedByLifecycle);
             return;
-          }
-        }
-        // Core has retired the outgoing session. Remove its presentation tab
-        // before exposing another state, so no cached Dart buffer can later
-        // be selected against an id Core no longer owns.
-        final tabSessions = ref.read(openNoteSessionsProvider.notifier);
-        if (tabSessions.byId(current.metadata.id) != null) {
-          tabSessions.remove(current.metadata.id);
-          ref
-              .read(workspaceSessionProvider.notifier)
-              .removeOpenNoteId(current.metadata.id);
-        } else {
-          ref.read(workspaceSessionProvider.notifier).setActiveNoteId(null);
+          case _NoteCloseTerminal.skipped:
+            // A tab-close request ahead of this legacy switch already settled
+            // the session. Do not issue a second close or open a replacement
+            // against a stale outgoing snapshot.
+            return;
+          case _NoteCloseTerminal.clean:
+            break;
         }
         if (!_isOpenAdmissionCurrent(
           lifecycleAdmission,

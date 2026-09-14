@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' show AppExitResponse;
 
 import 'package:burlmd/src/providers/rust_api_provider.dart';
 import 'package:burlmd/src/providers/workspace_provider.dart';
@@ -6,6 +7,7 @@ import 'package:burlmd/src/design/burl_theme.dart';
 import 'package:burlmd/src/design/burl_motion.dart';
 import 'package:burlmd/src/providers/burl_preferences_provider.dart';
 import 'package:burlmd/src/providers/note_providers.dart';
+import 'package:burlmd/src/components/lifecycle_actions.dart';
 import 'package:burlmd/src/components/visual_parity_fixture.dart';
 import 'package:burlmd/l10n/generated/app_localizations.dart';
 import 'package:burlmd/src/rust/draft.dart';
@@ -14,6 +16,7 @@ import 'package:burlmd/src/rust/markdown/ast.dart';
 import 'package:burlmd/src/screens/workspace.dart';
 import 'package:flutter/foundation.dart'
     show debugDefaultTargetPlatformOverride;
+import 'package:flutter/gestures.dart' show kMiddleMouseButton;
 import 'package:flutter/material.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -47,6 +50,10 @@ class _MountingRustApi extends RustApi {
   /// Concept ids that no longer exist when a saved session is restored.
   final Set<String> unavailableNoteIds = {};
   final Map<String, Object> openNoteErrors = {};
+  final Map<String, Object> closeNoteErrors = {};
+  final Map<String, Completer<void>> closeNoteGates = {};
+  NoteState? createNoteResult;
+  Completer<void>? createNoteGate;
   final List<ActiveWorkspaceSessionSnapshot> savedSnapshots = [];
 
   /// What every `note_write_status` poll reports until a test changes it.
@@ -111,6 +118,24 @@ class _MountingRustApi extends RustApi {
   @override
   Future<void> closeNote(String noteId) async {
     calls.add('close:$noteId');
+    final gate = closeNoteGates[noteId];
+    if (gate != null && !gate.isCompleted) await gate.future;
+    final error = closeNoteErrors[noteId];
+    if (error != null) throw error;
+  }
+
+  @override
+  Future<LifecycleResult> createNote(String directoryPath, String title) async {
+    calls.add('create:$directoryPath:$title');
+    final gate = createNoteGate;
+    if (gate != null && !gate.isCompleted) await gate.future;
+    final created = createNoteResult;
+    if (created == null) throw StateError('no staged created Note');
+    return LifecycleResult(
+      state: created,
+      effects: const LifecycleEffects(remapped: [], rewritten: []),
+      removed: const [],
+    );
   }
 
   @override
@@ -1110,7 +1135,7 @@ void main() {
     );
   });
 
-  testWidgets('a focused Core tab opens its single-tab context menu with '
+  testWidgets('a focused Core tab exposes every serialized close action with '
       'Shift+F10', (tester) async {
     final api = _MountingRustApi([_treeNode('a', 'Alpha')]);
     await _pumpShell(tester, api);
@@ -1125,9 +1150,152 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey('tab-menu-close')), findsOneWidget);
-    expect(find.byKey(const ValueKey('tab-menu-close-others')), findsNothing);
-    expect(find.byKey(const ValueKey('tab-menu-close-all')), findsNothing);
+    expect(find.byKey(const ValueKey('tab-menu-close-others')), findsOneWidget);
+    expect(find.byKey(const ValueKey('tab-menu-close-all')), findsOneWidget);
   });
+
+  testWidgets(
+    'Close Others and Close All menu actions use the Core-backed batch coordinator',
+    (tester) async {
+      final api = _MountingRustApi([
+        _treeNode('a', 'Alpha'),
+        _treeNode('b', 'Beta'),
+        _treeNode('c', 'Gamma'),
+      ]);
+      final container = await _pumpShell(tester, api);
+      final controller = container.read(activeNoteProvider.notifier);
+      await controller.openAsTab('a');
+      await controller.openAsTab('b');
+      await controller.openAsTab('c');
+      controller.activateExistingTab('b');
+      container.read(selectedNoteIdProvider.notifier).select('b');
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('shell-tab-b')));
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.f10);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('tab-menu-close-others')));
+      await tester.pumpAndSettle();
+
+      expect(api.calls.where((call) => call.startsWith('close:')), [
+        'close:a',
+        'close:c',
+      ]);
+      expect(find.byKey(const Key('shell-tab-b')), findsOneWidget);
+      expect(find.byKey(const Key('shell-tab-a')), findsNothing);
+      expect(find.byKey(const Key('shell-tab-c')), findsNothing);
+
+      await tester.tap(find.byKey(const Key('shell-tab-b')));
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.f10);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('tab-menu-close-all')));
+      await tester.pumpAndSettle();
+
+      expect(api.calls.where((call) => call.startsWith('close:')), [
+        'close:a',
+        'close:c',
+        'close:b',
+      ]);
+      expect(find.byKey(const Key('shell-tab-strip')), findsOneWidget);
+      expect(find.byKey(const Key('shell-tab-b')), findsNothing);
+      expect(container.read(selectedNoteIdProvider), isNull);
+    },
+  );
+
+  testWidgets('a middle-click tab close waits for the terminal Core result', (
+    tester,
+  ) async {
+    final closeGate = Completer<void>();
+    final api = _MountingRustApi([_treeNode('a', 'Alpha')])
+      ..closeNoteGates['a'] = closeGate;
+    await _pumpShell(tester, api);
+
+    await tester.tap(find.byKey(const ValueKey('workspace-tree-note-a')));
+    await tester.pumpAndSettle();
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.byKey(const Key('shell-tab-a'))),
+      buttons: kMiddleMouseButton,
+    );
+    await gesture.up();
+    await tester.pump();
+
+    expect(api.calls.where((call) => call.startsWith('close:')), ['close:a']);
+    expect(find.byKey(const Key('shell-tab-a')), findsOneWidget);
+    closeGate.complete();
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('shell-tab-a')), findsNothing);
+  });
+
+  testWidgets(
+    'the native app-exit callback cancels on a warning and exits after a clean batch',
+    (tester) async {
+      final api = _MountingRustApi([_treeNode('a', 'Alpha')]);
+      final container = await _pumpShell(tester, api);
+      final controller = container.read(activeNoteProvider.notifier);
+      await controller.openAsTab('a');
+      await controller.openAsTab('b');
+      await tester.pump();
+      api.closeNoteErrors['a'] = const CloseNoteWarning('cleanup warning');
+
+      expect(
+        await tester.binding.handleRequestAppExit(),
+        AppExitResponse.cancel,
+      );
+      await tester.pump();
+      expect(api.calls.where((call) => call.startsWith('close:')), ['close:a']);
+      expect(find.byKey(const Key('shell-tab-a')), findsNothing);
+      expect(find.byKey(const Key('shell-tab-b')), findsOneWidget);
+
+      api.closeNoteErrors.remove('a');
+      expect(await tester.binding.handleRequestAppExit(), AppExitResponse.exit);
+      expect(api.calls.where((call) => call.startsWith('close:')), [
+        'close:a',
+        'close:b',
+      ]);
+    },
+  );
+
+  testWidgets(
+    'the native exit callback visibly refuses while a real lifecycle create is settling',
+    (tester) async {
+      final createGate = Completer<void>();
+      final api = _MountingRustApi([_treeNode('a', 'Alpha')])
+        ..createNoteGate = createGate
+        ..createNoteResult = const NoteState(
+          ast: [],
+          metadata: NoteMetadata(
+            id: 'Created',
+            path: 'Created.md',
+            title: 'Created',
+            lastModified: 0,
+            okfConformant: true,
+          ),
+          baseRevision: 'head',
+          restoredFromDraft: false,
+        );
+      final container = await _pumpShell(tester, api);
+
+      final creating = container
+          .read(lifecycleActionsProvider)
+          .createNote('', 'Created');
+      await tester.pump();
+      expect(api.calls, ['create::Created']);
+
+      expect(
+        await tester.binding.handleRequestAppExit(),
+        AppExitResponse.cancel,
+      );
+      expect(container.read(noteCloseFailureProvider), isA<StateError>());
+      expect(api.calls, ['create::Created']);
+
+      createGate.complete();
+      expect(await creating, isA<LifecycleCompleted>());
+    },
+  );
 
   testWidgets('a focused note tab selects with Enter and Space', (
     tester,

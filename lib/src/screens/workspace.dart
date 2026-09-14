@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' show AppExitResponse;
 
 import 'package:burlmd/src/components/status_message.dart';
 import 'package:burlmd/src/components/visual_parity_fixture.dart';
@@ -27,6 +28,26 @@ class WorkspaceScreen extends ConsumerStatefulWidget {
 
 class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
   var _sessionRestoreStarted = false;
+  late final AppLifecycleListener _appLifecycleListener;
+
+  @override
+  void initState() {
+    super.initState();
+    _appLifecycleListener = AppLifecycleListener(
+      onExitRequested: () async {
+        final completedCleanly = await ref
+            .read(activeNoteProvider.notifier)
+            .closeAllForOrderlyShutdown();
+        return completedCleanly ? AppExitResponse.exit : AppExitResponse.cancel;
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _appLifecycleListener.dispose();
+    super.dispose();
+  }
 
   Future<void> _restoreSessionTabs(WorkspaceSessionState snapshot) async {
     final unavailable = await ref
