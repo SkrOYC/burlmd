@@ -794,6 +794,24 @@ void main() {
       container.read(burlPreferencesProvider).theme,
       BurlThemePreference.system,
     );
+
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('preferences-update-notifications')),
+      180,
+      scrollable: find.descendant(
+        of: find.byKey(const ValueKey('preferences-drawer')),
+        matching: find.byType(Scrollable),
+      ),
+    );
+    expect(container.read(burlPreferencesProvider).updateNotifications, isTrue);
+    await tester.tap(
+      find.byKey(const ValueKey('preferences-update-notifications')),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      container.read(burlPreferencesProvider).updateNotifications,
+      isFalse,
+    );
   });
 
   testWidgets('production sync and history remain honest without Core data', (
