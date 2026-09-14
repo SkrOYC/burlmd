@@ -668,9 +668,9 @@ commit_convention: Conventional Commits
 
 ## Provisional research boundary
 
-TechSpec v2.1.30 (translated from reviewed v1.8.7-provisional) permits research code only under `.constitution/prototypes/`. The Epic G M0 production exceptions remain unchanged. `BURL-M015` and `BURL-M003` may write production code only for their reproducibility and validation bootstrap. The co-merged Tasks v3.2.14 `BURL-M003` adaptation satisfies raw contract version 40's Stage 4 routing requirement when this complete reviewed documentation pull request merges. `BURL-M003` remains incomplete, and implementation remains blocked until the whole reviewed raw-version-40 TechSpec and co-merged Stage 4 adaptation merge. `BURL-O001` remains independently blocked, a maintained stop, and isn't authorized.
+TechSpec v2.2.1 (translated from reviewed v1.8.7-provisional) permits research code only under `.constitution/prototypes/`. The active Epic G M0 production exceptions are `BURL-G001` through `BURL-G005`, `BURL-G007`, and `BURL-M015`. Raw contract version 40 and `BURL-M003` ci_bootstrap are dormant. They permit no bootstrap, recovery, production, or hosted execution. The private Linux-first path contains no hosted-execution authority and must not invoke the `BURL-M003` workflow, role, sealing, or aggregation path. `BURL-O001` remains independently blocked, a maintained stop, and isn't authorized.
 
-The reviewed raw-version-40 TechSpec and Stage 4 BURL-M003 adaptation must merge before the recovery implementation starts. Complete Epic M, including the reviewed `BURL-M003` recovery implementation, fresh accepted managed run, exact three-file evidence pull request, epic closeout, and reconciliation. Then pause before Epic H or Epic G implementation until the user explicitly resumes that work. Every other production ticket remains blocked by its own decision evidence and matching Stage 3 and Stage 4 adaptation. Except for these contract-scoped exceptions, production directories (`lib/`, `rust/`, `linux/`, and `macos/`) are read-only inputs to this research wave.
+If the user resumes upstream planning, a later approved Stage 3/4 adaptation can make the retained raw-version-40 protocol eligible for BURL-M003. Only then does its recovery sequence apply: complete Epic M, including the reviewed `BURL-M003` recovery implementation, fresh accepted managed run, exact three-file evidence pull request, epic closeout, and reconciliation. Until then, BURL-M003 cannot precede or block the active private Epic G work. Every other production ticket remains blocked by its own decision evidence and matching Stage 3 and Stage 4 adaptation. Except for the active contract-scoped exceptions, production directories (`lib/`, `rust/`, `linux/`, and `macos/`) are read-only inputs to this research wave.
 
 The five exact prototype roots and verification commands are machine-readable in `contracts/provisional-spikes.toml`. Its allowlist is exhaustive: each Spike may write only its named prototype root and report path. Every unlisted repository path is read-only. Framework bookkeeping may update the owning active Task after the Spike process exits, but that isn't part of the Spike's write authority.
 
@@ -682,7 +682,7 @@ Research Tasks stop on a failed safety or fidelity gate. A performance miss is e
 
 ## Generated-binding bootstrap checker
 
-The merged base for `BURL-M003` doesn't contain `scripts/check-generated-bindings.sh`. Before any validation gate invokes that path, `BURL-M003` must implement the checker under its allocated `scripts/**` scope. The implementation must not import or cherry-pick the coordinating Epic G branch.
+The merged base for `BURL-M003` doesn't contain `scripts/check-generated-bindings.sh`. After the user resumes upstream planning and a later approved Stage 3/4 adaptation authorizes BURL-M003, it must implement the checker under its allocated `scripts/**` scope before any validation gate invokes that path. The implementation must not import or cherry-pick the coordinating Epic G branch.
 
 The checker must perform these steps in order:
 
@@ -698,7 +698,7 @@ The stale-binding diagnostic names both generated surfaces and instructs the dev
 
 `BURL-M003` uses a reviewed recovery to replace its managed-validation trust anchor. The base history retains reviewed BURL-M015 commit `6d30b7445b0108a6a5dd963cd2aa2ae5f5090485` and the original PR #15 BURL-M003 anchor `f72659cef4487317c9e984e01f775a358f814a41`. The original anchor's first parent is the BURL-M015 commit.
 
-Rebase-merge the complete reviewed raw-version-40 TechSpec and Stage 4 BURL-M003 adaptation before implementation. This closure doesn't require a self-referential landed-SHA field or a placeholder commit.
+For future BURL-M003 execution only after the user resumes upstream planning and a later approved Stage 3/4 adaptation authorizes it, rebase-merge the complete reviewed raw-version-40 TechSpec and Stage 4 adaptation before implementation. This closure doesn't require a self-referential landed-SHA field or a placeholder commit.
 
 Create one implementation commit on `fix/epic-m-hosted-runner-recovery` from that reviewed documentation tip. The commit receives local validation, independent milestone review, and pull-request review. Rebase-merging the implementation pull request makes the resulting `master` tip the replacement `TRUST_ANCHOR_SHA`. Set `BASE_SHA` to its first parent, which is the reviewed documentation tip. If that reviewed recovery later fails under the same raw-version-40 contract, apply each correction as one separately reviewed commit from the immediately preceding reviewed `master` tip. That preceding tip becomes `BASE_SHA`, and the correction's merged tip becomes the next replacement anchor. Every base must retain the merged approved documentation and the original PR #15 and BURL-M015 ancestry. Never use a source-branch documentation SHA, arbitrary ancestor, or several correction commits in one source range. The exact `BASE_SHA..TRUST_ANCHOR_SHA` range contains one reviewed implementation commit and must satisfy the unchanged `bootstrap_write_allowlist`. Every anchor requires fresh self-validation and the dedicated reviewed evidence pull request.
 
@@ -872,7 +872,7 @@ The outer Bubblewrap invocation is the containment authority for mount, network,
 
 Before each `exec`, measure the canonical complete-argv encoding and reject a value at or above half of `getconf ARG_MAX`. The per-session SHA-256, not this size guard, binds the invocation. Remove every ephemeral leaf after success, failure, interruption, or timeout. Each per-device space check is a start guard only. It isn't a phase transcript, phase-peak measurement, or packaging-capacity claim.
 
-This closure view authorizes only `BURL-M003`. The co-merged Tasks v3.2.14 adaptation satisfies raw contract version `40`'s Stage 4 routing requirement when the complete reviewed documentation pull request merges. It updates only BURL-M003's raw-version and diagnostic references. Earlier BURL-G011, BURL-P002, and BURL-O012 adaptations remain historical. For each candidate namespace and session payload, the parent launches only Bubblewrap. The existing trusted preparation, identity checks, and pinned post-session `flock` verifier remain required and don't form a general process allowlist. `BURL-O001` remains under `maintained_stop_tickets`, which preserves the Stage 3 stop without authorizing implementation.
+This closure view is a dormant future-execution protocol for `BURL-M003`; it authorizes nothing in this pass. The co-merged Tasks v3.2.14 adaptation is historical and updates only BURL-M003's raw-version and diagnostic references. It cannot make BURL-M003 eligible before the user resumes upstream planning and a later approved Stage 3/4 adaptation authorizes it. Earlier BURL-G011, BURL-P002, and BURL-O012 adaptations remain historical. If future BURL-M003 execution becomes eligible, each candidate namespace and session payload must launch only Bubblewrap. The existing trusted preparation, identity checks, and pinned post-session `flock` verifier remain required and don't form a general process allowlist. `BURL-O001` remains under `maintained_stop_tickets`, which preserves the Stage 3 stop without authorizing implementation.
 
 ### Emit bounded failure diagnostics on hosted macOS
 
@@ -1256,12 +1256,20 @@ does not produce a package, publish an artifact, or qualify a supported
 platform.
 
 `BURL-G001` owns `scripts/visual-regression.sh`. Before a capture, it must
-start a private headless Sway compositor and clear ambient `DISPLAY`,
-`WAYLAND_DISPLAY`, and `SWAYSOCK`. The harness must use its private runtime
-directory, compositor socket, Wayland display, and input state. It must accept
-only the application PID that `scripts/smoke-shot.sh` writes through its owned
-inherited file descriptor. The harness must verify that PID's Sway client
-geometry twice, separated by a compositor tick, before it captures.
+clear ambient `DISPLAY`, `WAYLAND_DISPLAY`, and `SWAYSOCK` for the entire
+launch: the harness, private headless Sway compositor, `scripts/smoke-shot.sh`,
+and application. The harness can set only its private Wayland variables for the
+child that needs them. It must use its private runtime directory, compositor
+socket, Wayland display, and input state. It must accept only the application
+PID that `scripts/smoke-shot.sh` writes through its owned inherited file
+descriptor. The harness must verify that PID's Sway client geometry twice,
+separated by a compositor tick, before it captures.
+
+Before any visual proof is eligible, `BURL-G001` must run a regression with a
+poisoned ambient `DISPLAY` value. The regression must prove that the harness,
+Sway, smoke child, and application receive no `DISPLAY` value and use only the
+private Wayland endpoint. No pre-existing source is verified safe by this
+requirement.
 
 The private capture is `1878x989`. It retains the GTK HeaderBar in the PNG but
 excludes its 47 rows from the product-pixel comparison. This is a local
@@ -1282,6 +1290,11 @@ analysis. Any ticket that changes an FFI surface must also run
 `./scripts/check-generated-bindings.sh`; it regenerates the two binding
 surfaces, rejects stale output, and leaves the pre-check tree unchanged. The
 `BURL-G004` command also requires the existing Core-session readiness input.
+Before `BURL-G002` imports the platform application-support API, it must declare
+the planned direct dependency with `flutter pub add path_provider@2.1.6` and
+commit the resolver-generated `pubspec.lock`. The lockfile is absent from this
+specification pass, so the ticket must verify the resolved package graph rather
+than replaying an earlier lockfile.
 
 Stage 4 must quote the new private commands from the front matter, make
 `BURL-G002` through `BURL-G005` and `BURL-G007` depend on `BURL-G001` for the

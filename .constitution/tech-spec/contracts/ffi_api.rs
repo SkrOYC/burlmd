@@ -13,8 +13,10 @@
 // never assigns Remote history or Object transfer/storage to Provider.
 // Research-only Tasks must use contracts/provisional-spikes.toml and must not
 // implement or extend this FFI. The named Epic G exceptions may implement
-// their specified contracts. BURL-M015 and BURL-M003 may bootstrap validation
-// but may not change this interface. Each remaining production contract waits
+// their specified contracts. BURL-M015 may bootstrap validation. BURL-M003's
+// bootstrap is dormant pending user-resumed upstream planning and a later
+// approved Stage 3/4 adaptation, and may not change this interface. Each
+// remaining production contract waits
 // only for its own evidence, final Stage 3 reconciliation, and Stage 4
 // adaptation.
 //
