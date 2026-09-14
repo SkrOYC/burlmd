@@ -1,5 +1,5 @@
 schema_version = 40
-stage = "tech-spec-v2.2.2-provisional"
+stage = "tech-spec-v2.3.0-provisional"
 production_implementation_authorized = false
 # The Epic G entries preserve the M0 exception. BURL-M015 is the only active
 # bootstrap exception. The BURL-M003 raw protocol is dormant and permits no
