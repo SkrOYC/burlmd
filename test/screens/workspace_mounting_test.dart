@@ -63,6 +63,8 @@ class _MountingRustApi extends RustApi {
   List<NoteMetadata> searchResult = const [];
   String? searchQuery;
   int? searchLimit;
+  final Map<String, List<NoteMetadata>> titleResults = {};
+  final Map<String, List<NoteMetadata>> backlinkResults = {};
   Object? sessionLoadError;
   Object? sessionSaveError;
 
@@ -177,6 +179,18 @@ class _MountingRustApi extends RustApi {
     searchQuery = query;
     searchLimit = limit;
     return searchResult;
+  }
+
+  @override
+  Future<List<NoteMetadata>> findNotesByTitle(String query, int limit) async {
+    calls.add('title:$query:$limit');
+    return titleResults[query] ?? const [];
+  }
+
+  @override
+  Future<List<NoteMetadata>> backlinks(String noteId) async {
+    calls.add('backlinks:$noteId');
+    return backlinkResults[noteId] ?? const [];
   }
 
   @override
@@ -649,6 +663,61 @@ void main() {
       expect(find.byKey(const ValueKey('preferences-drawer')), findsNothing);
     },
   );
+
+  testWidgets('keyboard title and backlink navigation open Core-backed tabs', (
+    tester,
+  ) async {
+    final api = _MountingRustApi([_treeNode('a', 'Alpha')])
+      ..titleResults['Pro'] = [_metadata('project', 'Project plan')]
+      ..backlinkResults['project'] = [_metadata('inbound', 'Meeting notes')];
+    final container = await _pumpShell(tester, api);
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyP);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('note-navigation-palette')),
+      findsOneWidget,
+    );
+
+    await tester.enterText(find.byType(TextField), 'Pro');
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+
+    expect(api.calls, contains('title:Pro:25'));
+    expect(container.read(selectedNoteIdProvider), 'project');
+    expect(api.calls, contains('open:project'));
+    expect(
+      container.read(openNoteSessionsProvider).map((note) => note.metadata.id),
+      contains('project'),
+    );
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyP);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+    expect(api.calls, contains('backlinks:project'));
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+
+    expect(container.read(selectedNoteIdProvider), 'inbound');
+    expect(api.calls, contains('open:inbound'));
+    expect(
+      container.read(openNoteSessionsProvider).map((note) => note.metadata.id),
+      contains('inbound'),
+    );
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyK);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('search-palette')), findsOneWidget);
+  });
 
   testWidgets('workspace overlays move and retain focus inside the modal', (
     tester,

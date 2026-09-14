@@ -438,6 +438,17 @@ tickets:
     title: Surface keyboard title jump and backlinks
     type: Feature
     effort: 5
+    deviations:
+      - files:
+          - lib/src/design/workspace_shell.dart
+          - lib/l10n/**
+          - test/screens/workspace_mounting_test.dart
+        justification: Mount the title-jump and backlinks surface in the production
+          shell with keyboard invocation and localized labels, preserving the
+          existing Ctrl+K full-text search. These epic-owned paths provide the
+          integration needed by the ticket's existing keyboard-only acceptance;
+          the mounted-shell regression proves the real keyboard-to-Core-tab
+          route, and providers continue to own state and Core access.
     depends_on:
       - BURL-G001
       - BURL-G004
@@ -481,7 +492,7 @@ tickets:
       - flow-link-graph
       - flow-search
     certainty: assumed
-    status: planned
+    status: done
   - id: BURL-G008
     title: Implement Core-owned undo and redo
     type: Feature

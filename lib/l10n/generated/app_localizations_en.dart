@@ -89,6 +89,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get workspaceSearchShortcutControl => 'Ctrl+K';
 
   @override
+  String get workspaceJumpToNote => 'Jump to note…';
+
+  @override
+  String get workspaceJumpToNoteTooltip => 'Jump to note';
+
+  @override
+  String get workspaceJumpShortcutMacos => '⌘P';
+
+  @override
+  String get workspaceJumpShortcutControl => 'Ctrl+P';
+
+  @override
   String get workspaceDismissOverlay => 'Dismiss overlay';
 
   @override
@@ -196,6 +208,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get workspaceCloseSearch => 'Close search';
+
+  @override
+  String get workspaceCloseNoteNavigation => 'Close note navigation';
 
   @override
   String get workspaceEditorPreferences => 'Editor Preferences';
@@ -559,4 +574,25 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get searchRescanHint =>
       'If this keeps happening, run \"Rescan workspace\" to rebuild the search index.';
+
+  @override
+  String get noteNavigationTitle => 'Jump to note';
+
+  @override
+  String get noteNavigationHint => 'Type a title prefix';
+
+  @override
+  String get noteNavigationTypePrompt => 'Type a title prefix to find a note';
+
+  @override
+  String get noteNavigationNoMatches => 'No notes match this title';
+
+  @override
+  String get noteNavigationBacklinks => 'Notes that link here';
+
+  @override
+  String get noteNavigationNoBacklinks => 'No notes link here';
+
+  @override
+  String get noteNavigationFailed => 'Could not load notes';
 }
