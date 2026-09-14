@@ -1,6 +1,6 @@
-// FORWARD STATUS (live TechSpec v2.1.30; translated from reviewed v1.8.7-provisional): this is the delivered
+// FORWARD STATUS (live TechSpec v2.2.2; translated from reviewed v1.8.7-provisional): this is the delivered
 // brownfield interface, with the Epic G session-restore exception specified.
-// It is not otherwise an implementation-ready contract for structured PRD v2.0.5 and
+// It is not otherwise an implementation-ready contract for structured PRD v2.0.7 and
 // Architecture v2.1.2.
 // In particular, AstNode is a rendering projection rather than the required
 // canonical extended AST; the OAuth redirect flow is superseded by the

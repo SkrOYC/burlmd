@@ -1,5 +1,5 @@
 schema_version = 40
-stage = "tech-spec-v2.1.30-provisional"
+stage = "tech-spec-v2.2.2-provisional"
 production_implementation_authorized = false
 # The Epic G entries preserve the M0 exception. BURL-M015 is the only active
 # bootstrap exception. The BURL-M003 raw protocol is dormant and permits no
@@ -49,8 +49,8 @@ compare_every_captured_identity_field_and_role_signer_with_trusted_expected_iden
 status = "deferred-pending-upstream-resumption"
 generated_binding_checker = "scripts/check-generated-bindings.sh"
 generated_binding_checker_owner = "BURL-M003"
-generated_binding_checker_base_state = "absent"
-generated_binding_checker_behavior = "After the user resumes upstream planning and a later approved Stage 3/4 adaptation makes future BURL-M003 execution eligible, implement the checker before any gate invokes it without importing or cherry-picking the coordinating Epic G branch. Snapshot a path-sorted SHA-256 manifest and byte-for-byte backup of rust/src/frb_generated.rs and every regular file under lib/src/rust. Run flutter_rust_bridge_codegen generate using provisional version 2.12.0. On Linux, use linux_candidate_closure_view.cmp_executable for both byte comparisons. Compare file sets and bytes, fail on generator error or stale output, and restore and verify the exact precheck state on success, failure, or interruption."
+generated_binding_checker_base_state = "present in merged base 40cdce12de2d9c93eab2391b44f819fee62508d4 and this checkout"
+generated_binding_checker_behavior = "After the user resumes upstream planning and a later approved Stage 3/4 adaptation makes future BURL-M003 execution eligible, revalidate the existing checker and correct it if revalidation finds a defect before any gate invokes it. Do not reimplement it or import or cherry-pick the coordinating Epic G branch. Snapshot a path-sorted SHA-256 manifest and byte-for-byte backup of rust/src/frb_generated.rs and every regular file under lib/src/rust. Run flutter_rust_bridge_codegen generate using provisional version 2.12.0. On Linux, use linux_candidate_closure_view.cmp_executable for both byte comparisons. Compare file sets and bytes, fail on generator error or stale output, and restore and verify the exact precheck state on success, failure, or interruption."
 candidate_phase = "trusted-workflow-dispatch-with-tested-source-checked-out-as-data"
 draft_pull_request = "candidate-visibility-and-review-only"
 aggregation = "clean-trust-anchor-checkout-only"

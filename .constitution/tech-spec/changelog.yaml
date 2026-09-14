@@ -1,4 +1,14 @@
 entries:
+  - version: v2.2.2
+    date: 2026-09-13
+    fixed:
+      - "Corrected the dormant BURL-M003 generated-binding checker metadata. The non-mutating checker exists in merged base 40cdce12de2d9c93eab2391b44f819fee62508d4 and in this checkout. Future authorized execution revalidates it and corrects a defect if needed; it does not reimplement the checker."
+      - "Synchronized the live FFI forward-status comment and provisional raw-contract stage marker with this Stage 3 patch pass and PRD v2.0.7. Raw schema version 40 is unchanged."
+      - "Aligned the provisional-spikes sidecar with the dormant protocol. Historical Tasks v3.2.14 remains context only; it does not authorize, settle, or route future BURL-M003 execution."
+    upstream:
+      prd: v2.0.7
+      architecture: v2.1.2
+    by: patch-lane
   - version: v2.2.1
     date: 2026-09-13
     added:

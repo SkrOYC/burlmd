@@ -668,7 +668,7 @@ commit_convention: Conventional Commits
 
 ## Provisional research boundary
 
-TechSpec v2.2.1 (translated from reviewed v1.8.7-provisional) permits research code only under `.constitution/prototypes/`. The active Epic G M0 production exceptions are `BURL-G001` through `BURL-G005`, `BURL-G007`, and `BURL-M015`. Raw contract version 40 and `BURL-M003` ci_bootstrap are dormant. They permit no bootstrap, recovery, production, or hosted execution. The private Linux-first path contains no hosted-execution authority and must not invoke the `BURL-M003` workflow, role, sealing, or aggregation path. `BURL-O001` remains independently blocked, a maintained stop, and isn't authorized.
+TechSpec v2.2.2 (translated from reviewed v1.8.7-provisional) permits research code only under `.constitution/prototypes/`. The active Epic G M0 production exceptions are `BURL-G001` through `BURL-G005`, `BURL-G007`, and `BURL-M015`. Raw contract version 40 and `BURL-M003` ci_bootstrap are dormant. They permit no bootstrap, recovery, production, or hosted execution. The private Linux-first path contains no hosted-execution authority and must not invoke the `BURL-M003` workflow, role, sealing, or aggregation path. `BURL-O001` remains independently blocked, a maintained stop, and isn't authorized.
 
 If the user resumes upstream planning, a later approved Stage 3/4 adaptation can make the retained raw-version-40 protocol eligible for BURL-M003. Only then does its recovery sequence apply: complete Epic M, including the reviewed `BURL-M003` recovery implementation, fresh accepted managed run, exact three-file evidence pull request, epic closeout, and reconciliation. Until then, BURL-M003 cannot precede or block the active private Epic G work. Every other production ticket remains blocked by its own decision evidence and matching Stage 3 and Stage 4 adaptation. Except for the active contract-scoped exceptions, production directories (`lib/`, `rust/`, `linux/`, and `macos/`) are read-only inputs to this research wave.
 
@@ -682,7 +682,7 @@ Research Tasks stop on a failed safety or fidelity gate. A performance miss is e
 
 ## Generated-binding bootstrap checker
 
-The merged base for `BURL-M003` doesn't contain `scripts/check-generated-bindings.sh`. After the user resumes upstream planning and a later approved Stage 3/4 adaptation authorizes BURL-M003, it must implement the checker under its allocated `scripts/**` scope before any validation gate invokes that path. The implementation must not import or cherry-pick the coordinating Epic G branch.
+The merged base for `BURL-M003` includes `scripts/check-generated-bindings.sh`. After the user resumes upstream planning and a later approved Stage 3/4 adaptation authorizes BURL-M003, revalidate the checker and correct it if needed before any validation gate invokes that path. Keep the checker non-mutating. Do not replace it by importing or cherry-picking the coordinating Epic G branch.
 
 The checker must perform these steps in order:
 
