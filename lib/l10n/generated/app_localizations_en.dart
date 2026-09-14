@@ -536,6 +536,11 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String treeActionFailedWithCleanup(String error, String cleanupError) {
+    return 'The action failed: $error. Cleanup also needs attention: $cleanupError';
+  }
+
+  @override
   String get codeCopy => 'Copy';
 
   @override

@@ -74,6 +74,7 @@ CAPTURE_PPM="$(mktemp "$CAPTURE_DIR/.visual-regression-${NAME}.capture.XXXXXX.pp
 BASELINE_PPM="$(mktemp "$CAPTURE_DIR/.visual-regression-${NAME}.baseline.XXXXXX.ppm")"
 APP_PID_FILE=""
 APP_PID_FD=""
+APP_PID_READ_FD=""
 VISUAL_RUNTIME_DIR=""
 VISUAL_SWAY_CONFIG=""
 VISUAL_SWAY_LOG=""
@@ -94,6 +95,10 @@ cleanup() {
   if [[ -n "$APP_PID_FD" ]]; then
     exec {APP_PID_FD}>&- || true
   fi
+  if [[ -n "$APP_PID_READ_FD" ]]; then
+    exec {APP_PID_READ_FD}<&- || true
+  fi
+  [[ -z "$APP_PID_FILE" ]] || rm -f -- "$APP_PID_FILE"
   rm -f "$CAPTURE_PPM" "$BASELINE_PPM"
   if [[ -n "$VISUAL_RUNTIME_DIR" && -d "$VISUAL_RUNTIME_DIR" && "$VISUAL_RUNTIME_DIR" == /tmp/burlmd-visual-wayland.* ]]; then
     rm -rf -- "$VISUAL_RUNTIME_DIR"
@@ -453,9 +458,12 @@ DART
 
 smoke_app_pid() {
   local app_pid
-  [[ "$APP_PID_FD" =~ ^[1-9][0-9]*$ ]] || return 1
-  [[ -f "/proc/self/fd/$APP_PID_FD" && -O "/proc/self/fd/$APP_PID_FD" ]] || return 1
-  app_pid="$(head -n 1 "/proc/self/fd/$APP_PID_FD")" || return 1
+  [[ "$APP_PID_READ_FD" =~ ^[1-9][0-9]*$ ]] || return 1
+  [[ -f "/proc/self/fd/$APP_PID_READ_FD" && -O "/proc/self/fd/$APP_PID_READ_FD" ]] || return 1
+  # This is a distinct parent-owned open file description, opened before the
+  # handoff name was unlinked. Its offset remains at zero while smoke-shot
+  # writes through the inherited writer descriptor.
+  read -r -u "$APP_PID_READ_FD" app_pid || return 1
   [[ "$app_pid" =~ ^[1-9][0-9]*$ ]] || return 1
   kill -0 "$app_pid" 2>/dev/null || return 1
   printf '%s\n' "$app_pid"
@@ -550,14 +558,32 @@ exec {APP_PID_FD}<> "$APP_PID_FILE" || {
   echo "visual-regression: could not open the private PID handoff" >&2
   exit 1
 }
+exec {APP_PID_READ_FD}< "$APP_PID_FILE" || {
+  echo "visual-regression: could not open the private PID reader" >&2
+  exit 1
+}
+# The runtime directory is visible to the native client. Remove the sole name
+# before smoke-shot starts: the trusted launcher retains only APP_PID_FD, while
+# this visual parent reads from its private descriptor.
+rm -f -- "$APP_PID_FILE" || {
+  echo "visual-regression: could not unlink the private PID handoff" >&2
+  exit 1
+}
+APP_PID_FILE=""
 
 # The smoke harness and application receive no ambient X11 display. They use
 # only the private runtime directory and Wayland socket created above.
-env -u DISPLAY \
-  "XDG_RUNTIME_DIR=$VISUAL_RUNTIME_DIR" "WAYLAND_DISPLAY=$VISUAL_WAYLAND_DISPLAY" \
-  "SWAYSOCK=$VISUAL_SWAY_SOCKET" GDK_BACKEND=wayland \
-  "BURLMD_SMOKE_SHOT_DIR=$CAPTURE_DIR" "BURLMD_SMOKE_APP_PID_FD=$APP_PID_FD" \
-  "$REPO_ROOT/scripts/smoke-shot.sh" "$NAME" &
+(
+  # APP_PID_READ_FD is exclusively for this parent and must not cross the
+  # smoke-launcher exec boundary. smoke-shot itself revokes APP_PID_FD before
+  # it execs the native application.
+  exec {APP_PID_READ_FD}<&-
+  exec env -u DISPLAY \
+    "XDG_RUNTIME_DIR=$VISUAL_RUNTIME_DIR" "WAYLAND_DISPLAY=$VISUAL_WAYLAND_DISPLAY" \
+    "SWAYSOCK=$VISUAL_SWAY_SOCKET" GDK_BACKEND=wayland \
+    "BURLMD_SMOKE_SHOT_DIR=$CAPTURE_DIR" "BURLMD_SMOKE_APP_PID_FD=$APP_PID_FD" \
+    "$REPO_ROOT/scripts/smoke-shot.sh" "$NAME"
+) &
 SMOKE_PID=$!
 # GTK's HeaderBar occupies the first 47 rows in this reproducible Linux
 # capture. It is host-owned (font AA, close button, and compositor rendering),

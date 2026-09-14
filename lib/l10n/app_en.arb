@@ -397,6 +397,8 @@
   "@treeMoveDestinationTitle": { "description": "Move-note destination dialog title." },
   "treeActionFailed": "The action failed: {error}",
   "@treeActionFailed": { "description": "Lifecycle action failure status.", "placeholders": { "error": { "type": "String", "example": "Path unavailable" } } },
+  "treeActionFailedWithCleanup": "The action failed: {error}. Cleanup also needs attention: {cleanupError}",
+  "@treeActionFailedWithCleanup": { "description": "Lifecycle action failure status when the attempt to retire an unpresentable inactive note also reports a Core refusal or terminal warning.", "placeholders": { "error": { "type": "String", "example": "Could not refresh the remapped note" }, "cleanupError": { "type": "String", "example": "Could not close the remapped note" } } },
   "codeCopy": "Copy",
   "@codeCopy": { "description": "Code-block copy button label." },
   "codeCopied": "Copied",
