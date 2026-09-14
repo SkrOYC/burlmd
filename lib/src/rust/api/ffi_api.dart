@@ -11,6 +11,7 @@ import '../markdown/ast.dart';
 import '../workspace/bootstrap.dart';
 import '../workspace/lifecycle.dart';
 import '../workspace/persist.dart';
+import '../workspace/session_snapshot.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 part 'ffi_api.freezed.dart';
@@ -168,6 +169,33 @@ Future<CloseNoteResult> closeNote({required String noteId}) =>
 /// recovered work on startup (CAP-WS-03).
 Future<List<NoteMetadata>> pendingDrafts() =>
     RustLib.instance.api.crateApiFfiApiPendingDrafts();
+
+/// Loads Core-owned, presentation-only state for the active Workspace.
+///
+/// Core, rather than the caller, selects the Workspace. Invalid or corrupt
+/// current data is quarantined and returns the writable empty default; a later
+/// version is preserved and refuses normal-path writes until BURL-O005 owns an
+/// explicitly safe recovery path.
+Future<ActiveWorkspaceSessionSnapshot> loadActiveWorkspaceSessionSnapshot() =>
+    RustLib.instance.api.crateApiFfiApiLoadActiveWorkspaceSessionSnapshot();
+
+/// Atomically saves presentation-only state for the active Workspace.
+///
+/// The FFI intentionally does not accept `workspace_id` or `schema_version`:
+/// Core supplies both, validates every identity, and owns the partition.
+Future<void> saveActiveWorkspaceSessionSnapshot({
+  required ActiveWorkspaceSessionSnapshot snapshot,
+}) => RustLib.instance.api.crateApiFfiApiSaveActiveWorkspaceSessionSnapshot(
+  snapshot: snapshot,
+);
+
+/// Moves an invalid current-version active snapshot out of its live path while
+/// preserving its bytes. It never clears the refusal recorded for a later
+/// schema version.
+Future<void> clearCorruptActiveWorkspaceSessionSnapshot() => RustLib
+    .instance
+    .api
+    .crateApiFfiApiClearCorruptActiveWorkspaceSessionSnapshot();
 
 /// Creates a Note in `directory_path` (empty string for the bundle root) with
 /// an OKF-conformant frontmatter block, and **opens it**. Its

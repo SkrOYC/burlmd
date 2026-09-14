@@ -354,6 +354,9 @@ class NoteController extends Notifier<NoteState?> {
             return;
           }
         }
+        // Core has retired the outgoing session. Until the replacement opens,
+        // the snapshot must not claim an active Note.
+        ref.read(workspaceSessionProvider.notifier).setActiveNoteId(null);
         if (!_isOpenAdmissionCurrent(
           lifecycleAdmission,
           admittedByLifecycle: admittedByLifecycle,
@@ -362,6 +365,7 @@ class NoteController extends Notifier<NoteState?> {
           // boundary while it was pending. This snapshot names a retired
           // session, so do not retain it or continue into the selected id.
           state = null;
+          ref.read(workspaceSessionProvider.notifier).setActiveNoteId(null);
           ref.read(keystrokeWriteFailureProvider.notifier).report(null);
           return;
         }
@@ -373,10 +377,16 @@ class NoteController extends Notifier<NoteState?> {
       )) {
         // Lifecycle work may have deleted, renamed, or rekeyed this target
         // while `open_note` was in flight. Its stale success cannot mount it.
-        if (switching) state = null;
+        if (switching) {
+          state = null;
+          ref.read(workspaceSessionProvider.notifier).setActiveNoteId(null);
+        }
         return;
       }
       state = opened;
+      ref
+          .read(workspaceSessionProvider.notifier)
+          .setActiveNoteId(opened.metadata.id);
       // A successful open clears any earlier failure so the surface
       // reflects the present, not the last thing that went wrong — both
       // surfaces: the old Note's keystroke-write failure belongs to a
@@ -398,6 +408,7 @@ class NoteController extends Notifier<NoteState?> {
         // The outgoing close completed, so retaining its old state as a live
         // editor would target a deregistered Core session.
         state = null;
+        ref.read(workspaceSessionProvider.notifier).setActiveNoteId(null);
         ref.read(keystrokeWriteFailureProvider.notifier).report(null);
       } else {
         final stillOpen = state?.metadata.id;
@@ -474,8 +485,21 @@ class NoteController extends Notifier<NoteState?> {
   /// address a dead identifier and fail. The returned post-operation state is
   /// authoritative; adopting it directly keeps the editor anchored to the
   /// same live session under its new id.
-  void adopt(NoteState newState) {
+  void adopt(NoteState newState, {String? oldId}) {
+    final previousId = oldId ?? state?.metadata.id;
     state = newState;
+    if (previousId != null && previousId != newState.metadata.id) {
+      ref
+          .read(workspaceSessionProvider.notifier)
+          .rekeyOpenNoteId(
+            oldNoteId: previousId,
+            newNoteId: newState.metadata.id,
+          );
+    } else {
+      ref
+          .read(workspaceSessionProvider.notifier)
+          .setActiveNoteId(newState.metadata.id);
+    }
   }
 
   /// Closes the editor without touching the Core (`SHEL-E005`): the Note it
@@ -488,6 +512,7 @@ class NoteController extends Notifier<NoteState?> {
   /// an impossibility. This mirrors what a successful open does.
   void clear() {
     state = null;
+    ref.read(workspaceSessionProvider.notifier).setActiveNoteId(null);
     ref.read(noteSwitchingProvider.notifier).set(false);
     ref.read(editorErrorProvider.notifier).report(null);
     ref.read(noteCloseFailureProvider.notifier).acknowledge();

@@ -578,7 +578,7 @@ class LifecycleActions {
         newId: newId,
       ),
     );
-    _ref.read(activeNoteProvider.notifier).adopt(newState);
+    _ref.read(activeNoteProvider.notifier).adopt(newState, oldId: oldId);
     signal.clear();
   }
 

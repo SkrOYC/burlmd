@@ -17,6 +17,7 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated_io.dart';
 import 'workspace/bootstrap.dart';
 import 'workspace/lifecycle.dart';
 import 'workspace/persist.dart';
+import 'workspace/session_snapshot.dart';
 
 abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   RustLibApiImplPlatform({
@@ -28,6 +29,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   String dco_decode_String(dynamic raw);
+
+  @protected
+  ActiveWorkspaceSessionSnapshot dco_decode_active_workspace_session_snapshot(
+    dynamic raw,
+  );
 
   @protected
   AppError dco_decode_app_error(dynamic raw);
@@ -43,6 +49,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   bool dco_decode_bool(dynamic raw);
+
+  @protected
+  ActiveWorkspaceSessionSnapshot
+  dco_decode_box_autoadd_active_workspace_session_snapshot(dynamic raw);
 
   @protected
   AppError dco_decode_box_autoadd_app_error(dynamic raw);
@@ -176,6 +186,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   RangeEditResult dco_decode_range_edit_result(dynamic raw);
 
   @protected
+  SessionSyncPresentation dco_decode_session_sync_presentation(dynamic raw);
+
+  @protected
   StructuralEdit dco_decode_structural_edit(dynamic raw);
 
   @protected
@@ -208,6 +221,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   String sse_decode_String(SseDeserializer deserializer);
 
   @protected
+  ActiveWorkspaceSessionSnapshot sse_decode_active_workspace_session_snapshot(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   AppError sse_decode_app_error(SseDeserializer deserializer);
 
   @protected
@@ -221,6 +239,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   bool sse_decode_bool(SseDeserializer deserializer);
+
+  @protected
+  ActiveWorkspaceSessionSnapshot
+  sse_decode_box_autoadd_active_workspace_session_snapshot(
+    SseDeserializer deserializer,
+  );
 
   @protected
   AppError sse_decode_box_autoadd_app_error(SseDeserializer deserializer);
@@ -376,6 +400,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   RangeEditResult sse_decode_range_edit_result(SseDeserializer deserializer);
 
   @protected
+  SessionSyncPresentation sse_decode_session_sync_presentation(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   StructuralEdit sse_decode_structural_edit(SseDeserializer deserializer);
 
   @protected
@@ -408,6 +437,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_String(String self, SseSerializer serializer);
 
   @protected
+  void sse_encode_active_workspace_session_snapshot(
+    ActiveWorkspaceSessionSnapshot self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_app_error(AppError self, SseSerializer serializer);
 
   @protected
@@ -421,6 +456,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_bool(bool self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_active_workspace_session_snapshot(
+    ActiveWorkspaceSessionSnapshot self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_box_autoadd_app_error(
@@ -635,6 +676,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_range_edit_result(
     RangeEditResult self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_session_sync_presentation(
+    SessionSyncPresentation self,
     SseSerializer serializer,
   );
 
