@@ -1,4 +1,17 @@
 entries:
+  - version: v2.2.0
+    date: 2026-09-13
+    added:
+      - "Defined private Linux checkout verification for the approved Epic G subset: tests, static analysis, non-mutating generated-binding checks where applicable, and a private headless Sway desktop smoke."
+    changed:
+      - "Defined private-milestone applicability that excludes BURL-M003 managed validation without changing its three-role contracts, completion guard, or future public-release matrix."
+      - "Required the private harness to clear ambient display state, verify its launched application PID twice at 1878x989, and exclude the 47-pixel host HeaderBar from product comparison."
+      - "Distinguished a self-generated private smoke baseline from a reviewed zero-pixel regression baseline, and required a Stage 4 active-and-deferred G-plan adaptation before implementation."
+      - "Preserved the implicit production STOP, independent Stage 3 generated-binding revalidation, and existing Rust and Dart review obligations outside the approved private G subset."
+    upstream:
+      prd: v2.0.6
+      architecture: v2.1.2
+    by: stage
   - version: v2.1.30
     date: 2026-09-13
     changed:
