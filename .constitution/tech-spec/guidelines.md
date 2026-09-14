@@ -496,13 +496,13 @@ layout:
     purpose: "Legacy ambient-display manual capture, used by private Linux only through visual-regression.sh"
   - path: scripts/visual-regression.sh
     purpose: BURL-G001 private headless Sway desktop smoke and zero-pixel shell regression gate
-    exists: false
+    exists: true
   - path: test/goldens/shell-g001-linux.png
     purpose: BURL-G001 approved private Linux shell reference image
-    exists: false
+    exists: true
   - path: .constitution/evidence/BURL-G001
     purpose: BURL-G001 approved reference provenance and manifest-backed repetition evidence
-    exists: false
+    exists: true
   - path: scripts/managed-evidence.sh
     purpose: Deferred managed evidence client for the future supported-release matrix
     exists: false
