@@ -51,6 +51,8 @@ class _LifecycleApi extends RustApi {
   LifecycleWarning? lifecycleWarning;
   Object? closeNoteError;
   Completer<void>? closeNoteGate;
+  var closesInFlight = 0;
+  var maxClosesInFlight = 0;
 
   /// What `open_note` returns per id — for already-open Notes the live
   /// session state (post-rewrite, post-remap), which is exactly what the
@@ -143,10 +145,18 @@ class _LifecycleApi extends RustApi {
   @override
   Future<void> closeNote(String noteId) async {
     calls.add('closeNote:$noteId');
-    final gate = closeNoteGate;
-    if (gate != null && !gate.isCompleted) await gate.future;
-    final error = closeNoteError;
-    if (error != null) throw error;
+    closesInFlight++;
+    maxClosesInFlight = maxClosesInFlight > closesInFlight
+        ? maxClosesInFlight
+        : closesInFlight;
+    try {
+      final gate = closeNoteGate;
+      if (gate != null && !gate.isCompleted) await gate.future;
+      final error = closeNoteError;
+      if (error != null) throw error;
+    } finally {
+      closesInFlight--;
+    }
   }
 
   @override
@@ -2708,6 +2718,81 @@ void main() {
     expect(find.text('unrelated note'), findsOneWidget);
     expect(api.updateBlockNoteIds, ['A']);
   });
+  testWidgets(
+    'a stale-create cleanup and a tab close never overlap at the Core boundary',
+    (tester) async {
+      final createGate = Completer<void>();
+      final closeGate = Completer<void>();
+      final api = _LifecycleApi()
+        ..createNoteResult = stateFor('Created')
+        ..createNoteGate = createGate
+        ..closeNoteGate = closeGate
+        ..openStates = {'Old': stateFor('Old')};
+      late ProviderContainer container;
+      await tester.pumpWidget(_probeHarness(api, (c) => container = c));
+      addTearDown(container.dispose);
+      final controller = container.read(activeNoteProvider.notifier);
+      await controller.openAsTab('Old');
+      container.read(selectedNoteIdProvider.notifier).select('Old');
+
+      final creating = container
+          .read(lifecycleActionsProvider)
+          .createNote('', 'Created');
+      await tester.pump();
+      // A later lifecycle-admitted selection makes the create response stale,
+      // so it must retire Created through the shared close boundary.
+      container
+          .read(selectedNoteIdProvider.notifier)
+          .selectForLifecycle('Elsewhere');
+      createGate.complete();
+      await tester.pump();
+      expect(api.calls, ['createNote::Created', 'closeNote:Created']);
+
+      final closingOld = controller.closeTab('Old');
+      await tester.pump();
+      expect(api.calls, ['createNote::Created', 'closeNote:Created']);
+      expect(api.maxClosesInFlight, 1);
+
+      closeGate.complete();
+      expect(await creating, isA<LifecycleCompleted>());
+      expect(await closingOld, isTrue);
+      expect(api.calls, [
+        'createNote::Created',
+        'closeNote:Created',
+        'closeNote:Old',
+      ]);
+      expect(api.maxClosesInFlight, 1);
+    },
+  );
+
+  testWidgets(
+    'a lifecycle action cannot create a Core session after a close batch begins',
+    (tester) async {
+      final closeGate = Completer<void>();
+      final api = _LifecycleApi()
+        ..closeNoteGate = closeGate
+        ..createNoteResult = stateFor('Created')
+        ..openStates = {'Old': stateFor('Old')};
+      late ProviderContainer container;
+      await tester.pumpWidget(_probeHarness(api, (c) => container = c));
+      addTearDown(container.dispose);
+      final controller = container.read(activeNoteProvider.notifier);
+      await controller.openAsTab('Old');
+
+      final closing = controller.closeAllTabs();
+      await tester.pump();
+      expect(api.calls, ['closeNote:Old']);
+
+      final create = await container
+          .read(lifecycleActionsProvider)
+          .createNote('', 'Created');
+      expect(create, isA<LifecycleFailed>());
+      expect(api.calls, ['closeNote:Old']);
+
+      closeGate.complete();
+      expect(await closing, isTrue);
+    },
+  );
 }
 
 enum _ImeCompletion {

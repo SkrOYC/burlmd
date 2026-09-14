@@ -554,6 +554,36 @@ class _EditorPaneState extends ConsumerState<_EditorPane> {
     ref.read(selectedNoteIdProvider.notifier).select(next.metadata.id);
   }
 
+  Future<void> _closeOtherTabs(_CoreNoteTab keptTab) async {
+    final completedCleanly = await ref
+        .read(activeNoteProvider.notifier)
+        .closeOtherTabs(keptTab.id);
+    if (!mounted || !completedCleanly) return;
+    if (!ref
+        .read(activeNoteProvider.notifier)
+        .activateExistingTab(keptTab.id)) {
+      return;
+    }
+    ref.read(selectedNoteIdProvider.notifier).select(keptTab.id);
+  }
+
+  Future<void> _closeAllTabs() async {
+    await ref.read(activeNoteProvider.notifier).closeAllTabs();
+    if (!mounted) return;
+    final remaining = ref.read(openNoteSessionsProvider);
+    if (remaining.isEmpty) {
+      ref.read(selectedNoteIdProvider.notifier).clear();
+      return;
+    }
+    if (ref.read(activeNoteProvider) == null) {
+      final next = remaining.first;
+      ref
+          .read(activeNoteProvider.notifier)
+          .activateExistingTab(next.metadata.id);
+      ref.read(selectedNoteIdProvider.notifier).select(next.metadata.id);
+    }
+  }
+
   @override
   void didUpdateWidget(covariant _EditorPane oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -590,6 +620,8 @@ class _EditorPaneState extends ConsumerState<_EditorPane> {
             onSelect: (tab) =>
                 ref.read(selectedNoteIdProvider.notifier).select(tab.id),
             onClose: (tab) => unawaited(_closeTab(tab)),
+            onCloseOthers: (tab) => unawaited(_closeOtherTabs(tab)),
+            onCloseAll: () => unawaited(_closeAllTabs()),
           ),
           _MetadataHeader(
             compact: widget.compact,
@@ -634,6 +666,8 @@ class _CoreNoteTabStrip extends StatelessWidget {
     required this.onOpenNavigator,
     required this.onSelect,
     required this.onClose,
+    required this.onCloseOthers,
+    required this.onCloseAll,
   });
 
   final bool compact;
@@ -642,6 +676,8 @@ class _CoreNoteTabStrip extends StatelessWidget {
   final VoidCallback onOpenNavigator;
   final ValueChanged<_CoreNoteTab> onSelect;
   final ValueChanged<_CoreNoteTab> onClose;
+  final ValueChanged<_CoreNoteTab> onCloseOthers;
+  final VoidCallback onCloseAll;
 
   @override
   Widget build(BuildContext context) {
@@ -684,6 +720,8 @@ class _CoreNoteTabStrip extends StatelessWidget {
                     active: active,
                     onSelect: () => onSelect(tab),
                     onClose: () => onClose(tab),
+                    onCloseOthers: () => onCloseOthers(tab),
+                    onCloseAll: onCloseAll,
                   );
                 },
               ),
@@ -701,11 +739,13 @@ class _WorkspaceTab extends StatefulWidget {
     required this.active,
     required this.onSelect,
     required this.onClose,
+    required this.onCloseOthers,
+    required this.onCloseAll,
   });
 
   final _CoreNoteTab tab;
   final bool active;
-  final VoidCallback onSelect, onClose;
+  final VoidCallback onSelect, onClose, onCloseOthers, onCloseAll;
 
   @override
   State<_WorkspaceTab> createState() => _WorkspaceTabState();
@@ -742,9 +782,28 @@ class _WorkspaceTabState extends State<_WorkspaceTab> {
           value: _TabMenuAction.close,
           child: Text(l10n.workspaceCloseTab),
         ),
+        PopupMenuItem(
+          key: const ValueKey('tab-menu-close-others'),
+          value: _TabMenuAction.closeOthers,
+          child: Text(l10n.workspaceCloseOtherTabs),
+        ),
+        PopupMenuItem(
+          key: const ValueKey('tab-menu-close-all'),
+          value: _TabMenuAction.closeAll,
+          child: Text(l10n.workspaceCloseAllVisualTabs),
+        ),
       ],
     );
-    if (result == _TabMenuAction.close) widget.onClose();
+    switch (result) {
+      case _TabMenuAction.close:
+        widget.onClose();
+      case _TabMenuAction.closeOthers:
+        widget.onCloseOthers();
+      case _TabMenuAction.closeAll:
+        widget.onCloseAll();
+      case null:
+        break;
+    }
   }
 
   @override
@@ -906,7 +965,7 @@ class _WorkspaceTabState extends State<_WorkspaceTab> {
   }
 }
 
-enum _TabMenuAction { close }
+enum _TabMenuAction { close, closeOthers, closeAll }
 
 class _MetadataHeader extends StatefulWidget {
   const _MetadataHeader({

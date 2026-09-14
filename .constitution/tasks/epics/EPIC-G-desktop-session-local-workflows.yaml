@@ -332,6 +332,20 @@ tickets:
     title: Serialize every Note-close and batch-close lifecycle
     type: Feature
     effort: 8
+    deviations:
+      - files:
+          - lib/src/screens/workspace.dart
+        justification: Wire the mounted Workspace screen's native application-exit
+          callback to the serialized orderly-shutdown coordinator. The epic owns
+          this path; this small production integration is required to exercise
+          the ticket's existing shutdown acceptance, without changing product
+          scope or adding Workspace adoption.
+      - files:
+          - lib/src/components/lifecycle_actions.dart
+        justification: Route the existing stale-create and failed-refresh Core
+          close calls through the same serialized close boundary as tab and
+          shutdown requests. The epic owns this path; leaving these callers
+          independent would violate the ticket's non-overlap invariant.
     depends_on:
       - BURL-G001
       - BURL-G004
@@ -375,7 +389,7 @@ tickets:
     flows:
       - flow-desktop-session
     certainty: assumed
-    status: planned
+    status: done
   - id: BURL-G006
     title: Restore and explicitly switch the active Workspace
     type: Feature

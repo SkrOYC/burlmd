@@ -351,16 +351,15 @@ class LifecycleActions {
       _reconcileMountedCreatedSession(noteId);
       return;
     }
-    CloseNoteWarning? terminalWarning;
-    try {
-      await _api.closeNote(noteId);
-    } on CloseNoteWarning catch (warning) {
+    final terminalWarning = await _ref
+        .read(activeNoteProvider.notifier)
+        .retireCoreSessionForLifecycle(noteId);
+    if (terminalWarning != null) {
       // The create result retains its own lifecycle warning, while this
       // independently terminal close warning uses the existing one-shot
       // status seam. Its listener acknowledges before displaying, so a stale
       // create cannot leak a session or replay this warning on a rebuild.
-      _ref.read(noteCloseFailureProvider.notifier).report(warning);
-      terminalWarning = warning;
+      _ref.read(noteCloseFailureProvider.notifier).report(terminalWarning);
     }
     // A state can mount while close_note is in flight. Core has nevertheless
     // retired its one session for this id, so remove every same-id
@@ -475,6 +474,19 @@ class LifecycleActions {
         LifecycleFailed(
           StateError(
             'Workspace lifecycle changes are unavailable during a rescan.',
+          ),
+        ),
+      );
+    }
+    // A wider close batch has already fenced ordinary opens and is deriving
+    // its all-clean terminal result. A lifecycle create or remap started in
+    // that window could produce a new Core session after the batch approved a
+    // Workspace switch or app exit, so make this a visible, retryable refusal.
+    if (_ref.read(noteCloseBatchingProvider) > 0) {
+      return Future.value(
+        LifecycleFailed(
+          StateError(
+            'Workspace lifecycle changes are unavailable while notes are closing.',
           ),
         ),
       );
@@ -762,10 +774,10 @@ class LifecycleActions {
   /// reported alongside the refresh failure without replacing that failure.
   Future<bool> _retireFailedInactiveRefresh(String noteId) async {
     try {
-      await _api.closeNote(noteId);
-      return true;
-    } on CloseNoteWarning catch (warning) {
-      if (_ref.mounted) {
+      final warning = await _ref
+          .read(activeNoteProvider.notifier)
+          .retireCoreSessionForLifecycle(noteId);
+      if (warning != null && _ref.mounted) {
         _ref.read(noteCloseFailureProvider.notifier).report(warning);
       }
       return true;
