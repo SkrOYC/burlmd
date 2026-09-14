@@ -62,6 +62,54 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get noteCloseUnavailableDuringRescan =>
+      'Close notes after the workspace rescan finishes.';
+
+  @override
+  String get noteCloseUnavailableDuringReload =>
+      'Close notes after the note reload finishes.';
+
+  @override
+  String get workspaceRescanRetainedNoteUnwritten =>
+      'Rescan unavailable: a retained note has unsaved edits.';
+
+  @override
+  String workspaceSessionRestoreFailed(String error) {
+    return 'Could not restore workspace session: $error';
+  }
+
+  @override
+  String workspaceSessionSaveFailed(String error) {
+    return 'Could not save workspace session: $error';
+  }
+
+  @override
+  String workspacePreferencesSaveFailed(String error) {
+    return 'Could not save preferences: $error';
+  }
+
+  @override
+  String workspaceOrderlyExitFailed(String error) {
+    return 'Could not complete orderly exit: $error';
+  }
+
+  @override
+  String get noteCloseUnavailableDuringLifecycle =>
+      'Close notes after workspace changes finish.';
+
+  @override
+  String get lifecycleUnavailableDuringReload =>
+      'Workspace changes are unavailable while a note reload is in progress.';
+
+  @override
+  String get lifecycleUnavailableDuringRescan =>
+      'Workspace changes are unavailable during a rescan.';
+
+  @override
+  String get lifecycleUnavailableDuringClose =>
+      'Workspace changes are unavailable while notes are closing.';
+
+  @override
   String lifecycleCommitWarning(String detail) {
     return 'The change is applied, but its Git commit failed: $detail';
   }

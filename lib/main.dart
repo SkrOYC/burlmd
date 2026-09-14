@@ -200,7 +200,7 @@ class _HomeState extends ConsumerState<_Home> {
     }
     ref.invalidate(workspaceTreeProvider);
     // Selecting drives the shell's editor-pane listener, which opens the
-    // Note through [NoteController.open] — the same path a user tap takes.
+    // Note through [NoteController.openAsTab] — the same path a user tap takes.
     ref.read(selectedNoteIdProvider.notifier).select(state!.metadata.id);
   }
 

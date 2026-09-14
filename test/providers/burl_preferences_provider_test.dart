@@ -22,6 +22,9 @@ class _ControlledDevicePreferencesStore extends DevicePreferencesStore {
     this.writeFailure,
     this.renameFailure,
     this.loadGate,
+    this.quarantineCandidates,
+    this.quarantineFailure,
+    this.quarantineCollisionBytes,
   });
 
   Object? writeFailure;
@@ -31,7 +34,12 @@ class _ControlledDevicePreferencesStore extends DevicePreferencesStore {
   Future<void>? renameGate;
   List<Completer<void>>? renameStartedGates;
   List<Future<void>>? renameGates;
+  List<String>? quarantineCandidates;
+  Object? quarantineFailure;
+  List<int>? quarantineCollisionBytes;
   var _renameAttempt = 0;
+  var _quarantineAttempt = 0;
+  var _quarantineCollisionInjected = false;
 
   @override
   Future<BurlPreferences> load() {
@@ -64,6 +72,28 @@ class _ControlledDevicePreferencesStore extends DevicePreferencesStore {
     final gates = renameGates;
     if (gates != null && attempt < gates.length) await gates[attempt];
     return super.renameTemporaryFile(temporary, destination);
+  }
+
+  @override
+  String nextQuarantinePath(File file) {
+    final candidates = quarantineCandidates;
+    final attempt = _quarantineAttempt++;
+    if (candidates != null && attempt < candidates.length) {
+      return candidates[attempt];
+    }
+    return super.nextQuarantinePath(file);
+  }
+
+  @override
+  Future<File> createQuarantineReservation(File destination) async {
+    final failure = quarantineFailure;
+    if (failure != null) throw failure;
+    final collisionBytes = quarantineCollisionBytes;
+    if (collisionBytes != null && !_quarantineCollisionInjected) {
+      _quarantineCollisionInjected = true;
+      await destination.writeAsBytes(collisionBytes);
+    }
+    return super.createQuarantineReservation(destination);
   }
 }
 
@@ -178,6 +208,64 @@ void main() {
       expect(await file.exists(), isFalse);
       expect(await quarantined.readAsBytes(), bytes);
     });
+
+    test(
+      'quarantine collision preserves both payloads and blocks restart',
+      () async {
+        await applicationSupport.create(recursive: true);
+        final file = File('${applicationSupport.path}/device-preferences.json');
+        final existingPath = '${file.path}.quarantine-collision';
+        final preservedBytes = [0x01, 0x02, 0x03];
+        final corruptBytes = [0xff, 0xfe, 0xfd];
+        await file.writeAsBytes(corruptBytes);
+        store = _ControlledDevicePreferencesStore(
+          applicationSupportDirectory: () async => applicationSupport,
+          quarantineCandidates: [existingPath, '${file.path}.quarantine-fresh'],
+          quarantineCollisionBytes: preservedBytes,
+        );
+
+        expect(await store.load(), BurlPreferences.defaults());
+        expect(await File(existingPath).readAsBytes(), preservedBytes);
+        final fresh = File('${file.path}.quarantine-fresh');
+        expect(await fresh.readAsBytes(), corruptBytes);
+        expect(await file.exists(), isFalse);
+
+        final restartedStore = DevicePreferencesStore(
+          applicationSupportDirectory: () async => applicationSupport,
+        );
+        expect(await restartedStore.load(), BurlPreferences.defaults());
+        await expectLater(
+          restartedStore.save(
+            const BurlPreferences(theme: BurlThemePreference.dark),
+          ),
+          throwsA(isA<StateError>()),
+        );
+        expect(await File(existingPath).readAsBytes(), preservedBytes);
+        expect(await fresh.readAsBytes(), corruptBytes);
+      },
+    );
+
+    test(
+      'quarantine reservation failure leaves original bytes in place',
+      () async {
+        await applicationSupport.create(recursive: true);
+        final file = File('${applicationSupport.path}/device-preferences.json');
+        final bytes = [0xff, 0xfe, 0xfd];
+        await file.writeAsBytes(bytes);
+        store = _ControlledDevicePreferencesStore(
+          applicationSupportDirectory: () async => applicationSupport,
+          quarantineFailure: FileSystemException('quarantine unavailable'),
+        );
+
+        expect(await store.load(), BurlPreferences.defaults());
+        expect(await file.readAsBytes(), bytes);
+        await expectLater(
+          store.save(const BurlPreferences(theme: BurlThemePreference.dark)),
+          throwsA(isA<StateError>()),
+        );
+        expect(await file.readAsBytes(), bytes);
+      },
+    );
 
     test(
       'later-version bytes remain preserved and disable replacement',

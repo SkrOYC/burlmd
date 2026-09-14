@@ -120,13 +120,6 @@ class WorkspaceSessionFailure {
   final Object error;
   final String workspaceId;
   final int scopeGeneration;
-
-  String get message => switch (operation) {
-    WorkspaceSessionOperation.load =>
-      'Could not restore workspace session: $error',
-    WorkspaceSessionOperation.save =>
-      'Could not save workspace session: $error',
-  };
 }
 
 class WorkspaceSessionFailures extends Notifier<WorkspaceSessionFailure?> {
@@ -301,6 +294,45 @@ class WorkspaceSession extends Notifier<WorkspaceSessionState> {
     _scheduleSave();
   }
 
+  /// Applies a successful Core directory rename to presentation-only tree
+  /// expansion. Prefix matching is segment-aware so `folder` never affects
+  /// `folder2`.
+  void rekeyExpandedDirectoryPrefix({
+    required String oldPath,
+    required String newPath,
+  }) {
+    final oldPrefix = '$oldPath/';
+    final expanded = {
+      for (final path in state.expandedDirectoryIds)
+        if (path == oldPath)
+          newPath
+        else if (path.startsWith(oldPrefix))
+          '$newPath/${path.substring(oldPrefix.length)}'
+        else
+          path,
+    };
+    if (expanded.length == state.expandedDirectoryIds.length &&
+        expanded.every(state.expandedDirectoryIds.contains)) {
+      return;
+    }
+    state = state.copyWith(expandedDirectoryIds: Set.unmodifiable(expanded));
+    _scheduleSave();
+  }
+
+  /// Drops only a deleted directory and its descendants after Core confirms
+  /// deletion. A sibling with a textual but not segment prefix remains open.
+  void removeExpandedDirectoryPrefix(String path) {
+    final prefix = '$path/';
+    final expanded = state.expandedDirectoryIds
+        .where(
+          (candidate) => candidate != path && !candidate.startsWith(prefix),
+        )
+        .toSet();
+    if (expanded.length == state.expandedDirectoryIds.length) return;
+    state = state.copyWith(expandedDirectoryIds: Set.unmodifiable(expanded));
+    _scheduleSave();
+  }
+
   /// Records an identity only after Core has opened that Note successfully.
   /// The snapshot remains an identity-only restore hint; Core owns the actual
   /// session that made this id eligible to persist.
@@ -351,8 +383,8 @@ class WorkspaceSession extends Notifier<WorkspaceSessionState> {
   }
 
   /// Replaces restored identities with exactly the Core sessions that
-  /// reopened. Failed ids are intentionally absent so the next startup does
-  /// not keep retrying a Note Core said is unavailable.
+  /// reopened. Permanently unavailable ids are absent; transient failures
+  /// remain retained Core identities until a later terminal close.
   void replaceOpenNotes({
     required List<String> openNoteIds,
     required String? activeNoteId,

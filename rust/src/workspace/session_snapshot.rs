@@ -582,6 +582,14 @@ mod tests {
             br#"{"schema_version":1,"workspace_id":"workspace-a","open_note_ids":[""],"active_note_id":null,"expanded_directory_ids":[],"search_query":"","sync_presentation":"local"}"#.as_slice(),
             br#"{"schema_version":1,"workspace_id":"workspace-a","open_note_ids":["a","a"],"active_note_id":null,"expanded_directory_ids":[],"search_query":"","sync_presentation":"local"}"#.as_slice(),
             br#"{"schema_version":1,"workspace_id":"workspace-a","open_note_ids":["../escape"],"active_note_id":null,"expanded_directory_ids":[],"search_query":"","sync_presentation":"local"}"#.as_slice(),
+            br#"{"schema_version":1,"workspace_id":"workspace-a","open_note_ids":["a/b","a//b"],"active_note_id":null,"expanded_directory_ids":[],"search_query":"","sync_presentation":"local"}"#.as_slice(),
+            br#"{"schema_version":1,"workspace_id":"workspace-a","open_note_ids":["a/./b"],"active_note_id":null,"expanded_directory_ids":[],"search_query":"","sync_presentation":"local"}"#.as_slice(),
+            br#"{"schema_version":1,"workspace_id":"workspace-a","open_note_ids":["a/../b"],"active_note_id":null,"expanded_directory_ids":[],"search_query":"","sync_presentation":"local"}"#.as_slice(),
+            br#"{"schema_version":1,"workspace_id":"workspace-a","open_note_ids":[".hidden"],"active_note_id":null,"expanded_directory_ids":[],"search_query":"","sync_presentation":"local"}"#.as_slice(),
+            br#"{"schema_version":1,"workspace_id":"workspace-a","open_note_ids":["a/.hidden"],"active_note_id":null,"expanded_directory_ids":[],"search_query":"","sync_presentation":"local"}"#.as_slice(),
+            br#"{"schema_version":1,"workspace_id":"workspace-a","open_note_ids":[".hidden/a"],"active_note_id":null,"expanded_directory_ids":[],"search_query":"","sync_presentation":"local"}"#.as_slice(),
+            br#"{"schema_version":1,"workspace_id":"workspace-a","open_note_ids":["index"],"active_note_id":null,"expanded_directory_ids":[],"search_query":"","sync_presentation":"local"}"#.as_slice(),
+            br#"{"schema_version":1,"workspace_id":"workspace-a","open_note_ids":["a/log"],"active_note_id":null,"expanded_directory_ids":[],"search_query":"","sync_presentation":"local"}"#.as_slice(),
             br#"{"schema_version":1,"workspace_id":"workspace-a","open_note_ids":[],"active_note_id":null,"expanded_directory_ids":[""],"search_query":"","sync_presentation":"local"}"#.as_slice(),
             br#"{"schema_version":1,"workspace_id":"workspace-a","open_note_ids":[],"active_note_id":null,"expanded_directory_ids":["dir","dir"],"search_query":"","sync_presentation":"local"}"#.as_slice(),
             br#"{"schema_version":1,"workspace_id":"workspace-a","open_note_ids":[],"active_note_id":null,"expanded_directory_ids":["../escape"],"search_query":"","sync_presentation":"local"}"#.as_slice(),
@@ -599,6 +607,8 @@ mod tests {
                 ActiveWorkspaceSessionSnapshot::default()
             );
             assert!(!path.exists());
+            store.save(&workspace, &snapshot(None)).unwrap();
+            assert!(path.exists());
         }
         let preserved = std::fs::read_dir(path.parent().unwrap())
             .unwrap()
@@ -610,6 +620,27 @@ mod tests {
         for fixture in fixtures {
             assert!(preserved.iter().any(|bytes| bytes.as_slice() == fixture));
         }
+    }
+
+    #[test]
+    fn restores_missing_canonical_nested_unicode_note_ids() {
+        let (_directory, store, workspace) = store();
+        let path = store.snapshot_path(workspace.id());
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let raw = r#"{"schema_version":1,"workspace_id":"workspace-a","open_note_ids":["proyectos/計画"],"active_note_id":"proyectos/計画","expanded_directory_ids":["proyectos"],"search_query":"","sync_presentation":"local"}"#;
+        std::fs::write(&path, raw.as_bytes()).unwrap();
+
+        assert_eq!(
+            store.load(&workspace).unwrap(),
+            ActiveWorkspaceSessionSnapshot {
+                open_note_ids: vec!["proyectos/計画".to_string()],
+                active_note_id: Some("proyectos/計画".to_string()),
+                expanded_directory_ids: vec!["proyectos".to_string()],
+                search_query: String::new(),
+                sync_presentation: SessionSyncPresentation::Local,
+            }
+        );
+        assert_eq!(std::fs::read(path).unwrap(), raw.as_bytes());
     }
 
     #[test]

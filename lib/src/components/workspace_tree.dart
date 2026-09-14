@@ -29,9 +29,8 @@ import 'package:flutter_lucide/flutter_lucide.dart';
 /// (`workspaceTreeProvider`, the `WSPC-D009` contract), so expanding or
 /// collapsing a Directory only filters what is *rendered* from data already
 /// in memory: no further round trip, and no Workspace-wide reload per level.
-/// The set of expanded paths is ephemeral UI state — the one kind
-/// `tech-spec/guidelines.md` permits in widget state. No Note content is
-/// ever held here.
+/// The Workspace session owns the expanded-path presentation state. No Note
+/// content is ever held here.
 ///
 /// Directories sort before Notes at each level, each group by name; empty
 /// Directories appear (which is why they are indexed at all). Selecting a
@@ -877,6 +876,19 @@ void report(BuildContext context, LifecycleOutcome outcome) {
       },
     },
     LifecycleRefused(:final reason) => reason,
+    LifecycleFailed(error: LifecycleUnavailable(:final reason)) =>
+      switch (reason) {
+        LifecycleUnavailableReason.reloading => AppLocalizations.of(
+          context,
+        )!.lifecycleUnavailableDuringReload,
+        LifecycleUnavailableReason.rescanning => AppLocalizations.of(
+          context,
+        )!.lifecycleUnavailableDuringRescan,
+        LifecycleUnavailableReason.closingBatch ||
+        LifecycleUnavailableReason.closingNote => AppLocalizations.of(
+          context,
+        )!.lifecycleUnavailableDuringClose,
+      },
     LifecycleFailed(:final error) => AppLocalizations.of(
       context,
     )!.treeActionFailed('$error'),

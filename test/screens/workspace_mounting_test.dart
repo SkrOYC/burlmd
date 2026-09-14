@@ -3,6 +3,7 @@ import 'dart:ui' show AppExitResponse;
 
 import 'package:burlmd/src/providers/rust_api_provider.dart';
 import 'package:burlmd/src/providers/workspace_provider.dart';
+import 'package:burlmd/src/components/editor.dart';
 import 'package:burlmd/src/design/burl_theme.dart';
 import 'package:burlmd/src/design/burl_motion.dart';
 import 'package:burlmd/src/providers/burl_preferences_provider.dart';
@@ -1445,6 +1446,105 @@ void main() {
   });
 
   testWidgets(
+    'a final-tab close warning stays visible after the Editor unmounts',
+    (tester) async {
+      final api = _MountingRustApi([_treeNode('a', 'Alpha')]);
+      final container = await _pumpShell(tester, api);
+      await tester.tap(find.byKey(const ValueKey('workspace-tree-note-a')));
+      await tester.pumpAndSettle();
+      api.closeNoteErrors['a'] = const CloseNoteWarning('cleanup warning');
+
+      await tester.tap(find.byKey(const ValueKey('shell-tab-close-a')));
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.byType(Editor), findsNothing);
+      expect(container.read(activeNoteProvider), isNull);
+      expect(container.read(selectedNoteIdProvider), isNull);
+      expect(find.textContaining('Could not switch notes'), findsOneWidget);
+      expect(find.byType(SnackBar), findsOneWidget);
+      final dismissible = find.descendant(
+        of: find.byType(SnackBar),
+        matching: find.byType(Dismissible),
+      );
+      expect(dismissible, findsOneWidget);
+      expect(
+        tester.widget<Dismissible>(dismissible).direction,
+        DismissDirection.down,
+      );
+    },
+  );
+
+  testWidgets(
+    'a final-tab native-exit warning stays visible after the Editor unmounts',
+    (tester) async {
+      final api = _MountingRustApi([_treeNode('a', 'Alpha')]);
+      final container = await _pumpShell(tester, api);
+      await tester.tap(find.byKey(const ValueKey('workspace-tree-note-a')));
+      await tester.pumpAndSettle();
+      api.closeNoteErrors['a'] = const CloseNoteWarning('cleanup warning');
+
+      expect(
+        await tester.binding.handleRequestAppExit(),
+        AppExitResponse.cancel,
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.byType(Editor), findsNothing);
+      expect(container.read(activeNoteProvider), isNull);
+      expect(container.read(selectedNoteIdProvider), isNull);
+      expect(find.textContaining('Could not switch notes'), findsOneWidget);
+      expect(find.byType(SnackBar), findsOneWidget);
+      final dismissible = find.descendant(
+        of: find.byType(SnackBar),
+        matching: find.byType(Dismissible),
+      );
+      expect(dismissible, findsOneWidget);
+      expect(
+        tester.widget<Dismissible>(dismissible).direction,
+        DismissDirection.down,
+      );
+    },
+  );
+
+  testWidgets(
+    'a failed final session drain leaves an empty usable presentation',
+    (tester) async {
+      final api = _MountingRustApi([_treeNode('a', 'Alpha')]);
+      final container = await _pumpShell(tester, api);
+      await tester.tap(find.byKey(const ValueKey('workspace-tree-note-a')));
+      await tester.pumpAndSettle();
+      final retired = container.read(activeNoteProvider)!;
+      api.sessionSaveError = StateError('sidecar write unavailable');
+
+      expect(
+        await tester.binding.handleRequestAppExit(),
+        AppExitResponse.cancel,
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(container.read(activeNoteProvider), isNull);
+      expect(container.read(openNoteSessionsProvider), isEmpty);
+      expect(container.read(selectedNoteIdProvider), isNull);
+      expect(find.byType(Editor), findsNothing);
+      expect(
+        find.textContaining('Could not complete orderly exit'),
+        findsOneWidget,
+      );
+
+      api.sessionSaveError = null;
+      await tester.tap(find.byKey(const ValueKey('workspace-tree-note-a')));
+      await tester.pumpAndSettle();
+      expect(container.read(activeNoteProvider), isNot(same(retired)));
+      expect(container.read(activeNoteProvider)?.metadata.id, 'a');
+      expect(container.read(selectedNoteIdProvider), 'a');
+      expect(find.byType(Editor), findsOneWidget);
+    },
+  );
+
+  testWidgets(
     'the native app-exit callback cancels on warning or refusal and exits only after a clean batch',
     (tester) async {
       final api = _MountingRustApi([_treeNode('a', 'Alpha')]);
@@ -1461,9 +1561,11 @@ void main() {
         AppExitResponse.cancel,
       );
       await tester.pump();
+      await tester.pump();
       expect(api.calls.where((call) => call.startsWith('close:')), ['close:a']);
       expect(find.byKey(const Key('shell-tab-a')), findsNothing);
       expect(find.byKey(const Key('shell-tab-b')), findsOneWidget);
+      expect(find.textContaining('Could not switch notes'), findsOneWidget);
 
       api.closeNoteErrors.remove('a');
       api.closeNoteErrors['b'] = StateError('close refused');
@@ -1537,7 +1639,13 @@ void main() {
         await tester.binding.handleRequestAppExit(),
         AppExitResponse.cancel,
       );
-      expect(container.read(noteCloseFailureProvider), isA<StateError>());
+      await tester.pump();
+      await tester.pump();
+      expect(container.read(noteCloseFailureProvider), isNull);
+      expect(
+        find.textContaining('Close notes after workspace changes finish'),
+        findsOneWidget,
+      );
       expect(api.calls, ['create::Created']);
 
       createGate.complete();

@@ -1152,6 +1152,114 @@ void main() {
   });
 
   group('directory rename', () {
+    testWidgets(
+      'a retained Core identity follows a successful directory remap',
+      (tester) async {
+        final api = _LifecycleApi()
+          ..renameDirectoryResult = effects(
+            remapped: const [IdRemap(oldId: 'old/note', newId: 'new/note')],
+          );
+        late ProviderContainer container;
+        await tester.pumpWidget(_probeHarness(api, (c) => container = c));
+        addTearDown(container.dispose);
+        container
+            .read(retainedCoreSessionIdsProvider.notifier)
+            .retain('old/note');
+        container
+            .read(workspaceSessionProvider.notifier)
+            .addOpenNoteId('old/note');
+
+        await container
+            .read(lifecycleActionsProvider)
+            .renameDirectory('old', 'new');
+
+        expect(container.read(retainedCoreSessionIdsProvider), {'new/note'});
+        expect(container.read(workspaceSessionProvider).openNoteIds, [
+          'new/note',
+        ]);
+        expect(container.read(openNoteSessionsProvider), isEmpty);
+        expect(
+          await container.read(activeNoteProvider.notifier).closeAllTabs(),
+          isTrue,
+        );
+        expect(api.calls, ['renameDirectory:old:new', 'closeNote:new/note']);
+      },
+    );
+    testWidgets(
+      'a successful directory rename rekeys only its expanded path subtree',
+      (tester) async {
+        final api = _LifecycleApi()..renameDirectoryResult = effects();
+        late ProviderContainer container;
+        await tester.pumpWidget(_probeHarness(api, (c) => container = c));
+        addTearDown(container.dispose);
+        final session = container.read(workspaceSessionProvider.notifier);
+        for (final path in ['folder', 'folder/child', 'folder2', 'other']) {
+          session.toggleDirectory(path);
+        }
+
+        final outcome = await container
+            .read(lifecycleActionsProvider)
+            .renameDirectory('folder', 'renamed');
+
+        expect(outcome, isA<LifecycleCompleted>());
+        expect(container.read(workspaceSessionProvider).expandedDirectoryIds, {
+          'renamed',
+          'renamed/child',
+          'folder2',
+          'other',
+        });
+      },
+    );
+
+    testWidgets(
+      'a successful directory delete removes only its expanded path subtree',
+      (tester) async {
+        final api = _LifecycleApi();
+        late ProviderContainer container;
+        await tester.pumpWidget(_probeHarness(api, (c) => container = c));
+        addTearDown(container.dispose);
+        final session = container.read(workspaceSessionProvider.notifier);
+        for (final path in ['folder', 'folder/child', 'folder2', 'other']) {
+          session.toggleDirectory(path);
+        }
+
+        final outcome = await container
+            .read(lifecycleActionsProvider)
+            .deleteDirectory('folder');
+
+        expect(outcome, isA<LifecycleCompleted>());
+        expect(container.read(workspaceSessionProvider).expandedDirectoryIds, {
+          'folder2',
+          'other',
+        });
+      },
+    );
+
+    testWidgets('a refused directory rename leaves tree expansion unchanged', (
+      tester,
+    ) async {
+      final api = _LifecycleApi()
+        ..renameDirectoryError = AppError.pathUnavailable('name exists');
+      late ProviderContainer container;
+      await tester.pumpWidget(_probeHarness(api, (c) => container = c));
+      addTearDown(container.dispose);
+      final session = container.read(workspaceSessionProvider.notifier);
+      for (final path in ['folder', 'folder/child', 'folder2']) {
+        session.toggleDirectory(path);
+      }
+
+      final outcome = await container
+          .read(lifecycleActionsProvider)
+          .renameDirectory('folder', 'renamed');
+
+      expect(outcome, isA<LifecycleRefused>());
+      expect(container.read(workspaceSessionProvider).expandedDirectoryIds, {
+        'folder',
+        'folder/child',
+        'folder2',
+      });
+    });
+
     testWidgets('an open remapped note re-anchors through the NEW id the '
         'Core returns', (tester) async {
       final freshUnderNewId = stateFor('Renamed/Old');
@@ -1577,6 +1685,26 @@ void main() {
   );
 
   group('deletion', () {
+    testWidgets('a lifecycle delete releases a retained Core identity', (
+      tester,
+    ) async {
+      final api = _LifecycleApi();
+      late ProviderContainer container;
+      await tester.pumpWidget(_probeHarness(api, (c) => container = c));
+      addTearDown(container.dispose);
+      container.read(retainedCoreSessionIdsProvider.notifier).retain('gone');
+      container.read(workspaceSessionProvider.notifier).addOpenNoteId('gone');
+
+      await container.read(lifecycleActionsProvider).deleteNote('gone');
+
+      expect(container.read(retainedCoreSessionIdsProvider), isEmpty);
+      expect(container.read(workspaceSessionProvider).openNoteIds, isEmpty);
+      expect(
+        await container.read(activeNoteProvider.notifier).closeAllTabs(),
+        isTrue,
+      );
+      expect(api.calls, ['deleteNote:gone']);
+    });
     testWidgets('the deleted open note closes in the editor', (tester) async {
       final api = _LifecycleApi();
       late ProviderContainer container;
