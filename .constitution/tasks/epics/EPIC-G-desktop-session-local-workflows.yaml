@@ -821,6 +821,22 @@ closeout:
       single-instance private tests. Use one instance per profile for this
       private checkout and route coordinated version publication to the future
       architecture and TechSpec work before claiming that broader guarantee.
+    - PR 44 round seven identified three limits of the private visual harness.
+      It is not a hostile same-UID process sandbox; an application can inspect
+      parent descriptors through procfs. Its PID geometry check does not reject
+      every helper client, and the final capture does not certify unchanged
+      compositor topology. Preserve the immutable G001 reference evidence,
+      but do not claim hostile-child resistance, sole-client enforcement, or
+      final-frame topology qualification. Route stronger harness qualification
+      to the user's replacement roadmap rather than expand this private pass.
+    - The October 2026 constitution validator reports 21 identical TS-001
+      command-resolution errors on merged master and this candidate, with no
+      candidate-only errors. Its parser treats shell negation as an executable
+      and documented trust-anchor placeholders as literal paths. Baseline
+      comparison and direct checks distinguish these inherited tooling limits
+      from G regressions. Route parser compatibility and legacy sidecar warnings
+      to constitution-tooling and the post-G constitution alignment; do not
+      claim that the updated native validator reports a clean run.
   settled:
     - record: prd/capabilities.yaml#CAP-023
       evidence:

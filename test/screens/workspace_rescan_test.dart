@@ -354,6 +354,47 @@ void main() {
   );
 
   testWidgets(
+    'rescan is disabled during a delayed single close and re-enabled afterward',
+    (tester) async {
+      final closeGate = Completer<void>();
+      final api = _RescanRustApi([_note('a', 'Alpha')])..closeGate = closeGate;
+      var reindexCalls = 0;
+      final container = await _pumpShell(
+        tester,
+        api,
+        reindex: () async {
+          reindexCalls++;
+          return 1;
+        },
+      );
+
+      await tester.tap(find.text('Alpha'));
+      await tester.pumpAndSettle();
+      expect(_rescanButton(tester).onPressed, isNotNull);
+
+      final closing = container.read(activeNoteProvider.notifier).closeTab('a');
+      await tester.pump();
+      expect(api.calls, ['open:a', 'close:a']);
+      expect(container.read(noteCloseEditingProvider), 1);
+      expect(_rescanButton(tester).onPressed, isNull);
+
+      await tester.tap(find.text('Rescan workspace'));
+      await tester.pump();
+      expect(reindexCalls, 0);
+
+      closeGate.complete();
+      expect(await closing, isTrue);
+      await tester.pumpAndSettle();
+      expect(container.read(noteCloseEditingProvider), 0);
+      expect(_rescanButton(tester).onPressed, isNotNull);
+
+      await tester.tap(find.text('Rescan workspace'));
+      await tester.pumpAndSettle();
+      expect(reindexCalls, 1);
+    },
+  );
+
+  testWidgets(
     'a dirty inactive tab refuses rescan while the active tab is clean',
     (tester) async {
       final api = _RescanRustApi([_note('a', 'Alpha'), _note('b', 'Beta')])

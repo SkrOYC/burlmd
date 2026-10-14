@@ -297,6 +297,51 @@ void main() {
     },
   );
 
+  for (final saveFails in [false, true]) {
+    test(
+      'a delayed ${saveFails ? 'failing' : 'successful'} save settles its queue after disposal',
+      () async {
+        final api = _ScopedSessionSnapshotRustApi([_workspaceA]);
+        final container = ProviderContainer(
+          overrides: [rustApiProvider.overrideWithValue(api)],
+        );
+        addTearDown(container.dispose);
+
+        final restored = container.read(
+          workspaceSessionSnapshotProvider.future,
+        );
+        final load = await api.loadRequestAt(0);
+        load.completer.complete(
+          const ActiveWorkspaceSessionSnapshot(
+            openNoteIds: [],
+            expandedDirectoryIds: [],
+            searchQuery: '',
+            syncPresentation: SessionSyncPresentation.local,
+          ),
+        );
+        await restored;
+        final session = container.read(workspaceSessionProvider.notifier);
+        session.setSearchQuery('first');
+        final firstSave = await api.saveRequestAt(0);
+        session.setSearchQuery('queued');
+
+        container.dispose();
+        if (saveFails) {
+          firstSave.completer.completeError(StateError('sidecar unavailable'));
+        } else {
+          firstSave.completer.complete();
+        }
+        await Future<void>.delayed(Duration.zero);
+
+        expect(api.saveRequests, hasLength(2));
+        final queuedSave = api.saveRequests.last;
+        expect(queuedSave.snapshot.searchQuery, 'queued');
+        queuedSave.completer.complete();
+        await Future<void>.delayed(Duration.zero);
+      },
+    );
+  }
+
   test(
     'a persistence drain waits for a save admitted while its first save is pending',
     () async {
