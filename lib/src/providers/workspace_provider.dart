@@ -499,6 +499,7 @@ class WorkspaceSession extends Notifier<WorkspaceSessionState> {
       }
       try {
         await api.saveActiveWorkspaceSessionSnapshot(snapshot);
+        if (!ref.mounted) return;
         final failure = ref.read(workspaceSessionFailureProvider);
         if (failure != null &&
             failure.operation == WorkspaceSessionOperation.save &&
@@ -507,6 +508,7 @@ class WorkspaceSession extends Notifier<WorkspaceSessionState> {
           ref.read(workspaceSessionFailureProvider.notifier).clear();
         }
       } catch (error) {
+        if (!ref.mounted) return;
         _reportFailure(
           operation: WorkspaceSessionOperation.save,
           error: error,

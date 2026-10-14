@@ -411,6 +411,7 @@ class WorkspaceRescanButton extends ConsumerWidget {
     final blocked =
         rescan.running ||
         blockedByOpenEdits ||
+        ref.watch(noteCloseEditingProvider) > 0 ||
         ref.watch(lifecycleEditingProvider) > 0 ||
         ref.watch(reloadEditingProvider) > 0 ||
         ref.watch(noteSwitchingProvider);
