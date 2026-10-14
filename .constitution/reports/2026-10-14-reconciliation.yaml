@@ -1,0 +1,24 @@
+date: 2026-10-14
+commit: 06b72b2
+epics: [G]
+routed:
+  - stage: tasks
+    item: "The user will restructure the future roadmap after M and G close. Retain the five G deferral routes and dormant BURL-M003 as inputs; do not automatically start Epic H or expand this private Linux milestone."
+    from: G
+  - stage: tech-spec
+    item: "verification command \"TRUST_ANCHOR_WORKTREE/scripts/managed-evidence.sh run --ticket BURL-G011 --trust-anchor-sha TRUST_ANCHOR_SHA --source-ref SOURCE_REF --tested-source-sha TESTED_SOURCE_SHA --base-sha BASE_SHA --output EVIDENCE_WORKTREE/.constitution/evidence/BURL-G011/managed-evidence.json && git -C EVIDENCE_WORKTREE diff --check\" is owned by archived ticket BURL-G011 and still does not resolve"
+    from: G
+  - stage: tech-spec
+    item: "verification command \"flutter test && dart analyze && ./scripts/visual-regression.sh pref-g002 --baseline .qa/pref-g002-private.png --max-different-pixels 0 --write-baseline && git diff --check && ! rg -n '\\[DEBUG-' lib rust test scripts\" is owned by archived ticket BURL-G002 and still does not resolve"
+    from: G
+  - stage: tech-spec
+    item: "verification command \"flutter test && dart analyze && ./scripts/visual-regression.sh shell-g001 --baseline test/goldens/shell-g001-linux.png --max-different-pixels 0 && git diff --check && ! rg -n '\\[DEBUG-' lib rust test scripts\" is owned by archived ticket BURL-G001 and still does not resolve"
+    from: G
+proposed_decisions: []
+candidate_terms: []
+stale_owners:
+  - ".constitution/evidence/BURL-G001/manifest.yaml: BURL-G001"
+  - ".constitution/tasks/changelog.yaml: BURL-G011"
+  - ".constitution/tech-spec/guidelines.md: BURL-G001"
+  - ".constitution/tech-spec/guidelines.md: BURL-G002"
+  - ".constitution/tech-spec/guidelines.md: BURL-G011"

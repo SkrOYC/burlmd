@@ -246,8 +246,7 @@ verification_commands:
   - name: test
     label: quoted by BURL-G011 post-matrix common functional check
     command: "cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && git diff --check"
-    exists: false
-    owner: BURL-G011
+    exists: true
   - name: test
     label: quoted by BURL-G004
     command: "cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && BURLMD_SMOKE_TABS_G004=1 ./scripts/smoke-shot.sh tabs-g004 && git diff --check"
@@ -336,23 +335,19 @@ verification_commands:
   - name: test
     label: private Linux smoke for BURL-G003 after BURL-G001
     command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/visual-regression.sh state-g003 --baseline .qa/state-g003-private.png --max-different-pixels 0 --write-baseline && git diff --check"
-    exists: false
-    owner: BURL-G003
+    exists: true
   - name: test
     label: private Linux smoke for BURL-G004 after BURL-G001
     command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && BURLMD_SMOKE_TABS_G004=1 ./scripts/visual-regression.sh tabs-g004 --baseline .qa/tabs-g004-private.png --max-different-pixels 0 --write-baseline && git diff --check"
-    exists: false
-    owner: BURL-G004
+    exists: true
   - name: test
     label: private Linux smoke for BURL-G005 after BURL-G001
     command: "cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && ./scripts/visual-regression.sh close-g005 --baseline .qa/close-g005-private.png --max-different-pixels 0 --write-baseline && git diff --check"
-    exists: false
-    owner: BURL-G005
+    exists: true
   - name: test
     label: private Linux smoke for BURL-G007 after BURL-G001
     command: "flutter test && dart analyze && ./scripts/visual-regression.sh nav-g007 --baseline .qa/nav-g007-private.png --max-different-pixels 0 --write-baseline && git diff --check"
-    exists: false
-    owner: BURL-G007
+    exists: true
   - name: test
     label: quoted by BURL-G001
     command: "flutter test && dart analyze && ./scripts/visual-regression.sh shell-g001 --baseline test/goldens/shell-g001-linux.png --max-different-pixels 0 && git diff --check && ! rg -n '\\[DEBUG-' lib rust test scripts"
@@ -500,7 +495,7 @@ layout:
   - path: test/goldens/shell-g001-linux.png
     purpose: BURL-G001 approved private Linux shell reference image
     exists: true
-  - path: .constitution/evidence/BURL-G001
+  - path: ".constitution/evidence/BURL-G001"
     purpose: BURL-G001 approved reference provenance and manifest-backed repetition evidence
     exists: true
   - path: scripts/managed-evidence.sh

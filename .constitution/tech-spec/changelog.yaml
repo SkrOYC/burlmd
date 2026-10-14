@@ -1,4 +1,13 @@
 entries:
+  - version: v2.3.2
+    date: 2026-10-14
+    by: reconcile
+    added:
+      - "Verification command cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && git diff --check now exists (BURL-G001)"
+      - "Verification command cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/visual-regression.sh state-g003 --baseline .qa/state-g003-private.png --max-different-pixels 0 --write-baseline && git diff --check now exists (BURL-G001)"
+      - "Verification command cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && BURLMD_SMOKE_TABS_G004=1 ./scripts/visual-regression.sh tabs-g004 --baseline .qa/tabs-g004-private.png --max-different-pixels 0 --write-baseline && git diff --check now exists (BURL-G001)"
+      - "Verification command cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && ./scripts/visual-regression.sh close-g005 --baseline .qa/close-g005-private.png --max-different-pixels 0 --write-baseline && git diff --check now exists (BURL-G001)"
+      - "Verification command flutter test && dart analyze && ./scripts/visual-regression.sh nav-g007 --baseline .qa/nav-g007-private.png --max-different-pixels 0 --write-baseline && git diff --check now exists (BURL-G001)"
   - version: v2.3.1
     date: 2026-09-14
     fixed:

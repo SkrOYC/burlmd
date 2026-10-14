@@ -1,4 +1,34 @@
 entries:
+  - version: v3.2.19
+    date: 2026-10-14
+    changed:
+      - "Close Epic G's approved private Linux scope with BURL-G001 through BURL-G005 and BURL-G007 complete, totaling 34 points. Preserve the five explicit dependency and release deferrals without claiming their acceptance."
+      - "The separately reviewed owning Stage 3 patch 1c5996f records three delivered G001 layout paths as existing in TechSpec v2.3.1. This is availability metadata, not new acceptance or release evidence."
+      - "BURL-G006 deferred to Future Workspace adoption work after Epic H, as recorded in deferred_to.: Canonical Workspace authority, preflight, and adoption remain upstream prerequisites. G005 supplies the serialized-close prerequisite only."
+      - "BURL-G008 deferred to Future undo and redo work after Epic H's canonical AST and command stack.: The private Linux session work does not establish the canonical editing authority required for undo and redo."
+      - "BURL-G009 deferred to Future find and replace work after BURL-G008.: Undoable replacement depends on the deferred editing-command work."
+      - "BURL-G010 deferred to Future history work after the final Stage 3 history contract and canonical Workspace authority are settled.: The private Linux milestone does not qualify history restoration."
+      - "BURL-G011 deferred to Future feature-complete shell and managed supported-release qualification.: Deferred local features, BURL-M003, and platform and release prerequisites remain incomplete. Private headless smoke is not a substitute."
+      - "EPIC-G desktop session local workflows archived: 6 tickets, 34 points, 10064 diff lines, 0 review rounds"
+    added:
+      - "Deliver host-owned chrome, device-global preferences, validated Workspace session hints, Core-backed tabs, serialized close and native exit handling, and keyboard title-prefix and backlink navigation."
+      - "Follow-up from EPIC-G: G001 visual proof remains bound to immutable source 4ea6139 and its manifest-backed reference. Later G milestones intentionally change the UI and use private smoke captures, not a replacement G001 baseline."
+      - "Follow-up from EPIC-G: Full platform, packaging, performance, and supported-release qualification remain deferred. Reconciliation of command availability is not evidence that deferred commands or tickets were executed successfully."
+      - "Follow-up from EPIC-G: The whole FFI contract and desktop-session flow remain assumed where they include work beyond these tests, including deferred Workspace adoption."
+      - "Follow-up from EPIC-G: Defer the two PR 44 round-one P2 exact-number parsing cases to BURL-O005 hardening or its replacement in the user's next roadmap. Rust serde_json and Dart jsonDecode can round a manually supplied fractional version such as 1.0000000000000001 to 1, accepting it instead of quarantining it. The application writes canonical integer versions; these sidecars contain presentation hints, not Note content. Exact raw-token parsing is outside this closeout's low-cost fixes, and the snapshot schema remains assumed rather than being claimed fully settled with this known limitation."
+      - "Follow-up from EPIC-G: PR 44 round three proposed measuring rapid snapshot updates on slower application-support storage. No slow-storage workload measurement was performed in this private Linux pass. Defer that measurement and any resulting coalescing change to the user's quality roadmap; the current queues retain their tested stable-drain correctness behavior."
+      - "Follow-up from EPIC-G: Consider a focused session-controller extraction in the future roadmap after these correctness fixes. Do not expand this closeout into a broad provider refactor merely to reduce the current file's line count."
+      - "Follow-up from EPIC-G: PR 44 round four identified an unqualified cross-process case. The Linux runner permits multiple instances, and these sidecar stores have no cross-process version-publication lock. Concurrent different-schema writers to one application-support profile are not qualified by the single-instance private tests. Use one instance per profile for this private checkout and route coordinated version publication to the future architecture and TechSpec work before claiming that broader guarantee."
+      - "Follow-up from EPIC-G: PR 44 round seven identified three limits of the private visual harness. It is not a hostile same-UID process sandbox; an application can inspect parent descriptors through procfs. Its PID geometry check does not reject every helper client, and the final capture does not certify unchanged compositor topology. Preserve the immutable G001 reference evidence, but do not claim hostile-child resistance, sole-client enforcement, or final-frame topology qualification. Route stronger harness qualification to the user's replacement roadmap rather than expand this private pass."
+      - "Follow-up from EPIC-G: The October 2026 constitution validator reports 21 identical TS-001 command-resolution errors on merged master and this candidate, with no candidate-only errors. Its parser treats shell negation as an executable and documented trust-anchor placeholders as literal paths. Baseline comparison and direct checks distinguish these inherited tooling limits from G regressions. Route parser compatibility and legacy sidecar warnings to constitution-tooling and the post-G constitution alignment; do not claim that the updated native validator reports a clean run."
+    by: reconcile
+    fixed:
+      - "Preserve unread and unsupported durable state, fence stale restores, retain live Core identities after refused cleanup, surface Core errors, and verify close outcomes with a finite 108-scenario batch matrix and post-failure writes. The separately reviewed Stage 3 Evolution commit a88e1f6 established the G001-only visual-reference policy before code; it is not an execution spec patch."
+    fast_lane_through: 06b72b20f89d4ae781aa584a01d936fe15713cc8
+    upstream:
+      prd: v2.0.7
+      architecture: v2.1.2
+      tech-spec: v2.3.2
   - version: v3.2.18
     date: 2026-09-14
     changed: ["BURL-M003 deferred to Tasks Evolution for supported-release qualification after the user resumes that scope and the required upstream stages authorize execution.: The approved private Linux checkout milestone excludes managed release qualification. No accepted three-role report or reviewed completion evidence exists. Retained implementation and local fixture checks do not complete BURL-M003 or deliver CAP-076.", "EPIC-M CI bootstrap archived: 1 tickets, 3 points, 24156 diff lines, 5 review rounds"]
