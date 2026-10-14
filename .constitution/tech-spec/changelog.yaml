@@ -1,4 +1,10 @@
 entries:
+  - version: v2.3.4
+    date: 2026-10-14
+    by: reconcile
+    fixed:
+      - "Record the delivered G001 and G002 private harness commands and the implemented G011 managed-command template as available; remove their archived creator ownership. Availability does not complete deferred G011, qualify managed evidence, or authorize another platform."
+      - "Correct three stale owners left by the updated command resolver's shell-negation and trust-anchor-placeholder incompatibilities. Native validation now exposes 24 TS-001 parser errors instead of leaving three retired-ticket ownership errors; preserve that tooling limitation rather than claim a clean native run."
   - version: v2.3.3
     date: 2026-10-14
     changed:

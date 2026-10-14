@@ -241,8 +241,7 @@ verification_commands:
   - name: probe
     label: canonical managed verification for BURL-G011
     command: "TRUST_ANCHOR_WORKTREE/scripts/managed-evidence.sh run --ticket BURL-G011 --trust-anchor-sha TRUST_ANCHOR_SHA --source-ref SOURCE_REF --tested-source-sha TESTED_SOURCE_SHA --base-sha BASE_SHA --output EVIDENCE_WORKTREE/.constitution/evidence/BURL-G011/managed-evidence.json && git -C EVIDENCE_WORKTREE diff --check"
-    exists: false
-    owner: BURL-G011
+    exists: true
   - name: test
     label: quoted by BURL-G011 post-matrix common functional check
     command: "cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && git diff --check"
@@ -330,8 +329,7 @@ verification_commands:
   - name: test
     label: private Linux smoke for BURL-G002 after BURL-G001
     command: "flutter test && dart analyze && ./scripts/visual-regression.sh pref-g002 --baseline .qa/pref-g002-private.png --max-different-pixels 0 --write-baseline && git diff --check && ! rg -n '\\[DEBUG-' lib rust test scripts"
-    exists: false
-    owner: BURL-G002
+    exists: true
   - name: test
     label: private Linux smoke for BURL-G003 after BURL-G001
     command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/visual-regression.sh state-g003 --baseline .qa/state-g003-private.png --max-different-pixels 0 --write-baseline && git diff --check"
@@ -351,8 +349,7 @@ verification_commands:
   - name: test
     label: quoted by BURL-G001
     command: "flutter test && dart analyze && ./scripts/visual-regression.sh shell-g001 --baseline test/goldens/shell-g001-linux.png --max-different-pixels 0 && git diff --check && ! rg -n '\\[DEBUG-' lib rust test scripts"
-    exists: false
-    owner: BURL-G001
+    exists: true
   - name: test
     label: quoted by BURL-F004
     command: "flutter test test/components/block_editing_test.dart && BURLMD_SMOKE_F004=1 ./scripts/smoke-shot.sh f004-block-editing"
