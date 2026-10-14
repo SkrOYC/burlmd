@@ -500,31 +500,22 @@ layout:
     exists: true
   - path: scripts/managed-evidence.sh
     purpose: Deferred managed evidence client for the future supported-release matrix
-    exists: false
   - path: scripts/supervise-linux-session.sh
     purpose: Trusted in-namespace Linux session supervisor
-    exists: false
   - path: scripts/managed-sway.conf
     purpose: Fixed headless Sway configuration for managed Linux integration
-    exists: false
   - path: scripts/write-receipt-digest-observation.sh
     purpose: "Writes the trusted caller's identity-bound three-role receipt digest transport"
-    exists: false
   - path: scripts/prepare-compatibility-stage.sh
     purpose: Trusted macOS 26 seal helper that validates the producer bundle and creates the exact two-member compatibility stage without executing candidate bytes
-    exists: false
   - path: scripts/record-compatibility-stage-rest.sh
     purpose: "Trusted macOS 26 seal helper that binds the uploaded compatibility stage to its REST identity, digest, lifetime, and attestation"
-    exists: false
   - path: scripts/write-compatibility-stage-lineage.sh
     purpose: Trusted macOS 26 seal helper that writes the canonical immutable stage and producer-receipt lineage bytes
-    exists: false
   - path: scripts/prepare-compatibility-stage-consumer.sh
     purpose: "Trusted macOS 15 consumer helper that validates wrapper-produced offline verification results and producer lineage, removes credentials, and exposes only verified read-only producer members"
-    exists: false
   - path: scripts/validate-compatibility-stage-interface.sh
     purpose: Trusted macOS 15 validator for the complete compatibility consumer input interface
-    exists: false
   - path: test
     purpose: Dart widget tests
   - path: rust
@@ -602,7 +593,6 @@ layout:
     purpose: Dart dependencies
   - path: ".github/workflows"
     purpose: "Planned: PR, canary, benchmark, and release gates"
-    exists: false
   - path: flake.nix
     purpose: "Planned: release-tagged Nix package entrypoint"
     exists: false

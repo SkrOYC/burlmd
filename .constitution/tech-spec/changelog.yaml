@@ -1,4 +1,18 @@
 entries:
+  - version: v2.3.3
+    date: 2026-10-14
+    changed:
+      - "guidelines.md: layout scripts/managed-evidence.sh now exists"
+      - "guidelines.md: layout scripts/supervise-linux-session.sh now exists"
+      - "guidelines.md: layout scripts/managed-sway.conf now exists"
+      - "guidelines.md: layout scripts/write-receipt-digest-observation.sh now exists"
+      - "guidelines.md: layout scripts/prepare-compatibility-stage.sh now exists"
+      - "guidelines.md: layout scripts/record-compatibility-stage-rest.sh now exists"
+      - "guidelines.md: layout scripts/write-compatibility-stage-lineage.sh now exists"
+      - "guidelines.md: layout scripts/prepare-compatibility-stage-consumer.sh now exists"
+      - "guidelines.md: layout scripts/validate-compatibility-stage-interface.sh now exists"
+      - "guidelines.md: layout .github/workflows now exists"
+    by: derive
   - version: v2.3.2
     date: 2026-10-14
     by: reconcile
