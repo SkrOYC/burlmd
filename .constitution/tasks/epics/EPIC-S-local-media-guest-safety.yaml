@@ -1,0 +1,280 @@
+id: S
+name: local media and guest-change safety
+kind: product
+priority: 1
+capabilities:
+  - CAP-031
+  - CAP-037
+  - CAP-038
+  - CAP-039
+  - CAP-040
+  - CAP-042
+  - CAP-050
+  - CAP-052
+  - CAP-053
+  - CAP-056
+  - CAP-090
+depends_on: [H, I, Q, R]
+scope:
+  paths:
+    - "rust/src/assets/**"
+    - "rust/src/external_image/**"
+    - rust/src/lib.rs
+    - "rust/src/workspace/**"
+    - "rust/src/markdown/**"
+    - "rust/src/index/**"
+    - rust/src/git/operations.rs
+    - "rust/src/api/**"
+    - rust/src/frb_generated.rs
+    - rust/Cargo.toml
+    - rust/Cargo.lock
+    - "lib/src/rust/**"
+    - lib/src/components/block_view.dart
+    - lib/src/components/editor.dart
+    - lib/src/providers/note_providers.dart
+    - lib/src/providers/workspace_provider.dart
+    - lib/src/screens/workspace.dart
+    - "linux/**"
+    - "test/components/**"
+    - "test/providers/**"
+    - test/screens/workspace_rescan_test.dart
+    - "integration_test/**"
+    - integration_test/local_media_flow_test.dart
+    - integration_test/external_image_flow_test.dart
+    - integration_test/workspace_observer_flow_test.dart
+    - scripts/private-linux-live.sh
+    - pubspec.yaml
+    - pubspec.lock
+  out_of_scope:
+    - ".constitution/prd/out-of-scope/drag-and-drop-image-input.md"
+    - ".constitution/prd/out-of-scope/guided-repair.md"
+    - ".constitution/prd/out-of-scope/existing-collection-adoption.md"
+  tech_spec_patchable:
+    - tech-spec/adrs/ADR-010-undo-command-stack.md
+    - tech-spec/adrs/ADR-013-canonical-source-backed-markdown-ast.md
+    - tech-spec/adrs/ADR-016-hybrid-local-assets-and-s3-compatible-objects.md
+    - tech-spec/adrs/ADR-022-external-image-fetch-policy.md
+    - tech-spec/contracts/external-image-fetch.meta.yaml
+    - tech-spec/contracts/ffi_api.meta.yaml
+    - tech-spec/data-models/schema.meta.yaml
+    - tech-spec/guidelines.md
+    - tech-spec/stack.yaml
+estimated_diff_lines: 13500
+tickets:
+  - id: BURL-S001
+    title: Implement the Local Asset Store and portable references
+    type: Feature
+    effort: 8
+    depends_on: []
+    scope:
+      in:
+        - "rust/src/assets/**"
+        - "rust/src/workspace/**"
+        - rust/src/git/operations.rs
+        - "rust/src/api/**"
+        - rust/src/frb_generated.rs
+        - rust/Cargo.toml
+        - rust/Cargo.lock
+        - "lib/src/rust/**"
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && cargo clippy --workspace --all-targets --manifest-path rust/Cargo.toml -- -D warnings && ./scripts/check-generated-bindings.sh && git diff --check"
+      expected: "Asset identity, manifest, commit exclusion, generated-binding, and lint checks pass."
+    stop_conditions:
+      - "STOP unless accepted I001 evidence and the reviewed post-research Stage 3 patch publish content identity, manifest, resource, and retention contracts."
+      - STOP if payload exclusion depends on an ambient Git configuration or writable ignore file.
+      - "STOP if work adds Remote transfer, existing-collection adoption, migration, or cache eviction."
+    description: "Store verified imported image bytes under portable content identities, deduplicate identical Objects, persist the immutable textual reference state, and exclude payload bytes from local Git history by Core authority."
+    acceptance:
+      mode: invariant
+      evidence: |
+        Tests prove byte-to-identity agreement, atomic copy, deduplication, portable references, manifest round trips, fail-closed payload staging exclusion, retained verified bytes, and no dependency on the import source after success.
+      constraints: [NFC-08, NFC-23, NFC-24, NFC-25]
+    flows: [flow-assets]
+    certainty: assumed
+    status: planned
+  - id: BURL-S002
+    title: Add local images from file selection and clipboard paste
+    type: Feature
+    effort: 5
+    depends_on: [BURL-S001]
+    scope:
+      in:
+        - "rust/src/assets/**"
+        - "rust/src/markdown/**"
+        - "rust/src/api/**"
+        - rust/src/frb_generated.rs
+        - "lib/src/rust/**"
+        - lib/src/components/block_view.dart
+        - lib/src/components/editor.dart
+        - lib/src/providers/note_providers.dart
+        - "linux/**"
+        - "test/components/**"
+        - "integration_test/**"
+        - integration_test/local_media_flow_test.dart
+        - pubspec.yaml
+        - pubspec.lock
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && git diff --check"
+      expected: "File, clipboard, decode, insertion, undo, offline render, binding, widget, and analysis checks pass."
+    stop_conditions:
+      - "STOP if imported bytes aren't copied and verified before source insertion or if the Note can reference an unavailable imported source path."
+      - STOP if work adds drag-and-drop input or an unmeasured size or raster limit.
+    description: "Use file selection and clipboard image data to create the same verified local Asset, insert one portable Markdown reference as one undoable edit, and render the verified copy offline with accessible fallback."
+    acceptance:
+      mode: gherkin
+      supplementary: [live_probe]
+      recipe: private-linux-local-p0
+      evidence: |
+        Given an accepted image at the measured boundary, when the `local-image-input` scenario in integration_test/local_media_flow_test.dart selects the file or pastes its bytes, then both paths create the same verified Object and portable reference, display offline, survive save and reopen, and undo and redo as one operation. Cancellation, invalid input, and over-limit input leave the Note unchanged.
+      constraints: [NFC-08, NFC-18, NFC-23]
+    flows: [flow-assets, flow-edit-note]
+    certainty: assumed
+    status: planned
+  - id: BURL-S003
+    title: Load external web images through the dedicated safe client
+    type: Security
+    effort: 8
+    depends_on: [BURL-S002]
+    scope:
+      in:
+        - "rust/src/external_image/**"
+        - "rust/src/markdown/**"
+        - "rust/src/api/**"
+        - rust/src/frb_generated.rs
+        - rust/src/lib.rs
+        - rust/Cargo.toml
+        - rust/Cargo.lock
+        - "lib/src/rust/**"
+        - lib/src/components/block_view.dart
+        - lib/src/components/editor.dart
+        - "test/components/**"
+        - "integration_test/**"
+        - integration_test/external_image_flow_test.dart
+        - pubspec.yaml
+        - pubspec.lock
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml external_image -- --list | rg -q ': test' && cargo test --manifest-path rust/Cargo.toml external_image && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && git diff --check"
+      expected: "The dedicated client, binding, widget, and analysis checks pass for every allowed and refused target, response, limit, cancellation, and credential canary."
+    stop_conditions:
+      - STOP unless accepted I001 evidence and the reviewed post-research Stage 3 patch publish the measured resource limits and tested connection-target enforcement.
+      - "STOP if the code reuses Provider, Remote, Object Store, OAuth, proxy credentials, cookies, Flutter network images, or a persistent cache."
+      - "STOP if a redirect, nonpublic connection target, active document, stale result, or over-limit response can render or alter Note source."
+    description: "Create the code-owned external-image contract at rust/src/external_image/mod.rs and automatically fetch eligible HTTPS raster images as ephemeral, cancellable, credential-free render data."
+    acceptance:
+      mode: contract_test
+      supplementary: [live_probe]
+      recipe: private-linux-external-image
+      evidence: |
+        Contract tests assert zero redirects, public connection targets, standard TLS, no ambient or application credentials and headers, bounded streaming and decode, inert raster formats, revision cancellation, ephemeral storage, URL-preserving source, and content-free failures. The `external-image-policy` scenario in integration_test/external_image_flow_test.dart proves success, refusal, header canaries, cancellation, offline behavior, and no local Asset creation.
+      constraints: [NFC-02, NFC-05, NFC-08, NFC-18]
+    flows: [flow-edit-note]
+    certainty: assumed
+    status: planned
+  - id: BURL-S004
+    title: Add automatic isolated Workspace observation
+    type: Feature
+    effort: 5
+    depends_on: [BURL-S001]
+    scope:
+      in:
+        - scripts/private-linux-live.sh
+        - "rust/src/workspace/**"
+        - "rust/src/api/**"
+        - rust/src/frb_generated.rs
+        - rust/Cargo.toml
+        - rust/Cargo.lock
+        - "lib/src/rust/**"
+        - lib/src/providers/workspace_provider.dart
+        - test/screens/workspace_rescan_test.dart
+        - "integration_test/**"
+        - integration_test/workspace_observer_flow_test.dart
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && git diff --check"
+      expected: "Observer, binding, widget, analysis, and isolated recipe checks pass for event bursts and recovery."
+    stop_conditions:
+      - "STOP if an event mutates authority without Core reread and validation, or if observation reaches outside the Workspace."
+      - "STOP if completeness is claimed after an overflow, unsupported filesystem state, or recipe isolation failure."
+    description: "Convert Platform event bursts into debounced candidate changes, compare them with disk state, and make the isolated observer live recipe runnable with manual Rescan as recovery."
+    acceptance:
+      mode: benchmark
+      supplementary: [live_probe]
+      recipe: private-linux-workspace-observer
+      evidence: |
+        The `observer-events` scenario in integration_test/workspace_observer_flow_test.dart measures create, edit, rename, move, delete, burst, duplicate, reorder, overflow, and missed-event recovery from final write to reconciled state or visible decision. It passes the NFC-06 goal and fail threshold without duplicate history and binds the real app, synthetic Workspace, event trace, and final authority state.
+      constraints: [NFC-06, NFC-21, NFC-25]
+    flows: [flow-workspace-monitoring]
+    certainty: assumed
+    status: planned
+  - id: BURL-S005
+    title: Reconcile conforming external changes
+    type: Feature
+    effort: 5
+    depends_on: [BURL-S004]
+    scope:
+      in:
+        - "rust/src/workspace/**"
+        - "rust/src/index/**"
+        - rust/src/git/operations.rs
+        - "rust/src/api/**"
+        - rust/src/frb_generated.rs
+        - "lib/src/rust/**"
+        - lib/src/providers/workspace_provider.dart
+        - lib/src/providers/note_providers.dart
+        - lib/src/screens/workspace.dart
+        - "test/providers/**"
+        - test/screens/workspace_rescan_test.dart
+        - integration_test/workspace_observer_flow_test.dart
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && git diff --check"
+      expected: "Guest-change authority, history, index, reload, lifecycle, binding, and widget checks pass."
+    stop_conditions:
+      - "STOP if rename or identity provenance is ambiguous; present a bounded confirmation instead of guessing."
+      - "STOP if external changes bypass the same portable lifecycle, Link, conformance, or history rules as Writer actions."
+    description: "Admit conforming guest Note and lifecycle changes through Core authority, record one recoverable local outcome, update the derived index, and reload clean open Notes."
+    acceptance:
+      mode: gherkin
+      supplementary: [live_probe]
+      recipe: private-linux-workspace-observer
+      evidence: |
+        Given a clean open Note and portable Workspace lifecycle fixtures, when the `observer-valid-change` scenario in integration_test/workspace_observer_flow_test.dart creates, edits, renames, moves, or deletes as a guest, then Core validates the current disk revision, records exactly one history outcome, updates the authoritative tree and index, and reloads clean state. Ambiguous provenance requests confirmation.
+    flows: [flow-workspace-monitoring, flow-note-lifecycle]
+    certainty: assumed
+    status: planned
+  - id: BURL-S006
+    title: Preserve dirty and invalid external changes
+    type: Feature
+    effort: 8
+    depends_on: [BURL-S004, BURL-S005]
+    scope:
+      in:
+        - "rust/src/workspace/**"
+        - "rust/src/api/**"
+        - rust/src/frb_generated.rs
+        - "lib/src/rust/**"
+        - lib/src/components/editor.dart
+        - lib/src/providers/note_providers.dart
+        - lib/src/providers/workspace_provider.dart
+        - lib/src/screens/workspace.dart
+        - "test/components/**"
+        - "test/providers/**"
+        - test/screens/workspace_rescan_test.dart
+        - "integration_test/**"
+        - integration_test/workspace_observer_flow_test.dart
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && git diff --check"
+      expected: "Dirty, stale, invalid, correction, Rescan, binding, widget, and analysis checks pass without data loss."
+    stop_conditions:
+      - "STOP if invalid bytes replace authoritative state, either dirty version is discarded before a decision, or a stale decision applies."
+      - "STOP if work adds silent or guided repair; the Writer or Agent corrects invalid input outside the app."
+      - STOP if Rescan becomes an alternate authority or normal substitute for automatic observation.
+    description: "Preserve dirty burlmd and guest versions for explicit decisions, reject stale decisions, flag and retain invalid incoming bytes and the last known-good Note, admit later corrected input, and route Rescan through the same pipeline."
+    acceptance:
+      mode: invariant
+      supplementary: [live_probe]
+      recipe: private-linux-workspace-observer
+      evidence: |
+        Adversarial fixtures prove exact preservation of both dirty variants, incoming invalid bytes, and last known-good state; revision advancement invalidates a pending choice; corrected input can later enter authority; and Rescan converges without bypassing validation. The `observer-invalid-change` scenario in integration_test/workspace_observer_flow_test.dart records visible flags, decisions, corrections, and unchanged authoritative bytes.
+      constraints: [NFC-19, NFC-21, NFC-25]
+    flows: [flow-workspace-monitoring, flow-workspace-bootstrap]
+    certainty: assumed
+    status: planned

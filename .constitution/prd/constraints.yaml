@@ -2,42 +2,42 @@ constraints:
   - id: NFC-01
     legacy_id: Search Latency
     class: performance
-    statement: Full-text search and title filtering stay interactive at the Corpus Scale Goal.
+    statement: Full-text search and title filtering stay interactive at each applicable NFC-07 qualification profile.
     scale: Time from submitting a full-text search or title-filter query to receiving results.
-    meter: "The 95th percentile over 1,000 deterministic queries against the NFC-07 Goal corpus on both NFC-37 reference classes."
+    meter: "The 95th percentile over 1,000 deterministic queries against the first-use NFC-07 profile on private Linux, and later against the 10,000-Note profile in each applicable NFC-37 reference class."
     goal: Under 100 milliseconds.
     stretch: Under 25 milliseconds.
     fail: "Over 250 milliseconds at 10,000 Notes, or over 100 milliseconds at 1,000 Notes."
     certainty: assumed
-    assumption: "The target comes from operator intent; no NFC-39 nightly benchmark run exists on either NFC-37 reference class yet, so nothing has measured it."
+    assumption: "The thresholds predate the Linux-first ruling, but no accepted run has measured them against the 1,000-Note private Linux profile or the later 10,000-Note profile."
   - id: NFC-02
     legacy_id: UI Responsiveness
     class: performance
     statement: "Writing and editing, including a Block moving into and out of its raw editing state, hold a 60 Hz frame budget."
     scale: "Frame time of writing and editing interactions, including the transition of a Block into and out of its raw editing state."
-    meter: Frame timing over a 5-minute scripted session on the NFC-38 editing fixture in both NFC-37 reference classes.
+    meter: "Frame timing over a 5-minute scripted session on the NFC-38 editing fixture on private Linux for first use, and later in each applicable NFC-37 reference class."
     goal: "At least 99% of frames complete within 16.7 milliseconds, with no input-to-effect delay above 50 milliseconds."
     stretch: "At least 99.9% of frames complete within 16.7 milliseconds."
     fail: "More than 1% of frames exceed 33.3 milliseconds or any input-to-effect delay exceeds 100 milliseconds."
     certainty: assumed
-    assumption: "SPK-BURL-D001 measured the encrypted draft write on the typing path against this budget, but the scripted 5-minute frame-timing session has never run on either NFC-37 reference class."
+    assumption: "SPK-BURL-D001 measured the encrypted draft write on the typing path against this budget, but the scripted 5-minute frame-timing session hasn't qualified private Linux or either later NFC-37 reference class."
   - id: NFC-03
     legacy_id: Workspace Open Latency
     class: performance
     statement: "Opening a Workspace reaches an interactable shell quickly, with index construction continuing in the background."
     scale: Time from launch request to an interactable shell with the Workspace open.
-    meter: The 95th percentile of 20 opens of the NFC-07 Goal corpus on both NFC-37 reference classes.
-    goal: No more than 1 second at the Corpus Scale Goal. Remaining index construction proceeds without blocking Workspace use.
+    meter: "The 95th percentile of 20 opens against the first-use NFC-07 profile on private Linux, and later against the 10,000-Note profile in each applicable NFC-37 reference class."
+    goal: No more than 1 second at each applicable NFC-07 qualification profile. Remaining index construction proceeds without blocking Workspace use.
     stretch: No more than 1 second at the Corpus Scale Stretch.
-    fail: Open blocking longer than 3 seconds at the Corpus Scale Goal.
+    fail: Open blocking longer than 3 seconds at an applicable NFC-07 qualification profile.
     certainty: assumed
-    assumption: "The target comes from operator intent; no NFC-39 nightly benchmark run exists on either NFC-37 reference class yet, so nothing has measured it."
+    assumption: "The thresholds predate the Linux-first ruling, but no accepted run has measured them against the 1,000-Note private Linux profile or the later 10,000-Note profile."
   - id: NFC-04
     legacy_id: Cold Start
     class: performance
     statement: A cold process launch reaches the interactive shell without warm caches.
     scale: "Time from process launch to the interactive shell, cold, with no warm caches assumed."
-    meter: "The 95th percentile of 20 cold launches on both NFC-37 reference classes, including secure-storage and encrypted-index access."
+    meter: "The 95th percentile of 20 cold launches on private Linux for first use, and later in each applicable NFC-37 reference class, including secure-storage and encrypted-index access."
     goal: 1 second.
     stretch: 500 milliseconds.
     fail: 3 seconds.
@@ -47,13 +47,13 @@ constraints:
     legacy_id: Idle Memory
     class: performance
     statement: Resident memory at rest stays modest and does not grow while idle.
-    scale: "Resident memory at rest, after opening a Workspace at the Corpus Scale Goal and letting activity settle."
-    meter: Resident memory sampled each second for 10 minutes after a 5-minute settling period with the NFC-07 Goal corpus on both NFC-37 reference classes.
+    scale: "Resident memory at rest, after opening a Workspace at an applicable NFC-07 qualification profile and letting activity settle."
+    meter: "Resident memory sampled each second for 10 minutes after a 5-minute settling period against the first-use NFC-07 profile on private Linux, and later against the 10,000-Note profile in each applicable NFC-37 reference class."
     goal: 400 MB.
     stretch: 250 MB.
     fail: "1 GB, or growth above 5% during a 4-hour idle run after the settling period."
     certainty: assumed
-    assumption: "The target comes from operator intent; no NFC-39 nightly benchmark run exists on either NFC-37 reference class yet, so nothing has measured it."
+    assumption: "The thresholds predate the Linux-first ruling, but no accepted run has measured them against the 1,000-Note private Linux profile or the later 10,000-Note profile."
   - id: NFC-06
     legacy_id: External Change Detection
     class: performance
@@ -68,14 +68,14 @@ constraints:
   - id: NFC-07
     legacy_id: Corpus Scale
     class: performance
-    statement: Every other meter holds over a deterministically generated Workspace at this corpus scale and Note-size distribution.
-    scale: Number and size distribution of Notes in the Workspace over which every other meter in this file must hold.
-    meter: "Use a published deterministic generator to produce synthetic corpora at each level, then exercise search, tree building, open, and indexing."
-    goal: "10,000 Notes with a 4 KiB median, a 64 KiB 95th percentile, and a 1 MiB maximum Note."
+    statement: "Applicable performance meters first qualify on private Linux with up to 1,000 synthetic Notes and later qualify at the retained 10,000-Note scale."
+    scale: Number and size distribution of synthetic Notes in the Workspace over which the applicable performance meters must hold.
+    meter: "Use a published deterministic generator to produce the first-use and later-scale corpora, then exercise editing responsiveness, search, Workspace open, tree building, and indexing."
+    goal: "First-use profile: 1,000 synthetic Notes on private Linux with a 4 KiB median, a 64 KiB 95th percentile, and a 1 MiB maximum Note. Later-scale profile: 10,000 Notes with the same distribution."
     stretch: "50,000 Notes."
-    fail: "1,000 Notes. Below the Fail point, any missed meter is a defect rather than a scaling story."
+    fail: "Declaring first-use qualification without evidence at 1,000 synthetic Notes on private Linux, or declaring later-scale qualification without evidence at 10,000 Notes. Below 1,000 Notes, any missed meter is a defect rather than a scaling story."
     certainty: assumed
-    assumption: "No published deterministic corpus generator or NFC-37 reference-class setup exists for this meter."
+    assumption: "The user selected the two qualification scales, but no accepted synthetic-corpus evidence measures the first-use private Linux profile or the later 10,000-Note profile. The first-use profile reuses the retained distribution instead of introducing an unmeasured replacement, and no timing threshold changes."
   - id: NFC-08
     legacy_id: Image Import Size
     class: performance
@@ -108,7 +108,7 @@ constraints:
     stretch: Within 15 seconds.
     fail: Beyond 15 minutes while the connection is healthy.
     certainty: assumed
-    assumption: "No delivered synchronization capability or end-to-end timed-push evidence demonstrates this meter."
+    assumption: No delivered synchronization capability or end-to-end timed-push evidence demonstrates this meter.
   - id: NFC-11
     legacy_id: Remote Change Freshness
     class: performance
@@ -119,7 +119,7 @@ constraints:
     stretch: Within 15 seconds while connected.
     fail: "Beyond 15 minutes while connected, or beyond 1 hour after connectivity returns."
     certainty: assumed
-    assumption: "No delivered synchronization capability or end-to-end incoming-change evidence demonstrates this meter."
+    assumption: No delivered synchronization capability or end-to-end incoming-change evidence demonstrates this meter.
   - id: NFC-12
     legacy_id: Local-First Mandate
     class: reliability
@@ -134,7 +134,7 @@ constraints:
     legacy_id: Non-Blocking Sync
     class: reliability
     statement: "Background synchronization never blocks the main UI thread or interrupts editing; pending Decisions can pause synchronization but not local editing or history."
-    scale: UI-thread blocking, editing interruption, and local-history availability during synchronization and unresolved reconciliation states.
+    scale: "UI-thread blocking, editing interruption, and local-history availability during synchronization and unresolved reconciliation states."
     meter: "Exercise editing and local-history operations during active synchronization, pending Suggestions, and pending Lifecycle and Asset Decisions, while recording UI-thread work and operation outcomes."
     goal: "Synchronization performs no blocking work on the main UI thread, editing continues in every state, and unresolved Suggestions don't gate commits or pushes after burlmd records valid reconciled state."
     fail: "Synchronization blocks the main UI thread, interrupts editing, lets unresolved state corrupt publication, or a pending Decision blocks local editing or history."
@@ -154,7 +154,7 @@ constraints:
     legacy_id: Orderly Session Closure
     class: reliability
     statement: "Every orderly tab close, Workspace switch, and application exit runs the Note durability and history lifecycle, reports partial results, and preserves unprocessed sessions."
-    scale: Correct lifecycle outcomes across all orderly close entry points and every clean, degraded, failed, and unprocessed session sequence.
+    scale: "Correct lifecycle outcomes across all orderly close entry points and every clean, degraded, failed, and unprocessed session sequence."
     meter: "Run the close-state transition matrix for tab close, batch close, Workspace switch, and application exit with injected lifecycle outcomes."
     goal: "Every processed Note completes the durability and history lifecycle; partial closure reports exact outcomes, and every unprocessed session remains available."
     fail: "Any entry point bypasses the lifecycle, loses an unprocessed session, misreports a partial result, or continues a wider operation after an outcome that requires cancellation."
@@ -173,10 +173,10 @@ constraints:
   - id: NFC-17
     legacy_id: Object Availability
     class: reliability
-    statement: "A connected Workspace never publishes Note history that references an Object before verifying that Object in the configured Object Store."
+    statement: A connected Workspace never publishes Note history that references an Object before verifying that Object in the configured Object Store.
     scale: Published Note-history states whose reachable Object closure is verified in the configured Object Store before publication.
     meter: "Attempt publication across complete, missing, corrupt, stale, and concurrently changing Object-availability fixtures, then inspect publication and verification outcomes."
-    goal: "Every published history state has a freshly verified Object closure in the configured Object Store."
+    goal: Every published history state has a freshly verified Object closure in the configured Object Store.
     fail: "Any history publishes with a missing, corrupt, unverified, or stale Object obligation."
     certainty: assumed
     assumption: "CAP-054 and the Object Transfer boundary define this gate, but Object Store publication isn't delivered or measured."
@@ -194,8 +194,8 @@ constraints:
     legacy_id: Format Conformance
     class: reliability
     statement: "Every Note burlmd creates remains conformant with the Open Knowledge Format, and invalid guest Notes remain outside authoritative state until the Writer accepts a conforming repair."
-    scale: Conformance and authority state of created Notes, operated-on conformant Notes, and invalid guest Notes before and after repair decisions.
-    meter: "Validate generated Notes after every Note operation and exercise invalid guest fixtures through previewed Repair and Exclude decisions while preserving their original bytes."
+    scale: "Conformance and authority state of created Notes, operated-on conformant Notes, and invalid guest Notes before and after repair decisions."
+    meter: Validate generated Notes after every Note operation and exercise invalid guest fixtures through previewed Repair and Exclude decisions while preserving their original bytes.
     goal: "All burlmd-created and burlmd-modified Notes conform; invalid guest Notes remain uneditable and nonauthoritative until an accepted repair conforms."
     fail: "burlmd creates or causes a nonconformant Note, silently repairs guest input, edits invalid guest input, admits it to authoritative state, or loses its original bytes."
     certainty: assumed
@@ -204,7 +204,7 @@ constraints:
     legacy_id: Non-Destructive Reconciliation
     class: reliability
     statement: "Concurrent content reconciliation never discards either side, never duplicates a Note, and keeps both variants recoverable until the Writer resolves the Suggestion."
-    scale: Preservation, recoverability, and Note identity across concurrent content-edit scenarios before and after Suggestion resolution.
+    scale: "Preservation, recoverability, and Note identity across concurrent content-edit scenarios before and after Suggestion resolution."
     meter: "Generate overlapping and independent concurrent edits, reconcile them, and compare base, local, incoming, tentative, and resolved history plus the resulting Note identities."
     goal: "Both variants remain recoverable until resolution, every safe difference has a decision path, and reconciliation retains one Note identity."
     fail: "Either variant is lost, content becomes unrecoverable before resolution, raw conflict state escapes, or reconciliation duplicates the Note."
@@ -213,8 +213,8 @@ constraints:
   - id: NFC-21
     legacy_id: Guest Authority Boundary
     class: reliability
-    statement: "burlmd validates guest filesystem writes before admitting them to authoritative Workspace state and preserves the last known-good Note when input is invalid."
-    scale: Authority transitions and byte preservation for valid, invalid, partial, reordered, and adversarial guest filesystem writes.
+    statement: burlmd validates guest filesystem writes before admitting them to authoritative Workspace state and preserves the last known-good Note when input is invalid.
+    scale: "Authority transitions and byte preservation for valid, invalid, partial, reordered, and adversarial guest filesystem writes."
     meter: "Apply guest-write fixtures while a Workspace is open, then inspect validation, authoritative state, history, repair prompts, and the preserved last known-good bytes."
     goal: "Only conforming guest input enters authoritative state; invalid input preserves both its original bytes and the last known-good authoritative Note without silent repair."
     fail: "Invalid or partial input replaces authoritative state, changes the last known-good Note, triggers silent repair, becomes editable, or loses its original bytes."
@@ -223,8 +223,8 @@ constraints:
   - id: NFC-22
     legacy_id: Cross-Platform Path Identity
     class: compatibility
-    statement: "Every path burlmd creates retains one unambiguous identity across supported Linux and macOS filesystems and Windows-compatible path rules."
-    scale: Path identity and collision behavior under the case, Unicode normalization, reserved-name, trailing-character, alias, and traversal rules of every supported storage target.
+    statement: Every path burlmd creates retains one unambiguous identity across supported Linux and macOS filesystems and Windows-compatible path rules.
+    scale: "Path identity and collision behavior under the case, Unicode normalization, reserved-name, trailing-character, alias, and traversal rules of every supported storage target."
     meter: "Generate equivalent and adversarial path pairs, round-trip them through each target rule set, and compare their canonical identities and rejection outcomes."
     goal: "Each accepted path has one stable identity on every target, and burlmd rejects or deterministically disambiguates every collision before mutation."
     fail: "A path gains a second identity, aliases another path, escapes the Workspace, or collides after moving between supported targets."
@@ -234,17 +234,17 @@ constraints:
     legacy_id: Object Integrity
     class: reliability
     statement: "burlmd verifies Object bytes against their content identity before exposing, publishing, migrating, restoring, or deleting them."
-    scale: Content-identity verification outcomes for every operation that consumes, transfers, restores, exposes, or removes Object bytes.
+    scale: "Content-identity verification outcomes for every operation that consumes, transfers, restores, exposes, or removes Object bytes."
     meter: "Exercise each Object operation with matching, corrupt, truncated, substituted, and concurrently changed bytes, then inspect the operation and resulting state."
     goal: "Only bytes that match their content identity can complete an Object operation, and failed verification preserves known-good state."
     fail: "Any operation accepts mismatched bytes, exposes corrupt content, destroys a verified copy, or records an identity that doesn't match the bytes."
     certainty: assumed
-    assumption: "No delivered Asset and Object Store evidence measures content-identity verification across every Object operation."
+    assumption: No delivered Asset and Object Store evidence measures content-identity verification across every Object operation.
   - id: NFC-24
     legacy_id: Protected History
     class: reliability
     statement: "burlmd retains every Object reachable from a Protected State and, during `0.x`, never deletes authoritative Object Store bytes."
-    scale: Retention of Objects reachable from current, retained, unpublished, published, pending-reconciliation, and Consolidation states across cleanup operations.
+    scale: "Retention of Objects reachable from current, retained, unpublished, published, pending-reconciliation, and Consolidation states across cleanup operations."
     meter: "Construct each Protected State and overlapping reachability graph, run local cache eviction, migration, detach, and cleanup operations, then verify every reachable Object and deletion target."
     goal: "Every reachable Object remains available; only verified local cache copies with no active offline need can be evicted, and no authoritative Object Store byte is deleted during `0.x`."
     fail: "Any reachable Object becomes unavailable, an unverified or active local copy is evicted, or authoritative Object Store bytes are deleted during `0.x`."
@@ -253,8 +253,8 @@ constraints:
   - id: NFC-25
     legacy_id: Workspace Containment
     class: security
-    statement: "Workspace-controlled paths and indirections never grant access outside the Workspace boundary."
-    scale: Filesystem reads, writes, watches, adoption, and synchronization targets reachable through Workspace paths and indirections.
+    statement: Workspace-controlled paths and indirections never grant access outside the Workspace boundary.
+    scale: "Filesystem reads, writes, watches, adoption, and synchronization targets reachable through Workspace paths and indirections."
     meter: "Run traversal, absolute-path, symlink, alias, nested-repository, replacement-race, and normalization fixtures through adoption, monitoring, and synchronization operations."
     goal: "Every accepted target resolves inside the Workspace boundary, and every unsupported alias or external repository is rejected before access or mutation."
     fail: "Any Workspace-controlled input reads, writes, watches, publishes, or grants access outside the Workspace boundary."
@@ -274,7 +274,7 @@ constraints:
     legacy_id: At-Rest Protection (Local)
     class: security
     statement: "Notes remain plaintext so standard tools can use them. Platform storage protection remains a Writer-controlled installation choice that burlmd doesn't guarantee; burlmd encrypts the aggregate search index independently, keeps persistent keys in Platform secure storage, and erases transient key material after use."
-    scale: Plaintext portability of Notes, protection claims for Platform storage, encryption state of the aggregate index, and location and lifetime of persistent and transient key material.
+    scale: "Plaintext portability of Notes, protection claims for Platform storage, encryption state of the aggregate index, and location and lifetime of persistent and transient key material."
     meter: "Inspect Note and index storage plus product protection claims across create, search, restart, recovery, and failure paths; probe persistent key locations and verify transient key erasure after each authorized operation."
     goal: "Notes remain readable as plaintext, Platform protection is represented as an external Writer choice, aggregate index content isn't readable without its key, persistent keys exist only in Platform secure storage, and transient copies don't remain after use."
     fail: "A Note requires burlmd to read, burlmd guarantees Platform protection of Note files, aggregate index content is plaintext, persistent key material appears outside secure storage, or transient key material remains after its operation."
@@ -284,7 +284,7 @@ constraints:
     legacy_id: Credential Isolation
     class: security
     statement: "Remote and Object Store credentials persist only in Platform secure storage and never enter logs, diagnostics, Workspace content, or version history."
-    scale: Credential presence across persistent storage, process handoffs, diagnostics, logs, Workspace bytes, and version history.
+    scale: "Credential presence across persistent storage, process handoffs, diagnostics, logs, Workspace bytes, and version history."
     meter: "Inject unique credential canaries into authorization and storage operations, inspect every permitted persistence and diagnostic surface, and scan resulting Workspace history and artifacts."
     goal: "Persistent credentials appear only in Platform secure storage, and no credential canary appears in logs, diagnostics, Workspace content, or version history."
     fail: "A credential persists outside Platform secure storage or any credential value reaches a log, diagnostic, Workspace file, history object, or unrelated process boundary."
@@ -293,8 +293,8 @@ constraints:
   - id: NFC-29
     legacy_id: Non-Proprietary Storage
     class: compatibility
-    statement: "Every Note remains a plain-text file in the published Open Knowledge Format and is readable and editable without tooling produced by this project."
-    scale: Readability, editability, and conformance of Notes when only generic text and filesystem tools are available.
+    statement: Every Note remains a plain-text file in the published Open Knowledge Format and is readable and editable without tooling produced by this project.
+    scale: "Readability, editability, and conformance of Notes when only generic text and filesystem tools are available."
     meter: "Create and modify representative Notes with burlmd and independent text tools, then validate their bytes and Open Knowledge Format conformance without project tooling in the read-and-edit path."
     goal: "Every Note is plain text, follows the published format, and can be read and edited with an independent text editor."
     fail: "Any Note requires proprietary storage, an unpublished format, or project tooling for ordinary reading or editing."
@@ -304,7 +304,7 @@ constraints:
     legacy_id: Private Remote Boundary
     class: security
     statement: "A connected Remote remains private, and burlmd pauses synchronization when the Remote becomes public or required access is lost."
-    scale: Synchronization state after Remote privacy and access checks at connection, reconnection, periodic validation, and publication.
+    scale: "Synchronization state after Remote privacy and access checks at connection, reconnection, periodic validation, and publication."
     meter: "Change Remote visibility and required access at each check boundary, including stale and unavailable results, then observe publication and local Workspace behavior."
     goal: "Synchronization proceeds only with a fresh private and accessible result; every privacy or access failure pauses publication while preserving local use."
     fail: "burlmd publishes to a public or inaccessible Remote, treats missing or stale eligibility as valid, or blocks local Workspace use after the failure."
@@ -315,16 +315,16 @@ constraints:
     class: security
     statement: "burlmd never requests workflow-modification authority or publishes history containing `.github/workflows/**`; it preserves local access and offers Consolidation instead."
     scale: Requested Provider authority and workflow-path reachability across every local publication ref before Remote publication.
-    meter: "Inspect requested permissions and attempt publication with workflow paths in current and historical commits across every reachable local publication ref."
+    meter: Inspect requested permissions and attempt publication with workflow paths in current and historical commits across every reachable local publication ref.
     goal: "No workflow-modification authority is requested; workflow-bearing history is refused before publication, local use remains available, and clean-Workspace Consolidation is offered."
     fail: "burlmd requests workflow-modification authority, publishes reachable workflow content, blocks local use, or proceeds without the required refusal and Consolidation path."
     certainty: assumed
-    assumption: "No delivered Remote evidence proves the Provider-permission and prepublication invariant across every reachable local publication ref."
+    assumption: No delivered Remote evidence proves the Provider-permission and prepublication invariant across every reachable local publication ref.
   - id: NFC-32
     legacy_id: Private Object Store Boundary
     class: security
     statement: "burlmd refuses or pauses an Object Store when anonymous list, read, write, or delete access exists, or when the complete privacy result is missing or stale."
-    scale: Object Store acceptance and publication state for anonymous access across list, read, write, and delete operations, including result completeness and freshness.
+    scale: "Object Store acceptance and publication state for anonymous access across list, read, write, and delete operations, including result completeness and freshness."
     meter: "Probe all four anonymous operations at connection, periodically, before publication, and after access changes; inject missing, partial, stale, and unavailable results."
     goal: "An Object Store is active only after a fresh complete result denies every anonymous operation; any other result refuses connection or pauses publication."
     fail: "burlmd accepts or continues with anonymous access, an incomplete or stale result, or a probe that didn't cover all four operations."
@@ -333,29 +333,29 @@ constraints:
   - id: NFC-33
     legacy_id: Zero Automatic Off-Device Telemetry
     class: privacy
-    statement: "burlmd can record bounded structured diagnostics locally but never transmits usage metrics, errors, diagnostics, Note or Asset content, signed locations, or content-derived metadata automatically. Only the Writer can create and share a Diagnostics Export."
-    scale: Off-device transmissions and sensitive-field presence in local diagnostics and Writer-created Diagnostics Exports.
-    meter: "Inject content, credential, signed-location, and content-derived canaries, exercise success and failure paths with network observation, and inspect local diagnostics and exported bytes."
-    goal: "No automatic reporting request occurs; local diagnostics and Diagnostics Exports exclude Note and Asset content, credentials, signed locations, and content-derived data, and sharing requires an explicit Writer action."
-    fail: "Any automatic off-device report occurs, prohibited data enters diagnostics or an Export, or burlmd shares an Export without the Writer's action."
+    statement: "burlmd can record bounded structured diagnostics locally but never transmits usage metrics, errors, diagnostics, or diagnostic payloads automatically. Writer-authorized Note and Asset synchronization through configured Remote and Object Store connections is product traffic, not telemetry. That authorization doesn't permit Note or Asset content, credentials, signed locations, or content-derived metadata in logs, diagnostics, or Diagnostics Exports. Loading an external Markdown image when its Note opens permits only the request needed for that reference and doesn't permit transmitting other Note content, application credentials, or telemetry. Only the Writer can create and share a Diagnostics Export."
+    scale: "Automatic reporting, authorized product traffic, external Markdown image requests, and sensitive-field presence in local diagnostics and Writer-created Diagnostics Exports."
+    meter: "Inject content, credential, signed-location, and content-derived canaries, exercise authorized synchronization plus success and failure paths including external Markdown image loading with network observation, and inspect local logs, diagnostics, and exported bytes."
+    goal: "No automatic reporting request occurs; Note and Asset content travels only through Writer-authorized product connections; an external-image request discloses no other Note content, application credential, or telemetry; logs, local diagnostics, and Diagnostics Exports exclude Note and Asset content, credentials, signed locations, and content-derived data; and sharing a Diagnostics Export requires an explicit Writer action."
+    fail: "Any automatic off-device report occurs, authorized product traffic reaches a recipient outside the Writer-configured connection, an external-image request transmits prohibited data, prohibited data enters logs, diagnostics, or a Diagnostics Export, or burlmd shares a Diagnostics Export without the Writer's action."
     certainty: assumed
-    assumption: "This constraint remains assumed until Writer-controlled diagnostics pass the network and canary checks."
+    assumption: This constraint remains assumed until Writer-controlled diagnostics and external Markdown image requests pass the network and canary checks.
   - id: NFC-34
     legacy_id: Feature Parity
     class: compatibility
     statement: "Every supported release system passes the same release-blocking capability matrix; launching alone never establishes support."
     scale: Required capability outcomes for every supported release system and release artifact.
     meter: "Run the common release-blocking matrix for local editing, persistence, Export, synchronization, secure storage, recovery, and update notification on each supported system."
-    goal: "Every required matrix cell passes on every supported system for the exact release artifact."
+    goal: Every required matrix cell passes on every supported system for the exact release artifact.
     fail: "Any supported system skips or fails a required cell, receives a weaker capability matrix, or is accepted from a launch-only check."
     certainty: assumed
-    assumption: "This constraint remains assumed until an installable release artifact passes the authenticated cross-system matrix."
+    assumption: This constraint remains assumed until an installable release artifact passes the authenticated cross-system matrix.
   - id: NFC-35
     legacy_id: Version Policy
     class: compatibility
     statement: "Releases remain in the `0.x` series until the user explicitly declares stability, and downgrade compatibility isn't guaranteed."
-    scale: Public version identifiers and downgrade claims across release artifacts, manifests, update metadata, and release information.
-    meter: "Audit every candidate release surface for its version series and compatibility claims before publication."
+    scale: "Public version identifiers and downgrade claims across release artifacts, manifests, update metadata, and release information."
+    meter: Audit every candidate release surface for its version series and compatibility claims before publication.
     goal: "Every release stays in `0.x` before an explicit stability declaration, and no surface promises downgrade compatibility."
     fail: "A release leaves `0.x` without the declaration or any release surface guarantees downgrade compatibility."
     certainty: assumed
@@ -364,42 +364,42 @@ constraints:
     legacy_id: Migration Safety
     class: reliability
     statement: "Application-state migrations create a backup, apply atomically, restore earlier state after failure, and never rewrite Note content unless an explicit product operation requires it."
-    scale: State recoverability, atomic visibility, and Note-byte preservation across every supported migration and injected failure point.
+    scale: "State recoverability, atomic visibility, and Note-byte preservation across every supported migration and injected failure point."
     meter: "Snapshot application state and Note bytes, interrupt each migration before and after every durable transition, then reopen and compare the visible state, backup, and Notes."
     goal: "A successful migration exposes one complete new state; every failure restores the complete earlier state, and Note bytes remain identical unless a separate explicit operation changes them."
     fail: "A migration lacks a backup, exposes partial state, can't restore earlier state, or rewrites Note content without an explicit product operation."
     certainty: assumed
-    assumption: "This constraint remains assumed until application-state migrations pass the failure-injection matrix."
+    assumption: This constraint remains assumed until application-state migrations pass the failure-injection matrix.
   - id: NFC-37
     legacy_id: Reference Classes
     class: performance
-    statement: "Performance meters run in reproducible managed continuous-integration environments on the Linux x86-64 performance reference and the Apple Silicon macOS 26 performance and visual reference."
+    statement: Later supported-release performance meters run in reproducible managed continuous-integration environments on the Linux x86-64 performance reference and the Apple Silicon macOS 26 performance and visual reference.
     scale: Reference-environment conformance and identity completeness for each performance or visual evidence run.
     meter: "Before measurement, compare the environment with the published deterministic setup and required CPU, memory, viewport, and refresh-rate profile, then inspect its recorded environment and evidence identity."
     goal: "The Linux x86-64 reference has 4 logical CPUs and 16 GB of available memory. The Apple Silicon macOS 26 reference has M1-class compute, 3 logical CPUs, and 7 GB of available memory. Both use a fixed 1920×1080 logical viewport at 60 Hz and record the environment image identity, operating-system release, architecture, CPU allocation and model class, available memory, storage characteristics, viewport, refresh rate, build identity, and corpus identity. The reference-class setup is published and deterministic."
     fail: "A run uses another resource profile, viewport, or refresh rate; omits a required identity field; or presents incomplete-identity evidence as valid."
     certainty: assumed
-    assumption: "No managed benchmark evidence measures both reference classes with the complete required identity."
+    assumption: "No managed benchmark evidence measures both reference classes with the complete required identity. This later supported-release meter doesn't gate the private Linux milestone."
   - id: NFC-38
     legacy_id: Scripted Editing Note
     class: performance
-    statement: The UI Responsiveness meter uses one fixed editing fixture that exercises every supported syntax class.
-    scale: Block count, supported-syntax coverage, and pre-edit encoded size of the scripted editing Note.
+    statement: The UI Responsiveness meter uses one fixed editing fixture that exercises every syntax class supported by the increment under qualification.
+    scale: "Block count, supported-syntax coverage, and pre-edit encoded size of the scripted editing Note."
     meter: "Before the NFC-02 session, count the fixture's Blocks, verify that every supported syntax class appears, and measure its encoded size before edits."
-    goal: "Exactly 2,000 Blocks across every supported syntax class and exactly 1 MiB before edits."
-    fail: "The fixture has another Block count or pre-edit size, omits a supported syntax class, or changes between comparable runs."
+    goal: "Exactly 2,000 Blocks across every syntax class supported by the qualified increment and exactly 1 MiB before edits."
+    fail: "The fixture has another Block count or pre-edit size, omits a syntax class supported by the qualified increment, or changes between comparable runs."
     certainty: assumed
     assumption: "The required editing fixture hasn't been published or measured."
   - id: NFC-39
     legacy_id: Verification
     class: operability
-    statement: Every scalar meter is verified by scheduled nightly benchmark runs in each applicable NFC-37 reference class.
-    scale: Scheduled-run cadence, scalar-meter coverage, reference-class coverage, regression reporting, and environment-identity capture.
+    statement: "During later supported-release qualification, every scalar meter is verified by scheduled nightly benchmark runs in each applicable NFC-37 reference class."
+    scale: "Scheduled-run cadence, scalar-meter coverage, reference-class coverage, regression reporting, and environment-identity capture."
     meter: "Inspect each managed continuous-integration nightly run for every applicable scalar meter, required reference class, regression report, and NFC-37 environment identity."
     goal: "Every applicable scalar meter runs nightly in each applicable reference class, reports regressions without blocking merges, and captures the required environment identity."
     fail: "A nightly run omits an applicable scalar meter or reference class, omits required environment identity, fails to report a regression, or makes the benchmark regression itself a merge-blocking gate."
     certainty: assumed
-    assumption: "No scheduled nightly benchmark run covers every applicable scalar meter and reference class."
+    assumption: "No scheduled nightly benchmark run covers every applicable scalar meter and reference class. This later supported-release meter doesn't gate the private Linux milestone."
 deferred:
   - class: cost
     risk: "No cost meter exists because nothing in the architecture runs on infrastructure this project operates: content lives on the Writer's device, their Remote, and their Object Store. If a project-operated component ever appears, this gap hides its running cost until someone pays it."

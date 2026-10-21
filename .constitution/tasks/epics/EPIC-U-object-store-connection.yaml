@@ -1,0 +1,178 @@
+id: U
+name: Object Store connection and transfer
+kind: foundation
+priority: 2
+capabilities: [CAP-054, CAP-056, CAP-057]
+depends_on: [I, K, Q, S]
+scope:
+  paths:
+    - "rust/src/object_store/**"
+    - "rust/src/assets/**"
+    - "rust/src/security/**"
+    - "rust/src/workspace/**"
+    - "rust/src/api/**"
+    - rust/src/frb_generated.rs
+    - rust/Cargo.toml
+    - rust/Cargo.lock
+    - "lib/src/rust/**"
+    - "lib/src/components/**"
+    - "lib/src/providers/**"
+    - lib/src/screens/workspace.dart
+    - "lib/l10n/**"
+    - "test/**"
+    - "integration_test/**"
+    - integration_test/object_store_fixture_test.dart
+    - pubspec.yaml
+    - pubspec.lock
+  out_of_scope:
+    - ".constitution/prd/out-of-scope/object-store-migration.md"
+    - ".constitution/prd/out-of-scope/automatic-image-cache-eviction.md"
+  tech_spec_patchable:
+    - tech-spec/adrs/ADR-016-hybrid-local-assets-and-s3-compatible-objects.md
+    - tech-spec/contracts/ffi_api.meta.yaml
+    - tech-spec/data-models/schema.meta.yaml
+    - tech-spec/guidelines.md
+    - tech-spec/stack.yaml
+estimated_diff_lines: 10500
+tickets:
+  - id: BURL-U001
+    title: Connect and validate one private Object Store
+    type: Security
+    effort: 8
+    depends_on: []
+    scope:
+      in:
+        - "rust/src/object_store/**"
+        - "rust/src/security/**"
+        - "rust/src/api/**"
+        - rust/src/frb_generated.rs
+        - rust/Cargo.toml
+        - rust/Cargo.lock
+        - "lib/src/rust/**"
+        - "lib/src/components/**"
+        - "lib/src/providers/**"
+        - lib/src/screens/workspace.dart
+        - "lib/l10n/**"
+        - "test/**"
+        - "integration_test/**"
+        - integration_test/object_store_fixture_test.dart
+        - pubspec.yaml
+        - pubspec.lock
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && git diff --check"
+      expected: "Private-store protocol, negative anonymous access, cleanup, credential, binding, widget, and analysis checks pass."
+    stop_conditions:
+      - "STOP unless accepted I001 evidence and the reviewed post-research Stage 3 patch select the client, exact options, limits, and credential contract."
+      - "STOP if anonymous list, read, write, or delete succeeds or remains unknown, or if a privacy failure mutates provider policy."
+      - "STOP if credentials enter Workspace state, diagnostics, arguments, logs, or evidence."
+    description: "Collect one S3-compatible store configuration, persist secrets through Platform secure storage, and validate authenticated operations plus negative anonymous list, read, write, and delete probes under an owned disposable prefix."
+    acceptance:
+      mode: invariant
+      supplementary: [live_probe]
+      recipe: private-linux-object-store-fixture
+      evidence: |
+        The `store-connect-privacy` scenario in integration_test/object_store_fixture_test.dart drives the real application and Core against protocol-faithful synthetic Object Store resources. It proves authenticated disposable operations, denial of every anonymous permission, preservation after anonymous delete attempts, complete authenticated cleanup, typed privacy-paused failure, and no policy mutation or secret disclosure.
+    flows: [flow-object-store-lifecycle]
+    certainty: assumed
+    status: planned
+  - id: BURL-U002
+    title: "Upload, verify, and progressively hydrate Objects"
+    type: Feature
+    effort: 8
+    depends_on: [BURL-U001]
+    scope:
+      in:
+        - "rust/src/object_store/**"
+        - "rust/src/assets/**"
+        - "rust/src/workspace/**"
+        - "rust/src/api/**"
+        - rust/src/frb_generated.rs
+        - "lib/src/rust/**"
+        - "lib/src/components/**"
+        - "lib/src/providers/**"
+        - "test/**"
+        - "integration_test/**"
+        - integration_test/object_store_fixture_test.dart
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && git diff --check"
+      expected: "Upload, verification, resumable transfer, active-first hydration, binding, widget, and analysis checks pass."
+    stop_conditions:
+      - STOP if history can publish before every referenced Object verifies in the configured store.
+      - "STOP if unverified bytes render, transfer state enters the immutable manifest, or hydration blocks Note editing."
+    description: "Upload content-addressed Objects, verify remote bytes, persist resumable transfer state outside the manifest, and hydrate active images first without blocking local Note work."
+    acceptance:
+      mode: invariant
+      supplementary: [live_probe]
+      recipe: private-linux-object-store-fixture
+      evidence: |
+        Transfer, corruption, cancellation, restart, stale-privacy, and priority fixtures prove identity before exposure, durable resumption, active-first hydration, local editing availability, and the publication ordering required by NFC-17. The `object-transfer-hydration` scenario in integration_test/object_store_fixture_test.dart records the real application states.
+      constraints: [NFC-13, NFC-17, NFC-23, NFC-24]
+    flows: [flow-object-store-lifecycle, flow-sync-push]
+    certainty: assumed
+    status: planned
+  - id: BURL-U003
+    title: Recover missing or corrupt Objects without loss
+    type: Feature
+    effort: 5
+    depends_on: [BURL-U002]
+    scope:
+      in:
+        - "rust/src/object_store/**"
+        - "rust/src/assets/**"
+        - "rust/src/workspace/**"
+        - "rust/src/api/**"
+        - rust/src/frb_generated.rs
+        - "lib/src/rust/**"
+        - "lib/src/components/**"
+        - "lib/src/providers/**"
+        - "test/**"
+        - integration_test/object_store_fixture_test.dart
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && git diff --check"
+      expected: "Missing, corrupt, repair, replacement, removal, pause, binding, widget, and analysis checks pass."
+    stop_conditions:
+      - "STOP if a recovery action isn't valid for the known copies and references, or if a verified copy can be discarded before another verifies."
+      - STOP if local corruption is misclassified as a synchronization Asset Decision.
+    description: "Detect invalid availability or bytes, preserve every verified copy, pause affected publication, and expose only valid Retry, Repair from local, Choose replacement, or Remove reference actions."
+    acceptance:
+      mode: gherkin
+      supplementary: [live_probe]
+      recipe: private-linux-object-store-fixture
+      evidence: |
+        Given each combination of local and remote missing, corrupt, verified, and referenced Objects, when the `object-recovery` scenario in integration_test/object_store_fixture_test.dart begins recovery, then only valid actions appear, each accepted outcome re-verifies identity before exposure or publication, unrelated local work remains available, and cancellation preserves all known-good state.
+      constraints: [NFC-17, NFC-23, NFC-24]
+    flows: [flow-assets, flow-object-store-lifecycle]
+    certainty: assumed
+    status: planned
+  - id: BURL-U004
+    title: Update Object Store credentials atomically
+    type: Security
+    effort: 3
+    depends_on: [BURL-U001]
+    scope:
+      in:
+        - "rust/src/object_store/**"
+        - "rust/src/security/**"
+        - "rust/src/api/**"
+        - rust/src/frb_generated.rs
+        - "lib/src/rust/**"
+        - "lib/src/components/**"
+        - "lib/src/providers/**"
+        - "test/**"
+        - integration_test/object_store_fixture_test.dart
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && git diff --check"
+      expected: "Credential preflight, atomic reference rotation, failure preservation, cleanup guidance, binding, widget, and analysis checks pass."
+    stop_conditions:
+      - STOP if replacement credentials become authoritative before complete validation or if failure removes the working pair.
+      - STOP if work expands into Object Store replacement or migration.
+    description: "Preflight replacement credentials against the same configured store, atomically publish their secure reference, remove the superseded local secret only after success, and guide provider-side revocation."
+    acceptance:
+      mode: invariant
+      supplementary: [live_probe]
+      recipe: private-linux-object-store-fixture
+      evidence: |
+        Fault and concurrency fixtures prove that readers observe only the complete earlier or replacement credential reference, every failure retains the working connection, success removes only the superseded local secret, and no credential value enters logs or evidence. The `object-credential-update` scenario in integration_test/object_store_fixture_test.dart records the real application outcome.
+    flows: [flow-object-store-lifecycle]
+    certainty: assumed
+    status: planned

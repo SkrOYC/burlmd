@@ -1,0 +1,9 @@
+artifact_path: rust/src/external_image/mod.rs
+owner: BURL-S003
+surface: http
+flows: [flow-edit-note]
+boundaries: [BND-02, BND-22]
+companion: external-image-fetch.md
+certainty: assumed
+assumption: "BND-22 and ADR-022 define the policy, but no code-owned client or contract test exists. Resource limits and connection-target enforcement remain gated by BURL-I001 evidence and the later Stage 3 patch."
+settles_when: "Contract tests exercise eligible HTTPS raster loading, public-address enforcement, zero redirects, credential and header exclusion, resource refusal, cancellation, stale-revision suppression, offline behavior, diagnostics redaction, and URL-preserving Export against the code-owned artifact."

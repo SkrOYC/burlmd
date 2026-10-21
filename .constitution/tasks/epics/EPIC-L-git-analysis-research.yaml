@@ -1,0 +1,35 @@
+id: L
+name: structured Git analysis research
+kind: tooling
+priority: 1
+capabilities: []
+depends_on: []
+scope:
+  paths: [".constitution/spikes/SPK-BURL-L001.md"]
+  tech_spec_patchable:
+    - tech-spec/adrs/ADR-015-structured-git-shaped-reconciliation-analysis.md
+estimated_diff_lines: 2500
+tickets:
+  - id: BURL-L001
+    title: Select the structured Git reconciliation protocol
+    type: Spike
+    effort: 8
+    depends_on: []
+    scope:
+      in: [".constitution/spikes/SPK-BURL-L001.md"]
+    verification:
+      command: "rg -q '^Status: complete$' .constitution/spikes/SPK-BURL-L001.md && rg -q '^## Recommendation$' .constitution/spikes/SPK-BURL-L001.md && git diff --check"
+      expected: The report is complete and recommends a bounded read-only protocol that produces typed results without executing guest configuration or mutating the Workspace.
+    stop_conditions:
+      - "STOP if a candidate depends on human error prose, raw conflict-marker parsing, repository hooks, filters, helpers, or authoritative-worktree mutation."
+      - "STOP when the 8-point budget is exhausted; record unsupported conflict classes and resource limits without guessing."
+      - STOP if work writes product code or any constitution file other than the named Spike report.
+    description: "Compare merge-tree, temporary-index plumbing, and isolated-worktree porcelain against ADR-015's complete conflict, containment, fault, cancellation, and resource matrix."
+    acceptance:
+      mode: contract_test
+      evidence: |
+        The report records exact Git version and arguments, environment isolation, input corpus digests, typed output coverage, mutation checks, resource bounds, cancellation and cleanup outcomes, and a recommendation with explicit unsupported cases and required Stage 3 changes.
+    flows: [flow-conflict-resolution]
+    spike: SPK-BURL-L001
+    certainty: assumed
+    status: planned

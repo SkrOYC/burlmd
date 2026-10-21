@@ -17,7 +17,7 @@ stateDiagram-v2
     Restore --> ChooseWorkspace: No restorable Workspace
     ChooseWorkspace --> Active: Open Workspace succeeds
     Active --> Active: Device preference persists outside Workspace
-    Active --> Closing: Close tab, switch Workspace, or exit
+    Active --> Closing: Close tab or exit
     Closing --> Active: Clean close, continue serial batch
     Closing --> Active: Single replacement warning, continue to target Note
     Closing --> Partial: Batch or wider operation warning, stop and cancel
@@ -27,6 +27,8 @@ stateDiagram-v2
 ```
 
 The Host Platform owns window chrome throughout this flow. Device preferences and per-Workspace session state use separate durable scopes.
+
+Multiple-Workspace interfaces are deferred. A later Workspace switch must reuse this close lifecycle and its cancellation rules rather than bypassing them.
 
 ## Failure path
 

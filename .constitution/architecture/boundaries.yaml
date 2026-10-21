@@ -5,9 +5,10 @@ boundaries:
     kind: module
     type: Desktop interaction surface
     responsibility: "Captures Writer intent and renders authoritative state, warnings, Decisions, Suggestions, diagnostics, and release information"
-    inputs: ["Receives Note, Workspace, session, synchronization, and recovery state."]
+    inputs:
+      - "Receives Note, Workspace, session, synchronization, and recovery state."
     outputs: [Sends interaction commands.]
-    depends_on: [BND-02]
+    depends_on: [BND-02, BND-13]
     certainty: assumed
     assumption: "Migrated from containers.md; not yet mapped to a code path."
   - id: BND-02
@@ -16,9 +17,23 @@ boundaries:
     kind: module
     type: Application coordinator and authority boundary
     responsibility: "Serializes commands against authoritative model state, enforces authority and conformance, and coordinates local and external state machines"
-    inputs: ["Receives Writer actions, guest-change proposals, synchronization results, and Object results."]
+    inputs:
+      - "Receives Writer actions, guest-change proposals, synchronization results, Object results, and external image results."
     outputs: [Emits authoritative state and durable obligations.]
-    depends_on: [BND-03, BND-04, BND-05, BND-06, BND-07, BND-08, BND-09, BND-10, BND-11, BND-12, BND-18]
+    depends_on:
+      - BND-03
+      - BND-04
+      - BND-05
+      - BND-06
+      - BND-07
+      - BND-08
+      - BND-09
+      - BND-10
+      - BND-11
+      - BND-12
+      - BND-13
+      - BND-18
+      - BND-22
     certainty: assumed
     assumption: "Migrated from containers.md; not yet mapped to a code path."
   - id: BND-03
@@ -26,9 +41,10 @@ boundaries:
     name: Canonical Note Model
     kind: module
     type: Source-backed semantic model
-    responsibility: "Defines Note-local values and operations for parsing, rendering, source-preserving edits, undo, find and replace, Links, Assets, Suggestion representation, and conformance"
+    responsibility: "Defines Note-local values and operations for selected Markdown syntax, rendering, source-preserving edits, undo, find and replace, Links, local Asset references, external image references, Suggestion representation, and conformance"
     inputs: [Accepts Note source and semantic operations.]
-    outputs: ["Returns structured Note state, source ranges, and source-preserving results."]
+    outputs:
+      - "Returns structured Note state, source ranges, and source-preserving results."
     depends_on: []
     certainty: assumed
     assumption: "Migrated from containers.md; not yet mapped to a code path."
@@ -39,7 +55,8 @@ boundaries:
     type: Workspace authority model
     responsibility: "Solely owns authoritative Workspace and session state: the Directory tree, canonical paths, Note identity, open-session registry, Protected State, lifecycle provenance, and the lifecycle of Suggestions, Lifecycle Decisions, Asset Decisions, and reconciliation records"
     inputs: [Accepts Workspace operations and candidate external states.]
-    outputs: ["Returns authoritative tree state, Decisions, and retention roots."]
+    outputs:
+      - "Returns authoritative tree state, Decisions, and retention roots."
     depends_on: [BND-03]
     certainty: assumed
     assumption: "Migrated from containers.md; not yet mapped to a code path."
@@ -49,8 +66,12 @@ boundaries:
     kind: other
     type: Local authoritative storage
     responsibility: "Persists Note source, Directories, recoverable local history, and atomic lifecycle outcomes inside the Workspace boundary"
-    inputs: [Accepts requests to store or retrieve authoritative Workspace bytes and Versions.]
-    outputs: [Returns authoritative Workspace bytes, Versions, and persistence outcomes.]
+    inputs:
+      - Accepts requests to store or retrieve authoritative Workspace bytes and Versions.
+    outputs:
+      - Returns authoritative Workspace bytes
+      - Versions
+      - and persistence outcomes.
     depends_on: [BND-13]
     certainty: assumed
     assumption: "Migrated from containers.md; not yet mapped to a code path."
@@ -59,7 +80,7 @@ boundaries:
     name: Local Asset Store
     kind: other
     type: Local authoritative Object storage
-    responsibility: "Owns verified local Object bytes, active offline availability, hydration handoff, cache eviction, and retention of bytes reachable from Protected State"
+    responsibility: "Owns verified Object bytes for imported local Assets, active offline availability, hydration handoff, cache eviction, and retention of bytes reachable from Protected State; external image references don't enter this boundary automatically"
     inputs: [Accepts verified Object writes and retention roots.]
     outputs: ["Returns verified bytes, availability, and eviction outcomes."]
     depends_on: [BND-04, BND-05, BND-13]
@@ -82,8 +103,10 @@ boundaries:
     kind: other
     type: Non-Workspace durable state
     responsibility: "Persists and restores snapshots of device preferences, per-Workspace session state, drafts, operation intents, reconciliation records, synchronization presentation, and migration metadata. It doesn't own authoritative session state"
-    inputs: [Accepts device or Workspace-scoped application state and requests to restore it.]
-    outputs: [Returns restored device or Workspace-scoped application state and persistence outcomes.]
+    inputs:
+      - Accepts device or Workspace-scoped application state and requests to restore it.
+    outputs:
+      - Returns restored device or Workspace-scoped application state and persistence outcomes.
     depends_on: [BND-12]
     certainty: assumed
     assumption: "Migrated from containers.md; not yet mapped to a code path."
@@ -105,7 +128,8 @@ boundaries:
     type: Optional asynchronous coordinator
     responsibility: "Connects a Workspace to a private Remote, detects local and incoming history, coordinates reconciliation, and reports distinct synchronization states"
     inputs: [Accepts durable synchronization intents.]
-    outputs: ["Returns authentication, privacy, transfer, divergence, and completion outcomes."]
+    outputs:
+      - "Returns authentication, privacy, transfer, divergence, and completion outcomes."
     depends_on: [BND-02, BND-05, BND-08, BND-12, BND-14, BND-20]
     certainty: assumed
     assumption: "Migrated from containers.md; not yet mapped to a code path."
@@ -116,7 +140,8 @@ boundaries:
     type: Optional asynchronous Object coordinator
     responsibility: "Validates at connection, periodically, and before publication that anonymous callers can't list, read, write, or delete in the Object Store prefix; uploads and verifies required Objects before history publication; hydrates Objects; and coordinates migration, repair, rotation, and cleanup"
     inputs: [Accepts Object obligations and retention roots.]
-    outputs: ["Returns verification, hydration, migration, and recovery outcomes."]
+    outputs:
+      - "Returns verification, hydration, migration, and recovery outcomes."
     depends_on: [BND-02, BND-06, BND-08, BND-12, BND-21]
     certainty: assumed
     assumption: "Migrated from containers.md; not yet mapped to a code path."
@@ -126,8 +151,13 @@ boundaries:
     kind: other
     type: Credential and key persistence
     responsibility: "Persists index keys, Provider credentials, and Object Store credentials outside Workspace content and diagnostics"
-    inputs: [Accepts authorized requests to store, read, rotate, or remove secret material.]
-    outputs: [Returns secret material and operation outcomes to authorized callers.]
+    inputs:
+      - Accepts authorized requests to store
+      - read
+      - rotate
+      - or remove secret material.
+    outputs:
+      - Returns secret material and operation outcomes to authorized callers.
     depends_on: [BND-13]
     certainty: assumed
     assumption: "Migrated from containers.md; not yet mapped to a code path."
@@ -136,8 +166,14 @@ boundaries:
     name: Host Platform
     kind: other
     type: Operating system and filesystem authority
-    responsibility: "Owns window chrome, process lifecycle, filesystem events, secure storage, file selection, installation, and package-manager behavior"
-    inputs: [Accepts filesystem, secure-storage, file-selection, installation, and lifecycle operations.]
+    responsibility: "Owns window chrome, process lifecycle, filesystem events, secure storage, file selection, clipboard access, installation, and package-manager behavior"
+    inputs:
+      - Accepts filesystem
+      - secure-storage
+      - file-selection
+      - clipboard
+      - installation
+      - and lifecycle operations.
     outputs: [Returns Platform service outcomes and lifecycle signals.]
     depends_on: []
     certainty: assumed
@@ -148,9 +184,14 @@ boundaries:
     kind: other
     type: External authorization and location boundary
     responsibility: "Authorizes the Writer and selects, provisions, and locates an eligible private Remote"
-    inputs: ["Accepts authorization, Remote selection, provisioning, location, privacy, and access requests."]
-    outputs: ["Returns explicit authorization, private Remote location, provisioning, privacy, and access outcomes."]
-    depends_on: [BND-20, External network availability, Writer-controlled Provider account]
+    inputs:
+      - "Accepts authorization, Remote selection, provisioning, location, privacy, and access requests."
+    outputs:
+      - "Returns explicit authorization, private Remote location, provisioning, privacy, and access outcomes."
+    depends_on:
+      - BND-20
+      - External network availability
+      - Writer-controlled Provider account
     trust_boundary: true
     certainty: assumed
     assumption: "The PRD defines Provider authorization and private Remote eligibility, but the connection hasn't been exercised end to end."
@@ -161,7 +202,11 @@ boundaries:
     type: "Build, verification, and publication boundary"
     responsibility: "Produces each supported artifact, defines candidate placement and completion guards, establishes authoritative expected identity, requires complete accepted evidence, and publishes artifact integrity with provenance authenticated only by fresh non-executing sealing"
     inputs: [Accepts a release identity and Platform matrix.]
-    outputs: ["Sends validation and aggregation the expected trust-anchor, validation-control signer, tested-source, base, release, build, corpus, run, required-role, and role-specific evidence-class identities.", "Sends fixed candidate-placement and topology requirements plus terminal completion expectations.", "Directs the macOS 26 sealing role to produce the authenticated cross-version compatibility handoff and defines the expected producer-to-consumer lineage.", "Emits verified artifacts, evidence, and metadata to Release Distribution."]
+    outputs:
+      - "Sends validation and aggregation the expected trust-anchor, validation-control signer, tested-source, base, release, build, corpus, run, required-role, and role-specific evidence-class identities."
+      - Sends fixed candidate-placement and topology requirements plus terminal completion expectations.
+      - Directs the macOS 26 sealing role to produce the authenticated cross-version compatibility handoff and defines the expected producer-to-consumer lineage.
+      - "Emits verified artifacts, evidence, and metadata to Release Distribution."
     depends_on: [BND-16, BND-17, BND-19, Supported Platform build environments]
     certainty: assumed
     assumption: "The 2026-09-05 Realign ruling defines the release authority split, but its implementation remains unmerged and no published release has exercised it end to end."
@@ -171,8 +216,14 @@ boundaries:
     kind: other
     type: Pipeline-owned paired validation environments
     responsibility: "Runs each credential-free candidate role at a placement fixed by trusted workflow, records placement and completion as noncryptographic runtime guards, seals its untrusted handoff in a separate fresh authority environment that never executes candidate bytes, and owns the authenticated cross-version compatibility handoff within the macOS 26 seal"
-    inputs: ["Accepts an artifact, run identity, required role, and authoritative expected source, execution, base, release, build, corpus, placement, topology, and completion identities from Release Pipeline. Candidate commands receive no credentials or provenance authority.", "For the cross-version compatibility handoff, the trusted macOS 15 wrapper accepts the exact authenticated stage from the macOS 26 seal, verifies it before candidate execution, and exposes its members read-only after removing the acquisition credential context."]
-    outputs: ["Emits one complete untrusted handoff containing the role manifest and every named evidence file through a trusted wrapper, with placement and completion observations that don't prove candidate hosted origin.", "The strict-containment role emits candidate-process teardown proof; other hosted roles emit bounded-cleanup records without claiming arbitrary-process containment.", "Each fresh sealing environment emits authenticated immutable provenance only after validating handoff identity and integrity; this provenance alone cryptographically authenticates the sealing environment's hosted origin.", "For the cross-version compatibility handoff, the macOS 26 seal emits an authenticated compatibility stage bound to its exact identifier, integrity digest, producing seal locator, and provenance. The macOS 15 seal validates and carries the unchanged producer-to-consumer lineage."]
+    inputs:
+      - "Accepts an artifact, run identity, required role, and authoritative expected source, execution, base, release, build, corpus, placement, topology, and completion identities from Release Pipeline. Candidate commands receive no credentials or provenance authority."
+      - "For the cross-version compatibility handoff, the trusted macOS 15 wrapper accepts the exact authenticated stage from the macOS 26 seal, verifies it before candidate execution, and exposes its members read-only after removing the acquisition credential context."
+    outputs:
+      - "Emits one complete untrusted handoff containing the role manifest and every named evidence file through a trusted wrapper, with placement and completion observations that don't prove candidate hosted origin."
+      - "The strict-containment role emits candidate-process teardown proof; other hosted roles emit bounded-cleanup records without claiming arbitrary-process containment."
+      - "Each fresh sealing environment emits authenticated immutable provenance only after validating handoff identity and integrity; this provenance alone cryptographically authenticates the sealing environment's hosted origin."
+      - "For the cross-version compatibility handoff, the macOS 26 seal emits an authenticated compatibility stage bound to its exact identifier, integrity digest, producing seal locator, and provenance. The macOS 15 seal validates and carries the unchanged producer-to-consumer lineage."
     depends_on: [BND-15]
     trust_boundary: true
     certainty: settled
@@ -187,8 +238,17 @@ boundaries:
     kind: pipeline-stage
     type: Evidence integrity and acceptance boundary
     responsibility: "Treats candidate placement and completion as trusted-workflow and runtime guards, verifies each fresh sealing environment's hosted origin only through completed provenance, checks the trust-anchor relationship and write boundary, and verifies uninterrupted cross-version compatibility producer-seal-to-consumer lineage before isolated aggregation"
-    inputs: ["Accepts expected trust-anchor, validation-control signer, tested-source, base, release, build, corpus, run, required-role, and role-specific evidence-class identities from Release Pipeline.", "Accepts expected candidate-placement and topology requirements plus terminal completion expectations.", "Accepts one fresh-sealed bundle per role, the pipeline-owned candidate and sealing environment records, and noncryptographic candidate placement and completion observations.", "For the cross-version compatibility handoff, accepts the authenticated stage identifier, integrity digest, producing macOS 26 seal locator, provenance, and macOS 15 consumer binding.", "Receives verified read-only inputs produced by credentialed acquisition."]
-    outputs: ["Returns an accepted complete evidence set that distinguishes candidate runtime guards from authenticated seal origin.", "Returns explicit rejection outcomes for unmanaged, candidate-controlled, out-of-boundary, untrusted, missing, duplicated, mismatched, stale, corrupt, or unsealed evidence.", "For the cross-version compatibility handoff, returns explicit rejection outcomes for any absent, duplicated, substituted, expired, integrity-mismatched, unauthenticated, wrong-producer, wrong-role, wrong-run, wrong-seal, or consumer-unbound stage.", "Returns explicit rejection outcomes for exposed credentials or failed isolation."]
+    inputs:
+      - "Accepts expected trust-anchor, validation-control signer, tested-source, base, release, build, corpus, run, required-role, and role-specific evidence-class identities from Release Pipeline."
+      - Accepts expected candidate-placement and topology requirements plus terminal completion expectations.
+      - "Accepts one fresh-sealed bundle per role, the pipeline-owned candidate and sealing environment records, and noncryptographic candidate placement and completion observations."
+      - "For the cross-version compatibility handoff, accepts the authenticated stage identifier, integrity digest, producing macOS 26 seal locator, provenance, and macOS 15 consumer binding."
+      - Receives verified read-only inputs produced by credentialed acquisition.
+    outputs:
+      - Returns an accepted complete evidence set that distinguishes candidate runtime guards from authenticated seal origin.
+      - "Returns explicit rejection outcomes for unmanaged, candidate-controlled, out-of-boundary, untrusted, missing, duplicated, mismatched, stale, corrupt, or unsealed evidence."
+      - "For the cross-version compatibility handoff, returns explicit rejection outcomes for any absent, duplicated, substituted, expired, integrity-mismatched, unauthenticated, wrong-producer, wrong-role, wrong-run, wrong-seal, or consumer-unbound stage."
+      - Returns explicit rejection outcomes for exposed credentials or failed isolation.
     depends_on: [BND-16, BND-15]
     certainty: assumed
     assumption: "The 2026-09-05 Realign ruling defines this acceptance boundary, but its implementation remains unmerged and no complete release evidence set has exercised it."
@@ -199,7 +259,8 @@ boundaries:
     type: Optional asynchronous metadata coordinator
     responsibility: "Checks compatible release metadata, reports a higher 0.x release, and hands installation authority to the Host Platform or package manager"
     inputs: [Receives update-check intent.]
-    outputs: [Returns compatible release information without replacing installed binaries.]
+    outputs:
+      - Returns compatible release information without replacing installed binaries.
     depends_on: [BND-19, BND-02]
     certainty: assumed
     assumption: "Migrated from containers.md; not yet mapped to a code path."
@@ -218,10 +279,15 @@ boundaries:
     name: Remote
     kind: other
     type: Private external history storage
-    responsibility: "Stores and exchanges the private Workspace history for one connected Workspace"
-    inputs: ["Accepts authenticated history reads, writes, and published-ref enumeration."]
-    outputs: ["Returns Workspace history, advertised refs, transfer outcomes, and availability outcomes."]
-    depends_on: [BND-14, External network availability, Writer-controlled private Remote]
+    responsibility: Stores and exchanges the private Workspace history for one connected Workspace
+    inputs:
+      - "Accepts authenticated history reads, writes, and published-ref enumeration."
+    outputs:
+      - "Returns Workspace history, advertised refs, transfer outcomes, and availability outcomes."
+    depends_on:
+      - BND-14
+      - External network availability
+      - Writer-controlled private Remote
     trust_boundary: true
     certainty: assumed
     assumption: "The PRD defines private Remote history and access behavior, but synchronization hasn't been exercised end to end."
@@ -230,12 +296,29 @@ boundaries:
     kind: other
     type: Writer-controlled external Object storage
     responsibility: "Stores and exchanges immutable Object bytes for a connected Workspace under the Writer's control"
-    inputs: ["Accepts authenticated Object operations and anonymous list, read, write, and delete privacy probes."]
-    outputs: ["Returns verified Object bytes and explicit privacy, integrity, and availability outcomes."]
-    depends_on: [External network availability, Writer-controlled Object Store account]
+    inputs:
+      - "Accepts authenticated Object operations and anonymous list, read, write, and delete privacy probes."
+    outputs:
+      - "Returns verified Object bytes and explicit privacy, integrity, and availability outcomes."
+    depends_on:
+      - External network availability
+      - Writer-controlled Object Store account
     trust_boundary: true
     certainty: assumed
     assumption: "The PRD defines Writer-controlled Object storage and privacy behavior, but Object transfer hasn't been exercised end to end."
+  - id: BND-22
+    name: External Image Origin
+    kind: other
+    type: Untrusted external content source
+    responsibility: "Serves image bytes for an external reference in an opened Note without becoming Workspace storage, a local Asset, or an Object Store"
+    inputs:
+      - Receives a request for the exact external image reference from the opened Note.
+    outputs:
+      - Returns untrusted response bytes or an explicit retrieval failure.
+    depends_on: [External network availability]
+    trust_boundary: true
+    certainty: assumed
+    assumption: "The interview establishes the intended trust boundary, but the repository doesn't implement or test automatic external image retrieval when a Note opens."
 edges:
   - from: BND-01
     to: BND-02
@@ -281,6 +364,18 @@ edges:
     to: BND-18
     protocol: in-process
     note: "Update-availability queries; installation authority stays with the Platform"
+  - from: BND-02
+    to: BND-22
+    protocol: request-response
+    note: "Fetches only an external image reference from the opened Note; failures return an unavailable result without changing Note source or local editing"
+  - from: BND-01
+    to: BND-13
+    protocol: ipc
+    note: Writer-approved file selection and clipboard image retrieval through Platform services
+  - from: BND-02
+    to: BND-13
+    protocol: ipc
+    note: Writer-approved Export and Diagnostics Export destination inspection and publication through Platform filesystem services
   - from: BND-04
     to: BND-03
     protocol: in-process
@@ -304,7 +399,7 @@ edges:
   - from: BND-05
     to: BND-07
     protocol: shared-storage
-    note: "Authoritative Workspace bytes used to build the disposable encrypted projection"
+    note: Authoritative Workspace bytes used to build the disposable encrypted projection
   - from: BND-07
     to: BND-12
     protocol: in-process
@@ -324,7 +419,7 @@ edges:
   - from: BND-10
     to: BND-14
     protocol: request-response
-    note: Provider authorization, private Remote selection, provisioning, location, privacy, and access exchanges
+    note: "Provider authorization, private Remote selection, provisioning, location, privacy, and access exchanges"
   - from: BND-10
     to: BND-20
     protocol: request-response
@@ -384,7 +479,7 @@ edges:
   - from: BND-10
     to: BND-02
     protocol: in-process
-    note: "Returns synchronization status and reconciliation outcomes to Core Coordination"
+    note: Returns synchronization status and reconciliation outcomes to Core Coordination
   - from: BND-11
     to: BND-02
     protocol: in-process
@@ -392,7 +487,7 @@ edges:
   - from: BND-15
     to: BND-17
     protocol: file-handoff
-    note: "Authoritative expected identity and expected cross-version compatibility producer-to-consumer lineage delivered independently of candidate output"
+    note: Authoritative expected identity and expected cross-version compatibility producer-to-consumer lineage delivered independently of candidate output
   - from: BND-14
     to: BND-20
     protocol: request-response

@@ -2,22 +2,35 @@
 
 ## Purpose
 
-This document prevents the research wave from becoming an accidental implementation wave. Structured PRD v2.0.5 and Architecture v2.1.2 are binding. The delivered v1.6.x physical contracts remain valid only for already-delivered behavior. Where they conflict with the forward constitution, the forward requirement is authoritative.
+This document prevents research from becoming accidental implementation. Structured PRD v2.1.0, Architecture v2.2.0, ADR-021, ADR-022, the code-owned sidecars, and current `guidelines.md` take precedence over historical text in this file. Delivered physical contracts remain valid only for behavior the repository implements.
+
+## Current status and precedence
+
+Epics G and M are closed. They grant no active production exception. Raw contract version 40, BURL-M003, ADR-019, ADR-020, hosted roles, sealing, aggregation, packaging, and multi-platform qualification remain dormant supported-release history. They don't gate the private Linux roadmap and can't be repurposed as local evidence.
+
+Active BURL-H001, BURL-H002, BURL-I001, and BURL-L001 research can change only each ticket's named Spike report under `.constitution/spikes/`. Scratch code, fixtures, corpora, and measurements are disposable artifacts outside `.constitution/`; each report records the inventory, inputs, versions, and digests required for reproduction. No active Spike writes `.constitution/prototypes/` or product code.
+
+Accepted research evidence does not authorize dependent implementation. The owning Stage 3 pass reviews the evidence and patches the declared ADRs, stack entries, sidecars, FFI or data-model companions, layout, and verification commands. Stage 4 places that reviewed patch before dependent production. A ticket does not wait for unrelated research or a dormant managed gate.
 
 ## Decision gates
 
 | Forward area | Current physical status | Evidence or decision gate | Final Stage 3 output |
 | :--- | :--- | :--- | :--- |
-| Desktop preferences and Workspace sessions | Versioned JSON schemas specified for Epic G exceptions | No research Spike; implementation verifies Platform storage APIs and migration behavior | Device-preference schema, per-Workspace session schema, restore and serial-close FFI |
+| Desktop preferences and Workspace sessions | Delivered G-series JSON schemas and session behavior | Further work uses ordinary tests and the Q001 live boundary | Device-preference and session changes only when active scope requires them |
 | Canonical Note and Workspace trees | Reduced `AstNode` projection | SPK-BURL-H001 | Canonical document schema, render projection, editing and indexing adapters, revised ADR-007 and FFI |
-| Cross-platform paths and conformance repair | Title-verbatim host paths; invalid Notes currently indexed | SPK-BURL-H002 | Path grammar, migration/repair plan, preflight/live-monitor contracts, revised OKF contract and schema |
+| Portable paths and guest validation | Title-verbatim host paths; invalid guest Notes can enter the delivered index | SPK-BURL-H002 for the path algorithm | Path grammar plus preflight and live-monitor validation that preserves invalid bytes and the last valid Note; arbitrary adoption, migration, and guided-repair UI remain deferred |
 | Live Workspace monitoring | Manual Rescan only | Final verification of `notify` 8.2.0 and fallback behavior | Observer event contract, debouncing, revision checks, external-change decisions |
-| Local history, undo, find, backlinks | Some planned FFI, incomplete production wiring | Canonical AST and path contracts first | Reconciled state and FFI contracts using authoritative Note sessions |
-| Atomic Export | Brownfield contract permits partial output | AST, path, and asset closure contracts first | Copy and `.okf` schemas, stable-revision lease, collision and atomic publication contracts |
+| Local history, undo, find, backlinks | Local history capture, backlinks, and title-prefix navigation are delivered; Note-level undo and in-Note find and replace are unfinished | Canonical document finalization before undo and in-Note find production | Preserve and adapt delivered history and navigation; add revision-bound undo and literal source-find contracts without rebuilding delivered behavior |
+| Plain-directory Export | Brownfield contract permits partial output | AST, path, and local-Asset closure contracts first | Stable-revision lease, destination refusal, complete-copy verification, and atomic publication; Bundle Archive remains deferred |
 | Local assets and Object Store | No physical contract | SPK-BURL-I001 plus measured PRD/Architecture review | `BND-06` Local Asset Store model, `BND-11` transfer and verification contract, `BND-21` Object Store configuration and operation contract, identity and key format, hydration, and retention state machine; `BND-14` Provider and `BND-20` Remote don't own Object bytes |
-| Private GitHub connection | Superseded OAuth redirect and marker-based merge | ADR-017 plus SPK-BURL-L001 | `BND-14` Provider device authorization, repository selection and provisioning, and eligible `BND-20` Remote location; `BND-20` authenticated history and ref contract; typed `BND-10` analysis and decision schemas; credential adapter; no Object transfer or storage responsibility |
-| Releases and updates | Development builds plus committed Epic G headless capture | SPK-BURL-O001 for package choices; BURL-M003 for managed validation bootstrap | Credential-free candidate bundles with noncryptographic runtime guards, fresh-seal provenance, a seal-owned authenticated BURL-O001 compatibility stage, an attested canonical producer-lineage transport that binds producer-receipt freshness, accepted or rejected chain-verifying aggregation, update metadata, and the installed-app release matrix |
-| Platform chrome | PR #11 presentation prototype leaked into production | Settled product decision | Remove preference/state/rendering/copy/tests and regenerate visual evidence; no replacement window-frame abstraction |
+| Private GitHub Provider connection | Superseded OAuth redirect and incomplete credential lifecycle | ADR-017 and the active GitHub device-flow companion | `BND-14` device authorization, token lifecycle, installation access, private repository selection or provisioning, and eligible `BND-20` Remote location; no history-analysis prerequisite and no Object transfer responsibility |
+| Remote history and reconciliation | Marker-based merge and incomplete synchronization state | SPK-BURL-L001 | `BND-20` authenticated history and ref contract plus typed `BND-10` analysis, Suggestions, Decisions, recovery, and application records; no Provider or Object Store responsibility |
+| Releases and updates | Dormant supported-release history | No active private-roadmap gate | Revisit through a later approved Stage 1 through Stage 4 realignment |
+| Platform chrome | Delivered G-series removal | No active gate | No replacement window-frame abstraction |
+
+## Historical raw-version-40 protocol
+
+The remainder of this section preserves the reviewed managed protocol. It is historical and dormant under the current-status rules. Its ticket mappings, recovery sequence, and evidence roles don't authorize work in the active roadmap.
 
 The release control surface treats the following scripts as immutable trust-anchor controls:
 
@@ -86,17 +99,17 @@ The Linux role retains one `logs/burl-m003-linux-closure-view.log` through uncha
 
 ## Contract-scoped production applicability
 
-The active Epic G M0 production exceptions are `BURL-G001` through `BURL-G005`, `BURL-G007`, and `BURL-M015`. Raw contract version `40` and `BURL-M003` ci_bootstrap are dormant. They permit no bootstrap, recovery, production, or hosted execution. The private Linux-first path has no hosted-execution authority and must not invoke the `BURL-M003` workflow, role, sealing, or aggregation path.
+No G or M production exception remains active. Raw contract version 40 and BURL-M003 are dormant and permit no bootstrap, recovery, production, hosted execution, or prerequisite for private Linux work. The private roadmap must not invoke the BURL-M003 workflow, roles, sealing, or aggregation path.
 
-The co-merged Tasks v3.2.14 adaptation is historical. It updates only BURL-M003's raw-version and diagnostic references, and does not authorize BURL-M003. BURL-G011, BURL-P002, and BURL-O012 remain historical adaptations. BURL-O001 remains blocked, but its raw-contract-version-39, PR #37, and Tasks-SHA stop wording is stale. Preserving that stop doesn't make it current or settle it. Its owning later Stage 3 routing and Stage 4 adaptation must replace the wording before BURL-O001 can run. The historical adaptation preserves the gate-log map, exact prefix, canonical decimal grammar, no-removal residual-race policy, BURL-O001 stop, artifact inventories, permissions, evidence classes, tickets, estimates, and epic graph. After the user resumes upstream planning and a later approved Stage 3/4 adaptation authorizes BURL-M003, complete Epic M, including the reviewed `BURL-M003` recovery implementation, fresh accepted managed run, exact three-file evidence pull request, epic closeout, and reconciliation.
+The co-merged Tasks v3.2.14 adaptation is historical. It updates only BURL-M003's raw-version and diagnostic references and does not authorize BURL-M003. BURL-G011, BURL-P002, and BURL-O012 remain historical adaptations. BURL-O001 remains blocked, but its raw-contract-version-39, PR #37, and Tasks-SHA stop wording is stale. Preserving that stop doesn't make it current or settle it. A later supported-release realignment must create active successor work rather than instruct execution to complete already-closed Epic M. The historical adaptation preserves the gate-log map, exact prefix, canonical decimal grammar, no-removal residual-race policy, BURL-O001 stop, artifact inventories, permissions, evidence classes, tickets, estimates, and epic graph.
 
 The recovery base history retains reviewed BURL-M015 commit `6d30b7445b0108a6a5dd963cd2aa2ae5f5090485` and the original PR #15 anchor `f72659cef4487317c9e984e01f775a358f814a41`. The first implementation uses the reviewed documentation tip after the Stage 4 adaptation as its first parent. This closure needs no self-referential field or placeholder commit.
 
 For the first raw-version-40 recovery, one reviewed implementation commit starts from the reviewed documentation tip after the Stage 4 adaptation. If the recovery later fails under the same contract, each correction is one separately reviewed commit from the immediately preceding reviewed `master` tip. The selected `BASE_SHA` is always the replacement anchor's first parent and retains the merged approved documentation and original lineage. A source-branch documentation SHA cannot be `BASE_SHA`. The unchanged bootstrap allowlist applies only to that one-commit range. Never accept an arbitrary ancestor. Every replacement anchor requires a fresh run, nonce, self-validation, and dedicated reviewed evidence pull request.
 
-Every other production ticket remains blocked until its own decision evidence lands. Product Requirements and Architecture are reviewed when that evidence changes an upstream assumption. Final Stage 3 then replaces that ticket's provisional physical contract, and Stage 4 adapts the ticket before implementation. A ticket doesn't wait for an unrelated Spike, and one completed Spike doesn't authorize neighboring production work.
+Each evidence-dependent production ticket remains blocked only by the decision evidence and reviewed Stage 3 physical contract it consumes. Product Requirements and Architecture are reviewed when evidence changes an upstream assumption. A ticket doesn't wait for unrelated research, and one completed Spike doesn't authorize neighboring production work.
 
-Spike Tasks may read production code and fixtures but may write only within their prototype roots and report records. Final Stage 3 still owns the reconciled FFI, schemas, bill of materials, repository layout, error taxonomy, and exact implementation commands for each affected contract.
+Active Spike tasks may read production code and fixtures but write only their named report. Disposable scratch work stays outside `.constitution/` and product paths. Stage 3 owns the reconciled FFI, schemas, bill of materials, repository layout, error taxonomy, and exact implementation commands for each affected contract.
 
 ## Known brownfield contradictions
 

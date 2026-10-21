@@ -1,0 +1,276 @@
+id: R
+name: local authoring foundation
+kind: foundation
+priority: 1
+capabilities:
+  - CAP-032
+  - CAP-034
+  - CAP-051
+  - CAP-081
+  - CAP-082
+  - CAP-083
+  - CAP-084
+  - CAP-085
+  - CAP-086
+  - CAP-087
+  - CAP-088
+  - CAP-089
+depends_on: [H, Q]
+scope:
+  paths:
+    - "rust/src/markdown/**"
+    - "rust/src/okf/**"
+    - "rust/src/workspace/**"
+    - rust/src/draft.rs
+    - "rust/src/index/**"
+    - "rust/src/db/**"
+    - "rust/src/api/**"
+    - rust/src/frb_generated.rs
+    - rust/Cargo.toml
+    - rust/Cargo.lock
+    - "lib/src/rust/**"
+    - lib/src/components/block_editor.dart
+    - lib/src/components/block_view.dart
+    - lib/src/components/editor.dart
+    - lib/src/components/range_text_input_client.dart
+    - lib/src/components/link_completion.dart
+    - lib/src/providers/note_providers.dart
+    - lib/src/providers/rust_api_provider.dart
+    - lib/src/providers/workspace_provider.dart
+    - lib/src/screens/workspace.dart
+    - "test/components/**"
+    - "test/providers/**"
+    - test/screens/workspace_mounting_test.dart
+    - integration_test/production_host_flow_test.dart
+    - integration_test/local_authoring_flow_test.dart
+    - pubspec.yaml
+    - pubspec.lock
+  out_of_scope:
+    - ".constitution/prd/out-of-scope/existing-collection-adoption.md"
+    - ".constitution/prd/out-of-scope/multiple-simultaneous-workspaces.md"
+  tech_spec_patchable:
+    - tech-spec/adrs/ADR-010-undo-command-stack.md
+    - tech-spec/adrs/ADR-013-canonical-source-backed-markdown-ast.md
+    - tech-spec/adrs/ADR-014-canonical-cross-platform-workspace-paths.md
+    - tech-spec/adrs/ADR-021-selected-p0-markdown-profile.md
+    - tech-spec/contracts/ffi_api.meta.yaml
+    - tech-spec/data-models/schema.meta.yaml
+    - tech-spec/guidelines.md
+    - tech-spec/stack.yaml
+estimated_diff_lines: 14500
+tickets:
+  - id: BURL-R001
+    title: Implement the accepted source-backed Note document
+    type: Feature
+    effort: 8
+    depends_on: []
+    scope:
+      in:
+        - "rust/src/markdown/**"
+        - rust/src/draft.rs
+        - rust/Cargo.toml
+        - rust/Cargo.lock
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && cargo clippy --workspace --all-targets --manifest-path rust/Cargo.toml -- -D warnings && git diff --check"
+      expected: "Core tests and invariants pass for the accepted model, and Clippy and diff checks are clean."
+    stop_conditions:
+      - "STOP unless accepted H001 evidence and the reviewed post-research Stage 3 patch select the model, renderer adapters, exact options, field contract, and undo bound."
+      - STOP if implementation retains the delivered projection as a second canonical model or serializes the whole document to save an existing Note.
+    description: "Replace the reduced parser authority with the accepted source-backed document, revision-local node identities, private byte ranges, checked interaction coordinates, exact selected-syntax representation, and source-preserving operations."
+    acceptance:
+      mode: invariant
+      evidence: |
+        Property tests cover the accepted H001 corpus and prove that edits change only addressed source, stale revisions and coordinates fail, unsupported source remains byte-identical, and renderer failure can't alter saved Markdown.
+      constraints: [NFC-18]
+    flows: [flow-edit-note]
+    certainty: assumed
+    status: planned
+  - id: BURL-R002
+    title: Implement portable canonical Workspace paths
+    type: Feature
+    effort: 5
+    depends_on: []
+    scope:
+      in:
+        - "rust/src/okf/**"
+        - "rust/src/workspace/**"
+        - "rust/src/index/**"
+        - "rust/src/db/**"
+        - integration_test/local_authoring_flow_test.dart
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && cargo clippy --workspace --all-targets --manifest-path rust/Cargo.toml -- -D warnings && git diff --check"
+      expected: "Path, lifecycle, containment, and index tests pass for the accepted algorithm with no unreviewed filesystem mutation."
+    stop_conditions:
+      - STOP unless accepted H002 evidence and the reviewed post-research Stage 3 patch publish the exact algorithm and fixture contract.
+      - "STOP if a path can alias, escape, collide after transfer, or require macOS execution as a private Linux prerequisite."
+      - STOP if work expands into adoption of an arbitrary existing collection or a multiple-Workspace interface.
+    description: "Apply the accepted portable component and collision rules to Note, Directory, Asset, ghost-Link, lifecycle, index, and session identities from first-use creation onward."
+    acceptance:
+      mode: invariant
+      supplementary: [live_probe]
+      recipe: private-linux-local-p0
+      evidence: |
+        Generated rule fixtures prove stable identity, deterministic refusal or disambiguation, containment, case-only rename, ghost creation, and round-trip display across Linux behavior and the checked macOS and Windows-compatible rule sets. The `portable-paths` scenario in integration_test/local_authoring_flow_test.dart records portable create, rename, move, reopen, and refusal outcomes in the real application.
+      constraints: [NFC-22, NFC-25]
+    flows: [flow-note-lifecycle, flow-workspace-bootstrap]
+    certainty: assumed
+    status: planned
+  - id: BURL-R003
+    title: Integrate canonical authority and generated projections
+    type: Feature
+    effort: 5
+    depends_on: [BURL-R001, BURL-R002]
+    scope:
+      in:
+        - "rust/src/api/**"
+        - rust/src/frb_generated.rs
+        - "rust/src/workspace/**"
+        - "rust/src/index/**"
+        - "lib/src/rust/**"
+        - lib/src/providers/rust_api_provider.dart
+        - lib/src/providers/note_providers.dart
+        - lib/src/providers/workspace_provider.dart
+        - "test/providers/**"
+        - integration_test/local_authoring_flow_test.dart
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && dart analyze && git diff --check"
+      expected: "Core, FFI, generated-binding, provider, and analysis checks pass with one authoritative Workspace and Note model."
+    stop_conditions:
+      - "STOP if Flutter, the index, Persistence, or a guest write can override Core authority."
+      - STOP if generated Rust or Dart outputs are omitted from the reviewed change.
+    description: "Project the accepted Note and Workspace authority through Flutter Rust Bridge, providers, search and Link adapters, and session state without exposing Core-owned byte offsets or a second model."
+    acceptance:
+      mode: contract_test
+      supplementary: [live_probe]
+      recipe: private-linux-local-p0
+      evidence: |
+        Contract tests assert revision and node identity, UTF-16 coordinate validation, authoritative focus results, portable identities, index derivation, and generated-binding parity across Rust and Dart. The `canonical-projection` scenario in integration_test/local_authoring_flow_test.dart proves the real UI consumes the generated projection and returns only validated interaction intents.
+    flows: [flow-edit-note, flow-note-lifecycle, flow-link-graph, flow-search]
+    certainty: assumed
+    status: planned
+  - id: BURL-R004
+    title: Deliver the selected P0 Markdown profile
+    type: Feature
+    effort: 8
+    depends_on: [BURL-R003]
+    scope:
+      in:
+        - "rust/src/markdown/**"
+        - "rust/src/api/**"
+        - rust/src/frb_generated.rs
+        - "lib/src/rust/**"
+        - lib/src/components/block_editor.dart
+        - lib/src/components/block_view.dart
+        - lib/src/components/editor.dart
+        - lib/src/components/link_completion.dart
+        - "test/components/**"
+        - integration_test/local_authoring_flow_test.dart
+        - pubspec.yaml
+        - pubspec.lock
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && git diff --check"
+      expected: "Core, generated-binding, widget, and analysis checks pass for every selected P0 construct and failure fallback."
+    stop_conditions:
+      - "STOP if ADR-021 remains proposed or the post-H001 Stage 3 patch hasn't pinned the accepted parser and renderer adapters."
+      - "STOP if math, Mermaid, highlighting, or another projection executes Note-provided code, loads network data, or becomes saved-source authority."
+      - STOP if work expands into P1 or P2 Markdown scope.
+    description: "Make tables, footnotes, interactive task lists, reference definitions, heading Links, fenced-code highlighting, math, Mermaid, and highlighted text source-editable and usable through the accepted inert render projections."
+    acceptance:
+      mode: gherkin
+      supplementary: [live_probe]
+      recipe: private-linux-local-p0
+      evidence: |
+        Given the checked P0 corpus in one fresh Workspace, when the `p0-markdown` scenario in integration_test/local_authoring_flow_test.dart opens, edits, follows or toggles each construct, saves, closes, and reopens it, then rendered behavior and source remain correct and invalid renderer input retains editable source.
+    flows: [flow-edit-note, flow-link-graph]
+    certainty: assumed
+    status: planned
+  - id: BURL-R005
+    title: Add complete Note-level undo and redo
+    type: Feature
+    effort: 5
+    depends_on: [BURL-R004]
+    scope:
+      in:
+        - "rust/src/markdown/**"
+        - rust/src/draft.rs
+        - "rust/src/api/**"
+        - rust/src/frb_generated.rs
+        - "lib/src/rust/**"
+        - lib/src/components/block_editor.dart
+        - lib/src/components/editor.dart
+        - lib/src/components/range_text_input_client.dart
+        - "test/components/**"
+        - integration_test/local_authoring_flow_test.dart
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && git diff --check"
+      expected: "Command-stack, generated-binding, widget, and analysis checks pass at the measured bounded depth."
+    stop_conditions:
+      - "STOP if an included content operation bypasses the command stack or if history crosses an external reload, sync-applied state, or closed Note."
+      - "STOP if the implementation invents an undo depth that the post-H001 Stage 3 patch hasn't accepted."
+    description: "Apply the accepted command boundaries and bounded source-patch stack to typing, deletion, selection edits, formatting, task toggles, local-image insertion, structural edits, and cross-Block operations."
+    acceptance:
+      mode: gherkin
+      supplementary: [live_probe]
+      recipe: private-linux-local-p0
+      evidence: |
+        Given each included editing operation and a mixed cross-Block sequence, when the `note-undo-redo` scenario in integration_test/local_authoring_flow_test.dart undoes to the initial source and redoes to the final source, then every source byte, selection target, task marker, image reference, and save result matches the recorded adjacent revision.
+    flows: [flow-edit-note]
+    certainty: assumed
+    status: planned
+  - id: BURL-R006
+    title: Add in-Note find and replace
+    type: Feature
+    effort: 5
+    depends_on: [BURL-R005]
+    scope:
+      in:
+        - "rust/src/markdown/**"
+        - "rust/src/api/**"
+        - rust/src/frb_generated.rs
+        - "lib/src/rust/**"
+        - lib/src/components/editor.dart
+        - "test/components/**"
+        - integration_test/local_authoring_flow_test.dart
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && git diff --check"
+      expected: "Find-session, replacement, generated-binding, widget, and analysis checks pass."
+    stop_conditions:
+      - "STOP if find mutates source or undo state, if a stale session applies, or if replace-all can partially commit."
+      - "STOP if work expands to Workspace-wide search, metadata editing, regex, or unapproved search options."
+    description: "Find literal case-sensitive source matches, navigate them, replace one, and apply replace-all atomically as one undoable revision-bound operation."
+    acceptance:
+      mode: gherkin
+      supplementary: [live_probe]
+      recipe: private-linux-local-p0
+      evidence: |
+        Given matches in rendered and raw-focused P0 source, when the `note-find-replace` scenario in integration_test/local_authoring_flow_test.dart navigates, replaces one, replaces all, mutates the Note between find and replace, and undoes replace-all, then ordering, focus, staleness, atomicity, and exact source restoration match ADR-021.
+    flows: [flow-edit-note]
+    certainty: assumed
+    status: planned
+  - id: BURL-R007
+    title: Qualify one fresh local Workspace authoring path
+    type: Feature
+    effort: 3
+    depends_on: [BURL-R002, BURL-R004, BURL-R005, BURL-R006]
+    scope:
+      in:
+        - lib/src/screens/workspace.dart
+        - lib/src/components/editor.dart
+        - test/screens/workspace_mounting_test.dart
+        - integration_test/production_host_flow_test.dart
+        - integration_test/local_authoring_flow_test.dart
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && git diff --check"
+      expected: The local-authoring test matrix passes and the fresh-Workspace real application flow completes without an account or network.
+    stop_conditions:
+      - "STOP if the path requires authentication, Remote state, an existing collection, a second Workspace, or another platform."
+    description: "Complete the first-use authoring path from fresh Workspace creation through portable Note lifecycle, selected Markdown editing, undo, find, save, close, and reopen."
+    acceptance:
+      mode: gherkin
+      supplementary: [live_probe]
+      recipe: private-linux-local-p0
+      evidence: |
+        Given no account, network, prior collection, or application state, when the `local-authoring-complete` scenario in integration_test/local_authoring_flow_test.dart creates one Workspace and exercises portable Note lifecycle and the complete authoring workflow, then every operation remains local and durable and the manifest records the reopened source and rendered state.
+    flows: [flow-workspace-bootstrap, flow-note-lifecycle, flow-edit-note]
+    certainty: assumed
+    status: planned

@@ -1,0 +1,308 @@
+id: "N"
+name: complete private synchronization
+kind: product
+priority: 2
+capabilities:
+  - CAP-055
+  - CAP-061
+  - CAP-062
+  - CAP-063
+  - CAP-064
+  - CAP-065
+  - CAP-066
+  - CAP-067
+  - CAP-068
+  - CAP-069
+  - CAP-071
+  - CAP-072
+  - CAP-073
+  - CAP-074
+depends_on: [K, Q, R, S, U, V]
+scope:
+  paths:
+    - "rust/src/provider/**"
+    - "rust/src/git/**"
+    - "rust/src/sync/**"
+    - "rust/src/object_store/**"
+    - "rust/src/assets/**"
+    - "rust/src/markdown/**"
+    - "rust/src/workspace/**"
+    - "rust/src/security/**"
+    - "rust/src/db/**"
+    - "rust/src/api/**"
+    - rust/src/frb_generated.rs
+    - rust/Cargo.toml
+    - rust/Cargo.lock
+    - "lib/src/rust/**"
+    - "lib/src/components/**"
+    - lib/src/components/editor.dart
+    - lib/src/components/block_view.dart
+    - "lib/src/providers/**"
+    - lib/src/providers/note_providers.dart
+    - "lib/src/screens/**"
+    - "lib/l10n/**"
+    - "test/**"
+    - "integration_test/**"
+    - integration_test/private_sync_two_device_test.dart
+    - integration_test/private_sync_real_provider_test.dart
+    - integration_test/github_device_flow_real_test.dart
+    - "test_driver/**"
+    - scripts/private-linux-live.sh
+    - pubspec.yaml
+    - pubspec.lock
+  out_of_scope:
+    - ".constitution/prd/out-of-scope/workspace-consolidation.md"
+    - ".constitution/prd/out-of-scope/object-store-migration.md"
+    - ".constitution/prd/out-of-scope/automatic-image-cache-eviction.md"
+  tech_spec_patchable:
+    - tech-spec/adrs/ADR-009-provider-seam.md
+    - tech-spec/adrs/ADR-015-structured-git-shaped-reconciliation-analysis.md
+    - tech-spec/adrs/ADR-016-hybrid-local-assets-and-s3-compatible-objects.md
+    - tech-spec/adrs/ADR-017-github-app-device-flow.md
+    - tech-spec/contracts/ffi_api.meta.yaml
+    - tech-spec/contracts/github-app-device-flow.meta.yaml
+    - tech-spec/data-models/schema.meta.yaml
+    - tech-spec/data-models/workspace-session-snapshot.schema.meta.yaml
+    - tech-spec/guidelines.md
+estimated_diff_lines: 14000
+tickets:
+  - id: BURL-N001
+    title: Resolve persistent Suggestions independently in the editor
+    type: Feature
+    effort: 5
+    depends_on: []
+    scope:
+      in:
+        - "rust/src/markdown/**"
+        - "rust/src/workspace/**"
+        - "rust/src/api/**"
+        - rust/src/frb_generated.rs
+        - "lib/src/rust/**"
+        - lib/src/components/editor.dart
+        - lib/src/components/block_view.dart
+        - lib/src/providers/note_providers.dart
+        - "test/**"
+        - integration_test/private_sync_two_device_test.dart
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && git diff --check"
+      expected: "Independent Suggestion resolution, custom source, persistence, history, binding, widget, and analysis checks pass."
+    stop_conditions:
+      - "STOP if resolving one Suggestion changes an unresolved sibling or loses base, local, incoming, or custom source."
+    description: "Render canonical Suggestions inline and apply accept-local, accept-incoming, accept-both, or custom source independently while unresolved siblings remain durable through history and synchronization."
+    acceptance:
+      mode: gherkin
+      supplementary: [live_probe]
+      recipe: private-linux-two-device-sync
+      evidence: |
+        Given several persistent Suggestions in one Note, when the `suggestion-resolution` scenario in integration_test/private_sync_two_device_test.dart resolves them in different orders and restarts between choices, then each chosen source is exact, unresolved siblings persist, history remains valid, and the manifest records both source variants and the final Note.
+    flows: [flow-conflict-resolution]
+    certainty: assumed
+    status: planned
+  - id: BURL-N012
+    title: Attach and publish the fresh local Workspace
+    type: Feature
+    effort: 8
+    depends_on: []
+    scope:
+      in:
+        - "rust/src/provider/**"
+        - "rust/src/git/**"
+        - "rust/src/sync/**"
+        - "rust/src/object_store/**"
+        - "rust/src/assets/**"
+        - "rust/src/workspace/**"
+        - "rust/src/api/**"
+        - rust/src/frb_generated.rs
+        - "lib/src/rust/**"
+        - "lib/src/components/**"
+        - "lib/src/providers/**"
+        - "lib/src/screens/**"
+        - "lib/l10n/**"
+        - "test/**"
+        - "integration_test/**"
+        - integration_test/private_sync_real_provider_test.dart
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && git diff --check"
+      expected: "Remote eligibility, workflow-history refusal, Object closure, publication, rollback, binding, widget, and analysis checks pass."
+    stop_conditions:
+      - "STOP if the Remote isn't private, empty, installed, and eligible, if any reachable workflow history exists, or if every protected Object isn't verified before publication."
+      - STOP if attachment persists before successful publication or if work adds deferred Consolidation.
+    description: "Recheck the selected private Remote and Object prerequisites, refuse workflow-bearing history, publish the fresh Workspace's Notes and images with ephemeral Git credentials, and persist attachment only after success."
+    acceptance:
+      mode: invariant
+      supplementary: [live_probe]
+      recipe: private-linux-real-provider-sync
+      evidence: |
+        Eligibility, workflow-history, privacy, Object, cancellation, crash, and provider fault fixtures prove fail-closed preparation and rollback. The `initial-publication` scenario in integration_test/private_sync_real_provider_test.dart binds the dedicated App installation, private Remote, Object Store, synthetic source revision, verified Object closure, and completed publication without tokens or private content.
+      constraints: [NFC-17, NFC-23, NFC-24]
+    flows: [flow-auth-handshake, flow-sync-push]
+    certainty: assumed
+    status: planned
+  - id: BURL-N013
+    title: Join the same connected Workspace on a second logical device
+    type: Feature
+    effort: 8
+    depends_on: [BURL-N012]
+    scope:
+      in:
+        - "rust/src/provider/**"
+        - "rust/src/git/**"
+        - "rust/src/sync/**"
+        - "rust/src/object_store/**"
+        - "rust/src/assets/**"
+        - "rust/src/workspace/**"
+        - "rust/src/api/**"
+        - rust/src/frb_generated.rs
+        - "lib/src/rust/**"
+        - "lib/src/components/**"
+        - "lib/src/providers/**"
+        - "lib/src/screens/**"
+        - "test/**"
+        - "integration_test/**"
+        - "test_driver/**"
+        - integration_test/private_sync_two_device_test.dart
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && git diff --check"
+      expected: "Safe destination, clone, interruption cleanup, bootstrap, text-first open, hydration, binding, UI, and analysis checks pass."
+    stop_conditions:
+      - "STOP if the destination isn't safe and empty, if partial materialization can become authoritative, or if Note editing waits for all inactive Objects."
+      - STOP if joining requires migration from another independent collection.
+    description: "Authorize the same Provider on an isolated second logical device, select the connected private Remote, materialize one complete local Workspace safely, open Notes promptly, and hydrate active images first."
+    acceptance:
+      mode: gherkin
+      supplementary: [live_probe]
+      recipe: private-linux-two-device-sync
+      evidence: |
+        Given safe, nonempty, interrupted, invalid, asset-free, and asset-bearing destinations, when the `second-device-join` scenario in integration_test/private_sync_two_device_test.dart joins the second device, then only a complete validated Workspace becomes authoritative, text is usable before inactive images finish, active images verify before display, and the manifest records independent roots, credentials, histories, and Object states.
+    flows: [flow-auth-handshake, flow-object-store-lifecycle]
+    certainty: assumed
+    status: planned
+  - id: BURL-N014
+    title: "Separate sign-out, detach, reconnect, and full-local transition"
+    type: Feature
+    effort: 8
+    depends_on: [BURL-N012, BURL-N013]
+    scope:
+      in:
+        - "rust/src/provider/**"
+        - "rust/src/git/**"
+        - "rust/src/sync/**"
+        - "rust/src/object_store/**"
+        - "rust/src/assets/**"
+        - "rust/src/workspace/**"
+        - "rust/src/security/**"
+        - "rust/src/api/**"
+        - rust/src/frb_generated.rs
+        - "lib/src/rust/**"
+        - "lib/src/components/**"
+        - "lib/src/providers/**"
+        - "lib/src/screens/**"
+        - "test/**"
+        - "integration_test/**"
+        - integration_test/private_sync_two_device_test.dart
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && git diff --check"
+      expected: "Sign-out, reauthorization, privacy pause, offline detach, reconnect, hydration, compare-and-swap, binding, UI, and analysis checks pass."
+    stop_conditions:
+      - "STOP if sign-out removes attachment, if offline Remote detach removes the Object Store, or if complete local detach lacks fresh authenticated refs and a verified bound local closure."
+      - "STOP if any path deletes remote bytes, rewrites history, or reports full-local success from partial work."
+    description: "Keep sign-out credential-only, retain the Object Store after offline Remote detach, reconnect the exact prior Remote when required, and atomically detach both external stores only after fresh refs and every protected image verify locally."
+    acceptance:
+      mode: invariant
+      supplementary: [live_probe]
+      recipe: private-linux-two-device-sync
+      evidence: |
+        The `full-local-detach` scenario in integration_test/private_sync_two_device_test.dart and its state-machine, cancellation, authority-advance, privacy, authorization, missing-Object, and offline fixtures prove distinct operations and fail-closed preservation. The manifest records complete local Notes, history, and protected images after successful detach and unchanged attachment after every held transition.
+      constraints: [NFC-16, NFC-23, NFC-24]
+    flows: [flow-auth-handshake, flow-object-store-lifecycle]
+    certainty: assumed
+    status: planned
+  - id: BURL-N015
+    title: Expose authoritative synchronization and Decision states
+    type: Feature
+    effort: 3
+    depends_on: [BURL-N001, BURL-N013, BURL-N014]
+    scope:
+      in:
+        - "rust/src/sync/**"
+        - "rust/src/api/**"
+        - rust/src/frb_generated.rs
+        - "lib/src/rust/**"
+        - "lib/src/components/**"
+        - "lib/src/providers/**"
+        - "lib/src/screens/**"
+        - "lib/l10n/**"
+        - "test/**"
+        - "integration_test/**"
+        - integration_test/private_sync_two_device_test.dart
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && git diff --check"
+      expected: "Sync-state, privacy, authorization, Object, Suggestion, Decision, recovery-action, accessibility, binding, widget, and analysis checks pass."
+    stop_conditions:
+      - "STOP if Presentation derives authority, collapses distinct failure classes, offers an invalid recovery action, or lets sync state block local editing."
+    description: "Present clean, active, offline, behind, failed, authentication-required, privacy-paused, Object-paused, Decision-paused, and pending-Suggestion states with timestamps, pending work, and only valid recovery actions."
+    acceptance:
+      mode: gherkin
+      supplementary: [live_probe]
+      recipe: private-linux-two-device-sync
+      evidence: |
+        Given every authoritative sync, authorization, privacy, Object, Suggestion, and Decision state, when the `sync-state-surface` scenario in integration_test/private_sync_two_device_test.dart inspects and acts on it, then the accessible UI shows the exact state and only its valid action while local editing and history remain available. The manifest records each transition.
+    flows: [flow-sync-push, flow-conflict-resolution, flow-auth-handshake]
+    certainty: assumed
+    status: planned
+  - id: BURL-N011
+    title: Validate complete Notes-and-images synchronization
+    type: Feature
+    effort: 8
+    depends_on: [BURL-N001, BURL-N012, BURL-N013, BURL-N014, BURL-N015]
+    scope:
+      in:
+        - scripts/private-linux-live.sh
+        - "rust/src/provider/**"
+        - "rust/src/git/**"
+        - "rust/src/sync/**"
+        - "rust/src/object_store/**"
+        - "rust/src/assets/**"
+        - "rust/src/workspace/**"
+        - "rust/src/security/**"
+        - "rust/src/api/**"
+        - rust/src/frb_generated.rs
+        - "lib/src/rust/**"
+        - "lib/src/components/**"
+        - "lib/src/providers/**"
+        - "lib/src/screens/**"
+        - "test/**"
+        - "integration_test/**"
+        - "test_driver/**"
+        - integration_test/private_sync_real_provider_test.dart
+        - integration_test/github_device_flow_real_test.dart
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && git diff --check"
+      expected: The complete hermetic matrix and isolated real-provider workflow pass with exact cleanup and no release or multi-platform claim.
+    stop_conditions:
+      - "STOP unless the approved wave plan names dedicated GitHub App, private repository, Object Store, synthetic data, permitted mutations, and cleanup, and records user-controlled device-flow approval availability."
+      - "STOP if a personal access token, inherited CLI session, chat secret, private collection, automated browser approval, or shared logical-device credential scope enters verification."
+      - "STOP if Notes and images, in-app Suggestions, lifecycle and Asset Decisions, or safe full-local detach aren't all complete."
+    description: "Own the two-logical-device and real-provider recipes and qualify connect, publication, join, offline work, Notes and image transfer, every conflict class, in-app Suggestions, authorization and privacy holds, crash recovery, bounded shutdown, and safe full-local detach."
+    acceptance:
+      mode: gherkin
+      supplementary: [live_probe]
+      recipe: private-linux-real-provider-sync
+      evidence: |
+        Given two independently isolated logical devices and dedicated real GitHub and Object Store resources, the Writer first completes the manual `real-github-device-approval` scenario in integration_test/github_device_flow_real_test.dart through the github-device-flow recipe. The `complete-real-provider-sync` scenario in integration_test/private_sync_real_provider_test.dart then exercises the complete lifecycle. Notes and protected images converge, both versions survive conflicts until in-app resolution, local work remains available through holds, detachment preserves complete local state, cleanup is exact, and the real-provider manifest binds every synthetic provider and application outcome without secrets. The companion private-linux-two-device-sync manifest proves the same state machine with controlled fault injection.
+      constraints:
+        - NFC-10
+        - NFC-11
+        - NFC-13
+        - NFC-16
+        - NFC-17
+        - NFC-20
+        - NFC-23
+        - NFC-24
+    flows:
+      - flow-auth-handshake
+      - flow-sync-push
+      - flow-conflict-resolution
+      - flow-object-store-lifecycle
+    certainty: assumed
+    status: planned

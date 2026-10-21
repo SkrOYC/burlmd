@@ -24,6 +24,7 @@ flowchart LR
     Provider[Provider\nexternal boundary]
     Remote[Remote\nexternal storage]
     ObjectStore[Object Store\nexternal storage]
+    ExternalImage[External Image Origin\nuntrusted external content source]
     Update[Release Update Coordinator\nmodule]
     Release[Release Pipeline\npipeline boundary]
     Validation[Isolated Validation Environment\ncredential-free candidates and fresh sealing authority]
@@ -33,6 +34,8 @@ flowchart LR
     Writer -->|interaction| UI
     Agent -->|guest filesystem write| Host
     UI <-->|in-process request and state response| Core
+    UI <-->|ipc: file selection and clipboard image retrieval| Host
+    Core -->|ipc: approved Export destination access| Host
     Core <-->|in-process model operations| NoteModel
     Core <-->|in-process model operations| WorkspaceModel
     WorkspaceModel -->|Note semantic operations| NoteModel
@@ -59,6 +62,7 @@ flowchart LR
     Sync <-->|durable synchronization state| State
     Provider -->|request-response: provisioned Remote location and access metadata| Remote
     ObjectTransfer <-->|request-response: Object transfer and privacy verification| ObjectStore
+    Core -->|request-response: external image retrieval| ExternalImage
     ObjectTransfer <-->|local Object handoff| LocalAssets
     ObjectTransfer <-->|durable Object state| State
     WorkspaceModel -->|Protected State roots| LocalAssets
@@ -78,7 +82,7 @@ flowchart LR
 - **Logical type:** Desktop interaction surface.
 - **Responsibility:** Captures Writer intent and renders authoritative state, warnings, Decisions, Suggestions, diagnostics, and release information.
 - **Inputs and outputs:** Sends interaction commands. Receives Note, Workspace, session, synchronization, and recovery state.
-- **Depends on:** Core Coordination.
+- **Depends on:** Core Coordination and Host Platform.
 
 This boundary can own ephemeral selection and focus. Durable preferences and per-Workspace session state belong to Application State.
 
@@ -87,14 +91,14 @@ This boundary can own ephemeral selection and focus. Durable preferences and per
 - **Boundary kind:** Module.
 - **Logical type:** Application coordinator and authority boundary.
 - **Responsibility:** Serializes commands against authoritative model state, enforces authority and conformance, and coordinates local and external state machines.
-- **Inputs and outputs:** Receives Writer actions, guest-change proposals, synchronization results, and Object results. Emits authoritative state and durable obligations.
-- **Depends on:** Canonical Note Model, Workspace Model, Workspace Persistence, Local Asset Store, Derived Index, Application State, Secure Storage, Workspace Observer, Remote Sync Coordinator, Object Transfer Coordinator, and Release Update Coordinator.
+- **Inputs and outputs:** Receives Writer actions, guest-change proposals, synchronization results, Object results, and external image results. Emits authoritative state and durable obligations.
+- **Depends on:** Canonical Note Model, Workspace Model, Workspace Persistence, Local Asset Store, Derived Index, Application State, Secure Storage, Host Platform, Workspace Observer, Remote Sync Coordinator, Object Transfer Coordinator, Release Update Coordinator, and External Image Origin.
 
 ## Canonical Note Model
 
 - **Boundary kind:** Module.
 - **Logical type:** Source-backed semantic model.
-- **Responsibility:** Defines Note-local values and operations for parsing, rendering, source-preserving edits, undo, find and replace, Links, Assets, Suggestion representation, and conformance.
+- **Responsibility:** Defines Note-local values and operations for selected Markdown syntax, rendering, source-preserving edits, undo, find and replace, Links, local Asset references, external image references, Suggestion representation, and conformance.
 - **Inputs and outputs:** Accepts Note source and semantic operations. Returns structured Note state, source ranges, and source-preserving results.
 - **Depends on:** No other logical boundary.
 
@@ -120,7 +124,7 @@ The boundary owns the logical model only. Stage 3 selects the physical schema, p
 
 - **Boundary kind:** Storage boundary.
 - **Logical type:** Local authoritative Object storage.
-- **Responsibility:** Owns verified local Object bytes, active offline availability, hydration handoff, cache eviction, and retention of bytes reachable from Protected State.
+- **Responsibility:** Owns verified Object bytes for imported local Assets, active offline availability, hydration handoff, cache eviction, and retention of bytes reachable from Protected State. External image references don't enter this boundary automatically.
 - **Inputs and outputs:** Accepts verified Object writes and retention roots. Returns verified bytes, availability, and eviction outcomes.
 - **Depends on:** Host Platform, Workspace Model for Protected State roots, and Workspace Persistence for Asset references.
 
@@ -178,7 +182,7 @@ Device preferences never enter Workspace content. Session and navigation state r
 
 - **Boundary kind:** External boundary.
 - **Logical type:** Operating system and filesystem authority.
-- **Responsibility:** Owns window chrome, process lifecycle, filesystem events, secure storage, file selection, installation, and package-manager behavior.
+- **Responsibility:** Owns window chrome, process lifecycle, filesystem events, secure storage, file selection, clipboard access, installation, and package-manager behavior.
 - **Inputs and outputs:** Provides Platform services and lifecycle signals.
 - **Depends on:** None.
 
@@ -205,6 +209,22 @@ Device preferences never enter Workspace content. Session and navigation state r
 - **Responsibility:** Stores and exchanges immutable Object bytes for a connected Workspace under the Writer's control.
 - **Inputs and outputs:** Accepts authenticated Object operations and anonymous list, read, write, and delete privacy probes. Returns verified Object bytes and explicit privacy, integrity, and availability outcomes.
 - **Depends on:** External network availability and a Writer-controlled Object Store account.
+
+## External Image Origin
+
+- **Boundary kind:** External trust boundary.
+- **Logical type:** Untrusted external content source.
+- **Responsibility:** Serves image bytes for an external reference in an opened Note without becoming Workspace storage, a local Asset, or an Object Store.
+- **Inputs and outputs:** Receives a request for the exact external image reference from the opened Note. Returns untrusted response bytes or an explicit retrieval failure.
+- **Depends on:** External network availability.
+
+Core Coordination treats every response as untrusted display input. A failed or unavailable request leaves Note source and local editing unchanged. Automatic loading doesn't rewrite or import the external reference.
+
+## Delivery boundaries
+
+The first usable boundary is one private Linux Workspace with local editing, local images, automatic guest-change observation, plain-folder Export, diagnostics, and the selected P0 Markdown syntax. Remote synchronization follows as a separate boundary that transfers Notes and local-image Objects together, resolves concurrent content through Suggestions, and can return safely to complete local-only use.
+
+P1 Markdown follows synchronization, then P2 Markdown. macOS qualification is P2 and doesn't gate private Linux use. Existing-collection adoption, multiple-Workspace interfaces, in-app Version history, guided repair, Bundle Archive Export, image drag-and-drop, Consolidation, Object Store migration, automatic local image cleanup, 10,000-Note qualification, and public-release qualification retain their owning boundaries but don't expand the active flows in this pass.
 
 ## Release Pipeline
 

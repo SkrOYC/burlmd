@@ -1,15 +1,35 @@
 ---
 verification_commands:
-  - name: probe
-    label: canonical BURL verification for BURL-K009
-    command: "./scripts/attest-github-app-token-expiration.sh --client-id \"$BURLMD_GITHUB_APP_CLIENT_ID\" --output .constitution/evidence/BURL-K009/github-app-token-expiration-attestation.json && ./scripts/verify-github-app-registration.sh --manifest config/github-app.release.toml --installation-url \"$BURLMD_GITHUB_APP_INSTALLATION_URL\" --expected-client-id \"$BURLMD_GITHUB_APP_CLIENT_ID\" --require-device-flow --require-private-repository-permissions --forbid-permission workflows --token-expiration-attestation .constitution/evidence/BURL-K009/github-app-token-expiration-attestation.json --max-attestation-age-hours 24 --output .constitution/evidence/BURL-K009/github-app-registration.json && git diff --check"
+  - name: test
+    label: private Linux live-driver self-test for BURL-Q001
+    command: "./scripts/private-linux-live.sh self-test && git diff --check"
     exists: false
-    owner: BURL-K009
-  - name: probe
-    label: canonical BURL verification for BURL-O014
-    command: "./scripts/attest-github-app-token-expiration.sh --client-id \"$BURLMD_GITHUB_APP_CLIENT_ID\" --output .constitution/evidence/BURL-O014/github-app-token-expiration-attestation.json && ./scripts/verify-github-app-registration.sh --manifest config/github-app.release.toml --installation-url \"$BURLMD_GITHUB_APP_INSTALLATION_URL\" --expected-client-id \"$BURLMD_GITHUB_APP_CLIENT_ID\" --require-device-flow --require-private-repository-permissions --forbid-permission workflows --token-expiration-attestation .constitution/evidence/BURL-O014/github-app-token-expiration-attestation.json --max-attestation-age-hours 24 --output .constitution/evidence/BURL-O014/github-app-registration.json && git diff --check"
+    owner: BURL-Q001
+  - name: test
+    label: private Linux canonical-model research for BURL-H001
+    command: "rg -q '^Status: complete$' .constitution/spikes/SPK-BURL-H001.md && rg -q '^## Recommendation$' .constitution/spikes/SPK-BURL-H001.md && git diff --check"
+    exists: true
+  - name: test
+    label: private Linux portable-path research for BURL-H002
+    command: "rg -q '^Status: complete$' .constitution/spikes/SPK-BURL-H002.md && rg -q '^## Recommendation$' .constitution/spikes/SPK-BURL-H002.md && git diff --check"
+    exists: true
+  - name: test
+    label: private Linux image and Object research for BURL-I001
+    command: "rg -q '^Status: complete$' .constitution/spikes/SPK-BURL-I001.md && rg -q '^## Recommendation$' .constitution/spikes/SPK-BURL-I001.md && git diff --check"
+    exists: true
+  - name: test
+    label: private Linux Git-analysis research for BURL-L001
+    command: "rg -q '^Status: complete$' .constitution/spikes/SPK-BURL-L001.md && rg -q '^## Recommendation$' .constitution/spikes/SPK-BURL-L001.md && git diff --check"
+    exists: true
+  - name: test
+    label: external image implementation contract for BURL-S003
+    command: "cargo test --manifest-path rust/Cargo.toml external_image -- --list | rg -q ': test' && cargo test --manifest-path rust/Cargo.toml external_image && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && git diff --check"
     exists: false
-    owner: BURL-O014
+    owner: BURL-S003
+  - name: test
+    label: active Core, FFI, and Flutter verification
+    command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && git diff --check"
+    exists: true
   - name: test
     label: quoted by BURL-E001
     command: "./scripts/smoke-shot.sh harness-selftest && test -s .qa/harness-selftest.png"
@@ -24,7 +44,7 @@ verification_commands:
     exists: true
   - name: format
     label: canonical raw-40 verification for BURL-M003
-    command: "cargo fmt --manifest-path rust/Cargo.toml -- --check && cargo clippy --workspace --all-targets --all-features --manifest-path rust/Cargo.toml -- -D warnings && cargo test --manifest-path rust/Cargo.toml && dart format --output=none --set-exit-if-changed lib test test_driver integration_test && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ! rg -n '\\[DEBUG-' lib rust test scripts && actionlint && ./scripts/assert-ci-matrix.sh --workflow .github/workflows/ci.yml --require-runner ubuntu-22.04 --require-runner macos-26 --require-runner macos-15 --require-role-schema .constitution/tech-spec/contracts/ci-role-evidence.schema.json --require-aggregate-schema .constitution/tech-spec/contracts/ci-evidence.schema.json && ./scripts/assert-managed-evidence-isolation.sh --contract .constitution/tech-spec/contracts/provisional-spikes.toml --sandbox bubblewrap --expected-version 0.11.2 && ./scripts/test-managed-role-production-contract.sh && ./scripts/test-managed-evidence-reconciliation.sh && ./scripts/test-seal-validators.sh && git diff --check"
+    command: "cargo fmt --manifest-path rust/Cargo.toml -- --check && cargo clippy --workspace --all-targets --all-features --manifest-path rust/Cargo.toml -- -D warnings && cargo test --manifest-path rust/Cargo.toml && dart format --output=none --set-exit-if-changed lib test test_driver integration_test && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && sh -c \"! rg -n '\\[DEBUG-' lib rust test scripts\" && actionlint && ./scripts/assert-ci-matrix.sh --workflow .github/workflows/ci.yml --require-runner ubuntu-22.04 --require-runner macos-26 --require-runner macos-15 --require-role-schema .constitution/tech-spec/contracts/ci-role-evidence.schema.json --require-aggregate-schema .constitution/tech-spec/contracts/ci-evidence.schema.json && ./scripts/assert-managed-evidence-isolation.sh --contract .constitution/tech-spec/contracts/provisional-spikes.toml --sandbox bubblewrap --expected-version 0.11.2 && ./scripts/test-managed-role-production-contract.sh && ./scripts/test-managed-evidence-reconciliation.sh && ./scripts/test-seal-validators.sh && git diff --check"
     exists: true
   - name: test
     label: canonical BURL verification for BURL-A002
@@ -32,25 +52,20 @@ verification_commands:
     exists: true
   - name: test
     label: quoted by BURL-F002
-    command: "cargo test --lib --manifest-path rust/Cargo.toml && flutter_rust_bridge_codegen generate && flutter test test/components/editor_test.dart test/components/selection_test.dart test/components/lifecycle_actions_test.dart test/components/block_editing_test.dart && BURLMD_SMOKE_F002=1 ./scripts/smoke-shot.sh f002-live-preview && dart analyze && git diff --check && ! rg -n '\\[DEBUG-' lib rust test scripts"
+    command: "cargo test --lib --manifest-path rust/Cargo.toml && flutter_rust_bridge_codegen generate && flutter test test/components/editor_test.dart test/components/selection_test.dart test/components/lifecycle_actions_test.dart test/components/block_editing_test.dart && BURLMD_SMOKE_F002=1 ./scripts/smoke-shot.sh f002-live-preview && dart analyze && git diff --check && sh -c \"! rg -n '\\[DEBUG-' lib rust test scripts\""
     exists: true
   - name: test
     label: quoted by BURL-F003
-    command: "cargo test --lib --manifest-path rust/Cargo.toml && flutter_rust_bridge_codegen generate && flutter test test/components/selection_test.dart test/components/editor_test.dart && BURLMD_SMOKE_F003=1 ./scripts/smoke-shot.sh f003-selection && dart analyze && git diff --check && ! rg -n '\\[DEBUG-' lib rust test scripts"
+    command: "cargo test --lib --manifest-path rust/Cargo.toml && flutter_rust_bridge_codegen generate && flutter test test/components/selection_test.dart test/components/editor_test.dart && BURLMD_SMOKE_F003=1 ./scripts/smoke-shot.sh f003-selection && dart analyze && git diff --check && sh -c \"! rg -n '\\[DEBUG-' lib rust test scripts\""
     exists: true
   - name: test
     label: quoted by BURL-F006
-    command: "cargo test --lib --manifest-path rust/Cargo.toml link_completion_limit_is_ten -- --list | rg -q ': test' && cargo test --lib --manifest-path rust/Cargo.toml link_completion_limit_is_ten && cargo test --lib --manifest-path rust/Cargo.toml prospective_ghost_completion -- --list | rg -q ': test' && cargo test --lib --manifest-path rust/Cargo.toml prospective_ghost_completion && cargo test --lib --manifest-path rust/Cargo.toml resolve_link_target -- --list | rg -q ': test' && cargo test --lib --manifest-path rust/Cargo.toml resolve_link_target && cargo test --lib --manifest-path rust/Cargo.toml create_link_target -- --list | rg -q ': test' && cargo test --lib --manifest-path rust/Cargo.toml create_link_target && flutter_rust_bridge_codegen generate && flutter gen-l10n && flutter test test/components/link_completion_test.dart test/components/editor_test.dart && BURLMD_SMOKE_F006=1 ./scripts/smoke-shot.sh f006-link-completion && dart analyze && git diff --check && ! rg -n '\\[DEBUG-' lib rust test scripts"
+    command: "cargo test --lib --manifest-path rust/Cargo.toml link_completion_limit_is_ten -- --list | rg -q ': test' && cargo test --lib --manifest-path rust/Cargo.toml link_completion_limit_is_ten && cargo test --lib --manifest-path rust/Cargo.toml prospective_ghost_completion -- --list | rg -q ': test' && cargo test --lib --manifest-path rust/Cargo.toml prospective_ghost_completion && cargo test --lib --manifest-path rust/Cargo.toml resolve_link_target -- --list | rg -q ': test' && cargo test --lib --manifest-path rust/Cargo.toml resolve_link_target && cargo test --lib --manifest-path rust/Cargo.toml create_link_target -- --list | rg -q ': test' && cargo test --lib --manifest-path rust/Cargo.toml create_link_target && flutter_rust_bridge_codegen generate && flutter gen-l10n && flutter test test/components/link_completion_test.dart test/components/editor_test.dart && BURLMD_SMOKE_F006=1 ./scripts/smoke-shot.sh f006-link-completion && dart analyze && git diff --check && sh -c \"! rg -n '\\[DEBUG-' lib rust test scripts\""
     exists: true
   - name: test
     label: quoted by BURL-F007
-    command: "cargo test --lib --manifest-path rust/Cargo.toml range_edit_result_reports_phantom -- --list | rg -q ': test' && cargo test --lib --manifest-path rust/Cargo.toml range_edit_result_reports_phantom && cargo test --lib --manifest-path rust/Cargo.toml range_edit_result_rejects_utf16_surrogate -- --list | rg -q ': test' && cargo test --lib --manifest-path rust/Cargo.toml range_edit_result_rejects_utf16_surrogate && cargo test --lib --manifest-path rust/Cargo.toml && flutter_rust_bridge_codegen generate && flutter test test/components/selection_editing_test.dart test/components/text_input_client_test.dart test/components/selection_test.dart && BURLMD_SMOKE_F007=1 ./scripts/smoke-shot.sh f007-range-editing && dart analyze && git diff --check && ! rg -n '\\[DEBUG-' lib rust test scripts"
+    command: "cargo test --lib --manifest-path rust/Cargo.toml range_edit_result_reports_phantom -- --list | rg -q ': test' && cargo test --lib --manifest-path rust/Cargo.toml range_edit_result_reports_phantom && cargo test --lib --manifest-path rust/Cargo.toml range_edit_result_rejects_utf16_surrogate -- --list | rg -q ': test' && cargo test --lib --manifest-path rust/Cargo.toml range_edit_result_rejects_utf16_surrogate && cargo test --lib --manifest-path rust/Cargo.toml && flutter_rust_bridge_codegen generate && flutter test test/components/selection_editing_test.dart test/components/text_input_client_test.dart test/components/selection_test.dart && BURLMD_SMOKE_F007=1 ./scripts/smoke-shot.sh f007-range-editing && dart analyze && git diff --check && sh -c \"! rg -n '\\[DEBUG-' lib rust test scripts\""
     exists: true
-  - name: test
-    label: quoted by BURL-N006
-    command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && dart analyze && ./scripts/verify-second-device-join.sh --private-remote \"$BURLMD_TEST_PRIVATE_REMOTE_URL\" --object-endpoint \"$BURLMD_TEST_S3_ENDPOINT\" --output target/runbooks/clone-k005.json && git diff --check"
-    exists: false
-    owner: BURL-N006
   - name: test
     label: "quoted by BURL-H006, BURL-J001, BURL-J002, BURL-J003, BURL-J004, BURL-J005, BURL-N007, BURL-L004, BURL-L008"
     command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && dart analyze && git diff --check"
@@ -58,10 +73,6 @@ verification_commands:
   - name: test
     label: quoted by BURL-H004
     command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh adapt-h004 && git diff --check"
-    exists: true
-  - name: test
-    label: quoted by BURL-I009
-    command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh adopt-i009 && git diff --check && ! rg -n '\\[DEBUG-' lib rust test scripts"
     exists: true
   - name: test
     label: quoted by BURL-N005
@@ -72,16 +83,8 @@ verification_commands:
     command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh asset-l007 && git diff --check"
     exists: true
   - name: test
-    label: quoted by BURL-K001
-    command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh auth-k001 && git diff --check && ! rg -n '\\[DEBUG-' lib rust test scripts"
-    exists: true
-  - name: test
     label: canonical BURL verification for BURL-P004
     command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh decide-h011 && git diff --check"
-    exists: true
-  - name: test
-    label: quoted by BURL-L011
-    command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh delete-l011 && git diff --check && ! rg -n '\\[DEBUG-' lib rust test scripts"
     exists: true
   - name: test
     label: quoted by BURL-N003
@@ -116,16 +119,8 @@ verification_commands:
     command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh life-l006 && git diff --check"
     exists: true
   - name: test
-    label: quoted by BURL-O002
-    command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh log-m002 && git diff --check && ! rg -n '\\[DEBUG-' lib rust test scripts"
-    exists: true
-  - name: test
     label: quoted by BURL-N002
     command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh migrate-i011 && git diff --check"
-    exists: true
-  - name: test
-    label: quoted by BURL-I004
-    command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh object-i004 && git diff --check && ! rg -n '\\[DEBUG-' lib rust test scripts"
     exists: true
   - name: test
     label: quoted by BURL-H007
@@ -138,14 +133,6 @@ verification_commands:
   - name: test
     label: canonical BURL verification for BURL-P001
     command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh repair-h008 && git diff --check"
-    exists: true
-  - name: test
-    label: quoted by BURL-K003
-    command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh repo-k003 && git diff --check && ! rg -n '\\[DEBUG-' lib rust test scripts"
-    exists: true
-  - name: test
-    label: quoted by BURL-I008
-    command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh rotate-i008 && git diff --check && ! rg -n '\\[DEBUG-' lib rust test scripts"
     exists: true
   - name: bench
     label: quoted by BURL-L003
@@ -183,11 +170,6 @@ verification_commands:
     label: quoted by BURL-K004
     command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test integration_test/connect_consolidation_flow_test.dart -d linux && dart analyze && git diff --check"
     exists: true
-  - name: probe
-    label: canonical managed verification for BURL-P002
-    command: "TRUST_ANCHOR_WORKTREE/scripts/managed-evidence.sh run --ticket BURL-P002 --trust-anchor-sha TRUST_ANCHOR_SHA --source-ref SOURCE_REF --tested-source-sha TESTED_SOURCE_SHA --base-sha BASE_SHA --output EVIDENCE_WORKTREE/.constitution/evidence/BURL-P002/managed-evidence.json && git -C EVIDENCE_WORKTREE diff --check"
-    exists: false
-    owner: BURL-P002
   - name: test
     label: "quoted by BURL-I002, BURL-L002"
     command: "cargo test --manifest-path rust/Cargo.toml && cargo clippy --workspace --all-targets --manifest-path rust/Cargo.toml -- -D warnings && ./scripts/check-generated-bindings.sh && git diff --check"
@@ -196,16 +178,6 @@ verification_commands:
     label: "quoted by BURL-H003, BURL-H005, BURL-I007, BURL-L010"
     command: "cargo test --manifest-path rust/Cargo.toml && cargo clippy --workspace --all-targets --manifest-path rust/Cargo.toml -- -D warnings && git diff --check"
     exists: true
-  - name: probe
-    label: canonical managed verification for BURL-O004
-    command: "TRUST_ANCHOR_WORKTREE/scripts/managed-evidence.sh run --ticket BURL-O004 --trust-anchor-sha TRUST_ANCHOR_SHA --source-ref SOURCE_REF --tested-source-sha TESTED_SOURCE_SHA --base-sha BASE_SHA --output EVIDENCE_WORKTREE/.constitution/evidence/BURL-O004/managed-evidence.json && git -C EVIDENCE_WORKTREE diff --check"
-    exists: false
-    owner: BURL-O004
-  - name: test
-    label: canonical BURL verification for BURL-N009
-    command: "cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && ./scripts/run-private-github-canary.sh --private-remote \"$BURLMD_TEST_PRIVATE_REMOTE_URL\" --object-endpoint \"$BURLMD_TEST_S3_ENDPOINT\" --cleanup always --output .constitution/evidence/BURL-N009/canary-n009.json && ./scripts/verify-device-authorization-runbook.sh --require-human-approval --output .constitution/evidence/BURL-N009/device-auth-n009.json && git diff --check"
-    exists: false
-    owner: BURL-N009
   - name: test
     label: quoted by BURL-G005
     command: "cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && ./scripts/smoke-shot.sh close-g005 && git diff --check"
@@ -240,7 +212,7 @@ verification_commands:
     exists: true
   - name: probe
     label: canonical managed verification for BURL-G011
-    command: "TRUST_ANCHOR_WORKTREE/scripts/managed-evidence.sh run --ticket BURL-G011 --trust-anchor-sha TRUST_ANCHOR_SHA --source-ref SOURCE_REF --tested-source-sha TESTED_SOURCE_SHA --base-sha BASE_SHA --output EVIDENCE_WORKTREE/.constitution/evidence/BURL-G011/managed-evidence.json && git -C EVIDENCE_WORKTREE diff --check"
+    command: "./scripts/managed-evidence.sh run --ticket BURL-G011 --trust-anchor-sha TRUST_ANCHOR_SHA --source-ref SOURCE_REF --tested-source-sha TESTED_SOURCE_SHA --base-sha BASE_SHA --output EVIDENCE_WORKTREE/.constitution/evidence/BURL-G011/managed-evidence.json && git -C EVIDENCE_WORKTREE diff --check"
     exists: true
   - name: test
     label: quoted by BURL-G011 post-matrix common functional check
@@ -323,12 +295,8 @@ verification_commands:
     command: "flutter test && dart analyze && ./scripts/smoke-shot.sh nav-g007 && git diff --check"
     exists: true
   - name: test
-    label: quoted by BURL-G002
-    command: "flutter test && dart analyze && ./scripts/smoke-shot.sh pref-g002 && git diff --check && ! rg -n '\\[DEBUG-' lib rust test scripts"
-    exists: true
-  - name: test
     label: private Linux smoke for BURL-G002 after BURL-G001
-    command: "flutter test && dart analyze && ./scripts/visual-regression.sh pref-g002 --baseline .qa/pref-g002-private.png --max-different-pixels 0 --write-baseline && git diff --check && ! rg -n '\\[DEBUG-' lib rust test scripts"
+    command: "flutter test && dart analyze && ./scripts/visual-regression.sh pref-g002 --baseline .qa/pref-g002-private.png --max-different-pixels 0 --write-baseline && git diff --check && sh -c \"! rg -n '\\[DEBUG-' lib rust test scripts\""
     exists: true
   - name: test
     label: private Linux smoke for BURL-G003 after BURL-G001
@@ -348,7 +316,7 @@ verification_commands:
     exists: true
   - name: test
     label: quoted by BURL-G001
-    command: "flutter test && dart analyze && ./scripts/visual-regression.sh shell-g001 --baseline test/goldens/shell-g001-linux.png --max-different-pixels 0 && git diff --check && ! rg -n '\\[DEBUG-' lib rust test scripts"
+    command: "flutter test && dart analyze && ./scripts/visual-regression.sh shell-g001 --baseline test/goldens/shell-g001-linux.png --max-different-pixels 0 && git diff --check && sh -c \"! rg -n '\\[DEBUG-' lib rust test scripts\""
     exists: true
   - name: test
     label: quoted by BURL-F004
@@ -364,7 +332,7 @@ verification_commands:
     exists: true
   - name: test
     label: quoted by BURL-F005
-    command: "flutter test test/components/emphasis_shortcuts_test.dart && BURLMD_SMOKE_F005=1 ./scripts/smoke-shot.sh f005-emphasis && dart analyze && git diff --check && ! rg -n '\\[DEBUG-' lib rust test scripts"
+    command: "flutter test test/components/emphasis_shortcuts_test.dart && BURLMD_SMOKE_F005=1 ./scripts/smoke-shot.sh f005-emphasis && dart analyze && git diff --check && sh -c \"! rg -n '\\[DEBUG-' lib rust test scripts\""
     exists: true
   - name: test
     label: quoted by BURL-E005
@@ -386,63 +354,123 @@ verification_commands:
     label: "quoted by BURL-C001, BURL-C002, BURL-C003, BURL-O006, BURL-O009, BURL-O011, BURL-O012, BURL-O013"
     command: git diff --check
     exists: true
-  - name: build
-    label: quoted by BURL-O007
-    command: "nix flake check && nix build .#packages.x86_64-linux.default && git diff --check"
-    exists: true
   - name: test
     label: quoted by BURL-D001
-    command: "test -s .constitution/spikes/SPK-BURL-D001.md && ! grep -q 'Status: placeholder' .constitution/spikes/SPK-BURL-D001.md && ! grep -q 'To be filled' .constitution/spikes/SPK-BURL-D001.md && git diff --quiet HEAD~1 HEAD -- rust/src"
+    command: "test -s .constitution/spikes/SPK-BURL-D001.md && sh -c \"! grep -q 'Status: placeholder' .constitution/spikes/SPK-BURL-D001.md\" && sh -c \"! grep -q 'To be filled' .constitution/spikes/SPK-BURL-D001.md\" && git diff --quiet HEAD~1 HEAD -- rust/src"
     exists: true
   - name: test
     label: quoted by BURL-F001
-    command: "test -s .constitution/spikes/SPK-BURL-F001.md && ! grep -q 'Status: placeholder' .constitution/spikes/SPK-BURL-F001.md && ! grep -q 'To be filled' .constitution/spikes/SPK-BURL-F001.md && git diff --quiet a960e34afb59e46ead601375bbfd6424eb4193ec^ a960e34afb59e46ead601375bbfd6424eb4193ec -- lib rust/src && git diff --check HEAD^ HEAD && flutter test test/components/editor_test.dart test/components/selection_test.dart && dart analyze && ! rg -n '\\[DEBUG-' lib rust test scripts"
+    command: "test -s .constitution/spikes/SPK-BURL-F001.md && sh -c \"! grep -q 'Status: placeholder' .constitution/spikes/SPK-BURL-F001.md\" && sh -c \"! grep -q 'To be filled' .constitution/spikes/SPK-BURL-F001.md\" && git diff --quiet a960e34afb59e46ead601375bbfd6424eb4193ec^ a960e34afb59e46ead601375bbfd6424eb4193ec -- lib rust/src && git diff --check HEAD^ HEAD && flutter test test/components/editor_test.dart test/components/selection_test.dart && dart analyze && sh -c \"! rg -n '\\[DEBUG-' lib rust test scripts\""
     exists: true
-  - name: probe
-    label: quoted by BURL-H001
-    command: "TRUST_ANCHOR_WORKTREE/scripts/managed-evidence.sh run --ticket BURL-H001 --trust-anchor-sha TRUST_ANCHOR_SHA --source-ref SOURCE_REF --tested-source-sha TESTED_SOURCE_SHA --base-sha BASE_SHA --output EVIDENCE_WORKTREE/.constitution/prototypes/ast/managed-evidence.json && git -C EVIDENCE_WORKTREE diff --check"
-    exists: true
-  - name: probe
-    label: quoted by BURL-H002
-    command: "TRUST_ANCHOR_WORKTREE/scripts/managed-evidence.sh run --ticket BURL-H002 --trust-anchor-sha TRUST_ANCHOR_SHA --source-ref SOURCE_REF --tested-source-sha TESTED_SOURCE_SHA --base-sha BASE_SHA --output EVIDENCE_WORKTREE/.constitution/prototypes/path/managed-evidence.json && git -C EVIDENCE_WORKTREE diff --check"
-    exists: true
-  - name: probe
-    label: quoted by BURL-I001
-    command: "TRUST_ANCHOR_WORKTREE/scripts/managed-evidence.sh run --ticket BURL-I001 --trust-anchor-sha TRUST_ANCHOR_SHA --source-ref SOURCE_REF --tested-source-sha TESTED_SOURCE_SHA --base-sha BASE_SHA --output EVIDENCE_WORKTREE/.constitution/prototypes/assets/managed-evidence.json && git -C EVIDENCE_WORKTREE diff --check"
-    exists: true
-  - name: probe
-    label: quoted by BURL-L001
-    command: "TRUST_ANCHOR_WORKTREE/scripts/managed-evidence.sh run --ticket BURL-L001 --trust-anchor-sha TRUST_ANCHOR_SHA --source-ref SOURCE_REF --tested-source-sha TESTED_SOURCE_SHA --base-sha BASE_SHA --output EVIDENCE_WORKTREE/.constitution/prototypes/git-analysis/managed-evidence.json && git -C EVIDENCE_WORKTREE diff --check"
-    exists: true
-  - name: probe
-    label: canonical managed verification for BURL-O001
-    command: "TRUST_ANCHOR_WORKTREE/scripts/managed-evidence.sh run --ticket BURL-O001 --trust-anchor-sha TRUST_ANCHOR_SHA --source-ref SOURCE_REF --tested-source-sha TESTED_SOURCE_SHA --base-sha BASE_SHA --output EVIDENCE_WORKTREE/.constitution/prototypes/packaging/managed-evidence.json && git -C EVIDENCE_WORKTREE diff --check"
-    exists: true
-  - name: other
-    label: canonical BURL verification for BURL-O006
-    command: "Run the accepted production AppImage build and installed probes derived from `SPK-BURL-O001`, then `git diff --check`."
+live_verification:
+  - name: private-linux-local-p0
+    surface: native
+    launch: "./scripts/private-linux-live.sh launch --recipe local-p0 --target \"$BURLMD_LIVE_TARGET\" --scenario \"$BURLMD_LIVE_SCENARIO\" --state-root target/live-verification/local-p0"
+    doctor: "./scripts/private-linux-live.sh doctor --recipe local-p0 --state-root target/live-verification/local-p0"
+    drive: "./scripts/private-linux-live.sh drive --recipe local-p0 --target \"$BURLMD_LIVE_TARGET\" --scenario \"$BURLMD_LIVE_SCENARIO\" --state-root target/live-verification/local-p0"
+    drive_kind: command
+    evidence:
+      kind: file
+      ref: target/live-verification/local-p0/manifest.json
+    cleanup: "./scripts/private-linux-live.sh cleanup --recipe local-p0 --state-root target/live-verification/local-p0"
     exists: false
-    owner: BURL-O006
-  - name: other
-    label: quoted by BURL-O009
-    command: "Run the accepted release construction and artifact verification commands from final TechSpec, then `git diff --check`."
+    owner: BURL-Q001
+  - name: private-linux-external-image
+    surface: native
+    launch: "./scripts/private-linux-live.sh launch --recipe external-image --target \"$BURLMD_LIVE_TARGET\" --scenario \"$BURLMD_LIVE_SCENARIO\" --state-root target/live-verification/external-image"
+    doctor: "./scripts/private-linux-live.sh doctor --recipe external-image --state-root target/live-verification/external-image"
+    drive: "./scripts/private-linux-live.sh drive --recipe external-image --target \"$BURLMD_LIVE_TARGET\" --scenario \"$BURLMD_LIVE_SCENARIO\" --state-root target/live-verification/external-image"
+    drive_kind: command
+    evidence:
+      kind: file
+      ref: target/live-verification/external-image/manifest.json
+    cleanup: "./scripts/private-linux-live.sh cleanup --recipe external-image --state-root target/live-verification/external-image"
     exists: false
-    owner: BURL-O009
-  - name: other
-    label: canonical BURL verification for BURL-O011
-    command: "TRUST_ANCHOR_WORKTREE/scripts/managed-evidence.sh run --ticket BURL-O011 --trust-anchor-sha TRUST_ANCHOR_SHA --source-ref SOURCE_REF --tested-source-sha TESTED_SOURCE_SHA --base-sha BASE_SHA --output EVIDENCE_WORKTREE/.constitution/evidence/BURL-O011/managed-evidence.json && git -C EVIDENCE_WORKTREE diff --check"
+    owner: BURL-Q001
+  - name: private-linux-workspace-observer
+    surface: native
+    launch: "./scripts/private-linux-live.sh launch --recipe workspace-observer --target \"$BURLMD_LIVE_TARGET\" --scenario \"$BURLMD_LIVE_SCENARIO\" --state-root target/live-verification/workspace-observer"
+    doctor: "./scripts/private-linux-live.sh doctor --recipe workspace-observer --state-root target/live-verification/workspace-observer"
+    drive: "./scripts/private-linux-live.sh drive --recipe workspace-observer --target \"$BURLMD_LIVE_TARGET\" --scenario \"$BURLMD_LIVE_SCENARIO\" --state-root target/live-verification/workspace-observer"
+    drive_kind: command
+    evidence:
+      kind: file
+      ref: target/live-verification/workspace-observer/manifest.json
+    cleanup: "./scripts/private-linux-live.sh cleanup --recipe workspace-observer --state-root target/live-verification/workspace-observer"
     exists: false
-    owner: BURL-O011
-  - name: other
-    label: canonical BURL verification for BURL-O012
-    command: "TRUST_ANCHOR_WORKTREE/scripts/managed-evidence.sh run --ticket BURL-O012 --trust-anchor-sha TRUST_ANCHOR_SHA --source-ref SOURCE_REF --tested-source-sha TESTED_SOURCE_SHA --base-sha BASE_SHA --output EVIDENCE_WORKTREE/.constitution/evidence/BURL-O012/managed-evidence.json && git -C EVIDENCE_WORKTREE diff --check"
+    owner: BURL-S004
+  - name: private-linux-1000-note-performance
+    surface: native
+    launch: "./scripts/private-linux-live.sh launch --recipe 1000-note-performance --target \"$BURLMD_LIVE_TARGET\" --scenario \"$BURLMD_LIVE_SCENARIO\" --state-root target/live-verification/1000-note-performance"
+    doctor: "./scripts/private-linux-live.sh doctor --recipe 1000-note-performance --state-root target/live-verification/1000-note-performance"
+    drive: "./scripts/private-linux-live.sh drive --recipe 1000-note-performance --target \"$BURLMD_LIVE_TARGET\" --scenario \"$BURLMD_LIVE_SCENARIO\" --state-root target/live-verification/1000-note-performance"
+    drive_kind: command
+    evidence:
+      kind: file
+      ref: target/live-verification/1000-note-performance/manifest.json
+    cleanup: "./scripts/private-linux-live.sh cleanup --recipe 1000-note-performance --state-root target/live-verification/1000-note-performance"
     exists: false
-    owner: BURL-O012
-  - name: other
-    label: canonical BURL verification for BURL-O013
-    command: "TRUST_ANCHOR_WORKTREE/scripts/managed-evidence.sh run --ticket BURL-O013 --trust-anchor-sha TRUST_ANCHOR_SHA --source-ref SOURCE_REF --tested-source-sha TESTED_SOURCE_SHA --base-sha BASE_SHA --output EVIDENCE_WORKTREE/.constitution/evidence/BURL-O013/managed-evidence.json && git -C EVIDENCE_WORKTREE diff --check"
+    owner: BURL-O004
+  - name: private-linux-github-device-flow-fixture
+    surface: native
+    launch: "./scripts/private-linux-live.sh launch --recipe github-device-flow-fixture --target \"$BURLMD_LIVE_TARGET\" --scenario \"$BURLMD_LIVE_SCENARIO\" --state-root target/live-verification/github-device-flow-fixture"
+    doctor: "./scripts/private-linux-live.sh doctor --recipe github-device-flow-fixture --state-root target/live-verification/github-device-flow-fixture"
+    drive: "./scripts/private-linux-live.sh drive --recipe github-device-flow-fixture --target \"$BURLMD_LIVE_TARGET\" --scenario \"$BURLMD_LIVE_SCENARIO\" --state-root target/live-verification/github-device-flow-fixture"
+    drive_kind: command
+    evidence:
+      kind: file
+      ref: target/live-verification/github-device-flow-fixture/manifest.json
+    cleanup: "./scripts/private-linux-live.sh cleanup --recipe github-device-flow-fixture --state-root target/live-verification/github-device-flow-fixture"
     exists: false
-    owner: BURL-O013
+    owner: BURL-K001
+  - name: private-linux-object-store-fixture
+    surface: native
+    launch: "./scripts/private-linux-live.sh launch --recipe object-store --target \"$BURLMD_LIVE_TARGET\" --scenario \"$BURLMD_LIVE_SCENARIO\" --state-root target/live-verification/object-store"
+    doctor: "./scripts/private-linux-live.sh doctor --recipe object-store --state-root target/live-verification/object-store"
+    drive: "./scripts/private-linux-live.sh drive --recipe object-store --target \"$BURLMD_LIVE_TARGET\" --scenario \"$BURLMD_LIVE_SCENARIO\" --state-root target/live-verification/object-store"
+    drive_kind: command
+    evidence:
+      kind: file
+      ref: target/live-verification/object-store/manifest.json
+    cleanup: "./scripts/private-linux-live.sh cleanup --recipe object-store --state-root target/live-verification/object-store"
+    exists: false
+    owner: BURL-U001
+  - name: github-device-flow
+    surface: native
+    launch: "./scripts/private-linux-live.sh launch --recipe github-device-flow --target \"$BURLMD_LIVE_TARGET\" --scenario \"$BURLMD_LIVE_SCENARIO\" --state-root target/live-verification/github-device-flow"
+    doctor: "./scripts/private-linux-live.sh doctor --recipe github-device-flow --state-root target/live-verification/github-device-flow"
+    drive: "Authorize the dedicated test installation in a user-controlled browser with the verification URI and code displayed by burlmd, then return to the isolated application and wait for its typed approval result. Do not use a personal access token, inherited GitHub CLI session, or automated browser action."
+    drive_kind: manual
+    evidence:
+      kind: file
+      ref: target/live-verification/github-device-flow/manifest.json
+    cleanup: "./scripts/private-linux-live.sh cleanup --recipe github-device-flow --state-root target/live-verification/github-device-flow"
+    exists: false
+    owner: BURL-N011
+  - name: private-linux-two-device-sync
+    surface: native
+    launch: "./scripts/private-linux-live.sh launch --recipe two-device-sync --target \"$BURLMD_LIVE_TARGET\" --scenario \"$BURLMD_LIVE_SCENARIO\" --state-root target/live-verification/two-device-sync"
+    doctor: "./scripts/private-linux-live.sh doctor --recipe two-device-sync --state-root target/live-verification/two-device-sync"
+    drive: "./scripts/private-linux-live.sh drive --recipe two-device-sync --target \"$BURLMD_LIVE_TARGET\" --scenario \"$BURLMD_LIVE_SCENARIO\" --state-root target/live-verification/two-device-sync"
+    drive_kind: command
+    evidence:
+      kind: file
+      ref: target/live-verification/two-device-sync/manifest.json
+    cleanup: "./scripts/private-linux-live.sh cleanup --recipe two-device-sync --state-root target/live-verification/two-device-sync"
+    exists: false
+    owner: BURL-N011
+  - name: private-linux-real-provider-sync
+    surface: native
+    launch: "./scripts/private-linux-live.sh launch --recipe real-provider-sync --target \"$BURLMD_LIVE_TARGET\" --scenario \"$BURLMD_LIVE_SCENARIO\" --state-root target/live-verification/real-provider-sync"
+    doctor: "./scripts/private-linux-live.sh doctor --recipe real-provider-sync --state-root target/live-verification/real-provider-sync"
+    drive: "./scripts/private-linux-live.sh drive --recipe real-provider-sync --target \"$BURLMD_LIVE_TARGET\" --scenario \"$BURLMD_LIVE_SCENARIO\" --state-root target/live-verification/real-provider-sync"
+    drive_kind: command
+    evidence:
+      kind: file
+      ref: target/live-verification/real-provider-sync/manifest.json
+    cleanup: "./scripts/private-linux-live.sh cleanup --recipe real-provider-sync --state-root target/live-verification/real-provider-sync"
+    exists: false
+    owner: BURL-N011
 layout:
   - path: ".agents"
     purpose: Agent skill definitions (Dart/Flutter workflows)
@@ -465,7 +493,7 @@ layout:
   - path: linux
     purpose: Flutter Linux build files (in-scope target)
   - path: macos
-    purpose: Flutter macOS build files (in-scope target)
+    purpose: Flutter macOS build files retained for deferred P2 qualification
   - path: lib
     purpose: Dart/Flutter UI source code
   - path: lib/main.dart
@@ -489,6 +517,9 @@ layout:
   - path: scripts/visual-regression.sh
     purpose: BURL-G001 private headless Sway desktop smoke and zero-pixel shell regression gate
     exists: true
+  - path: scripts/private-linux-live.sh
+    purpose: "Planned private Linux live-verification driver with single-instance, external-image, observer, performance, OAuth, and two-logical-device recipes"
+    exists: false
   - path: test/goldens/shell-g001-linux.png
     purpose: BURL-G001 approved private Linux shell reference image
     exists: true
@@ -496,7 +527,7 @@ layout:
     purpose: BURL-G001 approved reference provenance and manifest-backed repetition evidence
     exists: true
   - path: scripts/managed-evidence.sh
-    purpose: Deferred managed evidence client for the future supported-release matrix
+    purpose: Dormant managed evidence client retained for a later supported-release realignment
   - path: scripts/supervise-linux-session.sh
     purpose: Trusted in-namespace Linux session supervisor
   - path: scripts/managed-sway.conf
@@ -515,6 +546,45 @@ layout:
     purpose: Trusted macOS 15 validator for the complete compatibility consumer input interface
   - path: test
     purpose: Dart widget tests
+  - path: integration_test/private_linux_driver_test.dart
+    purpose: Planned BURL-Q001 real-application driver baseline
+    exists: false
+  - path: integration_test/local_authoring_flow_test.dart
+    purpose: Planned R-series local authoring live scenarios
+    exists: false
+  - path: integration_test/local_media_flow_test.dart
+    purpose: Planned local-image input live scenario
+    exists: false
+  - path: integration_test/external_image_flow_test.dart
+    purpose: Planned external-image policy live scenario
+    exists: false
+  - path: integration_test/workspace_observer_flow_test.dart
+    purpose: Planned automatic guest-change live scenarios
+    exists: false
+  - path: integration_test/plain_folder_export_flow_test.dart
+    purpose: Planned plain-directory Export live scenarios
+    exists: false
+  - path: integration_test/local_quality_flow_test.dart
+    purpose: Planned diagnostics, migration, and history-health live scenarios
+    exists: false
+  - path: integration_test/private_linux_performance_test.dart
+    purpose: Planned 1,000-Note private Linux performance scenario
+    exists: false
+  - path: integration_test/github_device_flow_fixture_test.dart
+    purpose: Planned real-client GitHub device-flow scenarios against a protocol-faithful synthetic Provider
+    exists: false
+  - path: integration_test/object_store_fixture_test.dart
+    purpose: Planned real-client Object Store scenarios against a protocol-faithful synthetic store
+    exists: false
+  - path: integration_test/private_sync_two_device_test.dart
+    purpose: Planned two-logical-device synchronization scenarios with controlled failures
+    exists: false
+  - path: integration_test/private_sync_real_provider_test.dart
+    purpose: Planned complete synchronization scenarios against dedicated real providers
+    exists: false
+  - path: integration_test/github_device_flow_real_test.dart
+    purpose: Planned N011 user-controlled GitHub device approval scenario
+    exists: false
   - path: rust
     purpose: Rust Core Engine source code
   - path: rust/src/frb_generated.rs
@@ -557,6 +627,9 @@ layout:
   - path: rust/src/export
     purpose: "Planned: stable-revision copy/archive Export"
     exists: false
+  - path: rust/src/external_image
+    purpose: "Planned: dedicated credential-free BND-22 external-image fetch and validation client"
+    exists: false
   - path: rust/src/object_store
     purpose: "Planned: S3-compatible transfer and validation"
     exists: false
@@ -568,16 +641,16 @@ layout:
   - path: rust/src/sync
     purpose: "BND-10 Remote synchronization coordination; BND-20 history/ref transfer is distinct from BND-14 authorization/location"
   - path: rust/benches
-    purpose: Planned managed PRD meters and BURL-O004-owned coordinator package
+    purpose: "Planned private Linux performance meters; managed aggregation remains deferred"
     exists: false
   - path: rust/benches/prd-meters-coordinator/Cargo.toml
-    purpose: "Planned locked coordinator manifest owned by BURL-O004; becomes trusted control only after reviewed merge and trust-anchor rotation"
+    purpose: "Dormant supported-release coordinator manifest; not owned by the replacement BURL-O004"
     exists: false
   - path: rust/benches/prd-meters-coordinator/Cargo.lock
-    purpose: Planned coordinator dependency lockfile and immutable preparation input owned by BURL-O004
+    purpose: Dormant supported-release coordinator dependency lockfile
     exists: false
   - path: rust/benches/prd-meters-coordinator/src/main.rs
-    purpose: "Planned coordinator source owned by BURL-O004; reads fixed /inputs role artifacts and writes only /output/nightly-prd-meters.json"
+    purpose: "Dormant supported-release coordinator source; the private 1,000-Note profile doesn't use managed role artifacts"
     exists: false
   - path: rust/src/update
     purpose: "Planned: compatible release-metadata checks"
@@ -589,7 +662,7 @@ layout:
   - path: pubspec.yaml
     purpose: Dart dependencies
   - path: ".github/workflows"
-    purpose: "Planned: PR, canary, benchmark, and release gates"
+    purpose: "Existing workflow directory; hosted release and multi-platform gates remain deferred"
   - path: flake.nix
     purpose: "Planned: release-tagged Nix package entrypoint"
     exists: false
@@ -605,19 +678,15 @@ commit_convention: Conventional Commits
 ---
 # Project structure and guidelines
 
-## Provisional research boundary
+## Active research boundary
 
-TechSpec v2.3.0 (translated from reviewed v1.8.7-provisional) permits research code only under `.constitution/prototypes/`. The active Epic G M0 production exceptions are `BURL-G001` through `BURL-G005`, `BURL-G007`, and `BURL-M015`. Raw contract version 40 and `BURL-M003` ci_bootstrap are dormant. They permit no bootstrap, recovery, production, or hosted execution. The private Linux-first path contains no hosted-execution authority and must not invoke the `BURL-M003` workflow, role, sealing, or aggregation path. `BURL-O001` remains independently blocked, a maintained stop, and isn't authorized.
+The private Linux roadmap starts with `BURL-H001`, `BURL-H002`, `BURL-I001`, and `BURL-L001` research. Each ticket's only constitution output is its named `.constitution/spikes/SPK-*.md` report. Scratch code and generated measurements are disposable session artifacts outside `.constitution/`; they are not committed product code or a second contract. The front matter declares the persistent report-verification command for each ticket. These commands replace the dormant managed commands for active research; they don't invoke BURL-M003, hosted roles, sealing, aggregation, macOS, packaging, or release qualification.
 
-If the user resumes upstream planning, a later approved Stage 3/4 adaptation can make the retained raw-version-40 protocol eligible for BURL-M003. Only then does its recovery sequence apply: complete Epic M, including the reviewed `BURL-M003` recovery implementation, fresh accepted managed run, exact three-file evidence pull request, epic closeout, and reconciliation. Until then, BURL-M003 cannot precede or block the active private Epic G work. Every other production ticket remains blocked by its own decision evidence and matching Stage 3 and Stage 4 adaptation. Except for the active contract-scoped exceptions, production directories (`lib/`, `rust/`, `linux/`, and `macos/`) are read-only inputs to this research wave.
+Each research report records exact source, tool, dependency, corpus, candidate, gate, and measurement identities. It also records the input inventory and digests needed to reproduce disposable fixtures and measurements. The owning command validates the completed report. Scratch files remain outside `.constitution/` and are removed after measurement. A conclusion without reproducible evidence doesn't settle an open decision.
 
-The five exact prototype roots and verification commands are machine-readable in `contracts/provisional-spikes.toml`. Its allowlist is exhaustive: each Spike may write only its named prototype root and report path. Every unlisted repository path is read-only. Framework bookkeeping may update the owning active Task after the Spike process exits, but that isn't part of the Spike's write authority.
+Research stops on a failed safety or fidelity gate. A performance miss is evidence, not permission to weaken the PRD. After accepted evidence, a reviewed Stage 3 patch must update every named ADR, stack pin, sidecar, FFI or data-model contract, and verification command before dependent production begins. Stage 4 must declare those TechSpec files patchable and place the patch before production. An unrelated open decision doesn't block work that doesn't consume it.
 
-Each harness writes one `results.json` that validates against `contracts/spike-result.schema.json`, records each platform run and exact tool and dependency versions, names its corpus, reports every required measurement, and makes one evidence-backed recommendation. Every gate and measurement names its candidate or the reserved `cross-cutting` value. Every run includes `host.profile` and records `claimedEvidenceClasses`, but that claim is not self-authorizing. The trusted collector maps the run to its authenticated role bundle, rejects a profile runner label that differs from the exact runner label for that role, and then requires ordered equality with that role's expected-identity evidence profile. The harness must also read its own TOML entry and fail unless its result contains exactly the declared candidate names and required gate names, every candidate has attributed outcomes, run IDs are unique, and every required run role is present; JSON Schema alone can't enforce those cross-file constraints. The mandatory result validator semantically parses every timestamp as RFC 3339 and rejects impossible calendar dates rather than trusting the schema's shape pattern. It also resolves each recorded 40- or 64-hex Git revision in the captured checkout and requires it to equal that run's captured revision.
-
-Command execution records exit status and separate standard-output and standard-error artifacts. Before aggregation, the harness verifies that every referenced evidence and artifact path is inside the Spike's write allowlist, exists, matches its byte count and SHA-256 digest, and isn't replaced by a later command. Raw fixtures and measurements stay beside the result. A conclusion without reproducible evidence does not settle an open decision.
-
-Research Tasks stop on a failed safety or fidelity gate. A performance miss is evidence, not permission to weaken the PRD: the result records it and final Product Requirements or Technical Implementation evolution decides the response. A production ticket starts only after its own decision evidence settles its physical contract and Stage 4 adapts that ticket. Unrelated unresolved Spikes don't form a global stop.
+Raw contract version 40, BURL-M003, ADR-019, ADR-020, and the managed evidence schemas remain dormant history. They authorize no bootstrap, hosted execution, recovery, production, packaging, or multi-platform gate for this roadmap. They cannot precede or block private Linux research or implementation. If the user resumes supported-release planning, a later Stage 3 and Stage 4 adaptation must revalidate that retained protocol before any execution.
 
 ## Generated-binding bootstrap checker
 
@@ -633,7 +702,7 @@ The checker must perform these steps in order:
 
 The stale-binding diagnostic names both generated surfaces and instructs the developer to regenerate and review the changes. The checker leaves the precheck working tree unchanged, including when it detects stale bindings. On the BURL-M003 Linux role, both byte comparisons use the raw contract's locked Diffutils `cmp` path.
 
-## Managed validation evidence protocol
+## Dormant managed validation evidence protocol
 
 `BURL-M003` uses a reviewed recovery to replace its managed-validation trust anchor. The base history retains reviewed BURL-M015 commit `6d30b7445b0108a6a5dd963cd2aa2ae5f5090485` and the original PR #15 BURL-M003 anchor `f72659cef4487317c9e984e01f775a358f814a41`. The original anchor's first parent is the BURL-M015 commit.
 
@@ -981,7 +1050,7 @@ The repository follows the default `flutter_rust_bridge` template structure to m
 ├── devenv.lock              # Pinned input revisions; the reproducibility boundary
 ├── rust-toolchain.toml      # Rust version pin, read by devenv and by rustup
 ├── linux/                   # Flutter Linux build files (in-scope target)
-├── macos/                   # Flutter macOS build files (in-scope target)
+├── macos/                   # Flutter macOS build files (deferred P2 qualification)
 ├── lib/                     # Dart/Flutter UI source code
 │   ├── main.dart
 │   ├── src/
@@ -995,7 +1064,8 @@ The repository follows the default `flutter_rust_bridge` template structure to m
 ├── scripts/                 # Repository-owned validation entry points
 │   ├── smoke-shot.sh        # Manual QA gate for every UI ticket (BURL-E001)
 │   ├── visual-regression.sh # Exact visual gate introduced by BURL-G001
-│   ├── managed-evidence.sh  # Managed evidence client implemented by BURL-M003
+│   ├── private-linux-live.sh # Planned isolated live-recipe driver (BURL-Q001)
+│   ├── managed-evidence.sh  # Dormant supported-release evidence client
 │   ├── supervise-linux-session.sh # Trusted in-namespace Linux supervisor
 │   ├── managed-sway.conf    # Fixed headless Sway configuration
 │   ├── write-receipt-digest-observation.sh # Caller receipt digest transport
@@ -1005,14 +1075,15 @@ The repository follows the default `flutter_rust_bridge` template structure to m
 │   ├── prepare-compatibility-stage-consumer.sh # macOS 15 read-only exposure
 │   └── validate-compatibility-stage-interface.sh # macOS 15 input interface
 ├── test/                    # Dart widget tests
+├── integration_test/        # Planned ticket-owned real-application scenario targets
 ├── rust/                    # Rust Core Engine source code
 │   └── src/frb_generated.rs # Auto-generated FRB Rust bridge; changes with Dart bindings
 │   ├── Cargo.toml
-│   ├── benches/             # Planned managed PRD meters
-│   │   └── prd-meters-coordinator/ # Planned BURL-O004 locked coordinator package
-│   │       ├── Cargo.toml   # Coordinator manifest; planned trusted control
-│   │       ├── Cargo.lock   # Coordinator dependency lock
-│   │       └── src/main.rs  # Fixed /inputs to /output/nightly-prd-meters.json aggregation
+│   ├── benches/             # Planned private Linux performance meters
+│   │   └── prd-meters-coordinator/ # Dormant supported-release coordinator package
+│   │       ├── Cargo.toml   # Dormant coordinator manifest
+│   │       ├── Cargo.lock   # Dormant coordinator dependency lock
+│   │       └── src/main.rs  # Dormant managed aggregation source
 │   ├── tests/               # Rust integration tests
 │   ├── src/
 │   │   ├── api/             # FFI interface exposed to Dart (thin #[frb] wrappers)
@@ -1042,6 +1113,7 @@ The repository follows the default `flutter_rust_bridge` template structure to m
 │   │   │                      reserved-filename rules), `links` (target
 │   │   │                      resolution and serialization)
 │   │   ├── export/          # Planned: stable-revision copy/archive Export
+│   │   ├── external_image/  # Planned: credential-free BND-22 fetch client
 │   │   ├── object_store/    # Planned: BND-11 transfer/verification to BND-21 Object Store
 │   │   ├── provider/        # Planned: BND-14 GitHub authorization/location only
 │   │   ├── security/        # OS Keychain root-key integration
@@ -1054,16 +1126,16 @@ The repository follows the default `flutter_rust_bridge` template structure to m
 │   │   │                      `persist` (the ADR-008 tiers and their locks)
 │   │   └── test_support.rs  # #[cfg(test)]-only fixtures shared across unit test modules
 ├── pubspec.yaml             # Dart dependencies
-├── .github/workflows/       # Planned: PR, canary, benchmark, and release gates
+├── .github/workflows/       # Existing; hosted release gates remain deferred
 ├── flake.nix                # Planned: release-tagged Nix package entrypoint
 ├── flake.lock               # Planned: release Flake reproducibility boundary
 ├── nix/                     # Planned: release package modules and checks
 └── flutter_rust_bridge.yaml # FRB configuration
 ```
 
-The directories marked **Planned** are the physical homes for the forward boundaries accepted by Architecture v2.1.2. They remain absent until their owning implementation ticket begins. A Spike never creates them. `rust/benches/prd-meters-coordinator/` is specifically owned by active non-Spike ticket BURL-O004; after its reviewed merge, the managed-validation trust anchor must rotate before that package can be prepared as trusted control. Final Stage 3 may refine files inside a planned directory after evidence, but moving responsibility to a different boundary requires Architecture review and a Tasks adaptation.
+The directories marked **Planned** are the physical homes for the forward boundaries accepted by Architecture v2.2.0. They remain absent until their owning implementation ticket begins. A Spike never creates them. Replacement BURL-O004 owns private Linux performance measurement, not the dormant `rust/benches/prd-meters-coordinator/` managed package. Final Stage 3 may refine files inside a planned directory after evidence, but moving responsibility to a different boundary requires Architecture review and a Tasks adaptation.
 
-The external physical seams remain distinct. `rust/src/provider/` implements `BND-14` authorization, eligible private-Remote selection or provisioning, and location only. `rust/src/sync/` implements `BND-10` coordination and `BND-20` authenticated history transfer and ref inventory. `rust/src/object_store/` implements `BND-11` transfer, privacy verification, hydration, and migration against `BND-21`. Provider code must not store or reconcile history. Remote code must not transfer Object bytes. Object Store code must not derive authority from Provider responses.
+The external physical seams remain distinct. `rust/src/provider/` implements `BND-14` authorization, eligible private-Remote selection or provisioning, and location only. `rust/src/sync/` implements `BND-10` coordination and `BND-20` authenticated history transfer and ref inventory. `rust/src/object_store/` implements `BND-11` transfer, privacy verification, hydration, and migration against `BND-21`. `rust/src/external_image/` implements only the credential-free BND-22 client. Provider code must not store or reconcile history. Remote code must not transfer Object bytes. Object Store code must not derive authority from Provider responses. External-image code must not reuse credentials or persist response bytes.
 
 `android/` and `ios/` are absent by design: mobile targets are deferred per
 `tasks/critical-path.md`, and no mobile toolchain is provisioned. `ANDROID_HOME`
@@ -1082,6 +1154,8 @@ All commands below assume the `devenv` shell (`devenv shell`, or automatic via
    - Avoid async/await unless absolutely necessary (e.g., long-running sync operations on a dedicated thread). Local index queries remain synchronous for maximum performance, except where `tech-spec/contracts/ffi_api.rs` itself declares a function `async` (e.g. `search_notes`) — the contract's FFI-boundary signature takes precedence over this preference; the function's own body should still execute synchronously to completion rather than actually yielding to an executor.
    - In the delivered v1.6.x model, source spans are Core-side state keyed by `block_path` and aren't fields of the reduced `AstNode` render projection. Forward work must instead keep source ranges inside the canonical Core document/AST state required by ADR-013; a Flutter render projection still receives only the coordinates its interaction contract needs. Final Stage 3 settles the exact range and projection types after SPK-BURL-H001. No UI code may treat a byte offset into Core-owned source as independent authority.
    - No code path may rewrite bytes outside the span of an edited Block. This is the Edit Fidelity constraint in `prd/constraints.yaml` and it is the reason no AST-to-Markdown serializer exists for the save path; adding one for that path reintroduces exactly the failure the constraint forbids.
+   - ADR-021's forward interaction surface uses opaque revision-local identities and checked UTF-16 coordinates. Source byte ranges remain private to Core. A stale revision, stale node, or surrogate-interior offset refuses without mutation.
+   - ADR-022's external-image client is separate from Provider, Remote, Object Store, OAuth, and Flutter networking. It configures every credential, redirect, proxy, target-address, media, resource, and cancellation rule explicitly; library defaults don't establish compliance.
 2. **Dart:**
    - Must pass `dart analyze`.
    - Must be formatted with `dart format`.
@@ -1093,6 +1167,7 @@ All commands below assume the `devenv` shell (`devenv shell`, or automatic via
      access remains behind their existing seams.
    - The rendered and raw presentations of a Block must be typographically identical. Only the text differs (`**bold**` versus bold); font, size, weight, line height, and padding must not, or the Block visibly jumps when it takes focus.
    - **Every error returned across the FFI boundary must reach a user-visible surface.** No call site may swallow a Core error. This rule exists because the editor shipped through Epic B with no error path at all — failures crossed the boundary and were discarded, a gap Epic B's review recorded but could not reach until the editor was mounted (`BURL-E004`, which landed the shell's error surface).
+   - External image bytes reach Flutter only after Core validates the response under ADR-022. Flutter renders inert bytes and the typed unavailable state; it never starts its own fetch, persists a web-image cache, or converts a web image into a local Asset.
    - **Shell surfaces coordinate through provider seams, not widget ownership.** Note selection flows through the shared selection seam (`selectedNoteIdProvider`) so the tree, editor and lifecycle actions stay coherent without referencing each other; the Directory tree renders from the Core's single whole-tree payload (one call, children nested) and holds only expansion state as ephemeral UI state. Note switching must close the outgoing Note through the Core before opening the next, so its session reaches the commit tier (`BURL-E004`).
    - **Close a Note.** An FFI error refuses the close and keeps the outgoing
      session writable. `CloseNoteResult.warning` means Core retired the session
@@ -1161,38 +1236,73 @@ For any malformed current-version snapshot, Core quarantines and preserves the o
 
 The distinction most worth stating: the **working source** is not the draft row. They hold the same bytes, but the buffer is the live editing state and the row is its crash-durable copy, and tier 2 clears the row while the buffer persists until the Note closes. Conflating them makes "a draft row exists" mean "a Note is open", which is false in both directions.
 
-## Editor-depth verification commands
+## Historical completed editor-depth evidence
 
-The active editor-depth tickets quote these commands exactly. `BURLMD_SMOKE_F005`, `BURLMD_SMOKE_F006`, and `BURLMD_SMOKE_F007` are required readiness inputs: the smoke harness must reject a generic Workspace window and capture only after the named staged interaction is ready.
+Completed F-series tickets quote the following command strings exactly, so the records remain unchanged for historical validation. They aren't current executable guidance for the replacement roadmap. In their completed context, `BURLMD_SMOKE_F005`, `BURLMD_SMOKE_F006`, and `BURLMD_SMOKE_F007` selected named staged interactions and required the smoke harness to reject a generic Workspace window. Current work uses the declared private Linux recipes and ticket-owned integration targets.
 
-- `flutter test test/components/emphasis_shortcuts_test.dart && BURLMD_SMOKE_F005=1 ./scripts/smoke-shot.sh f005-emphasis && dart analyze && git diff --check && ! rg -n '\[DEBUG-' lib rust test scripts`
-- `cargo test --lib --manifest-path rust/Cargo.toml link_completion_limit_is_ten -- --list | rg -q ': test' && cargo test --lib --manifest-path rust/Cargo.toml link_completion_limit_is_ten && cargo test --lib --manifest-path rust/Cargo.toml prospective_ghost_completion -- --list | rg -q ': test' && cargo test --lib --manifest-path rust/Cargo.toml prospective_ghost_completion && cargo test --lib --manifest-path rust/Cargo.toml resolve_link_target -- --list | rg -q ': test' && cargo test --lib --manifest-path rust/Cargo.toml resolve_link_target && cargo test --lib --manifest-path rust/Cargo.toml create_link_target -- --list | rg -q ': test' && cargo test --lib --manifest-path rust/Cargo.toml create_link_target && flutter_rust_bridge_codegen generate && flutter gen-l10n && flutter test test/components/link_completion_test.dart test/components/editor_test.dart && BURLMD_SMOKE_F006=1 ./scripts/smoke-shot.sh f006-link-completion && dart analyze && git diff --check && ! rg -n '\[DEBUG-' lib rust test scripts`
-- `cargo test --lib --manifest-path rust/Cargo.toml range_edit_result_reports_phantom -- --list | rg -q ': test' && cargo test --lib --manifest-path rust/Cargo.toml range_edit_result_reports_phantom && cargo test --lib --manifest-path rust/Cargo.toml range_edit_result_rejects_utf16_surrogate -- --list | rg -q ': test' && cargo test --lib --manifest-path rust/Cargo.toml range_edit_result_rejects_utf16_surrogate && cargo test --lib --manifest-path rust/Cargo.toml && flutter_rust_bridge_codegen generate && flutter test test/components/selection_editing_test.dart test/components/text_input_client_test.dart test/components/selection_test.dart && BURLMD_SMOKE_F007=1 ./scripts/smoke-shot.sh f007-range-editing && dart analyze && git diff --check && ! rg -n '\[DEBUG-' lib rust test scripts`
+- `flutter test test/components/emphasis_shortcuts_test.dart && BURLMD_SMOKE_F005=1 ./scripts/smoke-shot.sh f005-emphasis && dart analyze && git diff --check && sh -c "! rg -n '\\[DEBUG-' lib rust test scripts"`
+- `cargo test --lib --manifest-path rust/Cargo.toml link_completion_limit_is_ten -- --list | rg -q ': test' && cargo test --lib --manifest-path rust/Cargo.toml link_completion_limit_is_ten && cargo test --lib --manifest-path rust/Cargo.toml prospective_ghost_completion -- --list | rg -q ': test' && cargo test --lib --manifest-path rust/Cargo.toml prospective_ghost_completion && cargo test --lib --manifest-path rust/Cargo.toml resolve_link_target -- --list | rg -q ': test' && cargo test --lib --manifest-path rust/Cargo.toml resolve_link_target && cargo test --lib --manifest-path rust/Cargo.toml create_link_target -- --list | rg -q ': test' && cargo test --lib --manifest-path rust/Cargo.toml create_link_target && flutter_rust_bridge_codegen generate && flutter gen-l10n && flutter test test/components/link_completion_test.dart test/components/editor_test.dart && BURLMD_SMOKE_F006=1 ./scripts/smoke-shot.sh f006-link-completion && dart analyze && git diff --check && sh -c "! rg -n '\\[DEBUG-' lib rust test scripts"`
+- `cargo test --lib --manifest-path rust/Cargo.toml range_edit_result_reports_phantom -- --list | rg -q ': test' && cargo test --lib --manifest-path rust/Cargo.toml range_edit_result_reports_phantom && cargo test --lib --manifest-path rust/Cargo.toml range_edit_result_rejects_utf16_surrogate -- --list | rg -q ': test' && cargo test --lib --manifest-path rust/Cargo.toml range_edit_result_rejects_utf16_surrogate && cargo test --lib --manifest-path rust/Cargo.toml && flutter_rust_bridge_codegen generate && flutter test test/components/selection_editing_test.dart test/components/text_input_client_test.dart test/components/selection_test.dart && BURLMD_SMOKE_F007=1 ./scripts/smoke-shot.sh f007-range-editing && dart analyze && git diff --check && sh -c "! rg -n '\\[DEBUG-' lib rust test scripts"`
 
 ## Forward implementation verification commands
 
-Stage 4 tickets quote one of these gates and replace `<ticket-id>` with their lowercase ticket identifier. Ticket-specific tests and hardware-in-the-loop procedures supplement the gate; they don't remove it.
-
-For the private Linux-first usability milestone, a direct `scripts/smoke-shot.sh`
-invocation is not an eligible desktop check. It reads an ambient display. Stage 4
-must replace the active Epic G commands with the private Linux commands below.
-Those commands use the owned visual harness after `BURL-G001`; they do not
-authorize a change to a public-release gate.
+Stage 4 tickets quote an exact command from the front matter. Ticket-specific tests and a named live recipe supplement that command. A direct `scripts/smoke-shot.sh` invocation isn't an eligible live check for the replacement roadmap because it reads an ambient display and doesn't isolate configuration or secure storage. New tickets use `private-linux-live.sh` only after BURL-Q001 makes the declared recipe available.
 
 - **Core-only:** `cargo test --manifest-path rust/Cargo.toml && cargo clippy --workspace --all-targets --manifest-path rust/Cargo.toml -- -D warnings && git diff --check`
-- **Core/FFI/UI:** `cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && ./scripts/smoke-shot.sh <ticket-id> && git diff --check && ! rg -n '\[DEBUG-' lib rust test scripts`
-- **Flutter-only:** `flutter test && dart analyze && ./scripts/smoke-shot.sh <ticket-id> && git diff --check && ! rg -n '\[DEBUG-' lib rust test scripts`
-- **Release Flake:** `nix flake check && nix build .#packages.x86_64-linux.default && git diff --check`
-- **macOS release build:** `flutter build macos --release && git diff --check`
+- **Core, FFI, and UI:** `cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && git diff --check`
+- **Flutter-only:** `flutter test && dart analyze && git diff --check`
 
-Spike-dependent implementation tickets may quote the stable portion of these commands while the TechSpec is provisional. They must stop before implementation until final Stage 3 replaces every candidate-specific command and Stage 4 adapts the ticket.
+The existing front matter retains exact historical commands quoted by completed tickets. Historical command strings with shell negation use `sh -c` and the deferred BURL-G011 command uses `./scripts/managed-evidence.sh` so that all verification commands resolve cleanly under the constitution tool's shell parser. New work quotes the canonical forward verification commands above.
 
-## Private Linux-first verification
+## Private Linux live verification
 
-This contract applies only to the approved local-use work: `BURL-G001` through
-`BURL-G005`, and `BURL-G007`. It verifies a checkout on one Linux system. It
-does not produce a package, publish an artifact, or qualify a supported
-platform.
+The declared recipes verify a checkout on the sole Writer's private Linux machine with synthetic data. They don't package or publish an artifact, qualify another Linux system or macOS, establish hosted provenance, or revive the managed validation protocol.
+
+BURL-Q001 must make the shared driver fail before application launch unless it proves an owned headless display, app PID, capture destination, process state, and private `HOME`, `XDG_DATA_HOME`, `XDG_CONFIG_HOME`, `XDG_CACHE_HOME`, `XDG_STATE_HOME`, `XDG_RUNTIME_DIR`, and `TMPDIR` for each logical device. Every path must be an owner-private nonsymlink descendant of the exact run root. The child environment is an allowlist and contains no inherited GitHub, AWS, proxy, SSH-agent, package-registry, application-secret, Writer Workspace, database, display, or socket value.
+
+Each logical device also needs an independent Platform secure-storage scope before Rust initialization. The preferred minimal implementation is a validated per-run and per-device namespace through one Core credential-scope seam. Production retains its fixed namespace. A test scope is accepted only after the smoke root and nonce capability validate, and a partial or malformed test environment fails closed without falling back to production.
+
+The pinned Linux backend can unlock matching entries or collections. Namespace uniqueness alone therefore doesn't prove isolation. Before launch, BURL-Q001 must demonstrate noninteractive canary write, read, and delete; complete routing of the root key and every Provider or Object Store credential; no Writer entry access; no host prompt; independent logical-device identities; restart persistence inside the scenario; and exact owned cleanup. If that proof fails, Q001 must use a harness-owned D-Bus and Secret Service instead. This pass selects no daemon or package. Neither option claims hostile same-UID containment.
+
+The doctor fails on a missing or mismatched root, credential scope, service ownership, app PID, compositor socket, readiness marker, or environment entry. Cleanup terminates only recorded processes, deletes only the exact run root and credential scope, and invalidates evidence on any cleanup failure. It never launches on the Writer's active desktop or opens private content.
+
+Every recipe requires `BURLMD_LIVE_TARGET` and `BURLMD_LIVE_SCENARIO`. The target is one repository-relative regular Dart file under `integration_test/`, already inside the invoking ticket's scope. The scenario is a lowercase hyphenated identifier implemented by that target. The driver rejects a missing target, a path escape, another file kind, a target outside `integration_test/`, or a scenario the target doesn't declare. It uses Flutter's existing integration-test path to drive the real bundled application and real Core; it doesn't add a generic scenario language or substitute a fake `RustApi`.
+
+BURL-Q001 owns the reusable isolation, launch, readiness, drive, evidence, and cleanup mechanics plus one baseline target that proves real-app control and restart. It doesn't claim any future P0 feature. Each feature ticket owns its scenario target and application assertions. The named recipe supplies the verified execution boundary, while the ticket's acceptance evidence names the exact target, scenario, user outcome, and manifest members.
+
+`private-linux-local-p0` is the reusable local application boundary, not one preimplemented complete P0 matrix. `private-linux-external-image` adds controlled public HTTPS success, refusal, cancellation, header-canary, offline, and Export scenarios. `private-linux-workspace-observer` adds synthetic guest writes. `private-linux-1000-note-performance` measures the fixed first-use corpus. `private-linux-object-store-fixture` exercises the real application and Core against protocol-faithful synthetic Object Store resources for privacy, recovery, transfer, and credential-update scenarios. The two synchronization recipes use two independently isolated logical devices.
+
+`private-linux-github-device-flow-fixture` uses the real application, Core, and HTTP client against a protocol-faithful synthetic Provider. It proves request fields, headers, polling, slow-down, expiry, denial, cancellation, typed UI state, secure-storage routing, refresh, sign-out, and repository-selection behavior without claiming GitHub compatibility or automating a browser.
+
+The active target and scenario map is fixed as follows. A later ticket can add a scenario to its epic's target, but it doesn't rename a target or reuse a scenario for another outcome without a Stage 3 patch.
+
+| Tickets | Integration target | Scenarios | Recipe |
+| :--- | :--- | :--- | :--- |
+| BURL-Q001 | `integration_test/private_linux_driver_test.dart` | `driver-baseline` | `private-linux-local-p0` |
+| BURL-R002 through BURL-R007 | `integration_test/local_authoring_flow_test.dart` | `portable-paths`, `canonical-projection`, `p0-markdown`, `note-undo-redo`, `note-find-replace`, `local-authoring-complete` | `private-linux-local-p0` |
+| BURL-S002 | `integration_test/local_media_flow_test.dart` | `local-image-input` | `private-linux-local-p0` |
+| BURL-S003 | `integration_test/external_image_flow_test.dart` | `external-image-policy` | `private-linux-external-image` |
+| BURL-S004 through BURL-S006 | `integration_test/workspace_observer_flow_test.dart` | `observer-events`, `observer-valid-change`, `observer-invalid-change` | `private-linux-workspace-observer` |
+| BURL-J002 and BURL-J006 | `integration_test/plain_folder_export_flow_test.dart` | `plain-folder-export`, `plain-folder-export-ui` | `private-linux-local-p0` |
+| BURL-O002, BURL-O005, and BURL-O016 | `integration_test/local_quality_flow_test.dart` | `diagnostics-export`, `application-state-migration`, `history-health-warning` | `private-linux-local-p0` |
+| BURL-O004 | `integration_test/private_linux_performance_test.dart` | `first-use-1000-notes` | `private-linux-1000-note-performance` |
+| BURL-K001 through BURL-K003 | `integration_test/github_device_flow_fixture_test.dart` | `device-authorization`, `token-lifecycle`, `remote-selection` | `private-linux-github-device-flow-fixture` |
+| BURL-U001 through BURL-U004 | `integration_test/object_store_fixture_test.dart` | `store-connect-privacy`, `object-transfer-hydration`, `object-recovery`, `object-credential-update` | `private-linux-object-store-fixture` |
+| BURL-N001, BURL-N013, BURL-N014, and BURL-N015 | `integration_test/private_sync_two_device_test.dart` | `suggestion-resolution`, `second-device-join`, `full-local-detach`, `sync-state-surface` | `private-linux-two-device-sync` |
+| BURL-N012 and BURL-N011 | `integration_test/private_sync_real_provider_test.dart` | `initial-publication`, `complete-real-provider-sync` | `private-linux-real-provider-sync` |
+| BURL-N011 setup | `integration_test/github_device_flow_real_test.dart` | `real-github-device-approval` | `github-device-flow` |
+
+The real-provider synchronization wave requires the dedicated GitHub App installation, private repositories, and Object Store resources before plan approval. The wave plan names permitted creation, mutation, and cleanup. After K implementation exists, the Writer authorizes the dedicated installation through burlmd's displayed device flow during N011 setup with the manual `github-device-flow` recipe. The later `private-linux-real-provider-sync` evidence records that real-provider outcome. The synthetic K recipe isn't GitHub evidence, and a personal access token, inherited GitHub CLI session, secret in chat, or automated browser action can't substitute.
+
+## First-use performance qualification
+
+The private Linux first-use profile contains 1,000 synthetic Notes with a 4 KiB median, a 64 KiB 95th percentile, and a 1 MiB maximum Note. It applies the existing NFC-01 through NFC-05 thresholds and the NFC-38 editing fixture to search, Workspace open, indexing and tree construction, editing responsiveness, cold start, and idle memory. It doesn't replace those thresholds or claim the later 10,000-Note profile.
+
+BURL-O004 must publish a deterministic generator for that exact distribution and measure the 1,000-Note profile plus representative empty, small, and boundary cases; it doesn't run every integer corpus size or choose another profile. The later 10,000-Note qualification reuses the same distribution but remains deferred with the managed reference classes. Performance evidence uses the same Q001 isolation boundary and records the machine, source, build, corpus, and run identity without claiming reproducibility on another host.
+
+## Historical private Linux visual verification
+
+The following contract records the completed G-series visual work. New roadmap tickets don't quote these direct smoke commands or treat the historical harness as complete live isolation.
 
 `BURL-G001` owns `scripts/visual-regression.sh`. Before a capture, it must
 clear ambient `DISPLAY`, `WAYLAND_DISPLAY`, and `SWAYSOCK` for the entire
@@ -1340,6 +1450,8 @@ FFI contract does not trigger a build gate. The four *language* hooks each guard
 on their manifest, but `rust/Cargo.toml` and `pubspec.yaml` both exist as of
 Epic A, so all five hooks run on every applicable commit today.
 
+Shared Git hooks remain owned by the repository's devenv configuration. A linked worktree must not install, repoint, overwrite, or hand-edit them on its own. If a wave needs hook regeneration, the user approves it explicitly during step 0 from the intended canonical checkout. Each lane uses a verified nonmutating environment-entry path or escalates; it doesn't guess devenv flags, replace the `prek` entrypoint, or disable commit checks. Before cleanup removes a worktree, the lead verifies that shared hooks don't resolve through that worktree.
+
 `cargo clippy --workspace --all-targets` on every `.rs` commit is therefore a
 live gate now. Against a warm `target/` it costs ~20s (measured at Epic D's
 close, on a tree where the dev-profile dependencies were already built). The
@@ -1394,7 +1506,9 @@ single-run, so the bug (a multi-run paragraph silently collapsing to one
 uniform, unstyled `TextField` once made editable) was invisible to the suite
 until an actual rendered screenshot was inspected.
 
-## Evidence-only acceptance handoff
+## Dormant managed evidence-only acceptance handoff
+
+This section preserves the supported-release evidence protocol and its historical ticket mappings. Historical BURL-P002 is replaced by BURL-S004 for active observation work, and replacement BURL-O004 is private Linux performance work. Neither uses these managed paths, and none of these records authorize a hosted or multi-platform prerequisite for the active roadmap.
 
 An accepted managed run is an input to review, not ticket completion. `BURL-G011` and `BURL-P002` each write their managed report to `.constitution/evidence/BURL-G011/managed-evidence.json` and `.constitution/evidence/BURL-P002/managed-evidence.json`. `BURL-O004` additionally writes `.constitution/evidence/BURL-O004/nightly-prd-meters.json`; and the installed-release gates each write only `.constitution/evidence/BURL-O011/managed-evidence.json`, `.constitution/evidence/BURL-O012/managed-evidence.json`, or `.constitution/evidence/BURL-O013/managed-evidence.json`. For each ticket, a later evidence-only pull request may change only that ticket's exact evidence directory, adds the declared managed report and any result artifact, and includes `.constitution/evidence/BURL-<TICKET>/manifest.yaml` with the byte count and SHA-256 digest for every accepted file. Independent review and merge of that manifest-backed pull request are mandatory; neither a successful run nor a draft or unreviewed evidence pull request completes the ticket.
 
@@ -1404,30 +1518,12 @@ Canonical acceptance artifacts for `BURL-K009`, `BURL-N009`, and `BURL-O014` lik
 
 ## Execution conventions
 
-- Production authorization is contract-scoped. For this pass, only
-  `BURL-G001`, `BURL-G002`, `BURL-G003`, `BURL-G004`, `BURL-G005`, and
-  `BURL-G007` are executable after a Stage 4 plan adaptation quotes the
-  private commands. This pass does not alter the existing `BURL-M015`
-  verification, acceptance, or Tasks status. The private milestone excludes
-  `BURL-M003` and all hosted managed validation. Every other production ticket
-  has an implicit STOP until its own decision evidence, any required Product
-  Requirements or Architecture evolution, final Stage 3 contract, and Stage 4
-  adaptation are merged. An unrelated unresolved Spike doesn't block an
-  otherwise authorized ticket. Stage 4 must plan the active and deferred G
-  split before implementation. `BURL-G011` remains a supported-release gate,
-  not private Linux evidence.
-- When the user resumes managed validation, the five `Spike` tickets remain
-  research-only and executable within their exhaustive allowlists after their
-  declared dependencies are satisfied. `BURL-M003` satisfies those dependencies
-  only after both its reviewed implementation pull request and dedicated
-  reviewed evidence pull request merge. Every managed Spike runs the launcher
-  from a clean immutable trust-anchor checkout; the trusted default-branch
-  workflow checks out the separate tested source as data. Before dispatch and
-  during collection, the launcher rejects any change outside the ticket's exact
-  write allowlist or any changed validation control. Within the declared H
-  Spike tranche, the committed, validated, and independently reviewed
-  `BURL-H001` milestone satisfies `BURL-H002`; a draft or unmerged branch never
-  satisfies a cross-tranche or cross-branch dependency.
+- Production authorization is contract-scoped. The active research tickets can run with their private Linux commands. OD-04, OD-05, OD-06, and OD-07 remain open. Each blocks only work that consumes its unsettled physical choice.
+- An accepted research result doesn't authorize dependent production. The epic declares the affected ADRs, stack file, sidecars, FFI contract, data models, and guidelines as patchable. A reviewed Stage 3 patch accepts or rejects the evidence, publishes exact physical contracts, and lands before the production milestone.
+- BURL-Q001 precedes every new live probe. A ticket that touches a shipped UI surface runs tests and its named live recipe. Unit, widget, or fixture tests don't substitute for the real application, and a screenshot doesn't substitute for interaction, persistence, network, or performance evidence.
+- The P0 local milestone doesn't depend on Remote synchronization, OAuth, Object Store access, packaging, macOS, or hosted evidence. The first synchronization milestone follows with Notes and local images together, in-app Suggestions, one configured Object Store, credential updates, and safe full-local detachment. Deferred collection adoption, Version history UI, Consolidation, Object Store migration, cache eviction, 10,000-Note qualification, public releases, and macOS qualification receive no detailed production tickets in this plan.
+- Epic V is an internal, unexposed reconciliation substrate. Its typed analysis, durable intents, Suggestions, Decisions, protected-ref state, and compare-and-swap operations aren't a Writer-facing or automatically running synchronization feature by themselves. Epic N activates them through Provider-connected application flows, Presentation surfaces, and the two-device and real-provider recipes. V uses contract and invariant fixtures and claims no live end-to-end acceptance before N.
+- BURL-M003, BURL-O001, BURL-G011, ADR-019, ADR-020, and raw contract version 40 remain dormant supported-release history. They don't gate private Linux work and can't be repurposed as local evidence.
 - A ticket that scopes `rust/src/api/ffi_api.rs` also scopes both generated outputs: `lib/src/rust/**` and `rust/src/frb_generated.rs`. Its verification must regenerate and compare both byte for byte, fail on stale output, and leave the pre-check working tree unchanged. This convention avoids repeating generated files in every FFI ticket without transferring ownership away from the ticket.
 - The private milestone excludes `BURL-M003`; it doesn't change the completion
   guard. When the user resumes managed validation, `BURL-M003` must revalidate

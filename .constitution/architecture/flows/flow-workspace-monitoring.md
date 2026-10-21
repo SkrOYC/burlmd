@@ -35,14 +35,18 @@ sequenceDiagram
         Workspace-->>Core: Apply decision or request renewed review
         Core-->>UI: Authoritative result or renewed review
     else Invalid guest write
-        Core-->>UI: Preserve last known-good and original bytes, offer Repair, Compare, Exclude
+        Core->>Workspace: Hold incoming bytes outside authoritative editable state
+        Core-->>UI: Flag the problem and retain the last known-good Note
+        Host->>Observer: Writer or Agent writes a corrected revision
+        Observer->>Core: Debounced corrected candidate
+        Core->>Workspace: Re-read and validate the corrected revision
     end
 ```
 
 ## Failure path
 
 - Missed, duplicate, or reordered events converge by comparing candidate events with disk state.
-- Repair never applies without a preview.
+- Invalid input remains preserved and visible as a problem but can't replace or become editable as authoritative state. Guided repair is deferred.
 - A revision change between review and apply invalidates the decision.
 - Ambiguous lifecycle provenance or identity requires confirmation. A revision change before application renews that confirmation.
-- Rescan rebuilds observation state when incremental reconciliation can't prove completeness.
+- If automatic observation can't prove completeness, it preserves authoritative state and reports the degraded observation state. Rescan rebuilds observation state as an explicit recovery path.

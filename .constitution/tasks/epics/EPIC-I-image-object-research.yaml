@@ -1,0 +1,40 @@
+id: I
+name: image and Object research
+kind: tooling
+priority: 1
+capabilities: []
+depends_on: []
+scope:
+  paths: [".constitution/spikes/SPK-BURL-I001.md"]
+  tech_spec_patchable:
+    - tech-spec/adrs/ADR-016-hybrid-local-assets-and-s3-compatible-objects.md
+    - tech-spec/adrs/ADR-022-external-image-fetch-policy.md
+    - tech-spec/contracts/external-image-fetch.meta.yaml
+estimated_diff_lines: 3000
+tickets:
+  - id: BURL-I001
+    title: "Measure local images, Objects, and external-image limits"
+    type: Spike
+    effort: 8
+    depends_on: []
+    scope:
+      in: [".constitution/spikes/SPK-BURL-I001.md"]
+    verification:
+      command: "rg -q '^Status: complete$' .constitution/spikes/SPK-BURL-I001.md && rg -q '^## Recommendation$' .constitution/spikes/SPK-BURL-I001.md && git diff --check"
+      expected: The report is complete and records measured limits and provider evidence without selecting from missing credentials or weakening a PRD meter.
+    stop_conditions:
+      - "STOP if credentials, private content, or mutable provider state would enter the report."
+      - "STOP if a candidate weakens Object integrity, Protected State, offline local images, or external-image credential isolation."
+      - "STOP when the 8-point budget is exhausted; leave OD-06 or OD-07 open when evidence is incomplete."
+      - STOP if work writes product code or any constitution file other than the named Spike report.
+    description: "Measure local import, content identity, decode resources, the provisional imported-image cap, external-image response limits and target enforcement, one-store transfer and hydration, protected-history traversal, safe local preparation, and textual history growth."
+    acceptance:
+      mode: benchmark
+      evidence: |
+        Metrics cover encoded bytes, decoded raster memory and dimensions, concurrent and elapsed external-image work, hydration, integrity, repository growth, and history-health behavior. Threshold recommendations cite NFC-05, NFC-07, NFC-08, NFC-09, NFC-17, NFC-23, and NFC-24. The report records whether real S3-compatible evidence was available and names the required Stage 3 changes.
+      constraints: [NFC-05, NFC-07, NFC-08, NFC-09, NFC-17, NFC-23, NFC-24]
+    flows: [flow-assets, flow-object-store-lifecycle, flow-edit-note]
+    spike: SPK-BURL-I001
+    closes_decision: OD-06
+    certainty: assumed
+    status: planned

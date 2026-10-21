@@ -1,39 +1,36 @@
 ---
 job: JOB-05
-capabilities: [CAP-044, CAP-045]
-boundaries: [BND-01, BND-02, BND-05, BND-06, BND-08, BND-11, BND-13, BND-21]
+capabilities: [CAP-044, CAP-045, CAP-106]
+boundaries: [BND-01, BND-02, BND-08, BND-13]
 view: sequence
 certainty: assumed
 assumption: "Migrated from markdown; not yet exercised by an integration test."
 ---
-# History, recovery, and diagnostics flow
+# Local diagnostics flow
 
-**Maps to:** CAP-HIST-01, CAP-SUP-01.
+The active path records bounded content-free diagnostics and creates a Diagnostics Export only when the Writer requests one. Local Version capture continues through Workspace Persistence, but in-app Version listing and restore under CAP-044 are deferred.
 
 ```mermaid
 sequenceDiagram
     participant UI as Presentation and Interaction
     participant Core as Core Coordination
-    participant Persist as Workspace Persistence
     participant State as Application State
-    participant Destination as Writer-selected destination
+    participant Host as Host Platform
 
-    alt View or restore Note history
-        UI->>Core: List Note Versions
-        Core->>Persist: Read Note history
-        Persist-->>Core: Version summaries
-        Core-->>UI: Version summaries
-        UI->>Core: Confirm restore
-        Core->>Persist: Record restored content as the current recoverable state
-    else Create Diagnostics Export
-        UI->>Core: Create diagnostics
-        Core->>State: Read redacted structured events and schema metadata
-        Core->>Destination: Write Writer-controlled Diagnostics Export
+    UI->>Core: Request Diagnostics Export and choose destination
+    Core->>State: Read bounded redacted events and application and schema versions
+    State-->>Core: Content-free diagnostic records or recording failure
+    alt Records are available and destination write succeeds
+        Core->>Host: Prepare and verify Diagnostics Export at selected destination
+        Core-->>UI: Report export success
+    else Recording or export fails
+        Core-->>UI: Report diagnostic failure separately
     end
 ```
 
 ## Failure path
 
-- Restore never discards unwritten work without confirmation and a durability transition.
-- Missing historical Objects route through Object recovery before restored content becomes authoritative.
-- Diagnostics generation fails rather than including Note bytes, Asset bytes, credentials, or signed locations.
+- Diagnostics generation fails rather than including Note bytes, Asset bytes, credentials, signed locations, or content-derived metadata.
+- Recording failure doesn't fail or roll back the Writer's original product operation and doesn't change Workspace data.
+- Export failure doesn't claim success or expose a partial Diagnostics Export at the selected destination.
+- No diagnostic record or Diagnostics Export leaves the device automatically.

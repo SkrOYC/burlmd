@@ -21,7 +21,7 @@ sequenceDiagram
     participant Index as Derived Index
 
     UI->>Core: Create, rename, move, or delete
-    Core->>Workspace: Validate canonical path, containment, identity, and affected Links
+    Core->>Workspace: Validate portable canonical path, containment, identity, and affected Links
     Workspace-->>Core: Complete change set or refusal
     alt Change set is valid
         Core->>Persist: Apply one recoverable lifecycle outcome
@@ -35,5 +35,6 @@ sequenceDiagram
 ## Failure path
 
 - A path collision, unsupported indirection, or containment escape fails before mutation.
+- Every path created on private Linux follows the portable Workspace identity rules from first use. macOS runtime qualification remains separate from path-format portability.
 - A mid-operation failure restores the earlier files, Link text, open-session state, and derived projection.
 - Delete remains recoverable through local history and isn't an undo operation.

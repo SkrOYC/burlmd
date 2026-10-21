@@ -2,8 +2,8 @@
 id: ADR-0014
 status: proposed
 date: 2026-08-26
-certainty: assumed
-assumption: "Migrated; the decision's ruling reference was not found in the status line."
+certainty: open
+decision: OD-05
 ---
 # ADR-014: Canonical Cross-Platform Workspace Paths
 
@@ -27,10 +27,11 @@ The user selected a lowest-common-denominator on-disk format but intentionally l
 
 ## Evidence required
 
-SPK-BURL-H002 must compare at least an encoded title-derived component and an opaque canonical component. It must cover Unicode normalization and case equivalence, Windows device names and invalid characters, trailing dots and spaces, component and full-path limits, deterministic collisions, case-only rename, round-trip title display, ghost creation, reserved burlmd paths, and path traversal. It must run filesystem probes on Linux and default macOS; Windows rules are fixture-driven in this phase.
+SPK-BURL-H002 must compare at least an encoded title-derived component and an opaque canonical component. It must cover Unicode normalization and case equivalence, Windows device names and invalid characters, trailing dots and spaces, component and full-path limits, deterministic collisions, case-only rename, round-trip title display, ghost creation, reserved burlmd paths, and path traversal. The first-use research runs real filesystem probes on private Linux and uses checked macOS and Windows rule fixtures. It does not require or claim macOS runtime qualification. A later portability qualification can add real host probes without changing the requirement that paths are portable from first use.
 
 ## Consequences
 
 - No production lifecycle, Link, monitoring, Export, Consolidation, or asset-path work proceeds until the final algorithm is accepted.
 - Existing Workspaces require a previewed migration plan; a final format contract must state how collisions are repaired without silent data loss.
 - Exact user-facing default Workspace locations remain a host-platform concern and aren't part of this decision.
+- A Linux-only result cannot accept the final algorithm until its fixture evidence covers the retained macOS and Windows-compatible rules. Final acceptance requires a reviewed Stage 3 patch before path-dependent production work.
