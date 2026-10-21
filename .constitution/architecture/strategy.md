@@ -4,7 +4,11 @@
 
 burlmd remains a local-first modular desktop application. One authoritative Core boundary coordinates a Canonical Note Model, Workspace state, local durability, guest-change reconciliation, and optional external synchronization. The editing path stays local and synchronous. Remote and Object transfers run asynchronously and can't become prerequisites for local writing.
 
-A separate Release Pipeline produces installable artifacts for the supported Platform matrix. Pipeline-owned isolated environments run validation without using the Writer's active desktop. Each role owns its display, compositor, and input state, and declares only the process controls it can prove.
+The first usable boundary is one fresh Workspace on the Writer's private Linux checkout. It combines the selected P0 Markdown language, complete Note editing recovery, local images, automatic guest-change observation, plain-folder Export, local diagnostics, and qualification at 1,000 synthetic Notes. Portable Workspace identities apply from first use even though macOS runtime qualification is P2. Remote synchronization is the next delivery boundary and transfers Notes and local images together.
+
+External Markdown images use a separate untrusted network peer because opening their Note automatically contacts the referenced host. Core requests only each external image reference from the opened Note and treats the response as optional display input. Failure never blocks Note opening or local editing, and automatic loading never rewrites or imports the reference.
+
+A separate Release Pipeline retains the later public-release design. It doesn't gate the private Linux or synchronization milestones. Pipeline-owned isolated environments run supported-release validation without using the Writer's active desktop. Each role owns its display, compositor, and input state, and declares only the process controls it can prove.
 
 The three validation roles define evidence capabilities. A validation request assigns the exact subset its gate requires. Linux x86-64 and Apple Silicon macOS 26 can serve as performance-reference roles. Linux can also supply exact platform-regression evidence, but that evidence isn't a product visual reference. The macOS 26 role alone can supply authoritative product visual evidence. macOS 15 provides functional compatibility evidence only.
 
@@ -24,12 +28,15 @@ The pattern keeps every local capability available without a Provider or network
 
 Remote synchronization and Object transfer are separate logical boundaries because they fail independently and don't share a transaction. A coordination state machine prevents published Note history from referencing unavailable Objects. Explicit Suggestion, Lifecycle Decision, Asset Decision, and guest-write paths keep distinct conflict classes from collapsing into one unsafe workflow.
 
+The delivery phases don't create artificial runtime dependencies. P1 Markdown follows synchronization, and P2 Markdown follows P1. macOS support can begin after P1 independently of the P2 Markdown increment. Existing-collection adoption, multiple-Workspace interfaces, in-app Version history, guided repair, Bundle Archive Export, image drag-and-drop, Consolidation, Object Store migration, automatic local image cleanup, 10,000-Note qualification, and public release remain deferred outcomes rather than expanded active flows.
+
 Release validation is separate from evidence aggregation because execution, sealing, and acceptance fail independently. Isolation keeps the Writer's device state out of validation evidence. Aggregation verifies fresh-seal provenance and compares captured identity with authoritative expected identity. It treats candidate placement and completion as corroborating guards, never as hosted-origin proof. It also verifies the complete authenticated stage lineage for the cross-version compatibility handoff.
 
 ## Accepted trade-offs
 
 - The installed application carries local parsing, indexing, history, monitoring, and synchronization responsibilities, which increases artifact size and internal complexity.
 - Local Asset Store and Object Store coordination adds durable state and recovery work, but preserves offline access and Writer-controlled storage.
+- Automatic external image loading exposes the referenced host and network observer to the request and can fail independently of the Note. Isolating that optional response preserves local availability but means externally referenced images aren't guaranteed offline.
 - A lowest-common-denominator Workspace path model rejects some host-valid names to preserve identity across systems.
 - Structural and Asset Decisions can pause Workspace synchronization. Local editing and history remain available during the pause.
 - Owned validation environments and integrity-checked evidence handoffs add pipeline latency and retained artifacts, but make reference results reproducible and attributable.

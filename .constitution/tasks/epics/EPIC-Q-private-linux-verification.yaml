@@ -1,0 +1,69 @@
+id: Q
+name: private Linux verification foundation
+kind: tooling
+priority: 1
+capabilities: []
+depends_on: []
+scope:
+  paths:
+    - scripts/private-linux-live.sh
+    - scripts/visual-regression.sh
+    - scripts/smoke-shot.sh
+    - "rust/src/security/**"
+    - "rust/src/api/**"
+    - rust/src/frb_generated.rs
+    - lib/main.dart
+    - lib/src/smoke_isolation.dart
+    - "lib/src/rust/**"
+    - "integration_test/**"
+    - integration_test/private_linux_driver_test.dart
+    - "test_driver/**"
+    - test/smoke_isolation_test.dart
+    - test/visual_capture_driver_protocol_test.dart
+    - devenv.nix
+    - pubspec.yaml
+    - pubspec.lock
+  tech_spec_patchable: [tech-spec/guidelines.md, tech-spec/stack.yaml]
+estimated_diff_lines: 4500
+tickets:
+  - id: BURL-Q001
+    title: Establish isolated private Linux live verification
+    type: Chore
+    effort: 8
+    depends_on: []
+    scope:
+      in:
+        - scripts/private-linux-live.sh
+        - scripts/visual-regression.sh
+        - scripts/smoke-shot.sh
+        - "rust/src/security/**"
+        - "rust/src/api/**"
+        - rust/src/frb_generated.rs
+        - lib/main.dart
+        - lib/src/smoke_isolation.dart
+        - "lib/src/rust/**"
+        - "integration_test/**"
+        - integration_test/private_linux_driver_test.dart
+        - "test_driver/**"
+        - test/smoke_isolation_test.dart
+        - test/visual_capture_driver_protocol_test.dart
+        - devenv.nix
+        - pubspec.yaml
+        - pubspec.lock
+    verification:
+      command: "./scripts/private-linux-live.sh self-test && git diff --check"
+      expected: "The self-test exits 0 only after isolation, interaction, evidence capture, and exact cleanup pass."
+    stop_conditions:
+      - "STOP if any recipe can launch on the Writer's active display or read a private Workspace, database, configuration root, or credential entry; don't improvise."
+      - "STOP if namespace isolation can't prove independent noninteractive secure-storage routing; use only the Stage 3-approved harness-owned service fallback."
+      - "STOP if cleanup can't identify and remove only the recorded run root, processes, sockets, and credential scope."
+    description: "Create one repository-owned driver that isolates each logical device's filesystem, display, process, environment, and secure-storage state; drives the real Linux application; records manifest-bound evidence; and cleans only owned state."
+    acceptance:
+      mode: contract_test
+      supplementary: [live_probe]
+      recipe: private-linux-local-p0
+      evidence: |
+        Contract assertions reject every missing, inherited, symlinked, shared, production, or partially configured state surface before launch. The private-linux-local-p0 probe drives the `driver-baseline` scenario in integration_test/private_linux_driver_test.dart against the real application, records target/live-verification/local-p0/manifest.json, restarts with the same scenario scope, and proves exact cleanup without accessing Writer state.
+    flows: [flow-desktop-session]
+    certainty: assumed
+    status: planned

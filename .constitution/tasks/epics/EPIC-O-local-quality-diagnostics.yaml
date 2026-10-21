@@ -1,0 +1,178 @@
+id: O
+name: local quality and diagnostics
+kind: product
+priority: 1
+capabilities: [CAP-045, CAP-078, CAP-106]
+depends_on: [I, J, Q, R, S]
+scope:
+  paths:
+    - "rust/src/diagnostics/**"
+    - "rust/src/workspace/**"
+    - "rust/src/git/**"
+    - "rust/src/db/**"
+    - "rust/src/security/**"
+    - "rust/src/api/**"
+    - rust/src/frb_generated.rs
+    - rust/Cargo.toml
+    - rust/Cargo.lock
+    - "rust/benches/**"
+    - "lib/src/rust/**"
+    - "lib/src/components/**"
+    - "lib/src/providers/**"
+    - lib/src/screens/workspace.dart
+    - "lib/l10n/**"
+    - "test/**"
+    - "integration_test/**"
+    - integration_test/local_quality_flow_test.dart
+    - integration_test/private_linux_performance_test.dart
+    - "scripts/**"
+    - scripts/private-linux-live.sh
+  out_of_scope:
+    - ".constitution/prd/out-of-scope/full-history-diff-viewer.md"
+    - ".constitution/prd/out-of-scope/large-scale-performance-qualification.md"
+    - ".constitution/prd/out-of-scope/non-linux-and-public-release-qualification.md"
+  tech_spec_patchable:
+    - tech-spec/adrs/ADR-011-local-diagnostics.md
+    - tech-spec/contracts/ffi_api.meta.yaml
+    - tech-spec/data-models/schema.meta.yaml
+    - tech-spec/data-models/workspace-session-snapshot.schema.meta.yaml
+    - tech-spec/guidelines.md
+estimated_diff_lines: 10000
+tickets:
+  - id: BURL-O002
+    title: Add bounded content-free diagnostics and export
+    type: Feature
+    effort: 5
+    depends_on: []
+    scope:
+      in:
+        - "rust/src/diagnostics/**"
+        - "rust/src/api/**"
+        - rust/src/frb_generated.rs
+        - "lib/src/rust/**"
+        - "lib/src/components/**"
+        - "lib/src/providers/**"
+        - lib/src/screens/workspace.dart
+        - "lib/l10n/**"
+        - "test/**"
+        - "integration_test/**"
+        - integration_test/local_quality_flow_test.dart
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && git diff --check"
+      expected: "Redaction, retention, failure-isolation, export, binding, widget, and analysis checks pass."
+    stop_conditions:
+      - "STOP if Note or Asset content, credentials, signed locations, URLs, hosts, queries, or content-derived metadata can enter diagnostics."
+      - STOP if diagnostic recording or export failure can fail or roll back the original product operation.
+      - STOP if any record uploads or leaves the device automatically.
+    description: "Keep a bounded best-effort local record of application and schema versions, errors, retries, failures, and state decisions, and create a minimal Writer-requested Diagnostics Export at a selected destination."
+    acceptance:
+      mode: invariant
+      supplementary: [live_probe]
+      recipe: private-linux-local-p0
+      evidence: |
+        Redaction and fault fixtures prove bounded retention, content exclusion, no automatic transmission, verified Writer-selected output, no partial success, and exact separation between diagnostic failure and the originating operation. The `diagnostics-export` scenario in integration_test/local_quality_flow_test.dart records a successful export and injected recording and export failures while Workspace state remains unchanged.
+    flows: [flow-history-diagnostics]
+    certainty: assumed
+    status: planned
+  - id: BURL-O005
+    title: Back up and atomically migrate private application state
+    type: Feature
+    effort: 8
+    depends_on: [BURL-O002]
+    scope:
+      in:
+        - "rust/src/workspace/**"
+        - "rust/src/db/**"
+        - "rust/src/security/**"
+        - "rust/src/api/**"
+        - rust/src/frb_generated.rs
+        - "lib/src/rust/**"
+        - "lib/src/providers/**"
+        - "test/**"
+        - "integration_test/**"
+        - integration_test/local_quality_flow_test.dart
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && git diff --check"
+      expected: "Backup, migration, rollback, later-version refusal, UI, and analysis checks pass."
+    stop_conditions:
+      - "STOP if a migration can overwrite its only recoverable input, admit an unsupported later version, or rewrite Workspace Note content."
+      - STOP if work expands into packaging or public upgrade distribution.
+    description: "Version private application state, back up affected supported bytes, migrate atomically, rebuild derived state when safer, restore on failure, and quarantine unsupported later-version bytes without blocking safe local startup."
+    acceptance:
+      mode: invariant
+      supplementary: [live_probe]
+      recipe: private-linux-local-p0
+      evidence: |
+        Version and fault-injection fixtures prove exact backup input, atomic publication, rollback, derived-index rebuild, preservation of unsupported later-version bytes, and no Note mutation. The `application-state-migration` scenario in integration_test/local_quality_flow_test.dart records successful and failed restart migrations from synthetic state.
+    flows: [flow-desktop-session]
+    certainty: assumed
+    status: planned
+  - id: BURL-O016
+    title: Warn before local history storage becomes unhealthy
+    type: Feature
+    effort: 3
+    depends_on: [BURL-O002]
+    scope:
+      in:
+        - "rust/src/diagnostics/**"
+        - "rust/src/workspace/**"
+        - "rust/src/git/**"
+        - "rust/src/api/**"
+        - rust/src/frb_generated.rs
+        - "lib/src/rust/**"
+        - "lib/src/components/**"
+        - "lib/src/providers/**"
+        - "test/**"
+        - integration_test/local_quality_flow_test.dart
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && git diff --check"
+      expected: "History measurement, warning, non-destructive action, binding, widget, and analysis checks pass at the current accepted or provisional threshold."
+    stop_conditions:
+      - STOP if accepted I001 evidence or the owning Stage 3 patch changes the threshold without a Tasks adaptation.
+      - "STOP if the warning deletes history, rewrites content, claims a 10,000-Note qualification, or exposes a deferred history browser."
+    description: "Measure textual and manifest history against the threshold governed by OD-07, use the provisional 1 GiB assumption while it remains authoritative, and expose a clear warning with non-destructive inspection and recovery guidance."
+    acceptance:
+      mode: gherkin
+      supplementary: [live_probe]
+      recipe: private-linux-local-p0
+      evidence: |
+        Given history below, at, and above the authoritative threshold, when the `history-health-warning` scenario in integration_test/local_quality_flow_test.dart changes local history or opens the Workspace, then the warning appears before the unhealthy boundary, explains local consequences, offers no destructive action, and remains independent of the deferred Version browser.
+      constraints: [NFC-09]
+    flows: [flow-history-diagnostics]
+    certainty: assumed
+    status: planned
+  - id: BURL-O004
+    title: "Qualify first use through 1,000 synthetic Notes"
+    type: Chore
+    effort: 8
+    depends_on: [BURL-O002, BURL-O005, BURL-O016]
+    scope:
+      in:
+        - scripts/private-linux-live.sh
+        - "rust/benches/**"
+        - "test/**"
+        - "integration_test/**"
+        - integration_test/private_linux_performance_test.dart
+        - "scripts/**"
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && git diff --check"
+      expected: "Repository checks pass, and the isolated performance recipe records complete first-use evidence without a later-scale or cross-platform claim."
+    stop_conditions:
+      - "STOP if the deterministic first-use Note-size distribution hasn't been measured and published by this ticket before qualification."
+      - "STOP if any size from one through 1,000 Notes misses an applicable NFC goal or reaches a fail threshold."
+      - "STOP if evidence uses private content, an unisolated process, a managed hosted role, macOS, or the deferred 10,000-Note profile."
+    description: "Publish a deterministic synthetic first-use corpus generator, measure its Note-size distribution, and qualify search, Workspace open, indexing and tree construction, editing responsiveness, cold start, and idle memory on private Linux through 1,000 Notes."
+    acceptance:
+      mode: benchmark
+      supplementary: [live_probe]
+      recipe: private-linux-1000-note-performance
+      evidence: |
+        The `first-use-1000-notes` scenario in integration_test/private_linux_performance_test.dart collects metrics at every deterministic corpus size through 1,000 Notes using the NFC-38 editing fixture. Each applicable NFC-01 through NFC-05 goal is the pass threshold and each fail value is a hard refusal. The manifest records machine, source, build, corpus, run identity, distribution, raw measurements, and no claim beyond this private Linux profile.
+      constraints: [NFC-01, NFC-02, NFC-03, NFC-04, NFC-05, NFC-07, NFC-38]
+    flows:
+      - flow-workspace-bootstrap
+      - flow-search
+      - flow-edit-note
+      - flow-history-diagnostics
+    certainty: assumed
+    status: planned

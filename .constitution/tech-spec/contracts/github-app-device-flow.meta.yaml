@@ -1,6 +1,9 @@
-artifact: github-app-device-flow.toml
+artifact_path: rust/src/provider/github_device_flow.rs
+owner: BURL-K001
 surface: http
-flows: [flow-auth-handshake, flow-release]
-boundaries: [BND-10, BND-12, BND-14, BND-18, BND-19, BND-20]
+flows: [flow-auth-handshake]
+boundaries: [BND-10, BND-12, BND-14, BND-20]
 certainty: assumed
-assumption: "Migrated; not yet exercised by a contract test."
+assumption: The legacy sibling TOML records a superseded provisional contract. BURL-K001 must create and test the active code-owned artifact against ADR-017 and this companion before the device flow becomes an implementation surface.
+companion: github-app-device-flow.md
+settles_when: "Contract tests exercise pending, slow-down, approval, denial, expiry, cancellation, refresh rotation, one-401 recovery, sign-out, repository eligibility, workflow-history refusal, and the human-controlled live authorization recipe against the code-owned artifact."

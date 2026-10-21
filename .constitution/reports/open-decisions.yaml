@@ -100,7 +100,7 @@ decisions:
       chosen: genuinely parallel tracks
   - id: OD-04
     question: "Which standards foundation should the Core-owned canonical extended Markdown AST be built on?"
-    blocks: [BURL-H003, BURL-H004]
+    blocks: [BURL-R001, BURL-R003, BURL-R004]
     options:
       - name: mdast from the markdown crate
         pros:
@@ -128,16 +128,14 @@ decisions:
     spike: SPK-BURL-H001
     interim:
       assumption: "The provisional TechSpec assumes mdast so that BURL-H003 can be scoped; the spike may overturn it."
-      applied_by:
-        - tech-spec/data-models/provisional-forward-models.md
-        - "tasks/epics/EPIC-H-canonical-workspace-authority.yaml#BURL-H003"
+      applied_by: []
     status: open
     asked:
       date: 2026-08-25
       in: reports/2026-08-25-interview-tasks.md
   - id: OD-05
     question: "Which deterministic on-disk component and collision algorithm keeps one Workspace path unambiguous across Linux, macOS, and Windows-compatible storage?"
-    blocks: [BURL-H005]
+    blocks: [BURL-R002]
     options:
       - name: Lowest-common-denominator component with NFC normalization and collision suffixes
         pros:
@@ -167,14 +165,14 @@ decisions:
       assumption: "The provisional TechSpec assumes the lowest-common-denominator format so BURL-H005 can be scoped; the spike settles the exact algorithm."
       applied_by:
         - tech-spec/adrs/ADR-014-canonical-cross-platform-workspace-paths.md
-        - "tasks/epics/EPIC-H-canonical-workspace-authority.yaml#BURL-H005"
+        - "tasks/epics/EPIC-R-local-authoring-foundation.yaml#BURL-R002"
     status: open
     asked:
       date: 2026-08-25
       in: reports/2026-08-25-interview-tasks.md
   - id: OD-06
     question: "What is the maximum encoded size of one imported image?"
-    blocks: [BURL-I003]
+    blocks: [BURL-S002]
     options:
       - name: Keep the provisional 25 MiB limit
         pros:
@@ -244,7 +242,7 @@ decisions:
       in: reports/2026-08-25-interview-tasks.md
   - id: OD-08
     question: "Which oldest x86-64 Linux runtime baseline and named distributions does a supported 0.x release have to run on?"
-    blocks: [BURL-O006, BURL-O011]
+    blocks: [".constitution/prd/out-of-scope/non-linux-and-public-release-qualification.md"]
     options:
       - name: An Ubuntu 22.04-era glibc baseline
         pros:
@@ -316,7 +314,7 @@ decisions:
       chosen: Split Epic M into a CI bootstrap epic and a release-gate epic
   - id: OD-10
     question: "Which direction should own the ordering between Epic I's Object retention and Epic L's Remote refs, given that the downstream BURL-N002, BURL-N003, and BURL-N004 lifecycle tickets follow BURL-L010 while BURL-L010 needs BURL-I007, and their completion gate BURL-N005 consumes all three?"
-    blocks: [BURL-N002, BURL-N003, BURL-N004, BURL-N005]
+    blocks: [".constitution/prd/out-of-scope/object-store-migration.md", BURL-N013, BURL-N014, BURL-N015]
     options:
       - name: "Epic L depends on Epic I, and the three Object Store lifecycle tickets move to Epic L"
         pros:
@@ -359,11 +357,11 @@ decisions:
     ruling:
       ref: reports/2026-09-04-interview-tasks.md
       date: 2026-09-04
-      summary: "Under the user's delegated authority, adopted the downstream EPIC-N refinement: Epic I remains upstream, Epic L retains BURL-L010, and EPIC-N carries BURL-N002, BURL-N003, BURL-N004, and their BURL-N005 completion gate after Epic L. Direct placement in Epic L cannot preserve the downstream K obligations because second-device join and detach consume the lifecycle work while Epic L already depends on Epic K; adding the reverse Epic K → Epic L dependency would recreate the K↔L cycle. The EPIC-N cut preserves the acyclic Epic I → Epic K → Epic L → Epic N order."
+      summary: "Under the user's delegated authority, adopted the downstream EPIC-N refinement: Epic I remains upstream, Epic L retains BURL-L010, and EPIC-N carries BURL-N002, BURL-N003, BURL-N004, and their BURL-N005 completion gate after Epic L. Direct placement in Epic L cannot preserve the downstream K obligations because second-device join and detach consume the lifecycle work while Epic L already depends on Epic K; adding the reverse Epic K → Epic L dependency would recreate the K↔L cycle. The EPIC-N cut preserves the acyclic Epic I → Epic K → Epic L → Epic N order. On 2026-10-14, active-graph replacement mechanically rerouted this closed decision to the deferred Object Store migration record and BURL-N013 through BURL-N015; this routing update is not a new ruling."
       chosen: Keep Epic I upstream and create downstream Epic N after Epic L
   - id: OD-11
     question: "How should managed evidence establish candidate placement, authenticated hosted origin, and the BURL-O001 macOS 26-to-macOS 15 handoff while candidate jobs remain credential-free and receive no OIDC or attestation authority?"
-    blocks: [BURL-M003, BURL-O001, ADR-0019, BND-16, BND-17]
+    blocks: [BURL-M003, ".constitution/prd/out-of-scope/non-linux-and-public-release-qualification.md", ADR-0019, BND-16, BND-17]
     options:
       - name: Split candidate placement from seal provenance and make the macOS 26 seal own the authenticated stage
         pros:

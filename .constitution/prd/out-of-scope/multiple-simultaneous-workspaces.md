@@ -1,22 +1,23 @@
 ---
 decision: deferred
-date: 2026-07-24
+date: 2026-10-14
+ruling: reports/2026-10-14-interview-tasks.md
+revisit_when: "The Writer needs to create, select, or switch among genuinely separate collections after the one-collection workflow is dependable."
 ---
-# Out of Scope: Multiple Simultaneous Workspaces
+# Multiple Workspace interfaces
 
-**Status:** Deferred
-**Related:** CAP-WS-01, CAP-WS-05
+## Context
 
-## The deferred concept
-Managing several Workspaces at once — a switcher, cross-Workspace search, Links that cross Workspace boundaries, or more than one Workspace open concurrently.
+The first usable version begins with one fresh Workspace and one collection. Directories organize that collection.
 
-## Reasoning
-The Workspace is defined as "the root container holding all Notes and Directories." A user with one archive of their own thinking has one such root. Separating personal from work notes is real, but it is more naturally a Directory-level concern than a second root, and Directories already nest arbitrarily.
+## Decision
 
-Supporting several roots at once would affect nearly every other capability. Search would need a scope selector, Links would need a Workspace target, and the Directory tree would gain another level. That cost buys little before the single-Workspace experience is proven.
+Defer interfaces for creating, selecting, or switching among separate collections. Also defer simultaneous Workspaces, cross-Workspace search, and Links across Workspace boundaries.
 
-## What is in scope instead
-One Workspace is active at a time. The Writer can open or switch to another Workspace without keeping both active simultaneously.
+## Reason
 
-## Conditions that would reopen this
-Real, sustained use of two genuinely separate archives, where the friction of opening one at a time is felt in practice rather than anticipated. Worth noting the deferral is cheap to reverse: the model already treats a Workspace as an identified container rather than as an implicit global, so a second one is additive rather than structural.
+The Writer chose one collection for first use and can organize it with Directories. Interfaces for multiple Workspaces would expand session, search, Link, and lifecycle scope before that single collection is dependable.
+
+## Consequences
+
+CAP-043 remains the later product commitment for opening or switching Workspaces, but the replacement near-term roadmap must not create implementation tickets for it. Delivered Workspace-partitioned storage and session-safety behavior remain intact.

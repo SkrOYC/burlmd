@@ -2,7 +2,7 @@
 
 ## Status and source
 
-This full Tasks interview is complete. It records rulings and the required upstream routing for a later planning pass. It does not rewrite the active epic graph or authorize product implementation. Generation-stage approval remains pending.
+This full Tasks interview is complete. It records rulings and the required upstream routing for a later planning pass. It does not rewrite the active epic graph or authorize product implementation. At interview closure, generation-stage approval remained pending. The post-interview authorization at the end of this record approves the four ordered realignment stages.
 
 The inspected baseline is merged `master` at `2c6de152d2a84a82bdb85f2395db00a308fcca64`. The working checkout remains the historical `feat/epic-g-desktop-session` branch. Do not mistake its stage files for the inspected baseline or discard this interview record with obsolete work.
 
@@ -565,4 +565,12 @@ Each stage uses its own constitution-only pull request and document review, as i
 
 ## Interview handoff
 
-The only file written by this interview is `reports/2026-10-14-interview-tasks.md`. No stage files, product code, hooks, branches, or remote resources were changed. Both grounding agents finished; no spike was run. Preserve the interview as a constitution-only commit after the approved checkout and hook preparation. Ask for approval to begin the bounded Stage 1 Evolution pass. Do not run Stage 4 immediately while its upstream inputs remain stale.
+The only file written by this interview is `reports/2026-10-14-interview-tasks.md`. No stage files, product code, hooks, branches, or remote resources were changed. Both grounding agents finished; no spike was run. Preserve the interview as a constitution-only commit after the approved checkout and hook preparation. At interview closure, the next action was to ask for approval to begin the bounded Stage 1 Evolution pass. Do not run Stage 4 while its upstream inputs remain stale.
+
+## Post-interview authorization for the realignment
+
+After interview closure, the user approved all four ordered realignment stages and directed that every resulting `.constitution/` patch be part of one pull request. Each stage must remain aligned with the interview decisions and respect its write authority. Run the stages in pipeline order so each downstream layer reads the approved upstream result.
+
+This ruling supersedes the earlier packaging instruction that assigned a separate pull request to each stage. It does not erase the ordered route, collapse stage ownership, or weaken per-stage validation and review requirements.
+
+This authorization covers constitution changes from Stage 1 through Stage 4 in the single realignment pull request. It does not authorize product-code changes, global tooling repairs, validation exceptions, suppressed checks, or application implementation.

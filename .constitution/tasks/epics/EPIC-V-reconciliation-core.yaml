@@ -1,0 +1,239 @@
+id: V
+name: durable reconciliation core
+kind: foundation
+priority: 2
+capabilities: []
+depends_on: [L, R, S, U]
+scope:
+  paths:
+    - "rust/src/git/**"
+    - "rust/src/sync/**"
+    - "rust/src/workspace/**"
+    - "rust/src/markdown/**"
+    - "rust/src/assets/**"
+    - "rust/src/object_store/**"
+    - "rust/src/db/**"
+    - rust/Cargo.toml
+    - rust/Cargo.lock
+    - "test/**"
+  tech_spec_patchable:
+    - tech-spec/adrs/ADR-013-canonical-source-backed-markdown-ast.md
+    - tech-spec/adrs/ADR-015-structured-git-shaped-reconciliation-analysis.md
+    - tech-spec/adrs/ADR-016-hybrid-local-assets-and-s3-compatible-objects.md
+    - tech-spec/data-models/schema.meta.yaml
+    - tech-spec/guidelines.md
+    - tech-spec/stack.yaml
+estimated_diff_lines: 12000
+tickets:
+  - id: BURL-V001
+    title: Implement typed read-only Git reconciliation analysis
+    type: Security
+    effort: 8
+    depends_on: []
+    scope:
+      in:
+        - "rust/src/git/**"
+        - "rust/src/sync/**"
+        - "rust/src/workspace/**"
+        - rust/Cargo.toml
+        - rust/Cargo.lock
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && cargo clippy --workspace --all-targets --manifest-path rust/Cargo.toml -- -D warnings && git diff --check"
+      expected: "The accepted Git adapter, typed result, isolation, cancellation, cleanup, and lint checks pass."
+    stop_conditions:
+      - "STOP unless accepted L001 evidence and the reviewed post-research Stage 3 patch select the exact Git protocol, arguments, environment, limits, and typed records."
+      - "STOP if analysis mutates the authoritative worktree, executes hooks, filters, helpers, or merge drivers, parses human prose, or emits raw conflict markers as authority."
+    description: "Wrap the accepted version-locked Git protocol in typed base, local, incoming, path, stage, tentative, Suggestion, Lifecycle Decision, Asset Decision, and unsupported-entry records with bounded cancellation and cleanup."
+    acceptance:
+      mode: contract_test
+      evidence: |
+        The full L001 corpus asserts typed classification and exact identities for clean, content, lifecycle, Asset, mode, symlink, submodule, type, path-collision, dirty, blocker, base, history, limit, cancellation, and fault outcomes while the Workspace and guest configuration remain unchanged.
+    flows: [flow-conflict-resolution]
+    certainty: assumed
+    status: planned
+  - id: BURL-V002
+    title: Add durable synchronization intents and bounded scheduling
+    type: Feature
+    effort: 8
+    depends_on: [BURL-V001]
+    scope:
+      in:
+        - "rust/src/sync/**"
+        - "rust/src/git/**"
+        - "rust/src/workspace/**"
+        - "rust/src/db/**"
+        - "test/**"
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && cargo clippy --workspace --all-targets --manifest-path rust/Cargo.toml -- -D warnings && git diff --check"
+      expected: "Durable intent, startup resume, retry, state, cancellation, bounded shutdown, and lint checks pass."
+    stop_conditions:
+      - "STOP if scheduler intent, backoff, Object obligation, or reconciliation state exists only in memory."
+      - STOP if shutdown waits without the Stage 3 bound or cancellation can publish history ahead of protected Objects.
+    description: "Persist fetch, analysis, reconciliation, Object, and publication intents; resume idempotently; classify offline, rate-limit, authentication, privacy, Decision, Object, and failure states; and make orderly shutdown bounded."
+    acceptance:
+      mode: invariant
+      evidence: |
+        Restart and fault injection at every durable transition prove idempotent resume, explicit retry classes, local-editing availability, bounded cancellation and shutdown, no duplicate history, and no publication before Object verification.
+      constraints: [NFC-10, NFC-11, NFC-13, NFC-16, NFC-17]
+    flows: [flow-sync-push]
+    certainty: assumed
+    status: planned
+  - id: BURL-V003
+    title: Materialize content conflicts as persistent Suggestions
+    type: Feature
+    effort: 5
+    depends_on: [BURL-V001]
+    scope:
+      in:
+        - "rust/src/sync/**"
+        - "rust/src/markdown/**"
+        - "rust/src/workspace/**"
+        - "test/**"
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && cargo clippy --workspace --all-targets --manifest-path rust/Cargo.toml -- -D warnings && git diff --check"
+      expected: "Suggestion materialization, persistence, source-model, and lint checks pass."
+    stop_conditions:
+      - "STOP if either variant, the base, or exact source context can become unrecoverable before resolution."
+      - STOP if raw conflict markers or a second Markdown model become the user-facing authority.
+    description: "Convert independently resolvable Markdown content differences into canonical source-backed Suggestions, preserve base, local, and incoming variants, and create valid history that can continue synchronizing while Suggestions remain."
+    acceptance:
+      mode: invariant
+      evidence: |
+        Generated overlapping and independent edit fixtures prove smallest-safe Suggestion boundaries, exact variant recovery, one Note identity, valid source, history persistence, restart recovery, and no raw-marker escape.
+      constraints: [NFC-16, NFC-20]
+    flows: [flow-conflict-resolution]
+    certainty: assumed
+    status: planned
+  - id: BURL-V004
+    title: Implement durable Lifecycle Decisions
+    type: Feature
+    effort: 5
+    depends_on: [BURL-V001]
+    scope:
+      in:
+        - "rust/src/sync/**"
+        - "rust/src/workspace/**"
+        - "rust/src/db/**"
+        - "test/**"
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && cargo clippy --workspace --all-targets --manifest-path rust/Cargo.toml -- -D warnings && git diff --check"
+      expected: "Lifecycle conflict, durable decision, staleness, recovery, and lint checks pass."
+    stop_conditions:
+      - STOP if a structural outcome applies without explicit valid input or if a pending Decision blocks local editing or history.
+      - "STOP if stale base, local, incoming, or tentative identity can finalize."
+    description: "Persist and present explicit add, delete, rename, move, Directory, type, and path-identity outcomes, pause Workspace synchronization, preserve every candidate, and apply one revalidated lifecycle result."
+    acceptance:
+      mode: invariant
+      evidence: |
+        Conflict and crash fixtures prove durable candidate and choice preservation, valid action sets, exact staleness checks, local editing availability, atomic lifecycle application, and renewed input after authoritative advancement.
+      constraints: [NFC-13, NFC-16, NFC-25]
+    flows: [flow-conflict-resolution]
+    certainty: assumed
+    status: planned
+  - id: BURL-V005
+    title: Implement durable Asset Decisions
+    type: Feature
+    effort: 5
+    depends_on: [BURL-V001]
+    scope:
+      in:
+        - "rust/src/sync/**"
+        - "rust/src/assets/**"
+        - "rust/src/object_store/**"
+        - "rust/src/workspace/**"
+        - "rust/src/db/**"
+        - "test/**"
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && cargo clippy --workspace --all-targets --manifest-path rust/Cargo.toml -- -D warnings && git diff --check"
+      expected: "Asset conflict, Object coordination, durable decision, recovery, and lint checks pass."
+    stop_conditions:
+      - "STOP if a candidate Object can be discarded, rendered, or published without identity verification and an authoritative choice."
+      - STOP if a local missing or corrupt Object is misclassified as a synchronization conflict.
+    description: "Persist explicit decisions for conflicting Asset bytes, references, and availability; preserve all candidate Objects; coordinate recovery and publication; and pause only affected Workspace synchronization."
+    acceptance:
+      mode: invariant
+      evidence: |
+        Binary, reference, availability, crash, and stale-input fixtures prove verified candidate retention, valid choices, independent local work, restart recovery, safe Object publication, and renewed input after changed authority.
+      constraints: [NFC-13, NFC-16, NFC-17, NFC-23, NFC-24]
+    flows: [flow-conflict-resolution, flow-object-store-lifecycle]
+    certainty: assumed
+    status: planned
+  - id: BURL-V006
+    title: Finalize reconciliation with compare-and-swap recovery
+    type: Feature
+    effort: 5
+    depends_on: [BURL-V003, BURL-V004, BURL-V005]
+    scope:
+      in:
+        - "rust/src/sync/**"
+        - "rust/src/git/**"
+        - "rust/src/workspace/**"
+        - "rust/src/db/**"
+        - "test/**"
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && cargo clippy --workspace --all-targets --manifest-path rust/Cargo.toml -- -D warnings && git diff --check"
+      expected: "Compare-and-swap, crash, advancement, recomputation, and lint checks pass for every reconciliation class."
+    stop_conditions:
+      - STOP if finalization can target a history tip other than its recorded local input or if recomputation reuses stale Writer input.
+    description: "Persist complete reconciliation identities before input, recover after crash, compare-and-swap the recorded local branch, and recompute with renewed decisions when authority advances."
+    acceptance:
+      mode: invariant
+      evidence: |
+        Interruption at every transition and concurrent local advancement prove complete input recovery, stale-outcome refusal, atomic branch publication, deterministic recomputation, and preservation of every local and incoming state.
+      constraints: [NFC-16, NFC-20]
+    flows: [flow-conflict-resolution]
+    certainty: assumed
+    status: planned
+  - id: BURL-V007
+    title: Integrate complete Remote refs with Protected State
+    type: Security
+    effort: 8
+    depends_on: [BURL-V002]
+    scope:
+      in:
+        - "rust/src/git/**"
+        - "rust/src/sync/**"
+        - "rust/src/workspace/**"
+        - "rust/src/assets/**"
+        - "rust/src/object_store/**"
+        - "test/**"
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && cargo clippy --workspace --all-targets --manifest-path rust/Cargo.toml -- -D warnings && git diff --check"
+      expected: "Published-ref enumeration, quarantine, bounds, cancellation, retention, cleanup, and lint checks pass."
+    stop_conditions:
+      - "STOP if final Stage 3 hasn't published exact count, byte, transfer, and elapsed-work limits from accepted evidence."
+      - "STOP if enumeration mutates Workspace refs, prunes data, omits an advertised refs entry, or claims completeness after a limit or cancellation."
+    description: "Enumerate every advertised Remote ref within accepted limits, fetch each history into isolated no-prune quarantine, and extend Protected State roots for recovery, detach, hydration, and reconciliation."
+    acceptance:
+      mode: invariant
+      evidence: |
+        Generated ref, history, limit, cancellation, restart, malformed advertisement, and cleanup fixtures prove complete bounded enumeration, no Workspace-ref mutation, fail-closed incompleteness, and exact Object retention roots.
+      constraints: [NFC-16, NFC-23, NFC-24]
+    flows: [flow-sync-push, flow-object-store-lifecycle]
+    certainty: assumed
+    status: planned
+  - id: BURL-V008
+    title: Resolve delete-versus-edit without content loss
+    type: Feature
+    effort: 3
+    depends_on: [BURL-V003, BURL-V004]
+    scope:
+      in:
+        - "rust/src/sync/**"
+        - "rust/src/markdown/**"
+        - "rust/src/workspace/**"
+        - "test/**"
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && cargo clippy --workspace --all-targets --manifest-path rust/Cargo.toml -- -D warnings && git diff --check"
+      expected: "Delete-versus-edit restoration, Suggestion, confirmation, and lint checks pass."
+    stop_conditions:
+      - STOP if edited content can disappear before explicit deletion confirmation or if the restored Note gains a second identity.
+    description: "Restore the edited Note, represent the content difference as a persistent Suggestion, preserve both outcomes, and require confirmation before deletion wins."
+    acceptance:
+      mode: gherkin
+      evidence: |
+        Given concurrent deletion and editing in both directions, when reconciliation runs and the Writer resolves the Suggestion, then the edit remains recoverable, one Note identity survives, and deletion occurs only after explicit confirmation against current inputs.
+      constraints: [NFC-20]
+    flows: [flow-conflict-resolution]
+    certainty: assumed
+    status: planned

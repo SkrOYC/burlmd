@@ -1,6 +1,6 @@
 jobs:
   - id: JOB-01
-    legacy_id: "Write directly / Read finished"
+    legacy_id: Write directly / Read finished
     actor: Writer
     statement: "Compose in real Markdown and read the same Note as a finished document, without an editor that hides or rewrites the syntax and without toggling into a separate preview mode"
     priority: P0
@@ -13,7 +13,7 @@ jobs:
   - id: JOB-02
     legacy_id: Start immediately
     actor: Writer
-    statement: "Open the application and write the first Note with no account, no network connection, and no setup step, with the previous session's Workspace context back in place"
+    statement: "Open the application into one fresh local Workspace and write the first Note with no account or network connection, then return to that Workspace's previous session context after restart"
     priority: P0
     certainty: assumed
     evidence:
@@ -36,17 +36,17 @@ jobs:
   - id: JOB-04
     legacy_id: Sync seamlessly
     actor: Writer
-    statement: "Keep Notes up to date across devices automatically through a private Remote, tolerating long offline periods and never gating local writing on a credential"
+    statement: "Keep Notes and their local images up to date across devices automatically, tolerating long offline periods and never gating local writing on a credential"
     priority: P0
     certainty: assumed
-    assumption: "No delivered evidence demonstrates automatic Remote synchronization across devices or after long offline periods."
+    assumption: No delivered evidence demonstrates automatic Note and local-image synchronization across devices or after long offline periods.
   - id: JOB-05
     legacy_id: Retain ownership
     actor: Writer
-    statement: "Keep every Note as a portable file that outlives the application, recover an earlier version of a Note, and produce a diagnostics report without any content leaving the device"
+    statement: "Keep every Note and referenced local image portable beyond the application's lifetime, Export a consistent local copy, and create a content-free Diagnostics Export that only the Writer chooses whether to share"
     priority: P0
     certainty: assumed
-    assumption: "Open Knowledge Format conformance is delivered, but no evidence demonstrates Export, Version restore, and Diagnostics Export end to end."
+    assumption: "Open Knowledge Format conformance is delivered, but no evidence demonstrates plain-folder Export and Diagnostics Export end to end. In-app Version browsing and restore are deferred delivery outcomes."
   - id: JOB-06
     legacy_id: Resolve smoothly
     actor: Writer
@@ -64,7 +64,7 @@ jobs:
   - id: JOB-08
     legacy_id: Keep visual context
     actor: Writer
-    statement: "Include images in Notes without putting large binary payloads in Note history and without losing offline access to the assets still in use"
+    statement: Include images in Notes without putting large binary payloads in Note history and without losing offline access to the assets still in use
     priority: P0
     certainty: assumed
     assumption: "No delivered evidence demonstrates image import, offline availability through the Local Asset Store, or Object synchronization through the Object Store."
@@ -74,4 +74,4 @@ jobs:
     statement: "Install a tested 0.x prerelease on a supported desktop without building from source, and be told when a compatible update exists"
     priority: P0
     certainty: assumed
-    assumption: "This job remains assumed until published release artifacts pass the release-blocking matrix and compatible-update notification is available."
+    assumption: This job remains assumed until published release artifacts pass the release-blocking matrix and compatible-update notification is available.

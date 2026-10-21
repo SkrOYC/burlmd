@@ -12,7 +12,8 @@
 - Workspace Observer reports candidate changes. Core Coordination validates conformance, containment, and the latest disk revision before changing authoritative state.
 - A clean open Note adopts a conforming guest change through local history and reload.
 - A dirty Note preserves both versions and pauses writes until the Writer chooses a reviewed outcome. Core Coordination revalidates the guest revision before applying the choice.
-- Invalid guest input preserves original bytes and the last known-good Note. Repair requires a preview. Exclude keeps the input outside authoritative state.
+- Invalid guest input preserves original bytes and the last known-good Note. Any later guided repair requires a preview. Exclusion keeps the input outside authoritative state.
+- For first use, invalid guest input remains outside authoritative editable state until the Writer or Agent corrects it. Guided repair remains deferred.
 - Rescan remains an explicit recovery path when event observation is incomplete.
 
 ## Reconciliation resilience
@@ -29,7 +30,7 @@
 - Transient Provider failures retain credentials and enter retryable states. Only an authoritative credential rejection enters authentication-required state.
 - Before local history can reference a new Object, Application State records a durable operation intent and Object obligation.
 - Before history publication, Object Transfer verifies every required Object in the Object Store. Startup and prepublication reconciliation derive missing obligations from unpublished history.
-- During replacement-store migration, the replacement first passes the complete private-store validation. A durable intent then makes every publisher verify fresh replacement privacy and new Objects in both stores. Privacy drift pauses migration and publication with the old store authoritative. Cutover uses compare-and-swap against the migration epoch, Workspace revision, and complete Remote-ref inventory after baseline and delta copy. Devices without replacement credentials pause publication but keep local use. Cutover retains the old store's non-secret fallback descriptor. A replacement miss can be repaired with securely supplied old-store credentials or by a credentialed peer; the old bytes are content-verified, backfilled and verified in the replacement, and only then hydrated.
+- Object Store credential updates validate replacement credentials before removing earlier credentials. Failure or cancellation leaves the earlier configured connection authoritative. Object Store replacement is deferred and adds no migration or dual-write state to the active synchronization lifecycle.
 - Complete advertised-Remote-ref analysis is resource-bounded and fail-closed. Count, advertisement-byte, fetched-byte, or deadline exhaustion marks Remote authority incomplete, cleans the isolated quarantine, preserves local use, and blocks only decisions that require complete published history.
 - Pull or join validates referenced Object manifests before authoritative materialization and hydrates active Assets first.
 - An asset-bearing connected Workspace can't detach its Object Store alone. Offline Remote detachment retains the Object Store. Returning to fully local operation requires fresh authenticated enumeration of all published Remote refs, complete protected hydration, and atomic revision-bound detachment of both external storage boundaries.
@@ -38,7 +39,7 @@
 
 - Workspace Model derives Protected State from current state, retained or unpublished local history, reachable published Remote history, pending reconciliation, and Consolidation.
 - Core Coordination exposes bytes only after Object identity verification.
-- Local cache eviction requires a verified Object Store copy and no active offline need. burlmd doesn't delete authoritative Object Store bytes during `0.x` because history publication and Object Store deletion can't form one atomic transaction across the two external boundaries.
+- Downloaded Object copies remain local during the first synchronization milestone. Later local cache eviction requires a verified Object Store copy and no active offline need. burlmd doesn't delete authoritative Object Store bytes during `0.x` because history publication and Object Store deletion can't form one atomic transaction across the two external boundaries.
 
 ## Security and privacy
 
@@ -47,9 +48,18 @@
 - Persistent secrets exist only in Secure Storage. Transient in-memory material is narrowly scoped and promptly erased.
 - Structured local diagnostics exclude Note content, Asset content, credentials, signed locations, and content-derived telemetry.
 - No diagnostic or usage information leaves the device automatically. The Writer creates and shares a Diagnostics Export explicitly.
+- A diagnostics recording or export failure is reported separately. It doesn't fail the original product operation, change Workspace data, or expose a partial Diagnostics Export as complete.
+
+## External image resilience
+
+- Opening a Note automatically requests each external Markdown image reference from its external origin. The request doesn't include other Note content, application credentials, or telemetry.
+- Every response is untrusted display input. Invalid content, network unavailability, refusal, or interruption produces an unavailable image state without changing Note source or local authority.
+- External image loading doesn't block Note opening, local editing, or any capability covered by the Local-First Mandate. It never rewrites the reference or imports the response into the Local Asset Store automatically.
+- Stage 3 defines supported address forms, redirect behavior, resource limits, request metadata, and Export behavior. Stage 2 requires those choices to preserve this trust boundary and failure isolation.
 
 ## Validation evidence
 
+- Private Linux development uses repository checks and isolated headless application workflows on the Writer's Linux machine. This evidence can qualify the 1,000-Note first-use profile, but it doesn't establish a supported release, macOS operation, hosted provenance, or the 10,000-Note qualification outcome.
 - Each validation role owns an isolated display, compositor, and input channel. The strict-containment role also proves candidate-process teardown. Other hosted roles record bounded cleanup without claiming arbitrary-process containment. A role that can't prove its assigned ownership or cleanup obligations emits no acceptable evidence.
 - The Writer's active device never supplies visual proof or validation input. Captured Writer windows, desktop state, or active-device input invalidate the complete run.
 - Release Pipeline establishes immutable trust-anchor identity from a reviewed validation implementation. It creates expected role, source, build, run, evidence-class, candidate-placement, topology, and completion identities outside the tested source. It gives the same expectation directly to validation and aggregation.

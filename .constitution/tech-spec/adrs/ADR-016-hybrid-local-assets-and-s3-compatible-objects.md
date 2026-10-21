@@ -26,13 +26,21 @@ The product requires standard Markdown image paths that work offline and a Write
 
 ## Evidence required
 
-SPK-BURL-I001 compares the official AWS SDK for Rust with `object_store` using at least AWS S3 and one non-AWS S3-compatible fixture when credentials are safely available; otherwise it must use a protocol-faithful local service and flag cloud compatibility unverified. It measures content identity, deduplication, manifest round trips, decode memory and dimensions, the provisional 25 MiB limit, offline behavior, hydration, protected-history traversal, local cache eviction, and textual repository growth. OD-06 and OD-07 remain open until the measured PRD evolution.
+SPK-BURL-I001 compares the official AWS SDK for Rust with `object_store` using at least AWS S3 and one non-AWS S3-compatible fixture when credentials are safely available; otherwise it must use a protocol-faithful local service and flag cloud compatibility unverified. It measures local import, content identity, deduplication, manifest round trips, decode memory and dimensions, the provisional 25 MiB limit, offline behavior, one-store credential updates, synchronization hydration, protected-history traversal, safe full-local preparation, external-image resource limits under ADR-022, and textual repository growth. OD-06 and OD-07 remain open until the measured PRD evolution.
+
+The Spike doesn't select or prototype Object Store replacement, automatic local cache eviction, arbitrary existing-collection adoption, or Bundle Archive Export. Those deferred outcomes retain their invariants and receive detailed research when their revisit conditions are met.
 
 ## Consequences
 
 - The asset Spike may use candidate libraries in its isolated manifest only.
 - S3-only Workspaces, a burlmd-operated object service, Git LFS, and encrypted remote objects remain outside this phase.
 - Detaching the Object Store must preserve required authoritative bytes locally; it cannot strand referenced assets.
+
+## Delivery activation
+
+The private Linux first-use milestone activates local file selection, clipboard paste, verified local storage, source-reference insertion, offline rendering, undo, and plain-folder Export. The first synchronization milestone activates Notes and local-image Objects together, one configured Object Store, credential updates, protected availability before publication, and safe return to complete local-only use.
+
+Existing-collection adoption, Object Store replacement, and automatic local cache eviction remain deferred outcomes. Their retained rules are not prerequisites for the local or first synchronization milestones. SPK-BURL-I001 still measures the common identity, decode, integrity, and protected-state foundations needed by active work, and OD-06 and OD-07 remain open. Private Linux measurements don't qualify macOS or a public release.
 
 ## Verification anchors
 

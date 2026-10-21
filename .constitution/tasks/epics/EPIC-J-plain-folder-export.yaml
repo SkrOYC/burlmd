@@ -1,0 +1,120 @@
+id: J
+name: plain-folder Workspace Export
+kind: product
+priority: 1
+capabilities: [CAP-046, CAP-047, CAP-048, CAP-049]
+depends_on: [Q, S]
+scope:
+  paths:
+    - "rust/src/export/**"
+    - "rust/src/workspace/**"
+    - "rust/src/assets/**"
+    - "rust/src/api/**"
+    - rust/src/frb_generated.rs
+    - "lib/src/rust/**"
+    - lib/src/providers/workspace_provider.dart
+    - lib/src/screens/workspace.dart
+    - "lib/src/components/**"
+    - "lib/l10n/**"
+    - "test/components/**"
+    - "test/providers/**"
+    - "test/screens/**"
+    - "integration_test/**"
+    - integration_test/plain_folder_export_flow_test.dart
+  out_of_scope: [".constitution/prd/out-of-scope/bundle-archive-export.md"]
+  tech_spec_patchable:
+    - tech-spec/contracts/ffi_api.meta.yaml
+    - tech-spec/data-models/schema.meta.yaml
+    - tech-spec/guidelines.md
+estimated_diff_lines: 7500
+tickets:
+  - id: BURL-J001
+    title: Pin one stable complete Export revision
+    type: Feature
+    effort: 5
+    depends_on: []
+    scope:
+      in:
+        - "rust/src/export/**"
+        - "rust/src/workspace/**"
+        - "rust/src/assets/**"
+        - "rust/src/api/**"
+        - rust/src/frb_generated.rs
+        - "lib/src/rust/**"
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && dart analyze && git diff --check"
+      expected: "Stable-revision, flush, Object-closure, cancellation, binding, and analysis checks pass."
+    stop_conditions:
+      - "STOP if any open Note can't flush through normal durability, a guest decision remains unresolved, or the authoritative Directory, Note, and local Object closure can't bind to one revision."
+      - "STOP if Export mutates, closes, synchronizes, or silently repairs the Workspace."
+    description: "Acquire a bounded Export lease, flush every open Note, reject unresolved authority, and bind all Directories, Notes, and referenced verified local Objects to one stable Workspace revision."
+    acceptance:
+      mode: invariant
+      evidence: |
+        Concurrency and fault fixtures prove that every accepted closure names one authoritative revision, includes empty Directories and referenced local images, preserves foreign bytes, releases without Workspace mutation, and exposes no partial success after flush, revision, or Object failure.
+    flows: [flow-export]
+    certainty: assumed
+    status: planned
+  - id: BURL-J002
+    title: Publish an atomic plain-folder copy
+    type: Feature
+    effort: 5
+    depends_on: [BURL-J001]
+    scope:
+      in:
+        - "rust/src/export/**"
+        - "rust/src/workspace/**"
+        - "rust/src/assets/**"
+        - "rust/src/api/**"
+        - rust/src/frb_generated.rs
+        - "lib/src/rust/**"
+        - "test/providers/**"
+        - "integration_test/**"
+        - integration_test/plain_folder_export_flow_test.dart
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && dart analyze && git diff --check"
+      expected: "Copy, destination, completeness, failure-preservation, binding, and analysis checks pass."
+    stop_conditions:
+      - "STOP if the selected destination is nonempty or a complete sibling output can't be verified before atomic publication."
+      - "STOP if Export fetches or embeds an external web image; preserve its URL source only."
+      - STOP if work adds a Bundle Archive or replacement-in-place behavior.
+    description: "Copy the stable Notes and referenced local images into a temporary sibling, verify the complete plain-folder result, preserve external image URLs, and atomically publish only to an empty destination."
+    acceptance:
+      mode: gherkin
+      supplementary: [live_probe]
+      recipe: private-linux-local-p0
+      evidence: |
+        Given a Workspace with open Notes, empty Directories, local images, an external image URL, and preserved foreign bytes, when the `plain-folder-export` scenario in integration_test/plain_folder_export_flow_test.dart targets an empty folder, then one verified complete copy appears atomically and remains usable offline for local Assets. A nonempty destination or injected failure leaves no published partial output.
+    flows: [flow-export]
+    certainty: assumed
+    status: planned
+  - id: BURL-J006
+    title: Integrate the accessible plain-folder Export surface
+    type: Feature
+    effort: 3
+    depends_on: [BURL-J002]
+    scope:
+      in:
+        - lib/src/providers/workspace_provider.dart
+        - lib/src/screens/workspace.dart
+        - "lib/src/components/**"
+        - "lib/l10n/**"
+        - "test/components/**"
+        - "test/screens/**"
+        - "integration_test/**"
+        - integration_test/plain_folder_export_flow_test.dart
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && flutter test && dart analyze && git diff --check"
+      expected: "Export state, accessibility, widget, integration, and analysis checks pass."
+    stop_conditions:
+      - "STOP if Presentation infers completion, mutates source, or hides a terminal refusal, recovery need, or preservation result."
+    description: "Expose destination selection, stable-revision preparation, progress, nonempty-destination refusal, recovery needs, terminal failure, and verified success from typed Core state."
+    acceptance:
+      mode: gherkin
+      supplementary: [live_probe]
+      recipe: private-linux-local-p0
+      evidence: |
+        Given each authoritative Export state, when the `plain-folder-export-ui` scenario in integration_test/plain_folder_export_flow_test.dart starts or cancels Export and inspects its terminal outcome, then the accessible UI presents the exact state and valid action without manufacturing success, including a successful local-image copy and a refused nonempty destination.
+    flows: [flow-export]
+    certainty: assumed
+    status: planned

@@ -1,0 +1,67 @@
+id: H
+name: canonical Markdown and portable path research
+kind: tooling
+priority: 1
+capabilities: []
+depends_on: []
+scope:
+  paths:
+    - ".constitution/spikes/SPK-BURL-H001.md"
+    - ".constitution/spikes/SPK-BURL-H002.md"
+  tech_spec_patchable:
+    - tech-spec/adrs/ADR-010-undo-command-stack.md
+    - tech-spec/adrs/ADR-013-canonical-source-backed-markdown-ast.md
+    - tech-spec/adrs/ADR-014-canonical-cross-platform-workspace-paths.md
+    - tech-spec/adrs/ADR-021-selected-p0-markdown-profile.md
+estimated_diff_lines: 3500
+tickets:
+  - id: BURL-H001
+    title: Select the canonical source-backed Markdown model
+    type: Spike
+    effort: 8
+    depends_on: []
+    scope:
+      in: [".constitution/spikes/SPK-BURL-H001.md"]
+    verification:
+      command: "rg -q '^Status: complete$' .constitution/spikes/SPK-BURL-H001.md && rg -q '^## Recommendation$' .constitution/spikes/SPK-BURL-H001.md && git diff --check"
+      expected: "The report is complete, reproducible, and recommends only a candidate that passes every fidelity, safety, coordinate, rendering, and performance gate."
+    stop_conditions:
+      - "STOP if a candidate can't represent every selected P0 construct or preserve every untouched byte."
+      - "STOP when the 8-point budget is exhausted; record partial evidence without selecting by intuition."
+      - "STOP if work writes product code, a second contract, or any constitution file other than the named Spike report."
+    description: "Compare the four candidates named by ADR-013 against the complete ADR-021 corpus, source-preserving edit operations, revision-bound coordinates, renderer fallbacks, and existing performance meters."
+    acceptance:
+      mode: invariant
+      evidence: |
+        The report inventories inputs and digests, records every candidate and gate, and proves byte identity outside edited ranges across selected syntax, malformed source, Unicode, CRLF, reference and footnote definitions, heading fragments, math, Mermaid, marks, local images, and external images. It records parse, edit, projection, and renderer measurements and names the required Stage 3 changes.
+      constraints: [NFC-02, NFC-05, NFC-18, NFC-38]
+    flows: [flow-edit-note]
+    spike: SPK-BURL-H001
+    closes_decision: OD-04
+    certainty: assumed
+    status: planned
+  - id: BURL-H002
+    title: Select the portable Workspace path algorithm
+    type: Spike
+    effort: 5
+    depends_on: []
+    scope:
+      in: [".constitution/spikes/SPK-BURL-H002.md"]
+    verification:
+      command: "rg -q '^Status: complete$' .constitution/spikes/SPK-BURL-H002.md && rg -q '^## Recommendation$' .constitution/spikes/SPK-BURL-H002.md && git diff --check"
+      expected: The report is complete and recommends an unambiguous portable algorithm without claiming macOS runtime qualification.
+    stop_conditions:
+      - "STOP if an accepted component can alias, collide, escape the Workspace, or lose round-trip identity under a checked target rule set."
+      - "STOP when the 5-point budget is exhausted; preserve unresolved cases instead of inventing suffix or normalization rules."
+      - STOP if work writes product code or any constitution file other than the named Spike report.
+    description: "Compare the ADR-014 candidates with real private Linux filesystem probes and checked macOS and Windows rule fixtures for normalization, case, reserved names, limits, collisions, renames, ghost creation, and traversal."
+    acceptance:
+      mode: invariant
+      evidence: |
+        The report records reproducible fixtures and proves stable identity, deterministic refusal or disambiguation, readable title round trips, containment, and case-only rename behavior. It distinguishes rule-fixture evidence from deferred macOS runtime qualification and names the required Stage 3 changes.
+      constraints: [NFC-22, NFC-25]
+    flows: [flow-note-lifecycle]
+    spike: SPK-BURL-H002
+    closes_decision: OD-05
+    certainty: assumed
+    status: planned

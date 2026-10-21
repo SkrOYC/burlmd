@@ -3,11 +3,7 @@ mode: visual_regression
 produced:
   date: 2026-09-14
   commit: 4ea6139a0c996fc8e80a2b1ead58511deaf671d6
-  command: >-
-    flutter test && dart analyze && ./scripts/visual-regression.sh
-    shell-g001 --baseline test/goldens/shell-g001-linux.png
-    --max-different-pixels 0 && git diff --check && ! rg -n '\[DEBUG-' lib
-    rust test scripts
+  command: "flutter test && dart analyze && ./scripts/visual-regression.sh shell-g001 --baseline test/goldens/shell-g001-linux.png --max-different-pixels 0 && git diff --check && sh -c \"! rg -n '\\[DEBUG-' lib rust test scripts\""
   host: >-
     Private Linux x86-64 capture under the pinned devenv shell. Exact tool,
     lockfile, Fontconfig, and resolved-font identities are retained in the

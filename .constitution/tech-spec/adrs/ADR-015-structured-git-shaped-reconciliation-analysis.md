@@ -32,11 +32,14 @@ The harness also injects interruption at every durable transition, including ass
 
 Every tested Git process disables repository-controlled hooks, filters, merge drivers, credential helpers, and configuration unless the harness explicitly supplies a safe isolated value. Unsupported submodules and symlinks stop before Workspace mutation. The result also records the redistribution obligations for the exact Git executable and runtime intended for release artifacts.
 
+The private synchronization research can run on private Linux with synthetic local repositories and no Provider credential. It doesn't depend on BURL-M003, hosted sealing, macOS, packaging, or public-release qualification. Real Provider and Object Store evidence belongs to the later live synchronization recipe after the typed plan and application contracts land.
+
 ## Consequences
 
 - The final design may still use Git CLI operations, but it must pin the shipped CLI version and own a typed adapter instead of parsing human prose or relying on markers.
 - `gix` may remain for local object and commit operations. The Spike decides responsibilities from measured capability, not a desire for one Git library.
 - Remote sync and reconciliation implementation remain blocked until final Stage 3 publishes the typed plan and application contracts.
+- An accepted Spike is research evidence, not the typed production contract. Stage 4 must place the follow-up Stage 3 patch before implementation.
 
 ## Verification anchor
 

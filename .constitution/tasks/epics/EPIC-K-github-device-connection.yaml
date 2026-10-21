@@ -1,0 +1,142 @@
+id: K
+name: GitHub device authorization and Remote selection
+kind: foundation
+priority: 2
+capabilities: []
+depends_on: [O, Q, R]
+scope:
+  paths:
+    - "rust/src/provider/**"
+    - rust/src/provider/github_device_flow.rs
+    - "rust/src/security/**"
+    - rust/src/api/auth.rs
+    - rust/src/api/ffi_api.rs
+    - rust/src/api/mod.rs
+    - rust/src/frb_generated.rs
+    - rust/Cargo.toml
+    - rust/Cargo.lock
+    - "lib/src/rust/**"
+    - lib/src/providers/auth_provider.dart
+    - lib/src/screens/login.dart
+    - "lib/src/components/**"
+    - "lib/l10n/**"
+    - test/providers/auth_provider_test.dart
+    - test/screens/login_test.dart
+    - "integration_test/**"
+    - integration_test/github_device_flow_fixture_test.dart
+  tech_spec_patchable:
+    - tech-spec/adrs/ADR-009-provider-seam.md
+    - tech-spec/adrs/ADR-017-github-app-device-flow.md
+    - tech-spec/contracts/github-app-device-flow.meta.yaml
+    - tech-spec/contracts/ffi_api.meta.yaml
+    - tech-spec/guidelines.md
+    - tech-spec/stack.yaml
+estimated_diff_lines: 9000
+tickets:
+  - id: BURL-K001
+    title: Replace legacy OAuth with GitHub App device flow
+    type: Security
+    effort: 8
+    depends_on: []
+    scope:
+      in:
+        - rust/src/provider/github_device_flow.rs
+        - "rust/src/provider/**"
+        - rust/src/api/auth.rs
+        - rust/src/api/ffi_api.rs
+        - rust/src/api/mod.rs
+        - rust/src/frb_generated.rs
+        - rust/Cargo.toml
+        - rust/Cargo.lock
+        - "lib/src/rust/**"
+        - lib/src/providers/auth_provider.dart
+        - lib/src/screens/login.dart
+        - "lib/src/components/**"
+        - "lib/l10n/**"
+        - test/providers/auth_provider_test.dart
+        - test/screens/login_test.dart
+        - "integration_test/**"
+        - integration_test/github_device_flow_fixture_test.dart
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && git diff --check"
+      expected: "Device-flow protocol, error, cancellation, binding, widget, and analysis checks pass, and the legacy PKCE and client-secret path is absent."
+    stop_conditions:
+      - "STOP if a client secret, App private key, callback listener, personal access token, inherited GitHub CLI session, or automated browser approval enters the flow."
+      - STOP if work retains the legacy OAuth path as a fallback.
+    description: "Create the code-owned artifact at rust/src/provider/github_device_flow.rs, request and poll the GitHub App device code through the active companion contract, present typed progress and cancellation, and keep browser approval under Writer control."
+    acceptance:
+      mode: contract_test
+      supplementary: [live_probe]
+      recipe: private-linux-github-device-flow-fixture
+      evidence: |
+        Contract tests assert exact endpoint, headers, interval, expiry, slow-down, cancellation, error classification, and absence of secret-bearing paths. The `device-authorization` scenario in integration_test/github_device_flow_fixture_test.dart drives the real application, Core, and HTTP client against the protocol-faithful Provider fixture and records typed UI outcomes without claiming GitHub compatibility.
+    flows: [flow-auth-handshake]
+    certainty: assumed
+    status: planned
+  - id: BURL-K002
+    title: "Persist, refresh, and revoke the user token pair safely"
+    type: Security
+    effort: 5
+    depends_on: [BURL-K001]
+    scope:
+      in:
+        - "rust/src/provider/**"
+        - "rust/src/security/**"
+        - rust/src/api/auth.rs
+        - rust/src/api/ffi_api.rs
+        - rust/src/frb_generated.rs
+        - "lib/src/rust/**"
+        - lib/src/providers/auth_provider.dart
+        - test/providers/auth_provider_test.dart
+        - integration_test/github_device_flow_fixture_test.dart
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && git diff --check"
+      expected: "Secure-storage, atomic rotation, serialized refresh, one-replay, sign-out, binding, and widget checks pass without token disclosure."
+    stop_conditions:
+      - "STOP if token rotation can publish a partial pair, transient failure deletes valid credentials, or a failed operation replays more than once."
+      - "STOP if any token reaches Workspace files, Git configuration, diagnostics, command arguments, or evidence."
+    description: "Store the expiring access and refresh token pair only in Platform secure storage, serialize and atomically rotate refresh, classify authoritative and retryable failures, replay one authenticated failure once, and sign out without detaching."
+    acceptance:
+      mode: invariant
+      supplementary: [live_probe]
+      recipe: private-linux-github-device-flow-fixture
+      evidence: |
+        Fault and concurrency fixtures prove atomic pair visibility, one refresh at a time, pre-expiry refresh, one 401 replay, definitive rejection handling, transient preservation, sign-out semantics, and redaction. The `token-lifecycle` scenario in integration_test/github_device_flow_fixture_test.dart records authorization, restart persistence in the isolated credential scope, refresh, and sign-out without secrets.
+    flows: [flow-auth-handshake]
+    certainty: assumed
+    status: planned
+  - id: BURL-K003
+    title: Select or provision an eligible private Remote
+    type: Feature
+    effort: 5
+    depends_on: [BURL-K002]
+    scope:
+      in:
+        - "rust/src/provider/**"
+        - rust/src/api/ffi_api.rs
+        - rust/src/frb_generated.rs
+        - "lib/src/rust/**"
+        - lib/src/providers/auth_provider.dart
+        - lib/src/screens/login.dart
+        - "lib/src/components/**"
+        - "lib/l10n/**"
+        - test/providers/auth_provider_test.dart
+        - test/screens/login_test.dart
+        - "integration_test/**"
+        - integration_test/github_device_flow_fixture_test.dart
+    verification:
+      command: "cargo test --manifest-path rust/Cargo.toml && ./scripts/check-generated-bindings.sh && flutter test && dart analyze && git diff --check"
+      expected: "Installation, repository eligibility, provisioning, privacy, permission, binding, widget, and analysis checks pass."
+    stop_conditions:
+      - "STOP if a public, nonempty, inaccessible, uninstalled, or workflow-permission-bearing repository can become eligible."
+      - STOP if Provider code stores or reconciles history or transfers Object bytes.
+    description: "List GitHub App installations and accessible repositories, explain the registered permissions, select a private empty eligible Remote or provision one privately, and pause until installation coverage is authoritative."
+    acceptance:
+      mode: gherkin
+      supplementary: [live_probe]
+      recipe: private-linux-github-device-flow-fixture
+      evidence: |
+        Given eligible, public, nonempty, inaccessible, uninstalled, and newly provisioned repositories, when the `remote-selection` scenario in integration_test/github_device_flow_fixture_test.dart selects or creates a Remote through the protocol-faithful fixture, then only one private empty installed repository advances and every refusal remains local and recoverable without credentials.
+    flows: [flow-auth-handshake]
+    certainty: assumed
+    status: planned

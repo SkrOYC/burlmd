@@ -36,5 +36,6 @@ Delete-versus-edit follows the content path. burlmd restores the edited Note as 
 
 - Reconciliation records preserve base, local, incoming, tentative, and Writer-decision state before input is accepted.
 - Crash recovery resumes from the record.
+- If the Writer leaves or cancels a resolution session, the durable Suggestions or Decision record remains pending with both variants recoverable.
 - Finalization fails closed when local state advanced and requires renewed input for changed outcomes.
 - Raw conflict markers never become the user-facing or authoritative resolution model.

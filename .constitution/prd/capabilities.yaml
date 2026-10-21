@@ -389,20 +389,28 @@ capabilities:
     legacy_id: CAP-EDIT-06
     group: Note editing and retrieval
     priority: P0
-    statement: "Writers can insert images from a file, clipboard, or drag-and-drop action and view them inline in the Note."
-    rationale: Images are part of feature-complete daily note-taking.
+    statement: "Writers can add a local image by selecting a file or pasting image data from the clipboard, then view it inline and offline in the Note."
+    rationale: Both first-use image inputs produce the same safe local Asset outcome without requiring synchronization.
     jobs: [JOB-08]
-    certainty: assumed
-    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+    certainty: settled
+    evidence:
+      kind: ruling
+      ref: reports/2026-10-14-interview-tasks.md
+      date: 2026-10-14
+      note: The user required file selection and clipboard paste for first use and deferred drag-and-drop.
   - id: CAP-032
     legacy_id: CAP-EDIT-08
     group: Note editing and retrieval
     priority: P0
-    statement: "When the Writer invokes undo or redo, burlmd reverses or reapplies the most recent content operation in the open Note without consulting version history."
-    rationale: Undo must cover structural and cross-Block editing without conflating editing with synchronization or lifecycle history.
+    statement: "When the Writer invokes undo or redo, burlmd reverses or reapplies the most recent delivered content-editing operation in the open Note, including operations across Block boundaries, without consulting version history."
+    rationale: Every delivered editing operation needs dependable Note-level reversal without conflating editing with synchronization or lifecycle history.
     jobs: [JOB-01]
-    certainty: assumed
-    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+    certainty: settled
+    evidence:
+      kind: ruling
+      ref: reports/2026-10-14-interview-tasks.md
+      date: 2026-10-14
+      note: The user required complete Note-level undo and redo for every editing operation delivered in an increment.
   - id: CAP-033
     legacy_id: CAP-FIND-02
     group: Note editing and retrieval
@@ -423,8 +431,12 @@ capabilities:
     statement: "Within an open Note, Writers can find matches, navigate between them, replace one match, or replace all matches as one undoable operation."
     rationale: "Workspace search doesn't replace precise editing inside a long Note."
     jobs: [JOB-01]
-    certainty: assumed
-    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+    certainty: settled
+    evidence:
+      kind: ruling
+      ref: reports/2026-10-14-interview-tasks.md
+      date: 2026-10-14
+      note: "The user required match navigation, single replacement, and replace-all as one undoable operation for first use."
   - id: CAP-035
     legacy_id: CAP-GRAPH-05
     group: Note editing and retrieval
@@ -446,16 +458,20 @@ capabilities:
     rationale: "Open storage permits guest tools, but burlmd remains the authority for Workspace semantics and must not rewrite foreign content silently."
     jobs: [JOB-02]
     certainty: assumed
-    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+    assumption: "This remains a product commitment, but arbitrary existing-collection adoption is deferred beyond the replacement near-term roadmap. See out-of-scope/existing-collection-adoption.md."
   - id: CAP-037
     legacy_id: CAP-WS-07
     group: Workspace authority and recovery
     priority: P0
-    statement: "While a Workspace is open, burlmd detects guest file creates, edits, moves, renames, and deletes without requiring Rescan."
-    rationale: "A guest tool can write while burlmd runs, and those changes must not remain invisible."
+    statement: "While the Workspace is open, burlmd automatically detects local file creates, edits, moves, renames, and deletes made by an editor or Agent without requiring Rescan."
+    rationale: Local external work must become visible through a simple normal path while Rescan remains a recovery action.
     jobs: [JOB-07]
-    certainty: assumed
-    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+    certainty: settled
+    evidence:
+      kind: ruling
+      ref: reports/2026-10-14-interview-tasks.md
+      date: 2026-10-14
+      note: The user required automatic local external-change detection for first use and retained manual Rescan only as recovery.
   - id: CAP-038
     legacy_id: CAP-WS-08
     group: Workspace authority and recovery
@@ -491,16 +507,20 @@ capabilities:
     rationale: "Explicit repair isn't informed when the Writer can't inspect what burlmd will rewrite."
     jobs: [JOB-07]
     certainty: assumed
-    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+    assumption: "This remains a product commitment, but guided repair is deferred beyond first use. See out-of-scope/guided-repair.md."
   - id: CAP-042
     legacy_id: CAP-WS-12
     group: Workspace authority and recovery
     priority: P0
-    statement: "For an invalid guest write detected while the Workspace is open, burlmd preserves the last known-good Note and offers **Repair**, **Compare**, or **Exclude** before authoritative state changes."
-    rationale: Invalid live input must not silently replace readable content or block access to the preserved version.
+    statement: "When burlmd detects an invalid external write while the Workspace is open, it flags the problem, preserves the incoming bytes and last known-good Note, and keeps the invalid input outside authoritative editable state until the Writer or Agent corrects it."
+    rationale: "Invalid live input must remain visible and recoverable without silent repair, loss, or replacement of authoritative content."
     jobs: [JOB-07]
-    certainty: assumed
-    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+    certainty: settled
+    evidence:
+      kind: ruling
+      ref: reports/2026-10-14-interview-tasks.md
+      date: 2026-10-14
+      note: The user required invalid changes to be flagged and preserved without a first-use repair wizard.
   - id: CAP-043
     legacy_id: CAP-WS-13
     group: Workspace authority and recovery
@@ -509,7 +529,7 @@ capabilities:
     rationale: Workspace access must not depend only on restart restoration or first-time adoption.
     jobs: [JOB-02]
     certainty: assumed
-    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+    assumption: "This remains a product commitment, but first use has one fresh Workspace and defers interfaces for selecting or switching among collections. See out-of-scope/multiple-simultaneous-workspaces.md."
   - id: CAP-044
     legacy_id: CAP-HIST-01
     group: Workspace authority and recovery
@@ -518,25 +538,33 @@ capabilities:
     rationale: The delivered session history must be visible and recoverable through the application.
     jobs: [JOB-05]
     certainty: assumed
-    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+    assumption: "Local history capture remains active, but in-app Version browsing and restore are deferred beyond first use. See out-of-scope/full-history-diff-viewer.md."
   - id: CAP-045
     legacy_id: CAP-SUP-01
     group: Workspace authority and recovery
     priority: P0
-    statement: "Writers can create a Diagnostics Export that contains application and schema versions, errors, retries, and failures without Note or Asset content."
-    rationale: Writer-controlled diagnostics provide supportability without automatic telemetry.
+    statement: "Writers can explicitly create a minimal Diagnostics Export from bounded local records of application and schema versions, errors, retries, and failures, without Note content, Asset content, credentials, signed locations, or content-derived metadata."
+    rationale: "Writer-controlled, content-free diagnostics provide supportability without automatic upload."
     jobs: [JOB-05]
-    certainty: assumed
-    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+    certainty: settled
+    evidence:
+      kind: ruling
+      ref: reports/2026-10-14-interview-tasks.md
+      date: 2026-10-14
+      note: The user required bounded local diagnostics and an explicit minimal Diagnostics Export for first use.
   - id: CAP-046
     legacy_id: CAP-PORT-02
     group: Portability and paths
     priority: P0
-    statement: Writers can Export one stable Workspace revision as either a plain bundle copy or a single Bundle Archive.
-    rationale: Both supported forms provide a complete exit path without application-specific tooling.
+    statement: Writers can Export one stable Workspace revision as a plain-folder copy containing its Notes and referenced local images.
+    rationale: A complete plain-folder copy provides the first-use exit path without application-specific tooling or connected storage.
     jobs: [JOB-05]
-    certainty: assumed
-    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+    certainty: settled
+    evidence:
+      kind: ruling
+      ref: reports/2026-10-14-interview-tasks.md
+      date: 2026-10-14
+      note: The user required plain-folder Export for first use and deferred a single-file Bundle Archive.
   - id: CAP-047
     legacy_id: CAP-PORT-06
     group: Portability and paths
@@ -544,17 +572,25 @@ capabilities:
     statement: "Before Export, burlmd flushes every open Note through its durability lifecycle without retiring the session and stops when an external-file decision remains unresolved."
     rationale: Export must not capture stale drafts or an undecided authority state.
     jobs: [JOB-05]
-    certainty: assumed
-    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+    certainty: settled
+    evidence:
+      kind: ruling
+      ref: reports/2026-10-14-interview-tasks.md
+      date: 2026-10-14
+      note: "The user retained flush, revision, and unresolved-authority safety for the required plain-folder Export."
   - id: CAP-048
     legacy_id: CAP-PORT-07
     group: Portability and paths
     priority: P0
-    statement: "A plain-copy Export refuses a nonempty destination, and a Bundle Archive requires confirmation before replacement."
+    statement: A plain-folder Export refuses a nonempty destination.
     rationale: Export must not silently combine with or overwrite unrelated content.
     jobs: [JOB-05]
-    certainty: assumed
-    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+    certainty: settled
+    evidence:
+      kind: ruling
+      ref: reports/2026-10-14-interview-tasks.md
+      date: 2026-10-14
+      note: The user retained destination safety for the required plain-folder Export and deferred Bundle Archive replacement behavior with that format.
   - id: CAP-049
     legacy_id: CAP-PORT-08
     group: Portability and paths
@@ -562,17 +598,25 @@ capabilities:
     statement: "burlmd exposes an Export destination only after the complete output is verified. A failed Export doesn't appear successful or leave partial output at the selected destination."
     rationale: Atomic visibility keeps the portability guarantee trustworthy.
     jobs: [JOB-05]
-    certainty: assumed
-    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+    certainty: settled
+    evidence:
+      kind: ruling
+      ref: reports/2026-10-14-interview-tasks.md
+      date: 2026-10-14
+      note: The user retained complete-output verification and failure preservation for the required plain-folder Export.
   - id: CAP-050
     legacy_id: CAP-PORT-03
     group: Portability and paths
     priority: P0
-    statement: "When a guest tool changes Workspace files, burlmd validates the change against the published Workspace contract and preserves the last known-good state until invalid input is repaired or excluded."
+    statement: "When a guest tool changes Workspace files, burlmd validates the change against the published Workspace contract and preserves the incoming bytes and last known-good state until invalid input is corrected or excluded."
     rationale: "Interoperability requires clear authority and recovery rules, not silent trust in every filesystem write."
     jobs: [JOB-07]
-    certainty: assumed
-    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+    certainty: settled
+    evidence:
+      kind: ruling
+      ref: reports/2026-10-14-interview-tasks.md
+      date: 2026-10-14
+      note: The user retained validation and preservation while deferring guided repair.
   - id: CAP-051
     legacy_id: CAP-PORT-05
     group: Portability and paths
@@ -580,8 +624,12 @@ capabilities:
     statement: Every Workspace path that burlmd creates remains unambiguous when the Workspace moves among supported Linux and macOS hosts and Windows-compatible storage.
     rationale: "A Workspace must not change identity or develop collisions because another filesystem applies different case, normalization, or reserved-name rules."
     jobs: [JOB-03]
-    certainty: assumed
-    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+    certainty: settled
+    evidence:
+      kind: ruling
+      ref: reports/2026-10-14-interview-tasks.md
+      date: 2026-10-14
+      note: The user required portable filename rules from first use while leaving the exact algorithm open under OD-05.
   - id: CAP-052
     legacy_id: CAP-ASSET-01
     group: Assets and object storage
@@ -589,8 +637,12 @@ capabilities:
     statement: Each Asset uses a portable Workspace reference and remains available offline while the Asset is active.
     rationale: A Note must not depend on the source location from which the Writer imported an image.
     jobs: [JOB-08]
-    certainty: assumed
-    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+    certainty: settled
+    evidence:
+      kind: ruling
+      ref: reports/2026-10-14-interview-tasks.md
+      date: 2026-10-14
+      note: The user required imported local images to remain available offline in the first usable version.
   - id: CAP-053
     legacy_id: CAP-ASSET-02
     group: Assets and object storage
@@ -607,8 +659,12 @@ capabilities:
     statement: "Before a Workspace with Assets connects to a Remote, the Writer connects an Object Store they control and burlmd verifies that every protected Object is available there."
     rationale: "A published Note history must not reference binary content that another device can't retrieve."
     jobs: [JOB-08]
-    certainty: assumed
-    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+    certainty: settled
+    evidence:
+      kind: ruling
+      ref: reports/2026-10-14-interview-tasks.md
+      date: 2026-10-14
+      note: The user required Notes and images together and retained verified protected-image availability before connected history publishes.
   - id: CAP-055
     legacy_id: CAP-ASSET-04
     group: Assets and object storage
@@ -631,11 +687,15 @@ capabilities:
     legacy_id: CAP-ASSET-06
     group: Assets and object storage
     priority: P0
-    statement: Writers can rotate Object Store credentials or replace the Object Store without losing any Object reachable from a Protected State.
-    rationale: Writer-controlled storage must remain replaceable without weakening history.
+    statement: Writers can update credentials for the configured Object Store without losing any Object reachable from a Protected State.
+    rationale: Credential changes must not weaken synchronized image availability or history.
     jobs: [JOB-08]
-    certainty: assumed
-    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+    certainty: settled
+    evidence:
+      kind: ruling
+      ref: reports/2026-10-14-interview-tasks.md
+      date: 2026-10-14
+      note: The user required credential updates for one configured Object Store and deferred replacement of that store.
   - id: CAP-058
     legacy_id: CAP-ASSET-08
     group: Assets and object storage
@@ -644,7 +704,7 @@ capabilities:
     rationale: Local cache control must remain distinct from deleting an authoritative Object.
     jobs: [JOB-08]
     certainty: assumed
-    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+    assumption: "This remains a product commitment, but automatic local Object cleanup is deferred beyond the first synchronization milestone. See out-of-scope/automatic-image-cache-eviction.md."
   - id: CAP-059
     legacy_id: CAP-ASSET-09
     group: Assets and object storage
@@ -653,7 +713,7 @@ capabilities:
     rationale: Migration must not begin from incomplete or ambiguous input.
     jobs: [JOB-08]
     certainty: assumed
-    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+    assumption: "This remains a product commitment, but arbitrary existing-collection adoption is deferred beyond the replacement near-term roadmap. See out-of-scope/existing-collection-adoption.md."
   - id: CAP-060
     legacy_id: CAP-ASSET-10
     group: Assets and object storage
@@ -662,7 +722,7 @@ capabilities:
     rationale: "Adoption must preserve both referenced content and guest files that burlmd doesn't own."
     jobs: [JOB-08]
     certainty: assumed
-    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+    assumption: "This remains a product commitment, but arbitrary existing-collection adoption is deferred beyond the replacement near-term roadmap. See out-of-scope/existing-collection-adoption.md."
   - id: CAP-061
     legacy_id: CAP-ASSET-11
     group: Assets and object storage
@@ -670,8 +730,12 @@ capabilities:
     statement: "Before an asset-bearing Workspace becomes fully local, burlmd uses fresh authenticated Remote state to verify that every Object reachable from a Protected State is available locally, then atomically detaches both the Object Store and Remote. An offline Remote detach retains the Object Store."
     rationale: Returning to local operation must not strand history in storage that the Workspace no longer uses.
     jobs: [JOB-08]
-    certainty: assumed
-    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+    certainty: settled
+    evidence:
+      kind: ruling
+      ref: reports/2026-10-14-interview-tasks.md
+      date: 2026-10-14
+      note: The user required safe return to complete local-only use in the first synchronization milestone.
   - id: CAP-062
     legacy_id: CAP-ASSET-12
     group: Assets and object storage
@@ -679,8 +743,12 @@ capabilities:
     statement: "burlmd blocks Object Store detachment when protected hydration is incomplete and doesn't keep an asset-bearing Workspace Remote-connected without a verified Object Store."
     rationale: Remote Note history and synchronized Object availability form one user-visible integrity guarantee.
     jobs: [JOB-08]
-    certainty: assumed
-    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+    certainty: settled
+    evidence:
+      kind: ruling
+      ref: reports/2026-10-14-interview-tasks.md
+      date: 2026-10-14
+      note: The user retained verified local availability and preservation when safe detachment cannot complete.
   - id: CAP-063
     legacy_id: CAP-SYNC-01
     group: Private Remote synchronization
@@ -688,17 +756,25 @@ capabilities:
     statement: "Writers can connect a local Workspace to an eligible private Remote by provisioning one or selecting an empty one, then publish local history after all prerequisites pass."
     rationale: Connection adds off-device durability without becoming a prerequisite for local use.
     jobs: [JOB-04]
-    certainty: assumed
-    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+    certainty: settled
+    evidence:
+      kind: ruling
+      ref: reports/2026-10-14-interview-tasks.md
+      date: 2026-10-14
+      note: The user retained connecting the fresh local collection as part of the first synchronization milestone.
   - id: CAP-064
     legacy_id: CAP-SYNC-02
     group: Private Remote synchronization
     priority: P0
-    statement: "After connection, burlmd synchronizes changes during application use and makes a bounded final attempt during orderly shutdown."
-    rationale: Synchronization must continue without a resident background service or a manual command.
+    statement: "After connection, burlmd synchronizes Note history and protected local-image bytes during application use and makes a bounded final attempt during orderly shutdown."
+    rationale: The first synchronization milestone must keep Notes and images complete without a resident background service or manual command.
     jobs: [JOB-04]
-    certainty: assumed
-    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+    certainty: settled
+    evidence:
+      kind: ruling
+      ref: reports/2026-10-14-interview-tasks.md
+      date: 2026-10-14
+      note: The user required Notes and local images together in the first usable synchronization milestone.
   - id: CAP-065
     legacy_id: CAP-SYNC-03
     group: Private Remote synchronization
@@ -715,8 +791,12 @@ capabilities:
     statement: "When concurrent edits affect the same Note content, burlmd preserves base, local, and incoming content and represents each smallest safe difference as an independently resolvable Suggestion."
     rationale: "Content reconciliation must not expose raw conflict markers, duplicate Notes, or force an all-or-nothing choice."
     jobs: [JOB-06]
-    certainty: assumed
-    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+    certainty: settled
+    evidence:
+      kind: ruling
+      ref: reports/2026-10-14-interview-tasks.md
+      date: 2026-10-14
+      note: The user required in-app Suggestion resolution for concurrent content edits in the first synchronization milestone.
   - id: CAP-067
     legacy_id: CAP-SYNC-05
     group: Private Remote synchronization
@@ -733,8 +813,12 @@ capabilities:
     statement: "Writers can sign out without removing the Remote, detach through an explicit operation that preserves local history and protected Assets, and reconnect later without loss."
     rationale: Authentication and Workspace attachment have different consequences and must remain separate.
     jobs: [JOB-04]
-    certainty: assumed
-    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+    certainty: settled
+    evidence:
+      kind: ruling
+      ref: reports/2026-10-14-interview-tasks.md
+      date: 2026-10-14
+      note: The user required safe disconnection to local-only use without deleting remote data or losing local history and protected Assets.
   - id: CAP-069
     legacy_id: CAP-SYNC-07
     group: Private Remote synchronization
@@ -742,8 +826,12 @@ capabilities:
     statement: "On another device, Writers can authorize the same Provider, select the connected private Remote, and create a complete local Workspace from it."
     rationale: Multi-device access is the primary value of Remote synchronization.
     jobs: [JOB-04]
-    certainty: assumed
-    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+    certainty: settled
+    evidence:
+      kind: ruling
+      ref: reports/2026-10-14-interview-tasks.md
+      date: 2026-10-14
+      note: The user retained joining the same connected collection on another device in the first synchronization milestone.
   - id: CAP-070
     legacy_id: CAP-SYNC-08
     group: Private Remote synchronization
@@ -752,7 +840,7 @@ capabilities:
     rationale: Consolidation supports established local archives without merging unrelated histories.
     jobs: [JOB-04]
     certainty: assumed
-    assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+    assumption: "This remains a product commitment, but combining independent collections is deferred beyond the first synchronization milestone. See out-of-scope/workspace-consolidation.md."
   - id: CAP-071
     legacy_id: CAP-SYNC-10
     group: Private Remote synchronization
@@ -793,8 +881,8 @@ capabilities:
     legacy_id: CAP-REL-01
     group: Releases and upgrades
     priority: P0
-    statement: "Writers can install an Apple Silicon macOS or x86-64 Linux `0.x` release from published artifacts without building burlmd from source."
-    rationale: "A feature-complete desktop application isn't releasable if installation depends on the development environment."
+    statement: "Writers can install an x86-64 Linux `0.x` release from a published artifact without building burlmd from source."
+    rationale: A supported public Linux release needs an installable artifact independent of the development environment.
     jobs: [JOB-09]
     certainty: assumed
     assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
@@ -838,8 +926,339 @@ capabilities:
     legacy_id: CAP-REL-06
     group: Releases and upgrades
     priority: P0
-    statement: Each release supports the two most recent macOS major versions available on its release date and the x86-64 Linux runtime baseline accepted from OD-08 evidence.
-    rationale: "A release needs an explicit, evidence-backed compatibility window before its artifacts can be called supported."
+    statement: Each public x86-64 Linux release supports the runtime baseline accepted from OD-08 evidence.
+    rationale: "A public Linux release needs an explicit, evidence-backed compatibility window before its artifact can be called supported."
     jobs: [JOB-09]
     certainty: assumed
     assumption: "Planned for the feature-complete 0.x desktop release; no code delivers it yet, so the statement is the product's intent rather than observed behavior."
+  - id: CAP-081
+    group: Markdown language
+    priority: P0
+    statement: "Writers can author, edit, and render Markdown tables while preserving their source."
+    rationale: "Tables are required for the Writer's first-use documents."
+    jobs: [JOB-01]
+    certainty: settled
+    evidence:
+      kind: ruling
+      ref: reports/2026-10-14-interview-tasks.md
+      date: 2026-10-14
+      note: The user identified tables as essential for first use.
+  - id: CAP-082
+    group: Markdown language
+    priority: P0
+    statement: "Writers can author, edit, and render Markdown footnotes while preserving their source."
+    rationale: "Footnotes are required for the Writer's first-use documents."
+    jobs: [JOB-01]
+    certainty: settled
+    evidence:
+      kind: ruling
+      ref: reports/2026-10-14-interview-tasks.md
+      date: 2026-10-14
+      note: The user identified footnotes as essential for first use.
+  - id: CAP-083
+    legacy_id: M1
+    group: Markdown language
+    priority: P0
+    statement: "Writers can author and render task lists, and changing an interactive checkbox updates its Markdown source as an undoable edit."
+    rationale: Task state must remain usable without hiding the stored source.
+    jobs: [JOB-01]
+    certainty: settled
+    evidence:
+      kind: ruling
+      ref: reports/2026-10-14-interview-tasks.md
+      date: 2026-10-14
+      note: The user assigned task lists and interactive checkboxes to P0.
+  - id: CAP-084
+    legacy_id: M2
+    group: Markdown language
+    priority: P0
+    statement: Writers can author and render reference-style Links with reusable Link definitions while preserving their Markdown source.
+    rationale: Reusable definitions keep repeated destinations maintainable in source.
+    jobs: [JOB-01]
+    certainty: settled
+    evidence:
+      kind: ruling
+      ref: reports/2026-10-14-interview-tasks.md
+      date: 2026-10-14
+      note: The user assigned reference-style Links and reusable definitions to P0.
+  - id: CAP-085
+    legacy_id: M4
+    group: Markdown language
+    priority: P0
+    statement: Writers can author and follow Markdown Links to headings or sections within Notes.
+    rationale: Section Links make long Notes directly navigable.
+    jobs: [JOB-01, JOB-03]
+    certainty: settled
+    evidence:
+      kind: ruling
+      ref: reports/2026-10-14-interview-tasks.md
+      date: 2026-10-14
+      note: The user assigned Links to headings and sections within Notes to P0.
+  - id: CAP-086
+    legacy_id: M5
+    group: Markdown language
+    priority: P0
+    statement: Fenced code blocks render with syntax highlighting while their Markdown source remains directly editable.
+    rationale: Code-heavy Notes need readable language-aware presentation without a separate editing model.
+    jobs: [JOB-01]
+    certainty: settled
+    evidence:
+      kind: ruling
+      ref: reports/2026-10-14-interview-tasks.md
+      date: 2026-10-14
+      note: The user assigned syntax highlighting for code blocks to P0.
+  - id: CAP-087
+    legacy_id: M9
+    group: Markdown language
+    priority: P0
+    statement: Writers can author and render inline and display mathematical notation while preserving its source.
+    rationale: Mathematical notation is required in first-use technical Notes.
+    jobs: [JOB-01]
+    certainty: settled
+    evidence:
+      kind: ruling
+      ref: reports/2026-10-14-interview-tasks.md
+      date: 2026-10-14
+      note: The user assigned inline and display mathematical notation to P0.
+  - id: CAP-088
+    legacy_id: M10
+    group: Markdown language
+    priority: P0
+    statement: Writers can author Mermaid diagram source and view its rendered diagram in a Note.
+    rationale: Diagram source remains portable while the reading surface presents the diagram.
+    jobs: [JOB-01]
+    certainty: settled
+    evidence:
+      kind: ruling
+      ref: reports/2026-10-14-interview-tasks.md
+      date: 2026-10-14
+      note: The user assigned Mermaid diagrams to P0.
+  - id: CAP-089
+    legacy_id: M14
+    group: Markdown language
+    priority: P0
+    statement: Writers can author and render highlighted-text syntax while preserving its source.
+    rationale: Highlighting expresses emphasis distinct from standard Markdown emphasis.
+    jobs: [JOB-01]
+    certainty: settled
+    evidence:
+      kind: ruling
+      ref: reports/2026-10-14-interview-tasks.md
+      date: 2026-10-14
+      note: The user assigned highlighted-text syntax to P0.
+  - id: CAP-090
+    legacy_id: M20
+    group: Markdown language
+    priority: P0
+    statement: "When the Writer opens a Note that contains an external Markdown image reference with a web URL, burlmd automatically loads and displays that image without transmitting other Note content, application credentials, or telemetry."
+    rationale: "Externally referenced images remain ordinary Markdown references and don't become imported local Assets."
+    jobs: [JOB-01]
+    certainty: settled
+    evidence:
+      kind: ruling
+      ref: reports/2026-10-14-interview-tasks.md
+      date: 2026-10-14
+      note: The user assigned externally referenced images to P0 and chose automatic loading when a Note opens.
+  - id: CAP-091
+    legacy_id: M3
+    group: Markdown language
+    priority: P1
+    statement: Bare URLs and email addresses render automatically as Links without changing their source text.
+    rationale: Automatic Links improve reading without requiring explicit Link syntax.
+    jobs: [JOB-01]
+    certainty: settled
+    evidence:
+      kind: ruling
+      ref: reports/2026-10-14-interview-tasks.md
+      date: 2026-10-14
+      note: The user assigned automatic Links for bare URLs and email addresses to P1.
+  - id: CAP-092
+    legacy_id: M8
+    group: Markdown language
+    priority: P1
+    statement: Writers can edit YAML frontmatter and custom metadata within the Note editor without losing unrecognized fields.
+    rationale: Metadata remains directly editable while source fidelity protects guest-defined fields.
+    jobs: [JOB-01, JOB-07]
+    certainty: settled
+    evidence:
+      kind: ruling
+      ref: reports/2026-10-14-interview-tasks.md
+      date: 2026-10-14
+      note: The user assigned YAML frontmatter and custom metadata editing to P1.
+  - id: CAP-093
+    legacy_id: M11
+    group: Markdown language
+    priority: P1
+    statement: "Writers can author and render callouts, alerts, or admonitions while preserving their source."
+    rationale: Callouts distinguish important explanatory material in a readable Note.
+    jobs: [JOB-01]
+    certainty: settled
+    evidence:
+      kind: ruling
+      ref: reports/2026-10-14-interview-tasks.md
+      date: 2026-10-14
+      note: "The user assigned callouts, alerts, or admonitions to P1."
+  - id: CAP-094
+    legacy_id: M15
+    group: Markdown language
+    priority: P1
+    statement: Writers can author and render superscript and subscript while preserving their source.
+    rationale: Scientific and technical Notes need compact positional notation.
+    jobs: [JOB-01]
+    certainty: settled
+    evidence:
+      kind: ruling
+      ref: reports/2026-10-14-interview-tasks.md
+      date: 2026-10-14
+      note: The user assigned superscript and subscript to P1.
+  - id: CAP-095
+    legacy_id: M17
+    group: Markdown language
+    priority: P1
+    statement: Writers can author and render citations and bibliographies while preserving their source.
+    rationale: Research Notes need traceable references and readable bibliographies.
+    jobs: [JOB-01]
+    certainty: settled
+    evidence:
+      kind: ruling
+      ref: reports/2026-10-14-interview-tasks.md
+      date: 2026-10-14
+      note: The user assigned citations and bibliographies to P1.
+  - id: CAP-096
+    legacy_id: M18
+    group: Markdown language
+    priority: P1
+    statement: Writers can navigate a Note through an outline or generated table of contents derived from its headings.
+    rationale: Structural navigation keeps long Notes usable without changing their source.
+    jobs: [JOB-01, JOB-03]
+    certainty: settled
+    evidence:
+      kind: ruling
+      ref: reports/2026-10-14-interview-tasks.md
+      date: 2026-10-14
+      note: The user assigned a Note outline or generated table of contents to P1.
+  - id: CAP-097
+    legacy_id: M6
+    group: Markdown language
+    priority: P2
+    statement: A safe static subset of raw HTML renders without executing scripts while its source remains editable.
+    rationale: Static HTML compatibility must not create an active-content path.
+    jobs: [JOB-01]
+    certainty: settled
+    evidence:
+      kind: ruling
+      ref: reports/2026-10-14-interview-tasks.md
+      date: 2026-10-14
+      note: The user assigned safe static raw HTML rendering without scripts to P2.
+  - id: CAP-098
+    legacy_id: M7
+    group: Markdown language
+    priority: P2
+    statement: HTML comments remain editable in source and stay hidden in the rendered reading surface.
+    rationale: Comments carry authoring context without appearing in the finished Note.
+    jobs: [JOB-01]
+    certainty: settled
+    evidence:
+      kind: ruling
+      ref: reports/2026-10-14-interview-tasks.md
+      date: 2026-10-14
+      note: The user assigned hidden-but-editable HTML comments to P2.
+  - id: CAP-099
+    legacy_id: M12
+    group: Markdown language
+    priority: P2
+    statement: Writers can author and use collapsible details sections while preserving their source.
+    rationale: Collapsible sections keep optional detail available without dominating the reading surface.
+    jobs: [JOB-01]
+    certainty: settled
+    evidence:
+      kind: ruling
+      ref: reports/2026-10-14-interview-tasks.md
+      date: 2026-10-14
+      note: The user assigned collapsible details sections to P2.
+  - id: CAP-100
+    legacy_id: M13
+    group: Markdown language
+    priority: P2
+    statement: Writers can author and render definition lists while preserving their source.
+    rationale: Definition lists present term-and-description material directly.
+    jobs: [JOB-01]
+    certainty: settled
+    evidence:
+      kind: ruling
+      ref: reports/2026-10-14-interview-tasks.md
+      date: 2026-10-14
+      note: The user assigned definition lists to P2.
+  - id: CAP-101
+    legacy_id: M16
+    group: Markdown language
+    priority: P2
+    statement: Writers can author emoji shortcodes and view their rendered emoji while preserving the shortcode source.
+    rationale: "Shortcodes provide readable, portable text for emoji entry."
+    jobs: [JOB-01]
+    certainty: settled
+    evidence:
+      kind: ruling
+      ref: reports/2026-10-14-interview-tasks.md
+      date: 2026-10-14
+      note: The user assigned emoji shortcodes to P2.
+  - id: CAP-102
+    legacy_id: M19
+    group: Markdown language
+    priority: P2
+    statement: "Writers can add or remove table rows and columns through visual controls that update the table's Markdown source."
+    rationale: Table-specific controls can reduce repetitive source edits without hiding the stored table.
+    jobs: [JOB-01]
+    certainty: settled
+    evidence:
+      kind: ruling
+      ref: reports/2026-10-14-interview-tasks.md
+      date: 2026-10-14
+      note: The user assigned visual table row and column controls to P2.
+  - id: CAP-103
+    legacy_id: M21
+    group: Markdown language
+    priority: P2
+    statement: Writers can author and render custom element identifiers and attributes while preserving their source.
+    rationale: Custom identifiers and attributes support precise document structure and downstream use.
+    jobs: [JOB-01]
+    certainty: settled
+    evidence:
+      kind: ruling
+      ref: reports/2026-10-14-interview-tasks.md
+      date: 2026-10-14
+      note: The user assigned custom element identifiers and attributes to P2.
+  - id: CAP-104
+    legacy_id: CAP-REL-01 macOS portion
+    group: Releases and upgrades
+    priority: P2
+    statement: Writers can run the required local workflows on supported Apple Silicon macOS systems with the same data-safety and ownership guarantees as on Linux.
+    rationale: macOS support remains a P2 product outcome without becoming a prerequisite for private Linux use or requiring public packaging first.
+    jobs: [JOB-09]
+    certainty: settled
+    evidence:
+      kind: ruling
+      ref: reports/2026-10-14-interview-tasks.md
+      date: 2026-10-14
+      note: The user made macOS support and qualification P2.
+  - id: CAP-105
+    legacy_id: CAP-REL-06 macOS portion
+    group: Releases and upgrades
+    priority: P2
+    statement: macOS qualification covers the two most recent macOS major versions available when that qualification runs.
+    rationale: Supported macOS operation needs an explicit compatibility window independent of public artifact publication.
+    jobs: [JOB-09]
+    certainty: assumed
+    assumption: "The compatibility window is retained from the existing support commitment, but macOS qualification is P2 scope and remains unmeasured."
+  - id: CAP-106
+    group: Workspace authority and recovery
+    priority: P0
+    statement: "When local diagnostic recording or export fails, burlmd reports that diagnostic failure without failing the Writer's original product operation or losing Workspace data."
+    rationale: Diagnostics must help explain product failures without becoming a new cause of them.
+    jobs: [JOB-05]
+    certainty: settled
+    evidence:
+      kind: ruling
+      ref: reports/2026-10-14-interview-tasks.md
+      date: 2026-10-14
+      note: The user required diagnostics failures not to become product failures.

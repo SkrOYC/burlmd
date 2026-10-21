@@ -37,7 +37,7 @@ bill_of_materials:
     role: infrastructure
     version: "2.1.2"
     ecosystem: nix
-    justification: "Provisions the whole toolchain closure from devenv.lock so every machine and every managed runner resolve the same tools"
+    justification: Provisions the whole toolchain closure from devenv.lock so every machine and every managed runner resolve the same tools
     radar: adopt
     certainty: assumed
     assumption: "devenv.lock pins the devenv module set to a master revision with no ref, so devenv update can move it away from the CLI version the shell was verified against."
@@ -64,7 +64,7 @@ bill_of_materials:
     role: library
     version: "0.20.2"
     ecosystem: pub
-    justification: "Localization runtime required by the flutter_localizations package the pinned Flutter SDK ships"
+    justification: Localization runtime required by the flutter_localizations package the pinned Flutter SDK ships
     radar: adopt
     certainty: settled
     evidence:
@@ -135,7 +135,7 @@ bill_of_materials:
     role: library
     version: "0.13.4"
     ecosystem: cargo
-    justification: "Blocking rustls HTTP client for BND-14 Provider token exchange, installation access, and account/repository lookup; already resolved transitively by gix, so this adds features rather than a second stack and doesn't own BND-20 history"
+    justification: "Pinned blocking rustls client for BND-14 Provider requests and the separate credential-free BND-22 external-image client. Each client has independent configuration and authority; neither owns BND-20 history, and ADR-022 forbids Provider credentials, cookies, referrers, redirects, and inherited proxy credentials on the image path."
     radar: adopt
     certainty: settled
     evidence:
@@ -161,7 +161,7 @@ bill_of_materials:
     justification: "Candidate complete Markdown model independently measured by SPK-BURL-H001 against the delivered 0.12.2 splice parser; it is not a replacement pin until that decision evidence is accepted."
     radar: assess
     certainty: assumed
-    assumption: "provisional-spikes.toml requires SPK-BURL-H001 to evaluate the 0.13.4 complete model independently of the delivered 0.12.2 parser."
+    assumption: provisional-spikes.toml requires SPK-BURL-H001 to evaluate the 0.13.4 complete model independently of the delivered 0.12.2 parser.
   - name: saphyr
     role: library
     version: "0.0.11"
@@ -178,7 +178,7 @@ bill_of_materials:
     role: library
     version: "0.0.11"
     ecosystem: cargo
-    justification: "Lower-level event parser used to pre-scan for alias tokens before saphyr materializes untrusted frontmatter"
+    justification: Lower-level event parser used to pre-scan for alias tokens before saphyr materializes untrusted frontmatter
     radar: trial
     certainty: settled
     evidence:
@@ -189,7 +189,7 @@ bill_of_materials:
     role: library
     version: "0.10.9"
     ecosystem: cargo
-    justification: "PKCE S256 challenge and the ADR-007 base_revision content hash"
+    justification: PKCE S256 challenge and the ADR-007 base_revision content hash
     radar: adopt
     certainty: settled
     evidence:
@@ -200,7 +200,7 @@ bill_of_materials:
     role: library
     version: "4.1.5"
     ecosystem: cargo
-    justification: "Retrieves Provider tokens and the root index key from Platform secure storage without passing them through Dart memory"
+    justification: Retrieves Provider tokens and the root index key from Platform secure storage without passing them through Dart memory
     radar: adopt
     certainty: settled
     evidence:
@@ -219,10 +219,10 @@ bill_of_materials:
       kind: repository
       ref: rust/Cargo.lock
       date: 2026-09-03
-      note: "Vendored by libsqlite3-sys 0.38.1 through the rusqlite bundled-sqlcipher feature."
+      note: Vendored by libsqlite3-sys 0.38.1 through the rusqlite bundled-sqlcipher feature.
   - name: Open Knowledge Format
     role: persistence
-    version: "v0.2"
+    version: v0.2
     ecosystem: other
     justification: "The published on-disk Workspace format; a genuine external dependency of the storage layer even though nothing compiles against it"
     radar: adopt
@@ -230,7 +230,7 @@ bill_of_materials:
     evidence:
       kind: external
       ref: "https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md"
-      version: "v0.2"
+      version: v0.2
       date: 2026-09-03
       note: "ADR-004 pins the version; every revision is treated as potentially breaking because v0.1 to v0.2 already carried two breaking changes."
   - name: markdown
@@ -269,7 +269,7 @@ bill_of_materials:
     role: library
     version: "1.11.0"
     ecosystem: cargo
-    justification: "Companion BND-11 candidate configuration library for aws-sdk-s3 1.144.0 endpoint and path-style configuration against BND-21 in the SPK-BURL-I001 comparison."
+    justification: Companion BND-11 candidate configuration library for aws-sdk-s3 1.144.0 endpoint and path-style configuration against BND-21 in the SPK-BURL-I001 comparison.
     radar: assess
     certainty: assumed
     assumption: "provisional-spikes.toml names aws-sdk-s3 1.144.0 plus aws-config 1.11.0 as one candidate; no Object Store client exists today."
@@ -339,7 +339,7 @@ bill_of_materials:
     assumption: "BURL-M003 adds Linux-only `pkgs.iproute2` to `devenv.nix`; the pinned `devenv.lock` Nixpkgs revision resolves 7.0.0 and the measured base closure contains its exact store member, but no accepted managed run has exercised the hosted Bubblewrap and loopback prerequisite probe."
   - name: GNU Bash
     role: runtime
-    version: "5.3p9"
+    version: 5.3p9
     ecosystem: nix
     justification: "Runs the exact BURL-M003 supervisor, hosted Bubblewrap and loopback prerequisite probe, and Bash-based candidate commands from the locked Linux closure"
     radar: adopt
@@ -365,7 +365,7 @@ bill_of_materials:
     role: infrastructure
     version: fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
     ecosystem: other
-    justification: "Materializes the separate tested-source data with persisted credentials disabled"
+    justification: Materializes the separate tested-source data with persisted credentials disabled
     radar: adopt
     certainty: assumed
     assumption: "SHA resolved from the official repository on 2026-08-31; no workflow in this repository references it until BURL-M003 lands .github/workflows/ci.yml."
@@ -384,7 +384,7 @@ bill_of_materials:
     justification: "Publishes unique immutable expected, candidate, sealed, sealing-receipt, caller receipt-digest, and seal-owned BURL-O001 stage artifacts; its outputs include the service artifact ID and bare SHA-256 digest carried through the trusted caller for receipt verification"
     radar: adopt
     certainty: assumed
-    assumption: "SHA resolved from the official repository on 2026-08-31 and reverified on 2026-09-07 as the v7 tag. The pinned action.yml exposes artifact-id and a bare SHA-256 artifact-digest. No workflow in this repository references it until BURL-M003 lands .github/workflows/ci.yml."
+    assumption: SHA resolved from the official repository on 2026-08-31 and reverified on 2026-09-07 as the v7 tag. The pinned action.yml exposes artifact-id and a bare SHA-256 artifact-digest. No workflow in this repository references it until BURL-M003 lands .github/workflows/ci.yml.
   - name: actions/download-artifact
     role: infrastructure
     version: 3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c

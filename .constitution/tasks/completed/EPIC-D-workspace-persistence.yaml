@@ -52,10 +52,7 @@ tickets:
       out:
         - rust/src/**
     verification:
-      command: "test -s .constitution/spikes/SPK-BURL-D001.md && ! grep -q 'Status:
-        placeholder' .constitution/spikes/SPK-BURL-D001.md && ! grep -q 'To be
-        filled' .constitution/spikes/SPK-BURL-D001.md && git diff --quiet HEAD~1
-        HEAD -- rust/src"
+      command: "test -s .constitution/spikes/SPK-BURL-D001.md && sh -c \"! grep -q 'Status: placeholder' .constitution/spikes/SPK-BURL-D001.md\" && sh -c \"! grep -q 'To be filled' .constitution/spikes/SPK-BURL-D001.md\" && git diff --quiet HEAD~1 HEAD -- rust/src"
       expected: exit 0
     stop_conditions:
       - "STOP if this Spike is landed across more than one commit. Its gate
