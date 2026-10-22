@@ -2,7 +2,7 @@
 
 ## Status
 
-ADR-017 and this companion are the active decision and field-level contract. The sibling `github-app-device-flow.toml` file is retained only as legacy provisional history and isn't implementation authority. BURL-K001 creates the code-owned artifact at the sidecar's `artifact_path` and reports compatibility drift. Only a reviewed Stage 3 pass updates the sidecar or protocol contract after implementation evidence settles it.
+ADR-017 and this companion are the active decision and field-level contract. The legacy `github-app-device-flow.toml` file has been removed (preserved in Git history) and isn't implementation authority. BURL-K001 creates the code-owned artifact at the sidecar's `artifact_path` and reports compatibility drift. Only a reviewed Stage 3 pass updates the sidecar or protocol contract after implementation evidence settles it.
 
 ## Protocol pins
 
