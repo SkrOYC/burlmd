@@ -2,7 +2,7 @@
 
 ## Authority
 
-The code-owned `rust/src/db/schema.sql` file is authoritative for delivered SQLCipher database tables (`workspaces`, `notes`, `notes_fts`, `note_links`, `drafts`). The historical duplicate `.constitution/tech-spec/data-models/schema.sql` file has been removed (preserved in Git history) to ensure that the code-owned schema remains the single source of truth for database definitions.
+The code-owned `rust/src/db/schema.sql` file is authoritative for delivered SQLCipher database tables (`workspaces`, `notes`, `links`, `notes_fts`, `fts_mapping`, `drafts`, `directories`). The historical duplicate `.constitution/tech-spec/data-models/schema.sql` file has been removed (preserved in Git history) to ensure that the code-owned schema remains the single source of truth for database definitions.
 
 Every ticket that modifies database tables or migrations owns `rust/src/db/schema.sql` and its integration tests in Rust.
 
