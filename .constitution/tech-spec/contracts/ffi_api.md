@@ -2,7 +2,7 @@
 
 ## Authority
 
-The code-owned `rust/src/api/ffi_api.rs` file and its generated Rust and Dart bindings are authoritative for calls the repository implements. The sibling `.constitution/tech-spec/contracts/ffi_api.rs` file is retained as legacy provisional history and isn't an implementation contract. No ticket can implement a missing API merely because that historical file declares it.
+The code-owned `rust/src/api/ffi_api.rs` file and its generated Rust and Dart bindings are authoritative for calls the repository implements. The legacy `.constitution/tech-spec/contracts/ffi_api.rs` pseudo-contract has been removed (preserved in Git history) and isn't an implementation contract. No ticket can implement a missing API merely because that historical file declared it.
 
 Every ticket that changes the code-owned artifact also owns `rust/src/frb_generated.rs` and `lib/src/rust/**`. Its verification regenerates both binding surfaces, compares them with the committed bytes, and leaves the precheck tree unchanged.
 

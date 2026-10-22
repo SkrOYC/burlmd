@@ -1,4 +1,4 @@
-artifact: schema.sql
+artifact_path: rust/src/db/schema.sql
 surface: data-model
 flows:
   - flow-search
@@ -7,4 +7,6 @@ flows:
   - flow-workspace-bootstrap
 boundaries: [BND-07]
 certainty: assumed
-assumption: "Migrated; not yet exercised by a contract test."
+assumption: "The code-owned artifact rust/src/db/schema.sql is authoritative for delivered schema tables, while forward tables for assets, objects, reconciliation, and diagnostics remain provisional until their research and Stage 3 finalization land."
+companion: schema.md
+settles_when: "Contract and database integration tests exercise all delivered SQLCipher tables and migrations against rust/src/db/schema.sql, and post-research Stage 3 specifications finalize forward table additions."
